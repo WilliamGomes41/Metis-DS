@@ -1,0 +1,13 @@
+{
+  "api_version": "v1",
+  "service_version": "product-api-v1.1.0",
+  "synthetic_fixture": true,
+  "status": "abstain",
+  "answerability": "insufficient_evidence",
+  "reason": "required_relation_not_present",
+  "false_positive_class": "relation_mismatch",
+  "results": [],
+  "result_count": 0,
+  "request_id": "de7341f4-42e5-4152-bbfc-dec184014985",
+  "tenant_id": "step12a-smoke"
+}

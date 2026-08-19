@@ -1,0 +1,351 @@
+{
+  "golden_set_id": "fractuurpreventie-page15-holdout-v1.1",
+  "version": "1.1",
+  "status": "locked_before_first_valid_evaluation",
+  "scope": "Independent holdout for the published-corpus retrieval projection of the V&VN Osteoporose en fractuurpreventie page-15 pilot objects.",
+  "rules": {
+    "must_not_tune_on_this_set": true,
+    "no_answer_questions_must_abstain": true,
+    "numeric_or_advisory_answers_require_object_id": true,
+    "locked_before_first_evaluation": true
+  },
+  "questions": [
+    {
+      "id": "FP-H-F01",
+      "class": "fact",
+      "execution_mode": "published_corpus",
+      "question": "Welke onderdelen horen volgens deze kennisset bij het aanvullende onderzoek na een recente fractuur?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01"
+      ],
+      "must_contain": [
+        "DXA-VFA",
+        "laboratoriumonderzoek",
+        "valrisico"
+      ]
+    },
+    {
+      "id": "FP-H-F02",
+      "class": "fact",
+      "execution_mode": "published_corpus",
+      "question": "Een cliënt met een recente breuk is nog niet aanvullend onderzocht. Wie kan dat onderzoek aanvragen?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02"
+      ],
+      "must_contain": [
+        "behandelaar van de fractuur"
+      ]
+    },
+    {
+      "id": "FP-H-F03",
+      "class": "fact",
+      "execution_mode": "published_corpus",
+      "question": "Wat hoort besproken te worden wanneer bij een cliënt een verhoogd fractuurrisico is vastgesteld?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-03"
+      ],
+      "must_contain": [
+        "preventieve maatregelen"
+      ]
+    },
+    {
+      "id": "FP-H-C01",
+      "class": "condition_score",
+      "execution_mode": "published_corpus",
+      "question": "Vanaf welke leeftijd geldt in deze set de signaleringssituatie bij gebruik van prednison of dexamethason?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-glucocorticoids-40plus"
+      ],
+      "expected_logic": [
+        {
+          "field": "age",
+          "operator": "gte",
+          "threshold": 40,
+          "unit": "year"
+        }
+      ]
+    },
+    {
+      "id": "FP-H-C02",
+      "class": "condition_score",
+      "execution_mode": "published_corpus",
+      "question": "Voor welke 60-plus cliënt zonder twee specifieke risicosituaties is de risicofactorenscore bedoeld?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-screening-60plus"
+      ],
+      "must_preserve": [
+        "zonder recente fractuur",
+        "zonder gebruik van glucocorticoïden"
+      ]
+    },
+    {
+      "id": "FP-H-C03",
+      "class": "condition_score",
+      "execution_mode": "published_corpus",
+      "question": "Bij welke totaalscore uit de risicofactorenlijst wordt verwijzing naar de huisarts genoemd?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02"
+      ],
+      "expected_logic": [
+        {
+          "operator": "gte",
+          "threshold": 4,
+          "unit": "punten"
+        }
+      ],
+      "must_contain": [
+        "huisarts"
+      ]
+    },
+    {
+      "id": "FP-H-S01",
+      "class": "condition_score",
+      "execution_mode": "published_corpus",
+      "question": "Hoeveel punten telt leeftijd 60 jaar mee in deze scorelijst?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-01"
+      ],
+      "expected_logic": [
+        {
+          "field": "score_factor",
+          "operator": "gte",
+          "threshold": 60,
+          "unit": "jaar",
+          "score_points": 1
+        }
+      ]
+    },
+    {
+      "id": "FP-H-S02",
+      "class": "condition_score",
+      "execution_mode": "published_corpus",
+      "question": "Wat is het puntenaantal dat bij 70 jaar of ouder hoort?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-02"
+      ],
+      "expected_logic": [
+        {
+          "field": "score_factor",
+          "operator": "gte",
+          "threshold": 70,
+          "unit": "jaar",
+          "score_points": 2
+        }
+      ]
+    },
+    {
+      "id": "FP-H-S03",
+      "class": "condition_score",
+      "execution_mode": "published_corpus",
+      "question": "Welke score krijgt een BMI van 19 kg per vierkante meter?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-03"
+      ],
+      "expected_logic": [
+        {
+          "field": "score_factor",
+          "operator": "lt",
+          "threshold": 20,
+          "unit": "kg/m²",
+          "score_points": 1
+        }
+      ]
+    },
+    {
+      "id": "FP-H-S04",
+      "class": "condition_score",
+      "execution_mode": "published_corpus",
+      "question": "Hoe telt een breuk na het vijftigste levensjaar mee als die langer dan twee jaar geleden was?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-04"
+      ],
+      "must_contain": [
+        "1 punt"
+      ]
+    },
+    {
+      "id": "FP-H-S05",
+      "class": "condition_score",
+      "execution_mode": "published_corpus",
+      "question": "Welke bijdrage aan de score heeft een heupfractuur bij vader of moeder?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-05"
+      ],
+      "must_contain": [
+        "1 punt"
+      ]
+    },
+    {
+      "id": "FP-H-S06",
+      "class": "condition_score",
+      "execution_mode": "published_corpus",
+      "question": "Hoeveel punten levert meer dan één val in het afgelopen jaar of beperkte mobiliteit op?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-06"
+      ],
+      "must_contain": [
+        "1 punt"
+      ]
+    },
+    {
+      "id": "FP-H-S07",
+      "class": "condition_score",
+      "execution_mode": "published_corpus",
+      "question": "Hoe wordt dagelijks gebruik van drie of meer eenheden alcohol in de risicoscore gewaardeerd?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-07"
+      ],
+      "expected_logic": [
+        {
+          "field": "score_factor",
+          "operator": "gte",
+          "threshold": 3,
+          "unit": "eenheden alcohol per dag",
+          "score_points": 1
+        }
+      ]
+    },
+    {
+      "id": "FP-H-S08",
+      "class": "condition_score",
+      "execution_mode": "published_corpus",
+      "question": "Wat is de scorebijdrage van medicatie of een ernstige onderliggende aandoening die onvoldoende onder controle is?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-08"
+      ],
+      "must_contain": [
+        "1 punt"
+      ]
+    },
+    {
+      "id": "FP-H-X01",
+      "class": "exception",
+      "execution_mode": "published_corpus",
+      "question": "Welke uitzondering wordt genoemd bij verwijzen vanaf vier punten?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02"
+      ],
+      "must_preserve": [
+        "tenzij samen met de cliënt",
+        "overleg met de huisarts"
+      ]
+    },
+    {
+      "id": "FP-H-X02",
+      "class": "exception",
+      "execution_mode": "published_corpus",
+      "question": "Welke twee voorbeelden van inflammatoire darmziekten staan in de toelichting bij de risicofactoren?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-background-score-footnote"
+      ],
+      "must_contain": [
+        "Ziekte van Crohn",
+        "colitis ulcerosa"
+      ]
+    },
+    {
+      "id": "FP-H-X03",
+      "class": "exception",
+      "execution_mode": "published_corpus",
+      "question": "Hoe oud moet een cliënt minimaal zijn in de recente-fractuursituatie, en hoe recent is recent?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus"
+      ],
+      "expected_logic": [
+        {
+          "field": "age",
+          "operator": "gte",
+          "threshold": 50,
+          "unit": "year"
+        },
+        {
+          "field": "recent_fracture_age",
+          "operator": "lte",
+          "threshold": 2,
+          "unit": "year"
+        }
+      ]
+    },
+    {
+      "id": "FP-H-F04",
+      "class": "fact",
+      "execution_mode": "published_corpus",
+      "question": "Welk instrument wordt gebruikt om bij de geselecteerde 60-plus groep een eventueel verhoogd fractuurrisico vast te stellen?",
+      "expected_behavior": "retrieve",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-table-risk-score"
+      ],
+      "must_contain": [
+        "risicofactoren scorelijst"
+      ]
+    },
+    {
+      "id": "FP-H-N01",
+      "class": "no_answer",
+      "execution_mode": "published_corpus",
+      "question": "Welke T-score op de DXA-scan bevestigt volgens deze kennisset de diagnose osteoporose?",
+      "expected_behavior": "abstain",
+      "expected_object_ids": []
+    },
+    {
+      "id": "FP-H-N02",
+      "class": "no_answer",
+      "execution_mode": "published_corpus",
+      "question": "Welke dosis alendronine moet een patiënt volgens deze kennisset per week innemen?",
+      "expected_behavior": "abstain",
+      "expected_object_ids": []
+    },
+    {
+      "id": "FP-H-N03",
+      "class": "no_answer",
+      "execution_mode": "published_corpus",
+      "question": "Hoe vaak moet een DXA-meting worden herhaald tijdens behandeling?",
+      "expected_behavior": "abstain",
+      "expected_object_ids": []
+    },
+    {
+      "id": "FP-H-N04",
+      "class": "no_answer",
+      "execution_mode": "published_corpus",
+      "question": "Wat is de aanbevolen calciumtablet-dosering bij chronische nierinsufficiëntie?",
+      "expected_behavior": "abstain",
+      "expected_object_ids": []
+    },
+    {
+      "id": "FP-H-N05",
+      "class": "no_answer",
+      "execution_mode": "published_corpus",
+      "question": "Welke bisfosfonaatbehandeling heeft de voorkeur bij een eGFR van 25?",
+      "expected_behavior": "abstain",
+      "expected_object_ids": []
+    },
+    {
+      "id": "FP-H-N06",
+      "class": "no_answer",
+      "execution_mode": "published_corpus",
+      "question": "Welke laboratoriumwaarde voor vitamine D is volgens deze set de streefwaarde in nmol per liter?",
+      "expected_behavior": "abstain",
+      "expected_object_ids": []
+    }
+  ],
+  "correction_note": "v1.0 had five evaluator expectation-schema mismatches; question texts, expected object IDs, behavior labels, and retrieval configs are unchanged in v1.1."
+}

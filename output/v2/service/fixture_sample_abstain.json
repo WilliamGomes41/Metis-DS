@@ -1,0 +1,21 @@
+{
+  "engine_version": "hybrid-rrf-v1.0.0",
+  "index_signature": "95ca7e3ba945dc2192b300849109811feba1867c70e69e45ba35cbfb11dc150b",
+  "query": "Wat is de aanbevolen dosering morfine bij nierfalen?",
+  "behavior": "abstain",
+  "reason": "all_child_engines_abstained",
+  "child_decisions": {
+    "lexical": {
+      "behavior": "abstain",
+      "reason": "no_lexical_match"
+    },
+    "vector": {
+      "behavior": "abstain",
+      "reason": "similarity_below_threshold"
+    }
+  },
+  "results": [],
+  "mode": "fixture",
+  "synthetic_fixture_mode": true,
+  "warning": "SYNTHETIC FIXTURE MODE - not published V&VN knowledge."
+}

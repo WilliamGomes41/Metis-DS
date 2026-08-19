@@ -1,0 +1,10 @@
+{
+  "input_objects": 20,
+  "approved": 0,
+  "rejected": 0,
+  "pending_or_revise": 20,
+  "errors": [],
+  "validator": "PENDING_REVIEWER",
+  "validation_date": "2026-08-18",
+  "all_reviewed": false
+}

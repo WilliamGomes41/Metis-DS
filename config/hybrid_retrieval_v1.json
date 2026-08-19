@@ -1,0 +1,8 @@
+{
+  "top_k": 5,
+  "candidate_k": 10,
+  "rrf_k": 60,
+  "lexical_weight": 1.0,
+  "vector_weight": 1.0,
+  "fusion_status": "preliminary_equal_weight_rrf_not_golden_tuned"
+}

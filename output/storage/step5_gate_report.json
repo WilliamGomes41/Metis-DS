@@ -1,0 +1,108 @@
+{
+  "input_objects": 20,
+  "approved_objects": 0,
+  "blocked_objects": 20,
+  "embedding_ready": false,
+  "blocked": [
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-condition-glucocorticoids-40plus",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-glucocorticoids-40plus-01",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-condition-screening-60plus",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-03",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-table-risk-score",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-01",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-02",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-03",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-04",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-05",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-06",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-07",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-08",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-background-score-footnote",
+      "reason": "status_not_approved",
+      "validation_status": "needs_review"
+    }
+  ]
+}

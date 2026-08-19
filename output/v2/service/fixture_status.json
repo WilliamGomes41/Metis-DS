@@ -1,0 +1,15 @@
+{
+  "service_version": "inspection-service-v1.0.0",
+  "mode": "fixture",
+  "synthetic_fixture_mode": true,
+  "warning": "SYNTHETIC FIXTURE MODE - results are test data and are not published V&VN knowledge.",
+  "prepublication_gate": "BLOCKED",
+  "semantic_object_count": 21,
+  "approved_object_count": 0,
+  "high_risk_object_count": 12,
+  "verified_source_count": 0,
+  "published_envelope_count": 0,
+  "retrieval_record_count": 19,
+  "hybrid_index_signature": "95ca7e3ba945dc2192b300849109811feba1867c70e69e45ba35cbfb11dc150b",
+  "search_policy": "synthetic_fixture_only"
+}

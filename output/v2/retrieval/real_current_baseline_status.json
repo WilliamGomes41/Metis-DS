@@ -1,0 +1,10 @@
+{
+  "status": "BLOCKED_PENDING_PUBLISHED_CORPUS",
+  "reason": "The current canonical store exports zero published objects because clinical review and canonical source hash verification are not complete.",
+  "published_objects": 0,
+  "retrieval_records": 0,
+  "lexical_engine_ready": true,
+  "embeddings_enabled": false,
+  "production_acceptance_executed": false,
+  "canonical_data_mutated": false
+}

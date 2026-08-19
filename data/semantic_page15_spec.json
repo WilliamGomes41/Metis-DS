@@ -1,0 +1,61 @@
+{
+  "spec_version": "1.0",
+  "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+  "title": "Osteoporose en fractuurpreventie",
+  "source_url": "https://kennisplatform.venvn.nl/wp-content/uploads/richtlijnen/VVN-RL-Osteoporose-1.3.pdf",
+  "source_web_url": "https://kennisplatform.venvn.nl/richtlijn/osteoporose-en-fractuurpreventie/signalering",
+  "version": "augustus 2024",
+  "page": 15,
+  "section": "3. Signalering > 3.2 Aanbevelingen",
+  "source_extract": "output/fractuurpreventie_page15_raw.jsonl",
+  "source_verification": {
+    "status": "official_web_crosscheck",
+    "checked_on": "2026-08-19",
+    "notes": [
+      "Comparison symbols in the PDF text layer are known to be unreliable.",
+      "The public V&VN Knowledge Platform signalering page was used to cross-check thresholds and operators.",
+      "No clinical ambiguity is silently resolved; unresolved semantics remain needs_review."
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "recent-fracture-50plus",
+      "condition": "Bij een cliënt in zorg ≥ 50 jaar met een recente fractuur (≤ 2 jaar geleden)",
+      "recommendations": [
+        "Controleer of aanvullend onderzoek naar osteoporose is uitgevoerd. Dit bestaat uit DXA-VFA, aanvullend laboratoriumonderzoek en inschatting valrisico.",
+        "Informeer de cliënt over het belang van aanvullend onderzoek en motiveer en stimuleer de cliënt om dit uit te laten voeren als dat nog niet gedaan is. De behandelaar van de fractuur kan dit aanvragen.",
+        "Overleg bij een vastgesteld verhoogd fractuurrisico met de cliënt over het starten van preventieve maatregelen om nieuwe fracturen te voorkomen (zie de overige modules van deze richtlijn)."
+      ]
+    },
+    {
+      "id": "glucocorticoids-40plus",
+      "condition": "Bij een cliënt in zorg ≥ 40 jaar die behandeld wordt met systemische glucocorticoïden (bijvoorbeeld prednison en dexamethason)",
+      "recommendations": [
+        "Overleg met de cliënt over het starten van preventieve maatregelen om fracturen te voorkomen (zie de overige modules van deze richtlijn)."
+      ]
+    },
+    {
+      "id": "screening-60plus",
+      "condition": "Bij een cliënt ≥ 60 jaar zónder recente fractuur (≤ 2 jaar geleden) en zónder gebruik van glucocorticoïden",
+      "recommendations": [
+        "Gebruik de risicofactoren scorelijst (zie onderstaand kader) om een eventueel verhoogd fractuurrisico vast te stellen.",
+        "Verwijs de cliënt bij een score van ≥ 4 punten naar de huisarts voor aanvullend onderzoek tenzij samen met de cliënt en zo nodig in overleg met de huisarts wordt besloten hiervan af te zien. Het aanvullend onderzoek bestaat uit DXA-VFA, aanvullend laboratoriumonderzoek en inschatting valrisico.",
+        "Overleg bij een vastgesteld verhoogd fractuurrisico met de cliënt over het starten van preventieve maatregelen om (nieuwe) fracturen te voorkomen (zie de overige modules van deze richtlijn)."
+      ]
+    }
+  ],
+  "score_table": {
+    "title": "Risicofactoren scorelijst",
+    "rules": [
+      {"condition": "Leeftijd ≥ 60 jaar", "operator": "gte", "threshold": 60, "unit": "jaar", "score_points": 1},
+      {"condition": "Leeftijd ≥ 70 jaar", "operator": "gte", "threshold": 70, "unit": "jaar", "score_points": 2},
+      {"condition": "BMI < 20 kg/m²", "operator": "lt", "threshold": 20, "unit": "kg/m²", "score_points": 1},
+      {"condition": "Eerdere, niet recente, fractuur na 50e levensjaar, > 2 jaar geleden", "operator": "gt", "threshold": 2, "unit": "jaar geleden", "score_points": 1},
+      {"condition": "Ouder (vader/moeder) met heupfractuur", "operator": "eq", "threshold": "aanwezig", "unit": null, "score_points": 1},
+      {"condition": "Vallen > 1x laatste jaar en/of beperking mobiliteit", "operator": "gt", "threshold": 1, "unit": "val in laatste jaar", "score_points": 1},
+      {"condition": "Roken en/of alcohol ≥ 3 eenheden per dag", "operator": "gte", "threshold": 3, "unit": "eenheden alcohol per dag", "score_points": 1},
+      {"condition": "Gebruik van medicatie en/of ernstige onderliggende aandoening die onvoldoende onder controle is (in overleg met behandelend arts)", "operator": "eq", "threshold": "aanwezig", "unit": null, "score_points": 1}
+    ],
+    "footnote": "Inflammatoire darmziekten: Ziekte van Crohn en colitis ulcerosa, chronische malnutritie, malabsorptie, coeliakie, reumatoïde artritis, andere chronische inflammatoire aandoeningen zoals spondylartropathie (Ziekte van Bechterew), SLE, sarcoïdose, onbehandeld hypogonadisme bij mannen en vrouwen: bilaterale orchidectomie en ovariëctomie, anorexia nervosa, in het kader van behandeling van borstkanker en prostaatcarcinoom, hypopituïtarisme, COPD, orgaantransplantatie, type I Diabetes Mellitus, type II Diabetes Mellitus met insuline behandeling, schildklieraandoeningen: onbehandelde hyperthyreoïdie of chronisch overgesubstitueerde hypothyreoïdie, onbehandelde primaire hyperparathyreoïdie, M. Cushing, gebruik van anti-epileptica"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "provider": "local_char_tfidf",
+  "parameters": {
+    "ngram_min": 3,
+    "ngram_max": 5,
+    "sublinear_tf": true,
+    "dtype": "float64"
+  },
+  "secrets_policy": "no_secrets_in_config"
+}

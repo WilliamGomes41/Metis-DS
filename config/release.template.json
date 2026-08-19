@@ -1,0 +1,14 @@
+{
+  "release_id": "<release-id>",
+  "release_version": "<release-version>",
+  "release_owner": "<named-release-owner>",
+  "notes": "<release-notes>",
+  "items": [
+    {
+      "object_id": "<approved-object-id>",
+      "object_version": "<object-version>",
+      "content_hash": "<64-char-sha256>",
+      "action": "publish"
+    }
+  ]
+}

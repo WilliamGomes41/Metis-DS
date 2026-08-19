@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://venvn.nl/schemas/proposal.schema.v1.0.json",
+  "title": "V&VN AI Proposal v1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["proposal_id", "target_object_id", "proposal_type", "proposal", "model", "created_at", "status"],
+  "properties": {
+    "proposal_id": {"type": "string", "minLength": 1},
+    "target_object_id": {"type": ["string", "null"]},
+    "proposal_type": {"type": "string", "enum": ["classification", "relation", "metadata", "inconsistency"]},
+    "proposal": {"type": "object"},
+    "model": {"type": "string"},
+    "created_at": {"type": "string"},
+    "status": {"type": "string", "const": "proposal"}
+  }
+}

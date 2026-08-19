@@ -1,0 +1,23 @@
+{
+  "status": "fail_closed_expected",
+  "published_retrieval_records": 0,
+  "hybrid_empty_corpus_behavior": "abstain",
+  "provider_vector_empty_corpus_behavior": "abstain",
+  "embedding_provider": {
+    "contract_version": "embedding-provider-v1.0.0",
+    "provider_id": "local-char-tfidf-v1",
+    "deterministic": true,
+    "config": {
+      "ngram_min": 3,
+      "ngram_max": 5,
+      "sublinear_tf": true,
+      "dtype": "float64"
+    },
+    "fitted": true,
+    "dimension": 0,
+    "corpus_signature": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "credentials_in_config": false
+  },
+  "production_embeddings_generated": false,
+  "reason": "No published knowledge objects yet; expert/source gates remain authoritative."
+}

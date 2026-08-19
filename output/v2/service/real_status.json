@@ -1,0 +1,15 @@
+{
+  "service_version": "inspection-service-v1.0.0",
+  "mode": "real",
+  "synthetic_fixture_mode": false,
+  "warning": null,
+  "prepublication_gate": "BLOCKED",
+  "semantic_object_count": 21,
+  "approved_object_count": 0,
+  "high_risk_object_count": 12,
+  "verified_source_count": 0,
+  "published_envelope_count": 0,
+  "retrieval_record_count": 0,
+  "hybrid_index_signature": "dc2fe4c2688b496f4daccdea77131f64facb13ddb8491755a23ee58dbea1224d",
+  "search_policy": "published_only"
+}

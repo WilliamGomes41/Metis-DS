@@ -1,0 +1,14 @@
+{
+  "api_version": "v1",
+  "service_version": "product-api-v1.0.0",
+  "default_mode": "real",
+  "generation_enabled": false,
+  "authentication": "bearer_api_key_sha256_registry",
+  "entitlement_filter_stage": "before_retrieval",
+  "query_plaintext_logging": false,
+  "usage_metering": true,
+  "pilot_rate_limit_backend": "in_process_sliding_window",
+  "production_rate_limit_target": "Azure API Management or distributed equivalent",
+  "max_query_length": 2000,
+  "absolute_max_top_k": 20
+}

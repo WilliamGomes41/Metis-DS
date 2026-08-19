@@ -1,0 +1,41 @@
+protocol_version: "2.0"
+canonical_schema: "schemas/knowledge_object.schema.v1.0.json"
+proposal_schema: "schemas/proposal.schema.v1.0.json"
+semantic_spec: "data/semantic_page15_spec.v2.0.json"
+source_manifest: "data/source_manifest.v2.json"
+
+canonical_transform:
+  mode: deterministic
+  ai_allowed: false
+
+ai:
+  allowed_output_status: proposal
+  canonical_write_access: false
+
+publication:
+  approved_is_not_published: true
+  require_hash_verified_canonical_source: true
+  block_unresolved_uncertainty: true
+  require_review_snapshot_hash: true
+  require_release_owner: true
+
+four_eyes:
+  enabled: true
+  risk_fields:
+    - age_boundary
+    - dosage
+    - unit
+    - score_points
+    - score_threshold
+    - operator
+    - contraindication
+    - exception
+    - escalation_decision
+
+retrieval:
+  enabled: false
+  source_status_required: published
+
+embeddings:
+  enabled: false
+  source_status_required: published

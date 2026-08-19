@@ -1,0 +1,12 @@
+{
+  "audit_date": "2026-08-19",
+  "overall_status": "BLOCKED_FOR_CLINICAL_PUBLICATION_AND_PRODUCTION",
+  "pilot_development_status": "CONTINUE_WITH_REPAIRS",
+  "pytest": {"passed": 53, "failed": 0},
+  "coverage_percent": 83,
+  "p0_findings": 5,
+  "p1_findings": 8,
+  "p2_findings": 11,
+  "p3_findings": 3,
+  "next_gate": "INTEGRITY_KERNEL_AND_REVIEW_LIFECYCLE_REPAIR"
+}

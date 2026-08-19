@@ -1,0 +1,1 @@
+{"api_version":"v1","request_id":"14e119ce-f10a-4f32-bf2b-036089f1104e","tenant_id":"smoke-tenant","requests":1,"retrieves":1,"abstains":0,"results_returned":3,"by_endpoint":[{"endpoint":"/v1/retrieve","requests":1}]}

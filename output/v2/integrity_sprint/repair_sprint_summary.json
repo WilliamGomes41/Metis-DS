@@ -1,0 +1,20 @@
+{
+  "status": "BLOCKED",
+  "input_objects": 21,
+  "eligible_objects": 0,
+  "verified_source_count": 0,
+  "blockers": {
+    "review_snapshot_not_exact_object": 21,
+    "source_checksum_not_in_verified_registry": 21,
+    "source_checksum_not_sha256": 21,
+    "source_integrity_not_verified": 21,
+    "unresolved_uncertainty": 1,
+    "validated_by_missing": 21,
+    "validation_date_missing": 21,
+    "validation_status_not_approved": 21,
+    "second_review_metadata_missing": 12,
+    "second_review_not_approved": 12,
+    "second_review_snapshot_not_exact_object": 12,
+    "source_fragment_coordinates_unavailable": 20
+  }
+}

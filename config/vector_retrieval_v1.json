@@ -1,0 +1,8 @@
+{
+  "top_k": 5,
+  "ngram_min": 3,
+  "ngram_max": 5,
+  "min_similarity": 0.23,
+  "sublinear_tf": true,
+  "threshold_status": "preliminary_calibrated_on_golden_v0.1"
+}

@@ -1,0 +1,17 @@
+{
+  "registry_version": "1.0",
+  "notes": "Example only. Never commit real API keys. Store only SHA-256 hashes or use an external secret/identity system.",
+  "tenants": [
+    {
+      "tenant_id": "example-hospital",
+      "name": "Example Hospital",
+      "enabled": true,
+      "api_key_sha256": "<64-char-sha256-of-api-key>",
+      "scopes": ["retrieve", "knowledge:read", "documents:read", "updates:read", "usage:read"],
+      "allowed_document_ids": ["vvn-osteoporose-fractuurpreventie-2024"],
+      "allowed_topics": ["osteoporose", "fractuurpreventie"],
+      "requests_per_minute": 60,
+      "max_top_k": 5
+    }
+  ]
+}

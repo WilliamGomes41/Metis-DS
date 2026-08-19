@@ -1,0 +1,16 @@
+{
+  "repair_sprint": "PASS",
+  "publication_gate": "BLOCKED",
+  "tests_passed": 66,
+  "aggregate_coverage_percent": 83,
+  "deterministic_transform": true,
+  "canonical_integrity": true,
+  "source_binary_verified_current": false,
+  "legacy_coordinate_provenance_complete": false,
+  "clinical_review_complete": false,
+  "high_risk_second_review_complete": false,
+  "schema": "schemas/knowledge_object.schema.v1.1.json",
+  "semantic_spec": "data/semantic_page15_spec.v2.1.json",
+  "authoritative_cli": "vvn-data-service",
+  "report": "INTEGRITY_REPAIR_SPRINT_REPORT.md"
+}

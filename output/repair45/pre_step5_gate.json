@@ -1,0 +1,11 @@
+{
+  "gate": "pre_step5",
+  "status": "BLOCKED",
+  "checks": {
+    "semantic_schema_valid": true,
+    "semantic_integrity_valid": true,
+    "clinical_review_complete": false,
+    "validation_errors_zero": true,
+    "pending_zero": false
+  }
+}

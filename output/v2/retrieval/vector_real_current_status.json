@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "engine_version": "local-char-tfidf-vector-v1.0.0",
+  "published_retrieval_records": 0,
+  "index_signature": "5246a9b6ac9f428ac602ed6cc88945fa859a9679adeba462f486f06c970bfba3",
+  "index_built": false,
+  "behavior_on_query": "abstain",
+  "reason": "empty_published_corpus",
+  "canonical_data_mutated": false,
+  "note": "Real corpus remains empty because no knowledge objects are published."
+}

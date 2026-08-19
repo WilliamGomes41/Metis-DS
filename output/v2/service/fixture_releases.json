@@ -1,0 +1,9 @@
+[
+  {
+    "release_id": "SYNTHETIC-TEST-ONLY",
+    "release_version": "fixture-v2",
+    "published_at": "2026-08-19T00:00:00Z",
+    "object_count": 19,
+    "synthetic": true
+  }
+]

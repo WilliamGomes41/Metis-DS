@@ -1,0 +1,6 @@
+{
+  "status": "PASS",
+  "fragment_count": 7,
+  "schema_errors": [],
+  "out": "output/v2/source2/factory_raw_fixture.jsonl"
+}

@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Secrets / local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Runtime state
+output/runtime/
+*.sqlite
+*.sqlite3
+*.log
+
+# Local canonical source binaries and reviewer workbooks
+sources/private/
+*.pdf
+*.docx
+*.xlsx
+*.xls
+
+# Build artifacts
+build/
+dist/
+
+# Human review returns / audit exports belong in controlled data storage, not source control
+output/v2/review_return/
+output/*_review.csv
+output/*_validation_form.csv

@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "synthetic_fixture": true,
+  "release_id": "SYNTHETIC-TEST-ONLY",
+  "input_objects": 21,
+  "retrieval_records": 19,
+  "blocked": [],
+  "warning": "Fixture records are not approved or published V&VN knowledge."
+}

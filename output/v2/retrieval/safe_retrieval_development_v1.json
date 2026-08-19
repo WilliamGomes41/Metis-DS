@@ -1,0 +1,323 @@
+{
+  "evaluator_version": "safe-retrieval-development-eval-v1.0.0",
+  "evaluation_status": "development_only_tuning_allowed_not_independent_acceptance",
+  "golden_set_id": "fractuurpreventie-page15-golden-v0.1",
+  "metrics": {
+    "retrieve_questions": 16,
+    "retrieve_any_hit_at_5": 1.0,
+    "no_answer_questions": 6,
+    "abstention_accuracy": 1.0,
+    "false_answer_rate": 0.0
+  },
+  "details": [
+    {
+      "id": "FP-F01",
+      "class": "fact",
+      "question": "Waaruit bestaat het aanvullende onderzoek naar osteoporose bij een cliënt van 50 jaar of ouder met een recente fractuur?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "answerability": "supported",
+      "reason": "evidence_gate_passed",
+      "false_positive_class": null,
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus"
+      ],
+      "expected_hit": true
+    },
+    {
+      "id": "FP-F02",
+      "class": "fact",
+      "question": "Wie kan het aanvullende onderzoek aanvragen als dit bij een recente fractuur nog niet is gedaan?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "answerability": "supported",
+      "reason": "evidence_gate_passed",
+      "false_positive_class": null,
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus"
+      ],
+      "expected_hit": true
+    },
+    {
+      "id": "FP-F03",
+      "class": "fact",
+      "question": "Wat wordt geadviseerd bij een vastgesteld verhoogd fractuurrisico?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "answerability": "supported",
+      "reason": "evidence_gate_passed",
+      "false_positive_class": null,
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03"
+      ],
+      "expected_hit": true
+    },
+    {
+      "id": "FP-F04",
+      "class": "fact",
+      "question": "Welke voorbeelden van systemische glucocorticoïden noemt deze kennisset?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "answerability": "supported",
+      "reason": "evidence_gate_passed",
+      "false_positive_class": null,
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-glucocorticoids-40plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-glucocorticoids-40plus-01"
+      ],
+      "expected_hit": true
+    },
+    {
+      "id": "FP-F05",
+      "class": "fact",
+      "question": "Welke aandoeningen worden in de achtergrond bij de risicofactoren genoemd?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "answerability": "supported",
+      "reason": "evidence_gate_passed",
+      "false_positive_class": null,
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-background-score-footnote"
+      ],
+      "expected_hit": true
+    },
+    {
+      "id": "FP-F06",
+      "class": "fact",
+      "question": "Hoeveel punten geeft een vader of moeder met een heupfractuur in de risicofactorenscore?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "answerability": "supported",
+      "reason": "evidence_gate_passed",
+      "false_positive_class": null,
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-05"
+      ],
+      "expected_hit": true
+    },
+    {
+      "id": "FP-C01",
+      "class": "condition_score",
+      "question": "Vanaf welke leeftijd en bij hoe recente een fractuur geldt de eerste signaleringssituatie?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "answerability": "supported",
+      "reason": "evidence_gate_passed",
+      "false_positive_class": null,
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus"
+      ],
+      "expected_hit": true
+    },
+    {
+      "id": "FP-C02",
+      "class": "condition_score",
+      "question": "Vanaf welke leeftijd geldt de situatie voor cliënten die systemische glucocorticoïden gebruiken?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "answerability": "supported",
+      "reason": "evidence_gate_passed",
+      "false_positive_class": null,
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-glucocorticoids-40plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-glucocorticoids-40plus-01"
+      ],
+      "expected_hit": true
+    },
+    {
+      "id": "FP-C03",
+      "class": "condition_score",
+      "question": "Wanneer wordt de risicofactorenscore gebruikt bij een cliënt van 60 jaar of ouder?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "answerability": "supported",
+      "reason": "evidence_gate_passed",
+      "false_positive_class": null,
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-screening-60plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-03",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02"
+      ],
+      "expected_hit": true
+    },
+    {
+      "id": "FP-C04",
+      "class": "condition_score",
+      "question": "Bij welke score wordt verwezen naar de huisarts voor aanvullend onderzoek?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "answerability": "supported",
+      "reason": "evidence_gate_passed",
+      "false_positive_class": null,
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02"
+      ],
+      "expected_hit": true
+    },
+    {
+      "id": "FP-C05",
+      "class": "condition_score",
+      "question": "Hoe wordt een BMI lager dan 20 kg/m² gescoord?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "answerability": "supported",
+      "reason": "evidence_gate_passed",
+      "false_positive_class": null,
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-03"
+      ],
+      "expected_hit": true
+    },
+    {
+      "id": "FP-C06",
+      "class": "condition_score",
+      "question": "Hoe wordt roken en/of alcoholgebruik van 3 of meer eenheden per dag gescoord?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "answerability": "supported",
+      "reason": "evidence_gate_passed",
+      "false_positive_class": null,
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-07"
+      ],
+      "expected_hit": true
+    },
+    {
+      "id": "FP-E01",
+      "class": "exception",
+      "question": "Is verwijzing naar de huisarts bij een risicofactorenscore van 4 of hoger altijd onvoorwaardelijk?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "answerability": "supported",
+      "reason": "evidence_gate_passed",
+      "false_positive_class": null,
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02"
+      ],
+      "expected_hit": true
+    },
+    {
+      "id": "FP-E02",
+      "class": "exception",
+      "question": "Welke overlegvoorwaarde hoort bij medicatie of een ernstige onderliggende aandoening als risicofactor?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "answerability": "supported",
+      "reason": "evidence_gate_passed",
+      "false_positive_class": null,
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-08"
+      ],
+      "expected_hit": true
+    },
+    {
+      "id": "FP-E03",
+      "class": "exception",
+      "question": "Moet bij iedere cliënt van 60 jaar of ouder automatisch de risicofactorenscore worden gebruikt?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "answerability": "supported",
+      "reason": "evidence_gate_passed",
+      "false_positive_class": null,
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-screening-60plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-03",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02"
+      ],
+      "expected_hit": true
+    },
+    {
+      "id": "FP-E04",
+      "class": "exception",
+      "question": "Wanneer wordt bij een recente fractuur gesproken over starten van preventieve maatregelen?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "answerability": "supported",
+      "reason": "evidence_gate_passed",
+      "false_positive_class": null,
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus"
+      ],
+      "expected_hit": true
+    },
+    {
+      "id": "FP-N01",
+      "class": "no_answer",
+      "question": "Welke dagelijkse vitamine D-dosering adviseert deze pilotkennisset?",
+      "expected_behavior": "abstain",
+      "actual_behavior": "abstain",
+      "answerability": "insufficient_evidence",
+      "reason": "all_child_engines_abstained",
+      "false_positive_class": "below_confidence_threshold",
+      "returned_object_ids": [],
+      "abstention_correct": true
+    },
+    {
+      "id": "FP-N02",
+      "class": "no_answer",
+      "question": "Hoeveel milligram calcium per dag wordt in deze pilotkennisset geadviseerd?",
+      "expected_behavior": "abstain",
+      "actual_behavior": "abstain",
+      "answerability": "insufficient_evidence",
+      "reason": "all_child_engines_abstained",
+      "false_positive_class": "below_confidence_threshold",
+      "returned_object_ids": [],
+      "abstention_correct": true
+    },
+    {
+      "id": "FP-N03",
+      "class": "no_answer",
+      "question": "Hoe lang moet een bisfosfonaat volgens deze pilotkennisset worden gebruikt?",
+      "expected_behavior": "abstain",
+      "actual_behavior": "abstain",
+      "answerability": "insufficient_evidence",
+      "reason": "all_child_engines_abstained",
+      "false_positive_class": "below_confidence_threshold",
+      "returned_object_ids": [],
+      "abstention_correct": true
+    },
+    {
+      "id": "FP-N04",
+      "class": "no_answer",
+      "question": "Welke T-score op de DXA bevestigt volgens deze pilotkennisset de diagnose osteoporose?",
+      "expected_behavior": "abstain",
+      "actual_behavior": "abstain",
+      "answerability": "insufficient_evidence",
+      "reason": "all_child_engines_abstained",
+      "false_positive_class": "below_confidence_threshold",
+      "returned_object_ids": [],
+      "abstention_correct": true
+    },
+    {
+      "id": "FP-N05",
+      "class": "no_answer",
+      "question": "Heeft deze specifieke patiënt osteoporose?",
+      "expected_behavior": "abstain",
+      "actual_behavior": "abstain",
+      "answerability": "insufficient_evidence",
+      "reason": "patient_specific_context_not_available",
+      "false_positive_class": "context_mismatch",
+      "returned_object_ids": [],
+      "abstention_correct": true
+    },
+    {
+      "id": "FP-N06",
+      "class": "no_answer",
+      "question": "Adviseert deze pilotkennisset het routinematig gebruik van heupbeschermers?",
+      "expected_behavior": "abstain",
+      "actual_behavior": "abstain",
+      "answerability": "insufficient_evidence",
+      "reason": "all_child_engines_abstained",
+      "false_positive_class": "below_confidence_threshold",
+      "returned_object_ids": [],
+      "abstention_correct": true
+    }
+  ]
+}
