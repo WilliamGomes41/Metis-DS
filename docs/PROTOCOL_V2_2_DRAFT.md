@@ -416,7 +416,7 @@ Each release candidate MUST produce a machine-readable or equivalent immutable a
 
 An assurance record describes evidence; it MUST NOT override a failed or blocked gate.
 
-## 15. Current project mapping at draft.1
+## 15. Current project mapping at draft.2
 
 | Gate | Current status | Reason |
 |---|---|---|
