@@ -9,7 +9,7 @@ from src.provider_vector_retrieval_v1 import ProviderVectorIndex, ProviderVector
 from src.semantic_vector_retrieval_v1 import LocalVectorIndex, VectorConfig, read_jsonl
 
 ROOT = Path(__file__).resolve().parents[1]
-RECORDS = ROOT / "output/v2/retrieval/baseline_fixture_records.jsonl"
+RECORDS = ROOT / "data/fixtures/baseline_v0_1/baseline_fixture_records.jsonl"
 PCFG = ROOT / "config/embedding_provider_local_v1.json"
 VCFG = ROOT / "config/vector_retrieval_v1.json"
 

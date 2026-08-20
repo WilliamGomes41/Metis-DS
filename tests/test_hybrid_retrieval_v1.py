@@ -8,7 +8,7 @@ from src.semantic_vector_retrieval_v1 import VectorConfig, read_jsonl
 from src.evaluate_hybrid_retrieval import evaluate
 
 ROOT = Path(__file__).resolve().parents[1]
-RECORDS = ROOT / "output/v2/retrieval/baseline_fixture_records.jsonl"
+RECORDS = ROOT / "data/fixtures/baseline_v0_1/baseline_fixture_records.jsonl"
 GOLDEN = ROOT / "data/golden/fractuurpreventie_page15_golden_v0.1.json"
 HCFG = ROOT / "config/hybrid_retrieval_v1.json"
 LCFG = ROOT / "config/retrieval_baseline_v1.json"

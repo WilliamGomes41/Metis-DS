@@ -66,7 +66,7 @@ class ProductPaths:
     def defaults(cls, root: Path = ROOT) -> "ProductPaths":
         return cls(
             real_records=root / "output/v2/retrieval/real_current_retrieval_records.jsonl",
-            fixture_records=root / "output/v2/retrieval/baseline_fixture_records.jsonl",
+            fixture_records=root / "data/fixtures/baseline_v0_1/baseline_fixture_records.jsonl",
             real_published=root / "output/v2/retrieval/real_current_published.jsonl",
             lexical_config=root / "config/retrieval_baseline_v1.json",
             vector_config=root / "config/vector_retrieval_v1.json",

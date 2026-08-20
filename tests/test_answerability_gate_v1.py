@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_index():
-    records = [json.loads(x) for x in (ROOT / "output/v2/retrieval/baseline_fixture_records.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
+    records = [json.loads(x) for x in (ROOT / "data/fixtures/baseline_v0_1/baseline_fixture_records.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
     h = HybridConfig.from_dict(json.loads((ROOT / "config/hybrid_retrieval_v1.json").read_text()))
     l = RetrievalConfig.from_dict(json.loads((ROOT / "config/retrieval_baseline_v1.json").read_text()))
     v = VectorConfig.from_dict(json.loads((ROOT / "config/vector_retrieval_v1.json").read_text()))

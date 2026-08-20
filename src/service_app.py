@@ -51,7 +51,7 @@ class ServicePaths:
         return cls(
             semantic_objects=root / "output/v2/fractuurpreventie_page15_semantic_v21.jsonl",
             real_records=root / "output/v2/retrieval/real_current_retrieval_records.jsonl",
-            fixture_records=root / "output/v2/retrieval/baseline_fixture_records.jsonl",
+            fixture_records=root / "data/fixtures/baseline_v0_1/baseline_fixture_records.jsonl",
             real_published=root / "output/v2/retrieval/real_current_published.jsonl",
             source_manifest=root / "data/source_manifest.v2.json",
             source_registry=root / "data/source_registry.json",
