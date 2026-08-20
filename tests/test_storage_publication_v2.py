@@ -21,7 +21,7 @@ from src.canonical_store import (
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "schemas/knowledge_object.schema.v1.0.json"
-REAL_INPUT = ROOT / "output/v2/fractuurpreventie_page15_semantic_v2.jsonl"
+REAL_INPUT = ROOT / "data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v2.jsonl"
 
 
 def semantic_rows():

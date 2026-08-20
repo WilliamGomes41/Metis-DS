@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from retrieval_projection_v2 import build_projection, canonical_hash
 from validate_golden_set import validate
 
-SEMANTIC = ROOT / "output/v2/fractuurpreventie_page15_semantic_v2.jsonl"
+SEMANTIC = ROOT / "data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v2.jsonl"
 GOLDEN = ROOT / "data/golden/fractuurpreventie_page15_golden_v0.1.json"
 
 

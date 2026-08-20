@@ -13,7 +13,7 @@ from jsonschema import Draft202012Validator
 ROOT=Path(__file__).resolve().parents[1]
 SCHEMA=json.loads((ROOT/'schemas/knowledge_object.schema.v1.0.json').read_text(encoding='utf-8'))
 PROPOSAL_SCHEMA=json.loads((ROOT/'schemas/proposal.schema.v1.0.json').read_text(encoding='utf-8'))
-OUT=ROOT/'output/v2/fractuurpreventie_page15_semantic_v2.jsonl'
+OUT=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v2.jsonl'
 SPEC=ROOT/'data/semantic_page15_spec.v2.0.json'
 MANIFEST=ROOT/'data/source_manifest.v2.json'
 
@@ -40,7 +40,7 @@ def test_closed_model_and_schema_valid():
 
 
 def test_existing_expert_ids_preserved():
-    old=[json.loads(x)['object_id'] for x in (ROOT/'output/fractuurpreventie_page15_semantic.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+    old=[json.loads(x)['object_id'] for x in (ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
     new={o['object_id'] for o in rows()}
     assert set(old).issubset(new)
     assert len(new-set(old))==1

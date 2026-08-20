@@ -1,5 +1,8 @@
 name: ci
 
+permissions:
+  contents: read
+
 on:
   push:
   pull_request:
@@ -22,4 +25,6 @@ jobs:
       - run: pip install --no-deps --no-build-isolation -e .
       - run: python scripts/repository_preflight.py
       - run: python -m compileall -q src
+      - name: Verify architecture invariants
+        run: pytest -q tests/test_architecture_invariants.py
       - run: pytest -q
