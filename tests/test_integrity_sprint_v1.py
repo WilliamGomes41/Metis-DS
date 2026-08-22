@@ -98,7 +98,15 @@ def test_pdf_v2_extractor_captures_coordinates_and_full_fragment_hash(tmp_path:P
     pdf=tmp_path/'x.pdf'; doc=fitz.open(); page=doc.new_page(); page.insert_text((72,72),'Signalering test'); doc.save(pdf); doc.close()
     frags=extract(pdf,document_id='doc1',source_id='source1',pages=[1])
     assert frags and len(frags[0]['bbox'])==4 and all(isinstance(v,float) for v in frags[0]['bbox'])
+    expected_bbox=','.join(f'{value:.6f}' for value in frags[0]['bbox'])
+    assert frags[0]['source_locator']=={
+        'locator_type':'page_bbox',
+        'locator_value':f'page:1;bbox:{expected_bbox}',
+    }
     assert frags[0]['fragment_hash']==stable_hash(fragment_payload(frags[0]))
+    original_hash=frags[0]['fragment_hash']
+    frags[0]['source_locator']['locator_value']='page:1;bbox:0.000000,0.000000,0.000000,0.000000'
+    assert stable_hash(fragment_payload(frags[0]))!=original_hash
 
 def test_verified_source_can_be_bound_into_new_manifest(tmp_path:Path):
     from src.source_registry import register_source
