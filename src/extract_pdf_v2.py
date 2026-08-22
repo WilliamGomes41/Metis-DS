@@ -7,7 +7,7 @@ from typing import Any
 import fitz
 from src.integrity_kernel import stable_hash, schema_errors
 
-PARSER_VERSION='pdf-fragments-v2.0.0'
+PARSER_VERSION='pdf-fragments-v2.1.0'
 
 def clean_text(text:str)->str:
     text=text.replace('\u00ad','')
@@ -31,7 +31,11 @@ def classify(text:str,max_size:float,bold:bool)->str:
     return 'content'
 
 def fragment_payload(x:dict[str,Any])->dict[str,Any]:
-    return {k:x[k] for k in ['fragment_id','document_id','source_id','source_page','bbox','raw_text','clean_text','section_path','heading','sequence','parser_version']}
+    return {k:x[k] for k in ['fragment_id','document_id','source_id','source_page','bbox','source_locator','raw_text','clean_text','section_path','heading','sequence','parser_version']}
+
+def page_bbox_locator(page_no:int,bbox:list[float])->dict[str,str]:
+    coordinates=','.join(f'{value:.6f}' for value in bbox)
+    return {'locator_type':'page_bbox','locator_value':f'page:{page_no};bbox:{coordinates}'}
 
 def extract(pdf:Path, *, document_id:str, source_id:str, pages:list[int]|None=None)->list[dict[str,Any]]:
     doc=fitz.open(pdf); selected=pages or list(range(1,len(doc)+1)); out=[]; stack=[]; seq=0
@@ -57,7 +61,7 @@ def extract(pdf:Path, *, document_id:str, source_id:str, pages:list[int]|None=No
                     path=stack.copy()
             else: path=stack.copy()
             seq+=1; fid=f'{document_id}-p{page_no:03d}-f{seq:03d}'
-            x={'fragment_id':fid,'document_id':document_id,'source_id':source_id,'source_page':page_no,'bbox':bbox,'raw_text':raw,'clean_text':c,'section_path':path,'heading':heading,'sequence':seq,'parser_version':PARSER_VERSION,'fragment_hash':'0'*64}
+            x={'fragment_id':fid,'document_id':document_id,'source_id':source_id,'source_page':page_no,'bbox':bbox,'source_locator':page_bbox_locator(page_no,bbox),'raw_text':raw,'clean_text':c,'section_path':path,'heading':heading,'sequence':seq,'parser_version':PARSER_VERSION,'fragment_hash':'0'*64}
             x['fragment_hash']=stable_hash(fragment_payload(x)); out.append(x)
     return out
 
