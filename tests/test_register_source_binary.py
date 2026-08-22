@@ -27,8 +27,28 @@ def test_build_record_hashes_exact_bytes(tmp_path: Path):
     record = _record(source)
     assert record["source_checksum"] == sha256_file(source)
     assert record["size_bytes"] == source.stat().st_size
-    assert record["integrity_status"] == "verified"
+    assert record["integrity_status"] == "verified_local"
     assert record["binary_path"] == str(source)
+    assert record["immutable_storage_locator"] is None
+    assert record["publication_eligibility"] == "blocked_pending_immutable_storage"
+
+
+def test_immutable_locator_opens_transform_eligibility(tmp_path: Path):
+    source = (tmp_path / "source.pdf").resolve()
+    source.write_bytes(b"%PDF-1.7\nexact-test-bytes\n")
+    record = build_record(
+        source,
+        source_id="source-1",
+        title="Canonical test source",
+        source_url="https://example.test/source.pdf",
+        source_version="1.0",
+        content_type="application/pdf",
+        acquisition_method="official_download",
+        acquired_at="2026-08-22T12:00:00Z",
+        immutable_storage_locator="azure://canonical/sha256/test/source.pdf",
+    )
+    assert record["integrity_status"] == "verified"
+    assert record["publication_eligibility"] == "eligible_for_transform_and_review"
 
 
 def test_build_record_rejects_missing_binary(tmp_path: Path):
