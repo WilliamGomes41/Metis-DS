@@ -23,9 +23,9 @@ It is **not** the authoritative store for canonical clinical source binaries, pr
 | `output/runtime/` | Local runtime state | no |
 | `sources/private/` | Canonical source binaries if mounted locally | no |
 
-## Transitional output policy
+## Runtime output policy
 
-The pilot currently contains historical output artifacts because several existing regression tests reference them. New runtime state must not be added as a source-controlled dependency. A later cleanup can migrate required deterministic fixtures into `data/fixtures/` and make `output/` fully disposable.
+Automated tests use reviewed deterministic fixtures under `data/fixtures/` and must not depend on `output/`. The `output/` directory contains transitional historical pilot artefacts only; it is not an authoritative baseline, fixture store or acceptance-evidence store. New runtime state must remain untracked and must not become a source-controlled test dependency.
 
 ## Releases
 
@@ -39,4 +39,4 @@ Protocol, schema and clinical knowledge versions remain independently versioned 
 
 ## Branch protection target
 
-When the GitHub remote is created, configure `main` so that merges require the CI test workflow to pass. Direct pushes can remain disabled once the first baseline is established.
+The authoritative private remote is `WilliamGomes41/VENVN-DS`, with `main` as its default branch. Changes are handled procedurally through feature branches and pull requests while enforceable protection is unavailable under the current repository plan. Gate G1 remains `BLOCKED` until `main` enforces required CI checks and rejects direct pushes through GitHub branch protection or an equivalent ruleset.
