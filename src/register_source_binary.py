@@ -21,6 +21,7 @@ def build_record(
     content_type: str,
     acquisition_method: str,
     acquired_at: str,
+    immutable_storage_locator: str | None = None,
 ) -> dict[str, Any]:
     if not binary_path.exists() or not binary_path.is_file():
         raise ValueError("source_binary_missing")
@@ -35,6 +36,7 @@ def build_record(
     except ValueError as exc:
         raise ValueError("acquired_at_invalid") from exc
 
+    durably_stored = bool(immutable_storage_locator and immutable_storage_locator.strip())
     return {
         "source_id": source_id,
         "title": title,
@@ -46,13 +48,17 @@ def build_record(
         "size_bytes": binary_path.stat().st_size,
         "checksum_algorithm": "sha256",
         "source_checksum": sha256_file(binary_path),
-        "integrity_status": "verified",
+        "integrity_status": "verified" if durably_stored else "verified_local",
         "binary_path": str(binary_path.resolve()),
-        "immutable_storage_locator": str(binary_path.resolve()),
+        "immutable_storage_locator": immutable_storage_locator if durably_stored else None,
         "acquisition_method": acquisition_method,
         "acquired_at": acquired_at,
         "verified_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "publication_eligibility": "eligible_for_transform_and_review",
+        "publication_eligibility": (
+            "eligible_for_transform_and_review"
+            if durably_stored
+            else "blocked_pending_immutable_storage"
+        ),
     }
 
 
@@ -78,6 +84,7 @@ def main() -> int:
     parser.add_argument("--content-type", required=True)
     parser.add_argument("--acquisition-method", required=True)
     parser.add_argument("--acquired-at", required=True)
+    parser.add_argument("--immutable-storage-locator")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
 
@@ -91,6 +98,7 @@ def main() -> int:
         content_type=args.content_type,
         acquisition_method=args.acquisition_method,
         acquired_at=args.acquired_at,
+        immutable_storage_locator=args.immutable_storage_locator,
     )
     updated = update_registry(registry, record)
     args.out.parent.mkdir(parents=True, exist_ok=True)
