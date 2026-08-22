@@ -1,0 +1,13 @@
+{
+  "manifest_version": "1.0",
+  "protocol_version": "2.2.0",
+  "protocol_path": "docs/PROTOCOL_V2_2.md",
+  "protocol_sha256": "c380c9f6bfd609cf1abda9f06aec8b89ce059a2bddf1720a1458896d4159ba9f",
+  "repository": "WilliamGomes41/VENVN-DS",
+  "default_branch": "main",
+  "commit_sha": "77d30f3131eccc445197c472a6b7f4c753e0af42",
+  "approval_date": "2026-08-22",
+  "approval_authority": "project_owner",
+  "branch_protection_status": "temporary_procedural_control",
+  "conformance_effect": "does_not_override_gate_status"
+}
