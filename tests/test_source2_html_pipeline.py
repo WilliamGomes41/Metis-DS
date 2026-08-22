@@ -31,6 +31,43 @@ def test_html_extractor_emits_source_neutral_locators(tmp_path: Path):
     assert not validate_raw(rows, ROOT / "schemas/raw_fragment.schema.v1.1.json")
 
 
+def test_html_extractor_can_scope_to_canonical_content_container(tmp_path: Path):
+    html = tmp_path / "source.html"
+    html.write_text("""<!doctype html><html><body>
+<nav><p>Menu item</p></nav>
+<main><div class="canonical-content"><h1>Richtlijn</h1><p>Canonieke aanbeveling.</p></div></main>
+<div class="modal"><p>Verborgen duplicaat.</p></div>
+</body></html>""", encoding="utf-8")
+    rows = extract(
+        html,
+        document_id="doc-test",
+        source_id="source-test",
+        root_class="canonical-content",
+    )
+    assert [row["clean_text"] for row in rows] == ["Richtlijn", "Canonieke aanbeveling."]
+
+
+def test_html_extractor_fails_closed_when_root_container_is_absent(tmp_path: Path):
+    html = tmp_path / "source.html"
+    html.write_text("<html><body><p>Niet canoniek afgebakend.</p></body></html>", encoding="utf-8")
+    assert extract(
+        html,
+        document_id="doc-test",
+        source_id="source-test",
+        root_class="canonical-content",
+    ) == []
+
+
+def test_html_extractor_selects_one_declared_root_occurrence(tmp_path: Path):
+    html = tmp_path / "source.html"
+    html.write_text("""<div class="chapter"><h2>Samenvatting</h2><p>Eerste.</p></div>
+<div class="chapter"><h2>Details</h2><p>Tweede.</p></div>""", encoding="utf-8")
+    first = extract(html, document_id="doc", source_id="source", root_class="chapter")
+    second = extract(html, document_id="doc", source_id="source", root_class="chapter", root_occurrence=2)
+    assert [row["clean_text"] for row in first] == ["Samenvatting", "Eerste."]
+    assert [row["clean_text"] for row in second] == ["Details", "Tweede."]
+
+
 def test_generic_transform_validates_v12_and_keeps_html_locator(tmp_path: Path):
     html = tmp_path / "source.html"
     html.write_text("<h1>Test</h1>\n<h2>Aanbeveling</h2>\n<p>Gebruik de afgesproken interventie.</p>", encoding="utf-8")
