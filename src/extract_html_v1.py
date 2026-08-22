@@ -16,9 +16,10 @@ from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker
 
-PARSER_VERSION = "html-visible-text-v1.0.0"
+PARSER_VERSION = "html-visible-text-v1.1.0"
 BLOCK_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6", "p", "li"}
 SKIP_TAGS = {"script", "style", "noscript", "svg"}
+VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
 
 
 def _stable_hash(value: dict[str, Any]) -> str:
@@ -31,8 +32,14 @@ def _clean(text: str) -> str:
 
 
 class VisibleHTMLParser(HTMLParser):
-    def __init__(self) -> None:
+    def __init__(self, *, root_class: str | None = None, root_occurrence: int = 1) -> None:
         super().__init__(convert_charrefs=True)
+        self.root_class = root_class
+        self.root_occurrence = root_occurrence
+        self.root_seen = 0
+        self.root_finished = False
+        self.scope_depth = 0
+        self.root_found = root_class is None
         self.skip_depth = 0
         self.current: dict[str, Any] | None = None
         self.blocks: list[dict[str, Any]] = []
@@ -41,6 +48,17 @@ class VisibleHTMLParser(HTMLParser):
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag = tag.lower()
+        attributes = dict(attrs)
+        classes = set((attributes.get("class") or "").split())
+        if self.root_class and not self.scope_depth:
+            if self.root_class in classes:
+                self.root_seen += 1
+                if self.root_seen == self.root_occurrence:
+                    self.scope_depth = 1
+                    self.root_found = True
+            return
+        if self.root_class and tag not in VOID_TAGS:
+            self.scope_depth += 1
         if tag in SKIP_TAGS:
             self.skip_depth += 1
             return
@@ -57,6 +75,8 @@ class VisibleHTMLParser(HTMLParser):
         }
 
     def handle_data(self, data: str) -> None:
+        if self.root_class and not self.scope_depth:
+            return
         if self.skip_depth or not self.current:
             return
         self.current["parts"].append(data)
@@ -64,31 +84,36 @@ class VisibleHTMLParser(HTMLParser):
 
     def handle_endtag(self, tag: str) -> None:
         tag = tag.lower()
+        if self.root_class and not self.scope_depth:
+            return
         if tag in SKIP_TAGS and self.skip_depth:
             self.skip_depth -= 1
-            return
-        if self.skip_depth or not self.current or self.current["tag"] != tag:
-            return
-        text = _clean(" ".join(self.current["parts"]))
-        block = self.current
-        self.current = None
-        if not text:
-            return
-        level = int(tag[1]) if tag.startswith("h") and len(tag) == 2 and tag[1].isdigit() else None
-        if level:
-            self.heading_stack = [(lvl, txt) for lvl, txt in self.heading_stack if lvl < level]
-            self.heading_stack.append((level, text))
-            section_path = [txt for _, txt in self.heading_stack]
-            heading = text
-        else:
-            section_path = [txt for _, txt in self.heading_stack]
-            heading = self.heading_stack[-1][1] if self.heading_stack else None
-        block.update({"text": text, "section_path": section_path, "heading": heading})
-        self.blocks.append(block)
+        elif not self.skip_depth and self.current and self.current["tag"] == tag:
+            text = _clean(" ".join(self.current["parts"]))
+            block = self.current
+            self.current = None
+            if text:
+                level = int(tag[1]) if tag.startswith("h") and len(tag) == 2 and tag[1].isdigit() else None
+                if level:
+                    self.heading_stack = [(lvl, txt) for lvl, txt in self.heading_stack if lvl < level]
+                    self.heading_stack.append((level, text))
+                    section_path = [txt for _, txt in self.heading_stack]
+                    heading = text
+                else:
+                    section_path = [txt for _, txt in self.heading_stack]
+                    heading = self.heading_stack[-1][1] if self.heading_stack else None
+                block.update({"text": text, "section_path": section_path, "heading": heading})
+                self.blocks.append(block)
+        if self.root_class and tag not in VOID_TAGS:
+            self.scope_depth -= 1
+            if self.scope_depth == 0:
+                self.root_finished = True
 
 
-def extract(html_path: Path, *, document_id: str, source_id: str) -> list[dict[str, Any]]:
-    parser = VisibleHTMLParser()
+def extract(html_path: Path, *, document_id: str, source_id: str, root_class: str | None = None, root_occurrence: int = 1) -> list[dict[str, Any]]:
+    if root_occurrence < 1:
+        raise ValueError("root_occurrence_must_be_positive")
+    parser = VisibleHTMLParser(root_class=root_class, root_occurrence=root_occurrence)
     parser.feed(html_path.read_text(encoding="utf-8"))
     rows: list[dict[str, Any]] = []
     for seq, block in enumerate(parser.blocks, 1):
@@ -127,11 +152,13 @@ def main() -> int:
     ap.add_argument("--input", type=Path, required=True)
     ap.add_argument("--document-id", required=True)
     ap.add_argument("--source-id", required=True)
+    ap.add_argument("--root-class")
+    ap.add_argument("--root-occurrence", type=int, default=1)
     ap.add_argument("--schema", type=Path, default=Path("schemas/raw_fragment.schema.v1.1.json"))
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--report", type=Path, required=True)
     a = ap.parse_args()
-    rows = extract(a.input, document_id=a.document_id, source_id=a.source_id)
+    rows = extract(a.input, document_id=a.document_id, source_id=a.source_id, root_class=a.root_class, root_occurrence=a.root_occurrence)
     errors = validate(rows, a.schema)
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text("".join(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n" for r in rows), encoding="utf-8")
@@ -139,6 +166,8 @@ def main() -> int:
         "status": "PASS" if rows and not errors else "BLOCKED",
         "parser_version": PARSER_VERSION,
         "input": str(a.input),
+        "root_class": a.root_class,
+        "root_occurrence": a.root_occurrence,
         "fragment_count": len(rows),
         "schema_errors": errors,
     }
