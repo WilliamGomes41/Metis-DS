@@ -10,9 +10,9 @@ from src.protocol_approval_manifest import build_manifest
 def test_approved_v22_protocol_manifest_is_commit_bound(tmp_path: Path):
     protocol = tmp_path / "PROTOCOL_V2_2.md"
     protocol.write_text(
-        "**Status:** Approved for project use\\n"
-        "**Protocol version:** 2.2.0\\n"
-        "**Approval date:** 2026-08-22\\n",
+        "**Status:** Approved for project use\n"
+        "**Protocol version:** 2.2.0\n"
+        "**Approval date:** 2026-08-22\n",
         encoding="utf-8",
     )
     manifest = build_manifest(protocol, "a" * 40)
@@ -25,9 +25,9 @@ def test_approved_v22_protocol_manifest_is_commit_bound(tmp_path: Path):
 def test_approved_v23_delta_manifest_is_supported(tmp_path: Path):
     protocol = tmp_path / "PROTOCOL_V2_3_TECHNICAL_DELTA.md"
     protocol.write_text(
-        "**Status:** Approved for project use\\n"
-        "**Protocol delta version:** 2.3.0\\n"
-        "**Approval date:** 2026-08-25\\n",
+        "**Status:** Approved for project use\n"
+        "**Protocol delta version:** 2.3.0\n"
+        "**Approval date:** 2026-08-25\n",
         encoding="utf-8",
     )
     manifest = build_manifest(protocol, "b" * 40)
@@ -39,9 +39,9 @@ def test_approved_v23_delta_manifest_is_supported(tmp_path: Path):
 def test_draft_protocol_cannot_receive_approval_manifest(tmp_path: Path):
     protocol = tmp_path / "PROTOCOL.md"
     protocol.write_text(
-        "**Status:** Draft\\n"
-        "**Protocol version:** 2.3.0\\n"
-        "**Approval date:** 2026-08-25\\n",
+        "**Status:** Draft\n"
+        "**Protocol version:** 2.3.0\n"
+        "**Approval date:** 2026-08-25\n",
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="protocol_not_approved"):
@@ -50,13 +50,13 @@ def test_draft_protocol_cannot_receive_approval_manifest(tmp_path: Path):
 
 def test_manifest_requires_version_and_approval_date(tmp_path: Path):
     protocol = tmp_path / "PROTOCOL.md"
-    protocol.write_text("**Status:** Approved for project use\\n", encoding="utf-8")
+    protocol.write_text("**Status:** Approved for project use\n", encoding="utf-8")
     with pytest.raises(ValueError, match="protocol_version_missing"):
         build_manifest(protocol, "a" * 40)
 
     protocol.write_text(
-        "**Status:** Approved for project use\\n"
-        "**Protocol version:** 2.3.0\\n",
+        "**Status:** Approved for project use\n"
+        "**Protocol version:** 2.3.0\n",
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="approval_date_missing"):
@@ -66,9 +66,9 @@ def test_manifest_requires_version_and_approval_date(tmp_path: Path):
 def test_manifest_rejects_non_commit_reference(tmp_path: Path):
     protocol = tmp_path / "PROTOCOL.md"
     protocol.write_text(
-        "**Status:** Approved for project use\\n"
-        "**Protocol version:** 2.3.0\\n"
-        "**Approval date:** 2026-08-25\\n",
+        "**Status:** Approved for project use\n"
+        "**Protocol version:** 2.3.0\n"
+        "**Approval date:** 2026-08-25\n",
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="commit_sha_invalid"):
