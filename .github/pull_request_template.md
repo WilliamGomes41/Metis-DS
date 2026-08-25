@@ -7,6 +7,24 @@ Describe what changed and why.
 - [ ] No protocol/schema impact
 - [ ] Protocol/schema impact documented and versioned
 
+## Infrastructure / cost impact
+
+Select one:
+
+- [ ] None
+- [ ] Uses an already-declared dependency
+- [ ] Changes an existing dependency
+- [ ] Introduces a new dependency
+- [ ] Removes a dependency
+
+If anything other than `None` applies:
+
+- [ ] `config/infrastructure_manifest.v1.json` is updated or the change is explicitly blocked pending a linked decision
+- [ ] `docs/STACK_SETUP_BASELINE.md` is updated when the human-readable stack changes
+- [ ] Provider/account/plan/region/secret requirements are explicit
+- [ ] Cost model and expected cost range are recorded, or `TBD` has a deadline before provisioning
+- [ ] Required versus optional/future dependencies are not conflated
+
 ## Safety checks
 
 - [ ] No secrets or source binaries committed

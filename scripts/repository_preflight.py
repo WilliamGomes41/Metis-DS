@@ -18,6 +18,37 @@ SECRET_PATTERNS = {
     'azure_storage_key': re.compile(r'AccountKey=(?!<)[^\s;]{20,}'),
 }
 
+INFRA_MANIFEST = ROOT / 'config' / 'infrastructure_manifest.v1.json'
+STACK_BASELINE = ROOT / 'docs' / 'STACK_SETUP_BASELINE.md'
+INFRA_REQUIRED_FIELDS = {
+    'capability_id',
+    'capability',
+    'environment',
+    'requirement_status',
+    'implementation_status',
+    'current_implementation',
+    'target_implementation',
+    'provider',
+    'data_classification',
+    'region',
+    'persistence',
+    'identity_secret_boundary',
+    'cost_model',
+    'expected_cost_range',
+    'budget_owner',
+    'operational_owner',
+    'decision_deadline_gate',
+    'evidence',
+}
+VALID_REQUIREMENT_STATUSES = {'required', 'optional', 'future', 'not_applicable'}
+VALID_IMPLEMENTATION_STATUSES = {
+    'implemented',
+    'selected_not_provisioned',
+    'decision_open',
+    'blocked',
+    'not_needed',
+}
+
 
 def files() -> list[Path]:
     out: list[Path] = []
@@ -31,6 +62,75 @@ def files() -> list[Path]:
             continue
         out.append(path)
     return out
+
+
+def validate_infrastructure_manifest(errors: list[str]) -> None:
+    if not STACK_BASELINE.exists():
+        errors.append('docs/STACK_SETUP_BASELINE.md is required')
+    if not INFRA_MANIFEST.exists():
+        errors.append('config/infrastructure_manifest.v1.json is required')
+        return
+
+    try:
+        manifest = json.loads(INFRA_MANIFEST.read_text(encoding='utf-8'))
+    except (json.JSONDecodeError, OSError) as exc:
+        errors.append(f'infrastructure manifest is not valid readable JSON: {exc}')
+        return
+
+    environments = manifest.get('environments')
+    dependencies = manifest.get('dependencies')
+    if not isinstance(environments, list) or not environments:
+        errors.append('infrastructure manifest must declare at least one environment')
+        environments = []
+    if not isinstance(dependencies, list) or not dependencies:
+        errors.append('infrastructure manifest must declare at least one dependency')
+        return
+
+    known_environments = {str(x) for x in environments}
+    seen_ids: set[str] = set()
+    for idx, item in enumerate(dependencies):
+        prefix = f'infrastructure dependency[{idx}]'
+        if not isinstance(item, dict):
+            errors.append(f'{prefix} must be an object')
+            continue
+
+        missing = sorted(INFRA_REQUIRED_FIELDS - item.keys())
+        if missing:
+            errors.append(f'{prefix} missing fields: {", ".join(missing)}')
+            continue
+
+        capability_id = str(item.get('capability_id') or '').strip()
+        if not capability_id:
+            errors.append(f'{prefix} capability_id must not be empty')
+        elif capability_id in seen_ids:
+            errors.append(f'duplicate infrastructure capability_id: {capability_id}')
+        else:
+            seen_ids.add(capability_id)
+
+        environment = str(item.get('environment') or '')
+        if environment not in known_environments:
+            errors.append(f'{prefix} references undeclared environment: {environment}')
+
+        requirement_status = str(item.get('requirement_status') or '')
+        if requirement_status not in VALID_REQUIREMENT_STATUSES:
+            errors.append(f'{prefix} invalid requirement_status: {requirement_status}')
+
+        implementation_status = str(item.get('implementation_status') or '')
+        if implementation_status not in VALID_IMPLEMENTATION_STATUSES:
+            errors.append(f'{prefix} invalid implementation_status: {implementation_status}')
+
+        if requirement_status == 'required' and implementation_status == 'not_needed':
+            errors.append(f'{prefix} required capability cannot be marked not_needed')
+
+        for field in ('capability', 'current_implementation', 'target_implementation', 'provider',
+                      'data_classification', 'identity_secret_boundary', 'cost_model',
+                      'expected_cost_range', 'decision_deadline_gate'):
+            if not str(item.get(field) or '').strip():
+                errors.append(f'{prefix} {field} must not be empty')
+
+        evidence = item.get('evidence')
+        if not isinstance(evidence, list) or not evidence or not all(str(x).strip() for x in evidence):
+            errors.append(f'{prefix} evidence must contain at least one non-empty reference')
 
 
 def main() -> int:
@@ -55,6 +155,8 @@ def main() -> int:
         data = json.loads(tenant_path.read_text(encoding='utf-8'))
         if data.get('tenants'):
             errors.append('config/tenants.v1.json must contain an empty tenants list')
+
+    validate_infrastructure_manifest(errors)
 
     if errors:
         print(json.dumps({'status': 'BLOCKED', 'errors': errors}, indent=2))
