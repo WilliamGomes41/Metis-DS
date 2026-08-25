@@ -1,8 +1,9 @@
 # V&VN Data Services Protocol v2.3 — Setup, Stack and Cost Transparency
 
-**Status:** DRAFT — not approved
-**Protocol delta version:** 2.3.0-draft.1
-**Date:** 2026-08-24
+**Status:** Approved for project use
+**Protocol delta version:** 2.3.0
+**Approval date:** 2026-08-25
+**Approved by:** Project owner
 **Extends:** Protocol v2.2.0
 **Normative language:** MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are normative requirements
 
@@ -14,7 +15,7 @@ This delta requires those dependencies to be identified before they become imple
 
 It does not prescribe Azure, GitHub, PostgreSQL, Blob Storage, an embedding provider or an LLM merely because those technologies are common. It requires the **capability need, selected implementation, cost exposure and operational ownership** to be explicit before the dependency is relied upon.
 
-Protocol v2.2 remains normative until this delta is approved and recorded through the protocol approval process.
+Protocol v2.2.0 and this approved delta jointly form the normative baseline v2.3.0. Where requirements conflict, the stricter fail-closed requirement applies.
 
 ## 2. Core setup-transparency rule
 
@@ -202,11 +203,11 @@ Every pull request SHOULD contain an `Infrastructure / cost impact` section with
 
 When the value is not `None`, the pull request MUST link to the updated infrastructure manifest and stack baseline or record why progression is blocked.
 
-## 10. Current V&VN Data Services mapping at draft creation
+## 10. Current V&VN Data Services mapping at approval
 
-The following mapping is descriptive and MUST be re-evaluated before v2.3 approval.
+The following mapping was re-evaluated at approval and records the current environment-specific G0 state.
 
-| Capability | Current state | Draft G0 interpretation |
+| Capability | Current state | Approved G0 interpretation |
 |---|---|---|
 | GitHub authoritative repository | Implemented; branch protection remains procedural under current plan | Known plan/control dependency already recorded |
 | GitHub Actions CI | Implemented | No new provider required |
@@ -221,11 +222,11 @@ The following mapping is descriptive and MUST be re-evaluated before v2.3 approv
 | Hosted embedding provider | Not required by current accepted retrieval architecture | Future/optional; no budget dependency now |
 | LLM / Answer-RAG | Not part of Product API | Future/optional; governed separately by G7/C6 |
 
-On this draft mapping, **G0 Local Development can be treated as PASS once the manifest is present and consistent; G0 Azure DEV remains BLOCKED until the open infrastructure decisions are resolved.**
+On this approved mapping, **G0 Local Development can be treated as PASS once the manifest is present and consistent; G0 Azure DEV remains BLOCKED until the open infrastructure decisions are resolved.**
 
 ## 11. Required implementation artefacts for v2.3 adoption
 
-Before this delta can be approved as implemented policy, the repository SHOULD contain:
+At adoption, the repository MUST contain:
 
 - `docs/STACK_SETUP_BASELINE.md`;
 - a versioned machine-readable infrastructure manifest;
@@ -238,6 +239,6 @@ The CI validator does not need to verify vendor pricing. It MUST verify that req
 
 ## 12. Approval effect
 
-Approval of v2.3 would establish infrastructure and cost transparency as a protocol requirement. It would not itself authorize expenditure, select a vendor, provision Azure resources, or convert G8 to PASS.
+Approval of v2.3 establishes infrastructure and cost transparency as a protocol requirement. It does not itself authorize expenditure, select a vendor, provision Azure resources, or convert G0 Azure DEV or G8 to PASS.
 
-Until approved, this file is a proposal and Protocol v2.2.0 remains the authoritative normative baseline.
+From approval, Protocol v2.2.0 and this delta jointly form the authoritative normative baseline v2.3.0. Approval does not override any gate status; unresolved Azure DEV requirements remain `BLOCKED`.

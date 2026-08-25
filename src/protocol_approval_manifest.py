@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build an immutable approval manifest for a merged protocol document."""
+"""Build an immutable approval manifest for an approved protocol document."""
 from __future__ import annotations
 
 import argparse
@@ -11,6 +11,16 @@ from src.integrity_kernel import sha256_file
 
 
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+VERSION_RE = re.compile(
+    r"^\*\*(?:Protocol version|Protocol delta version):\*\*\s+"
+    r"(?P<version>\d+\.\d+\.\d+)\s*$",
+    re.MULTILINE,
+)
+DATE_RE = re.compile(
+    r"^\*\*(?:Approval date|Date):\*\*\s+"
+    r"(?P<date>\d{4}-\d{2}-\d{2})\s*$",
+    re.MULTILINE,
+)
 
 
 def build_manifest(protocol: Path, commit_sha: str) -> dict[str, object]:
@@ -21,17 +31,21 @@ def build_manifest(protocol: Path, commit_sha: str) -> dict[str, object]:
     text = protocol.read_text(encoding="utf-8")
     if "**Status:** Approved for project use" not in text:
         raise ValueError("protocol_not_approved")
-    if "**Protocol version:** 2.2.0" not in text:
-        raise ValueError("protocol_version_mismatch")
+    version_match = VERSION_RE.search(text)
+    if version_match is None:
+        raise ValueError("protocol_version_missing")
+    date_match = DATE_RE.search(text)
+    if date_match is None:
+        raise ValueError("approval_date_missing")
     return {
         "manifest_version": "1.0",
-        "protocol_version": "2.2.0",
+        "protocol_version": version_match.group("version"),
         "protocol_path": protocol.as_posix(),
         "protocol_sha256": sha256_file(protocol),
         "repository": "WilliamGomes41/VENVN-DS",
         "default_branch": "main",
         "commit_sha": commit_sha,
-        "approval_date": "2026-08-22",
+        "approval_date": date_match.group("date"),
         "approval_authority": "project_owner",
         "branch_protection_status": "temporary_procedural_control",
         "conformance_effect": "does_not_override_gate_status",

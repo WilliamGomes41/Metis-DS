@@ -1,8 +1,8 @@
 {
   "manifest_version": "1.0",
-  "status": "draft",
-  "protocol_target": "2.3.0-draft.1",
-  "updated_at": "2026-08-24",
+  "status": "approved",
+  "protocol_target": "2.3.0",
+  "updated_at": "2026-08-25",
   "repository": "WilliamGomes41/VENVN-DS",
   "environments": [
     "local_development",
