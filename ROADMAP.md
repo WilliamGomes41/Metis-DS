@@ -20,8 +20,10 @@ Status: grotendeels afgerond; governance-nazorg open.
 
 - Private GitHub-repository als gezaghebbende remote.
 - CI, repository-preflight en architectuur-invarianttests.
-- Protocol v2.2.0 vastgesteld.
+- Protocol v2.3.0 vastgesteld, inclusief G0 voor infrastructuur- en kostentransparantie.
 - Ontwikkelhiërarchie en handoffdiscipline geborgd.
+- Stackbaseline en machineleesbaar infrastructuurmanifest aanwezig.
+- G0 Local Development: `PASS`; G0 Azure DEV: `BLOCKED` totdat open keuzes zijn opgelost.
 - GD-03 reviewervereisten formeel vaststellen.
 - Retrospectieve onafhankelijke review van de C5-wijzigingen in PR #4 en PR #5.
 
@@ -61,9 +63,9 @@ Status: gepland.
 
 ### Fase 5 — Azure DEV en operationele gereedheid
 
-Status: geblokkeerd tot Azure-toegang en platformbesluiten beschikbaar zijn.
+Status: `BLOCKED` onder G0 Azure DEV totdat toegang, eigenaarschap, kosten en platformbesluiten beschikbaar zijn.
 
-- Technisch manifest voor stack, omgevingen, secrets, opslag, identity en observability.
+- Infrastructuurmanifest per gekozen Azure-component afronden: provider/product, regio, data boundary, identity/secrets, eigenaar en kosten.
 - Azure DEV inrichten met immutable bronopslag en gescheiden runtime-opslag.
 - Deployment reproduceerbaar koppelen aan commit, protocolversie en build-ID.
 - Security-, rollback-, withdrawal- en incidenttest uitvoeren.
