@@ -12,13 +12,13 @@ from src.integrity_kernel import sha256_file
 
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 VERSION_RE = re.compile(
-    r"^\\*\\*(?:Protocol version|Protocol delta version):\\*\\*\\s+"
-    r"(?P<version>\\d+\\.\\d+\\.\\d+)\\s*$",
+    r"^\*\*(?:Protocol version|Protocol delta version):\*\*\s+"
+    r"(?P<version>\d+\.\d+\.\d+)\s*$",
     re.MULTILINE,
 )
 DATE_RE = re.compile(
-    r"^\\*\\*(?:Approval date|Date):\\*\\*\\s+"
-    r"(?P<date>\\d{4}-\\d{2}-\\d{2})\\s*$",
+    r"^\*\*(?:Approval date|Date):\*\*\s+"
+    r"(?P<date>\d{4}-\d{2}-\d{2})\s*$",
     re.MULTILINE,
 )
 
@@ -60,7 +60,7 @@ def main() -> int:
     args = parser.parse_args()
     manifest = build_manifest(args.protocol, args.commit_sha)
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(manifest, indent=2) + "\\n", encoding="utf-8")
+    args.out.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"status": "PASS", "protocol_sha256": manifest["protocol_sha256"]}, indent=2))
     return 0
 
