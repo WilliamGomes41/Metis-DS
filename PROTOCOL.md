@@ -2,10 +2,13 @@
 
 ## Geldende norm
 
-De geldende normatieve specificatie is [Protocol v2.2.0](docs/PROTOCOL_V2_2.md).
+De geldende normatieve baseline is Protocol v2.3.0 en bestaat uit:
+
+1. [Protocol v2.2.0](docs/PROTOCOL_V2_2.md) — lifecycle, provenance en acceptance;
+2. [Protocol v2.3.0](docs/PROTOCOL_V2_3_TECHNICAL_DELTA.md) — setup, stack en kostentransparantie.
 
 - Status: goedgekeurd voor projectgebruik
-- Goedgekeurd: 2026-08-22
+- Goedgekeurd: 2026-08-25
 - Eigenaar: projecteigenaar V&VN Data Services
 - Regel bij conflict: de strengste fail-closed eis geldt
 
