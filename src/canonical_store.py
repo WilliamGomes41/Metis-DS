@@ -15,7 +15,6 @@ Safety properties:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -23,6 +22,8 @@ from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator
+
+from src.integrity_kernel import compute_canonical_object_hash, exact_review_snapshot_hash
 
 
 SQLITE_SCHEMA = r"""
@@ -98,58 +99,14 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def canonical_hash(value: Any) -> str:
-    payload = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
-
-
 def recompute_content_hash(obj: dict[str, Any]) -> str:
-    core = {
-        "object_type": obj["object_type"],
-        "text": obj["content"]["clean_text"],
-        "logic": obj.get("logic"),
-        "relations": obj.get("relations", []),
-        "decision_graph": obj.get("decision_graph"),
-        "risk": obj["risk"],
-    }
-    return canonical_hash(core)
-
-
-def _norm_review_value(value: Any) -> str:
-    if value is None:
-        return ""
-    text = str(value).strip()
-    if text.endswith(".0"):
-        try:
-            return str(int(float(text)))
-        except ValueError:
-            pass
-    return text
+    """Full immutable canonical-object hash (integrity kernel)."""
+    return compute_canonical_object_hash(obj)
 
 
 def first_review_snapshot_hash(obj: dict[str, Any]) -> str:
-    operator = threshold = unit = score_points = ""
-    logic = obj.get("logic") or {}
-    predicates = logic.get("predicates") or []
-    if obj["object_type"] == "score_rule" and predicates:
-        pred = predicates[0]
-        operator = _norm_review_value(pred.get("operator"))
-        threshold = _norm_review_value(pred.get("threshold"))
-        unit = _norm_review_value(pred.get("unit"))
-        score_points = _norm_review_value(logic.get("score_points"))
-    elif logic.get("result_threshold"):
-        result = logic["result_threshold"]
-        operator = _norm_review_value(result.get("operator"))
-        threshold = _norm_review_value(result.get("threshold"))
-        unit = _norm_review_value(result.get("unit"))
-    fields = {
-        "reviewed_text": _norm_review_value(obj["content"]["clean_text"]),
-        "reviewed_operator": operator,
-        "reviewed_threshold": threshold,
-        "reviewed_unit": unit,
-        "reviewed_score_points": score_points,
-    }
-    return canonical_hash(fields)
+    """Exact review snapshot of the canonical object (integrity kernel)."""
+    return exact_review_snapshot_hash(obj)
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -215,7 +172,7 @@ def eligibility_errors(obj: dict[str, Any], validator: Draft202012Validator) -> 
             errors.append("second_review_incomplete")
         elif sr.get("reviewer") == g.get("validated_by"):
             errors.append("second_reviewer_must_differ_from_first")
-        elif sr.get("snapshot_hash") != p.get("content_hash"):
+        elif sr.get("snapshot_hash") != first_review_snapshot_hash(obj):
             errors.append("second_review_snapshot_mismatch")
     return errors
 

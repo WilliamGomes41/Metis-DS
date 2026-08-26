@@ -124,6 +124,7 @@ class ProductState:
         self.vector_config = VectorConfig.from_dict(_read_json(paths.vector_config, {}))
         self.hybrid_config = HybridConfig.from_dict(_read_json(paths.hybrid_config, {}))
         self.answerability_config = AnswerabilityConfig.from_dict(_read_json(paths.hybrid_config.parent / "answerability_gate_v1.json", {}))
+        self._index_cache: dict[tuple[Any, ...], SafeRetrievalIndex] = {}
 
     def _reload_records(self, *, force: bool = False) -> bool:
         try:
@@ -187,13 +188,22 @@ class ProductState:
             rows.append(r)
         return rows
 
+    def _safe_index(self, records: list[dict[str, Any]]) -> SafeRetrievalIndex:
+        key = (self._records_mtime_ns, tuple((r.get("metadata") or {}).get("object_id") for r in records))
+        engine = self._index_cache.get(key)
+        if engine is None:
+            engine = SafeRetrievalIndex(
+                records, self.hybrid_config, self.lexical_config, self.vector_config, self.answerability_config
+            )
+            self._index_cache = {key: engine}
+        return engine
+
     def retrieve(self, tenant: TenantPolicy, req: RetrieveRequest) -> dict[str, Any]:
         self.require_scope(tenant, "retrieve")
         if req.top_k > tenant.max_top_k:
             raise HTTPException(status_code=400, detail={"code": "top_k_exceeds_tenant_limit", "max_top_k": tenant.max_top_k})
         records = self._tenant_records(tenant, req.filters)
-        engine = SafeRetrievalIndex(records, self.hybrid_config, self.lexical_config, self.vector_config, self.answerability_config)
-        raw = engine.search(req.query, req.top_k)
+        raw = self._safe_index(records).search(req.query, req.top_k)
         results: list[dict[str, Any]] = []
         for item in raw.get("results", []):
             record = next((r for r in records if (r.get("metadata") or {}).get("object_id") == item.get("object_id")), None)
@@ -375,7 +385,8 @@ def create_product_app(
             "service_version": SERVICE_VERSION,
             "mode": state.mode,
             "synthetic_fixture": state.synthetic,
-            "published_retrieval_records": len(state.records),
+            "published_retrieval_records": len(state.records) if state.synthetic else None,
+            "published_corpus_ready": bool(state.records),
             "corpus_reload_policy": "reload_on_file_change",
             "generation_enabled": False,
         }

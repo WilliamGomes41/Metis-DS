@@ -20,8 +20,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
+from .answerability_gate_v1 import AnswerabilityConfig
 from .hybrid_retrieval_v1 import HybridConfig, HybridIndex
 from .lexical_retrieval_v1 import RetrievalConfig, read_jsonl as read_lexical_jsonl
+from .safe_retrieval_v1 import SafeRetrievalIndex
 from .semantic_vector_retrieval_v1 import VectorConfig
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -100,6 +102,12 @@ class InspectionState:
         self.vector_config = VectorConfig.from_dict(_read_json(paths.vector_config, {}))
         self.hybrid_config = HybridConfig.from_dict(_read_json(paths.hybrid_config, {}))
         self.hybrid = HybridIndex(self.records, self.hybrid_config, self.lexical_config, self.vector_config)
+        self.answerability_config = AnswerabilityConfig.from_dict(
+            _read_json(paths.hybrid_config.parent / "answerability_gate_v1.json", {})
+        )
+        self.safe = SafeRetrievalIndex(
+            self.records, self.hybrid_config, self.lexical_config, self.vector_config, self.answerability_config
+        )
 
     def status(self) -> dict[str, Any]:
         validated = sum(1 for o in self.semantic_objects if (o.get("governance") or {}).get("validation_status") == "approved")
@@ -235,7 +243,7 @@ class InspectionState:
         return enriched
 
     def search(self, query: str, top_k: int) -> dict[str, Any]:
-        return self._enrich_results(self.hybrid.search(query, top_k))
+        return self._enrich_results(self.safe.search(query, top_k))
 
     def explain(self, query: str, top_k: int) -> dict[str, Any]:
         hybrid = self.hybrid.search(query, top_k)
@@ -259,6 +267,7 @@ class InspectionState:
                 "vector_threshold": self.vector_config.min_similarity,
             },
             "hybrid": self._enrich_results(hybrid),
+            "answerability": self._enrich_results(self.safe.search(query, top_k)),
             "lexical": lexical,
             "vector": vector,
         }

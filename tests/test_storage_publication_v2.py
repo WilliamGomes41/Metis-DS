@@ -35,6 +35,7 @@ def make_approved(*, high_risk: bool = False, version: str = "1.0"):
     obj["source"]["source_checksum"] = "a" * 64
     obj["source"]["integrity_status"] = "verified"
     obj["uncertainty"] = {"has_uncertainty": False, "items": []}
+    obj["provenance"]["content_hash"] = recompute_content_hash(obj)
     g = obj["governance"]
     g["validation_status"] = "approved"
     g["publication_status"] = "unpublished"
@@ -49,7 +50,7 @@ def make_approved(*, high_risk: bool = False, version: str = "1.0"):
             "status": "approved",
             "reviewer": "Reviewer B",
             "review_date": "2026-08-19",
-            "snapshot_hash": obj["provenance"]["content_hash"],
+            "snapshot_hash": first_review_snapshot_hash(obj),
         }
     else:
         g["second_review"] = {
@@ -242,3 +243,12 @@ def test_withdraw_release_hides_only_objects_still_pointing_to_that_release(tmp_
     with sqlite3.connect(db) as con:
         assert con.execute("SELECT status FROM publication_releases WHERE release_id='withdraw-me'").fetchone()[0] == "withdrawn"
         assert con.execute("SELECT COUNT(*) FROM canonical_object_versions").fetchone()[0] == 1
+
+def test_source_metadata_tamper_is_detected(tmp_path: Path):
+    obj = make_approved()
+    obj["source"]["title"] = "Tampered source title"
+    inp = tmp_path / "tampered.jsonl"; write_jsonl(inp, [obj])
+    rep = import_approved(tmp_path / "store.db", inp, SCHEMA_PATH, "technical-test")
+    assert rep["imported_objects"] == 0
+    assert "content_hash_mismatch" in rep["blocked"][0]["errors"]
+

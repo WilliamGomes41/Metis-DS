@@ -2,6 +2,15 @@
 
 All notable technical changes to V&VN Data Services are recorded here.
 
+## [Unreleased]
+
+### Fixed
+- Restored V&VN Data Services handoff/roadmap after Quire Phase 4B status was written into this repository.
+- Canonical store now uses the integrity-kernel object hash and exact review snapshot (closes remaining P0 dual-hash).
+- CLI `serve` / `serve-api` match the Docker entrypoints.
+- Inspection search uses the same answerability gate as the Product API.
+- `audit-current` defaults to reviewed fixtures instead of `output/`.
+
 ## [0.1.0] - 2026-08-20
 
 ### Added
