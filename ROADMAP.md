@@ -4,7 +4,7 @@
 
 Deze roadmap bepaalt de uitvoeringsvolgorde van de geldende norm uit `PROTOCOL.md`. De roadmap mag het protocol niet afzwakken of stilzwijgend uitbreiden. `HANDOFF.md` bevat de actuele voortgang; deze roadmap bevat de geplande volgorde en stopvoorwaarden.
 
-Quire-bind (UI, Reliability Observatory, discovery/adjudication) heeft een eigen roadmap. Die fasen horen niet in dit document.
+Deze repository is uitsluitend V&VN Data Services. Status, fasen of UI van andere producten horen niet in dit document.
 
 ## Niet-onderhandelbare doelen
 
@@ -60,14 +60,14 @@ Stopvoorwaarde: geen onafhankelijkheidsclaim op basis van Holdout A of de develo
 
 ### Fase 4 — MVP-servicelaag
 
-Status: deels aanwezig (Product API + inspection); afronden na Fase 2–3.
+Status: deels aanwezig (Product API + interne inspection); afronden na Fase 2–3.
 
 - Product-API/RAG-laag uitsluitend voeden met `supported` evidence.
 - Inspection en Product API gebruiken dezelfde answerability-gate.
 - Abstention en reason codes zichtbaar maken.
 - End-to-end validatie van query tot bronverwijzing.
 - Logging en audittrail zonder vertrouwelijke bron- of reviewdata te lekken.
-- Visuele bot/interface hoort in `quire-bind`, niet in deze pipeline-repo.
+- Geen product-frontend in deze repository. Inspection is intern en read-only.
 
 Stopvoorwaarde: geen generation/LLM in deze service; similarity is nooit answerability.
 
@@ -85,4 +85,4 @@ Stopvoorwaarde: geen Azure-provisioning zolang G0 Azure DEV `BLOCKED` is.
 
 ## Scopebeheer
 
-Nieuwe functionaliteit komt alleen in de roadmap nadat is vastgesteld dat deze door het huidige protocol wordt gedekt. Buiten scope voor de eerste MVP zijn uitbreidingen die de onafhankelijke acceptatie, bronintegriteit of fail-closed publicatie omzeilen of vertragen, en product-UI die in `quire-bind` thuishoort.
+Nieuwe functionaliteit komt alleen in de roadmap nadat is vastgesteld dat deze door het huidige protocol wordt gedekt. Buiten scope voor de eerste MVP zijn uitbreidingen die de onafhankelijke acceptatie, bronintegriteit of fail-closed publicatie omzeilen of vertragen, en elke product-UI of ander product dat niet V&VN Data Services is.
