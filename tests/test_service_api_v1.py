@@ -80,3 +80,14 @@ def test_sources_documents_releases_and_ui():
     releases = fixture.get("/releases").json()
     assert len(releases) == 1
     assert releases[0]["synthetic"] is True
+
+
+def test_fixture_answerability_gate_matches_product_api():
+    client = TestClient(create_app("fixture"))
+    supported = client.post("/search", json={"query": "Hoeveel punten krijgt leeftijd van 60 jaar of ouder?", "top_k": 5}).json()
+    unsupported = client.post("/search", json={"query": "Hoe vaak moet een DXA-meting tijdens behandeling worden herhaald?", "top_k": 5}).json()
+    assert supported["behavior"] == "retrieve"
+    assert supported["answerability"] == "supported"
+    assert unsupported["behavior"] == "abstain"
+    assert unsupported["answerability"] == "insufficient_evidence"
+    assert unsupported["results"] == []

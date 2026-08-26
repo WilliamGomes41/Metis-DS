@@ -1,3 +1,11 @@
+## Repository impact
+
+- [ ] `WilliamGomes41/VENVN-DS` only
+- [ ] `WilliamGomes41/quire-bind` only
+- [ ] Both (explain the boundary)
+
+Do not record Quire UI/observability status in this repository's `HANDOFF.md` / `ROADMAP.md`.
+
 ## Change
 
 Describe what changed and why.

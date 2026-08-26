@@ -4,6 +4,8 @@ from __future__ import annotations
 import argparse, json
 from pathlib import Path
 
+import os
+
 from src.build_review_queue_v3 import build as build_review_queue, read_jsonl
 from src.prepublication_gate_v3 import evaluate as evaluate_prepublication
 from src.source_registry import register_source
@@ -81,15 +83,32 @@ def cmd_audit_current(a:argparse.Namespace)->dict:
             'publication_gate':pre['status'],'publication_blocker_count':len(pre['errors'])}
 
 
+
+def cmd_serve(a: argparse.Namespace) -> dict:
+    import uvicorn
+    from src.service_app import create_app
+    os.environ["VVN_SERVICE_MODE"] = a.mode
+    uvicorn.run(create_app(a.mode), host=a.host, port=a.port)
+    return {"status": "PASS"}
+
+
+def cmd_serve_api(a: argparse.Namespace) -> dict:
+    import uvicorn
+    from src.product_api_v1 import create_product_app
+    uvicorn.run(create_product_app(a.mode, allow_fixture=(a.mode == "fixture")), host=a.host, port=a.port)
+    return {"status": "PASS"}
+
 def main()->int:
     ap=argparse.ArgumentParser(prog='vvn-data-service'); sub=ap.add_subparsers(dest='cmd',required=True)
-    p=sub.add_parser('audit-current'); p.add_argument('--input',type=Path,default=ROOT/'output/v2/fractuurpreventie_page15_semantic_v21.jsonl'); p.add_argument('--schema',type=Path,default=ROOT/'schemas/knowledge_object.schema.v1.1.json'); p.add_argument('--source-registry',type=Path,default=ROOT/'data/source_registry.json'); p.add_argument('--raw-extract',type=Path,default=ROOT/'output/fractuurpreventie_page15_raw.jsonl'); p.add_argument('--report',type=Path)
+    p=sub.add_parser('audit-current'); p.add_argument('--input',type=Path,default=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v21.jsonl'); p.add_argument('--schema',type=Path,default=ROOT/'schemas/knowledge_object.schema.v1.1.json'); p.add_argument('--source-registry',type=Path,default=ROOT/'data/source_registry.json'); p.add_argument('--raw-extract',type=Path,default=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_raw.jsonl'); p.add_argument('--report',type=Path)
     p=sub.add_parser('review-queue'); p.add_argument('--input',type=Path,required=True); p.add_argument('--track',choices=['clinical','technical'],required=True); p.add_argument('--out',type=Path,required=True); p.add_argument('--report',type=Path)
     p=sub.add_parser('source-register'); p.add_argument('--source-id',required=True); p.add_argument('--binary',type=Path,required=True); p.add_argument('--source-url',required=True); p.add_argument('--version'); p.add_argument('--out',type=Path,required=True); p.add_argument('--report',type=Path)
     p=sub.add_parser('source-bind'); p.add_argument('--manifest',type=Path,required=True); p.add_argument('--source-registry',type=Path,required=True); p.add_argument('--out',type=Path,required=True); p.add_argument('--report',type=Path)
     p=sub.add_parser('prepublish'); p.add_argument('--input',type=Path,required=True); p.add_argument('--schema',type=Path,required=True); p.add_argument('--source-registry',type=Path,required=True); p.add_argument('--raw-extract',type=Path,required=True); p.add_argument('--report',type=Path)
     p=sub.add_parser('extract-html'); p.add_argument('--input',type=Path,required=True); p.add_argument('--document-id',required=True); p.add_argument('--source-id',required=True); p.add_argument('--schema',type=Path,default=ROOT/'schemas/raw_fragment.schema.v1.1.json'); p.add_argument('--out',type=Path,required=True); p.add_argument('--report',type=Path)
     p=sub.add_parser('semantic-generic'); p.add_argument('--spec',type=Path,required=True); p.add_argument('--manifest',type=Path,required=True); p.add_argument('--raw',type=Path,required=True); p.add_argument('--schema',type=Path,default=ROOT/'schemas/knowledge_object.schema.v1.2.json'); p.add_argument('--out',type=Path,required=True); p.add_argument('--report',type=Path)
+    p=sub.add_parser('serve'); p.add_argument('--mode',choices=['real','fixture'],default='real'); p.add_argument('--host',default='0.0.0.0'); p.add_argument('--port',type=int,default=8000)
+    p=sub.add_parser('serve-api'); p.add_argument('--mode',choices=['real','fixture'],default='real'); p.add_argument('--host',default='0.0.0.0'); p.add_argument('--port',type=int,default=8080)
     a=ap.parse_args()
     try:
         if a.cmd=='audit-current': rep=cmd_audit_current(a)
@@ -99,6 +118,8 @@ def main()->int:
         elif a.cmd=='prepublish': rep=cmd_prepublish(a)
         elif a.cmd=='extract-html': rep=cmd_extract_html(a)
         elif a.cmd=='semantic-generic': rep=cmd_semantic_generic(a)
+        elif a.cmd=='serve': rep=cmd_serve(a)
+        elif a.cmd=='serve-api': rep=cmd_serve_api(a)
         else: raise AssertionError(a.cmd)
     except Exception as exc:
         rep={'status':'BLOCKED','error':type(exc).__name__,'message':str(exc)}
