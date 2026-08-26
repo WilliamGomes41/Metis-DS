@@ -1,10 +1,6 @@
-## Repository impact
+## Scope
 
-- [ ] `WilliamGomes41/VENVN-DS` only
-- [ ] `WilliamGomes41/quire-bind` only
-- [ ] Both (explain the boundary)
-
-Do not record Quire UI/observability status in this repository's `HANDOFF.md` / `ROADMAP.md`.
+This repository is V&VN Data Services only. Do not record status, phases or UI of other products in `PROTOCOL.md`, `ROADMAP.md` or `HANDOFF.md`.
 
 ## Change
 
