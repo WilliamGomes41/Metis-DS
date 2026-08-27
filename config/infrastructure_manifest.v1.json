@@ -2,7 +2,7 @@
   "manifest_version": "1.0",
   "status": "approved",
   "protocol_target": "2.3.0",
-  "updated_at": "2026-08-25",
+  "updated_at": "2026-08-28",
   "repository": "WilliamGomes41/VENVN-DS",
   "environments": [
     "local_development",
@@ -15,7 +15,7 @@
       "environment": "local_development",
       "requirement_status": "required",
       "implementation_status": "implemented",
-      "current_implementation": "GitHub repository WilliamGomes41/VENVN-DS; currently private; Protocol v2.5 permits public during declared MVP period",
+      "current_implementation": "GitHub repository WilliamGomes41/VENVN-DS; public during declared MVP period under Protocol v2.5; G1 technical protection ON",
       "target_implementation": "Public MVP remote with G1 branch protection; after MVP restore private hosting or an organization plan that can protect a private default branch",
       "provider": "GitHub",
       "data_classification": "source_code_and_safe_configuration",
@@ -109,8 +109,8 @@
       "environment": "local_development",
       "requirement_status": "required",
       "implementation_status": "implemented",
-      "current_implementation": "Locally supplied/mounted source binary excluded from Git",
-      "target_implementation": "Controlled local mount for development only",
+      "current_implementation": "Locally supplied/mounted source binary excluded from Git under sources/private/; G0 Local substitute only, explicitly not production",
+      "target_implementation": "Controlled local mount for development only; console ingest (Protocol v2.6) uses this local substitute until G0 Azure DEV PASSes",
       "provider": "local",
       "data_classification": "canonical_source_binary",
       "region": "local",
@@ -124,7 +124,8 @@
       "evidence": [
         "src/source_registry.py",
         "CONTRIBUTING.md",
-        "docs/REPOSITORY_CONVENTIONS.md"
+        "docs/REPOSITORY_CONVENTIONS.md",
+        "docs/PROTOCOL_V2_6_INTERNAL_OPERATIONS_CONSOLE_DELTA.md"
       ]
     },
     {
@@ -239,7 +240,8 @@
       "evidence": [
         "CONTRIBUTING.md",
         "docs/REPOSITORY_CONVENTIONS.md",
-        "docs/PROTOCOL_V2_2.md#6-canonical-source-acquisition-and-identity"
+        "docs/PROTOCOL_V2_2.md#6-canonical-source-acquisition-and-identity",
+        "docs/PROTOCOL_V2_6_INTERNAL_OPERATIONS_CONSOLE_DELTA.md"
       ]
     },
     {
@@ -447,6 +449,100 @@
       "operational_owner": "TBD",
       "decision_deadline_gate": "G8",
       "evidence": [
+        "docs/STACK_SETUP_BASELINE.md"
+      ]
+    },
+    {
+      "capability_id": "operations-console-ui-local",
+      "capability": "Internal operations console UI",
+      "environment": "local_development",
+      "requirement_status": "future",
+      "implementation_status": "decision_open",
+      "current_implementation": "Not implemented. Protocol v2.6 authorizes scope only; do not claim the console exists in code",
+      "target_implementation": "Intuitive internal console for guideline researchers and reviewers (ingest, review, publish; analytics later). Chat is not a room. Care-app frontend, chatbot, EPD/ECD UI and public website remain forbidden. Vendor TBD; Vercel is not required",
+      "provider": "TBD",
+      "data_classification": "internal_operations_ui_over_knowledge_kernel",
+      "region": "local",
+      "persistence": "not_a_source_of_truth; kernel remains the store",
+      "identity_secret_boundary": "internal accounts; no public signup; no shared login for review/publish",
+      "cost_model": "engineering_effort_until_a_host_is_selected",
+      "expected_cost_range": "TBD before any console hosting is provisioned; 0 current hosted-UI cost",
+      "budget_owner": "TBD",
+      "operational_owner": "TBD",
+      "decision_deadline_gate": "After bron 2 storage is capturable (bytes + hash + locator path); not instead of Fase 2",
+      "evidence": [
+        "docs/PROTOCOL_V2_6_INTERNAL_OPERATIONS_CONSOLE_DELTA.md",
+        "docs/STACK_SETUP_BASELINE.md"
+      ]
+    },
+    {
+      "capability_id": "operations-console-identity-local",
+      "capability": "Internal operations console identity (accounts and roles)",
+      "environment": "local_development",
+      "requirement_status": "future",
+      "implementation_status": "decision_open",
+      "current_implementation": "Not implemented. Identity is a required console capability when the console is built; this delta does not provision it",
+      "target_implementation": "Internal identity with at least researcher, reviewer and publisher roles. No shared login for review/publish. Local development substitute TBD; not public signup",
+      "provider": "TBD",
+      "data_classification": "internal_operator_identity",
+      "region": "local",
+      "persistence": "operator_accounts_separate_from_tenant_api_keys",
+      "identity_secret_boundary": "no secrets in Git; config/tenants.v1.json remains empty",
+      "cost_model": "no_separate_managed_service_cost_until_a_provider_is_selected",
+      "expected_cost_range": "0 current identity-service cost",
+      "budget_owner": "TBD",
+      "operational_owner": "TBD",
+      "decision_deadline_gate": "G0 for the target environment before console identity is relied upon",
+      "evidence": [
+        "docs/PROTOCOL_V2_6_INTERNAL_OPERATIONS_CONSOLE_DELTA.md",
+        "config/tenants.v1.json"
+      ]
+    },
+    {
+      "capability_id": "operations-console-ui-azure-dev",
+      "capability": "Internal operations console UI",
+      "environment": "azure_dev",
+      "requirement_status": "future",
+      "implementation_status": "decision_open",
+      "current_implementation": "Not implemented. Protocol v2.6 authorizes an internal operations console; no UI is built and no host is selected",
+      "target_implementation": "Internal console hosted with the DS product when G0 Azure DEV PASSes. Vendor TBD. Vercel, Neon and a hosted LLM are not required",
+      "provider": "TBD",
+      "data_classification": "internal_operations_ui_over_knowledge_kernel",
+      "region": "TBD",
+      "persistence": "not_a_source_of_truth; immutable source store plus canonical objects remain the kernel",
+      "identity_secret_boundary": "internal identity only; no public signup",
+      "cost_model": "hosting_and_plan_dependent_when_selected",
+      "expected_cost_range": "TBD before provisioning; G0 Azure DEV remains BLOCKED",
+      "budget_owner": "TBD",
+      "operational_owner": "TBD",
+      "decision_deadline_gate": "G0-Azure-DEV before any console hosting is provisioned",
+      "evidence": [
+        "docs/PROTOCOL_V2_6_INTERNAL_OPERATIONS_CONSOLE_DELTA.md",
+        "docs/STACK_SETUP_BASELINE.md",
+        "docs/PROTOCOL_V2_3_TECHNICAL_DELTA.md"
+      ]
+    },
+    {
+      "capability_id": "operations-console-identity-azure-dev",
+      "capability": "Internal operations console identity (accounts and roles)",
+      "environment": "azure_dev",
+      "requirement_status": "future",
+      "implementation_status": "decision_open",
+      "current_implementation": "Not implemented. Required console capability; no vendor selected; Azure AD is not provisioned; G8 is not closed by this delta",
+      "target_implementation": "Internal identity provider TBD, subject to G0 for Azure DEV. At least researcher, reviewer and publisher. No shared login. Must enforce uploader independence in accounts",
+      "provider": "TBD",
+      "data_classification": "internal_operator_identity_and_role_assignments",
+      "region": "TBD",
+      "persistence": "durable_identity_store_when_selected",
+      "identity_secret_boundary": "managed identity or approved secret boundary; no secrets in Git; does not by itself close G8 or provision Azure AD",
+      "cost_model": "identity_service_and_plan_dependent_when_selected",
+      "expected_cost_range": "TBD before provisioning; G0 Azure DEV remains BLOCKED",
+      "budget_owner": "TBD",
+      "operational_owner": "TBD",
+      "decision_deadline_gate": "G0-Azure-DEV before console identity is relied upon; G8 remains separate",
+      "evidence": [
+        "docs/PROTOCOL_V2_6_INTERNAL_OPERATIONS_CONSOLE_DELTA.md",
+        "docs/PROTOCOL_V2_2.md#13-protocol-v22-gates",
         "docs/STACK_SETUP_BASELINE.md"
       ]
     }

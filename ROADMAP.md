@@ -16,30 +16,31 @@ Deze repository is uitsluitend V&VN Data Services. Status, fasen of UI van ander
 - Eén integrity-kernel is de hash-autoriteit voor review-snapshot, store-import en publicatiegate.
 - Het DS-MVP blijft beperkt tot U1 bronverwijzing en U2 kennisrespons.
 - Technische toegang is nooit automatisch een licentie, V&VN-goedkeuring of toestemming voor modeltraining.
+- Een interne operations console MAG in deze repository als menselijk oppervlak over de knowledge kernel (Protocol v2.6, goedgekeurde scope, niet gebouwd). Een zorgapp-frontend, chatbot, EPD/ECD-UI of publieke website MAG dat niet. Chat hoort niet in de console.
 
 ## Fasen naar MVP
 
 ### Fase 1 — Repository en governance-baseline
 
-Status: G1-technische protection ON; gezaghebbende remote is public onder Protocol v2.5.0; resterende nazorg: named GD-03-reviewers en retrospectieve C5-review. Azure/G8 niet gestart.
+Status: G1-technische protection ON; gezaghebbende remote is public onder Protocol v2.5.0; resterende nazorg: named GD-03-reviewers en retrospectieve C5-review. Azure/G8 niet gestart. Protocol v2.6.0 is live als scope voor de interne operations console; de console is niet geïmplementeerd.
 
 - Gezaghebbende remote `WilliamGomes41/VENVN-DS` is public tijdens de gedeclareerde MVP-periode (Protocol v2.5.0). Publiek is niet de latere productiestandaard; na de MVP MUST een nieuw plan private hosting of een organisatieplan herstellen.
 - CI, repository-preflight en architectuur-invarianttests.
-- Protocol v2.5.0 vastgesteld en live (v2.2 + v2.3-delta + v2.4-delta + v2.5-delta), inclusief G0, product-/distributiegrenzen en de MVP-uitzondering voor een publieke remote. PR #16 squash-merged 2026-08-27T22:10:04Z (`73c0669c8ad7c62a836e7a39666f3db33644be68`).
+- Protocol v2.6.0 vastgesteld en live (v2.2 + v2.3-delta + v2.4-delta + v2.5-delta + v2.6-delta), inclusief G0, product-/distributiegrenzen, de MVP-uitzondering voor een publieke remote, en de interne operations console als goedgekeurde-niet-gebouwde scope.
 - Ontwikkelhiërarchie en handoffdiscipline geborgd.
 - Stackbaseline en machineleesbaar infrastructuurmanifest aanwezig.
 - G0 Local Development: `PASS`; G0 Azure DEV: `BLOCKED` totdat open keuzes zijn opgelost. Geen Azure starten in deze fase.
 - Integrity kernel als enige canonical-hash voor store én publication gate (herstel 2026-08-26).
 - GD-03 reviewervereisten ESTABLISHED (2026-08-27); evidence in `docs/GOVERNANCE.md`. Named reviewers blijven een latere bezettingsstap en zijn niet bezet.
 - Historische STEP-/audit-/repair-rapporten verplaatst naar `docs/history/` (2026-08-27); de root is het operationele oppervlak, geen vijfde stuurlaag.
-- Retrospectieve onafhankelijke review van de C5-wijzigingen in PR #4, PR #5 en PR #16 blijft verschuldigd.
-- G1 technische protection is ON. GitHub-ruleset **G1 main** (id `21686159`, 2026-08-27T22:10:53Z): geen verwijderen van `main`, geen force-push / non-fast-forward, required CI `test (3.12)` en `test (3.13)` (strict), pull request verplicht vóór merge, 0 vereiste goedkeurende reviews (solo owner). Protected branch, required CI en PR-workflow bestaan. Volgende uitvoeringsstap is Fase 2 (duurzame immutable opslag van bron 2).
+- Retrospectieve onafhankelijke review van de C5-wijzigingen in PR #4, PR #5, PR #16 en Protocol v2.6 blijft verschuldigd.
+- G1 technische protection is ON. GitHub-ruleset **G1 main** (id `21686159`, 2026-08-27T22:10:53Z): geen verwijderen van `main`, geen force-push / non-fast-forward, required CI `test (3.12)` en `test (3.13)` (strict), pull request verplicht vóór merge, 0 vereiste goedkeurende reviews (solo owner). Protected branch, required CI en PR-workflow bestaan. Volgende uitvoeringsstap is Fase 2 (duurzame immutable opslag van bron 2). De console komt daarna, niet in plaats daarvan.
 
-Stopvoorwaarde: C3–C6-merges vereisen de vastgestelde GD-03-matrix en onafhankelijke menselijke reviewers op dezelfde commit/snapshot; named reviewers zijn nog niet bezet. Bugfixes van bestaande protocolregels blijven toegestaan. Protocol v2.5 (PR #16) is een eigenaarsgoedgekeurde C5-delta; retrospectieve technical- en security/operations-review van PR #4, PR #5 en PR #16 blijft verschuldigd. GD-03 blijft ESTABLISHED.
+Stopvoorwaarde: C3–C6-merges vereisen de vastgestelde GD-03-matrix en onafhankelijke menselijke reviewers op dezelfde commit/snapshot; named reviewers zijn nog niet bezet. Bugfixes van bestaande protocolregels blijven toegestaan. Protocol v2.5 (PR #16) en Protocol v2.6 zijn eigenaarsgoedgekeurde C5-delta's; retrospectieve technical- en security/operations-review van PR #4, PR #5, PR #16 en v2.6 blijft verschuldigd. GD-03 blijft ESTABLISHED.
 
 ### Fase 2 — Canonieke bron 2
 
-Status: technische acquisitie en extractie ontwikkeld; menselijke en duurzame opslagstappen open.
+Status: technische acquisitie en extractie ontwikkeld; menselijke en duurzame opslagstappen open. Niet overslaan voor consolewerk.
 
 - Exacte officiële bronrepresentatie duurzaam en immutable opslaan.
 - Source manifest voltooien en integriteit opnieuw verifiëren.
@@ -47,7 +48,22 @@ Status: technische acquisitie en extractie ontwikkeld; menselijke en duurzame op
 - Klinische review uitvoeren op de exacte snapshot en afgeleide objecten.
 - Alleen na alle gates goedkeuren en publiceren.
 
-Stopvoorwaarde: ontbrekende bytes, checksum, immutable locator, provenance of review houdt publicatie `BLOCKED`.
+Stopvoorwaarde: ontbrekende bytes, checksum, immutable locator, provenance of review houdt publicatie `BLOCKED`. Console-implementatie start pas nadat bron 2-opslag ten minste vastlegbaar is (bytes + hash + locatorpad).
+
+### Fase 2b — Interne operations console (Protocol v2.6)
+
+Status: gepland intern oppervlak; Protocol v2.6 keurt de scope goed; de console is niet geïmplementeerd. Niet in plaats van Fase 2.
+
+- Start pas nadat bron 2-opslag ten minste vastlegbaar is (bytes + SHA-256 + locatorpad).
+- Frontend: intuïtieve console voor richtlijnonderzoekers en reviewers. Backend: immutable bronstore + canonieke kennisobjecten. Product API blijft een aparte machinedeur.
+- Vier kamers, geen vier knoppen voor één persoon: Ingest (mailbox), Review (verplichte return-loop), Publish (apart geautoriseerd besluit), Analytics (laatst, na verkeer).
+- Console-MVP: ingest + review-loop. Publish is een kleine derde kamer. Analytics niet eerst bouwen.
+- Identiteit verplicht in de console: researcher, reviewer, publisher; geen gedeelde login voor review/publish. Uploader MAG reviewer zijn, MUST NOT de enige vereiste reviewer op die snapshot zijn. Publicatie blijft BLOCKED tot minstens één andere benoemde reviewer dezelfde snapshot heeft goedgekeurd — afdwingen in accounts, niet als sociale regel.
+- Chat is geen kamer in deze console. Zorgapp-frontend, chatbot, EPD/ECD-UI en publieke website blijven verboden in deze repository.
+- Console-ingest vereist een immutable store (Azure Blob wanneer G0 Azure DEV PASSes; lokaal `sources/private/` alleen als G0 Local-substituut, expliciet geen productie).
+- Identiteitsprovider blijft `TBD` en onderworpen aan G0; dit sluit G8 niet en provisioneert geen Azure AD.
+
+Stopvoorwaarde: geen consolecode claimen als bestaande waarheid; geen analytics-first; geen chat in de console; geen shared login; uploader niet de enige vereiste reviewer; geen bronbinaries in Git.
 
 ### Fase 3 — Evaluatie en onafhankelijke acceptatie
 
@@ -58,12 +74,13 @@ Status: nog uit te voeren.
 - Answerable en moeilijke no-answer-cases opnemen, inclusief relationele, numerieke, populatie- en versieconflicten.
 - Onafhankelijke acceptatie uitvoeren zonder tuning op holdout B.
 - Release alleen bij alle protocolgates en `FAR = 0%` binnen de afgesproken scope.
+- Console-analytics MUST NOT worden gebruikt om Holdout B te tunen.
 
 Stopvoorwaarde: geen onafhankelijkheidsclaim op basis van Holdout A of de development/golden set.
 
 ### Fase 4 — MVP-servicelaag
 
-Status: deels aanwezig (Product API + interne inspection); afronden na Fase 2–3.
+Status: deels aanwezig (Product API + interne inspection); afronden na Fase 2–3. Interne operations console is Fase 2b, niet deze servicelaag.
 
 - Product API uitsluitend voeden met `supported` evidence.
 - Inspection en Product API gebruiken dezelfde answerability-gate.
@@ -72,9 +89,9 @@ Status: deels aanwezig (Product API + interne inspection); afronden na Fase 2–
 - Stabiele object-ID's, bronversie, status en canonical links leveren.
 - API/schema versieerbaar maken en contracttests voor provenance en withdrawal toevoegen.
 - Logging en audittrail zonder vertrouwelijke bron- of reviewdata te lekken.
-- Geen product-frontend in deze repository. Inspection is intern en read-only.
+- Geen zorgapp-frontend, chatbot, EPD/ECD-UI of publieke website in deze repository. Inspection is intern en read-only. De interne operations console is een apart goedgekeurd oppervlak (Fase 2b), nog niet gebouwd.
 
-Stopvoorwaarde: geen generation/LLM in deze service; similarity is nooit answerability; U3–U5 zijn buiten MVP.
+Stopvoorwaarde: geen generation/LLM in deze service; similarity is nooit answerability; U3–U5 zijn buiten MVP; chat is geen Product API-kamer en geen consoleruimte.
 
 ### Fase 5 — Azure DEV en operationele gereedheid
 
@@ -82,6 +99,7 @@ Status: `BLOCKED` onder G0 Azure DEV totdat toegang, eigenaarschap, kosten en pl
 
 - Infrastructuurmanifest per gekozen Azure-component afronden: provider/product, regio, data boundary, identity/secrets, eigenaar en kosten.
 - Azure DEV inrichten met immutable bronopslag en gescheiden runtime-opslag.
+- Console-identiteit en console-hosting blijven `TBD`; geen vendor geselecteerd; geen Vercel/Neon/LLM vereist.
 - Deployment reproduceerbaar koppelen aan commit, protocolversie en build-ID.
 - Security-, rollback-, withdrawal- en incidenttest uitvoeren.
 - MVP-go/no-go assurance-record afronden.
@@ -103,4 +121,4 @@ Stopvoorwaarde: geen externe toegang zonder juridische, privacy/security- en ver
 
 ## Scopebeheer
 
-Nieuwe functionaliteit komt alleen in de roadmap nadat is vastgesteld dat deze door het huidige protocol wordt gedekt. Buiten scope voor de eerste MVP zijn uitbreidingen die de onafhankelijke acceptatie, bronintegriteit of fail-closed publicatie omzeilen of vertragen, elke product-UI of ander product dat niet V&VN Data Services is, beslisregels, patiëntspecifiek advies en modeltraining.
+Nieuwe functionaliteit komt alleen in de roadmap nadat is vastgesteld dat deze door het huidige protocol wordt gedekt. Buiten scope voor de eerste MVP zijn uitbreidingen die de onafhankelijke acceptatie, bronintegriteit of fail-closed publicatie omzeilen of vertragen, een zorgapp-frontend, chatbot, EPD/ECD-UI of publieke website, beslisregels, patiëntspecifiek advies en modeltraining. De interne operations console is onder Protocol v2.6 in scope als gepland intern oppervlak en mag Fase 2 bron 2 niet overslaan.

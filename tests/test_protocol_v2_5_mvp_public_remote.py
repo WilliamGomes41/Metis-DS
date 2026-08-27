@@ -26,7 +26,7 @@ def test_v25_approval_manifest_matches_protocol_bytes() -> None:
     assert manifest["conformance_effect"] == "does_not_override_gate_status"
 
 
-def test_v25_delta_exists_and_is_the_live_baseline() -> None:
+def test_v25_remains_an_approved_component_of_current_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
@@ -36,9 +36,9 @@ def test_v25_delta_exists_and_is_the_live_baseline() -> None:
     assert "**Status:** Approved for project use" in delta
     assert "**Protocol delta version:** 2.5.0" in delta
     assert "docs/PROTOCOL_V2_5_MVP_PUBLIC_REMOTE_DELTA.md" in root_protocol
-    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.5.0") == 1
+    assert "Protocol v2.5.0" in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.4.0" not in root_protocol
-    assert "**Geldend protocol:** v2.5.0" in handoff
+    assert "**Geldend protocol:** v2.6.0" in handoff
     assert "Protocol v2.5.0" in roadmap
 
 
