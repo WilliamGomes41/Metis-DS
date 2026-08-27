@@ -1,10 +1,10 @@
 # Historical reports
 
-These files are one-off step, audit and repair writeups from the 2026 pilot. They are **not** steering documents and not a fifth layer.
+These files are one-off step, audit and repair writeups from the 2026 pilot. They are not steering documents and not a fifth layer.
 
 Current work is read in this order:
 
-`PROTOCOL.md` → `ROADMAP.md` → `HANDOFF.md` → acceptatietests → code
+`PROTOCOL.md → ROADMAP.md → HANDOFF.md → acceptatietests → code`
 
 Current protocol and technical documentation stays in `docs/`. New step, audit or repair writeups belong here, not at the repository root.
 

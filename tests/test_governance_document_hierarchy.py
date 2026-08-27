@@ -87,7 +87,7 @@ def test_repository_root_is_operating_surface_not_historical_reports() -> None:
     assert not clutter, f"historical reports belong under docs/history/: {clutter}"
 
     history_readme = _read("docs/history/README.md")
-    assert "not steering" in history_readme.lower()
+    assert "not steering documents" in history_readme.lower()
     assert "PROTOCOL.md → ROADMAP.md → HANDOFF.md → acceptatietests → code" in history_readme
     assert "docs/history/" in _read("HANDOFF.md")
     assert "docs/history/" in _read("docs/REPOSITORY_CONVENTIONS.md")
