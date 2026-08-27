@@ -58,7 +58,7 @@ No `test_*.py` files are present, although README files state that automated tes
 Required fix: create a committed pytest suite for schema validation, parent integrity, review decisions, storage gate, and retrieval gate.
 
 ### A6 - Missing step-5 configuration file
-`STEP5_PREP_README.md` references `config/step5.yaml`, but the file/directory is absent.
+`docs/history/STEP5_PREP_README.md` references `config/step5.yaml`, but the file/directory is absent.
 
 Required fix: create the config file or remove the claim from documentation.
 

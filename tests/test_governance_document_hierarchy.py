@@ -15,6 +15,8 @@ def test_governance_documents_exist() -> None:
         "HANDOFF.md",
         "docs/DEVELOPMENT_WORKFLOW.md",
         "docs/PROTOCOL_V2_2.md",
+        "docs/GOVERNANCE.md",
+        "data/assurance/gd_03_c3_c6_reviewer_matrix.json",
     )
     missing = [path for path in required if not (ROOT / path).is_file()]
     assert not missing, f"missing governance documents: {missing}"
@@ -45,6 +47,15 @@ def test_roadmap_and_handoff_have_operational_controls() -> None:
         assert required in handoff
 
 
+def test_operational_governance_record_is_subordinate_not_a_fifth_layer() -> None:
+    governance = _read("docs/GOVERNANCE.md")
+    protocol = _read("PROTOCOL.md")
+    assert "geen vijfde stuurlaag" in governance
+    assert "PROTOCOL.md → ROADMAP.md → HANDOFF.md → acceptatietests → code" in governance
+    assert "PROTOCOL.md → ROADMAP.md → HANDOFF.md → acceptatietests → code" in protocol
+    assert "docs/GOVERNANCE.md" in _read("HANDOFF.md")
+
+
 def test_workflow_requires_tests_before_code_and_handoff_after_validation() -> None:
     workflow = _read("docs/DEVELOPMENT_WORKFLOW.md")
     tests_step = workflow.index("Leg vóór implementatie")
@@ -52,4 +63,34 @@ def test_workflow_requires_tests_before_code_and_handoff_after_validation() -> N
     validation_step = workflow.index("Voer repository-preflight")
     final_handoff_step = workflow.index("Werk in dezelfde PR de handoff bij")
     assert tests_step < code_step < validation_step < final_handoff_step
+
+
+def test_repository_root_is_operating_surface_not_historical_reports() -> None:
+    operating = {
+        "PROTOCOL.md",
+        "ROADMAP.md",
+        "HANDOFF.md",
+        "README.md",
+        "CONTRIBUTING.md",
+        "CHANGELOG.md",
+        "SECURITY.md",
+    }
+    root_mds = {path.name for path in ROOT.glob("*.md")}
+    missing = sorted(operating - root_mds)
+    assert not missing, f"missing operating-surface documents at repository root: {missing}"
+
+    clutter = sorted(
+        name
+        for name in root_mds
+        if name.startswith("STEP") or name.endswith("_REPORT.md") or "AUDIT" in name
+    )
+    assert not clutter, f"historical reports belong under docs/history/: {clutter}"
+
+    history_readme = _read("docs/history/README.md")
+    assert "not steering documents" in history_readme.lower()
+    assert "PROTOCOL.md → ROADMAP.md → HANDOFF.md → acceptatietests → code" in history_readme
+    assert "docs/history/" in _read("HANDOFF.md")
+    assert "docs/history/" in _read("docs/REPOSITORY_CONVENTIONS.md")
+    assert (ROOT / "docs/history/STEP2_README.md").is_file()
+    assert (ROOT / "docs/history/FULL_TECHNICAL_AUDIT_2026-08-19.md").is_file()
 

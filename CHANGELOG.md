@@ -4,6 +4,9 @@ All notable technical changes to V&VN Data Services are recorded here.
 
 ## [Unreleased]
 
+### Changed
+- Historical step, audit and repair reports moved from the repository root to `docs/history/`. The root remains the operating surface; `output/` historical artefacts are unchanged.
+
 ### Fixed
 - Restored V&VN Data Services handoff/roadmap after foreign product status was written into this repository.
 - Canonical store now uses the integrity-kernel object hash and exact review snapshot (closes remaining P0 dual-hash).
