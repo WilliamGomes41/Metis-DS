@@ -57,10 +57,13 @@ Iedere materiële PR vermeldt minimaal:
 - vooraf vastgelegde tests of acceptatiecases;
 - uitgevoerde preflight, CI, volledige tests en echte-casevalidatie;
 - source-, schema-, publication-, answerability-, security- en privacy-impact waar toepasselijk;
+- infrastructure / cost impact (Protocol v2.3): `None`, existing dependency, changed dependency, new dependency, or removed dependency; bij iets anders dan `None` het infrastructuurmanifest en de stackbaseline bijwerken of expliciet blokkeren;
 - exacte commit/snapshot die iedere reviewer heeft beoordeeld;
 - resterende blokkades, afwijkingen en herstelactie.
 
 Een PR met code maar zonder vereiste test- en handoffwijziging is procesmatig incompleet.
+
+Protocol v2.6 keurt een interne operations console goed als DS-oppervlak. Een PR die console-UI, console-identiteit, review-afdwinging of publish-autorisatie toevoegt is minstens C5 spanning C3. Een zorgapp-frontend, chatbot, EPD/ECD-UI of publieke website in deze repository blijft verboden. Chat is geen consoleruimte. Deze protocol-PR implementeert geen UI.
 
 ## 6. CI-governance-invarianten
 
