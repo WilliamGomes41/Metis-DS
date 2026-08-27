@@ -14,6 +14,8 @@ Deze repository is uitsluitend V&VN Data Services. Status, fasen of UI van ander
 - Holdout A wordt niet gebruikt voor tuning of een nieuwe onafhankelijkheidsclaim.
 - Alleen actieve, gepubliceerde, entitled en herleidbare kennis mag een ondersteund resultaat vormen.
 - Eén integrity-kernel is de hash-autoriteit voor review-snapshot, store-import en publicatiegate.
+- Het DS-MVP blijft beperkt tot U1 bronverwijzing en U2 kennisrespons.
+- Technische toegang is nooit automatisch een licentie, V&VN-goedkeuring of toestemming voor modeltraining.
 
 ## Fasen naar MVP
 
@@ -23,7 +25,7 @@ Status: grotendeels afgerond; governance-nazorg open.
 
 - Private GitHub-repository als gezaghebbende remote.
 - CI, repository-preflight en architectuur-invarianttests.
-- Protocol v2.3.0 vastgesteld, inclusief G0 voor infrastructuur- en kostentransparantie.
+- Protocol v2.4.0 vastgesteld, inclusief G0 en product-/distributiegrenzen.
 - Ontwikkelhiërarchie en handoffdiscipline geborgd.
 - Stackbaseline en machineleesbaar infrastructuurmanifest aanwezig.
 - G0 Local Development: `PASS`; G0 Azure DEV: `BLOCKED` totdat open keuzes zijn opgelost.
@@ -62,14 +64,16 @@ Stopvoorwaarde: geen onafhankelijkheidsclaim op basis van Holdout A of de develo
 
 Status: deels aanwezig (Product API + interne inspection); afronden na Fase 2–3.
 
-- Product-API/RAG-laag uitsluitend voeden met `supported` evidence.
+- Product API uitsluitend voeden met `supported` evidence.
 - Inspection en Product API gebruiken dezelfde answerability-gate.
 - Abstention en reason codes zichtbaar maken.
 - End-to-end validatie van query tot bronverwijzing.
+- Stabiele object-ID's, bronversie, status en canonical links leveren.
+- API/schema versieerbaar maken en contracttests voor provenance en withdrawal toevoegen.
 - Logging en audittrail zonder vertrouwelijke bron- of reviewdata te lekken.
 - Geen product-frontend in deze repository. Inspection is intern en read-only.
 
-Stopvoorwaarde: geen generation/LLM in deze service; similarity is nooit answerability.
+Stopvoorwaarde: geen generation/LLM in deze service; similarity is nooit answerability; U3–U5 zijn buiten MVP.
 
 ### Fase 5 — Azure DEV en operationele gereedheid
 
@@ -83,6 +87,19 @@ Status: `BLOCKED` onder G0 Azure DEV totdat toegang, eigenaarschap, kosten en pl
 
 Stopvoorwaarde: geen Azure-provisioning zolang G0 Azure DEV `BLOCKED` is.
 
+### Fase 6 — Externe integratiepilot
+
+Status: gepland na PASS van toepasselijke bron-, acceptance- en operationele gates.
+
+- Eén richtlijn of expliciet begrensde bronset.
+- Eén U1- of U2-toepassing.
+- Eén zorgorganisatie, één leverancier/ontwikkelpartner en één gebruikersgroep.
+- Consumentenregistratie en gebruiksovereenkomst vastleggen.
+- Attribution, updates, supersession, withdrawal en incidentmelding end-to-end testen.
+- Vooraf veiligheids-, gebruiks- en stopcriteria vaststellen.
+
+Stopvoorwaarde: geen externe toegang zonder juridische, privacy/security- en verantwoordelijkheidstoets; geen U3–U5 zonder nieuwe protocolbeslissing en toepasselijke C3–C6-review.
+
 ## Scopebeheer
 
-Nieuwe functionaliteit komt alleen in de roadmap nadat is vastgesteld dat deze door het huidige protocol wordt gedekt. Buiten scope voor de eerste MVP zijn uitbreidingen die de onafhankelijke acceptatie, bronintegriteit of fail-closed publicatie omzeilen of vertragen, en elke product-UI of ander product dat niet V&VN Data Services is.
+Nieuwe functionaliteit komt alleen in de roadmap nadat is vastgesteld dat deze door het huidige protocol wordt gedekt. Buiten scope voor de eerste MVP zijn uitbreidingen die de onafhankelijke acceptatie, bronintegriteit of fail-closed publicatie omzeilen of vertragen, elke product-UI of ander product dat niet V&VN Data Services is, beslisregels, patiëntspecifiek advies en modeltraining.
