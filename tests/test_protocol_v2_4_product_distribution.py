@@ -1,12 +1,29 @@
+from __future__ import annotations
+
+import json
 from pathlib import Path
+
+from src.integrity_kernel import sha256_file
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DELTA = ROOT / "docs" / "PROTOCOL_V2_4_PRODUCT_DISTRIBUTION_DELTA.md"
+APPROVAL = ROOT / "data" / "assurance" / "protocol_v2_4_approval.json"
 
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def test_v24_approval_manifest_matches_protocol_bytes() -> None:
+    manifest = json.loads(APPROVAL.read_text(encoding="utf-8"))
+    assert manifest["protocol_version"] == "2.4.0"
+    assert manifest["protocol_path"] == "docs/PROTOCOL_V2_4_PRODUCT_DISTRIBUTION_DELTA.md"
+    assert manifest["protocol_sha256"] == sha256_file(DELTA)
+    assert manifest["commit_sha"] == "725987260cd345a92d38b44aaa6c219e8b72fc78"
+    assert manifest["approval_date"] == "2026-08-27"
+    assert manifest["approval_authority"] == "project_owner"
+    assert manifest["conformance_effect"] == "does_not_override_gate_status"
 
 
 def test_v24_is_current_approved_product_distribution_delta() -> None:
