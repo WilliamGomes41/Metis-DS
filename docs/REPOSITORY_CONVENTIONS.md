@@ -44,4 +44,6 @@ Protocol, schema and clinical knowledge versions remain independently versioned 
 
 ## Branch protection target
 
-The authoritative private remote is `WilliamGomes41/VENVN-DS`, with `main` as its default branch. Changes are handled procedurally through feature branches and pull requests while enforceable protection is unavailable under the current repository plan. Gate G1 remains `BLOCKED` until `main` enforces required CI checks and rejects direct pushes through GitHub branch protection or an equivalent ruleset.
+The authoritative remote is `WilliamGomes41/VENVN-DS`, with `main` as its default branch. Protocol v2.5 permits that remote to be public during a declared MVP period so GitHub branch protection can be enabled on the current free personal plan. After the MVP, public hosting is not the production baseline.
+
+Until visibility is switched and protection is on, changes are handled procedurally through feature branches and pull requests. Gate G1 remains `BLOCKED` until `main` requires CI checks `test (3.12)` and `test (3.13)`, requires a pull request before merging, rejects force-pushes and cannot be deleted.
