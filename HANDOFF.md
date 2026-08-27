@@ -8,7 +8,7 @@
 ## Actuele waarheid
 
 - Deze repository is **alleen** V&VN Data Services: protocol, bronintegriteit, pipeline, publicatiegates, retrieval en Product API. Andere producten horen hier niet in governance of code.
-- Protocol v2.5.0 is de normatieve baseline (v2.2.0 + v2.3-delta + v2.4-delta + v2.5-delta). v2.5 is de eigenaarsgoedgekeurde MVP-uitzondering: de gezaghebbende remote MAG publiek zijn tijdens een gedeclareerde MVP-periode, zodat G1-branchprotection technisch kan worden aangezet.
+- Protocol v2.5.0 is de normatieve baseline (v2.2.0 + v2.3-delta + v2.4-delta + v2.5-delta). v2.5 is de eigenaarsgoedgekeurde MVP-uitzondering: de gezaghebbende remote MAG publiek zijn tijdens een gedeclareerde MVP-periode, zodat G1-branchprotection technisch kan worden aangezet. Het checksumgebonden approval-manifest staat in `data/assurance/protocol_v2_5_approval.json`.
 - Deze PR wijzigt GitHub-zichtbaarheid niet. Metis zet de remote na merge op public en zet daarna G1-protection aan. Tot die twee stappen blijft G1 `BLOCKED`.
 - V&VN DS is vastgelegd als gevalideerde kennisobjecten, Product API en interne read-only inspection.
 - Het MVP is beperkt tot U1 bronverwijzing en U2 kennisrespons; U3 beslisregels, U4 patiëntspecifiek advies en U5 voorspellende/getrainde modellen zijn buiten scope.
