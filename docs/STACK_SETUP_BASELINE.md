@@ -5,12 +5,13 @@
 **Scope:** current repository baseline and infrastructure dependencies visible in code/protocol
 **Purpose:** make setup, vendor, account, persistence and cost dependencies visible before they become implementation blockers or budget surprises.
 
-This document is descriptive, not a vendor commitment. Protocol v2.2 remains the approved normative baseline until a later protocol delta is approved.
+This document is descriptive, not a vendor commitment. The approved normative baseline is Protocol v2.5.0.
 
 ## 1. Current architecture in one view
 
 ```text
-GitHub private repository + GitHub Actions
+GitHub repository WilliamGomes41/VENVN-DS + GitHub Actions
+        (MAY be public during the declared MVP period; G1 protection follows)
         |
         v
 Python 3.12/3.13 application
@@ -33,7 +34,7 @@ The repository currently contains no frontend application and the Product API co
 
 | Capability | Current implementation | Target / production implication | Required by | Cost/setup exposure | Status |
 |---|---|---|---|---|---|
-| Authoritative code | Private GitHub repository `WilliamGomes41/VENVN-DS` | Organization-grade protected default branch or equivalent enforcement | G1 | May require GitHub plan/org change | **Known blocker:** protection is procedural only |
+| Authoritative code | GitHub repository `WilliamGomes41/VENVN-DS` (currently private; Protocol v2.5 MAY make it public for MVP) | Protected default branch on the public MVP remote; after MVP restore private or org-hosted protection | G1 | Current free personal plan cannot protect a private default branch (403) | **Known blocker:** G1 remains BLOCKED until public + protection |
 | CI | GitHub Actions, Python 3.12/3.13 | Continue clean lockfile install, preflight, compile and tests | G1 | Usually existing GitHub usage; monitor quota/plan | Implemented |
 | Runtime language | Python `>=3.12,<3.14` | Pin supported runtime in deployed container | G1/G8 | No separate service cost | Implemented |
 | Packaging/runtime image | Docker, `python:3.13-slim` | A managed Azure container/web runtime must be selected before Azure DEV | G8 | **New hosting cost likely** | Decision open |

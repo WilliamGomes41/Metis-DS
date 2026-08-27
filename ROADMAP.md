@@ -23,19 +23,19 @@ Deze repository is uitsluitend V&VN Data Services. Status, fasen of UI van ander
 
 Status: grotendeels afgerond; governance-nazorg open.
 
-- Private GitHub-repository als gezaghebbende remote.
+- Gezaghebbende remote `WilliamGomes41/VENVN-DS`; tijdens de gedeclareerde MVP-periode MAG die public zijn (Protocol v2.5). Publiek is niet de latere productiestandaard.
 - CI, repository-preflight en architectuur-invarianttests.
-- Protocol v2.4.0 vastgesteld, inclusief G0 en product-/distributiegrenzen.
+- Protocol v2.5.0 vastgesteld (v2.2 + v2.3-delta + v2.4-delta + v2.5-delta), inclusief G0, product-/distributiegrenzen en de MVP-uitzondering voor een publieke remote.
 - Ontwikkelhiërarchie en handoffdiscipline geborgd.
 - Stackbaseline en machineleesbaar infrastructuurmanifest aanwezig.
 - G0 Local Development: `PASS`; G0 Azure DEV: `BLOCKED` totdat open keuzes zijn opgelost.
 - Integrity kernel als enige canonical-hash voor store én publication gate (herstel 2026-08-26).
 - GD-03 reviewervereisten ESTABLISHED (2026-08-27); evidence in `docs/GOVERNANCE.md`. Named reviewers blijven een latere bezettingsstap.
 - Historische STEP-/audit-/repair-rapporten verplaatst naar `docs/history/` (2026-08-27); de root is het operationele oppervlak, geen vijfde stuurlaag.
-- Retrospectieve onafhankelijke review van de C5-wijzigingen in PR #4 en PR #5.
-- G1: required CI op `main`, geen directe push.
+- Retrospectieve onafhankelijke review van de C5-wijzigingen in PR #4, PR #5 en Protocol v2.5.
+- G1 blijft `BLOCKED` totdat de remote public is en branch protection aanstaat: required CI `test (3.12)` en `test (3.13)`, PR verplicht, geen force-push, `main` niet verwijderbaar. Direct daarna volgt duurzame opslag van bron 2.
 
-Stopvoorwaarde: C3–C6-merges vereisen de vastgestelde GD-03-matrix en onafhankelijke menselijke reviewers op dezelfde commit/snapshot; named reviewers zijn nog niet bezet. Bugfixes van bestaande protocolregels blijven toegestaan.
+Stopvoorwaarde: C3–C6-merges vereisen de vastgestelde GD-03-matrix en onafhankelijke menselijke reviewers op dezelfde commit/snapshot; named reviewers zijn nog niet bezet. Bugfixes van bestaande protocolregels blijven toegestaan. Protocol v2.5 is een eigenaarsgoedgekeurde C5-delta met retrospectieve technical- en security/operations-review, hetzelfde patroon als PR #4 en PR #5; GD-03 blijft ESTABLISHED.
 
 ### Fase 2 — Canonieke bron 2
 

@@ -26,7 +26,7 @@ def test_v24_approval_manifest_matches_protocol_bytes() -> None:
     assert manifest["conformance_effect"] == "does_not_override_gate_status"
 
 
-def test_v24_is_current_approved_product_distribution_delta() -> None:
+def test_v24_remains_an_approved_component_of_current_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
@@ -36,7 +36,7 @@ def test_v24_is_current_approved_product_distribution_delta() -> None:
     assert "**Protocol delta version:** 2.4.0" in delta
     assert "docs/PROTOCOL_V2_4_PRODUCT_DISTRIBUTION_DELTA.md" in root_protocol
     assert "Protocol v2.4.0" in root_protocol
-    assert "**Geldend protocol:** v2.4.0" in handoff
+    assert "**Geldend protocol:** v2.5.0" in handoff
     assert "Fase 6 — Externe integratiepilot" in roadmap
 
 

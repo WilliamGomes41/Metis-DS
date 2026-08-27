@@ -10,8 +10,16 @@ Do not commit API keys, passwords, database URLs containing credentials, certifi
 
 ## Source integrity
 
-Canonical source files are not stored in Git. They are registered by cryptographic checksum and are intended to reside in controlled immutable object storage.
+Canonical source files are not stored in Git. They are registered by cryptographic checksum and are intended to reside in controlled immutable object storage. Canonical source HTML and PDF MUST NOT be committed.
+
+During the declared MVP public-remote period, tracked fixtures, holdouts and historical `output/` artefacts MAY remain in the repository. They are software artefacts, not canonical source binaries.
 
 ## Reporting
 
-Until a formal security contact is assigned, security findings should be handled privately within the V&VN Data Services project team and must not be posted in public issues.
+During the declared MVP period the authoritative remote MAY be public. Security findings MUST be handled privately:
+
+- use GitHub private vulnerability reporting when available;
+- otherwise handle findings privately with the V&VN Data Services project owner and security/operations reviewers;
+- MUST NOT post source bytes, credentials, unpublished knowledge, or exploit details in public issues, pull requests or discussions.
+
+Do not dump canonical source content, secrets or unpublished knowledge into the public issue tracker.

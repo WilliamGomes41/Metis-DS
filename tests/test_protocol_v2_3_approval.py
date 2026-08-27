@@ -30,7 +30,7 @@ def test_v23_remains_an_approved_component_of_current_baseline() -> None:
     assert "**Status:** Approved for project use" in protocol
     assert "**Protocol delta version:** 2.3.0" in protocol
     assert "docs/PROTOCOL_V2_3_TECHNICAL_DELTA.md" in root_protocol
-    assert "**Geldend protocol:** v2.4.0" in handoff
+    assert "**Geldend protocol:** v2.5.0" in handoff
 
 
 def test_infrastructure_baseline_is_approved_without_overstating_azure() -> None:
