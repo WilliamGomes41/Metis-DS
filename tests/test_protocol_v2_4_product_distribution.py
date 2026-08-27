@@ -1,0 +1,55 @@
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+DELTA = ROOT / "docs" / "PROTOCOL_V2_4_PRODUCT_DISTRIBUTION_DELTA.md"
+
+
+def _read(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def test_v24_is_current_approved_product_distribution_delta() -> None:
+    delta = _read(DELTA)
+    root_protocol = _read(ROOT / "PROTOCOL.md")
+    roadmap = _read(ROOT / "ROADMAP.md")
+    handoff = _read(ROOT / "HANDOFF.md")
+
+    assert "**Status:** Approved for project use" in delta
+    assert "**Protocol delta version:** 2.4.0" in delta
+    assert "docs/PROTOCOL_V2_4_PRODUCT_DISTRIBUTION_DELTA.md" in root_protocol
+    assert "Protocol v2.4.0" in root_protocol
+    assert "**Geldend protocol:** v2.4.0" in handoff
+    assert "Fase 6 — Externe integratiepilot" in roadmap
+
+
+def test_v24_limits_mvp_to_source_navigation_and_knowledge_response() -> None:
+    delta = _read(DELTA)
+    assert "U1 Source navigation" in delta
+    assert "U2 Knowledge response" in delta
+    assert "The first V&VN DS MVP is limited to U1 and U2." in delta
+    assert "U3 Deterministic decision rule" in delta
+    assert "U4 Patient-specific recommendation" in delta
+    assert "U5 Predictive or trained model" in delta
+
+
+def test_v24_keeps_frontend_generation_and_patient_data_outside_ds_mvp() -> None:
+    delta = _read(DELTA)
+    assert "A reference application MAY consume the Product API" in delta
+    assert "it is a separate consuming product" in delta
+    assert "MUST NOT process patient records" in delta
+    assert "MUST NOT be offered or described as general model-training data" in delta
+
+
+def test_v24_requires_external_use_and_withdrawal_controls() -> None:
+    delta = _read(DELTA)
+    required = (
+        "consumer and accountable owner",
+        "declared use mode and intended users",
+        "update, supersession and withdrawal handling",
+        "incident, error and misuse reporting",
+        "Technical access MUST NOT be treated as permission",
+        "consumer notification",
+    )
+    for phrase in required:
+        assert phrase in delta
