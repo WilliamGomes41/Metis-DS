@@ -27,7 +27,7 @@ Thumbs.db
 *.pfx
 *.p12
 
-# Runtime state
+# Runtime state (new generated output stays untracked; historical tracked artefacts under output/ remain)
 output/runtime/
 *.sqlite
 *.sqlite3

@@ -12,6 +12,16 @@ Publication is fail-closed. An object cannot be published unless the source bina
 
 The Fractuurpreventie pilot source binary is not locally available, so the real publication gate is expected to remain `BLOCKED`. This is a valid safety state.
 
+## Documentation
+
+The repository root is the operating surface. Read current work in this order:
+
+`PROTOCOL.md` → `ROADMAP.md` → `HANDOFF.md` → tests → code
+
+- `docs/` — current protocol and technical documentation
+- `docs/history/` — historical step, audit and repair reports; not steering documents
+- `docs/REPOSITORY_CONVENTIONS.md` — directory contract
+
 ## Reproduce
 
 ```bash
