@@ -31,6 +31,7 @@ Status: grotendeels afgerond; governance-nazorg open.
 - G0 Local Development: `PASS`; G0 Azure DEV: `BLOCKED` totdat open keuzes zijn opgelost.
 - Integrity kernel als enige canonical-hash voor store én publication gate (herstel 2026-08-26).
 - GD-03 reviewervereisten ESTABLISHED (2026-08-27); evidence in `docs/GOVERNANCE.md`. Named reviewers blijven een latere bezettingsstap.
+- Historische STEP-/audit-/repair-rapporten verplaatst naar `docs/history/` (2026-08-27); de root is het operationele oppervlak, geen vijfde stuurlaag.
 - Retrospectieve onafhankelijke review van de C5-wijzigingen in PR #4 en PR #5.
 - G1: required CI op `main`, geen directe push.
 

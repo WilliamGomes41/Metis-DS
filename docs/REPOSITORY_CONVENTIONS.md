@@ -16,6 +16,7 @@ It is **not** the authoritative store for canonical clinical source binaries, pr
 | `data/` | Specs, manifests, golden/holdout definitions and safe fixtures | yes |
 | `tests/` | Automated regression tests | yes |
 | `docs/` | Protocol and technical documentation | yes |
+| `docs/history/` | Historical step, audit and repair reports; not steering documents | yes |
 | `db/` | Database schemas/migrations | yes |
 | `examples/` | Safe client examples | yes |
 | `scripts/` | Build, audit and repository tooling | yes |
@@ -23,9 +24,13 @@ It is **not** the authoritative store for canonical clinical source binaries, pr
 | `output/runtime/` | Local runtime state | no |
 | `sources/private/` | Canonical source binaries if mounted locally | no |
 
+## Documentation layout
+
+The repository root is the operating surface: `PROTOCOL.md`, `ROADMAP.md`, `HANDOFF.md`, `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `SECURITY.md`, plus code, config and build files. The steering hierarchy remains `PROTOCOL.md → ROADMAP.md → HANDOFF.md → acceptatietests → code`. `docs/history/` holds one-off step, audit and repair writeups; those files do not add a steering layer and must not be treated as current protocol, roadmap or handoff.
+
 ## Runtime output policy
 
-Automated tests use reviewed deterministic fixtures under `data/fixtures/` and must not depend on `output/`. The `output/` directory contains transitional historical pilot artefacts only; it is not an authoritative baseline, fixture store or acceptance-evidence store. New runtime state must remain untracked and must not become a source-controlled test dependency.
+Automated tests use reviewed deterministic fixtures under `data/fixtures/` and must not depend on `output/`. The `output/` directory contains transitional historical pilot artefacts only; it is not an authoritative baseline, fixture store or acceptance-evidence store. New runtime state must remain untracked under `output/runtime/` and must not become a source-controlled test dependency.
 
 ## Releases
 

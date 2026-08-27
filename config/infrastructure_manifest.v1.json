@@ -52,7 +52,7 @@
       "decision_deadline_gate": "G1",
       "evidence": [
         ".github/workflows/ci.yml",
-        "REPOSITORY_BASELINE_REPORT.md"
+        "docs/history/REPOSITORY_BASELINE_REPORT.md"
       ]
     },
     {
@@ -146,7 +146,7 @@
       "decision_deadline_gate": "G8",
       "evidence": [
         "src/usage_ledger_v1.py",
-        "PRODUCT_API_V1_REPORT.md"
+        "docs/history/PRODUCT_API_V1_REPORT.md"
       ]
     },
     {
@@ -262,7 +262,7 @@
       "evidence": [
         "src/canonical_store.py",
         "db/schema_v2.sql",
-        "FULL_TECHNICAL_AUDIT_2026-08-19.md"
+        "docs/history/FULL_TECHNICAL_AUDIT_2026-08-19.md"
       ]
     },
     {
@@ -285,7 +285,7 @@
       "decision_deadline_gate": "G8 / GD-06",
       "evidence": [
         "src/usage_ledger_v1.py",
-        "PRODUCT_API_V1_REPORT.md",
+        "docs/history/PRODUCT_API_V1_REPORT.md",
         "docs/PROTOCOL_V2_2.md#16-governance-decision-register"
       ]
     },
@@ -423,7 +423,7 @@
       "operational_owner": "not_applicable",
       "decision_deadline_gate": "G7 before any future Answer-RAG deployment",
       "evidence": [
-        "PRODUCT_API_V1_REPORT.md",
+        "docs/history/PRODUCT_API_V1_REPORT.md",
         "docs/PROTOCOL_V2_2.md#12-future-answerrag-layer"
       ]
     },

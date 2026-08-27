@@ -110,7 +110,7 @@ This inventory is derived from the current repository, especially:
 - `src/product_security_v1.py` — in-process rate limiting and APIM/Redis replacement boundary;
 - `src/embedding_provider_v1.py` and `config/embedding_provider_local_v1.json` — local deterministic embedding provider and managed-identity/env secret boundary;
 - `CONTRIBUTING.md` and `docs/REPOSITORY_CONVENTIONS.md` — controlled source binaries outside Git and Azure Blob target;
-- `PRODUCT_API_V1_REPORT.md` and `FULL_TECHNICAL_AUDIT_2026-08-19.md` — Azure/multi-replica and production adapter gaps.
+- `docs/history/PRODUCT_API_V1_REPORT.md` and `docs/history/FULL_TECHNICAL_AUDIT_2026-08-19.md` — Azure/multi-replica and production adapter gaps.
 
 ## 6. Maintenance rule
 

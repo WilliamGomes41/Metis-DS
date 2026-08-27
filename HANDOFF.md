@@ -15,6 +15,7 @@
 - PR #4 (source integrity), #5 (PDF completeness), #6 (scoped HTML), #7 (stack/G0), #8 (ontwikkelhiërarchie), #9 (v2.3-approval), #10 (integrity-kernel + runtime-entrypoints), #11 (repositoryscope), #12 (v2.4 product/distributie) en #13 (v2.4-approval-evidence) zijn afgerond.
 - Operationeel governance-record toegevoegd: `docs/GOVERNANCE.md` (ondergeschikt aan `PROTOCOL.md`, geen vijfde stuurlaag) met machineleesbaar GD-03-artefact `data/assurance/gd_03_c3_c6_reviewer_matrix.json`.
 - GD-03 is ESTABLISHED (2026-08-27) as written: C3 min. 2 clinical+technical; C4 min. 2 evaluation+technical; C5 min. 2 security/operations+technical; C6 min. 3 clinical+technical+safety/evaluation. Reviewers onafhankelijk van de auteur; dezelfde exacte commit/snapshot. AI / Grok Bot / Metis tellen niet mee als vereiste reviewer, keuren niet goed en publiceren niet.
+- Repository-indeling (C0, 2026-08-27): historische STEP-/audit-/repair-rapporten staan in `docs/history/`. De root is het operationele oppervlak (`PROTOCOL.md`, `ROADMAP.md`, `HANDOFF.md`, `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `SECURITY.md` plus code/config/build). Dit voegt geen vijfde stuurlaag toe. `output/` blijft als overgangsartefacten staan; tests gebruiken `data/fixtures/`.
 - De exacte officiële HTML-representatie van bron 2 is lokaal geverifieerd en deterministisch geëxtraheerd.
 - Bron 1 en bron 2 blijven `BLOCKED` voor publicatie zolang immutable opslag, definitieve registratie en klinische review ontbreken.
 - G0 Local Development is `PASS`. G0 Azure DEV blijft `BLOCKED`.
