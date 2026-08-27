@@ -15,6 +15,8 @@ def test_governance_documents_exist() -> None:
         "HANDOFF.md",
         "docs/DEVELOPMENT_WORKFLOW.md",
         "docs/PROTOCOL_V2_2.md",
+        "docs/GOVERNANCE.md",
+        "data/assurance/gd_03_c3_c6_reviewer_matrix.json",
     )
     missing = [path for path in required if not (ROOT / path).is_file()]
     assert not missing, f"missing governance documents: {missing}"
@@ -43,6 +45,15 @@ def test_roadmap_and_handoff_have_operational_controls() -> None:
         "BLOCKED",
     ):
         assert required in handoff
+
+
+def test_operational_governance_record_is_subordinate_not_a_fifth_layer() -> None:
+    governance = _read("docs/GOVERNANCE.md")
+    protocol = _read("PROTOCOL.md")
+    assert "geen vijfde stuurlaag" in governance
+    assert "PROTOCOL.md → ROADMAP.md → HANDOFF.md → acceptatietests → code" in governance
+    assert "PROTOCOL.md → ROADMAP.md → HANDOFF.md → acceptatietests → code" in protocol
+    assert "docs/GOVERNANCE.md" in _read("HANDOFF.md")
 
 
 def test_workflow_requires_tests_before_code_and_handoff_after_validation() -> None:

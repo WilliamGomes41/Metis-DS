@@ -30,11 +30,11 @@ Status: grotendeels afgerond; governance-nazorg open.
 - Stackbaseline en machineleesbaar infrastructuurmanifest aanwezig.
 - G0 Local Development: `PASS`; G0 Azure DEV: `BLOCKED` totdat open keuzes zijn opgelost.
 - Integrity kernel als enige canonical-hash voor store én publication gate (herstel 2026-08-26).
-- GD-03 reviewervereisten formeel vaststellen.
+- GD-03 reviewervereisten ESTABLISHED (2026-08-27); evidence in `docs/GOVERNANCE.md`. Named reviewers blijven een latere bezettingsstap.
 - Retrospectieve onafhankelijke review van de C5-wijzigingen in PR #4 en PR #5.
 - G1: required CI op `main`, geen directe push.
 
-Stopvoorwaarde: geen nieuwe C3-C6-merge zolang GD-03 niet formeel is vastgesteld en vereiste reviewevidence ontbreekt, behalve bugfixes van bestaande protocolregels.
+Stopvoorwaarde: C3–C6-merges vereisen de vastgestelde GD-03-matrix en onafhankelijke menselijke reviewers op dezelfde commit/snapshot; named reviewers zijn nog niet bezet. Bugfixes van bestaande protocolregels blijven toegestaan.
 
 ### Fase 2 — Canonieke bron 2
 

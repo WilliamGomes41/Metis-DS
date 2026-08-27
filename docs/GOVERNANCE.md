@@ -1,0 +1,77 @@
+# V&VN Data Services — Operationeel governance-record
+
+**Status:** ondergeschikt aan `PROTOCOL.md`  
+**Geldend protocol:** v2.4.0 (v2.2.0 + v2.3-delta + v2.4-delta)  
+**Bijgewerkt:** 2026-08-27  
+**Eigenaar:** projecteigenaar V&VN Data Services
+
+## Plaats in de hiërarchie
+
+Dit bestand is **geen vijfde stuurlaag**. De verplichte volgorde blijft:
+
+`PROTOCOL.md → ROADMAP.md → HANDOFF.md → acceptatietests → code`
+
+Dit record maakt Protocol v2.2 §16 operationeel zichtbaar. Het voegt geen productregel, architectuurgrens, safety-invariant, verantwoordelijkheid of toegestane/verboden route toe. Bij conflict geldt `PROTOCOL.md` en de strengste fail-closed eis.
+
+De statuskolom in `docs/PROTOCOL_V2_2.md` §16 is de stand **bij protocolgoedkeuring**. Latere eigenaarsbesluiten worden hier vastgelegd en wijzigen het protocolbestand niet. Dat is geen nieuwe protocolversie.
+
+Machineleesbaar bewijs voor het enige tot nu toe vastgestelde besluit: [`data/assurance/gd_03_c3_c6_reviewer_matrix.json`](../data/assurance/gd_03_c3_c6_reviewer_matrix.json).
+
+## Besluitenregister (Protocol v2.2 §16)
+
+| ID | Besluit | Eigenaar | Vereiste specialistische inbreng | Deadline-gate | Status |
+|---|---|---|---|---|---|
+| GD-01 | Minimumomvang van de onafhankelijke holdout en vereiste high-risk-samenstelling | Projecteigenaar | Clinical governance en evaluation lead | Voordat Holdout B wordt gemaakt of aan het geëvalueerde team wordt getoond | OPEN |
+| GD-02 | Statistische rapportagemethode en betrouwbaarheidsniveau voor FAR | Projecteigenaar | Evaluation/statistics reviewer | Voordat Holdout B-acceptatiecriteria worden bevroren | OPEN |
+| GD-03 | Vereist aantal reviewers voor C3–C6-pull requests | Projecteigenaar | Technische en klinische governance | Voordat de volgende C3-, C4-, C5- of C6-wijziging wordt gemerged | ESTABLISHED |
+| GD-04 | Maximale emergency-withdrawal-tijd en retrospectief break-glass-reviewinterval | Projecteigenaar | Clinical safety en operations | Voordat Azure DEV voor externe pilotgebruikers wordt geopend | OPEN |
+| GD-05 | Ondersteunde API-depreciatieperiode | Projecteigenaar | Product/API-eigenaar | Voordat de eerste externe API-consument wordt onboarded | OPEN |
+| GD-06 | Bewaartermijnen voor acquisitierecords, auditlogs, gebruikslogs en vertrouwelijk reviewbewijs | Projecteigenaar | Privacy, security en records management | Voordat Azure DEV extern pilotverkeer verwerkt | OPEN |
+| GD-07 | Benoemde operationele eigenaar voor productiereleases en emergency withdrawal | Projecteigenaar | V&VN-service-eigenaarschap | Voordat een externe pilotrelease wordt geautoriseerd | OPEN |
+
+OPEN-besluiten mogen niet als established of `PASS` worden behandeld. Een gemiste deadline-gate blijft `BLOCKED`.
+
+## GD-03 — reviewervereisten C3–C6 (ESTABLISHED)
+
+- **Besluit:** Required reviewer count for C3–C6 pull requests, as written.
+- **Status:** ESTABLISHED
+- **Besluitdatum:** 2026-08-27
+- **Eigenaar:** projecteigenaar V&VN Data Services
+- **Protocolbasis:** Protocol v2.2 §16; geen nieuwe protocolversie
+- **Specialistische inbreng:** technische en klinische governance, vastgelegd als de matrix hieronder
+- **Evidence:** dit bestand en `data/assurance/gd_03_c3_c6_reviewer_matrix.json`
+- **Niet onderdeel van dit besluit:** naamgeving van individuele reviewers. Dat is een latere bezettingsstap en houdt GD-03 niet OPEN.
+
+### Reviewermatrix
+
+| Klasse | Minimum | Verplichte rollen |
+|---|---:|---|
+| C3 Canonical/review | 2 | clinical + technical |
+| C4 Retrieval/answerability | 2 | evaluation + technical |
+| C5 Publication/security | 2 | security/operations + technical |
+| C6 Generation | 3 | clinical + technical + safety/evaluation |
+
+### Verplichte voorwaarden
+
+- Reviewers MUST onafhankelijk zijn van de auteur.
+- Reviewers beoordelen dezelfde exacte commit of snapshot.
+- AI, Grok Bot en Metis MUST NOT meetellen als vereiste C3–C6-reviewer, MUST NOT goedkeuren en MUST NOT publiceren.
+
+PR #4 en PR #5 zijn C5-wijzigingen en vereisen nog retrospectieve onafhankelijke technical- en security/operations-review volgens deze matrix.
+
+## Rolgrenzen (reeds in het protocol; hier alleen zichtbaar gemaakt)
+
+Protocol v2.2 §2: AI MAY mappings of metadata voorstellen; AI MUST NOT canonical knowledge goedkeuren of publiceren.
+
+Operationele toedeling binnen die norm:
+
+- **Grok Bot** implementeert code pas na `protocol → roadmap → handoff → tests`. Grok Bot is geen vereiste C3–C6-reviewer, keurt niet goed en publiceert niet.
+- **Metis** is de V&VN DS-assistent voor protocol, governance en organisatie. Metis is geen vereiste C3–C6-reviewer, keurt niet goed en publiceert niet.
+
+Deze toedeling wijzigt geen protocolverantwoordelijkheid.
+
+## Wat dit record niet doet
+
+- Geen Azure-provisioning, geen productgedrag, geen nieuwe agent.
+- Geen sluiting van GD-01, GD-02, GD-04, GD-05, GD-06 of GD-07.
+- Geen override van gate-status (`PASS` / `BLOCKED` / `FAIL` / `NOT_EVALUATED`).

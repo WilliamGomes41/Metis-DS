@@ -1,0 +1,60 @@
+{
+  "manifest_version": "1.0",
+  "decision_id": "GD-03",
+  "decision": "Required reviewer count for C3–C6 pull requests",
+  "status": "ESTABLISHED",
+  "protocol_version": "2.4.0",
+  "protocol_path": "docs/PROTOCOL_V2_2.md",
+  "protocol_section": "16",
+  "governance_path": "docs/GOVERNANCE.md",
+  "governance_sha256": "34c8df0409f0df700761359b97cf46e6ee118b498059c321d12ca8e169a35afc",
+  "repository": "WilliamGomes41/VENVN-DS",
+  "default_branch": "main",
+  "decision_date": "2026-08-27",
+  "approval_date": "2026-08-27",
+  "approval_authority": "project_owner",
+  "owner": "project owner V&VN Data Services",
+  "required_specialist_input": "technical and clinical governance",
+  "named_reviewers_status": "later_staffing_step_does_not_keep_decision_open",
+  "branch_protection_status": "temporary_procedural_control",
+  "conformance_effect": "does_not_override_gate_status",
+  "evidence_path": "docs/GOVERNANCE.md",
+  "evidence_url": "docs/GOVERNANCE.md",
+  "reviewer_matrix": {
+    "C3": {
+      "class_name": "Canonical/review",
+      "minimum": 2,
+      "required_roles": ["clinical", "technical"]
+    },
+    "C4": {
+      "class_name": "Retrieval/answerability",
+      "minimum": 2,
+      "required_roles": ["evaluation", "technical"]
+    },
+    "C5": {
+      "class_name": "Publication/security",
+      "minimum": 2,
+      "required_roles": ["security/operations", "technical"]
+    },
+    "C6": {
+      "class_name": "Generation",
+      "minimum": 3,
+      "required_roles": ["clinical", "technical", "safety/evaluation"]
+    }
+  },
+  "constraints": {
+    "reviewers_independent_of_author": true,
+    "same_exact_commit_or_snapshot": true,
+    "ai_grok_bot_metis_must_not_count_as_required_c3_c6_reviewer": true,
+    "ai_grok_bot_metis_must_not_approve": true,
+    "ai_grok_bot_metis_must_not_publish": true
+  },
+  "open_sibling_decisions": [
+    "GD-01",
+    "GD-02",
+    "GD-04",
+    "GD-05",
+    "GD-06",
+    "GD-07"
+  ]
+}
