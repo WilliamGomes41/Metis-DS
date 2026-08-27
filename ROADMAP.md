@@ -21,21 +21,21 @@ Deze repository is uitsluitend V&VN Data Services. Status, fasen of UI van ander
 
 ### Fase 1 — Repository en governance-baseline
 
-Status: grotendeels afgerond; governance-nazorg open.
+Status: G1-technische protection ON; gezaghebbende remote is public onder Protocol v2.5.0; resterende nazorg: named GD-03-reviewers en retrospectieve C5-review. Azure/G8 niet gestart.
 
-- Gezaghebbende remote `WilliamGomes41/VENVN-DS`; tijdens de gedeclareerde MVP-periode MAG die public zijn (Protocol v2.5). Publiek is niet de latere productiestandaard.
+- Gezaghebbende remote `WilliamGomes41/VENVN-DS` is public tijdens de gedeclareerde MVP-periode (Protocol v2.5.0). Publiek is niet de latere productiestandaard; na de MVP MUST een nieuw plan private hosting of een organisatieplan herstellen.
 - CI, repository-preflight en architectuur-invarianttests.
-- Protocol v2.5.0 vastgesteld (v2.2 + v2.3-delta + v2.4-delta + v2.5-delta), inclusief G0, product-/distributiegrenzen en de MVP-uitzondering voor een publieke remote.
+- Protocol v2.5.0 vastgesteld en live (v2.2 + v2.3-delta + v2.4-delta + v2.5-delta), inclusief G0, product-/distributiegrenzen en de MVP-uitzondering voor een publieke remote. PR #16 squash-merged 2026-08-27T22:10:04Z (`73c0669c8ad7c62a836e7a39666f3db33644be68`).
 - Ontwikkelhiërarchie en handoffdiscipline geborgd.
 - Stackbaseline en machineleesbaar infrastructuurmanifest aanwezig.
-- G0 Local Development: `PASS`; G0 Azure DEV: `BLOCKED` totdat open keuzes zijn opgelost.
+- G0 Local Development: `PASS`; G0 Azure DEV: `BLOCKED` totdat open keuzes zijn opgelost. Geen Azure starten in deze fase.
 - Integrity kernel als enige canonical-hash voor store én publication gate (herstel 2026-08-26).
-- GD-03 reviewervereisten ESTABLISHED (2026-08-27); evidence in `docs/GOVERNANCE.md`. Named reviewers blijven een latere bezettingsstap.
+- GD-03 reviewervereisten ESTABLISHED (2026-08-27); evidence in `docs/GOVERNANCE.md`. Named reviewers blijven een latere bezettingsstap en zijn niet bezet.
 - Historische STEP-/audit-/repair-rapporten verplaatst naar `docs/history/` (2026-08-27); de root is het operationele oppervlak, geen vijfde stuurlaag.
-- Retrospectieve onafhankelijke review van de C5-wijzigingen in PR #4, PR #5 en Protocol v2.5.
-- G1 blijft `BLOCKED` totdat de remote public is en branch protection aanstaat: required CI `test (3.12)` en `test (3.13)`, PR verplicht, geen force-push, `main` niet verwijderbaar. Direct daarna volgt duurzame opslag van bron 2.
+- Retrospectieve onafhankelijke review van de C5-wijzigingen in PR #4, PR #5 en PR #16 blijft verschuldigd.
+- G1 technische protection is ON. GitHub-ruleset **G1 main** (id `21686159`, 2026-08-27T22:10:53Z): geen verwijderen van `main`, geen force-push / non-fast-forward, required CI `test (3.12)` en `test (3.13)` (strict), pull request verplicht vóór merge, 0 vereiste goedkeurende reviews (solo owner). Protected branch, required CI en PR-workflow bestaan. Volgende uitvoeringsstap is Fase 2 (duurzame immutable opslag van bron 2).
 
-Stopvoorwaarde: C3–C6-merges vereisen de vastgestelde GD-03-matrix en onafhankelijke menselijke reviewers op dezelfde commit/snapshot; named reviewers zijn nog niet bezet. Bugfixes van bestaande protocolregels blijven toegestaan. Protocol v2.5 is een eigenaarsgoedgekeurde C5-delta met retrospectieve technical- en security/operations-review, hetzelfde patroon als PR #4 en PR #5; GD-03 blijft ESTABLISHED.
+Stopvoorwaarde: C3–C6-merges vereisen de vastgestelde GD-03-matrix en onafhankelijke menselijke reviewers op dezelfde commit/snapshot; named reviewers zijn nog niet bezet. Bugfixes van bestaande protocolregels blijven toegestaan. Protocol v2.5 (PR #16) is een eigenaarsgoedgekeurde C5-delta; retrospectieve technical- en security/operations-review van PR #4, PR #5 en PR #16 blijft verschuldigd. GD-03 blijft ESTABLISHED.
 
 ### Fase 2 — Canonieke bron 2
 
