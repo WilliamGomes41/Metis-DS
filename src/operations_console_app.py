@@ -66,10 +66,8 @@ def _status_label(state: str) -> str:
 
 def _beeldmerk() -> str:
     return (
-        '<span class="beeldmerk" aria-hidden="true">'
-        '<span class="v-first">v</span><span class="amp">&amp;</span>'
-        '<span class="v-second">v</span><span class="n">n</span>'
-        "</span>"
+        '<img class="beeldmerk" src="/brand/venvn-beeldmerk.png" '
+        'width="94" height="32" alt="v&amp;vn">'
     )
 
 

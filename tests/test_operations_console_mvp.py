@@ -789,6 +789,33 @@ def test_brand_css_uses_venvn_tokens_and_one_secondary_family(tmp_path: Path) ->
     assert "fail closed" in fonts_readme.lower() or "fails closed" in fonts_readme.lower()
 
 
+def test_header_uses_official_beeldmerk_image_not_constructed_mark(tmp_path: Path) -> None:
+    from src.operations_console_app import create_console_app
+
+    mark = ROOT / "assets/brand/venvn-beeldmerk.png"
+    assert mark.is_file()
+    assert mark.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+    source = (ROOT / "src/operations_console_app.py").read_text(encoding="utf-8")
+    css = (ROOT / "assets/brand/console.css").read_text(encoding="utf-8")
+    assert "v-first" not in source
+    assert "v-second" not in source
+    assert '<span class="beeldmerk"' not in source
+    assert "/brand/venvn-beeldmerk.png" in source
+    assert ".beeldmerk .v-first" not in css
+    assert ".beeldmerk .amp" not in css
+    client = TestClient(create_console_app(_console(tmp_path)))
+    login = client.get("/login").text
+    assert 'src="/brand/venvn-beeldmerk.png"' in login
+    assert 'class="v-first"' not in login
+    served = client.get("/brand/venvn-beeldmerk.png")
+    assert served.status_code == 200
+    assert served.headers["content-type"].startswith("image/png")
+    assert served.content[:8] == b"\x89PNG\r\n\x1a\n"
+    for pirate in ("fonts.googleapis.com", "fonts.gstatic.com", "use.typekit.net", "unpkg.com"):
+        assert pirate not in login
+        assert pirate not in css
+
+
 def test_via_negativa_is_not_the_heading_of_researcher_rooms(tmp_path: Path) -> None:
     client, console, accounts = _html_client(tmp_path)
     _ingest_html(console, accounts)

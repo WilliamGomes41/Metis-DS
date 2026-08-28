@@ -69,23 +69,17 @@ a { color: var(--paars); }
 
 .brand {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   text-decoration: none;
   color: inherit;
 }
 
 .beeldmerk {
-  font-weight: 700;
-  font-size: 1.55rem;
-  letter-spacing: -0.03em;
-  line-height: 1;
+  display: block;
+  height: 32px;
+  width: auto;
 }
-
-.beeldmerk .v-first,
-.beeldmerk .v-second { color: var(--rood); }
-.beeldmerk .amp { color: var(--paars); }
-.beeldmerk .n { color: var(--zwart); }
 
 .brand-name {
   font-weight: 700;
