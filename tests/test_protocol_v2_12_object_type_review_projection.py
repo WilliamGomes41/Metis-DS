@@ -43,10 +43,11 @@ def test_v212_delta_exists_and_is_the_live_baseline() -> None:
     assert "Protocol v2.12.0" in roadmap
 
 
-def test_v212_hierarchy_points_at_one_live_version_without_claiming_v211_live() -> None:
+def test_v212_hierarchy_points_at_combined_live_version_without_rewriting_v212_delta() -> None:
     root_protocol = _read(ROOT / "PROTOCOL.md")
     delta = _read(DELTA)
     assert root_protocol.count("De geldende normatieve baseline is Protocol v2.12.0") == 1
+    assert "plus Protocol v2.11.0" in root_protocol
     assert "docs/PROTOCOL_V2_2.md" in root_protocol
     assert "docs/PROTOCOL_V2_3_TECHNICAL_DELTA.md" in root_protocol
     assert "docs/PROTOCOL_V2_4_PRODUCT_DISTRIBUTION_DELTA.md" in root_protocol
@@ -56,8 +57,8 @@ def test_v212_hierarchy_points_at_one_live_version_without_claiming_v211_live() 
     assert "docs/PROTOCOL_V2_8_USERS_HIERARCHY_CONSOLE_ORDER_DELTA.md" in root_protocol
     assert "docs/PROTOCOL_V2_9_CONSOLE_UX_BRAND_DELTA.md" in root_protocol
     assert "docs/PROTOCOL_V2_10_CONSOLE_NAV_ACCOUNTS_DELTA.md" in root_protocol
+    assert "docs/PROTOCOL_V2_11_HTML_FREEZE_LOCATOR_DELTA.md" in root_protocol
     assert "docs/PROTOCOL_V2_12_OBJECT_TYPE_REVIEW_PROJECTION_DELTA.md" in root_protocol
-    assert "docs/PROTOCOL_V2_11_HTML_FREEZE_LOCATOR_DELTA.md" not in root_protocol
     assert (
         "v2.2.0, v2.3.0, v2.4.0, v2.5.0, v2.6.0, v2.7.0, v2.8.0, v2.9.0, v2.10.0 and this delta jointly form normative baseline v2.12.0"
         in delta
@@ -230,7 +231,7 @@ def test_v212_serving_uses_atomic_published_projection() -> None:
     assert "verouderde projectie na withdraw is een protocolfout" in handoff
 
 
-def test_v212_points_at_open_pr27_without_claiming_v211_live_or_duplicating_it() -> None:
+def test_v212_delta_keeps_historical_pr27_lock_while_wiring_lists_v211_live() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
@@ -243,17 +244,17 @@ def test_v212_points_at_open_pr27_without_claiming_v211_live_or_duplicating_it()
     assert "Do not duplicate v2.11 as if it were already on main" in delta
     assert "Protocol v2.11 is not live baseline" in delta
     assert "This delta MUST NOT merge, edit or close PR #27" in delta
-    assert "PR #27" in root_protocol
-    assert "niet de live baseline" in root_protocol
-    assert "v2.11-slot" in root_protocol
-    assert "PR #27" in roadmap
-    assert "niet de live baseline" in roadmap
-    assert "PR #27" in handoff
-    assert "niet de live baseline" in handoff
-    assert "MUST NOT mergen, bewerken of sluiten" in handoff
+    assert "docs/PROTOCOL_V2_11_HTML_FREEZE_LOCATOR_DELTA.md" in root_protocol
+    assert "plus Protocol v2.11.0" in root_protocol
+    assert "Protocol v2.11.0" in roadmap
+    assert "Protocol v2.11.0" in handoff
+    assert "v2.12 MUST NOT v2.11 als substituut" in handoff
     assert "De geldende normatieve baseline is Protocol v2.11.0" not in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.11.0" not in roadmap
     assert "**Geldend protocol:** v2.11.0" not in handoff
+    assert "niet de live baseline" not in root_protocol
+    assert "niet de live baseline" not in roadmap
+    assert "niet de live baseline" not in handoff
 
 
 def test_v212_keeps_fail_closed_exclusions_and_gitignore() -> None:

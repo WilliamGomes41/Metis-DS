@@ -1,7 +1,7 @@
 # V&VN Data Services — Operationeel governance-record
 
 **Status:** ondergeschikt aan `PROTOCOL.md`  
-**Geldend protocol:** v2.12.0 (v2.2.0 + v2.3-delta + v2.4-delta + v2.5-delta + v2.6-delta + v2.7-delta + v2.8-delta + v2.9-delta + v2.10-delta + v2.12-delta)  
+**Geldend protocol:** v2.12.0 (v2.2.0 + v2.3-delta + v2.4-delta + v2.5-delta + v2.6-delta + v2.7-delta + v2.8-delta + v2.9-delta + v2.10-delta + v2.11-delta + v2.12-delta)  
 **Bijgewerkt:** 2026-08-28  
 **Eigenaar:** projecteigenaar V&VN Data Services
 
@@ -57,7 +57,7 @@ OPEN-besluiten mogen niet als established of `PASS` worden behandeld. Een gemist
 - Reviewers beoordelen dezelfde exacte commit of snapshot.
 - AI, Grok Bot en Metis MUST NOT meetellen als vereiste C3–C6-reviewer, MUST NOT goedkeuren en MUST NOT publiceren.
 
-PR #4 en PR #5 zijn C5-wijzigingen en vereisen nog retrospectieve onafhankelijke technical- en security/operations-review volgens deze matrix. Protocol v2.9.0 blijft een geldend C3-onderdeel (taakgerichte console-UX en V&VN digitale stylesheet). Protocol v2.10.0 blijft een geldend C5-onderdeel (identiteit/toegang spanning console-kamers/nav: Documentenhierarchie, wachttaak-badges, Accounts-kamer). Protocol v2.12 is een eigenaarsgoedgekeurde C3-protocoldelta (retrieve-safety / answerability spanning review/publish-autorisatiebinding: objecttype, reviewtupel, atomaire projectie) en heropent GD-03 niet. Ingest URL-HTML blijft het v2.11-slot in open PR #27 (niet de live baseline). Benoemde reviewers blijven onbezet.
+PR #4 en PR #5 zijn C5-wijzigingen en vereisen nog retrospectieve onafhankelijke technical- en security/operations-review volgens deze matrix. Protocol v2.9.0 blijft een geldend C3-onderdeel (taakgerichte console-UX en V&VN digitale stylesheet). Protocol v2.10.0 blijft een geldend C5-onderdeel (identiteit/toegang spanning console-kamers/nav: Documentenhierarchie, wachttaak-badges, Accounts-kamer). Protocol v2.11.0 is een eigenaarsgoedgekeurde C3-protocoldelta (bron/review/publish / retrieve-safety: geüploade HTML-freeze, weigering van live URL-HTML, verplichte source locators, fail-closed Product API zonder locator) en heropent GD-03 niet. Protocol v2.12.0 is een eigenaarsgoedgekeurde C3-protocoldelta (retrieve-safety / answerability spanning review/publish-autorisatiebinding: objecttype, reviewtupel, atomaire projectie) en heropent GD-03 niet. Benoemde reviewers blijven onbezet.
 
 ## Rolgrenzen (reeds in het protocol; hier alleen zichtbaar gemaakt)
 

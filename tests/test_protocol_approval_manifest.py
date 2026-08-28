@@ -120,6 +120,20 @@ def test_approved_v210_delta_manifest_is_supported(tmp_path: Path):
     assert manifest["commit_sha"] == "b" * 40
 
 
+def test_approved_v211_delta_manifest_is_supported(tmp_path: Path):
+    protocol = tmp_path / "PROTOCOL_V2_11_HTML_FREEZE_LOCATOR_DELTA.md"
+    protocol.write_text(
+        "**Status:** Approved for project use\n"
+        "**Protocol delta version:** 2.11.0\n"
+        "**Approval date:** 2026-08-28\n",
+        encoding="utf-8",
+    )
+    manifest = build_manifest(protocol, "c" * 40)
+    assert manifest["protocol_version"] == "2.11.0"
+    assert manifest["approval_date"] == "2026-08-28"
+    assert manifest["commit_sha"] == "c" * 40
+
+
 def test_approved_v212_delta_manifest_is_supported(tmp_path: Path):
     protocol = tmp_path / "PROTOCOL_V2_12_OBJECT_TYPE_REVIEW_PROJECTION_DELTA.md"
     protocol.write_text(
