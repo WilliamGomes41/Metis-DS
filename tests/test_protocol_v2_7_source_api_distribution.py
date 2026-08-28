@@ -20,7 +20,8 @@ def test_v27_approval_manifest_matches_protocol_bytes() -> None:
     assert manifest["protocol_version"] == "2.7.0"
     assert manifest["protocol_path"] == "docs/PROTOCOL_V2_7_SOURCE_API_DISTRIBUTION_DELTA.md"
     assert manifest["protocol_sha256"] == sha256_file(DELTA)
-    assert manifest["commit_sha"] == "337728dd76c0b5d50bdc6421b83d6a777a134a61"
+    assert manifest["commit_sha"] == "d61aed6553503772df3fab16c4f12247966fc161"
+    assert manifest["commit_sha"] != "337728dd76c0b5d50bdc6421b83d6a777a134a61"
     assert manifest["approval_date"] == "2026-08-28"
     assert manifest["approval_authority"] == "project_owner"
     assert manifest["conformance_effect"] == "does_not_override_gate_status"
