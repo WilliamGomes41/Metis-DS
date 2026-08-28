@@ -69,6 +69,8 @@ Protocol v2.7 legt first-wave bron, object-level retrieve-and-abstain API en dis
 
 Protocol v2.8 legt primaire gebruikers, klasse×familie-bronhiërarchie en console-bouwvolgorde vast. Alle v2.6-consoleregels en alle v2.7-bron-/API-/distributieregels blijven van kracht, behalve de begrensde supersessie van de bouwvolgorde: de volgende implementatie is een echte console-MVP op de bestaande kernel, geen mockup; Continentie bron 2 komt via die console binnen; duurzame immutable opslag wordt niet overgeslagen. RAG op kennisplatform-HTML is niet het product. Geen Vercel, Neon of LLM-vendor. Deze protocol-PR implementeert geen UI, geen mockup en geen productcode.
 
+Protocol v2.9 legt taakgerichte onderzoeker-UX en de V&VN digitale stylesheet vast. Alle v2.6-kamers, v2.7-ingesttypen en v2.8-gebruikers-/hiërarchieregels blijven van kracht. De volgende implementatie is een console-UX-rewrite op de bestaande kernel, geen Azure, geen Vercel/Neon, geen mockup; de G2-locator blijft de publicatieblocker. Deze protocol-PR wijzigt `src/operations_console_*.py` niet en implementeert de nieuwe UI niet.
+
 ## 6. CI-governance-invarianten
 
 CI controleert minimaal dat:

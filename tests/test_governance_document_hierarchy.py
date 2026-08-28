@@ -24,7 +24,7 @@ def test_governance_documents_exist() -> None:
 
 def test_protocol_has_one_versioned_norm_and_required_hierarchy() -> None:
     protocol = _read("PROTOCOL.md")
-    assert protocol.count("De geldende normatieve baseline is Protocol v2.8.0") == 1
+    assert protocol.count("De geldende normatieve baseline is Protocol v2.9.0") == 1
     assert protocol.count("docs/PROTOCOL_V2_2.md") == 1
     assert protocol.count("docs/PROTOCOL_V2_3_TECHNICAL_DELTA.md") == 1
     assert protocol.count("docs/PROTOCOL_V2_4_PRODUCT_DISTRIBUTION_DELTA.md") == 1
@@ -32,6 +32,7 @@ def test_protocol_has_one_versioned_norm_and_required_hierarchy() -> None:
     assert protocol.count("docs/PROTOCOL_V2_6_INTERNAL_OPERATIONS_CONSOLE_DELTA.md") == 1
     assert protocol.count("docs/PROTOCOL_V2_7_SOURCE_API_DISTRIBUTION_DELTA.md") == 1
     assert protocol.count("docs/PROTOCOL_V2_8_USERS_HIERARCHY_CONSOLE_ORDER_DELTA.md") == 1
+    assert protocol.count("docs/PROTOCOL_V2_9_CONSOLE_UX_BRAND_DELTA.md") == 1
     assert "PROTOCOL.md → ROADMAP.md → HANDOFF.md → acceptatietests → code" in protocol
     assert "probleem of failure → protocoltoets" in protocol
 

@@ -1,8 +1,8 @@
 # V&VN Data Services — Operationeel governance-record
 
 **Status:** ondergeschikt aan `PROTOCOL.md`  
-**Geldend protocol:** v2.4.0 (v2.2.0 + v2.3-delta + v2.4-delta)  
-**Bijgewerkt:** 2026-08-27  
+**Geldend protocol:** v2.9.0 (v2.2.0 + v2.3-delta + v2.4-delta + v2.5-delta + v2.6-delta + v2.7-delta + v2.8-delta + v2.9-delta)  
+**Bijgewerkt:** 2026-08-28  
 **Eigenaar:** projecteigenaar V&VN Data Services
 
 ## Plaats in de hiërarchie
@@ -57,7 +57,7 @@ OPEN-besluiten mogen niet als established of `PASS` worden behandeld. Een gemist
 - Reviewers beoordelen dezelfde exacte commit of snapshot.
 - AI, Grok Bot en Metis MUST NOT meetellen als vereiste C3–C6-reviewer, MUST NOT goedkeuren en MUST NOT publiceren.
 
-PR #4 en PR #5 zijn C5-wijzigingen en vereisen nog retrospectieve onafhankelijke technical- en security/operations-review volgens deze matrix.
+PR #4 en PR #5 zijn C5-wijzigingen en vereisen nog retrospectieve onafhankelijke technical- en security/operations-review volgens deze matrix. Protocol v2.9 is een eigenaarsgoedgekeurde C3-protocoldelta (taakgerichte console-UX en V&VN digitale stylesheet) en heropent GD-03 niet. Benoemde reviewers blijven onbezet.
 
 ## Rolgrenzen (reeds in het protocol; hier alleen zichtbaar gemaakt)
 

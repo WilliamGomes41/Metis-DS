@@ -16,7 +16,7 @@ Deze repository is uitsluitend V&VN Data Services. Status, fasen of UI van ander
 - Eén integrity-kernel is de hash-autoriteit voor review-snapshot, store-import en publicatiegate.
 - Het DS-MVP blijft beperkt tot U1 bronverwijzing en U2 kennisrespons.
 - Technische toegang is nooit automatisch een licentie, V&VN-goedkeuring of toestemming voor modeltraining.
-- Een interne operations console MAG in deze repository als menselijk oppervlak over de knowledge kernel (Protocol v2.6, goedgekeurde scope, niet gebouwd). Een zorgapp-frontend, chatbot, EPD/ECD-UI of publieke website MAG dat niet. Chat hoort niet in de console.
+- Een interne operations console MAG in deze repository als menselijk oppervlak over de knowledge kernel (Protocol v2.6, goedgekeurde scope; console-MVP ingest+review in code; Protocol v2.9 eist een taakgerichte onderzoeker-UX en V&VN digitale stylesheet). Een zorgapp-frontend, chatbot, EPD/ECD-UI of publieke website MAG dat niet. Chat hoort niet in de console.
 - Primaire DS-gebruikers zijn richtlijnonderzoekers (console) en B2B-abonnees (EPD, instelling, hun bot). Verpleegkundigen zijn geen primaire DS-gebruikers; ontwerp de console niet voor verpleegkundigen (Protocol v2.8).
 - First-wave officiële bestanden zijn HTML-pagina en PDF; kennisplatform `story.html`-boomplayers vallen buiten de first wave (Protocol v2.7).
 - Bronhiërarchie heeft twee assen: klasse/gewicht op ieder object (`richtlijn` > `handreiking` > `artikel` > `transcript`/`podcast`) en familie/topic als haak, geen nieuw bestand. Zwaarder MAG niet door lichter worden gevuld. Een podcast MUST NOT een richtlijn in de API vervangen, ook niet in dezelfde familie (Protocol v2.8).
@@ -27,21 +27,21 @@ Deze repository is uitsluitend V&VN Data Services. Status, fasen of UI van ander
 
 ### Fase 1 — Repository en governance-baseline
 
-Status: G1-technische protection ON; gezaghebbende remote is public onder Protocol v2.5.0; resterende nazorg: named GD-03-reviewers en retrospectieve C5-review. Azure/G8 niet gestart. Protocol v2.8.0 is live. Protocol v2.7.0 blijft van kracht. Protocol v2.6.0 blijft de goedgekeurde-niet-gebouwde console-scope; de console is niet geïmplementeerd.
+Status: G1-technische protection ON; gezaghebbende remote is public onder Protocol v2.5.0; resterende nazorg: named GD-03-reviewers en retrospectieve C5/C3-review. Azure/G8 niet gestart. Protocol v2.9.0 is live. Protocol v2.8.0 blijft van kracht. Protocol v2.7.0 blijft van kracht. Protocol v2.6.0 blijft de goedgekeurde console-scope; console-MVP ingest+review is geïmplementeerd; de v2.9-UX-rewrite is niet geïmplementeerd.
 
 - Gezaghebbende remote `WilliamGomes41/VENVN-DS` is public tijdens de gedeclareerde MVP-periode (Protocol v2.5.0). Publiek is niet de latere productiestandaard; na de MVP MUST een nieuw plan private hosting of een organisatieplan herstellen.
 - CI, repository-preflight en architectuur-invarianttests.
-- Protocol v2.8.0 vastgesteld en live (v2.2 + v2.3-delta + v2.4-delta + v2.5-delta + v2.6-delta + v2.7-delta + v2.8-delta), inclusief G0, product-/distributiegrenzen, de MVP-uitzondering voor een publieke remote, de interne operations console als goedgekeurde-niet-gebouwde scope, first-wave bron / retrieve-and-abstain / distributieregels, primaire gebruikers, klasse×familie-hiërarchie en de console-bouwvolgorde.
+- Protocol v2.9.0 vastgesteld en live (v2.2 + v2.3-delta + v2.4-delta + v2.5-delta + v2.6-delta + v2.7-delta + v2.8-delta + v2.9-delta), inclusief G0, product-/distributiegrenzen, de MVP-uitzondering voor een publieke remote, de interne operations console als goedgekeurde scope, first-wave bron / retrieve-and-abstain / distributieregels, primaire gebruikers, klasse×familie-hiërarchie, de console-bouwvolgorde en de taakgerichte onderzoeker-UX plus V&VN digitale stylesheet. Protocol v2.8.0 blijft een geldend onderdeel van die baseline.
 - Ontwikkelhiërarchie en handoffdiscipline geborgd.
 - Stackbaseline en machineleesbaar infrastructuurmanifest aanwezig.
 - G0 Local Development: `PASS`; G0 Azure DEV: `BLOCKED` totdat open keuzes zijn opgelost. Geen Azure starten in deze fase.
 - Integrity kernel als enige canonical-hash voor store én publication gate (herstel 2026-08-26).
 - GD-03 reviewervereisten ESTABLISHED (2026-08-27); evidence in `docs/GOVERNANCE.md`. Named reviewers blijven een latere bezettingsstap en zijn niet bezet.
 - Historische STEP-/audit-/repair-rapporten verplaatst naar `docs/history/` (2026-08-27); de root is het operationele oppervlak, geen vijfde stuurlaag.
-- Retrospectieve onafhankelijke review van de C5-wijzigingen in PR #4, PR #5, PR #16, Protocol v2.6 / PR #18, Protocol v2.7 / PR #19 en Protocol v2.8 blijft verschuldigd.
-- G1 technische protection is ON. GitHub-ruleset **G1 main** (id `21686159`, 2026-08-27T22:10:53Z): geen verwijderen van `main`, geen force-push / non-fast-forward, required CI `test (3.12)` en `test (3.13)` (strict), pull request verplicht vóór merge, 0 vereiste goedkeurende reviews (solo owner). Protected branch, required CI en PR-workflow bestaan. Volgende uitvoeringsstap is Fase 2b: een echte console-MVP op de bestaande kernel, met Continentie bron 2 als eerste envelope via die console. Geen mockup. Niet wachten op Azure.
+- Retrospectieve onafhankelijke review van de C5-wijzigingen in PR #4, PR #5, PR #16, Protocol v2.6 / PR #18, Protocol v2.7 / PR #19, Protocol v2.8 / PR #21 en de console-implementatie / PR #23, plus C3-review van Protocol v2.9, blijft verschuldigd.
+- G1 technische protection is ON. GitHub-ruleset **G1 main** (id `21686159`, 2026-08-27T22:10:53Z): geen verwijderen van `main`, geen force-push / non-fast-forward, required CI `test (3.12)` en `test (3.13)` (strict), pull request verplicht vóór merge, 0 vereiste goedkeurende reviews (solo owner). Protected branch, required CI en PR-workflow bestaan. Volgende uitvoeringsstap is de console-UX-rewrite op de bestaande kernel (Protocol v2.9): taakgerichte onderzoeker-UX en V&VN digitale stylesheet, geen mockup, geen Azure, geen Vercel/Neon. Publicatie blijft BLOCKED zonder immutable locator (G2).
 
-Stopvoorwaarde: C3–C6-merges vereisen de vastgestelde GD-03-matrix en onafhankelijke menselijke reviewers op dezelfde commit/snapshot; named reviewers zijn nog niet bezet. Bugfixes van bestaande protocolregels blijven toegestaan. Protocol v2.5 (PR #16), Protocol v2.6 (PR #18), Protocol v2.7 (PR #19) en Protocol v2.8 zijn eigenaarsgoedgekeurde C5-delta's; retrospectieve technical- en security/operations-review van PR #4, PR #5, PR #16, v2.6, v2.7 en v2.8 blijft verschuldigd. GD-03 blijft ESTABLISHED.
+Stopvoorwaarde: C3–C6-merges vereisen de vastgestelde GD-03-matrix en onafhankelijke menselijke reviewers op dezelfde commit/snapshot; named reviewers zijn nog niet bezet. Bugfixes van bestaande protocolregels blijven toegestaan. Protocol v2.5 (PR #16), Protocol v2.6 (PR #18), Protocol v2.7 (PR #19) en Protocol v2.8 (PR #21) zijn eigenaarsgoedgekeurde C5-delta's; Protocol v2.9 is een eigenaarsgoedgekeurde C3-delta; retrospectieve technical-, security/operations- en (voor v2.9) clinical-review van PR #4, PR #5, PR #16, v2.6, v2.7, v2.8, PR #23 en v2.9 blijft verschuldigd. GD-03 blijft ESTABLISHED.
 
 ### Fase 2 — Canonieke bron 2
 
@@ -57,12 +57,13 @@ Status: technische acquisitie en extractie ontwikkeld; duurzame immutable opslag
 
 Stopvoorwaarde: ontbrekende bytes, checksum, immutable locator, provenance of review houdt publicatie `BLOCKED`. Dit slaat duurzame immutable opslag niet over.
 
-### Fase 2b — Interne operations console (Protocol v2.6 / v2.8)
+### Fase 2b — Interne operations console (Protocol v2.6 / v2.8 / v2.9)
 
-Status: console-MVP ingest+review geïmplementeerd in deze repository (G0 local, gekoppeld aan de bestaande kernel); Protocol v2.6 keurt de scope goed. Geen mockup. Publicatie blijft BLOCKED zonder immutable locator (G2). Azure niet gestart. Duurzame opslag wordt niet overgeslagen.
+Status: console-MVP ingest+review geïmplementeerd in deze repository (G0 local, gekoppeld aan de bestaande kernel); Protocol v2.6 keurt de scope goed; Protocol v2.9 eist een taakgerichte onderzoeker-UX en V&VN digitale stylesheet. Volgende implementatie: console-UX-rewrite op de bestaande kernel. Geen mockup. Geen Azure. Geen Vercel/Neon. Publicatie blijft BLOCKED zonder immutable locator (G2). Duurzame opslag wordt niet overgeslagen.
 
-- Bouw geen mockup. Wacht niet op Azure of een afgeronde «DS» voordat onderzoekers een echte console hebben.
+- Bouw geen mockup. Wacht niet op Azure, Vercel, Neon of een afgeronde «DS» voordat onderzoekers een taakgerichte console hebben.
 - Echte console-MVP, gekoppeld aan de bestaande kernel (extract, objects, gates, lokaal `sources/private/` als G0-local store): ingest HTML/PDF, family-tree, reviewers selecteren, review return-loop.
+- Protocol v2.9: die kernel-MVP MUST een taakgerichte onderzoeker-UX en V&VN digitale stylesheet krijgen. Gestapelde ongelabelde HTML-formulieren van gelijk gewicht MUST NOT de blijvende onderzoeker-UX zijn. Envelope is geen UI-term. Snapshot-id is geen onderzoeker-invoerveld. Verplaatsen en promoveren MUST echte klikbare acties zijn. Login MUST gebruikersnaam én wachtwoord vragen.
 - Continentie bron 2 is de eerste envelope en komt VIA die console binnen, niet via een parallel engineer-only pad als onderzoekerservaring.
 - Frontend: intuïtieve console voor richtlijnonderzoekers en reviewers, niet voor verpleegkundigen. Backend: immutable bronstore + canonieke kennisobjecten. Product API bestaat al en blijft een aparte machinedeur; niet eerst herbouwen.
 - Console-boom = familie × klasse. Ieder bestand houdt zijn eigen hash. Familie is een haak, geen nieuw bestand. MVP: de ingest-onderzoeker zet de familie. Een branch morgen toevoegen tekent de boom niet opnieuw.
@@ -73,7 +74,7 @@ Status: console-MVP ingest+review geïmplementeerd in deze repository (G0 local,
 - Console-ingest vereist een immutable store: lokale `sources/private/` is de G0 Local-substituut tot G0 Azure DEV PASSes (expliciet geen productie); Azure Blob wanneer G0 Azure DEV PASSes.
 - Identiteitsprovider blijft `TBD` en onderworpen aan G0; dit sluit G8 niet en provisioneert geen Azure AD.
 
-Stopvoorwaarde: geen mockup; geen consolecode claimen als bestaande waarheid; geen analytics-first; geen chat in de console; geen shared login; uploader niet de enige vereiste reviewer; geen bronbinaries in Git; geen Azure starten; publicatie blijft BLOCKED zonder immutable locator.
+Stopvoorwaarde: geen mockup; geen stacked datamodel-dump als blijvende onderzoeker-UX; geen analytics-first; geen chat in de console; geen shared login; uploader niet de enige vereiste reviewer; geen bronbinaries in Git; geen Azure starten; geen Vercel/Neon; publicatie blijft BLOCKED zonder immutable locator.
 
 ### Fase 3 — Evaluatie en onafhankelijke acceptatie
 
@@ -103,7 +104,7 @@ Status: deels aanwezig (Product API + interne inspection); afronden na Fase 2–
 - Stabiele object-ID's, bronversie, status en canonical links leveren.
 - API/schema versieerbaar maken en contracttests voor provenance en withdrawal toevoegen.
 - Logging en audittrail zonder vertrouwelijke bron- of reviewdata te lekken.
-- Geen zorgapp-frontend, chatbot, EPD/ECD-UI of publieke website in deze repository. Inspection is intern en read-only. De interne operations console is een apart goedgekeurd oppervlak (Fase 2b), nog niet gebouwd.
+- Geen zorgapp-frontend, chatbot, EPD/ECD-UI of publieke website in deze repository. Inspection is intern en read-only. De interne operations console is een apart goedgekeurd oppervlak (Fase 2b); kernel-MVP ingest+review is gebouwd; Protocol v2.9-UX-rewrite volgt.
 
 Stopvoorwaarde: geen generation/LLM in deze service; similarity is nooit answerability; U3–U5 zijn buiten MVP; chat is geen Product API-kamer en geen consoleruimte; geen ziekenhuisprotocollen, adoptielijsten of patiëntgegevens opslaan.
 
@@ -138,4 +139,4 @@ Stopvoorwaarde: geen externe toegang zonder juridische, privacy/security- en ver
 
 ## Scopebeheer
 
-Nieuwe functionaliteit komt alleen in de roadmap nadat is vastgesteld dat deze door het huidige protocol wordt gedekt. Buiten scope voor de eerste MVP zijn uitbreidingen die de onafhankelijke acceptatie, bronintegriteit of fail-closed publicatie omzeilen of vertragen, een zorgapp-frontend, chatbot, EPD/ECD-UI of publieke website, beslisregels, patiëntspecifiek advies, algemene modeltraining, care-impact-onderzoek en federated learning. Training MAG alleen als tweede licentie mét live publicatiestatuscheck (Protocol v2.7). De interne operations console is onder Protocol v2.6 in scope als gepland intern oppervlak. Protocol v2.8 zet de volgende implementatie op een echte console-MVP (geen mockup) op de bestaande kernel; Continentie bron 2 komt via die console binnen. Duurzame immutable opslag wordt niet overgeslagen: lokale store is de G0-stand-in tot G0 Azure DEV; publicatie blijft BLOCKED zonder immutable locator (G2).
+Nieuwe functionaliteit komt alleen in de roadmap nadat is vastgesteld dat deze door het huidige protocol wordt gedekt. Buiten scope voor de eerste MVP zijn uitbreidingen die de onafhankelijke acceptatie, bronintegriteit of fail-closed publicatie omzeilen of vertragen, een zorgapp-frontend, chatbot, EPD/ECD-UI of publieke website, beslisregels, patiëntspecifiek advies, algemene modeltraining, care-impact-onderzoek en federated learning. Training MAG alleen als tweede licentie mét live publicatiestatuscheck (Protocol v2.7). De interne operations console is onder Protocol v2.6 in scope als intern oppervlak. Protocol v2.8 zette de volgende implementatie op een echte console-MVP (geen mockup) op de bestaande kernel; Continentie bron 2 komt VIA de console binnen. Protocol v2.9 zet de volgende implementatie op een console-UX-rewrite op de bestaande kernel (taakgerichte onderzoeker-UX + V&VN digitale stylesheet; geen Azure, geen Vercel/Neon, geen mockup). Duurzame immutable opslag wordt niet overgeslagen: lokale store is de G0-stand-in tot G0 Azure DEV; publicatie blijft BLOCKED zonder immutable locator (G2).
