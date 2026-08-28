@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 from src.integrity_kernel import sha256_file
@@ -20,10 +22,20 @@ def test_v211_approval_manifest_matches_protocol_bytes() -> None:
     assert manifest["protocol_version"] == "2.11.0"
     assert manifest["protocol_path"] == "docs/PROTOCOL_V2_11_HTML_FREEZE_LOCATOR_DELTA.md"
     assert manifest["protocol_sha256"] == sha256_file(DELTA)
-    assert manifest["commit_sha"] == "46c880c090944ffb5a2025c71d3b1a8414158f99"
+    assert manifest["commit_sha"] == "12fe1b70bfb5aaed235201769a9ce3199bc684ce"
     assert manifest["approval_date"] == "2026-08-28"
     assert manifest["approval_authority"] == "project_owner"
     assert manifest["conformance_effect"] == "does_not_override_gate_status"
+
+
+def test_v211_approval_commit_contains_protocol_bytes() -> None:
+    manifest = json.loads(APPROVAL.read_text(encoding="utf-8"))
+    blob = subprocess.check_output(
+        ["git", "cat-file", "-p", f"{manifest['commit_sha']}:{manifest['protocol_path']}"],
+        cwd=ROOT,
+    )
+    assert hashlib.sha256(blob).hexdigest() == manifest["protocol_sha256"]
+    assert hashlib.sha256(blob).hexdigest() == sha256_file(DELTA)
 
 
 def test_v211_delta_exists_and_is_the_live_baseline() -> None:
