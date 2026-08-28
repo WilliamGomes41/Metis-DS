@@ -5,6 +5,7 @@ All notable technical changes to V&VN Data Services are recorded here.
 ## [Unreleased]
 
 ### Added
+- Protocol v2.9.0: researcher-task console UX and V&VN digital stylesheet (huisstyle) rules. Protocol-only; does not implement the UI rewrite. Next implementation is that rewrite on the existing kernel. G2 remains the publication blocker.
 - Internal operations console MVP: ingest mailbox (HTML/PDF or URL snapshot), family × class tree, named reviewers, review return-loop, local G0 identity. Served by `vvn-data-service serve-console`. Publication remains fail-closed without an immutable locator (G2).
 
 ### Changed
