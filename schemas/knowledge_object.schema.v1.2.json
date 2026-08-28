@@ -42,7 +42,9 @@
       "enum": [
         "document",
         "section",
+        "heading",
         "definition",
+        "explanation",
         "condition",
         "score_rule",
         "decision",
@@ -50,7 +52,38 @@
         "recommendation",
         "exception",
         "out_of_scope",
-        "supersession"
+        "supersession",
+        "unclassified"
+      ]
+    },
+    "proposed_object_type": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "heading",
+        "definition",
+        "explanation",
+        "condition",
+        "exception",
+        "recommendation",
+        null
+      ]
+    },
+    "confirmed_object_type": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "heading",
+        "definition",
+        "explanation",
+        "condition",
+        "exception",
+        "recommendation",
+        null
       ]
     },
     "source": {

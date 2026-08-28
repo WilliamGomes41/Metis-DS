@@ -25,6 +25,7 @@ from typing import Any, Iterable
 
 SEARCHABLE_TYPES = {
     "definition",
+    "explanation",
     "condition",
     "score_rule",
     "decision",
@@ -34,7 +35,7 @@ SEARCHABLE_TYPES = {
     "out_of_scope",
 }
 
-NON_SEARCHABLE_TYPES = {"document", "section", "supersession"}
+NON_SEARCHABLE_TYPES = {"document", "section", "supersession", "heading", "unclassified"}
 
 
 def canonical_hash(value: Any) -> str:
@@ -189,6 +190,16 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             "parent_object_id": obj.get("parent_object_id"),
             "context_object_ids": context_ids,
             "risk_level": (obj.get("risk") or {}).get("risk_level"),
+            "confirmed_object_type": obj.get("confirmed_object_type") or obj.get("object_type"),
+            "proposed_object_type": obj.get("proposed_object_type"),
+            "source_locator": next(
+                (
+                    frag.get("source_locator")
+                    for frag in (obj.get("provenance") or {}).get("source_fragments") or []
+                    if (frag.get("source_locator") or {}).get("locator_value")
+                ),
+                None,
+            ),
         }
         # Preserve structured clinical logic separately from free-text retrieval text.
         # This is a derived read-only projection of the canonical object and allows

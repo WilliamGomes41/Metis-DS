@@ -99,6 +99,16 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
             "object_version": spec["object_version"],
             "parent_object_id": item.get("parent_object_id"),
             "object_type": item["object_type"],
+            **(
+                {"proposed_object_type": item["proposed_object_type"]}
+                if item.get("proposed_object_type")
+                else {}
+            ),
+            **(
+                {"confirmed_object_type": item["confirmed_object_type"]}
+                if item.get("confirmed_object_type")
+                else {}
+            ),
             "source": _source(manifest, page),
             "structure": {
                 "section_path": item.get("section_path", []),
