@@ -260,6 +260,10 @@ def test_v29_is_c3_with_owner_approval_and_retrospective_review() -> None:
     assert "G0 Azure DEV blijft `BLOCKED`" in handoff
     assert "v2.9.0" in governance
     assert "heropent GD-03 niet" in governance
+    gd03 = json.loads((ROOT / "data" / "assurance" / "gd_03_c3_c6_reviewer_matrix.json").read_text(encoding="utf-8"))
+    assert gd03["status"] == "ESTABLISHED"
+    assert gd03["protocol_version"] == "2.4.0"
+    assert gd03["decision_date"] == "2026-08-27"
 
 
 def test_v29_records_ux_rewrite_build_order_without_skipping_g2() -> None:
