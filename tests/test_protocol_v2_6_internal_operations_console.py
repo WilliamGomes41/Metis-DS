@@ -38,7 +38,7 @@ def test_v26_remains_an_approved_component_of_current_baseline() -> None:
     assert "docs/PROTOCOL_V2_6_INTERNAL_OPERATIONS_CONSOLE_DELTA.md" in root_protocol
     assert "Protocol v2.6.0" in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.5.0" not in root_protocol
-    assert "**Geldend protocol:** v2.7.0" in handoff
+    assert "**Geldend protocol:** v2.8.0" in handoff
     assert "Protocol v2.6.0" in roadmap
 
 
@@ -174,9 +174,8 @@ def test_v26_places_console_after_bron2_storage_not_instead() -> None:
     assert "not instead of Fase 2" in delta
     assert "Do not claim the console exists in code" in delta
     assert "Fase 2b — Interne operations console" in roadmap
-    assert "Niet in plaats van Fase 2" in roadmap
+    assert "Duurzame opslag wordt niet overgeslagen" in roadmap
     assert "goedgekeurd-niet-gebouwd" in handoff
-    assert "Fase 2: exacte bron 2" in handoff
     assert "Bron 2 is nog BLOCKED op duurzame immutable opslag" in handoff
 
 
