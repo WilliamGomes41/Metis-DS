@@ -1,5 +1,13 @@
 # V&VN extraction rules v0.1 — Osteoporose en fractuurpreventie
 
+> **Protocol v2.13 supersedes this file** for serving taxonomy, object size/chunking, and fusion of condition into recommendation. Do not delete this file. It remains a historical craft note.
+>
+> - Historical types (`decision`, `action`, `score_rule`, `table`, `background`, `patient_information`) MUST NOT be MVP serving types. The closed serving typeset is Protocol v2.12 / v2.13: `heading`, `definition`, `explanation`, `condition`, `exception`, `recommendation`, plus `unclassified` as default.
+> - Token-budget chunks (300–700 / 1000) MUST NOT define object identity. Extraction MUST split at meaning boundaries.
+> - Fusion of condition into recommendation is the forbidden default pattern (Protocol v2.13). Keep condition and recommendation as separate objects linked by confirmed `applies_if` / `except_if` unless splitting would break a single grammatical claim.
+>
+> Still-valid craft notes below: preserve clinical wording; keep `raw_text` beside `clean_text`; do not invent headings; do not change numeric thresholds.
+
 ## Doel
 Zet de bron om naar herleidbare kennisobjecten zonder klinische betekenis, voorwaarden, scorelogica of bronstructuur te verliezen.
 
