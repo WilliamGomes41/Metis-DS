@@ -5,7 +5,7 @@
 **Scope:** current repository baseline and infrastructure dependencies visible in code/protocol
 **Purpose:** make setup, vendor, account, persistence and cost dependencies visible before they become implementation blockers or budget surprises.
 
-This document is descriptive, not a vendor commitment. The approved normative baseline is Protocol v2.10.0. Protocol v2.9.0 remains an approved component of that baseline.
+This document is descriptive, not a vendor commitment. The approved normative baseline is Protocol v2.11.0. Protocol v2.10.0 remains an approved component of that baseline.
 
 ## 1. Current architecture in one view
 
@@ -29,7 +29,7 @@ Target external/Azure operation requires replacing several local pilot component
 with durable, shared and operationally managed services.
 ```
 
-The G0 local operations console MVP is implemented in this repository (`vvn-data-service serve-console`). Protocol v2.6 authorizes that internal operations console as scope. Protocol v2.7 keeps those console rules and records: No LLM in the MVP; the Product API is object-level retrieve-and-abstain and MUST NOT generate prose. Protocol v2.8 keeps those rules and records: do not build a mockup; Continentie bron 2 enters through that console; local `sources/private/` is the G0 stand-in until G0 Azure DEV; the Product API already exists and MUST NOT be rebuilt first; RAG on kennisplatform HTML is not the product. Protocol v2.9 adds researcher-task UX and V&VN digital stylesheet rules; that rewrite is now in code (PR #25), including the official beeldmerk. Protocol v2.10 adds Documentenhierarchie (UI heading; kernel remains family × class), waiting-task badges, and an Accounts room (publisher as MVP identity admin; closed role set); that follow-up is not implemented in this protocol change. The Product API contains no LLM/generation layer. Vercel, Neon and a hosted LLM are therefore **not** current V&VN Data Services requirements. No identity vendor is selected. No Vercel, Neon, or LLM vendor.
+The G0 local operations console MVP is implemented in this repository (`vvn-data-service serve-console`). Protocol v2.6 authorizes that internal operations console as scope. Protocol v2.7 keeps those console rules and records: No LLM in the MVP; the Product API is object-level retrieve-and-abstain and MUST NOT generate prose. Protocol v2.8 keeps those rules and records: do not build a mockup; Continentie bron 2 enters through that console; local `sources/private/` is the G0 stand-in until G0 Azure DEV; the Product API already exists and MUST NOT be rebuilt first; RAG on kennisplatform HTML is not the product. Protocol v2.9 adds researcher-task UX and V&VN digital stylesheet rules; that rewrite is now in code (PR #25), including the official beeldmerk. Protocol v2.10 adds Documentenhierarchie (UI heading; kernel remains family × class), waiting-task badges, and an Accounts room (publisher as MVP identity admin; closed role set); that follow-up is not implemented in this protocol change. Protocol v2.11 requires official first-wave HTML as an uploaded freeze file, rejects live URL-HTML at ingest, requires source locators on knowledge objects, and fail-closes Product API `supported` without a locator; that kernel work is not implemented in this protocol change. The Product API contains no LLM/generation layer. Vercel, Neon and a hosted LLM are therefore **not** current V&VN Data Services requirements. No identity vendor is selected. No Vercel, Neon, or LLM vendor.
 
 ## 2. Dependency inventory
 
@@ -115,6 +115,7 @@ This inventory is derived from the current repository, especially:
 - `docs/PROTOCOL_V2_8_USERS_HIERARCHY_CONSOLE_ORDER_DELTA.md` — primary users, class×family source hierarchy, real console-MVP build order on the existing kernel; RAG on kennisplatform HTML is not the product.
 - `docs/PROTOCOL_V2_9_CONSOLE_UX_BRAND_DELTA.md` — researcher-task console UX and V&VN digital stylesheet; licensed fonts not in repo; fail-closed system fallback; no Canva PDF in git.
 - `docs/PROTOCOL_V2_10_CONSOLE_NAV_ACCOUNTS_DELTA.md` — Documentenhierarchie heading, waiting-task badges, Accounts room; closed role set; publisher is MVP identity admin; CLI `console-account` bootstrap remains valid.
+- `docs/PROTOCOL_V2_11_HTML_FREEZE_LOCATOR_DELTA.md` — uploaded HTML freeze file; reject live URL-HTML at ingest; mandatory source locators; fail-closed Product API `supported` without a locator; no Azure/Vercel/Neon.
 - `Dockerfile` and `Dockerfile.product-api` — Python/container runtime;
 - `pyproject.toml` and lockfiles — pinned Python stack;
 - `src/operations_console_v1.py` and `src/operations_console_app.py` — G0 local operations console MVP and identity store;

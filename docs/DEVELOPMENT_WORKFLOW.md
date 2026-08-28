@@ -73,6 +73,8 @@ Protocol v2.9 legt taakgerichte onderzoeker-UX en de V&VN digitale stylesheet va
 
 Protocol v2.10 legt Documentenhierarchie, wachttaak-badges en de Accounts-kamer vast. Alle v2.6-kamers, v2.7-ingesttypen, v2.8-gebruikers-/hiërarchieregels en v2.9-UX-/huisstyleregels blijven van kracht. De volgende implementatie is een console-vervolg op de nu-in-code v2.9-UX (PR #25 gemerged): hernoemen, echte badges, Accounts; geen Azure, geen Vercel/Neon, geen mockup, geen chat, geen verpleegkundigen-UI; de G2-locator blijft de publicatieblocker. Deze protocol-PR wijzigt `src/operations_console_*.py` niet en implementeert de nieuwe UI niet.
 
+Protocol v2.11 legt geüploade HTML-freeze, weigering van live URL-HTML, verplichte source locators en fail-closed Product API zonder locator vast. Alle v2.6-kamers, v2.7-bron-/API-/distributieregels (behalve de begrensde HTML-URL-ingestzin), v2.8-gebruikers-/hiërarchieregels, v2.9-UX-/huisstyleregels en v2.10-console-/nav-/accountsregels blijven van kracht. HTML wordt niet geheel verboden. De volgende implementatie is de Implementation engineer op de bestaande kernel: live URL-HTML bij ingest weigeren; Product API fail-closed `supported` zonder source locator. PROTOCOL → tests → code later. Geen Azure, geen Vercel/Neon, geen mockup; de G2-locator blijft de publicatieblocker. Deze protocol-PR wijzigt `src/operations_console_*.py` en `src/product_api_*.py` niet en implementeert ingest-weigering noch API-fail-closed.
+
 ## 6. CI-governance-invarianten
 
 CI controleert minimaal dat:

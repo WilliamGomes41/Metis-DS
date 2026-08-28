@@ -5,6 +5,7 @@ All notable technical changes to V&VN Data Services are recorded here.
 ## [Unreleased]
 
 ### Added
+- Protocol v2.11.0: uploaded HTML freeze file, reject live URL-HTML at ingest, mandatory source locators on knowledge objects, and fail-closed Product API `supported` without a locator. Protocol-only; does not implement ingest rejection or API fail-closed. Next implementation is the Implementation engineer on the existing kernel. G2 remains the publication blocker. Does not reopen GD-03.
 - Protocol v2.10.0: Documentenhierarchie heading, real waiting-task badges, and Accounts room with closed role set (researcher, reviewer, publisher). Protocol-only; does not implement the UI follow-up. Next implementation is that follow-up on the now-merged v2.9 UX (PR #25). G2 remains the publication blocker.
 - Console-UX-rewrite on the existing kernel: task-oriented researcher rooms, researcher vocabulary (no envelope as a UI term), visible move/promote actions, login with gebruikersnaam and `type=password`, V&VN digital stylesheet tokens (Water secondary family, system-font fallback) and the official v&vn beeldmerk PNG. Protocol v2.9.0 remains the live UX/brand law; this implements that rewrite in `src/operations_console_app.py` (PR #25). G2 remains the publication blocker.
 - Protocol v2.9.0: researcher-task console UX and V&VN digital stylesheet (huisstyle) rules. Protocol-only; does not implement the UI rewrite. Next implementation is that rewrite on the existing kernel. G2 remains the publication blocker.
