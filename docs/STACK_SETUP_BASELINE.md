@@ -5,7 +5,7 @@
 **Scope:** current repository baseline and infrastructure dependencies visible in code/protocol
 **Purpose:** make setup, vendor, account, persistence and cost dependencies visible before they become implementation blockers or budget surprises.
 
-This document is descriptive, not a vendor commitment. The approved normative baseline is Protocol v2.11.0. Protocol v2.10.0 remains an approved component of that baseline.
+This document is descriptive, not a vendor commitment. The approved normative baseline is Protocol v2.11.0. Protocol v2.10.0 remains an approved component of that baseline. Protocol v2.9.0 remains an approved component of that baseline.
 
 ## 1. Current architecture in one view
 
