@@ -161,6 +161,7 @@ def _record(
         md["source_version"] = "1.0"
     return {
         "metadata": md,
+        "retrieval_id": f"{object_id}@1.0",
         "retrieval_text": text,
         "structured_logic": None,
         "projection_hash": "b" * 64,
@@ -371,9 +372,12 @@ def test_a_only_recommendation_is_action_advice_other_types_fit_without_advice_w
     assert "e1" in {row["object_id"] for row in explained["results"]}
     assert all(row.get("advice_weight") is not True for row in explained["results"])
 
+    bounded_rec = dict(rec)
+    bounded_rec["metadata"] = dict(rec["metadata"])
+    bounded_rec["metadata"]["context_object_ids"] = ["c1"]
     bounded = _eval(
         "Wat adviseert deze richtlijn bij een alarmsignaal?",
-        [rec, condition],
+        [bounded_rec, condition],
     )
     assert bounded["answerability"] == "supported"
     for row in bounded["results"]:

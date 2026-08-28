@@ -282,7 +282,12 @@ def _relation_supported(relation: str, record: dict[str, Any]) -> bool:
     if relation == "diagnostic_threshold":
         return bool(re.search(r"\bt\s*score\b", text) and re.search(r"\b(?:gte|lte|gt|lt|eq|diagnos\w*)\b", text))
     if relation == "recommendation":
-        return bool(re.search(r"\b(?:adviseer\w*|aanbevel\w*|gebruik|verwijs|overleg|controleer|informeer|start\w*)\b", text))
+        return bool(
+            re.search(
+                r"\b(?:(?:ge)?adviseer\w*|aanbevel\w*|bespreek\w*|gebruik\w*|verwijs\w*|overleg\w*|controleer\w*|informeer\w*|start\w*)\b",
+                text,
+            )
+        )
     return True
 
 
@@ -525,6 +530,14 @@ def evaluate_answerability(
     evidence_by_id = {e.object_id: e for e in evidence_rows}
     cluster_rows: list[dict[str, Any]] = []
     supporting_ids: list[str] = []
+    blocked_reasons: list[str] = []
+    for oid in candidate_ids:
+        record = record_by_object.get(oid)
+        if not record:
+            continue
+        blocked = _type_gate_reason(spec, record, record_by_object)
+        if blocked:
+            blocked_reasons.append(blocked)
     for cluster in _candidate_clusters(candidate_ids, record_by_object):
         ok, row = _cluster_support(spec, cluster, evidence_by_id, cfg)
         cluster_rows.append(row)
@@ -572,6 +585,8 @@ def evaluate_answerability(
         }
 
     type_reason = next((c.get("type_gate_reason") for c in cluster_rows if c.get("type_gate_reason")), None)
+    if not type_reason and blocked_reasons and len(blocked_reasons) == len(candidate_ids):
+        type_reason = blocked_reasons[0]
     if type_reason:
         reason = type_reason
         fp_class = "relation_mismatch" if type_reason == "type_does_not_fit_question" else "context_mismatch"

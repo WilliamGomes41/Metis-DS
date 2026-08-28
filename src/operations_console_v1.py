@@ -748,9 +748,11 @@ class OperationsConsole:
         confirmed = confirmed_object_type
         if not confirmed and target.get("confirmed_object_type"):
             confirmed = target["confirmed_object_type"]
-        if not confirmed and target.get("object_type") == "heading":
+        apply_type = bool(confirmed_object_type) or bool(target.get("confirmed_object_type"))
+        if not apply_type and decision == "approve" and target.get("object_type") == "heading":
             confirmed = "heading"
-        if confirmed:
+            apply_type = True
+        if apply_type and confirmed:
             if not is_closed_confirmed_type(confirmed):
                 raise ConsoleError("unknown_object_type")
             if target.get("object_type") != "document":
