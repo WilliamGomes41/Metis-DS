@@ -5,7 +5,7 @@
 **Scope:** current repository baseline and infrastructure dependencies visible in code/protocol
 **Purpose:** make setup, vendor, account, persistence and cost dependencies visible before they become implementation blockers or budget surprises.
 
-This document is descriptive, not a vendor commitment. The approved normative baseline is Protocol v2.6.0.
+This document is descriptive, not a vendor commitment. The approved normative baseline is Protocol v2.7.0.
 
 ## 1. Current architecture in one view
 
@@ -28,7 +28,7 @@ Target external/Azure operation requires replacing several local pilot component
 with durable, shared and operationally managed services.
 ```
 
-The repository currently contains no frontend application. Protocol v2.6 authorizes an internal operations console as scope; that console is not implemented and MUST NOT be claimed as existing code. The Product API contains no LLM/generation layer. Vercel, Neon and a hosted LLM are therefore **not** current V&VN Data Services requirements. No identity vendor is selected.
+The repository currently contains no frontend application. Protocol v2.6 authorizes an internal operations console as scope; that console is not implemented and MUST NOT be claimed as existing code. Protocol v2.7 keeps those console rules and records: No LLM in the MVP; the Product API is object-level retrieve-and-abstain and MUST NOT generate prose. The Product API contains no LLM/generation layer. Vercel, Neon and a hosted LLM are therefore **not** current V&VN Data Services requirements. No identity vendor is selected. No Vercel, Neon, or LLM vendor.
 
 ## 2. Dependency inventory
 
@@ -110,6 +110,7 @@ Unknown values should remain visibly `TBD`; they must not be silently filled in 
 This inventory is derived from the current repository, especially:
 
 - `docs/PROTOCOL_V2_6_INTERNAL_OPERATIONS_CONSOLE_DELTA.md` — internal operations console scope; identity as a required console capability; no vendor selected.
+- `docs/PROTOCOL_V2_7_SOURCE_API_DISTRIBUTION_DELTA.md` — first-wave source, object-level retrieve-and-abstain API, live subscription product; no LLM in the MVP; no Vercel, Neon or LLM vendor.
 - `Dockerfile` and `Dockerfile.product-api` — Python/container runtime;
 - `pyproject.toml` and lockfiles — pinned Python stack;
 - `src/canonical_store.py` and `db/schema_v2.sql` — SQLite pilot versus PostgreSQL production reference;

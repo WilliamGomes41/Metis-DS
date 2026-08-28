@@ -1,0 +1,13 @@
+{
+  "manifest_version": "1.0",
+  "protocol_version": "2.7.0",
+  "protocol_path": "docs/PROTOCOL_V2_7_SOURCE_API_DISTRIBUTION_DELTA.md",
+  "protocol_sha256": "ec3aa7a3b19ff38ac9fd2a89d099d3e03dc9bac6fa300ff53009cf6661940194",
+  "repository": "WilliamGomes41/VENVN-DS",
+  "default_branch": "main",
+  "commit_sha": "337728dd76c0b5d50bdc6421b83d6a777a134a61",
+  "approval_date": "2026-08-28",
+  "approval_authority": "project_owner",
+  "branch_protection_status": "temporary_procedural_control",
+  "conformance_effect": "does_not_override_gate_status"
+}

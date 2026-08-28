@@ -65,6 +65,8 @@ Een PR met code maar zonder vereiste test- en handoffwijziging is procesmatig in
 
 Protocol v2.6 keurt een interne operations console goed als DS-oppervlak. Een PR die console-UI, console-identiteit, review-afdwinging of publish-autorisatie toevoegt is minstens C5 spanning C3. Een zorgapp-frontend, chatbot, EPD/ECD-UI of publieke website in deze repository blijft verboden. Chat is geen consoleruimte. Deze protocol-PR implementeert geen UI.
 
+Protocol v2.7 legt first-wave bron, object-level retrieve-and-abstain API en distributieregels vast. Alle v2.6-consoleregels blijven van kracht. Fase 2 bron 2-opslag mag niet worden overgeslagen. Geen Vercel, Neon of LLM-vendor. Deze protocol-PR implementeert geen UI en geen productcode.
+
 ## 6. CI-governance-invarianten
 
 CI controleert minimaal dat:
