@@ -24,7 +24,9 @@ from typing import Any, Callable, Iterable
 
 from src.extract_html_v1 import extract as extract_html
 from src.extract_pdf_v2 import extract as extract_pdf
-from src.integrity_kernel import compute_canonical_object_hash, sha256_bytes
+from src.integrity_kernel import compute_canonical_object_hash, sha256_bytes, stamp_canonical_hashes
+from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES, extract_object_type, is_closed_confirmed_type
+from src.publish_authorization_v1 import invalidate_for_object, still_matches, tuple_record
 from src.review_workflow_v3 import apply_reviews
 from src.revision_workflow import create_revision
 from src.semantic_transform_generic_v1 import transform as transform_generic
@@ -171,6 +173,7 @@ def _spec_from_fragments(
     document_id: str,
     title: str,
     family: str,
+    class_: str,
     fragments: list[dict[str, Any]],
     content_kind: str,
 ) -> dict[str, Any]:
@@ -186,26 +189,27 @@ def _spec_from_fragments(
         text = (fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
         if not text:
             continue
-        object_type = "section" if fragment.get("heading") else "recommendation"
-        objects.append(
-            {
-                "object_id": f"{document_id}-{fragment['fragment_id']}",
-                "object_type": object_type,
-                "text": text,
-                "clean_text": text,
-                "source_fragment_ids": [fragment["fragment_id"]],
-                "section_path": fragment.get("section_path") or [],
-                "heading": fragment.get("heading"),
-                "review_track": "clinical",
-            }
-        )
+        object_type, proposed = extract_object_type(fragment)
+        spec_item: dict[str, Any] = {
+            "object_id": f"{document_id}-{fragment['fragment_id']}",
+            "object_type": object_type,
+            "text": text,
+            "clean_text": text,
+            "source_fragment_ids": [fragment["fragment_id"]],
+            "section_path": fragment.get("section_path") or [],
+            "heading": fragment.get("heading"),
+            "review_track": "clinical",
+        }
+        if proposed:
+            spec_item["proposed_object_type"] = proposed
+        objects.append(spec_item)
     return {
         "spec_version": "console-ingest-1.0",
         "document_id": document_id,
         "object_version": "1.0",
         "target_group": [],
         "care_setting": [],
-        "topic": [family, f"class-weight:{content_kind}"],
+        "topic": [family, f"class:{class_}", f"source-kind:{content_kind}"],
         "objects": objects,
     }
 
@@ -233,9 +237,16 @@ class OperationsConsole:
         self._objects_dir = self.runtime / "objects"
         self._objects_dir.mkdir(parents=True, exist_ok=True)
         self._ledger_path = self.runtime / "review_ledger.jsonl"
+        self._bindings_path = self.runtime / "publish_authorizations.json"
         self._accounts: dict[str, dict[str, Any]] = self._load_map(self._accounts_path)
         self._sessions: dict[str, dict[str, Any]] = self._load_map(self._sessions_path)
         self._envelopes: dict[str, dict[str, Any]] = self._load_map(self._envelopes_path)
+        self._bindings: dict[str, list[dict[str, Any]]] = self._load_map(self._bindings_path)  # type: ignore[assignment]
+        if self._bindings_path.exists():
+            loaded = json.loads(self._bindings_path.read_text(encoding="utf-8"))
+            self._bindings = {key: list(value) for key, value in loaded.items()}
+        else:
+            self._bindings = {}
 
     def _load_map(self, path: Path) -> dict[str, dict[str, Any]]:
         if not path.exists():
@@ -250,6 +261,9 @@ class OperationsConsole:
 
     def _save_envelopes(self) -> None:
         _atomic_write(self._envelopes_path, self._envelopes)
+
+    def _save_bindings(self) -> None:
+        _atomic_write(self._bindings_path, self._bindings)
 
     def _objects_path(self, snapshot_id: str) -> Path:
         return self._objects_dir / f"{snapshot_id}.jsonl"
@@ -387,6 +401,123 @@ class OperationsConsole:
             raise ConsoleError("uploader_cannot_be_sole_required_reviewer")
         return unique
 
+    def create_managed_account(
+        self,
+        *,
+        actor_id: str,
+        username: str,
+        password: str,
+        roles: Iterable[str],
+        display_name: str | None = None,
+    ) -> dict[str, Any]:
+        self._require_role(actor_id, "publisher")
+        return self.create_account(username, password, roles, display_name=display_name)
+
+    def assign_roles(self, *, actor_id: str, account_id: str, roles: Iterable[str]) -> dict[str, Any]:
+        self._require_role(actor_id, "publisher")
+        account = self._account(account_id)
+        role_set = sorted(set(roles))
+        if any(role not in ALLOWED_ROLES for role in role_set):
+            raise ConsoleError("unknown_role")
+        account["roles"] = role_set
+        self._save_accounts()
+        return self._public_account(account)
+
+    def waiting_task_counts(self, account_id: str) -> dict[str, int]:
+        account = self._account(account_id)
+        roles = set(account["roles"])
+        ingest = 0
+        review = 0
+        publish = 0
+        tree = 0
+        for envelope in self._envelopes.values():
+            objects = self._load_objects(envelope["snapshot_id"])
+            statuses = {(row.get("governance") or {}).get("validation_status") for row in objects}
+            if envelope.get("uploader_account_id") == account_id and statuses & {"revise", "rejected"}:
+                ingest += 1
+            if account_id in (envelope.get("named_reviewers") or []) and "reviewer" in roles:
+                if "needs_review" in statuses or not objects:
+                    review += 1
+                elif objects and all(
+                    (row.get("governance") or {}).get("validation_status") == "needs_review"
+                    or row.get("object_type") == "document"
+                    for row in objects
+                ):
+                    review += 1
+                elif "needs_review" in statuses:
+                    review += 1
+            if envelope.get("clinical_rereview_required") and roles & {"researcher", "reviewer", "publisher"}:
+                tree += 1
+            if "publisher" in roles and envelope.get("state") == CAPTURED:
+                publish += 1
+        if "reviewer" in roles:
+            review = len(
+                [
+                    envelope
+                    for envelope in self._envelopes.values()
+                    if account_id in (envelope.get("named_reviewers") or [])
+                    and any(
+                        (row.get("governance") or {}).get("validation_status") == "needs_review"
+                        for row in self._load_objects(envelope["snapshot_id"])
+                    )
+                ]
+            )
+        if "publisher" not in roles:
+            publish = 0
+        if "researcher" not in roles:
+            ingest = 0
+        return {
+            "ingest": ingest,
+            "tree": tree,
+            "review": review,
+            "publish": publish,
+            "accounts": 0,
+        }
+
+    def object_review_bindings(self, snapshot_id: str) -> list[dict[str, Any]]:
+        self._envelope(snapshot_id)
+        current = {row["object_id"]: row for row in self.snapshot_objects(snapshot_id)}
+        out = []
+        for row in self._bindings.get(snapshot_id, []):
+            item = dict(row)
+            obj = current.get(item.get("object_id"))
+            item["valid"] = bool(obj) and still_matches(item, obj)
+            out.append(item)
+        return out
+
+    def confirm_object_type(
+        self,
+        *,
+        actor_id: str,
+        snapshot_id: str,
+        object_id: str,
+        confirmed_object_type: str,
+    ) -> dict[str, Any]:
+        reviewer = self._require_role(actor_id, "reviewer")
+        if actor_id not in self._envelope(snapshot_id)["named_reviewers"]:
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        if not is_closed_confirmed_type(confirmed_object_type):
+            raise ConsoleError("unknown_object_type")
+        current = self.snapshot_objects(snapshot_id)
+        target = next((row for row in current if row["object_id"] == object_id), None)
+        if target is None:
+            raise ConsoleError("unknown_object")
+        if target.get("object_type") == "document":
+            raise ConsoleError("unknown_object_type")
+        target["confirmed_object_type"] = confirmed_object_type
+        target["object_type"] = confirmed_object_type
+        stamp_canonical_hashes(target)
+        history = [
+            row
+            for row in self._load_objects(snapshot_id)
+            if not (row["object_id"] == object_id and row["object_version"] == target["object_version"])
+        ]
+        history.append(target)
+        self._save_objects(snapshot_id, history)
+        self._bindings[snapshot_id] = invalidate_for_object(self._bindings.get(snapshot_id, []), object_id)
+        self._save_bindings()
+        return deepcopy(target)
+
     def ingest(
         self,
         *,
@@ -422,6 +553,8 @@ class OperationsConsole:
             raise ConsoleError("official_file_or_url_required")
         filename = filename or "source.bin"
         kind = classify_official_file(data, filename, content_type)
+        if url and kind == "html":
+            raise ConsoleError("live_url_html_not_allowed")
         digest = sha256_bytes(data)
         stored_dir = self.source_store / digest
         stored_dir.mkdir(parents=True, exist_ok=True)
@@ -441,6 +574,7 @@ class OperationsConsole:
             document_id=document_id,
             title=title.strip(),
             family=family_hook,
+            class_=class_,
             fragments=fragments,
             content_kind=kind,
         )
@@ -583,6 +717,11 @@ class OperationsConsole:
             governance["publication_status"] = "unpublished"
         self._save_objects(snapshot_id, rows)
         self._save_envelopes()
+        self._bindings[snapshot_id] = invalidate_for_object(self._bindings.get(snapshot_id, []), "")
+        self._bindings[snapshot_id] = [
+            {**row, "valid": False} for row in self._bindings.get(snapshot_id, [])
+        ]
+        self._save_bindings()
         return self._receipt(envelope)
 
     def review_object(
@@ -594,6 +733,7 @@ class OperationsConsole:
         decision: str,
         comment: str | None = None,
         proposed_correction: str | None = None,
+        confirmed_object_type: str | None = None,
     ) -> list[dict[str, Any]]:
         reviewer = self._require_role(actor_id, "reviewer")
         if _is_forbidden_identity(reviewer["username"]) or _is_forbidden_identity(reviewer["display_name"]):
@@ -605,6 +745,18 @@ class OperationsConsole:
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
+        confirmed = confirmed_object_type
+        if not confirmed and target.get("confirmed_object_type"):
+            confirmed = target["confirmed_object_type"]
+        if not confirmed and target.get("object_type") == "heading":
+            confirmed = "heading"
+        if confirmed:
+            if not is_closed_confirmed_type(confirmed):
+                raise ConsoleError("unknown_object_type")
+            if target.get("object_type") != "document":
+                target["confirmed_object_type"] = confirmed
+                target["object_type"] = confirmed
+                stamp_canonical_hashes(target)
         track = target["governance"]["review_track"]
         payload = {
             "object_id": object_id,
@@ -630,11 +782,35 @@ class OperationsConsole:
             if not (row["object_id"] == object_id and row["object_version"] == target["object_version"])
         ]
         updated_target = next(row for row in updated if row["object_id"] == object_id)
+        if confirmed and updated_target.get("object_type") != "document":
+            updated_target["confirmed_object_type"] = confirmed
+            updated_target["object_type"] = confirmed
+            stamp_canonical_hashes(updated_target)
         history.append(updated_target)
         self._save_objects(snapshot_id, history)
         if decision == "approve":
             envelope["review_passes"][actor_id] = {"passed": True, "at": utc_now(), "object_id": object_id}
             self._save_envelopes()
+            binding = tuple_record(
+                object_id=object_id,
+                object_version=updated_target["object_version"],
+                canonical_object_hash=compute_canonical_object_hash(updated_target),
+                confirmed_object_type=updated_target.get("confirmed_object_type"),
+                reviewer=reviewer["username"],
+                reviewer_id=actor_id,
+                decision=decision,
+            )
+            rows = [
+                item
+                for item in self._bindings.get(snapshot_id, [])
+                if not (item.get("object_id") == object_id and item.get("reviewer_id") == actor_id)
+            ]
+            rows.append(binding)
+            self._bindings[snapshot_id] = rows
+            self._save_bindings()
+        else:
+            self._bindings[snapshot_id] = invalidate_for_object(self._bindings.get(snapshot_id, []), object_id)
+            self._save_bindings()
         return deepcopy(updated)
 
     def correct_object(
@@ -659,6 +835,10 @@ class OperationsConsole:
             schema_path=self.schema_path,
             ledger=self._ledger_path,
         )
+        if revised.get("object_type") not in {"document", "heading"}:
+            revised["object_type"] = "unclassified"
+        revised.pop("confirmed_object_type", None)
+        stamp_canonical_hashes(revised)
         history = self._load_objects(snapshot_id)
         history.append(revised)
         self._save_objects(snapshot_id, history)
@@ -666,6 +846,8 @@ class OperationsConsole:
         envelope["review_passes"] = {}
         envelope["clinical_rereview_required"] = True
         self._save_envelopes()
+        self._bindings[snapshot_id] = invalidate_for_object(self._bindings.get(snapshot_id, []), object_id)
+        self._save_bindings()
         return deepcopy(revised)
 
     def silently_edit_object(self, snapshot_id: str, object_id: str, _patch: dict[str, Any]) -> None:
@@ -675,21 +857,24 @@ class OperationsConsole:
     def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         self._require_role(actor_id, "publisher")
         envelope = self._envelope(snapshot_id)
+        bindings = [row for row in self.object_review_bindings(snapshot_id) if row.get("valid") and row.get("decision") == "approve"]
         others = [
-            reviewer_id
-            for reviewer_id in envelope["named_reviewers"]
-            if reviewer_id != envelope["uploader_account_id"]
-            and (envelope.get("review_passes") or {}).get(reviewer_id, {}).get("passed")
+            row
+            for row in bindings
+            if row.get("reviewer_id") != envelope["uploader_account_id"]
         ]
         blockers: list[str] = []
         independence = bool(others)
         if not independence:
             blockers.append("second_named_reviewer_required")
+        if not bindings:
+            blockers.append("object_tuple_required")
         if not envelope.get("immutable_storage_locator"):
             blockers.append("blocked_pending_immutable_locator")
         return {
             "snapshot_id": snapshot_id,
             "independence_satisfied": independence,
+            "tuple_authorization": bool(bindings),
             "publish_allowed": False,
             "state": envelope["state"],
             "blockers": blockers,

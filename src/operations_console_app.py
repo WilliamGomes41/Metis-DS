@@ -35,6 +35,7 @@ STATUS_LABELS = {
 BLOCKER_LABELS = {
     "second_named_reviewer_required": "Nog een andere benoemde reviewer moet goedkeuren.",
     "blocked_pending_immutable_locator": "Duurzame opslag ontbreekt; publicatie blijft geblokkeerd.",
+    "object_tuple_required": "Publicatie vereist review gebonden aan object, versie, hash, bevestigd type, reviewer en besluit.",
 }
 ERROR_COPY = {
     "not_authenticated": "Je bent niet aangemeld.",
@@ -47,6 +48,10 @@ ERROR_COPY = {
     "publisher_role_required": "Publiceren vereist de rol publisher.",
     "reviewer_role_required": "Review vereist de rol reviewer.",
     "researcher_role_required": "Inleveren vereist de rol researcher.",
+    "live_url_html_not_allowed": "Een live HTML-URL kan niet worden ingeleverd. Lever een HTML-bestand of een PDF-URL in.",
+    "unknown_object_type": "Kies een type uit de gesloten set.",
+    "unknown_role": "Alleen researcher, reviewer of publisher zijn toegestaan.",
+    "forbidden_reviewer_identity": "Deze identiteit mag niet als reviewer worden aangemaakt.",
 }
 
 
@@ -98,22 +103,25 @@ def _help() -> str:
     """
 
 
-def _nav(account: dict[str, Any] | None, current: str = "") -> str:
+def _nav(account: dict[str, Any] | None, current: str = "", counts: dict[str, int] | None = None) -> str:
     who = (
         f'{_esc(account.get("display_name"))} · rollen: {", ".join(_esc(r) for r in account.get("roles") or [])}'
         if account
         else "niet aangemeld"
     )
+    counts = counts or {}
     rooms = [
-        ("ingest", "/ingest", "Inleveren"),
-        ("tree", "/tree", "Familieboom"),
-        ("review", "/review", "Review"),
-        ("publish", "/publish", "Publiceren"),
+        ("ingest", "/ingest", "Inleveren", counts.get("ingest", 0)),
+        ("tree", "/tree", "Documentenhierarchie", counts.get("tree", 0)),
+        ("review", "/review", "Review", counts.get("review", 0)),
+        ("publish", "/publish", "Publiceren", counts.get("publish", 0)),
+        ("accounts", "/accounts", "Accounts", 0),
     ]
     links = []
-    for key, href, label in rooms:
+    for key, href, label, count in rooms:
         current_attr = ' aria-current="page"' if current == key else ""
-        links.append(f'<a href="{href}"{current_attr}>{label}</a>')
+        badge = f'<span class="badge">{count}</span>' if count else ""
+        links.append(f'<a href="{href}"{current_attr}>{label}{badge}</a>')
     links.append('<a class="quiet" href="/logout">Uitloggen</a>')
     return f"""
     <header class="topbar">
@@ -181,6 +189,11 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         if not account:
             raise ConsoleError("not_authenticated")
         return account
+
+    def _counts(account: dict[str, Any] | None) -> dict[str, int]:
+        if not account:
+            return {}
+        return state.waiting_task_counts(account["account_id"])
 
     @app.exception_handler(ConsoleError)
     async def console_errors(_request: Request, exc: ConsoleError) -> HTMLResponse:
@@ -268,11 +281,11 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         documents = state.list_envelopes()
         return _page(
             f"""
-            {_nav(account, "ingest")}
+            {_nav(account, "ingest", _counts(account))}
             <section class="room">
               <h1>Document inleveren</h1>
               <p class="lead">Lever een HTML-pagina of PDF in voor review. Continentie is de eerste documentfamilie op dit onderzoekerspad.</p>
-              <p class="next">Daarna: het document verschijnt in de familieboom en gaat naar review. Publiceren is een later, apart besluit.</p>
+              <p class="next">Daarna: het document verschijnt in de documentenhierarchie en gaat naar review. Publiceren is een later, apart besluit.</p>
               <p class="statement">Verwacht: titel, versie, familie en klasse, plus minstens één andere reviewer dan jezelf.</p>
               <form method="post" action="/ingest" enctype="multipart/form-data">
                 <div class="sections">
@@ -280,7 +293,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     <h3>Bron</h3>
                     <label for="file">Bestand (HTML of PDF)</label>
                     <input id="file" type="file" name="file">
-                    <label for="url">Of URL (direct naar exacte bytes)</label>
+                    <label for="url">Of PDF-URL (exacte bytes worden direct vastgelegd)</label>
                     <input id="url" name="url" placeholder="https://...">
                   </div>
                   <div class="section">
@@ -385,7 +398,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         )
         return _page(
             f"""
-            {_nav(account, "ingest")}
+            {_nav(account, "ingest", _counts(account))}
             <section class="room">
               <h1>Document ingeleverd</h1>
               <p class="lead">Het document is vastgelegd en wacht op review.</p>
@@ -393,7 +406,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
               <div class="doc-card">
                 {_document_card_heading({**receipt, "status": receipt["state"]})}
               </div>
-              <p><a class="btn-secondary" href="/review">Naar review</a> <a class="btn-secondary" href="/tree">Naar familieboom</a></p>
+              <p><a class="btn-secondary" href="/review">Naar review</a> <a class="btn-secondary" href="/tree">Naar documentenhierarchie</a></p>
             </section>
             {_help()}
             """
@@ -454,9 +467,9 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         empty = '<p class="muted">Nog geen documenten. Lever eerst een document in.</p>'
         return _page(
             f"""
-            {_nav(account, "tree")}
+            {_nav(account, "tree", _counts(account))}
             <section class="room">
-              <h1>Familieboom</h1>
+              <h1>Documentenhierarchie</h1>
               <p class="lead">Bekijk documenten per familie en klasse. Verplaats een document naar een andere familie, of promoveer de klasse.</p>
               <p class="next">Verplaatsen is een curatoract (geen herhash). Promoveren vereist daarna opnieuw review.</p>
               {"".join(blocks) or empty}
@@ -542,14 +555,22 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                 heading = (obj.get("content") or {}).get("heading") or obj.get("object_type")
                 text = (obj.get("content") or {}).get("clean_text") or ""
                 status = (obj.get("governance") or {}).get("validation_status") or ""
+                proposed = obj.get("proposed_object_type") or ""
+                confirmed = obj.get("confirmed_object_type") or obj.get("object_type") or ""
+                type_options = "".join(
+                    f'<option value="{name}"{" selected" if name == confirmed else ""}>{name}</option>'
+                    for name in ("heading", "definition", "explanation", "condition", "exception", "recommendation")
+                )
                 objects_html += f"""
                 <article class="object">
                   <h3>{_esc(heading)}</h3>
-                  <p class="meta"><span>status <b>{_esc(status)}</b></span></p>
+                  <p class="meta"><span>status <b>{_esc(status)}</b></span><span>huidig type <b>{_esc(obj.get("object_type"))}</b></span>{"<span>voorstel <b>" + _esc(proposed) + "</b></span>" if proposed else ""}</p>
                   <p>{_esc(text)}</p>
                   <form method="post" action="/review">
                     <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
                     <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
+                    <label for="type-{_esc(obj["object_id"])}">Bevestig type</label>
+                    <select id="type-{_esc(obj["object_id"])}" name="confirmed_object_type">{type_options}</select>
                     <label for="decision-{_esc(obj["object_id"])}">Besluit</label>
                     <select id="decision-{_esc(obj["object_id"])}" name="decision">
                       <option value="approve">Goedkeuren</option>
@@ -567,7 +588,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
         return _page(
             f"""
-            {_nav(account, "review")}
+            {_nav(account, "review", _counts(account))}
             <section class="room">
               <h1>Review</h1>
               <p class="lead">Beoordeel de objecten van een ingeleverd document. Keur goed, vraag revisie, of wijs af.</p>
@@ -588,6 +609,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         decision: str = Form(...),
         comment: str = Form(""),
         proposed_correction: str = Form(""),
+        confirmed_object_type: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
         state.review_object(
@@ -597,6 +619,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             decision=decision,
             comment=comment,
             proposed_correction=proposed_correction,
+            confirmed_object_type=confirmed_object_type.strip() or None,
         )
         if decision == "revise" and proposed_correction.strip():
             state.correct_object(
@@ -632,16 +655,89 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             )
         return _page(
             f"""
-            {_nav(account, "publish")}
+            {_nav(account, "publish", _counts(account))}
             <section class="room">
               <h1>Publiceren</h1>
               <p class="lead">Publiceren is een apart geautoriseerd besluit over een gereviewd document.</p>
-              <p class="next">Zonder duurzame, onwijzigbare opslag blijft publicatie geblokkeerd. Cutover wordt niet gefingeerd.</p>
+              <p class="next">Zonder duurzame, onwijzigbare opslag blijft publicatie geblokkeerd. Cutover wordt niet gefingeerd. Een telling van vastgelegde documenten is geen publicatie-autorisatie.</p>
               <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen documenten.</p>'}</div>
             </section>
             {_help()}
             """
         )
+
+    @app.get("/accounts", response_class=HTMLResponse)
+    def accounts_get(request: Request) -> str:
+        account = _require(request)
+        rows = []
+        for row in sorted(state._accounts.values(), key=lambda item: item["username"]):
+            public = state._public_account(row)
+            rows.append(
+                f"""
+                <article class="doc-card">
+                  <p class="doc-title">{_esc(public["display_name"])}</p>
+                  <p class="meta">
+                    <span>gebruikersnaam <b>{_esc(public["username"])}</b></span>
+                    <span>rollen <b>{", ".join(_esc(r) for r in public["roles"])}</b></span>
+                  </p>
+                </article>
+                """
+            )
+        form = ""
+        if "publisher" in account["roles"]:
+            form = """
+              <form method="post" action="/accounts">
+                <div class="sections">
+                  <div class="section">
+                    <h3>Nieuwe gebruiker</h3>
+                    <label for="username">Gebruikersnaam</label>
+                    <input id="username" name="username" required>
+                    <label for="display_name">Weergavenaam</label>
+                    <input id="display_name" name="display_name" required>
+                    <label for="password">Wachtwoord</label>
+                    <input id="password" type="password" name="password" required>
+                    <label for="roles">Rol</label>
+                    <select id="roles" name="roles">
+                      <option value="researcher">researcher</option>
+                      <option value="reviewer">reviewer</option>
+                      <option value="publisher">publisher</option>
+                    </select>
+                    <button class="btn-primary" type="submit">Gebruiker aanmaken</button>
+                  </div>
+                </div>
+              </form>
+            """
+        return _page(
+            f"""
+            {_nav(account, "accounts", _counts(account))}
+            <section class="room">
+              <h1>Accounts</h1>
+              <p class="lead">Beheer interne gebruikers. Alleen een publisher mag gebruikers aanmaken en rollen toewijzen.</p>
+              <p class="next">Rollen blijven gesloten: researcher, reviewer, publisher. Geen open registratie. Geen gedeelde login.</p>
+              {form}
+              <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen accounts.</p>'}</div>
+            </section>
+            {_help()}
+            """
+        )
+
+    @app.post("/accounts", response_class=HTMLResponse)
+    def accounts_post(
+        request: Request,
+        username: str = Form(...),
+        display_name: str = Form(...),
+        password: str = Form(...),
+        roles: str = Form(...),
+    ) -> HTMLResponse:
+        account = _require(request)
+        state.create_managed_account(
+            actor_id=account["account_id"],
+            username=username,
+            display_name=display_name,
+            password=password,
+            roles=[item.strip() for item in roles.split(",") if item.strip()],
+        )
+        return RedirectResponse("/accounts", status_code=303)
 
     @app.get("/health")
     def health() -> dict[str, Any]:

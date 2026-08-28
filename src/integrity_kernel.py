@@ -65,6 +65,9 @@ def canonical_object_payload(obj: dict[str, Any]) -> dict[str, Any]:
             payload[key] = _provenance_for_hash(obj.get(key) or {})
         else:
             payload[key] = deepcopy(obj.get(key))
+    for extra in ("proposed_object_type", "confirmed_object_type"):
+        if extra in obj:
+            payload[extra] = deepcopy(obj.get(extra))
     return payload
 
 

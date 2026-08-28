@@ -172,7 +172,7 @@ def test_html_and_pdf_ingest_accepted_word_and_story_html_rejected(tmp_path: Pat
         )
 
 
-def test_url_ingest_snapshots_exact_bytes_immediately_with_receipt(tmp_path: Path) -> None:
+def test_url_ingest_of_html_is_rejected_as_live_url_html(tmp_path: Path) -> None:
     payload = HTML_FIXTURE.read_bytes()
 
     class Handler(BaseHTTPRequestHandler):
@@ -193,29 +193,22 @@ def test_url_ingest_snapshots_exact_bytes_immediately_with_receipt(tmp_path: Pat
         url = f"http://127.0.0.1:{server.server_port}/continentie.html"
         console = _console(tmp_path)
         accounts = _accounts(console)
-        receipt = console.ingest(
-            actor_id=accounts["researcher"]["account_id"],
-            url=url,
-            ingest_kind="new",
-            title="URL snapshot",
-            version="1.0",
-            date="2025-04-01",
-            live_url=url,
-            class_="richtlijn",
-            family="continentie",
-            named_reviewers=[accounts["reviewer"]["account_id"]],
-        )
+        with pytest.raises(ConsoleError, match="live_url_html_not_allowed"):
+            console.ingest(
+                actor_id=accounts["researcher"]["account_id"],
+                url=url,
+                ingest_kind="new",
+                title="URL snapshot",
+                version="1.0",
+                date="2025-04-01",
+                live_url=url,
+                class_="richtlijn",
+                family="continentie",
+                named_reviewers=[accounts["reviewer"]["account_id"]],
+            )
     finally:
         server.shutdown()
         server.server_close()
-
-    assert receipt["sha256"] == sha256_bytes(payload)
-    assert receipt["locator"].startswith("g0-local:")
-    assert receipt["state"] == "captured_not_published"
-    assert receipt["immutable_storage_locator"] is None
-    stored = Path(receipt["binary_path"]).read_bytes()
-    assert stored == payload
-    assert "sources/private" in receipt["binary_path"].replace("\\", "/")
 
 
 def test_family_set_at_ingest_move_does_not_rehash_or_require_rereview(tmp_path: Path) -> None:

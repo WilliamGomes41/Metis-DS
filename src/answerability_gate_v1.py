@@ -15,6 +15,27 @@ import unicodedata
 from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable
 
+try:
+    from .abstain_catalog_v1 import sentence_for
+    from .object_taxonomy_v1 import (
+        CLASS_ORDER,
+        is_advice_weight,
+        locator_of,
+        published_object_type,
+        source_class_of,
+        type_fits_question,
+    )
+except ImportError:
+    from abstain_catalog_v1 import sentence_for
+    from object_taxonomy_v1 import (
+        CLASS_ORDER,
+        is_advice_weight,
+        locator_of,
+        published_object_type,
+        source_class_of,
+        type_fits_question,
+    )
+
 GATE_VERSION = "answerability-evidence-gate-v1.0.0"
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+", re.IGNORECASE)
@@ -81,6 +102,7 @@ class NumericConstraint:
 @dataclass(frozen=True)
 class QuerySpec:
     intent: str
+    question_kind: str = "fact"
     required_relations: tuple[str, ...] = ()
     anchors: tuple[str, ...] = ()
     numeric_constraints: tuple[NumericConstraint, ...] = ()
@@ -181,6 +203,11 @@ def parse_query(query: str) -> QuerySpec:
 
     relations: list[str] = []
     intent = "fact"
+    question_kind = "fact"
+    if re.search(r"\bwat is\b|\bdefinitie\b|\bbetekenis\b", n):
+        question_kind = "definition"
+    elif re.search(r"\bwaarom\b|\bhoe werkt\b|\buitleg\b|\bwaarom helpt\b", n):
+        question_kind = "explanation"
     if re.search(r"\bhoe vaak\b|\bfrequentie\b|\bherhaal\w*\b|\binterval\b", n):
         intent = "frequency_lookup"; relations.append("frequency")
     elif re.search(r"\bhoe lang\b|\bduur\b|\bbehandelduur\b", n):
@@ -195,9 +222,17 @@ def parse_query(query: str) -> QuerySpec:
         intent = "diagnostic_threshold_lookup"; relations.append("diagnostic_threshold")
     elif re.search(r"\badviseer\w*\b|\baanbevel\w*\b|\broutinematig\b", n):
         intent = "recommendation_lookup"; relations.append("recommendation")
+        question_kind = "action_advice"
+
+    if question_kind == "fact" and re.search(r"\badviseert\b|\bhandelingsadvies\b", n):
+        question_kind = "action_advice"
+        if "recommendation" not in relations:
+            relations.append("recommendation")
+            intent = "recommendation_lookup"
 
     return QuerySpec(
         intent=intent,
+        question_kind=question_kind,
         required_relations=tuple(relations),
         anchors=_extract_anchors(query),
         numeric_constraints=_extract_numeric_constraints(query),
@@ -374,6 +409,66 @@ def _cluster_support(
     }
 
 
+def _lighter_class_blocked(record: dict[str, Any], corpus: dict[str, dict[str, Any]]) -> bool:
+    own = source_class_of(record)
+    if not own:
+        return False
+    present = [source_class_of(row) for row in corpus.values()]
+    present = [item for item in present if item]
+    if not present:
+        return False
+    heaviest = max(CLASS_ORDER.get(item, 0) for item in present)
+    return CLASS_ORDER.get(own, 0) < heaviest
+
+
+def _type_gate_reason(spec: QuerySpec, record: dict[str, Any], corpus: dict[str, dict[str, Any]]) -> str | None:
+    if not locator_of(record):
+        return "source_locator_missing"
+    published = published_object_type(record)
+    md = record.get("metadata") or record
+    if published == "unclassified":
+        if md.get("proposed_object_type") and not md.get("confirmed_object_type"):
+            return "unconfirmed_proposal"
+        return "unclassified_object"
+    if published == "heading":
+        return "heading_not_answerable"
+    if _lighter_class_blocked(record, corpus):
+        return "type_does_not_fit_question"
+    if not type_fits_question(spec.question_kind, published):
+        return "type_does_not_fit_question"
+    return None
+
+
+def _decorate_results(spec: QuerySpec, results: list[dict[str, Any]], record_by_object: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    decorated = []
+    for item in results:
+        oid = item.get("object_id")
+        record = record_by_object.get(oid) or {}
+        published = published_object_type(record) if record else None
+        row = dict(item)
+        row["object_type"] = published
+        row["advice_weight"] = bool(published and is_advice_weight(spec.question_kind, published))
+        row["labels"] = ["V", "VN"]
+        decorated.append(row)
+    return decorated
+
+
+def _abstain(base: dict[str, Any], *, reason: str, fp_class: str | None, evidence: list, clusters: list | None = None) -> dict[str, Any]:
+    return {
+        **base,
+        "behavior": "abstain",
+        "answerability": "insufficient_evidence",
+        "reason": reason,
+        "false_positive_class": fp_class,
+        "results": [],
+        "labels": [],
+        "advice_weight": False,
+        "abstain_sentence": sentence_for(reason),
+        "candidate_evidence": evidence,
+        **({"evidence_clusters": clusters} if clusters is not None else {}),
+    }
+
+
 def evaluate_answerability(
     query: str,
     raw_result: dict[str, Any],
@@ -392,26 +487,20 @@ def evaluate_answerability(
     }
 
     if spec.patient_specific:
-        return {
-            **base,
-            "behavior": "abstain",
-            "answerability": "insufficient_evidence",
-            "reason": "patient_specific_context_not_available",
-            "false_positive_class": "context_mismatch",
-            "results": [],
-            "candidate_evidence": [],
-        }
+        return _abstain(
+            base,
+            reason="patient_specific_context_not_available",
+            fp_class="context_mismatch",
+            evidence=[],
+        )
 
     if raw_result.get("behavior") != "retrieve" or not raw_result.get("results"):
-        return {
-            **base,
-            "behavior": "abstain",
-            "answerability": "insufficient_evidence",
-            "reason": raw_result.get("reason") or "no_candidates",
-            "false_positive_class": "below_confidence_threshold",
-            "results": [],
-            "candidate_evidence": [],
-        }
+        return _abstain(
+            base,
+            reason=raw_result.get("reason") or "no_candidates",
+            fp_class="below_confidence_threshold",
+            evidence=[],
+        )
 
     evidence_rows: list[CandidateEvidence] = []
     candidate_ids: list[str] = []
@@ -440,7 +529,25 @@ def evaluate_answerability(
         ok, row = _cluster_support(spec, cluster, evidence_by_id, cfg)
         cluster_rows.append(row)
         if ok and not supporting_ids:
-            supporting_ids = list(cluster)
+            eligible = []
+            type_reason = None
+            for oid in cluster:
+                record = record_by_object.get(oid)
+                if not record:
+                    continue
+                blocked = _type_gate_reason(spec, record, record_by_object)
+                if blocked:
+                    type_reason = type_reason or blocked
+                    continue
+                eligible.append(oid)
+            if spec.question_kind == "action_advice":
+                if not any(published_object_type(record_by_object[oid]) == "recommendation" for oid in eligible):
+                    type_reason = type_reason or "type_does_not_fit_question"
+                    eligible = []
+            if eligible:
+                supporting_ids = eligible
+            elif type_reason and not supporting_ids:
+                cluster_rows[-1]["type_gate_reason"] = type_reason
 
     if supporting_ids:
         supporting_set = set(supporting_ids)
@@ -449,19 +556,26 @@ def evaluate_answerability(
         results = raw_result.get("results", [])
         if cfg.filter_results_to_supporting_evidence:
             results = [r for r in results if r.get("object_id") in supporting_set]
+        decorated = _decorate_results(spec, results, record_by_object)
         return {
             **base,
             "behavior": "retrieve",
             "answerability": "supported",
             "reason": "evidence_gate_passed",
             "false_positive_class": None,
-            "results": results,
+            "results": decorated,
+            "labels": ["V", "VN"],
+            "advice_weight": any(row.get("advice_weight") for row in decorated),
+            "abstain_sentence": None,
             "candidate_evidence": [asdict(x) for x in evidence_rows],
             "evidence_clusters": cluster_rows,
         }
 
-    # Explain the first failed safety dimension across the candidate set.
-    if spec.required_relations and not any(all(c.get("relation_support", {}).values()) for c in cluster_rows):
+    type_reason = next((c.get("type_gate_reason") for c in cluster_rows if c.get("type_gate_reason")), None)
+    if type_reason:
+        reason = type_reason
+        fp_class = "relation_mismatch" if type_reason == "type_does_not_fit_question" else "context_mismatch"
+    elif spec.required_relations and not any(all(c.get("relation_support", {}).values()) for c in cluster_rows):
         reason = "required_relation_not_present"
         fp_class = "relation_mismatch"
     elif spec.numeric_constraints and not any(all(c.get("numeric_support", [])) for c in cluster_rows):
@@ -475,13 +589,10 @@ def evaluate_answerability(
         reason = "insufficient_evidence"
         fp_class = "semantic_neighbor"
 
-    return {
-        **base,
-        "behavior": "abstain",
-        "answerability": "insufficient_evidence",
-        "reason": reason,
-        "false_positive_class": fp_class,
-        "results": [],
-        "candidate_evidence": [asdict(x) for x in evidence_rows],
-        "evidence_clusters": cluster_rows,
-    }
+    return _abstain(
+        base,
+        reason=reason,
+        fp_class=fp_class,
+        evidence=[asdict(x) for x in evidence_rows],
+        clusters=cluster_rows,
+    )

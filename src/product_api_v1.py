@@ -27,7 +27,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, 
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from .answerability_gate_v1 import AnswerabilityConfig
+from .answerability_gate_v1 import AnswerabilityConfig, evaluate_answerability
 from .hybrid_retrieval_v1 import HybridConfig
 from .safe_retrieval_v1 import SafeRetrievalIndex
 from .lexical_retrieval_v1 import RetrievalConfig
@@ -214,7 +214,7 @@ class ProductState:
                 "knowledge_object_id": item["object_id"],
                 "object_version": item.get("object_version"),
                 "document_id": md.get("document_id"),
-                "object_type": md.get("object_type"),
+                "object_type": item.get("object_type") or md.get("object_type"),
                 "content": record.get("retrieval_text"),
                 "structured_logic": record.get("structured_logic"),
                 "source": {
@@ -222,6 +222,7 @@ class ProductState:
                     "url": md.get("source_url"),
                     "page": md.get("source_page"),
                     "version": md.get("source_version"),
+                    "locator": md.get("source_locator"),
                 },
                 "release": {
                     "release_id": md.get("release_id"),
@@ -235,6 +236,8 @@ class ProductState:
                 },
                 "content_hash": md.get("content_hash"),
                 "projection_hash": record.get("projection_hash"),
+                "advice_weight": bool(item.get("advice_weight")),
+                "labels": item.get("labels") or (["V", "VN"] if raw.get("answerability") == "supported" else []),
             })
         return {
             "api_version": API_VERSION,
@@ -244,6 +247,9 @@ class ProductState:
             "answerability": raw.get("answerability"),
             "reason": raw.get("reason"),
             "false_positive_class": raw.get("false_positive_class"),
+            "labels": raw.get("labels") or [],
+            "advice_weight": bool(raw.get("advice_weight")),
+            "abstain_sentence": raw.get("abstain_sentence"),
             "results": results,
             "result_count": len(results),
         }
