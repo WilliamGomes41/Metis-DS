@@ -23,7 +23,7 @@ def test_v213_approval_manifest_matches_protocol_bytes() -> None:
     assert manifest["protocol_version"] == "2.13.0"
     assert manifest["protocol_path"] == "docs/PROTOCOL_V2_13_ATOMIC_OBJECT_SEMANTICS_DELTA.md"
     assert manifest["protocol_sha256"] == _sha256_file(DELTA)
-    assert manifest["commit_sha"] == "pending_after_merge"
+    assert manifest["commit_sha"] == "8cfe9dc37a8f3f0bf3548a40abff41acb4fb39ce"
     assert manifest["approval_date"] == "2026-08-28"
     assert manifest["approval_authority"] == "project_owner"
     assert manifest["conformance_effect"] == "does_not_override_gate_status"
@@ -232,7 +232,7 @@ def test_v213_records_kernel_then_g2_and_does_not_write_v214() -> None:
     assert "Implementation engineer op de bestaande kernel" in handoff
     assert "Protocol v2.14 is niet de volgende stap" in handoff
     assert "Metis implementeert niet" in handoff
-    assert "pending_after_merge" in handoff
+    assert "8cfe9dc37a8f3f0bf3548a40abff41acb4fb39ce" in handoff
     assert "Protocol v2.13.0" in changelog
     assert "does not implement extract, relations, open-original, schema or publish()" in changelog
     assert "v2.14 is not next" in changelog
