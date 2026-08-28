@@ -112,7 +112,7 @@ def _nav(account: dict[str, Any] | None, current: str = "", counts: dict[str, in
     counts = counts or {}
     rooms = [
         ("ingest", "/ingest", "Inleveren", counts.get("ingest", 0)),
-        ("tree", "/tree", "Documentenhierarchie", counts.get("tree", 0)),
+        ("tree", "/tree", "Documentenhiërarchie", counts.get("tree", 0)),
         ("review", "/review", "Review", counts.get("review", 0)),
         ("publish", "/publish", "Publiceren", counts.get("publish", 0)),
         ("accounts", "/accounts", "Accounts", 0),
@@ -469,7 +469,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             f"""
             {_nav(account, "tree", _counts(account))}
             <section class="room">
-              <h1>Documentenhierarchie</h1>
+              <h1>Documentenhiërarchie</h1>
               <p class="lead">Bekijk documenten per familie en klasse. Verplaats een document naar een andere familie, of promoveer de klasse.</p>
               <p class="next">Verplaatsen is een curatoract (geen herhash). Promoveren vereist daarna opnieuw review.</p>
               {"".join(blocks) or empty}

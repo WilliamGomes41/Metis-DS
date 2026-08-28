@@ -7,7 +7,7 @@ Owner-approved v2.11 lock (not live baseline; implement in code): reject
 live URL-HTML, accept uploaded freeze HTML, PDF URL with immediate exact-byte
 hash, fail-closed supported without source_locator.
 
-Protocol v2.10 (live, console follow-up): Documentenhierarchie, waiting-task
+Protocol v2.10 (live, console follow-up): Documentenhiërarchie, waiting-task
 badges, Accounts room with closed roles.
 """
 from __future__ import annotations
@@ -786,10 +786,12 @@ def test_c_nav_heading_is_documentenhierarchie_not_familieboom(tmp_path: Path) -
     client = TestClient(create_console_app(console))
     client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
     html = client.get("/tree").text
-    assert "Documentenhierarchie" in html
+    assert "Documentenhiërarchie" in html
+    assert "Documentenhierarchie" not in html
     assert "Familieboom" not in html
     nav = client.get("/ingest").text
-    assert "Documentenhierarchie" in nav
+    assert "Documentenhiërarchie" in nav
+    assert "Documentenhierarchie" not in nav
     assert "Familieboom" not in nav
 
 
@@ -930,4 +932,5 @@ def test_c_no_envelope_or_snapshot_as_researcher_ui_terms(tmp_path: Path) -> Non
         assert "snapshot id" not in html
     source = (ROOT / "src/operations_console_app.py").read_text(encoding="utf-8")
     assert '"Familieboom"' not in source
-    assert "Documentenhierarchie" in source
+    assert "Documentenhiërarchie" in source
+    assert "Documentenhierarchie" not in source
