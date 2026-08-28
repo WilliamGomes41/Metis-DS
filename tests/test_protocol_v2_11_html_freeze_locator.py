@@ -26,7 +26,7 @@ def test_v211_approval_manifest_matches_protocol_bytes() -> None:
     assert manifest["conformance_effect"] == "does_not_override_gate_status"
 
 
-def test_v211_delta_exists_and_is_the_live_baseline() -> None:
+def test_v211_delta_exists_and_is_a_live_baseline_component() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
@@ -36,16 +36,20 @@ def test_v211_delta_exists_and_is_the_live_baseline() -> None:
     assert "**Status:** Approved for project use" in delta
     assert "**Protocol delta version:** 2.11.0" in delta
     assert "docs/PROTOCOL_V2_11_HTML_FREEZE_LOCATOR_DELTA.md" in root_protocol
-    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.11.0") == 1
+    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.12.0") == 1
+    assert "plus Protocol v2.11.0" in root_protocol
+    assert "De geldende normatieve baseline is Protocol v2.11.0" not in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.10.0" not in root_protocol
-    assert "**Geldend protocol:** v2.11.0" in handoff
+    assert "**Geldend protocol:** v2.12.0 + v2.11.0" in handoff
+    assert "**Geldend protocol:** v2.11.0" not in handoff
     assert "Protocol v2.11.0" in roadmap
 
 
-def test_v211_hierarchy_points_at_one_live_version() -> None:
+def test_v211_hierarchy_points_at_combined_live_baseline() -> None:
     root_protocol = _read(ROOT / "PROTOCOL.md")
     delta = _read(DELTA)
-    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.11.0") == 1
+    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.12.0") == 1
+    assert "plus Protocol v2.11.0" in root_protocol
     assert "docs/PROTOCOL_V2_2.md" in root_protocol
     assert "docs/PROTOCOL_V2_3_TECHNICAL_DELTA.md" in root_protocol
     assert "docs/PROTOCOL_V2_4_PRODUCT_DISTRIBUTION_DELTA.md" in root_protocol
@@ -56,6 +60,7 @@ def test_v211_hierarchy_points_at_one_live_version() -> None:
     assert "docs/PROTOCOL_V2_9_CONSOLE_UX_BRAND_DELTA.md" in root_protocol
     assert "docs/PROTOCOL_V2_10_CONSOLE_NAV_ACCOUNTS_DELTA.md" in root_protocol
     assert "docs/PROTOCOL_V2_11_HTML_FREEZE_LOCATOR_DELTA.md" in root_protocol
+    assert "docs/PROTOCOL_V2_12_OBJECT_TYPE_REVIEW_PROJECTION_DELTA.md" in root_protocol
     assert (
         "v2.2.0, v2.3.0, v2.4.0, v2.5.0, v2.6.0, v2.7.0, v2.8.0, v2.9.0, v2.10.0 and this delta jointly form normative baseline v2.11.0"
         in delta
