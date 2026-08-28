@@ -41,6 +41,10 @@ runtime/private/
 *.xlsx
 *.xls
 
+# Licensed brand fonts are supplied out of band; never commit binaries
+assets/brand/fonts/**
+!assets/brand/fonts/README.md
+
 # Build artifacts
 build/
 dist/
