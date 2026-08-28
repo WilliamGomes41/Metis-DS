@@ -36,17 +36,21 @@ def test_v212_delta_exists_and_is_the_live_baseline() -> None:
     assert "**Status:** Approved for project use" in delta
     assert "**Protocol delta version:** 2.12.0" in delta
     assert "docs/PROTOCOL_V2_12_OBJECT_TYPE_REVIEW_PROJECTION_DELTA.md" in root_protocol
-    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.12.0") == 1
+    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.13.0") == 1
+    assert "plus Protocol v2.12.0" in root_protocol
+    assert "plus Protocol v2.11.0" in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.10.0" not in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.11.0" not in root_protocol
-    assert "**Geldend protocol:** v2.12.0" in handoff
+    assert "De geldende normatieve baseline is Protocol v2.12.0" not in root_protocol
+    assert "**Geldend protocol:** v2.13.0" in handoff
     assert "Protocol v2.12.0" in roadmap
 
 
 def test_v212_hierarchy_points_at_combined_live_version_without_rewriting_v212_delta() -> None:
     root_protocol = _read(ROOT / "PROTOCOL.md")
     delta = _read(DELTA)
-    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.12.0") == 1
+    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.13.0") == 1
+    assert "plus Protocol v2.12.0" in root_protocol
     assert "plus Protocol v2.11.0" in root_protocol
     assert "docs/PROTOCOL_V2_2.md" in root_protocol
     assert "docs/PROTOCOL_V2_3_TECHNICAL_DELTA.md" in root_protocol
@@ -59,6 +63,7 @@ def test_v212_hierarchy_points_at_combined_live_version_without_rewriting_v212_d
     assert "docs/PROTOCOL_V2_10_CONSOLE_NAV_ACCOUNTS_DELTA.md" in root_protocol
     assert "docs/PROTOCOL_V2_11_HTML_FREEZE_LOCATOR_DELTA.md" in root_protocol
     assert "docs/PROTOCOL_V2_12_OBJECT_TYPE_REVIEW_PROJECTION_DELTA.md" in root_protocol
+    assert "docs/PROTOCOL_V2_13_ATOMIC_OBJECT_SEMANTICS_DELTA.md" in root_protocol
     assert (
         "v2.2.0, v2.3.0, v2.4.0, v2.5.0, v2.6.0, v2.7.0, v2.8.0, v2.9.0, v2.10.0 and this delta jointly form normative baseline v2.12.0"
         in delta
