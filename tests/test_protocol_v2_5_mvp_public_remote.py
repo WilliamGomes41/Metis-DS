@@ -38,7 +38,7 @@ def test_v25_remains_an_approved_component_of_current_baseline() -> None:
     assert "docs/PROTOCOL_V2_5_MVP_PUBLIC_REMOTE_DELTA.md" in root_protocol
     assert "Protocol v2.5.0" in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.4.0" not in root_protocol
-    assert "**Geldend protocol:** v2.6.0" in handoff
+    assert "**Geldend protocol:** v2.7.0" in handoff
     assert "Protocol v2.5.0" in roadmap
 
 
