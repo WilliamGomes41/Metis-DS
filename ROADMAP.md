@@ -38,10 +38,10 @@ Status: G1-technische protection ON; gezaghebbende remote is public onder Protoc
 - Integrity kernel als enige canonical-hash voor store én publication gate (herstel 2026-08-26).
 - GD-03 reviewervereisten ESTABLISHED (2026-08-27); evidence in `docs/GOVERNANCE.md`. Named reviewers blijven een latere bezettingsstap en zijn niet bezet.
 - Historische STEP-/audit-/repair-rapporten verplaatst naar `docs/history/` (2026-08-27); de root is het operationele oppervlak, geen vijfde stuurlaag.
-- Retrospectieve onafhankelijke review van de C5-wijzigingen in PR #4, PR #5, PR #16, Protocol v2.6 / PR #18, Protocol v2.7 / PR #19 en Protocol v2.8 blijft verschuldigd.
+- Retrospectieve onafhankelijke review van de C5-wijzigingen in PR #4, PR #5, PR #16, Protocol v2.6 / PR #18, Protocol v2.7 / PR #19 en Protocol v2.8 / PR #21 blijft verschuldigd.
 - G1 technische protection is ON. GitHub-ruleset **G1 main** (id `21686159`, 2026-08-27T22:10:53Z): geen verwijderen van `main`, geen force-push / non-fast-forward, required CI `test (3.12)` en `test (3.13)` (strict), pull request verplicht vóór merge, 0 vereiste goedkeurende reviews (solo owner). Protected branch, required CI en PR-workflow bestaan. Volgende uitvoeringsstap is Fase 2b: een echte console-MVP op de bestaande kernel, met Continentie bron 2 als eerste envelope via die console. Geen mockup. Niet wachten op Azure.
 
-Stopvoorwaarde: C3–C6-merges vereisen de vastgestelde GD-03-matrix en onafhankelijke menselijke reviewers op dezelfde commit/snapshot; named reviewers zijn nog niet bezet. Bugfixes van bestaande protocolregels blijven toegestaan. Protocol v2.5 (PR #16), Protocol v2.6 (PR #18), Protocol v2.7 (PR #19) en Protocol v2.8 zijn eigenaarsgoedgekeurde C5-delta's; retrospectieve technical- en security/operations-review van PR #4, PR #5, PR #16, v2.6, v2.7 en v2.8 blijft verschuldigd. GD-03 blijft ESTABLISHED.
+Stopvoorwaarde: C3–C6-merges vereisen de vastgestelde GD-03-matrix en onafhankelijke menselijke reviewers op dezelfde commit/snapshot; named reviewers zijn nog niet bezet. Bugfixes van bestaande protocolregels blijven toegestaan. Protocol v2.5 (PR #16), Protocol v2.6 (PR #18), Protocol v2.7 (PR #19) en Protocol v2.8 (PR #21) zijn eigenaarsgoedgekeurde C5-delta's; retrospectieve technical- en security/operations-review van PR #4, PR #5, PR #16, v2.6, v2.7 en v2.8 blijft verschuldigd. GD-03 blijft ESTABLISHED.
 
 ### Fase 2 — Canonieke bron 2
 
