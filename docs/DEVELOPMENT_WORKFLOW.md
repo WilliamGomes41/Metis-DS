@@ -67,6 +67,8 @@ Protocol v2.6 keurt een interne operations console goed als DS-oppervlak. Een PR
 
 Protocol v2.7 legt first-wave bron, object-level retrieve-and-abstain API en distributieregels vast. Alle v2.6-consoleregels blijven van kracht. Fase 2 bron 2-opslag mag niet worden overgeslagen. Geen Vercel, Neon of LLM-vendor. Deze protocol-PR implementeert geen UI en geen productcode.
 
+Protocol v2.8 legt primaire gebruikers, klasse×familie-bronhiërarchie en console-bouwvolgorde vast. Alle v2.6-consoleregels en alle v2.7-bron-/API-/distributieregels blijven van kracht, behalve de begrensde supersessie van de bouwvolgorde: de volgende implementatie is een echte console-MVP op de bestaande kernel, geen mockup; Continentie bron 2 komt via die console binnen; duurzame immutable opslag wordt niet overgeslagen. RAG op kennisplatform-HTML is niet het product. Geen Vercel, Neon of LLM-vendor. Deze protocol-PR implementeert geen UI, geen mockup en geen productcode.
+
 ## 6. CI-governance-invarianten
 
 CI controleert minimaal dat:

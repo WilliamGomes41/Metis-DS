@@ -5,7 +5,7 @@
 **Scope:** current repository baseline and infrastructure dependencies visible in code/protocol
 **Purpose:** make setup, vendor, account, persistence and cost dependencies visible before they become implementation blockers or budget surprises.
 
-This document is descriptive, not a vendor commitment. The approved normative baseline is Protocol v2.7.0.
+This document is descriptive, not a vendor commitment. The approved normative baseline is Protocol v2.8.0.
 
 ## 1. Current architecture in one view
 
@@ -28,7 +28,7 @@ Target external/Azure operation requires replacing several local pilot component
 with durable, shared and operationally managed services.
 ```
 
-The repository currently contains no frontend application. Protocol v2.6 authorizes an internal operations console as scope; that console is not implemented and MUST NOT be claimed as existing code. Protocol v2.7 keeps those console rules and records: No LLM in the MVP; the Product API is object-level retrieve-and-abstain and MUST NOT generate prose. The Product API contains no LLM/generation layer. Vercel, Neon and a hosted LLM are therefore **not** current V&VN Data Services requirements. No identity vendor is selected. No Vercel, Neon, or LLM vendor.
+The repository currently contains no frontend application. Protocol v2.6 authorizes an internal operations console as scope; that console is not implemented and MUST NOT be claimed as existing code. Protocol v2.7 keeps those console rules and records: No LLM in the MVP; the Product API is object-level retrieve-and-abstain and MUST NOT generate prose. Protocol v2.8 keeps those rules and records: do not build a mockup; the next implementation is a real console MVP on the existing kernel; local `sources/private/` is the G0 stand-in until G0 Azure DEV; do not wait for Azure; the Product API already exists and MUST NOT be rebuilt first; RAG on kennisplatform HTML is not the product. The Product API contains no LLM/generation layer. Vercel, Neon and a hosted LLM are therefore **not** current V&VN Data Services requirements. No identity vendor is selected. No Vercel, Neon, or LLM vendor.
 
 ## 2. Dependency inventory
 
@@ -41,7 +41,7 @@ The repository currently contains no frontend application. Protocol v2.6 authori
 | Container image registry | None required locally | May be needed depending selected Azure deployment route | G8 | Possible registry/storage cost | Decision open; do not assume ACR until runtime is chosen |
 | Product API | FastAPI + Uvicorn | Externally reachable machine-to-machine API | G8 | Included in runtime; network/ingress may add cost | Implemented locally |
 | Canonical source binaries | Local file supplied to source registry; binaries excluded from Git. Local `sources/private/` is the G0 Local substitute and is explicitly not production | Controlled immutable source store. Target architecture names **Azure Blob Storage** when G0 Azure DEV PASSes. Console ingest (Protocol v2.6) requires this store | G2/G8 / console ingest | **New durable storage cost** | Required before real source operation in Azure; G0 Azure DEV remains BLOCKED |
-| Internal operations console UI | Not implemented. Protocol v2.6 authorizes an intuitive console for researchers and reviewers (ingest, review, publish, later analytics). Not a care-app frontend, chatbot, EPD/ECD UI or public website. Chat is not a room | Hosted internal UI in this repository or a tightly bound same-product package; vendor **TBD**. Vercel is not required | Protocol v2.6 / after bron 2 storage is capturable | **New internal UI cost if/when built**; no vendor selected | Authorized not built; do not implement in this protocol change |
+| Internal operations console UI | Not implemented. Protocol v2.6 authorizes an intuitive console for researchers and reviewers (ingest, review, publish, later analytics). Not a care-app frontend, chatbot, EPD/ECD UI or public website. Chat is not a room. Protocol v2.8: primary users are guideline researchers, not nurses; next implementation is a real console MVP on the existing kernel, not a mockup | Hosted internal UI in this repository or a tightly bound same-product package; vendor **TBD**. Vercel is not required. Do not wait for Azure; local `sources/private/` is the G0 stand-in | Protocol v2.6 / v2.8; next implementation after this protocol delta | **New internal UI cost if/when built**; no vendor selected | Authorized not built; do not implement in this protocol change |
 | Console identity (accounts/roles) | Not implemented. Required console capability when the console is built: researcher, reviewer, publisher; no shared login for review/publish | Internal identity, not public signup. Provider **TBD** and subject to G0. Does not close G8 or provision Azure AD | Protocol v2.6 C5 / G0 / G8 | **New identity/access cost if/when selected**; no vendor selected | Decision open; G0 Azure DEV remains BLOCKED |
 | Canonical/publication database | SQLite reference runtime; PostgreSQL schema exists in `db/schema_v2.sql` | Production database adapter and durable relational store; current reference target is PostgreSQL | G8 | **New managed database cost** | Adapter/integration not implemented |
 | Usage ledger | Local SQLite | Shared durable usage/audit backend for multi-replica production | G8 | Could share production DB or use separate observability/data service | Decision open |
@@ -85,7 +85,7 @@ The Product API returns published V&VN evidence to consumers and explicitly perf
 
 ### 3.6 An internal operations console is authorized, not built
 
-Protocol v2.6 authorizes an internal operations console (ingest, review, publish, later analytics) as a human surface over the knowledge kernel. The console is not implemented. Identity (researcher / reviewer / publisher) is a required console capability; no vendor is selected; Azure AD is not provisioned; G8 is not closed. Vercel, Neon and a hosted LLM are not required. Console work starts only after bron 2 storage is at least capturable and does not replace Fase 2.
+Protocol v2.6 authorizes an internal operations console (ingest, review, publish, later analytics) as a human surface over the knowledge kernel. The console is not implemented. Identity (researcher / reviewer / publisher) is a required console capability; no vendor is selected; Azure AD is not provisioned; G8 is not closed. Vercel, Neon and a hosted LLM are not required. Protocol v2.8: do not build a mockup; the next implementation is a real console MVP wired to the existing kernel; Continentie bron 2 enters through that console; local `sources/private/` is the G0 stand-in until G0 Azure DEV; publication remains BLOCKED without an immutable locator (G2). Do not wait for Azure. Durable immutable storage is not skipped.
 
 ## 4. Decisions that should be made before Azure DEV spending
 
@@ -111,6 +111,7 @@ This inventory is derived from the current repository, especially:
 
 - `docs/PROTOCOL_V2_6_INTERNAL_OPERATIONS_CONSOLE_DELTA.md` — internal operations console scope; identity as a required console capability; no vendor selected.
 - `docs/PROTOCOL_V2_7_SOURCE_API_DISTRIBUTION_DELTA.md` — first-wave source, object-level retrieve-and-abstain API, live subscription product; no LLM in the MVP; no Vercel, Neon or LLM vendor.
+- `docs/PROTOCOL_V2_8_USERS_HIERARCHY_CONSOLE_ORDER_DELTA.md` — primary users, class×family source hierarchy, real console-MVP build order on the existing kernel; RAG on kennisplatform HTML is not the product.
 - `Dockerfile` and `Dockerfile.product-api` — Python/container runtime;
 - `pyproject.toml` and lockfiles — pinned Python stack;
 - `src/canonical_store.py` and `db/schema_v2.sql` — SQLite pilot versus PostgreSQL production reference;

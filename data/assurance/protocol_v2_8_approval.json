@@ -1,0 +1,13 @@
+{
+  "manifest_version": "1.0",
+  "protocol_version": "2.8.0",
+  "protocol_path": "docs/PROTOCOL_V2_8_USERS_HIERARCHY_CONSOLE_ORDER_DELTA.md",
+  "protocol_sha256": "e21a75d1e92b4c011901c324d1fbed21e551060359c476cd1f587ab80395571c",
+  "repository": "WilliamGomes41/VENVN-DS",
+  "default_branch": "main",
+  "commit_sha": "d61aed6553503772df3fab16c4f12247966fc161",
+  "approval_date": "2026-08-28",
+  "approval_authority": "project_owner",
+  "branch_protection_status": "temporary_procedural_control",
+  "conformance_effect": "does_not_override_gate_status"
+}
