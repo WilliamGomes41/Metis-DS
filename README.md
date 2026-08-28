@@ -46,7 +46,10 @@ vvn-data-service review-queue --input <objects.jsonl> --track clinical --out <qu
 vvn-data-service source-register --source-id <id> --binary <file.pdf> --source-url <url> --out <registry.json>
 vvn-data-service source-bind --manifest data/source_manifest.v2.json --source-registry <registry.json> --out <verified-manifest.json>
 vvn-data-service prepublish --input <reviewed.jsonl> --schema schemas/knowledge_object.schema.v1.1.json --source-registry <registry.json> --raw-extract <raw.jsonl>
+vvn-data-service serve-console --host 127.0.0.1 --port 8090
 ```
+
+The researcher path for Continentie (bron 2) is the operations console mailbox, not a parallel engineer-only ingest UX. Existing CLI extract/register tools remain for engineers and tests. Capture is not publication; G2 remains BLOCKED.
 ## Protocol v2.1 safe retrieval
 
 The Product API uses `SafeRetrievalIndex`: hybrid search produces candidates, after which a deterministic Answerability/Evidence Gate checks concept coverage, requested relations and explicit numeric constraints. A high similarity score alone never establishes answerability.

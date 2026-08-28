@@ -160,10 +160,18 @@ def test_v26_records_identity_without_closing_g8() -> None:
     assert "operations-console-ui-azure-dev" in capability_ids
     assert "operations-console-identity-azure-dev" in capability_ids
     for item in infra["dependencies"]:
-        if item["capability_id"].startswith("operations-console-"):
+        if not item["capability_id"].startswith("operations-console-"):
+            continue
+        assert "Vercel" not in item["provider"]
+        assert "Neon" not in item["provider"]
+        if item["capability_id"].endswith("-azure-dev"):
             assert item["provider"] == "TBD"
             assert item["implementation_status"] == "decision_open"
             assert item["requirement_status"] == "future"
+        else:
+            assert item["environment"] == "local_development"
+            assert item["implementation_status"] == "implemented"
+            assert item["provider"] == "local"
 
 
 def test_v26_places_console_after_bron2_storage_not_instead() -> None:
@@ -175,8 +183,10 @@ def test_v26_places_console_after_bron2_storage_not_instead() -> None:
     assert "Do not claim the console exists in code" in delta
     assert "Fase 2b — Interne operations console" in roadmap
     assert "Duurzame opslag wordt niet overgeslagen" in roadmap
-    assert "goedgekeurd-niet-gebouwd" in handoff
     assert "Bron 2 is nog BLOCKED op duurzame immutable opslag" in handoff
+    assert "deze delta claimt geen bestaande UI en implementeert de console niet" in handoff
+    assert "Echte console-MVP ingest+review" in handoff
+    assert "bestaat nu in code" in handoff
 
 
 def test_v26_is_c5_spanning_c3_with_owner_approval_and_retrospective_review() -> None:

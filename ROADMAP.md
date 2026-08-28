@@ -59,7 +59,7 @@ Stopvoorwaarde: ontbrekende bytes, checksum, immutable locator, provenance of re
 
 ### Fase 2b — Interne operations console (Protocol v2.6 / v2.8)
 
-Status: volgende implementatie na Protocol v2.8; Protocol v2.6 keurt de scope goed; de console is niet geïmplementeerd. Geen mockup. Niet wachten op Azure of een afgeronde «DS». Duurzame opslag wordt niet overgeslagen.
+Status: console-MVP ingest+review geïmplementeerd in deze repository (G0 local, gekoppeld aan de bestaande kernel); Protocol v2.6 keurt de scope goed. Geen mockup. Publicatie blijft BLOCKED zonder immutable locator (G2). Azure niet gestart. Duurzame opslag wordt niet overgeslagen.
 
 - Bouw geen mockup. Wacht niet op Azure of een afgeronde «DS» voordat onderzoekers een echte console hebben.
 - Echte console-MVP, gekoppeld aan de bestaande kernel (extract, objects, gates, lokaal `sources/private/` als G0-local store): ingest HTML/PDF, family-tree, reviewers selecteren, review return-loop.
