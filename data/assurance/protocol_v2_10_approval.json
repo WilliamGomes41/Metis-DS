@@ -1,0 +1,13 @@
+{
+  "manifest_version": "1.0",
+  "protocol_version": "2.10.0",
+  "protocol_path": "docs/PROTOCOL_V2_10_CONSOLE_NAV_ACCOUNTS_DELTA.md",
+  "protocol_sha256": "1b58ad93035870482d5a5615509f36fffe2abb91754007ec3d72b40db0c7a66a",
+  "repository": "WilliamGomes41/VENVN-DS",
+  "default_branch": "main",
+  "commit_sha": "48fc309032a693b9efcebbf4a7bbe9774cba51fa",
+  "approval_date": "2026-08-28",
+  "approval_authority": "project_owner",
+  "branch_protection_status": "temporary_procedural_control",
+  "conformance_effect": "does_not_override_gate_status"
+}

@@ -69,7 +69,9 @@ Protocol v2.7 legt first-wave bron, object-level retrieve-and-abstain API en dis
 
 Protocol v2.8 legt primaire gebruikers, klasse×familie-bronhiërarchie en console-bouwvolgorde vast. Alle v2.6-consoleregels en alle v2.7-bron-/API-/distributieregels blijven van kracht, behalve de begrensde supersessie van de bouwvolgorde: de volgende implementatie is een echte console-MVP op de bestaande kernel, geen mockup; Continentie bron 2 komt via die console binnen; duurzame immutable opslag wordt niet overgeslagen. RAG op kennisplatform-HTML is niet het product. Geen Vercel, Neon of LLM-vendor. Deze protocol-PR implementeert geen UI, geen mockup en geen productcode.
 
-Protocol v2.9 legt taakgerichte onderzoeker-UX en de V&VN digitale stylesheet vast. Alle v2.6-kamers, v2.7-ingesttypen en v2.8-gebruikers-/hiërarchieregels blijven van kracht. De volgende implementatie is een console-UX-rewrite op de bestaande kernel, geen Azure, geen Vercel/Neon, geen mockup; de G2-locator blijft de publicatieblocker. Deze protocol-PR wijzigt `src/operations_console_*.py` niet en implementeert de nieuwe UI niet.
+Protocol v2.9 legt taakgerichte onderzoeker-UX en de V&VN digitale stylesheet vast. Alle v2.6-kamers, v2.7-ingesttypen en v2.8-gebruikers-/hiërarchieregels blijven van kracht. De console-UX-rewrite op de bestaande kernel is nu in code (PR #25), geen Azure, geen Vercel/Neon, geen mockup; de G2-locator blijft de publicatieblocker.
+
+Protocol v2.10 legt Documentenhierarchie, wachttaak-badges en de Accounts-kamer vast. Alle v2.6-kamers, v2.7-ingesttypen, v2.8-gebruikers-/hiërarchieregels en v2.9-UX-/huisstyleregels blijven van kracht. De volgende implementatie is een console-vervolg op de nu-in-code v2.9-UX (PR #25 gemerged): hernoemen, echte badges, Accounts; geen Azure, geen Vercel/Neon, geen mockup, geen chat, geen verpleegkundigen-UI; de G2-locator blijft de publicatieblocker. Deze protocol-PR wijzigt `src/operations_console_*.py` niet en implementeert de nieuwe UI niet.
 
 ## 6. CI-governance-invarianten
 

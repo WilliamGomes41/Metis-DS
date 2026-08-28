@@ -5,7 +5,8 @@ All notable technical changes to V&VN Data Services are recorded here.
 ## [Unreleased]
 
 ### Added
-- Console-UX-rewrite on the existing kernel: task-oriented researcher rooms, researcher vocabulary (no envelope as a UI term), visible move/promote actions, login with gebruikersnaam and `type=password`, V&VN digital stylesheet tokens (Water secondary family, system-font fallback). Protocol v2.9.0 remains the live UX/brand law; this implements that rewrite in `src/operations_console_app.py`. G2 remains the publication blocker.
+- Protocol v2.10.0: Documentenhierarchie heading, real waiting-task badges, and Accounts room with closed role set (researcher, reviewer, publisher). Protocol-only; does not implement the UI follow-up. Next implementation is that follow-up on the now-merged v2.9 UX (PR #25). G2 remains the publication blocker.
+- Console-UX-rewrite on the existing kernel: task-oriented researcher rooms, researcher vocabulary (no envelope as a UI term), visible move/promote actions, login with gebruikersnaam and `type=password`, V&VN digital stylesheet tokens (Water secondary family, system-font fallback) and the official v&vn beeldmerk PNG. Protocol v2.9.0 remains the live UX/brand law; this implements that rewrite in `src/operations_console_app.py` (PR #25). G2 remains the publication blocker.
 - Protocol v2.9.0: researcher-task console UX and V&VN digital stylesheet (huisstyle) rules. Protocol-only; does not implement the UI rewrite. Next implementation is that rewrite on the existing kernel. G2 remains the publication blocker.
 - Internal operations console MVP: ingest mailbox (HTML/PDF or URL snapshot), family × class tree, named reviewers, review return-loop, local G0 identity. Served by `vvn-data-service serve-console`. Publication remains fail-closed without an immutable locator (G2).
 
