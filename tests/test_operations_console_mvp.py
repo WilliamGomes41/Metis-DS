@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import threading
 import zipfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -682,3 +683,171 @@ def test_continentie_researcher_path_is_the_console_mailbox(tmp_path: Path) -> N
     assert "mailbox" in ingest_page or "ingest" in ingest_page
     assert "onderzoekerspad" in ingest_page
     assert "parallel ingestpad voor engineers" in ingest_page
+
+
+def _html_client(tmp_path: Path) -> tuple[TestClient, OperationsConsole, dict]:
+    from src.operations_console_app import create_console_app
+
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    client = TestClient(create_console_app(console))
+    client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
+    return client, console, accounts
+
+
+def _headings(html: str) -> list[str]:
+    return [re.sub(r"<[^>]+>", "", block).strip().lower() for block in re.findall(r"<h[12][^>]*>.*?</h[12]>", html, flags=re.I | re.S)]
+
+
+def _visible_named_inputs(html: str, name: str) -> list[str]:
+    found: list[str] = []
+    for tag in re.findall(r"<input\b[^>]*>", html, flags=re.I):
+        if re.search(rf'name=["\']{re.escape(name)}["\']', tag, flags=re.I):
+            if not re.search(r'type=["\']hidden["\']', tag, flags=re.I):
+                found.append(tag)
+    for tag in re.findall(r"<select\b[^>]*>", html, flags=re.I):
+        if re.search(rf'name=["\']{re.escape(name)}["\']', tag, flags=re.I):
+            found.append(tag)
+    return found
+
+
+def test_login_asks_for_gebruikersnaam_and_password_type(tmp_path: Path) -> None:
+    from src.operations_console_app import create_console_app
+
+    client = TestClient(create_console_app(_console(tmp_path)))
+    html = client.get("/login").text
+    lower = html.lower()
+    assert "gebruikersnaam" in lower
+    assert "wachtwoord" in lower
+    assert re.search(r'<input[^>]*id=["\']wachtwoord["\'][^>]*type=["\']password["\']', html, flags=re.I)
+    assert re.search(r'<input[^>]*type=["\']password["\'][^>]*name=["\']password["\']', html, flags=re.I) or re.search(
+        r'<input[^>]*name=["\']password["\'][^>]*type=["\']password["\']', html, flags=re.I
+    )
+    assert "envelope" not in lower
+
+
+def test_researcher_html_has_no_envelope_and_no_visible_snapshot_id(tmp_path: Path) -> None:
+    client, console, accounts = _html_client(tmp_path)
+    _ingest_html(console, accounts)
+    for path in ("/ingest", "/tree", "/review", "/publish"):
+        html = client.get(path).text
+        assert "envelope" not in html.lower()
+        assert _visible_named_inputs(html, "snapshot_id") == []
+
+
+def test_ingest_primary_action_is_inleveren_not_envelope(tmp_path: Path) -> None:
+    client, _, _ = _html_client(tmp_path)
+    html = client.get("/ingest").text
+    assert "envelope" not in html.lower()
+    assert re.search(r"<button\b[^>]*>\s*inleveren\s*</button>", html, flags=re.I)
+    assert "envelope inleveren" not in html.lower()
+    assert "<h1>document inleveren</h1>" in html.lower()
+
+
+def test_family_tree_exposes_move_and_promote_on_listed_document(tmp_path: Path) -> None:
+    client, console, accounts = _html_client(tmp_path)
+    receipt = _ingest_html(console, accounts, title="Continentie fixture", version="1.0")
+    html = client.get("/tree").text
+    lower = html.lower()
+    assert "continentie fixture" in lower
+    assert "1.0" in html
+    assert "verplaatsen" in lower
+    assert "promoveren" in lower
+    assert 'action="/tree/move"' in html
+    assert 'action="/tree/promote"' in html
+    assert _visible_named_inputs(html, "snapshot_id") == []
+    assert re.search(r'<input[^>]*type=["\']hidden["\'][^>]*name=["\']snapshot_id["\']', html, flags=re.I)
+    moved = client.post("/tree/move", data={"snapshot_id": receipt["snapshot_id"], "new_family": "decubitus"}, follow_redirects=True)
+    assert moved.status_code == 200
+    assert console.list_envelopes()[0]["family"] == "decubitus"
+    assert "decubitus" in moved.text.lower()
+    assert "verplaatsen" in moved.text.lower()
+
+
+def test_brand_css_uses_venvn_tokens_and_one_secondary_family(tmp_path: Path) -> None:
+    from src.operations_console_app import create_console_app
+
+    css = (ROOT / "assets/brand/console.css").read_text(encoding="utf-8")
+    html_login_template = (ROOT / "src/operations_console_app.py").read_text(encoding="utf-8")
+    served = TestClient(create_console_app(_console(tmp_path))).get("/brand/console.css")
+    assert served.status_code == 200
+    assert "#E23100" in served.text
+    assert "#E23100" in css
+    assert "#5D3297" in css
+    assert "#45AAC7" in css
+    assert "#EAF8F8" in css
+    assert re.search(r"body\s*\{[^}]*background:\s*#EAF8F8", css)
+    assert not re.search(r"body\s*\{[^}]*background:\s*#E23100", css)
+    assert not re.search(r"body\s*\{[^}]*background:\s*#000000", css)
+    for other_family in ("#E28080", "#FDEFEB", "#6FA57D", "#EDFAF0", "#E2A659", "#FCF8EA"):
+        assert other_family not in css
+    for pirate in ("fonts.googleapis.com", "fonts.gstatic.com", "use.typekit.net", "unpkg.com"):
+        assert pirate not in css
+        assert pirate not in html_login_template
+    assert "ui-sans-serif, system-ui, sans-serif" in css
+    fonts_readme = (ROOT / "assets/brand/fonts/README.md").read_text(encoding="utf-8")
+    assert "fail closed" in fonts_readme.lower() or "fails closed" in fonts_readme.lower()
+
+
+def test_via_negativa_is_not_the_heading_of_researcher_rooms(tmp_path: Path) -> None:
+    client, console, accounts = _html_client(tmp_path)
+    _ingest_html(console, accounts)
+    forbidden = (
+        "niet de product api",
+        "niet ontworpen voor verpleegkundigen",
+        "chat is geen kamer",
+        "geen parallel ingestpad",
+        "must not",
+    )
+    for path in ("/ingest", "/tree", "/review", "/publish"):
+        headings = _headings(client.get(path).text)
+        assert headings, path
+        joined = " ".join(headings)
+        for phrase in forbidden:
+            assert phrase not in joined
+    ingest_h1 = _headings(client.get("/ingest").text)[0]
+    assert ingest_h1 == "document inleveren"
+
+
+def test_html_ingest_submits_document_and_publish_stays_blocked(tmp_path: Path) -> None:
+    client, console, accounts = _html_client(tmp_path)
+    response = client.post(
+        "/ingest",
+        data={
+            "ingest_kind": "new",
+            "title": "Continentie via console",
+            "version": "1.0",
+            "date": "2025-04-01",
+            "live_url": "https://example.test/continentie",
+            "class_": "richtlijn",
+            "family": "continentie",
+            "named_reviewers": accounts["reviewer"]["account_id"],
+        },
+        files={"file": ("continentie.html", HTML_FIXTURE.read_bytes(), "text/html")},
+    )
+    assert response.status_code == 200
+    assert "document ingeleverd" in response.text.lower()
+    assert "envelope" not in response.text.lower()
+    envelopes = console.list_envelopes()
+    assert len(envelopes) == 1
+    assert envelopes[0]["title"] == "Continentie via console"
+    publish = client.get("/publish").text.lower()
+    assert "publiceren" in publish
+    assert "geblokkeerd" in publish or "blocked" in publish
+
+
+def test_document_keyed_move_wrapper_does_not_rehash(tmp_path: Path) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    receipt = _ingest_html(console, accounts, family="continentie")
+    moved = console.move_family_document(
+        actor_id=accounts["researcher"]["account_id"],
+        title=receipt["title"],
+        version=receipt["version"],
+        family="continentie",
+        new_family="decubitus",
+    )
+    assert moved["family"] == "decubitus"
+    assert moved["sha256"] == receipt["sha256"]
+    assert moved["clinical_rereview_required"] is False
+

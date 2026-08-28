@@ -1,50 +1,53 @@
-"""FastAPI HTML surface for the internal operations console MVP.
+"""FastAPI HTML surface for the internal operations console.
 
-This is the researcher/reviewer door over the knowledge kernel. It is not the
-Product API, not inspection, not a care-app frontend, and not a public website.
+Task-oriented researcher door over the knowledge kernel (Protocol v2.9).
+Not the Product API, not a care-app frontend, and not a public website.
 Chat is not a room.
 """
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
-from src.operations_console_v1 import CONSOLE_VERSION, ConsoleError, OperationsConsole, REPO_ROOT
+from src.operations_console_v1 import (
+    ALLOWED_CLASSES,
+    CONSOLE_VERSION,
+    ConsoleError,
+    OperationsConsole,
+    REPO_ROOT,
+)
 
 SERVICE_VERSION = CONSOLE_VERSION
 COOKIE = "console_session"
-
-CONSOLE_HTML = """<!doctype html>
-<html lang="nl">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>V&amp;VN Data Services — Interne operations console</title>
-<style>
-:root{font-family:Inter,system-ui,sans-serif;color:#111827;background:#f3f4f6}
-body{margin:0}
-.wrap{max-width:1100px;margin:0 auto;padding:24px}
-.panel{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin-bottom:16px}
-h1{margin:0 0 8px;font-size:26px}h2{margin:0 0 12px;font-size:18px}
-.muted{color:#6b7280}nav a{margin-right:12px;color:#1d4ed8;text-decoration:none;font-weight:650}
-label{display:block;margin:10px 0 4px;font-weight:650}input,select,textarea{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;box-sizing:border-box}
-button{border:0;border-radius:8px;padding:10px 16px;background:#111827;color:#fff;font-weight:650;cursor:pointer;margin-top:12px}
-.banner{padding:10px 12px;border-radius:8px;margin:12px 0;background:#ecfdf5;border:1px solid #a7f3d0}
-.warn{background:#fff7ed;border-color:#fdba74}.err{background:#fef2f2;border-color:#fecaca}
-.tree{font-family:ui-monospace,Menlo,monospace;font-size:13px}li{margin:6px 0}
-</style>
-</head>
-<body><div class="wrap">
-__BODY__
-</div></body></html>
-"""
-
-
-def _page(body: str) -> str:
-    return CONSOLE_HTML.replace("__BODY__", body)
+BRAND_DIR = REPO_ROOT / "assets" / "brand"
+HELP_ONCE = (
+    "Interne operations console voor richtlijnonderzoekers en reviewers. "
+    "Dit is niet de Product API. Niet ontworpen voor verpleegkundigen. "
+    "Chat is geen kamer in deze console. Geen parallel ingestpad voor engineers "
+    "als onderzoekerservaring."
+)
+STATUS_LABELS = {
+    "captured_not_published": "ingevoerd, niet gepubliceerd",
+}
+BLOCKER_LABELS = {
+    "second_named_reviewer_required": "Nog een andere benoemde reviewer moet goedkeuren.",
+    "blocked_pending_immutable_locator": "Duurzame opslag ontbreekt; publicatie blijft geblokkeerd.",
+}
+ERROR_COPY = {
+    "not_authenticated": "Je bent niet aangemeld.",
+    "invalid_credentials": "Gebruikersnaam of wachtwoord is onjuist.",
+    "uploader_cannot_be_sole_required_reviewer": "De uploader mag reviewer zijn, maar niet de enige.",
+    "word_not_first_wave": "Word-bestanden horen niet bij de first wave. Lever HTML of PDF in.",
+    "story_html_boom_player_out_of_first_wave": "Kennisplatform-boomplayers horen niet bij de first wave.",
+    "official_file_or_url_required": "Kies een HTML- of PDF-bestand, of een URL.",
+    "named_reviewers_required": "Kies minstens één andere reviewer dan jezelf.",
+    "publisher_role_required": "Publiceren vereist de rol publisher.",
+    "reviewer_role_required": "Review vereist de rol reviewer.",
+    "researcher_role_required": "Inleveren vereist de rol researcher.",
+}
 
 
 def _esc(value: Any) -> str:
@@ -57,21 +60,104 @@ def _esc(value: Any) -> str:
     )
 
 
-def _nav(account: dict[str, Any] | None) -> str:
-    who = f'{_esc(account.get("display_name"))} · rollen: {", ".join(_esc(r) for r in account.get("roles") or [])}' if account else "niet aangemeld"
+def _status_label(state: str) -> str:
+    return STATUS_LABELS.get(state, state.replace("_", " "))
+
+
+def _beeldmerk() -> str:
+    return (
+        '<span class="beeldmerk" aria-hidden="true">'
+        '<span class="v-first">v</span><span class="amp">&amp;</span>'
+        '<span class="v-second">v</span><span class="n">n</span>'
+        "</span>"
+    )
+
+
+def _page(body: str) -> str:
+    return f"""<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>V&amp;VN Data Services — Interne operations console</title>
+<link rel="stylesheet" href="/brand/console.css">
+</head>
+<body>
+<div class="shell">
+{body}
+</div>
+</body>
+</html>
+"""
+
+
+def _help() -> str:
     return f"""
-    <div class="panel">
-      <h1>V&amp;VN Data Services — Interne operations console</h1>
-      <div class="muted">Menselijke deur over de knowledge kernel voor richtlijnonderzoekers en reviewers. Dit is niet de Product API. Niet ontworpen voor verpleegkundigen. Chat is geen kamer in deze console.</div>
-      <nav>
-        <a href="/ingest">Ingest (mailbox)</a>
-        <a href="/tree">Familieboom</a>
-        <a href="/review">Review</a>
-        <a href="/publish">Publish</a>
-        <a href="/logout">Uitloggen</a>
-      </nav>
-      <div class="muted">{who}</div>
-    </div>
+    <details class="help">
+      <summary>Over deze console</summary>
+      <p>{_esc(HELP_ONCE)}</p>
+    </details>
+    """
+
+
+def _nav(account: dict[str, Any] | None, current: str = "") -> str:
+    who = (
+        f'{_esc(account.get("display_name"))} · rollen: {", ".join(_esc(r) for r in account.get("roles") or [])}'
+        if account
+        else "niet aangemeld"
+    )
+    rooms = [
+        ("ingest", "/ingest", "Inleveren"),
+        ("tree", "/tree", "Familieboom"),
+        ("review", "/review", "Review"),
+        ("publish", "/publish", "Publiceren"),
+    ]
+    links = []
+    for key, href, label in rooms:
+        current_attr = ' aria-current="page"' if current == key else ""
+        links.append(f'<a href="{href}"{current_attr}>{label}</a>')
+    links.append('<a class="quiet" href="/logout">Uitloggen</a>')
+    return f"""
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="V&amp;VN Data Services">
+        {_beeldmerk()}
+        <span class="brand-name">Data Services</span>
+      </a>
+      <nav class="rooms">{"".join(links)}</nav>
+      <div class="who">{who}</div>
+    </header>
+    """
+
+
+def _class_options(selected: str = "richtlijn") -> str:
+    return "".join(
+        f'<option value="{_esc(name)}"{" selected" if name == selected else ""}>{_esc(name)}</option>'
+        for name in ALLOWED_CLASSES
+    )
+
+
+def _document_options(rows: list[dict[str, Any]], selected: str = "") -> str:
+    options = ['<option value="">Kies een document</option>']
+    for row in rows:
+        label = f'{row["title"]} · {row["version"]} · {row["family"]}'
+        snap = row["snapshot_id"]
+        options.append(
+            f'<option value="{_esc(snap)}"{" selected" if snap == selected else ""}>{_esc(label)}</option>'
+        )
+    return "".join(options)
+
+
+def _document_card_heading(row: dict[str, Any]) -> str:
+    return f"""
+      <header>
+        <p class="doc-title">{_esc(row["title"])}</p>
+      </header>
+      <p class="meta">
+        <span>versie <b>{_esc(row["version"])}</b></span>
+        <span>familie <b>{_esc(row["family"])}</b></span>
+        <span>klasse <b>{_esc(row["class"])}</b></span>
+        <span>status <b>{_esc(_status_label(row.get("status") or row.get("state") or ""))}</b></span>
+      </p>
     """
 
 
@@ -82,6 +168,8 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         version=SERVICE_VERSION,
         description="Internal researcher/reviewer console. Not the Product API. Chat is not a room.",
     )
+    if BRAND_DIR.is_dir():
+        app.mount("/brand", StaticFiles(directory=str(BRAND_DIR)), name="brand")
 
     def _current(request: Request) -> dict[str, Any] | None:
         token = request.cookies.get(COOKIE)
@@ -99,7 +187,19 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
     @app.exception_handler(ConsoleError)
     async def console_errors(_request: Request, exc: ConsoleError) -> HTMLResponse:
         status = 401 if exc.code in {"not_authenticated", "invalid_credentials"} else 403 if "role_required" in exc.code else 400
-        body = _page(f'{_nav(None)}<div class="panel"><div class="banner err">{_esc(exc.code)}</div><p><a href="/login">Naar login</a></p></div>')
+        message = ERROR_COPY.get(exc.code, "Deze actie is niet toegestaan.")
+        body = _page(
+            f"""
+            {_nav(None)}
+            <section class="room">
+              <h1>Actie niet uitgevoerd</h1>
+              <div class="banner err">{_esc(message)}</div>
+              <p class="muted">{_esc(exc.code)}</p>
+              <p><a href="/login">Naar aanmelden</a></p>
+            </section>
+            {_help()}
+            """
+        )
         return HTMLResponse(body, status_code=status)
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
@@ -107,12 +207,17 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         account = _current(request)
         if not account:
             return _page(
-                """
-                <div class="panel">
-                  <h1>V&amp;VN Data Services — Interne operations console</h1>
-                  <p class="muted">Interne identiteit. Geen open registratie. Chat is geen kamer.</p>
-                  <p><a href="/login">Inloggen</a></p>
-                </div>
+                f"""
+                <section class="room login-card">
+                  <a class="brand" href="/login" aria-label="V&amp;VN Data Services">
+                    {_beeldmerk()}
+                    <span class="brand-name">Data Services</span>
+                  </a>
+                  <h1>Interne operations console</h1>
+                  <p class="lead">Meld je aan om documenten in te leveren, te reviewen of te publiceren.</p>
+                  <p><a class="btn-primary" href="/login" style="display:inline-block;text-decoration:none;">Aanmelden</a></p>
+                </section>
+                {_help()}
                 """
             )
         return RedirectResponse("/ingest", status_code=303)
@@ -120,16 +225,23 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
     @app.get("/login", response_class=HTMLResponse)
     def login_form() -> str:
         return _page(
-            """
-            <div class="panel">
-              <h2>Interne login</h2>
-              <p class="muted">Geen open registratie. Geen gedeelde login voor review of publish.</p>
+            f"""
+            <section class="room login-card">
+              <a class="brand" href="/login" aria-label="V&amp;VN Data Services">
+                {_beeldmerk()}
+                <span class="brand-name">Data Services</span>
+              </a>
+              <h1>Aanmelden</h1>
+              <p class="lead">Meld je aan met je interne account. Geen open registratie. Geen gedeelde login.</p>
               <form method="post" action="/login">
-                <label>Gebruikersnaam</label><input name="username" required>
-                <label>Wachtwoord</label><input type="password" name="password" required>
-                <button type="submit">Inloggen</button>
+                <label for="gebruikersnaam">Gebruikersnaam</label>
+                <input id="gebruikersnaam" name="username" autocomplete="username" required>
+                <label for="wachtwoord">Wachtwoord</label>
+                <input id="wachtwoord" type="password" name="password" autocomplete="current-password" required>
+                <button class="btn-primary" type="submit">Aanmelden</button>
               </form>
-            </div>
+            </section>
+            {_help()}
             """
         )
 
@@ -155,37 +267,80 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             f'<option value="{_esc(row["account_id"])}">{_esc(row["display_name"])} ({_esc(row["username"])})</option>'
             for row in reviewers
         )
+        documents = state.list_envelopes()
         return _page(
             f"""
-            {_nav(account)}
-            <div class="panel">
-              <h2>Ingest — mailbox</h2>
-              <div class="banner">Onderzoekerspad voor Continentie bron 2: deze mailbox. Geen parallel ingestpad voor engineers als onderzoekerservaring. Officiële first-wave bestanden: HTML-pagina of PDF. Word en kennisplatform story.html-boomplayers worden geweigerd. Capture is geen publicatie.</div>
+            {_nav(account, "ingest")}
+            <section class="room">
+              <h1>Document inleveren</h1>
+              <p class="lead">Lever een HTML-pagina of PDF in voor review. Continentie is de eerste documentfamilie op dit onderzoekerspad.</p>
+              <p class="next">Daarna: het document verschijnt in de familieboom en gaat naar review. Publiceren is een later, apart besluit.</p>
+              <p class="statement">Verwacht: titel, versie, familie en klasse, plus minstens één andere reviewer dan jezelf.</p>
               <form method="post" action="/ingest" enctype="multipart/form-data">
-                <label>Bestand (HTML of PDF)</label><input type="file" name="file">
-                <label>Of URL (wordt onmiddellijk naar exacte bytes gesnapshot)</label><input name="url" placeholder="https://...">
-                <label>Nieuw of nieuwe versie</label>
-                <select name="ingest_kind"><option value="new">new</option><option value="new_version">new_version</option></select>
-                <label>Vervangt snapshot (bij nieuwe versie)</label><input name="replaces_snapshot_id">
-                <label>Titel</label><input name="title" required>
-                <label>Versie</label><input name="version" required>
-                <label>Datum</label><input name="date" placeholder="2025-04-01" required>
-                <label>Live URL</label><input name="live_url">
-                <label>Klasse</label>
-                <select name="class_">
-                  <option value="richtlijn">richtlijn</option>
-                  <option value="handreiking">handreiking</option>
-                  <option value="artikel">artikel</option>
-                  <option value="transcript">transcript</option>
-                  <option value="podcast">podcast</option>
-                </select>
-                <label>Familie (haak, geen nieuw bestand; MVP één familie per document)</label>
-                <input name="family" value="continentie" required>
-                <label>Benoemde reviewers (uploader mag reviewer zijn, maar MUST NOT de enige zijn)</label>
-                <select name="named_reviewers" multiple size="6">{options}</select>
-                <button type="submit">Envelope inleveren</button>
+                <div class="sections">
+                  <div class="section">
+                    <h3>Bron</h3>
+                    <label for="file">Bestand (HTML of PDF)</label>
+                    <input id="file" type="file" name="file">
+                    <label for="url">Of URL (direct naar exacte bytes)</label>
+                    <input id="url" name="url" placeholder="https://...">
+                  </div>
+                  <div class="section">
+                    <h3>Document</h3>
+                    <div class="field-row">
+                      <div>
+                        <label for="title">Titel</label>
+                        <input id="title" name="title" required>
+                      </div>
+                      <div>
+                        <label for="version">Versie</label>
+                        <input id="version" name="version" required>
+                      </div>
+                    </div>
+                    <div class="field-row">
+                      <div>
+                        <label for="date">Datum</label>
+                        <input id="date" name="date" placeholder="2025-04-01" required>
+                      </div>
+                      <div>
+                        <label for="class_">Klasse</label>
+                        <select id="class_" name="class_">{_class_options()}</select>
+                      </div>
+                    </div>
+                    <label for="family">Familie</label>
+                    <input id="family" name="family" value="continentie" required>
+                    <label for="ingest_kind">Nieuw of nieuwe versie</label>
+                    <select id="ingest_kind" name="ingest_kind">
+                      <option value="new">Nieuw document</option>
+                      <option value="new_version">Nieuwe versie van een bestaand document</option>
+                    </select>
+                    <div id="replaces-row" hidden>
+                      <label for="replaces_document">Bestaand document</label>
+                      <select id="replaces_document" name="replaces_document">{_document_options(documents)}</select>
+                    </div>
+                    <label for="live_url">Live URL (optioneel)</label>
+                    <input id="live_url" name="live_url">
+                  </div>
+                  <div class="section">
+                    <h3>Reviewers</h3>
+                    <label for="named_reviewers">Benoemde reviewers</label>
+                    <select id="named_reviewers" name="named_reviewers" multiple size="6">{options}</select>
+                    <p class="muted">De uploader mag reviewer zijn, maar niet de enige.</p>
+                  </div>
+                </div>
+                <button class="btn-primary" type="submit">Inleveren</button>
               </form>
-            </div>
+            </section>
+            {_help()}
+            <script>
+            (function () {{
+              var kind = document.getElementById("ingest_kind");
+              var row = document.getElementById("replaces-row");
+              function sync() {{ row.hidden = kind.value !== "new_version"; }}
+              kind.addEventListener("change", sync);
+              sync();
+            }})();
+            </script>
             """
         )
 
@@ -200,7 +355,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         class_: str = Form(...),
         family: str = Form(...),
         url: str = Form(""),
-        replaces_snapshot_id: str = Form(""),
+        replaces_document: str = Form(""),
         named_reviewers: list[str] = Form(default=[]),
         file: UploadFile | None = File(None),
     ) -> str:
@@ -212,6 +367,8 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             filename = file.filename
             data = await file.read()
             content_type = file.content_type
+        if isinstance(named_reviewers, str):
+            named_reviewers = [named_reviewers] if named_reviewers.strip() else []
         receipt = state.ingest(
             actor_id=account["account_id"],
             filename=filename,
@@ -226,106 +383,202 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             class_=class_,
             family=family,
             named_reviewers=named_reviewers,
-            replaces_snapshot_id=replaces_snapshot_id.strip() or None,
+            replaces_snapshot_id=replaces_document.strip() or None,
         )
         return _page(
             f"""
-            {_nav(account)}
-            <div class="panel">
-              <h2>Receipt</h2>
-              <div class="banner">SHA-256 {_esc(receipt["sha256"])} · locator {_esc(receipt["locator"])} · staat {_esc(receipt["state"])}. Immutable locator (G2) ontbreekt; publicatie blijft BLOCKED.</div>
-              <pre>{_esc(receipt)}</pre>
-            </div>
+            {_nav(account, "ingest")}
+            <section class="room">
+              <h1>Document ingeleverd</h1>
+              <p class="lead">Het document is vastgelegd en wacht op review.</p>
+              <p class="next">Volgende stap: open Review en laat een andere benoemde reviewer het document beoordelen.</p>
+              <div class="doc-card">
+                {_document_card_heading({**receipt, "status": receipt["state"]})}
+              </div>
+              <p><a class="btn-secondary" href="/review">Naar review</a> <a class="btn-secondary" href="/tree">Naar familieboom</a></p>
+            </section>
+            {_help()}
             """
         )
 
     @app.get("/tree", response_class=HTMLResponse)
     def tree(request: Request) -> str:
         account = _require(request)
+        can_move = "researcher" in account["roles"] or "publisher" in account["roles"]
+        can_promote = "reviewer" in account["roles"]
         payload = state.family_tree()
-        blocks = []
+        blocks: list[str] = []
         for family, node in payload["families"].items():
-            children = "".join(
-                f'<li>{_esc(child["class"])} · {_esc(child["title"])} · {_esc(child["sha256"][:12])}… · parent={_esc(child["parent"])}</li>'
-                for child in node["children"]
+            cards = []
+            for child in node["children"]:
+                actions = []
+                if can_move:
+                    actions.append(
+                        f"""
+                        <form method="post" action="/tree/move">
+                          <input type="hidden" name="snapshot_id" value="{_esc(child["snapshot_id"])}">
+                          <input type="hidden" name="title" value="{_esc(child["title"])}">
+                          <input type="hidden" name="version" value="{_esc(child["version"])}">
+                          <input type="hidden" name="family" value="{_esc(child["family"])}">
+                          <label>Nieuwe familie
+                            <input name="new_family" required placeholder="familie">
+                          </label>
+                          <button class="btn-secondary" type="submit">Verplaatsen</button>
+                        </form>
+                        """
+                    )
+                if can_promote:
+                    actions.append(
+                        f"""
+                        <form method="post" action="/tree/promote">
+                          <input type="hidden" name="snapshot_id" value="{_esc(child["snapshot_id"])}">
+                          <input type="hidden" name="title" value="{_esc(child["title"])}">
+                          <input type="hidden" name="version" value="{_esc(child["version"])}">
+                          <input type="hidden" name="family" value="{_esc(child["family"])}">
+                          <label>Nieuwe klasse
+                            <select name="new_class">{_class_options(child["class"])}</select>
+                          </label>
+                          <button class="btn-secondary" type="submit">Promoveren</button>
+                        </form>
+                        """
+                    )
+                cards.append(
+                    f"""
+                    <article class="doc-card">
+                      {_document_card_heading(child)}
+                      <div class="doc-actions">{"".join(actions)}</div>
+                    </article>
+                    """
+                )
+            blocks.append(
+                f'<h2>Familie {_esc(family)}</h2><div class="doc-list">{"".join(cards)}</div>'
             )
-            blocks.append(f"<h3>Familie {_esc(family)}</h3><ul class='tree'>{children}</ul>")
+        empty = '<p class="muted">Nog geen documenten. Lever eerst een document in.</p>'
         return _page(
             f"""
-            {_nav(account)}
-            <div class="panel">
-              <h2>Familieboom = familie × klasse</h2>
-              <p class="muted">Familie is een haak, geen nieuw bestand. Een richtlijn is niet de ouder van een podcast; zij zijn siblings onder de familie. Een branch morgen toevoegen tekent de boom niet opnieuw.</p>
-              {''.join(blocks) or "<p>Nog geen envelopes.</p>"}
-              <form method="post" action="/tree/move">
-                <h3>Verplaatsen tussen families (curatoract; geen re-hash, geen klinische herreview)</h3>
-                <label>Snapshot</label><input name="snapshot_id" required>
-                <label>Nieuwe familie</label><input name="new_family" required>
-                <button type="submit">Verplaatsen</button>
-              </form>
-              <form method="post" action="/tree/promote">
-                <h3>Klasse promoveren (MUST require review)</h3>
-                <label>Snapshot</label><input name="snapshot_id" required>
-                <label>Nieuwe klasse</label>
-                <select name="new_class">
-                  <option>richtlijn</option><option>handreiking</option><option>artikel</option><option>transcript</option><option>podcast</option>
-                </select>
-                <button type="submit">Promoveren</button>
-              </form>
-            </div>
+            {_nav(account, "tree")}
+            <section class="room">
+              <h1>Familieboom</h1>
+              <p class="lead">Bekijk documenten per familie en klasse. Verplaats een document naar een andere familie, of promoveer de klasse.</p>
+              <p class="next">Verplaatsen is een curatoract (geen herhash). Promoveren vereist daarna opnieuw review.</p>
+              {"".join(blocks) or empty}
+            </section>
+            {_help()}
             """
         )
 
     @app.post("/tree/move")
-    def tree_move(request: Request, snapshot_id: str = Form(...), new_family: str = Form(...)) -> RedirectResponse:
+    def tree_move(
+        request: Request,
+        new_family: str = Form(...),
+        snapshot_id: str = Form(""),
+        title: str = Form(""),
+        version: str = Form(""),
+        family: str = Form(""),
+    ) -> RedirectResponse:
         account = _require(request)
-        state.move_family(actor_id=account["account_id"], snapshot_id=snapshot_id, new_family=new_family)
+        if snapshot_id.strip():
+            state.move_family(actor_id=account["account_id"], snapshot_id=snapshot_id, new_family=new_family)
+        else:
+            state.move_family_document(
+                actor_id=account["account_id"],
+                title=title,
+                version=version,
+                family=family,
+                new_family=new_family,
+            )
         return RedirectResponse("/tree", status_code=303)
 
     @app.post("/tree/promote")
-    def tree_promote(request: Request, snapshot_id: str = Form(...), new_class: str = Form(...)) -> RedirectResponse:
+    def tree_promote(
+        request: Request,
+        new_class: str = Form(...),
+        snapshot_id: str = Form(""),
+        title: str = Form(""),
+        version: str = Form(""),
+        family: str = Form(""),
+    ) -> RedirectResponse:
         account = _require(request)
-        state.promote_class(actor_id=account["account_id"], snapshot_id=snapshot_id, new_class=new_class)
+        if snapshot_id.strip():
+            state.promote_class(actor_id=account["account_id"], snapshot_id=snapshot_id, new_class=new_class)
+        else:
+            state.promote_class_document(
+                actor_id=account["account_id"],
+                title=title,
+                version=version,
+                family=family,
+                new_class=new_class,
+            )
         return RedirectResponse("/tree", status_code=303)
 
     @app.get("/review", response_class=HTMLResponse)
-    def review_get(request: Request, snapshot_id: str = "") -> str:
+    def review_get(request: Request, document: str = "") -> str:
         account = _require(request)
+        chosen = document.strip()
         envelopes = state.list_envelopes()
-        options = "".join(
-            f'<option value="{_esc(row["snapshot_id"])}" {"selected" if row["snapshot_id"]==snapshot_id else ""}>{_esc(row["title"])} · {_esc(row["class"])} · {_esc(row["family"])}</option>'
-            for row in envelopes
-        )
-        objects_html = ""
-        if snapshot_id:
-            for obj in state.snapshot_objects(snapshot_id):
-                objects_html += f"""
-                <div class="panel">
-                  <div><b>{_esc(obj["object_id"])}</b> · {_esc(obj["object_type"])} · {_esc(obj["governance"]["validation_status"])} · v{_esc(obj["object_version"])}</div>
-                  <p>{_esc(obj["content"]["clean_text"])}</p>
-                  <form method="post" action="/review">
-                    <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
-                    <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
-                    <label>Besluit</label>
-                    <select name="decision"><option>approve</option><option>revise</option><option>reject</option></select>
-                    <label>Toelichting</label><textarea name="comment"></textarea>
-                    <label>Proposed correction</label><textarea name="proposed_correction"></textarea>
-                    <button type="submit">Review vastleggen</button>
-                  </form>
+        chosen_row = next((row for row in envelopes if row["snapshot_id"] == chosen), None)
+        picker = f"""
+              <form method="get" action="/review">
+                <label for="document">Document</label>
+                <div class="actions">
+                  <select id="document" name="document">{_document_options(envelopes, chosen)}</select>
+                  <button class="btn-secondary" type="submit">Openen</button>
                 </div>
+              </form>
+        """
+        cards = []
+        if not chosen:
+            for row in envelopes:
+                cards.append(
+                    f"""
+                    <article class="doc-card">
+                      {_document_card_heading({**row, "status": row["state"]})}
+                      <p><a class="btn-secondary" href="/review?document={_esc(row["snapshot_id"])}">Reviewen</a></p>
+                    </article>
+                    """
+                )
+        objects_html = ""
+        if chosen_row:
+            objects_html += f'<div class="doc-card">{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}</div>'
+            for obj in state.snapshot_objects(chosen):
+                heading = (obj.get("content") or {}).get("heading") or obj.get("object_type")
+                text = (obj.get("content") or {}).get("clean_text") or ""
+                status = (obj.get("governance") or {}).get("validation_status") or ""
+                objects_html += f"""
+                <article class="object">
+                  <h3>{_esc(heading)}</h3>
+                  <p class="meta"><span>status <b>{_esc(status)}</b></span></p>
+                  <p>{_esc(text)}</p>
+                  <form method="post" action="/review">
+                    <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
+                    <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
+                    <label for="decision-{_esc(obj["object_id"])}">Besluit</label>
+                    <select id="decision-{_esc(obj["object_id"])}" name="decision">
+                      <option value="approve">Goedkeuren</option>
+                      <option value="revise">Revisie vragen</option>
+                      <option value="reject">Afwijzen</option>
+                    </select>
+                    <label for="comment-{_esc(obj["object_id"])}">Toelichting</label>
+                    <textarea id="comment-{_esc(obj["object_id"])}" name="comment"></textarea>
+                    <label for="correction-{_esc(obj["object_id"])}">Voorgestelde correctie</label>
+                    <textarea id="correction-{_esc(obj["object_id"])}" name="proposed_correction"></textarea>
+                    <button class="btn-primary" type="submit">Review vastleggen</button>
+                  </form>
+                </article>
                 """
+        empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
         return _page(
             f"""
-            {_nav(account)}
-            <div class="panel">
-              <h2>Review — verplichte return-loop</h2>
-              <p class="muted">Geen Excel. Reviewer werkt op de exacte snapshot-objecten. Reject/correctie maakt een nieuwe objectversie of blokkeert de oude. Gepubliceerde waarheid wordt nooit stilzwijgend gewijzigd. Uploader MUST NOT de enige vereiste reviewer zijn.</p>
-              <form method="get" action="/review">
-                <label>Snapshot</label><select name="snapshot_id">{options}</select>
-                <button type="submit">Openen</button>
-              </form>
-            </div>
-            {objects_html}
+            {_nav(account, "review")}
+            <section class="room">
+              <h1>Review</h1>
+              <p class="lead">Beoordeel de objecten van een ingeleverd document. Keur goed, vraag revisie, of wijs af.</p>
+              <p class="next">Een reject of correctie maakt een nieuwe objectversie of blokkeert de oude. De uploader mag niet de enige vereiste reviewer zijn.</p>
+              {picker}
+              {"".join(cards) if not chosen else ""}
+              {objects_html or empty}
+            </section>
+            {_help()}
             """
         )
 
@@ -357,7 +610,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     "operations": [{"op": "set", "path": "content.clean_text", "value": proposed_correction.strip()}],
                 },
             )
-        return RedirectResponse(f"/review?snapshot_id={snapshot_id}", status_code=303)
+        return RedirectResponse(f"/review?document={snapshot_id}", status_code=303)
 
     @app.get("/publish", response_class=HTMLResponse)
     def publish_get(request: Request) -> str:
@@ -369,17 +622,26 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                 considered = state.consider_publish(actor_id=account["account_id"], snapshot_id=envelope["snapshot_id"])
             except ConsoleError as exc:
                 considered = {"blockers": [exc.code], "publish_allowed": False}
+            blockers = considered.get("blockers") or []
+            blocker_text = " ".join(BLOCKER_LABELS.get(code, code) for code in blockers) or "Geen extra blockers in deze kamer."
             rows.append(
-                f"<li>{_esc(envelope['title'])} · {_esc(envelope['state'])} · blockers: {_esc(considered['blockers'])}</li>"
+                f"""
+                <article class="doc-card">
+                  {_document_card_heading({**envelope, "status": envelope["state"]})}
+                  <div class="banner warn">{_esc(blocker_text)}</div>
+                </article>
+                """
             )
         return _page(
             f"""
-            {_nav(account)}
-            <div class="panel">
-              <h2>Publish — kleine derde kamer</h2>
-              <div class="banner warn">Publicatie blijft BLOCKED zonder immutable locator (G2). Lokale sources/private/ is geen productie. Cutover wordt niet gefingeerd.</div>
-              <ul>{''.join(rows) or "<li>Geen snapshots.</li>"}</ul>
-            </div>
+            {_nav(account, "publish")}
+            <section class="room">
+              <h1>Publiceren</h1>
+              <p class="lead">Publiceren is een apart geautoriseerd besluit over een gereviewd document.</p>
+              <p class="next">Zonder duurzame, onwijzigbare opslag blijft publicatie geblokkeerd. Cutover wordt niet gefingeerd.</p>
+              <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen documenten.</p>'}</div>
+            </section>
+            {_help()}
             """
         )
 

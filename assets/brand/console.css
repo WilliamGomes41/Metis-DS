@@ -1,0 +1,342 @@
+/* V&VN Data Services — internal operations console
+   Digital stylesheet tokens. One secondary family (Water) for the whole console.
+   Licensed HK Grotesk / Raleway Bold are not in this repository; fail closed to
+   the documented system stack. Do not fetch fonts from a public CDN.
+*/
+
+:root {
+  --rood: #E23100;
+  --paars: #5D3297;
+  --zwart: #000000;
+  --wit: #FFFFFF;
+  --water: #45AAC7;
+  --water-light: #EAF8F8;
+  --text: #1f2430;
+  --muted: #4b5568;
+  --line: #c5e4ea;
+  --font-body: ui-sans-serif, system-ui, sans-serif;
+  --font-heading: ui-sans-serif, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-weight: 400;
+  color: var(--text);
+  background: #EAF8F8;
+}
+
+h1, h2, h3, .statement, .btn-primary {
+  font-family: var(--font-heading);
+  font-weight: 700;
+}
+
+h1, h2 {
+  color: var(--water);
+  margin: 0 0 0.4rem;
+}
+
+h1 { font-size: 1.7rem; line-height: 1.2; }
+h2 { font-size: 1.35rem; }
+h3 { font-size: 1.05rem; color: var(--paars); margin: 0 0 0.5rem; }
+
+a { color: var(--paars); }
+
+.shell {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 20px 20px 48px;
+}
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  background: var(--wit);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px 18px;
+  margin-bottom: 18px;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.beeldmerk {
+  font-weight: 700;
+  font-size: 1.55rem;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.beeldmerk .v-first,
+.beeldmerk .v-second { color: var(--rood); }
+.beeldmerk .amp { color: var(--paars); }
+.beeldmerk .n { color: var(--zwart); }
+
+.brand-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--paars);
+}
+
+.who {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.rooms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rooms a {
+  display: inline-block;
+  text-decoration: none;
+  font-weight: 700;
+  font-family: var(--font-heading);
+  color: var(--paars);
+  padding: 8px 12px;
+  border-radius: 999px;
+}
+
+.rooms a[aria-current="page"] {
+  background: var(--water-light);
+  color: var(--paars);
+  box-shadow: inset 0 0 0 2px var(--water);
+}
+
+.rooms a.quiet {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.room {
+  background: var(--wit);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 22px;
+  margin-bottom: 16px;
+}
+
+.lead {
+  margin: 0 0 1rem;
+  max-width: 46rem;
+}
+
+.next {
+  margin: 0 0 1.25rem;
+  color: var(--muted);
+  max-width: 46rem;
+}
+
+.statement {
+  margin: 0 0 1rem;
+  font-size: 1.05rem;
+}
+
+.muted { color: var(--muted); }
+
+.sections {
+  display: grid;
+  gap: 18px;
+}
+
+.section {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--wit);
+}
+
+.section h3 {
+  margin-bottom: 12px;
+}
+
+label {
+  display: block;
+  margin: 10px 0 4px;
+  font-weight: 700;
+}
+
+input, select, textarea {
+  width: 100%;
+  max-width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  background: var(--wit);
+  color: var(--text);
+}
+
+textarea { min-height: 88px; }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: end;
+  margin-top: 12px;
+}
+
+button, .btn {
+  font: inherit;
+  cursor: pointer;
+}
+
+.btn-primary {
+  border: 0;
+  border-radius: 10px;
+  padding: 12px 22px;
+  background: var(--paars);
+  color: var(--wit);
+  margin-top: 16px;
+}
+
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--rood);
+  outline-offset: 2px;
+}
+
+.btn-secondary {
+  border: 1px solid var(--paars);
+  border-radius: 10px;
+  padding: 8px 14px;
+  background: var(--wit);
+  color: var(--paars);
+  font-weight: 700;
+  font-family: var(--font-heading);
+}
+
+.banner {
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin: 0 0 16px;
+  background: var(--water-light);
+  border: 1px solid var(--water);
+}
+
+.banner.warn {
+  background: var(--wit);
+  border-color: var(--paars);
+}
+
+.banner.err {
+  background: var(--wit);
+  border-color: var(--rood);
+}
+
+.doc-list {
+  display: grid;
+  gap: 12px;
+}
+
+.doc-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--wit);
+}
+
+.doc-card header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.doc-title {
+  font-weight: 700;
+  font-family: var(--font-heading);
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  margin: 0 0 12px;
+}
+
+.meta b { color: var(--text); font-weight: 700; }
+
+.doc-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.doc-actions form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: end;
+}
+
+.doc-actions label {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.doc-actions input,
+.doc-actions select {
+  width: auto;
+  min-width: 10rem;
+}
+
+.doc-actions .btn-secondary {
+  margin: 0;
+}
+
+.object {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  margin-top: 14px;
+}
+
+.help {
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.help summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--paars);
+}
+
+.login-card {
+  max-width: 28rem;
+  margin: 8vh auto 0;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}

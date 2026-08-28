@@ -538,6 +538,9 @@ class OperationsConsole:
                     "snapshot_id": envelope["snapshot_id"],
                     "class": envelope["class"],
                     "title": envelope["title"],
+                    "version": envelope["version"],
+                    "family": family,
+                    "status": envelope["state"],
                     "sha256": envelope["sha256"],
                     "parent": family,
                     "is_live_capture": envelope["is_live_capture"],
@@ -748,6 +751,52 @@ class OperationsConsole:
 
     def list_envelopes(self) -> list[dict[str, Any]]:
         return [self._receipt(row) for row in self._envelopes.values()]
+
+    def resolve_document(self, *, title: str, version: str, family: str) -> dict[str, Any]:
+        """Map researcher-visible document identity onto the kernel snapshot."""
+        wanted = (title.strip(), version.strip(), family.strip())
+        matches = [
+            row
+            for row in self._envelopes.values()
+            if (row["title"], row["version"], row["family"]) == wanted
+        ]
+        if not matches:
+            raise ConsoleError("unknown_document")
+        if len(matches) > 1:
+            raise ConsoleError("document_not_unique")
+        return self._receipt(matches[0])
+
+    def move_family_document(
+        self,
+        *,
+        actor_id: str,
+        title: str,
+        version: str,
+        family: str,
+        new_family: str,
+    ) -> dict[str, Any]:
+        document = self.resolve_document(title=title, version=version, family=family)
+        return self.move_family(
+            actor_id=actor_id,
+            snapshot_id=document["snapshot_id"],
+            new_family=new_family,
+        )
+
+    def promote_class_document(
+        self,
+        *,
+        actor_id: str,
+        title: str,
+        version: str,
+        family: str,
+        new_class: str,
+    ) -> dict[str, Any]:
+        document = self.resolve_document(title=title, version=version, family=family)
+        return self.promote_class(
+            actor_id=actor_id,
+            snapshot_id=document["snapshot_id"],
+            new_class=new_class,
+        )
 
     def researcher_path(self) -> dict[str, Any]:
         return {
