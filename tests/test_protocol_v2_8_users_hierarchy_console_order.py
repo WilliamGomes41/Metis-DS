@@ -79,7 +79,8 @@ def test_v28_keeps_all_v26_and_v27_rules() -> None:
     assert "Alle v2.6-consoleregels blijven van kracht" in root_protocol
     assert "Alle v2.7-bron-/API-/distributieregels blijven van kracht" in root_protocol
     assert "Chat hoort niet in de console" in handoff
-    assert "goedgekeurd-niet-gebouwd" in handoff
+    assert "deze delta claimt geen bestaande UI en implementeert de console niet" in handoff
+    assert "bestaat nu in code" in handoff
 
 
 def test_v28_records_primary_users_not_nurses() -> None:
@@ -164,7 +165,9 @@ def test_v28_records_real_console_mvp_build_order_without_skipping_storage() -> 
     assert "Echte console-MVP ingest+review" in handoff
     assert "geen mockup" in handoff
     assert "Bron 2 is nog BLOCKED op duurzame immutable opslag" in handoff
-    assert "goedgekeurd-niet-gebouwd" in handoff
+    assert "deze delta claimt geen bestaande UI en implementeert de console niet" in handoff
+    assert "Echte console-MVP ingest+review" in handoff
+    assert "bestaat nu in code" in handoff
     assert "Do not claim the console exists in code" in delta
 
 
@@ -238,12 +241,18 @@ def test_v28_keeps_g1_public_mvp_and_forbids_vercel_neon_llm() -> None:
     assert "operations-console-ui-local" in capability_ids
     assert "operations-console-identity-local" in capability_ids
     for item in infra["dependencies"]:
-        if item["capability_id"].startswith("operations-console-"):
+        if not item["capability_id"].startswith("operations-console-"):
+            continue
+        assert "Vercel" not in item["provider"]
+        assert "Neon" not in item["provider"]
+        if item["capability_id"].endswith("-azure-dev"):
             assert item["provider"] == "TBD"
             assert item["implementation_status"] == "decision_open"
             assert item["requirement_status"] == "future"
-            assert "Vercel" not in item["provider"]
-            assert "Neon" not in item["provider"]
+        else:
+            assert item["environment"] == "local_development"
+            assert item["implementation_status"] == "implemented"
+            assert item["provider"] == "local"
 
 
 def test_v28_does_not_implement_console_or_product_code() -> None:

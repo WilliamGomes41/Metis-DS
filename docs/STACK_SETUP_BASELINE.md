@@ -23,6 +23,7 @@ FastAPI + Uvicorn Product API
         +--> local SQLite usage ledger
         +--> in-process rate limiter
         +--> locally mounted canonical source binaries
+        +--> local operations console (FastAPI HTML; G0 identity under output/runtime/)
 
 Target external/Azure operation requires replacing several local pilot components
 with durable, shared and operationally managed services.
@@ -41,8 +42,8 @@ The repository currently contains no frontend application. Protocol v2.6 authori
 | Container image registry | None required locally | May be needed depending selected Azure deployment route | G8 | Possible registry/storage cost | Decision open; do not assume ACR until runtime is chosen |
 | Product API | FastAPI + Uvicorn | Externally reachable machine-to-machine API | G8 | Included in runtime; network/ingress may add cost | Implemented locally |
 | Canonical source binaries | Local file supplied to source registry; binaries excluded from Git. Local `sources/private/` is the G0 Local substitute and is explicitly not production | Controlled immutable source store. Target architecture names **Azure Blob Storage** when G0 Azure DEV PASSes. Console ingest (Protocol v2.6) requires this store | G2/G8 / console ingest | **New durable storage cost** | Required before real source operation in Azure; G0 Azure DEV remains BLOCKED |
-| Internal operations console UI | Not implemented. Protocol v2.6 authorizes an intuitive console for researchers and reviewers (ingest, review, publish, later analytics). Not a care-app frontend, chatbot, EPD/ECD UI or public website. Chat is not a room. Protocol v2.8: primary users are guideline researchers, not nurses; next implementation is a real console MVP on the existing kernel, not a mockup | Hosted internal UI in this repository or a tightly bound same-product package; vendor **TBD**. Vercel is not required. Do not wait for Azure; local `sources/private/` is the G0 stand-in | Protocol v2.6 / v2.8; next implementation after this protocol delta | **New internal UI cost if/when built**; no vendor selected | Authorized not built; do not implement in this protocol change |
-| Console identity (accounts/roles) | Not implemented. Required console capability when the console is built: researcher, reviewer, publisher; no shared login for review/publish | Internal identity, not public signup. Provider **TBD** and subject to G0. Does not close G8 or provision Azure AD | Protocol v2.6 C5 / G0 / G8 | **New identity/access cost if/when selected**; no vendor selected | Decision open; G0 Azure DEV remains BLOCKED |
+| Internal operations console UI | Implemented locally: FastAPI HTML console in this repository (`vvn-data-service serve-console`; ingest, family tree, review return-loop; publish room fail-closed without G2). Not a care-app frontend, chatbot, EPD/ECD UI or public website. Chat is not a room. Primary users are guideline researchers, not nurses | Keep the in-repo HTML console for G0 Local. Azure host **TBD**; Vercel is not required. Local `sources/private/` is the G0 stand-in | Protocol v2.6 / v2.8; G0 Local implemented; G2 still BLOCKED | **0 incremental hosted-UI cost locally**; Azure hosting cost TBD | G0 local implemented; G0 Azure DEV remains BLOCKED; no vendor is selected for Azure |
+| Console identity (accounts/roles) | Implemented locally: researcher, reviewer, publisher; no shared login; uploader independence enforced in accounts. Runtime under gitignored `output/runtime/` | Internal identity, not public signup. Azure provider **TBD** and subject to G0. Does not close G8 or provision Azure AD | Protocol v2.6 C5 / G0 / G8 | **0 current identity-service cost**; Azure identity cost TBD | G0 local implemented; no vendor is selected for Azure; G0 Azure DEV remains BLOCKED |
 | Canonical/publication database | SQLite reference runtime; PostgreSQL schema exists in `db/schema_v2.sql` | Production database adapter and durable relational store; current reference target is PostgreSQL | G8 | **New managed database cost** | Adapter/integration not implemented |
 | Usage ledger | Local SQLite | Shared durable usage/audit backend for multi-replica production | G8 | Could share production DB or use separate observability/data service | Decision open |
 | Tenant registry | Local JSON containing only API-key hashes; real tenant config excluded from Git | Production tenant/config store and controlled secret provisioning | G8 | Secret/config service may add cost | Decision open |
@@ -83,9 +84,9 @@ The current retrieval stack works with a deterministic local char-TFIDF provider
 
 The Product API returns published V&VN evidence to consumers and explicitly performs no generation. A future Answer/RAG layer is separate. This prevents model/API expenditure from being treated as an unavoidable setup cost for the current Data Services pilot.
 
-### 3.6 An internal operations console is authorized, not built
+### 3.6 An internal operations console is implemented locally, not hosted on Azure
 
-Protocol v2.6 authorizes an internal operations console (ingest, review, publish, later analytics) as a human surface over the knowledge kernel. The console is not implemented. Identity (researcher / reviewer / publisher) is a required console capability; no vendor is selected; Azure AD is not provisioned; G8 is not closed. Vercel, Neon and a hosted LLM are not required. Protocol v2.8: do not build a mockup; the next implementation is a real console MVP wired to the existing kernel; Continentie bron 2 enters through that console; local `sources/private/` is the G0 stand-in until G0 Azure DEV; publication remains BLOCKED without an immutable locator (G2). Do not wait for Azure. Durable immutable storage is not skipped.
+Protocol v2.6 authorizes an internal operations console (ingest, review, publish, later analytics) as a human surface over the knowledge kernel. The G0 local console MVP (ingest + family tree + review return-loop) is implemented in this repository; Azure hosting is not implemented. Identity (researcher / reviewer / publisher) is a required console capability; no vendor is selected for Azure; Azure AD is not provisioned; G8 is not closed. Vercel, Neon and a hosted LLM are not required. Protocol v2.8: do not build a mockup; Continentie bron 2 enters through that console; local `sources/private/` is the G0 stand-in until G0 Azure DEV; publication remains BLOCKED without an immutable locator (G2). Durable immutable storage is not skipped.
 
 ## 4. Decisions that should be made before Azure DEV spending
 
@@ -114,6 +115,7 @@ This inventory is derived from the current repository, especially:
 - `docs/PROTOCOL_V2_8_USERS_HIERARCHY_CONSOLE_ORDER_DELTA.md` — primary users, class×family source hierarchy, real console-MVP build order on the existing kernel; RAG on kennisplatform HTML is not the product.
 - `Dockerfile` and `Dockerfile.product-api` — Python/container runtime;
 - `pyproject.toml` and lockfiles — pinned Python stack;
+- `src/operations_console_v1.py` and `src/operations_console_app.py` — G0 local operations console MVP and identity store;
 - `src/canonical_store.py` and `db/schema_v2.sql` — SQLite pilot versus PostgreSQL production reference;
 - `src/product_api_v1.py` and `src/usage_ledger_v1.py` — local file/SQLite runtime state;
 - `src/product_security_v1.py` — in-process rate limiting and APIM/Redis replacement boundary;

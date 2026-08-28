@@ -4,6 +4,9 @@ All notable technical changes to V&VN Data Services are recorded here.
 
 ## [Unreleased]
 
+### Added
+- Internal operations console MVP: ingest mailbox (HTML/PDF or URL snapshot), family × class tree, named reviewers, review return-loop, local G0 identity. Served by `vvn-data-service serve-console`. Publication remains fail-closed without an immutable locator (G2).
+
 ### Changed
 - Historical step, audit and repair reports moved from the repository root to `docs/history/`. The root remains the operating surface; `output/` historical artefacts are unchanged.
 

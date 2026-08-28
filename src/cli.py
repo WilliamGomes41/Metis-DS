@@ -98,6 +98,28 @@ def cmd_serve_api(a: argparse.Namespace) -> dict:
     uvicorn.run(create_product_app(a.mode, allow_fixture=(a.mode == "fixture")), host=a.host, port=a.port)
     return {"status": "PASS"}
 
+
+def cmd_serve_console(a: argparse.Namespace) -> dict:
+    import uvicorn
+    from src.operations_console_app import create_console_app
+    from src.operations_console_v1 import OperationsConsole
+
+    console = OperationsConsole(
+        root=ROOT,
+        source_store=a.source_store,
+        runtime=a.runtime,
+    )
+    uvicorn.run(create_console_app(console), host=a.host, port=a.port)
+    return {"status": "PASS"}
+
+
+def cmd_console_account(a: argparse.Namespace) -> dict:
+    from src.operations_console_v1 import OperationsConsole
+
+    console = OperationsConsole(root=ROOT, source_store=a.source_store, runtime=a.runtime)
+    account = console.create_account(a.username, a.password, roles=[item.strip() for item in a.roles.split(",") if item.strip()], display_name=a.display_name)
+    return {"status": "PASS", "account": account}
+
 def main()->int:
     ap=argparse.ArgumentParser(prog='vvn-data-service'); sub=ap.add_subparsers(dest='cmd',required=True)
     p=sub.add_parser('audit-current'); p.add_argument('--input',type=Path,default=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v21.jsonl'); p.add_argument('--schema',type=Path,default=ROOT/'schemas/knowledge_object.schema.v1.1.json'); p.add_argument('--source-registry',type=Path,default=ROOT/'data/source_registry.json'); p.add_argument('--raw-extract',type=Path,default=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_raw.jsonl'); p.add_argument('--report',type=Path)
@@ -109,6 +131,8 @@ def main()->int:
     p=sub.add_parser('semantic-generic'); p.add_argument('--spec',type=Path,required=True); p.add_argument('--manifest',type=Path,required=True); p.add_argument('--raw',type=Path,required=True); p.add_argument('--schema',type=Path,default=ROOT/'schemas/knowledge_object.schema.v1.2.json'); p.add_argument('--out',type=Path,required=True); p.add_argument('--report',type=Path)
     p=sub.add_parser('serve'); p.add_argument('--mode',choices=['real','fixture'],default='real'); p.add_argument('--host',default='0.0.0.0'); p.add_argument('--port',type=int,default=8000)
     p=sub.add_parser('serve-api'); p.add_argument('--mode',choices=['real','fixture'],default='real'); p.add_argument('--host',default='0.0.0.0'); p.add_argument('--port',type=int,default=8080)
+    p=sub.add_parser('serve-console'); p.add_argument('--host',default='127.0.0.1'); p.add_argument('--port',type=int,default=8090); p.add_argument('--source-store',type=Path,default=ROOT/'sources'/'private'); p.add_argument('--runtime',type=Path,default=ROOT/'output'/'runtime'/'operations-console')
+    p=sub.add_parser('console-account'); p.add_argument('--username',required=True); p.add_argument('--password',required=True); p.add_argument('--roles',default='researcher'); p.add_argument('--display-name'); p.add_argument('--source-store',type=Path,default=ROOT/'sources'/'private'); p.add_argument('--runtime',type=Path,default=ROOT/'output'/'runtime'/'operations-console'); p.add_argument('--report',type=Path)
     a=ap.parse_args()
     try:
         if a.cmd=='audit-current': rep=cmd_audit_current(a)
@@ -120,6 +144,8 @@ def main()->int:
         elif a.cmd=='semantic-generic': rep=cmd_semantic_generic(a)
         elif a.cmd=='serve': rep=cmd_serve(a)
         elif a.cmd=='serve-api': rep=cmd_serve_api(a)
+        elif a.cmd=='serve-console': rep=cmd_serve_console(a)
+        elif a.cmd=='console-account': rep=cmd_console_account(a)
         else: raise AssertionError(a.cmd)
     except Exception as exc:
         rep={'status':'BLOCKED','error':type(exc).__name__,'message':str(exc)}

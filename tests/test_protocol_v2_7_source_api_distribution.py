@@ -72,7 +72,8 @@ def test_v27_keeps_all_v26_console_rules() -> None:
     assert "console work MUST NOT replace Fase 2" in delta
     assert "Alle v2.6-consoleregels blijven van kracht" in root_protocol
     assert "Chat hoort niet in de console" in handoff
-    assert "goedgekeurd-niet-gebouwd" in handoff
+    assert "deze delta claimt geen bestaande UI en implementeert de console niet" in handoff
+    assert "bestaat nu in code" in handoff
 
 
 def test_v27_records_first_wave_source_rules() -> None:
@@ -151,7 +152,8 @@ def test_v27_does_not_skip_fase2_or_claim_console_built() -> None:
     assert "Do not claim the console exists in code" in delta
     assert "Duurzame opslag wordt niet overgeslagen" in roadmap
     assert "Bron 2 is nog BLOCKED op duurzame immutable opslag" in handoff
-    assert "goedgekeurd-niet-gebouwd" in handoff
+    assert "deze delta claimt geen bestaande UI en implementeert de console niet" in handoff
+    assert "bestaat nu in code" in handoff
 
 
 def test_v27_keeps_fail_closed_exclusions_and_gitignore() -> None:
@@ -222,9 +224,15 @@ def test_v27_keeps_g1_public_mvp_and_forbids_vercel_neon_llm() -> None:
     assert "operations-console-ui-local" in capability_ids
     assert "operations-console-identity-local" in capability_ids
     for item in infra["dependencies"]:
-        if item["capability_id"].startswith("operations-console-"):
+        if not item["capability_id"].startswith("operations-console-"):
+            continue
+        assert "Vercel" not in item["provider"]
+        assert "Neon" not in item["provider"]
+        if item["capability_id"].endswith("-azure-dev"):
             assert item["provider"] == "TBD"
             assert item["implementation_status"] == "decision_open"
             assert item["requirement_status"] == "future"
-            assert "Vercel" not in item["provider"]
-            assert "Neon" not in item["provider"]
+        else:
+            assert item["environment"] == "local_development"
+            assert item["implementation_status"] == "implemented"
+            assert item["provider"] == "local"

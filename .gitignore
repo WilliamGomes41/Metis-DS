@@ -35,6 +35,7 @@ output/runtime/
 
 # Local canonical source binaries and reviewer workbooks
 sources/private/
+runtime/private/
 *.pdf
 *.docx
 *.xlsx
