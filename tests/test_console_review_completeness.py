@@ -496,8 +496,9 @@ def test_published_object_type_serves_only_confirmed_closed_types() -> None:
     assert published_object_type(invented) == "unclassified"
     body = (ROOT / "src/object_taxonomy_v1.py").read_text(encoding="utf-8")
     fn = body.split("def published_object_type", 1)[1].split("\ndef ", 1)[0]
-    assert "published_at" not in fn
-    assert 'if "confirmed_object_type" not in md' not in fn
+    code = fn.split('"""', 2)[-1]
+    assert "published_at" not in code
+    assert 'if "confirmed_object_type" not in md' not in code
 
 
 # ---------------------------------------------------------------------------
