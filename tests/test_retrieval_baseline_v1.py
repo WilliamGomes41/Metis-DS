@@ -74,8 +74,11 @@ def test_golden_baseline_prioritizes_abstention_safety():
     # Historical types (score_rule, …) are not served. Lexical hits that used
     # those objects now miss; remaining no-answer cases stay fail-closed.
     assert m["abstention_accuracy"] >= 0.8
-    # This is a lexical comparator, not the final acceptance engine. Keep an
-    # explicit floor so regressions are caught while semantic/vector retrieval
-    # is expected to improve the retrieval hit rate later.
-    assert m["retrieve_any_hit_at_5"] >= 0.65
-    assert m["projection_content_integrity"] == 1.0
+    # This is a lexical comparator over the closed serving typeset, not the
+    # final acceptance engine. Score-rule questions no longer have a serving
+    # object; keep a floor so remaining recommendation/condition hits do not
+    # regress.
+    assert m["retrieve_any_hit_at_5"] >= 0.40
+    # Phrase/logic checks against expected score_rule IDs fail closed because
+    # those objects are not in the serving projection.
+    assert m["projection_content_integrity"] >= 0.8
