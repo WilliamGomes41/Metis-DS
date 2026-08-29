@@ -27,7 +27,9 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, 
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
+from .abstain_catalog_v1 import sentence_for
 from .answerability_gate_v1 import AnswerabilityConfig, evaluate_answerability
+from .object_taxonomy_v1 import serving_block_reason
 from .hybrid_retrieval_v1 import HybridConfig
 from .safe_retrieval_v1 import SafeRetrievalIndex
 from .lexical_retrieval_v1 import RetrievalConfig
@@ -333,13 +335,25 @@ class ProductState:
         if not tenant.allows_document(md.get("document_id")) or not tenant.allows_topics(md.get("topic") or []):
             # Deliberately use 404 to avoid disclosing existence outside entitlement.
             raise HTTPException(status_code=404, detail={"code": "knowledge_object_not_found"})
+        blocked = serving_block_reason(record)
+        if blocked:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "knowledge_object_not_servable",
+                    "reason": blocked,
+                    "status": "abstain",
+                    "answerability": "insufficient_evidence",
+                    "abstain_sentence": sentence_for(blocked),
+                },
+            )
         return {
             "api_version": API_VERSION,
             "synthetic_fixture": self.synthetic,
             "knowledge_object_id": object_id,
             "object_version": md.get("object_version"),
             "document_id": md.get("document_id"),
-            "object_type": md.get("object_type"),
+            "object_type": md.get("confirmed_object_type") or md.get("object_type"),
             "content": record.get("retrieval_text"),
             "structured_logic": record.get("structured_logic"),
             "source": {"title": md.get("source_title"), "url": md.get("source_url"), "page": md.get("source_page"), "version": md.get("source_version")},

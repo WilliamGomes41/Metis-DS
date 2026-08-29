@@ -7,6 +7,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from lexical_retrieval_v1 import LexicalIndex, RetrievalConfig, tokenize
 from evaluate_retrieval_baseline import evaluate
+from object_taxonomy_v1 import CLOSED_OBJECT_TYPES
 from retrieval_projection_v2 import build_projection
 from semantic_transform_v2 import load_json, transform, sha256_bytes
 
@@ -23,6 +24,8 @@ def fixture_records():
         obj = json.loads(json.dumps(obj))
         obj["governance"]["validation_status"] = "approved"
         obj["uncertainty"] = {"has_uncertainty": False, "items": []}
+        if obj.get("object_type") in CLOSED_OBJECT_TYPES and not obj.get("confirmed_object_type"):
+            obj["confirmed_object_type"] = obj["object_type"]
         envelopes.append({
             "knowledge_object": obj,
             "publication": {

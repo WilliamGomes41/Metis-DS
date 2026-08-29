@@ -8,6 +8,9 @@ SENTENCES = {
     "unclassified_object": (
         "Dit object heeft nog geen bevestigd type en kan niet als ondersteund antwoord dienen."
     ),
+    "historical_type_not_served": (
+        "Dit objecttype hoort niet bij de gesloten serving-set en wordt niet geserveerd."
+    ),
     "unconfirmed_proposal": (
         "Een onbevestigd typevoorstel is geen gepubliceerd type."
     ),

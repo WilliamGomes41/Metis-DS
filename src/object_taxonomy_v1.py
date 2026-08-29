@@ -81,27 +81,36 @@ def is_closed_confirmed_type(value: str | None) -> bool:
 
 
 def published_object_type(record: dict[str, Any]) -> str:
-    """Return the type that may be served. Unconfirmed proposals are unclassified."""
+    """Return the type that may be served.
+
+    Only a human-confirmed type from the closed set is served. Unconfirmed
+    proposals, unclassified, historical types, published_at shortcuts and
+    missing-proposed-key fallbacks MUST NOT be served.
+    """
     md = record.get("metadata") if "metadata" in record else record
     confirmed = md.get("confirmed_object_type")
-    if confirmed:
-        if confirmed in HISTORICAL_NON_SERVING_TYPES:
-            return DEFAULT_OBJECT_TYPE
+    if is_closed_confirmed_type(confirmed):
         return confirmed
-    obj_type = md.get("object_type") or DEFAULT_OBJECT_TYPE
-    if obj_type in HISTORICAL_NON_SERVING_TYPES:
-        return DEFAULT_OBJECT_TYPE
-    if obj_type == DEFAULT_OBJECT_TYPE:
-        return DEFAULT_OBJECT_TYPE
-    if obj_type in CONTAINER_TYPES:
-        return obj_type
-    if md.get("type_confirmed") is True:
-        return obj_type
-    if md.get("published_at") and obj_type not in {DEFAULT_OBJECT_TYPE, None, ""}:
-        return obj_type
-    if "confirmed_object_type" not in md and "proposed_object_type" not in md and obj_type != DEFAULT_OBJECT_TYPE:
-        return obj_type
     return DEFAULT_OBJECT_TYPE
+
+
+def serving_block_reason(record: dict[str, Any]) -> str | None:
+    """Why this record MUST NOT be served. None when it may be served."""
+    if not locator_of(record):
+        return "source_locator_missing"
+    md = record.get("metadata") if "metadata" in record else record
+    confirmed = md.get("confirmed_object_type")
+    raw_type = md.get("object_type")
+    if confirmed in HISTORICAL_NON_SERVING_TYPES or (
+        not is_closed_confirmed_type(confirmed) and raw_type in HISTORICAL_NON_SERVING_TYPES
+    ):
+        return "historical_type_not_served"
+    served = published_object_type(record)
+    if not is_closed_confirmed_type(served):
+        if md.get("proposed_object_type") and not confirmed:
+            return "unconfirmed_proposal"
+        return "unclassified_object"
+    return None
 
 
 def source_class_of(record: dict[str, Any]) -> str | None:

@@ -35,7 +35,7 @@ from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES, extract_object_type, is_
 from src.open_original_v1 import OpenOriginalError, open_source_passage
 from src.publish_authorization_v1 import invalidate_for_object, still_matches, tuple_record
 from src.review_workflow_v3 import apply_reviews
-from src.revision_workflow import create_revision
+from src.revision_workflow import bump_patch, create_revision
 from src.semantic_transform_generic_v1 import transform as transform_generic
 from src.serving_relations_v1 import confirm_relation_set, is_closed_relation_type
 
@@ -529,6 +529,9 @@ class OperationsConsole:
             raise ConsoleError("unknown_object")
         if target.get("object_type") == "document":
             raise ConsoleError("unknown_object_type")
+        self._require_open_original(snapshot_id, object_id)
+        if target.get("confirmed_object_type") != confirmed_object_type:
+            target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
         target["confirmed_object_type"] = confirmed_object_type
         target["object_type"] = confirmed_object_type
         mark_four_eyes_on_object(target, confirmed_type=confirmed_object_type)
@@ -566,6 +569,8 @@ class OperationsConsole:
             confirmed = confirm_relation_set(relations)
         except ValueError as exc:
             raise ConsoleError("unknown_relation_type") from exc
+        if target.get("confirmed_relations") != confirmed:
+            target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
         target["confirmed_relations"] = confirmed
         stamp_canonical_hashes(target)
         history = [
@@ -596,6 +601,19 @@ class OperationsConsole:
             )
         except OpenOriginalError as exc:
             raise ConsoleError(exc.code) from exc
+
+    def _require_open_original(self, snapshot_id: str, object_id: str) -> dict[str, Any]:
+        try:
+            return self.open_source_passage(snapshot_id=snapshot_id, object_id=object_id)
+        except ConsoleError as exc:
+            if exc.code in {
+                "source_locator_missing",
+                "freeze_bytes_missing",
+                "locator_kind_mismatch",
+                "unsupported_locator",
+            }:
+                raise ConsoleError("open_original_required") from exc
+            raise
 
     def ingest(
         self,
@@ -827,14 +845,19 @@ class OperationsConsole:
         confirmed = confirmed_object_type
         if not confirmed and target.get("confirmed_object_type"):
             confirmed = target["confirmed_object_type"]
-        apply_type = bool(confirmed_object_type) or bool(target.get("confirmed_object_type"))
-        if not apply_type and decision == "approve" and target.get("object_type") == "heading":
-            confirmed = "heading"
+        apply_type = bool(confirmed_object_type)
+        if decision == "approve" or apply_type:
+            self._require_open_original(snapshot_id, object_id)
+        if decision == "approve":
+            if not is_closed_confirmed_type(confirmed):
+                raise ConsoleError("unknown_object_type")
             apply_type = True
         if apply_type and confirmed:
             if not is_closed_confirmed_type(confirmed):
                 raise ConsoleError("unknown_object_type")
             if target.get("object_type") != "document":
+                if target.get("confirmed_object_type") != confirmed:
+                    target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
                 target["confirmed_object_type"] = confirmed
                 target["object_type"] = confirmed
                 mark_four_eyes_on_object(target, confirmed_type=confirmed)

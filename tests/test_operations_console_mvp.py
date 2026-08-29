@@ -313,11 +313,13 @@ def test_uploader_cannot_be_the_sole_required_reviewer(tmp_path: Path) -> None:
     uploader = accounts["researcher"]["account_id"]
     objects = console.snapshot_objects(receipt["snapshot_id"])
     target = next(obj for obj in objects if obj["object_type"] != "document")
+    closed = "heading" if target["object_type"] == "heading" else "explanation"
     console.review_object(
         actor_id=uploader,
         snapshot_id=receipt["snapshot_id"],
         object_id=target["object_id"],
         decision="approve",
+        confirmed_object_type=closed,
     )
     consider = console.consider_publish(
         actor_id=accounts["publisher"]["account_id"],
@@ -334,6 +336,7 @@ def test_uploader_cannot_be_the_sole_required_reviewer(tmp_path: Path) -> None:
         snapshot_id=receipt["snapshot_id"],
         object_id=target["object_id"],
         decision="approve",
+        confirmed_object_type=closed,
     )
     consider_after = console.consider_publish(
         actor_id=accounts["publisher"]["account_id"],
