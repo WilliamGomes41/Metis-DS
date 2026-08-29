@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
+from src.operations_console_app import _esc, create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 
 
@@ -151,7 +151,7 @@ def test_review_card_object_left_bronpassage_right(tmp_path: Path) -> None:
     assert 'name="relation"' in left
     assert "Bevestig type" in left
     assert "Besluit" in left
-    assert opened["passage"] in right
+    assert _esc(opened["passage"]) in right
     assert "Bronpassage" in right
     assert "Bevestig type" not in right
     assert "Besluit" not in right
