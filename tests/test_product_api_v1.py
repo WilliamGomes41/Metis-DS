@@ -66,7 +66,7 @@ def test_invalid_key_rejected(tmp_path):
 
 def test_fixture_retrieve_contract_and_source(tmp_path):
     c,_=client(tmp_path)
-    r=c.post("/v1/retrieve",headers=headers(),json={"query":"Welke score geldt vanaf 60 jaar bij fractuurrisico?","top_k":5})
+    r=c.post("/v1/retrieve",headers=headers(),json={"query":"Wanneer gebruik je de risicofactorenscore?","top_k":5})
     assert r.status_code==200
     data=r.json()
     assert data["status"]=="retrieve"
@@ -213,7 +213,7 @@ def test_product_state_reloads_changed_retrieval_file(tmp_path):
     )
     app=create_product_app("fixture",paths=p,tenant_registry=registry(),usage_ledger=UsageLedger(p.usage_db),allow_fixture=True)
     c=TestClient(app)
-    assert c.get("/v1/health").json()["published_retrieval_records"]==19
+    assert c.get("/v1/health").json()["published_retrieval_records"]==11
     lines=fixture_copy.read_text(encoding="utf-8").splitlines()
     fixture_copy.write_text(lines[0]+"\n",encoding="utf-8")
     # Tenant-scoped endpoint triggers reload.

@@ -23,19 +23,36 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
+from src.object_taxonomy_v1 import published_object_type
+from src.serving_relations_v1 import (
+    HISTORICAL_NON_SERVING_TYPES,
+    applies_if_targets,
+    binding_relations,
+    except_if_targets,
+)
+
 SEARCHABLE_TYPES = {
     "definition",
     "explanation",
     "condition",
+    "recommendation",
+    "exception",
+}
+
+NON_SEARCHABLE_TYPES = {
+    "document",
+    "section",
+    "supersession",
+    "heading",
+    "unclassified",
     "score_rule",
     "decision",
     "action",
-    "recommendation",
-    "exception",
     "out_of_scope",
+    "table",
+    "background",
+    "patient_information",
 }
-
-NON_SEARCHABLE_TYPES = {"document", "section", "supersession", "heading", "unclassified"}
 
 
 def canonical_hash(value: Any) -> str:
@@ -136,7 +153,10 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
     records: list[dict[str, Any]] = []
     for env in valid:
         obj = env["knowledge_object"]
-        if obj["object_type"] not in SEARCHABLE_TYPES:
+        served_type = published_object_type(obj)
+        if served_type in HISTORICAL_NON_SERVING_TYPES or served_type in NON_SEARCHABLE_TYPES:
+            continue
+        if served_type not in SEARCHABLE_TYPES:
             continue
         pub = env["publication"]
         content = obj.get("content") or {}
@@ -146,7 +166,10 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
         context_ids: list[str] = []
         if obj.get("parent_object_id") and obj["parent_object_id"] in object_index:
             context_ids.append(obj["parent_object_id"])
-        for rel in obj.get("relations") or []:
+        bound = binding_relations(obj)
+        applies_ids = [oid for oid in applies_if_targets(obj) if oid in object_index]
+        except_ids = [oid for oid in except_if_targets(obj) if oid in object_index]
+        for rel in bound:
             target = rel.get("target_object_id")
             if target in object_index and target not in context_ids:
                 context_ids.append(target)
@@ -175,7 +198,7 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             "object_id": obj["object_id"],
             "object_version": obj["object_version"],
             "document_id": obj["document_id"],
-            "object_type": obj["object_type"],
+            "object_type": served_type,
             "content_hash": obj["provenance"]["content_hash"],
             "release_id": pub["release_id"],
             "release_version": pub["release_version"],
@@ -189,8 +212,11 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             "care_setting": content.get("care_setting", []),
             "parent_object_id": obj.get("parent_object_id"),
             "context_object_ids": context_ids,
+            "applies_if_object_ids": applies_ids,
+            "except_if_object_ids": except_ids,
+            "confirmed_relations": bound,
             "risk_level": (obj.get("risk") or {}).get("risk_level"),
-            "confirmed_object_type": obj.get("confirmed_object_type") or obj.get("object_type"),
+            "confirmed_object_type": served_type,
             "proposed_object_type": obj.get("proposed_object_type"),
             "source_locator": next(
                 (

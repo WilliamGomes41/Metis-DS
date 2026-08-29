@@ -52,7 +52,7 @@ def test_retrieval_projection_preserves_structured_logic():
 
 def test_answerability_remains_a_separate_fail_closed_decision():
     index = _safe_index()
-    supported = index.search("Hoeveel punten krijgt leeftijd van 60 jaar of ouder?")
+    supported = index.search("Wanneer gebruik je de risicofactorenscore?")
     unsupported = index.search("Hoe vaak moet een DXA-meting tijdens behandeling worden herhaald?")
     assert supported["behavior"] == "retrieve"
     assert supported["answerability"] == "supported"

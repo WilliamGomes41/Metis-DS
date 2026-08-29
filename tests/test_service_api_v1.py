@@ -29,7 +29,7 @@ def test_fixture_mode_is_visibly_synthetic_and_retrieves():
     assert st["synthetic_fixture_mode"] is True
     assert "SYNTHETIC" in st["warning"]
     assert st["retrieval_record_count"] > 0
-    r = client.post("/search", json={"query": "Welke score geldt vanaf 60 jaar bij fractuurrisico?", "top_k": 5}).json()
+    r = client.post("/search", json={"query": "Wanneer gebruik je de risicofactorenscore?", "top_k": 5}).json()
     assert r["synthetic_fixture_mode"] is True
     assert r["behavior"] == "retrieve"
     assert r["results"]
@@ -84,7 +84,7 @@ def test_sources_documents_releases_and_ui():
 
 def test_fixture_answerability_gate_matches_product_api():
     client = TestClient(create_app("fixture"))
-    supported = client.post("/search", json={"query": "Hoeveel punten krijgt leeftijd van 60 jaar of ouder?", "top_k": 5}).json()
+    supported = client.post("/search", json={"query": "Wanneer gebruik je de risicofactorenscore?", "top_k": 5}).json()
     unsupported = client.post("/search", json={"query": "Hoe vaak moet een DXA-meting tijdens behandeling worden herhaald?", "top_k": 5}).json()
     assert supported["behavior"] == "retrieve"
     assert supported["answerability"] == "supported"

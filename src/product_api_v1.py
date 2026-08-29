@@ -33,6 +33,7 @@ from .safe_retrieval_v1 import SafeRetrievalIndex
 from .lexical_retrieval_v1 import RetrievalConfig
 from .product_security_v1 import SlidingWindowRateLimiter, TenantPolicy, TenantRegistry
 from .semantic_vector_retrieval_v1 import VectorConfig
+from .serving_relations_v1 import applies_if_targets, except_if_targets, historical_type_must_not_serve
 from .usage_ledger_v1 import UsageLedger
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -134,6 +135,11 @@ class ProductState:
         if not force and mtime == self._records_mtime_ns:
             return False
         self.records = _read_jsonl(self.records_path)
+        self.records = [
+            row
+            for row in self.records
+            if not historical_type_must_not_serve((row.get("metadata") or {}).get("object_type"))
+        ]
         self.record_by_object = {r.get("metadata", {}).get("object_id"): r for r in self.records if (r.get("metadata") or {}).get("object_id")}
         self._records_mtime_ns = mtime
         return True
@@ -198,6 +204,53 @@ class ProductState:
             self._index_cache = {key: engine}
         return engine
 
+    def _bound_payload(self, record: dict[str, Any]) -> dict[str, Any]:
+        md = record.get("metadata") or {}
+        return {
+            "knowledge_object_id": md.get("object_id"),
+            "object_version": md.get("object_version"),
+            "object_type": md.get("object_type") or md.get("confirmed_object_type"),
+            "content": record.get("retrieval_text"),
+            "advice_weight": False,
+            "labels": ["V", "VN"],
+        }
+
+    def _attach_advice_bounds(self, results: list[dict[str, Any]], records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        by_id = {(row.get("metadata") or {}).get("object_id"): row for row in records}
+        out: list[dict[str, Any]] = []
+        for item in results:
+            record = by_id.get(item.get("knowledge_object_id")) or {}
+            md = record.get("metadata") or {}
+            applies_ids = list(md.get("applies_if_object_ids") or applies_if_targets(record) or applies_if_targets(md))
+            except_ids = list(md.get("except_if_object_ids") or except_if_targets(record) or except_if_targets(md))
+            item["applies_if"] = []
+            item["except_if"] = []
+            if item.get("object_type") != "recommendation" or not (applies_ids or except_ids):
+                out.append(item)
+                continue
+            missing = False
+            applies = []
+            excepts = []
+            for oid in applies_ids:
+                target = by_id.get(oid)
+                if not target:
+                    missing = True
+                    break
+                applies.append(self._bound_payload(target))
+            if not missing:
+                for oid in except_ids:
+                    target = by_id.get(oid)
+                    if not target:
+                        missing = True
+                        break
+                    excepts.append(self._bound_payload(target))
+            if missing:
+                continue
+            item["applies_if"] = applies
+            item["except_if"] = excepts
+            out.append(item)
+        return out
+
     def retrieve(self, tenant: TenantPolicy, req: RetrieveRequest) -> dict[str, Any]:
         self.require_scope(tenant, "retrieve")
         if req.top_k > tenant.max_top_k:
@@ -239,6 +292,22 @@ class ProductState:
                 "advice_weight": bool(item.get("advice_weight")),
                 "labels": item.get("labels") or (["V", "VN"] if raw.get("answerability") == "supported" else []),
             })
+        results = self._attach_advice_bounds(results, records)
+        if raw.get("answerability") == "supported" and not results:
+            return {
+                "api_version": API_VERSION,
+                "service_version": SERVICE_VERSION,
+                "synthetic_fixture": self.synthetic,
+                "status": "abstain",
+                "answerability": "insufficient_evidence",
+                "reason": "advice_bounds_missing",
+                "false_positive_class": "relation_mismatch",
+                "labels": [],
+                "advice_weight": False,
+                "abstain_sentence": raw.get("abstain_sentence"),
+                "results": [],
+                "result_count": 0,
+            }
         return {
             "api_version": API_VERSION,
             "service_version": SERVICE_VERSION,

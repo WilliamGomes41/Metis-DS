@@ -74,17 +74,15 @@ def test_recommendation_inherits_published_condition_context():
     assert "DXA-VFA" in rr["retrieval_text"]
 
 
-def test_projection_preserves_logic_and_exact_threshold_operator():
+def test_projection_does_not_serve_historical_score_rule():
     obj = by_id()["vvn-osteoporose-fractuurpreventie-2024-p015-score-07"]
     records, blocked = build_projection([published_envelope(obj)])
     assert blocked == []
-    text = records[0]["retrieval_text"]
-    assert "≥ 3 eenheden per dag" in text
-    assert "Score: 1 punt(en)" in text
+    assert records == []
 
 
 def test_projection_hash_is_deterministic():
-    obj = by_id()["vvn-osteoporose-fractuurpreventie-2024-p015-score-03"]
+    obj = by_id()["vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01"]
     env = published_envelope(obj)
     a, _ = build_projection([env])
     b, _ = build_projection([env])

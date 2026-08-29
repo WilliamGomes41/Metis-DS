@@ -376,6 +376,44 @@
         }
       }
     },
+    "confirmed_relations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "relation_type",
+          "target_object_id"
+        ],
+        "properties": {
+          "relation_type": {
+            "type": "string",
+            "enum": [
+              "applies_if",
+              "except_if",
+              "defines",
+              "explains",
+              "supported_by",
+              "supersedes",
+              "parent",
+              "child"
+            ]
+          },
+          "target_object_id": {
+            "type": "string"
+          },
+          "target_object_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confirmed": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
     "relations": {
       "type": "array",
       "items": {
@@ -389,16 +427,27 @@
           "relation_type": {
             "type": "string",
             "enum": [
-              "child_of",
-              "conditioned_by",
-              "supports",
-              "exception_to",
+              "applies_if",
+              "except_if",
+              "defines",
+              "explains",
+              "supported_by",
               "supersedes",
-              "superseded_by"
+              "parent",
+              "child"
             ]
           },
           "target_object_id": {
             "type": "string"
+          },
+          "target_object_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confirmed": {
+            "type": "boolean"
           }
         }
       }

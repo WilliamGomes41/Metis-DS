@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from src.serving_relations_v1 import HISTORICAL_NON_SERVING_TYPES
+
 CLOSED_OBJECT_TYPES = (
     "heading",
     "definition",
@@ -27,7 +29,7 @@ CLASS_ORDER = {
     "transcript": 1,
     "podcast": 1,
 }
-HISTORICAL_FACT_TYPES = frozenset({"score_rule", "action", "decision", "section"})
+HISTORICAL_FACT_TYPES = HISTORICAL_NON_SERVING_TYPES
 
 _DEFINITION_RE = re.compile(r"\b(?:is een|wordt genoemd|definitie|betekent)\b", re.I)
 _EXCEPTION_RE = re.compile(r"\b(?:behalve|tenzij|uitgezonderd|uitzondering)\b", re.I)
@@ -83,8 +85,12 @@ def published_object_type(record: dict[str, Any]) -> str:
     md = record.get("metadata") if "metadata" in record else record
     confirmed = md.get("confirmed_object_type")
     if confirmed:
+        if confirmed in HISTORICAL_NON_SERVING_TYPES:
+            return DEFAULT_OBJECT_TYPE
         return confirmed
     obj_type = md.get("object_type") or DEFAULT_OBJECT_TYPE
+    if obj_type in HISTORICAL_NON_SERVING_TYPES:
+        return DEFAULT_OBJECT_TYPE
     if obj_type == DEFAULT_OBJECT_TYPE:
         return DEFAULT_OBJECT_TYPE
     if obj_type in CONTAINER_TYPES:
@@ -129,13 +135,15 @@ def locator_of(record: dict[str, Any]) -> dict[str, Any] | None:
 def type_fits_question(question_kind: str, object_type: str) -> bool:
     if object_type in {DEFAULT_OBJECT_TYPE, "heading", "document"}:
         return False
+    if object_type in HISTORICAL_NON_SERVING_TYPES:
+        return False
     if question_kind == "action_advice":
         return object_type in {"recommendation", "condition", "exception"}
     if question_kind == "definition":
         return object_type == "definition"
     if question_kind == "explanation":
         return object_type == "explanation"
-    if object_type in CLOSED_OBJECT_TYPES or object_type in HISTORICAL_FACT_TYPES:
+    if object_type in CLOSED_OBJECT_TYPES:
         return True
     return False
 
