@@ -12,6 +12,8 @@ from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from src.four_eyes_v1 import requires_four_eyes
+from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES
 from src.operations_console_v1 import (
     ALLOWED_CLASSES,
     CONSOLE_VERSION,
@@ -19,6 +21,7 @@ from src.operations_console_v1 import (
     OperationsConsole,
     REPO_ROOT,
 )
+from src.serving_relations_v1 import CLOSED_RELATION_TYPES, proposed_relations
 
 SERVICE_VERSION = CONSOLE_VERSION
 COOKIE = "console_session"
@@ -51,8 +54,25 @@ ERROR_COPY = {
     "researcher_role_required": "Inleveren vereist de rol researcher.",
     "live_url_html_not_allowed": "Een live HTML-URL kan niet worden ingeleverd. Lever een HTML-bestand of een PDF-URL in.",
     "unknown_object_type": "Kies een type uit de gesloten set.",
+    "object_type_not_confirmed": "Kies een type uit de gesloten set.",
     "unknown_role": "Alleen researcher, reviewer of publisher zijn toegestaan.",
     "forbidden_reviewer_identity": "Deze identiteit mag niet als reviewer worden aangemaakt.",
+    "unknown_relation_type": "Kies alleen relaties uit de gesloten set.",
+    "open_original_required": "Open eerst de bronpassage. Type bevestigen zonder het origineel is niet toegestaan.",
+    "source_locator_missing": "De bronpassage ontbreekt; type bevestigen is niet toegestaan.",
+    "freeze_bytes_missing": "Het geüploade origineel ontbreekt; type bevestigen is niet toegestaan.",
+    "locator_kind_mismatch": "De locator past niet bij dit bestand.",
+    "unsupported_locator": "Deze locator kan niet worden geopend.",
+}
+RELATION_LABELS = {
+    "applies_if": "geldt indien",
+    "except_if": "geldt niet indien",
+    "defines": "definieert",
+    "explains": "licht toe",
+    "supported_by": "onderbouwd door",
+    "supersedes": "vervangt",
+    "parent": "bovenliggend",
+    "child": "onderliggend",
 }
 
 
@@ -152,6 +172,58 @@ def _document_options(rows: list[dict[str, Any]], selected: str = "") -> str:
             f'<option value="{_esc(snap)}"{" selected" if snap == selected else ""}>{_esc(label)}</option>'
         )
     return "".join(options)
+
+
+def _type_options(confirmed: str) -> str:
+    placeholder_selected = " selected" if not confirmed else ""
+    options = [
+        f'<option value="" disabled{placeholder_selected}>nog niet bevestigd</option>'
+    ]
+    for name in CLOSED_OBJECT_TYPES:
+        selected = " selected" if name == confirmed else ""
+        options.append(f'<option value="{name}"{selected}>{name}</option>')
+    return "".join(options)
+
+
+def _relation_checkboxes(obj: dict[str, Any], objects: list[dict[str, Any]]) -> str:
+    by_id = {row.get("object_id"): row for row in objects}
+    confirmed = {
+        (row.get("relation_type"), row.get("target_object_id"))
+        for row in (obj.get("confirmed_relations") or [])
+        if row.get("relation_type") in CLOSED_RELATION_TYPES
+    }
+    proposed = [
+        row
+        for row in proposed_relations(obj)
+        if row.get("relation_type") in CLOSED_RELATION_TYPES
+    ]
+    if not proposed:
+        return ""
+    boxes = []
+    for row in proposed:
+        rel = row["relation_type"]
+        target_id = row["target_object_id"]
+        target = by_id.get(target_id) or {}
+        target_text = (
+            (target.get("content") or {}).get("heading")
+            or (target.get("content") or {}).get("clean_text")
+            or target_id
+        )
+        checked = " checked" if (rel, target_id) in confirmed else ""
+        label = RELATION_LABELS.get(rel, rel)
+        boxes.append(
+            f'<label class="check">'
+            f'<input type="checkbox" name="relation" value="{_esc(rel)}:{_esc(target_id)}"{checked}>'
+            f'{_esc(label)} ({_esc(rel)}) → {_esc(target_text)}</label>'
+        )
+    return (
+        '<fieldset class="relations">'
+        "<legend>Voorgestelde relaties</legend>"
+        f"{''.join(boxes)}"
+        '<button class="btn-secondary" type="submit" form="relations-'
+        f'{_esc(obj["object_id"])}">Relaties bevestigen</button>'
+        "</fieldset>"
+    )
 
 
 def _document_card_heading(row: dict[str, Any]) -> str:
@@ -552,19 +624,19 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         objects_html = ""
         if chosen_row:
             objects_html += f'<div class="doc-card">{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}</div>'
-            for obj in state.snapshot_objects(chosen):
+            snapshot_objects = state.snapshot_objects(chosen)
+            for obj in snapshot_objects:
                 heading = (obj.get("content") or {}).get("heading") or obj.get("object_type")
                 text = (obj.get("content") or {}).get("clean_text") or ""
                 status = (obj.get("governance") or {}).get("validation_status") or ""
                 proposed = obj.get("proposed_object_type") or ""
-                confirmed = obj.get("confirmed_object_type") or obj.get("object_type") or ""
-                type_options = "".join(
-                    f'<option value="{name}"{" selected" if name == confirmed else ""}>{name}</option>'
-                    for name in ("heading", "definition", "explanation", "condition", "exception", "recommendation")
-                )
+                confirmed = obj.get("confirmed_object_type") or ""
+                type_options = _type_options(confirmed)
+                passage_ok = False
                 passage_html = ""
                 try:
                     opened = state.open_source_passage(snapshot_id=chosen, object_id=obj["object_id"])
+                    passage_ok = True
                     passage_html = f"""
                   <div class="bronpassage">
                     <h4>Bronpassage</h4>
@@ -573,21 +645,41 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                   </div>
                     """
                 except ConsoleError:
-                    passage_html = '<p class="muted">Bronpassage ontbreekt; dit object kan niet als supported worden geserveerd.</p>'
+                    passage_html = '<p class="muted">Bronpassage ontbreekt; type bevestigen en goedkeuren zijn uitgeschakeld tot het origineel open kan.</p>'
+                type_disabled = "" if passage_ok else " disabled"
+                approve_disabled = "" if passage_ok else " disabled"
+                four_eyes_html = ""
+                if requires_four_eyes(obj, confirmed_type=confirmed or None):
+                    four_eyes_html = (
+                        '<div class="banner warn">Dit object vereist four-eyes: '
+                        "<b>tweede reviewer nodig</b>.</div>"
+                    )
+                relation_form = ""
+                relation_boxes = _relation_checkboxes(obj, snapshot_objects)
+                if relation_boxes:
+                    relation_form = f"""
+                  <form id="relations-{_esc(obj["object_id"])}" method="post" action="/review/relations">
+                    <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
+                    <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
+                    {relation_boxes}
+                  </form>
+                    """
                 objects_html += f"""
                 <article class="object">
                   <h3>{_esc(heading)}</h3>
                   <p class="meta"><span>status <b>{_esc(status)}</b></span><span>huidig type <b>{_esc(obj.get("object_type"))}</b></span>{"<span>voorstel <b>" + _esc(proposed) + "</b></span>" if proposed else ""}</p>
+                  {four_eyes_html}
                   <p>{_esc(text)}</p>
                   {passage_html}
+                  {relation_form}
                   <form method="post" action="/review">
                     <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
                     <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
                     <label for="type-{_esc(obj["object_id"])}">Bevestig type</label>
-                    <select id="type-{_esc(obj["object_id"])}" name="confirmed_object_type">{type_options}</select>
+                    <select id="type-{_esc(obj["object_id"])}" name="confirmed_object_type"{type_disabled}>{type_options}</select>
                     <label for="decision-{_esc(obj["object_id"])}">Besluit</label>
                     <select id="decision-{_esc(obj["object_id"])}" name="decision">
-                      <option value="approve">Goedkeuren</option>
+                      <option value="approve"{approve_disabled}>Goedkeuren</option>
                       <option value="revise">Revisie vragen</option>
                       <option value="reject">Afwijzen</option>
                     </select>
@@ -670,6 +762,29 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             )
         return RedirectResponse(f"/review?document={snapshot_id}", status_code=303)
 
+    @app.post("/review/relations")
+    def review_relations_post(
+        request: Request,
+        snapshot_id: str = Form(...),
+        object_id: str = Form(...),
+        relation: list[str] = Form(default=[]),
+    ) -> RedirectResponse:
+        account = _require(request)
+        raw = [relation] if isinstance(relation, str) else list(relation or [])
+        rows = []
+        for item in raw:
+            rel_type, sep, target = item.partition(":")
+            if not sep or not rel_type or not target:
+                raise ConsoleError("unknown_relation_type")
+            rows.append({"relation_type": rel_type, "target_object_id": target})
+        state.confirm_relations(
+            actor_id=account["account_id"],
+            snapshot_id=snapshot_id,
+            object_id=object_id,
+            relations=rows,
+        )
+        return RedirectResponse(f"/review?document={snapshot_id}", status_code=303)
+
     @app.get("/publish", response_class=HTMLResponse)
     def publish_get(request: Request) -> str:
         account = _require(request)
@@ -709,6 +824,21 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         rows = []
         for row in sorted(state._accounts.values(), key=lambda item: item["username"]):
             public = state._public_account(row)
+            role_boxes = "".join(
+                f'<label class="check"><input type="checkbox" name="roles" value="{name}"'
+                f'{" checked" if name in public["roles"] else ""}>{name}</label>'
+                for name in ("researcher", "reviewer", "publisher")
+            )
+            role_form = ""
+            if "publisher" in account["roles"]:
+                role_form = f"""
+                  <form method="post" action="/accounts/roles">
+                    <input type="hidden" name="account_id" value="{_esc(public["account_id"])}">
+                    <p>Rollen wijzigen</p>
+                    {role_boxes}
+                    <button class="btn-secondary" type="submit">Rollen wijzigen</button>
+                  </form>
+                """
             rows.append(
                 f"""
                 <article class="doc-card">
@@ -717,6 +847,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     <span>gebruikersnaam <b>{_esc(public["username"])}</b></span>
                     <span>rollen <b>{", ".join(_esc(r) for r in public["roles"])}</b></span>
                   </p>
+                  {role_form}
                 </article>
                 """
             )
@@ -773,6 +904,27 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             display_name=display_name,
             password=password,
             roles=[item.strip() for item in roles.split(",") if item.strip()],
+        )
+        return RedirectResponse("/accounts", status_code=303)
+
+    @app.post("/accounts/roles")
+    def accounts_roles_post(
+        request: Request,
+        account_id: str = Form(...),
+        roles: list[str] = Form(default=[]),
+    ) -> RedirectResponse:
+        account = _require(request)
+        chosen: list[str] = []
+        if isinstance(roles, str):
+            chosen = [roles]
+        elif roles:
+            chosen = list(roles)
+        if not chosen:
+            raise ConsoleError("unknown_role")
+        state.assign_roles(
+            actor_id=account["account_id"],
+            account_id=account_id,
+            roles=chosen,
         )
         return RedirectResponse("/accounts", status_code=303)
 

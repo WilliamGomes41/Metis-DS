@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from object_taxonomy_v1 import CLOSED_OBJECT_TYPES
 from retrieval_projection_v2 import build_projection, canonical_hash
 from validate_golden_set import validate
 
@@ -21,6 +22,8 @@ def published_envelope(obj, release="fixture-release-1"):
     o = copy.deepcopy(obj)
     o["governance"]["validation_status"] = "approved"
     o["uncertainty"] = {"has_uncertainty": False, "items": []}
+    if o.get("object_type") in CLOSED_OBJECT_TYPES and not o.get("confirmed_object_type"):
+        o["confirmed_object_type"] = o["object_type"]
     return {
         "knowledge_object": o,
         "publication": {
