@@ -665,30 +665,34 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                   </form>
                     """
                 objects_html += f"""
-                <article class="object">
-                  <h3>{_esc(heading)}</h3>
-                  <p class="meta"><span>status <b>{_esc(status)}</b></span><span>huidig type <b>{_esc(obj.get("object_type"))}</b></span>{"<span>voorstel <b>" + _esc(proposed) + "</b></span>" if proposed else ""}</p>
-                  {four_eyes_html}
-                  <p>{_esc(text)}</p>
-                  {passage_html}
-                  {relation_form}
-                  <form method="post" action="/review">
-                    <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
-                    <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
-                    <label for="type-{_esc(obj["object_id"])}">Bevestig type</label>
-                    <select id="type-{_esc(obj["object_id"])}" name="confirmed_object_type"{type_disabled}>{type_options}</select>
-                    <label for="decision-{_esc(obj["object_id"])}">Besluit</label>
-                    <select id="decision-{_esc(obj["object_id"])}" name="decision">
-                      <option value="approve"{approve_disabled}>Goedkeuren</option>
-                      <option value="revise">Revisie vragen</option>
-                      <option value="reject">Afwijzen</option>
-                    </select>
-                    <label for="comment-{_esc(obj["object_id"])}">Toelichting</label>
-                    <textarea id="comment-{_esc(obj["object_id"])}" name="comment"></textarea>
-                    <label for="correction-{_esc(obj["object_id"])}">Voorgestelde correctie</label>
-                    <textarea id="correction-{_esc(obj["object_id"])}" name="proposed_correction"></textarea>
-                    <button class="btn-primary" type="submit">Review vastleggen</button>
-                  </form>
+                <article class="object review-card-two-column">
+                  <div class="review-card-object">
+                    <h3>{_esc(heading)}</h3>
+                    <p class="meta"><span>status <b>{_esc(status)}</b></span><span>huidig type <b>{_esc(obj.get("object_type"))}</b></span>{"<span>voorstel <b>" + _esc(proposed) + "</b></span>" if proposed else ""}</p>
+                    {four_eyes_html}
+                    <p>{_esc(text)}</p>
+                    {relation_form}
+                    <form method="post" action="/review">
+                      <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
+                      <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
+                      <label for="type-{_esc(obj["object_id"])}">Bevestig type</label>
+                      <select id="type-{_esc(obj["object_id"])}" name="confirmed_object_type"{type_disabled}>{type_options}</select>
+                      <label for="decision-{_esc(obj["object_id"])}">Besluit</label>
+                      <select id="decision-{_esc(obj["object_id"])}" name="decision">
+                        <option value="approve"{approve_disabled}>Goedkeuren</option>
+                        <option value="revise">Revisie vragen</option>
+                        <option value="reject">Afwijzen</option>
+                      </select>
+                      <label for="comment-{_esc(obj["object_id"])}">Toelichting</label>
+                      <textarea id="comment-{_esc(obj["object_id"])}" name="comment"></textarea>
+                      <label for="correction-{_esc(obj["object_id"])}">Voorgestelde correctie</label>
+                      <textarea id="correction-{_esc(obj["object_id"])}" name="proposed_correction"></textarea>
+                      <button class="btn-primary" type="submit">Review vastleggen</button>
+                    </form>
+                  </div>
+                  <div class="review-card-bronpassage">
+                    {passage_html}
+                  </div>
                 </article>
                 """
         empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
