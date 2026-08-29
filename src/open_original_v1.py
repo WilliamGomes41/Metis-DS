@@ -1,0 +1,99 @@
+"""Open the exact source passage for a knowledge object (Protocol v2.11 locators).
+
+From every knowledge object the reviewer MUST be able to open the exact source
+passage. Locators remain v2.11: PDF ``page_bbox``; HTML ``web_line_range`` on
+freeze bytes that are never reserialized. Provenance-only-in-JSON is not enough.
+Missing or empty source_locator fails closed.
+"""
+from __future__ import annotations
+
+from io import BytesIO
+from typing import Any
+
+from src.object_taxonomy_v1 import locator_of
+
+
+class OpenOriginalError(ValueError):
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
+def parse_web_line_range(locator_value: str) -> tuple[int, int]:
+    # lines:4-7;p:1
+    head = locator_value.split(";", 1)[0]
+    if not head.startswith("lines:"):
+        raise OpenOriginalError("unsupported_locator")
+    span = head.split(":", 1)[1]
+    start_s, _, end_s = span.partition("-")
+    start = int(start_s)
+    end = int(end_s or start_s)
+    if start < 1 or end < start:
+        raise OpenOriginalError("unsupported_locator")
+    return start, end
+
+
+def parse_page_bbox(locator_value: str) -> tuple[int, list[float]]:
+    # page:1;bbox:x0,y0,x1,y1
+    parts = dict(
+        item.split(":", 1) for item in locator_value.split(";") if ":" in item
+    )
+    page = int(parts["page"])
+    bbox = [float(item) for item in parts["bbox"].split(",")]
+    if page < 1 or len(bbox) != 4:
+        raise OpenOriginalError("unsupported_locator")
+    return page, bbox
+
+
+def passage_from_html_freeze(freeze_bytes: bytes, locator_value: str) -> str:
+    """Read the exact freeze bytes. MUST NOT reserialize, pretty-print, or re-save."""
+    text = freeze_bytes.decode("utf-8")
+    start, end = parse_web_line_range(locator_value)
+    lines = text.splitlines()
+    excerpt = lines[start - 1 : end]
+    return "\n".join(excerpt)
+
+
+def passage_from_pdf_freeze(freeze_bytes: bytes, locator_value: str) -> str:
+    import fitz
+
+    page_no, bbox = parse_page_bbox(locator_value)
+    doc = fitz.open(stream=BytesIO(freeze_bytes), filetype="pdf")
+    try:
+        page = doc[page_no - 1]
+        rect = fitz.Rect(bbox)
+        return page.get_text("text", clip=rect).strip()
+    finally:
+        doc.close()
+
+
+def open_source_passage(
+    *,
+    freeze_bytes: bytes | None,
+    content_kind: str,
+    locator: dict[str, Any] | None,
+    object_record: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    loc = locator if locator is not None else (locator_of(object_record or {}) if object_record else None)
+    if not isinstance(loc, dict) or not str(loc.get("locator_value") or "").strip():
+        raise OpenOriginalError("source_locator_missing")
+    if freeze_bytes is None:
+        raise OpenOriginalError("freeze_bytes_missing")
+    locator_type = loc.get("locator_type")
+    value = loc["locator_value"]
+    if locator_type == "web_line_range":
+        if content_kind != "html":
+            raise OpenOriginalError("locator_kind_mismatch")
+        passage = passage_from_html_freeze(freeze_bytes, value)
+    elif locator_type == "page_bbox":
+        if content_kind != "pdf":
+            raise OpenOriginalError("locator_kind_mismatch")
+        passage = passage_from_pdf_freeze(freeze_bytes, value)
+    else:
+        raise OpenOriginalError("unsupported_locator")
+    return {
+        "locator_type": locator_type,
+        "locator_value": value,
+        "passage": passage,
+        "reserialized": False,
+    }

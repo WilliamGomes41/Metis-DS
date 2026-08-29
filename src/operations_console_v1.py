@@ -22,14 +22,22 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+from src.atomic_split_v1 import proposed_relations_for_units, split_meaning_units
 from src.extract_html_v1 import extract as extract_html
 from src.extract_pdf_v2 import extract as extract_pdf
+from src.four_eyes_v1 import (
+    mark_four_eyes_on_object,
+    publish_authorization_contract,
+    requires_four_eyes,
+)
 from src.integrity_kernel import compute_canonical_object_hash, sha256_bytes, stamp_canonical_hashes
 from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES, extract_object_type, is_closed_confirmed_type
+from src.open_original_v1 import OpenOriginalError, open_source_passage
 from src.publish_authorization_v1 import invalidate_for_object, still_matches, tuple_record
 from src.review_workflow_v3 import apply_reviews
 from src.revision_workflow import create_revision
 from src.semantic_transform_generic_v1 import transform as transform_generic
+from src.serving_relations_v1 import confirm_relation_set, is_closed_relation_type
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -185,24 +193,41 @@ def _spec_from_fragments(
             "review_track": "technical",
         }
     ]
+    meaning_units: list[dict[str, Any]] = []
     for fragment in fragments:
         text = (fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
         if not text:
             continue
         object_type, proposed = extract_object_type(fragment)
-        spec_item: dict[str, Any] = {
-            "object_id": f"{document_id}-{fragment['fragment_id']}",
-            "object_type": object_type,
-            "text": text,
-            "clean_text": text,
-            "source_fragment_ids": [fragment["fragment_id"]],
-            "section_path": fragment.get("section_path") or [],
-            "heading": fragment.get("heading"),
-            "review_track": "clinical",
-        }
-        if proposed:
-            spec_item["proposed_object_type"] = proposed
-        objects.append(spec_item)
+        is_heading = object_type == "heading"
+        units = split_meaning_units(text, is_heading=is_heading)
+        for index, unit in enumerate(units, 1):
+            fake = {**fragment, "clean_text": unit, "raw_text": unit}
+            if not is_heading:
+                # Keep section heading as structure, but do not let it equal the unit text.
+                if fake.get("heading") == unit:
+                    fake["heading"] = None
+            unit_type, unit_proposed = extract_object_type(fake)
+            if is_heading:
+                unit_type, unit_proposed = "heading", "heading"
+            suffix = f"-u{index:02d}" if len(units) > 1 else ""
+            spec_item: dict[str, Any] = {
+                "object_id": f"{document_id}-{fragment['fragment_id']}{suffix}",
+                "object_type": unit_type,
+                "text": unit,
+                "clean_text": unit,
+                "source_fragment_ids": [fragment["fragment_id"]],
+                "section_path": fragment.get("section_path") or [],
+                "heading": fragment.get("heading"),
+                "review_track": "clinical",
+                "relations": [],
+                "confirmed_relations": [],
+            }
+            if unit_proposed:
+                spec_item["proposed_object_type"] = unit_proposed
+            meaning_units.append(spec_item)
+    proposed_relations_for_units(meaning_units)
+    objects.extend(meaning_units)
     return {
         "spec_version": "console-ingest-1.0",
         "document_id": document_id,
@@ -506,6 +531,7 @@ class OperationsConsole:
             raise ConsoleError("unknown_object_type")
         target["confirmed_object_type"] = confirmed_object_type
         target["object_type"] = confirmed_object_type
+        mark_four_eyes_on_object(target, confirmed_type=confirmed_object_type)
         stamp_canonical_hashes(target)
         history = [
             row
@@ -517,6 +543,59 @@ class OperationsConsole:
         self._bindings[snapshot_id] = invalidate_for_object(self._bindings.get(snapshot_id, []), object_id)
         self._save_bindings()
         return deepcopy(target)
+
+    def confirm_relations(
+        self,
+        *,
+        actor_id: str,
+        snapshot_id: str,
+        object_id: str,
+        relations: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        reviewer = self._require_role(actor_id, "reviewer")
+        if actor_id not in self._envelope(snapshot_id)["named_reviewers"]:
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        current = self.snapshot_objects(snapshot_id)
+        target = next((row for row in current if row["object_id"] == object_id), None)
+        if target is None:
+            raise ConsoleError("unknown_object")
+        for row in relations:
+            if not is_closed_relation_type(row.get("relation_type")):
+                raise ConsoleError("unknown_relation_type")
+        try:
+            confirmed = confirm_relation_set(relations)
+        except ValueError as exc:
+            raise ConsoleError("unknown_relation_type") from exc
+        target["confirmed_relations"] = confirmed
+        stamp_canonical_hashes(target)
+        history = [
+            row
+            for row in self._load_objects(snapshot_id)
+            if not (row["object_id"] == object_id and row["object_version"] == target["object_version"])
+        ]
+        history.append(target)
+        self._save_objects(snapshot_id, history)
+        self._bindings[snapshot_id] = invalidate_for_object(self._bindings.get(snapshot_id, []), object_id)
+        self._save_bindings()
+        _ = reviewer
+        return deepcopy(target)
+
+    def open_source_passage(self, *, snapshot_id: str, object_id: str) -> dict[str, Any]:
+        envelope = self._envelope(snapshot_id)
+        target = next((row for row in self.snapshot_objects(snapshot_id) if row["object_id"] == object_id), None)
+        if target is None:
+            raise ConsoleError("unknown_object")
+        freeze_path = Path(envelope["binary_path"])
+        freeze_bytes = freeze_path.read_bytes() if freeze_path.exists() else None
+        try:
+            return open_source_passage(
+                freeze_bytes=freeze_bytes,
+                content_kind=envelope["content_kind"],
+                locator=None,
+                object_record=target,
+            )
+        except OpenOriginalError as exc:
+            raise ConsoleError(exc.code) from exc
 
     def ingest(
         self,
@@ -758,6 +837,7 @@ class OperationsConsole:
             if target.get("object_type") != "document":
                 target["confirmed_object_type"] = confirmed
                 target["object_type"] = confirmed
+                mark_four_eyes_on_object(target, confirmed_type=confirmed)
                 stamp_canonical_hashes(target)
         track = target["governance"]["review_track"]
         payload = {
@@ -787,6 +867,7 @@ class OperationsConsole:
         if confirmed and updated_target.get("object_type") != "document":
             updated_target["confirmed_object_type"] = confirmed
             updated_target["object_type"] = confirmed
+            mark_four_eyes_on_object(updated_target, confirmed_type=confirmed)
             stamp_canonical_hashes(updated_target)
         history.append(updated_target)
         self._save_objects(snapshot_id, history)
@@ -871,16 +952,41 @@ class OperationsConsole:
             blockers.append("second_named_reviewer_required")
         if not bindings:
             blockers.append("object_tuple_required")
+        four_eyes_needed = False
+        four_eyes_ok = True
+        contracts = []
+        for obj in self.snapshot_objects(snapshot_id):
+            if obj.get("object_type") == "document":
+                continue
+            contract = publish_authorization_contract(
+                obj=obj,
+                bindings=bindings,
+                uploader_id=envelope["uploader_account_id"],
+                immutable_locator=envelope.get("immutable_storage_locator"),
+                envelope_review_passes=envelope.get("review_passes"),
+            )
+            contracts.append(contract)
+            if requires_four_eyes(obj):
+                four_eyes_needed = True
+                if not contract["four_eyes_satisfied"]:
+                    four_eyes_ok = False
+        if four_eyes_needed and not four_eyes_ok:
+            blockers.append("four_eyes_required")
         if not envelope.get("immutable_storage_locator"):
             blockers.append("blocked_pending_immutable_locator")
+        unique = list(dict.fromkeys(blockers))
         return {
             "snapshot_id": snapshot_id,
             "independence_satisfied": independence,
             "tuple_authorization": bool(bindings),
+            "four_eyes_required": four_eyes_needed,
+            "four_eyes_satisfied": four_eyes_ok if four_eyes_needed else True,
+            "envelope_review_passes_authorizes": False,
             "publish_allowed": False,
             "state": envelope["state"],
-            "blockers": blockers,
+            "blockers": unique,
             "g2": "BLOCKED",
+            "object_contracts": contracts,
         }
 
     def publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:

@@ -27,13 +27,14 @@
 
 ## Implementatievoortgang (deze golf)
 
-Eigenaarsgoedgekeurde codegolf A→B→C op de bestaande kernel, één PR tegen main. De protocol-delta's zelf implementeerden geen productcode; wat nu in code bestaat:
+Eigenaarsgoedgekeurde codegolf A→B→C plus v2.13-kernelfollow-up op de bestaande kernel, één PR tegen main. De protocol-delta's zelf implementeerden geen productcode; wat nu in code bestaat:
 
 - A (v2.12): extractie default `unclassified` (heading MAG `heading`); machinevoorstel is geen gepubliceerd type; answerability is vraagtype × objecttype; alleen `recommendation` is handelingsadvies; reviewautorisatie is het objecttupel, niet envelope-`review_passes`; Product API leest een atomaire gepubliceerde projectie; `publish()` blijft G2-BLOCKED.
 - B (v2.11-lock in code; Protocol v2.11.0 is al live op main): live URL-HTML geweigerd; geüploade freeze-HTML en PDF-upload OK; PDF-URL alleen met onmiddellijke exacte-byte-hash; `supported` vereist aanwezige `source_locator`. Deze implementatie-PR bewerkt PROTOCOL.md en PROTOCOL_V2_* niet.
 - C (v2.10): UI-heading Documentenhierarchie; echte wachttaak-badges (zero-hidden); Accounts-kamer met gesloten rollen researcher/reviewer/publisher; verboden identiteiten niet als vereiste reviewer aanmaakbaar.
+- D (v2.13): Implementation engineer op de bestaande kernel — atomaire split op betekenisgrenzen (tokenbudget definieert geen objectidentiteit; fusion van condition/exception in recommendation verboden behalve één grammaticale claim); gesloten serving-relaties (`applies_if`, `except_if`, `defines`, `explains`, `supported_by`, `supersedes`, `parent`/`child`); onbevestigde relaties binden niet; schema v1.2 aligned op serving-wetnamen; historische types niet geserveerd; four-eyes op het v2.12-tupel (`exception`, high `risk_level`, listed risk fields; agents tellen niet; uploader MUST NOT de enige vereiste reviewer zijn); open-origineel via freeze-bytes + v2.11-locator in de reviewkamer; Product API serveert een gepubliceerde recommendation samen met gepubliceerde `applies_if`/`except_if`-targets. `publish()` blijft G2-BLOCKED. Capture is geen publicatie.
 
-Resterende blokkades: G2-locator, G0 Azure DEV, named GD-03-reviewers, retrospectieve C3/C5. Geen Azure/Vercel/Neon/LLM. `tenants.v1.json` blijft leeg. Eerstvolgende taak na merge van deze protocol-PR: Implementation engineer op de bestaande kernel (atomaire objecten + relaties + typebevestiging + high-risk four-eyes + open-origineel). DAARNA G2. Protocol v2.14 is niet de volgende stap. Metis implementeert niet.
+Resterende blokkades: G2-locator, G0 Azure DEV, named GD-03-reviewers, retrospectieve C3/C5. Geen Azure/Vercel/Neon/LLM. `tenants.v1.json` blijft leeg. Eerstvolgende taak: G2 immutable locator. Protocol v2.14 is niet de volgende stap. Metis implementeert niet.
 
 ## Open governancepunt
 
@@ -79,7 +80,7 @@ Protocol v2.13 legt de eigenaarsgoedgekeurde lock vast na audit tegen live basel
 
 ## Eerstvolgende taak
 
-1. Na merge van deze protocol-PR: Implementation engineer op de bestaande kernel — atomaire objecten + gesloten relaties + typebevestiging + high-risk four-eyes + open-origineel. Metis implementeert niet. Protocol v2.14 is niet de volgende stap.
+1. Implementation engineer op de bestaande kernel: atomaire objecten + gesloten relaties + typebevestiging + high-risk four-eyes + open-origineel zijn in code. Metis implementeert niet. Protocol v2.14 is niet de volgende stap.
 2. DAARNA G2 immutable locator / Azure DEV. Die blijven BLOCKED. Niet faken. Capture is geen publicatie. `publish()` blijft G2-BLOCKED. Geen Azure, Vercel, Neon of LLM starten. G2 overslaan MUST NOT.
 3. Retrospectieve onafhankelijke C5-review van PR #4, PR #5, PR #16, Protocol v2.6 / PR #18, Protocol v2.7 / PR #19, Protocol v2.8 / PR #21, de console-implementatie / PR #23, de console-UX-rewrite / PR #25 en Protocol v2.10, plus retrospectieve C3-review van Protocol v2.9, Protocol v2.11, Protocol v2.12 en Protocol v2.13 (C3 spanning C5 four-eyes), volgens de GD-03-matrix; daarna named reviewers bezetten. Er worden geen namen verzonnen.
 4. Holdout B onafhankelijk vergrendelen; geen tuning daarop. GD-01 en GD-02 blijven OPEN tot die gates. False support is een Fase-3-meetlat, geen stille extra gate in v2.13.

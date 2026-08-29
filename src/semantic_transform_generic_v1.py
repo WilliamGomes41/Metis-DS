@@ -14,6 +14,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker
 from src.integrity_kernel import stamp_canonical_hashes, stable_hash
+from src.serving_relations_v1 import confirm_relation_set, proposed_relations
 
 TRANSFORM_VERSION = "semantic-generic-v1.0.0"
 
@@ -124,7 +125,10 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
                 "topic": spec.get("topic", []),
             },
             "logic": item.get("logic"),
-            "relations": item.get("relations", []),
+            "relations": proposed_relations({"relations": item.get("relations", [])}),
+            "confirmed_relations": confirm_relation_set(item["confirmed_relations"])
+            if item.get("confirmed_relations")
+            else [],
             "decision_graph": item.get("decision_graph"),
             "risk": {
                 "risk_level": "high" if high else "standard",

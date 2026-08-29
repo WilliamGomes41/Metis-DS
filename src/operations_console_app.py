@@ -36,6 +36,7 @@ BLOCKER_LABELS = {
     "second_named_reviewer_required": "Nog een andere benoemde reviewer moet goedkeuren.",
     "blocked_pending_immutable_locator": "Duurzame opslag ontbreekt; publicatie blijft geblokkeerd.",
     "object_tuple_required": "Publicatie vereist review gebonden aan object, versie, hash, bevestigd type, reviewer en besluit.",
+    "four_eyes_required": "High-risk objecten vereisen four-eyes: een tweede benoemde reviewer op hetzelfde objecttupel.",
 }
 ERROR_COPY = {
     "not_authenticated": "Je bent niet aangemeld.",
@@ -561,11 +562,24 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     f'<option value="{name}"{" selected" if name == confirmed else ""}>{name}</option>'
                     for name in ("heading", "definition", "explanation", "condition", "exception", "recommendation")
                 )
+                passage_html = ""
+                try:
+                    opened = state.open_source_passage(snapshot_id=chosen, object_id=obj["object_id"])
+                    passage_html = f"""
+                  <div class="bronpassage">
+                    <h4>Bronpassage</h4>
+                    <pre>{_esc(opened.get("passage") or "")}</pre>
+                    <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(chosen)}&amp;object={_esc(obj["object_id"])}">Open bronpassage</a></p>
+                  </div>
+                    """
+                except ConsoleError:
+                    passage_html = '<p class="muted">Bronpassage ontbreekt; dit object kan niet als supported worden geserveerd.</p>'
                 objects_html += f"""
                 <article class="object">
                   <h3>{_esc(heading)}</h3>
                   <p class="meta"><span>status <b>{_esc(status)}</b></span><span>huidig type <b>{_esc(obj.get("object_type"))}</b></span>{"<span>voorstel <b>" + _esc(proposed) + "</b></span>" if proposed else ""}</p>
                   <p>{_esc(text)}</p>
+                  {passage_html}
                   <form method="post" action="/review">
                     <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
                     <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
@@ -596,6 +610,29 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
               {picker}
               {"".join(cards) if not chosen else ""}
               {objects_html or empty}
+            </section>
+            {_help()}
+            """
+        )
+
+    @app.get("/review/bronpassage", response_class=HTMLResponse)
+    def review_bronpassage(request: Request, document: str = "", object: str = "") -> str:
+        account = _require(request)
+        chosen = document.strip()
+        object_id = object.strip()
+        if not chosen or not object_id:
+            raise ConsoleError("unknown_object")
+        opened = state.open_source_passage(snapshot_id=chosen, object_id=object_id)
+        return _page(
+            f"""
+            {_nav(account, "review", _counts(account))}
+            <section class="room">
+              <h1>Bronpassage</h1>
+              <p class="lead">Open de exacte plaats in het geüploade origineel bij dit kennisobject.</p>
+              <article class="object">
+                <pre>{_esc(opened.get("passage") or "")}</pre>
+              </article>
+              <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">Terug naar review</a></p>
             </section>
             {_help()}
             """

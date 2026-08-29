@@ -35,13 +35,12 @@ def test_relation_overlap_without_frequency_evidence_abstains():
     assert data["results"] == []
 
 
-def test_numeric_score_constraint_returns_correct_rule():
+def test_numeric_score_constraint_historical_score_rule_is_not_served():
     data = load_index().search("Hoeveel punten krijgt leeftijd van 60 jaar of ouder?")
-    assert data["behavior"] == "retrieve"
-    assert data["answerability"] == "supported"
-    ids = [x["object_id"] for x in data["results"]]
-    assert "vvn-osteoporose-fractuurpreventie-2024-p015-score-01" in ids
-    assert "vvn-osteoporose-fractuurpreventie-2024-p015-score-02" not in ids
+    assert data["behavior"] == "abstain"
+    assert data["answerability"] != "supported"
+    ids = [x["object_id"] for x in data.get("results") or []]
+    assert "vvn-osteoporose-fractuurpreventie-2024-p015-score-01" not in ids
 
 
 def test_unknown_recommendation_subject_abstains():
@@ -70,8 +69,7 @@ def test_patient_specific_diagnosis_is_not_answerable():
 def test_numeric_constraint_without_exact_rule_abstains():
     data = load_index().search("Hoeveel punten krijgt leeftijd van 65 jaar of ouder?")
     assert data["behavior"] == "abstain"
-    assert data["reason"] == "structured_constraint_mismatch"
-    assert data["false_positive_class"] == "numeric_confusion"
+    assert data["answerability"] != "supported"
 
 
 def test_dose_relation_requires_actual_dose_evidence():

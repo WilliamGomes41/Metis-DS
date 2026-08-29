@@ -44,9 +44,13 @@ def test_operator_normalization_is_deterministic():
     assert tokenize("BMI < 20 en alcohol ≥ 3") == ["bmi", "lt", "20", "alcohol", "gte", "3"]
 
 
-def test_fixture_builds_19_searchable_records():
+def test_fixture_builds_serving_type_records_only():
     records = fixture_records()
-    assert len(records) == 19
+    types = {(r.get("metadata") or {}).get("object_type") for r in records}
+    assert "score_rule" not in types
+    assert "decision" not in types
+    assert "action" not in types
+    assert len(records) == 11
     assert all("structured_logic" in r for r in records)
 
 
@@ -56,20 +60,25 @@ def test_baseline_abstains_on_out_of_corpus_vitamin_d_question():
     assert r["behavior"] == "abstain"
 
 
-def test_baseline_finds_corrected_alcohol_rule():
+def test_baseline_does_not_serve_historical_score_rule():
     idx = LexicalIndex(fixture_records(), config())
     r = idx.search("Hoe wordt roken en/of alcoholgebruik van 3 of meer eenheden per dag gescoord?")
-    assert r["behavior"] == "retrieve"
-    assert r["results"][0]["object_id"].endswith("score-07")
+    ids = [row["object_id"] for row in r.get("results") or []]
+    assert not any(item.endswith("score-07") for item in ids)
 
 
 def test_golden_baseline_prioritizes_abstention_safety():
     golden = json.loads((ROOT / "data/golden/fractuurpreventie_page15_golden_v0.1.json").read_text())
     rep = evaluate(fixture_records(), golden, config())
     m = rep["metrics"]
-    assert m["abstention_accuracy"] == 1.0
-    # This is a lexical comparator, not the final acceptance engine. Keep an
-    # explicit floor so regressions are caught while semantic/vector retrieval
-    # is expected to improve the retrieval hit rate later.
-    assert m["retrieve_any_hit_at_5"] >= 0.65
-    assert m["projection_content_integrity"] == 1.0
+    # Historical types (score_rule, …) are not served. Lexical hits that used
+    # those objects now miss; remaining no-answer cases stay fail-closed.
+    assert m["abstention_accuracy"] >= 0.8
+    # This is a lexical comparator over the closed serving typeset, not the
+    # final acceptance engine. Score-rule questions no longer have a serving
+    # object; keep a floor so remaining recommendation/condition hits do not
+    # regress.
+    assert m["retrieve_any_hit_at_5"] >= 0.40
+    # Phrase/logic checks against expected score_rule IDs fail closed because
+    # those objects are not in the serving projection.
+    assert m["projection_content_integrity"] >= 0.8
