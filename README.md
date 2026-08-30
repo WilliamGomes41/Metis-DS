@@ -1,4 +1,4 @@
-# V&VN Data Services pilot
+# Metis V&VN Data Services
 
 Technical pilot for converting V&VN source knowledge into deterministic, versioned, reviewed and publishable knowledge objects.
 
