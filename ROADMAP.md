@@ -53,6 +53,20 @@ Tien epics → cluster/fase (kaart, geen tweede locklijst):
 9. Audit, monitoring & disaster recovery — cluster 7; Fase 5.
 10. Immutable storage / G2 — Fase 2, BLOCKED; blijft de publicatieblocker.
 
+## Open schaalbaarheids- en assurancewerkstromen
+
+Deze werkstromen maken expliciet wat nog nodig is om Metis betrouwbaar op te schalen naar veel bronnen en naar gebruik door AI-toepassingen. Zij zijn **gepland maar nog geen vastgesteld protocol of geïmplementeerd gedrag**. Iedere werkstroom vereist eerst het bijbehorende governancebesluit in `docs/GOVERNANCE.md`, daarna zo nodig een protocolwijziging, acceptatietests en pas daarna code. De bestaande volgorde blijft staan: eerst de tweekoloms reviewkaart, daarna G2.
+
+| ID | Werkstroom | Beoogde fase | Minimaal te besluiten en later te realiseren | Gate |
+|---|---|---|---|---|
+| SA-01 | Bron- en kennisfamilie-eigenaarschap | Fase 2 | Inhoudelijke eigenaar en actualiteitsverantwoordelijke per officiële bron en kennisfamilie; reviewtermijn, escalatieroute en betekenis van ontbrekend eigenaarschap. | Besluiten vóór eerste externe pilotrelease. |
+| SA-02 | Delta-review en hergebruik van reviewbewijs | Fase 2b, na eerste echte-bronpilot | Objectniveau-diff tussen bronversies; nieuw, gewijzigd, verwijderd, verplaatst en ongewijzigd onderscheiden; regels voor behoud of verval van reviewbewijs; risicogestuurde reviewwachtrij. | Eerst valideren op vijf echte richtlijnen; geen automatische reviewovername zonder protocol en tests. |
+| SA-03 | Semantisch conflictregister | Fase 2 / 4 | Conflictstatussen, voorrangs- en escalatieregels, reviewerflow en fail-closed API-gedrag wanneer geldige bronnen of versies elkaar tegenspreken. | Besluiten vóór meerdere bronnen dezelfde vraag in een extern pilotcorpus kunnen beantwoorden. |
+| SA-04 | End-to-end integriteitsreconciliatie | Fase 5 / G8 | Deterministische vergelijking van bronbytes, bronregister, canonieke store, reviewledger, gepubliceerde projectie, retrieval-index en API-output; blokkering en herstel bij afwijkingen. | Verplicht vóór externe pilottoegang. |
+| SA-05 | Reproduceerbare trainingsdataset en model-lineage | Na retrieve-and-abstain-MVP | Datasetmanifest en -versie, objecthashes, bron- en licentiescope, uitsluiting van conflict/verlopen/withdrawn, registratie dataset → training → model en update-/withdrawalverplichting met live statuscheck. | Geen trainingslicentie of datasetexport voordat deze track afzonderlijk is vastgesteld en getest. |
+
+SA-01 tot en met SA-04 concretiseren noodzakelijke live-assurance. SA-05 blokkeert de retrieve-and-abstain-pilot niet, maar blokkeert ieder gebruik van Metis als trainingsdataset.
+
 ## Eigenaarslock 2026-08-29 — Reviewkaart bronpassage (twee kolommen)
 
 Docs-only lock. Geen nieuw protocol. Geen Protocol v2.14. Geen productcode in deze PR. Metis implementeert niet.
@@ -94,6 +108,8 @@ Status: technische acquisitie en extractie ontwikkeld; duurzame immutable opslag
 - Deterministische extractie en object-diff genereren.
 - Klinische review uitvoeren op de exacte snapshot en afgeleide objecten.
 - Alleen na alle gates goedkeuren en publiceren.
+- SA-01 voorbereiden: per echte bron en kennisfamilie vastleggen wie inhoudelijk eigenaar en actualiteitsverantwoordelijke moet zijn; publicatiegedrag bij ontbrekend eigenaarschap blijft OPEN tot GD-08 is vastgesteld.
+- SA-03 met echte bronnen onderzoeken: botsingen registreren als evaluatiebewijs; geen stilzwijgende bronprioriteit of nieuw serving-gedrag vóór GD-10 en een toepasselijke protocolwijziging.
 
 Stopvoorwaarde: ontbrekende bytes, checksum, immutable locator, provenance of review houdt publicatie `BLOCKED`. Dit slaat duurzame immutable opslag niet over.
 
@@ -107,6 +123,7 @@ Status: console-MVP ingest+review geïmplementeerd; console-UX-rewrite (Protocol
 - Protocol v2.10: de boomheading MUST Documentenhierarchie heten (niet Familieboom; kernel blijft familie × klasse). Iedere topnav-heading MUST een zichtbare wachttaak-badge tonen bij echt kernelwerk voor de huidige gebruiker; de badge MUST afwezig of zero-hidden zijn als er niets wacht; counts MUST geen decoratie zijn; de Publish-badge MUST NOT impliceren dat publicatie G2 passeerde. Accounts is identiteitsbeheer, geen chat en geen vijfde klinische kamer; een publisher MUST gebruikers kunnen aanmaken en rollen toewijzen/wijzigen; de rollenset blijft GESLOTEN (researcher, reviewer, publisher); eerste bootstrap via CLI `console-account` blijft geldig.
 - Protocol v2.12: Extractie MUST alleen structuur en provenance bepalen. De gesloten object-typeset is heading, definition, explanation, condition, exception, recommendation; unclassified is de default, geen zesde advies-type. Answerability MUST vraagtype × objecttype joinen; alleen recommendation MAG handelingsadvies zijn; andere typen MUST NOT advies-gewicht krijgen. Cutover/publish MUST NOT envelope `review_passes` alleen vertrouwen; binding is `object_id` + `object_version` + `canonical_object_hash` + `confirmed_object_type` + reviewer + decision. Serving MUST een gevalideerde gepubliceerde projectie atomair gebruiken. Die kernelwet is in code. Azure/G2 blijven buiten deze delta.
 - Protocol v2.13: één kennisobject MUST één bevestigbare betekeniseenheid zijn. Extractie MUST op betekenisgrenzen splitsen. Gesloten relaties (`applies_if`, `except_if`, `defines`, `explains`, `supported_by`, `supersedes`, `parent`/`child`) MUST op de exacte objectversie worden bevestigd. High-risk four-eyes MUST op het v2.12-tupel wanneer `exception`, high `risk_level`, of een high-risk veld aanwezig is. Vanaf ieder kennisobject MUST de reviewer de exacte bronpassage kunnen openen (v2.11-locators; geen nieuw schema). Waar v2.13 en v2.12 §10 botsen over welke implementatie de volgende is, geldt v2.13. Implementation engineer op de bestaande kernel: atomaire split, gesloten relaties, typebevestiging, high-risk four-eyes en open-origineel zijn in code. Eigenaarslock 2026-08-29: volgende console-implementatie is alleen de tweecoloms reviewkaart (links kennisobject, rechts exacte bronpassage; smal stapelt). Relaties blijven voorgestelde checkboxes + bevestigen; MUST NOT een graaf-editor. DAARNA G2/Azure. Protocol v2.14 is niet de volgende stap. Publicatie blijft BLOCKED zonder G2-locator.
+- SA-02 volgt pas na de evaluatie met vijf echte richtlijnen: de console moet uiteindelijk wijzigingen, onzekerheden en high-risk passages centraal kunnen aanbieden en aantoonbaar ongewijzigde inhoud kunnen onderscheiden. Reviewbewijs wordt niet automatisch overgenomen voordat GD-09, protocol en acceptatietests dit toestaan.
 - Protocol v2.11: officiële first-wave HTML MUST een geüploade freeze-file zijn. Live URL-HTML MUST bij ingest worden geweigerd. De Product API MUST NOT `supported` teruggeven zonder source locator. v2.11-kernelwerk blijft verplichte wet. Het v2.10-console-vervolg is al in code en wordt niet heropend.
 - Continentie bron 2 is de eerste envelope en komt VIA die console binnen, niet via een parallel engineer-only pad als onderzoekerservaring.
 - Frontend: intuïtieve console voor richtlijnonderzoekers en reviewers, niet voor verpleegkundigen. Backend: immutable bronstore + canonieke kennisobjecten. Product API bestaat al en blijft een aparte machinedeur; niet eerst herbouwen.
@@ -162,6 +179,7 @@ Status: `BLOCKED` onder G0 Azure DEV totdat toegang, eigenaarschap, kosten en pl
 - Wacht niet op Azure voordat onderzoekers een echte console hebben; de lokale store is de stand-in tot G0 Azure DEV.
 - Deployment reproduceerbaar koppelen aan commit, protocolversie en build-ID.
 - Security-, rollback-, withdrawal- en incidenttest uitvoeren.
+- SA-04 uitvoeren: een deterministische integriteitsrunner reconcilieert bronbytes → bronregister → canonieke store → reviewledger → actieve projectie → retrieval-index → API. Een onverklaarde afwijking is `FAIL` of `BLOCKED`, nooit alleen een waarschuwing.
 - MVP-go/no-go assurance-record afronden.
 
 Stopvoorwaarde: geen Azure-provisioning zolang G0 Azure DEV `BLOCKED` is.
@@ -178,9 +196,12 @@ Status: gepland na PASS van toepasselijke bron-, acceptance- en operationele gat
 - Consumentenregistratie en gebruiksovereenkomst vastleggen.
 - Attribution, updates, supersession, withdrawal en incidentmelding end-to-end testen.
 - Vooraf veiligheids-, gebruiks- en stopcriteria vaststellen.
+- Geen externe pilotrelease zonder vastgesteld bron-/familie-eigenaarschap (SA-01), passend conflictgedrag voor de gekozen bronset (SA-03) en geslaagde end-to-end integriteitsreconciliatie (SA-04).
 
 Stopvoorwaarde: geen externe toegang zonder juridische, privacy/security- en verantwoordelijkheidstoets; geen U3–U5 zonder nieuwe protocolbeslissing en toepasselijke C3–C6-review.
 
 ## Scopebeheer
 
 Nieuwe functionaliteit komt alleen in de roadmap nadat is vastgesteld dat deze door het huidige protocol wordt gedekt. Buiten scope voor de eerste MVP zijn uitbreidingen die de onafhankelijke acceptatie, bronintegriteit of fail-closed publicatie omzeilen of vertragen, een zorgapp-frontend, chatbot, EPD/ECD-UI of publieke website, beslisregels, patiëntspecifiek advies, algemene modeltraining, care-impact-onderzoek en federated learning. Training MAG alleen als tweede licentie mét live publicatiestatuscheck (Protocol v2.7). De interne operations console is onder Protocol v2.6 in scope als intern oppervlak. Protocol v2.8 zette de volgende implementatie op een echte console-MVP (geen mockup) op de bestaande kernel; Continentie bron 2 komt VIA de console binnen. Protocol v2.9 zet de console-UX-rewrite op de bestaande kernel (taakgerichte onderzoeker-UX + V&VN digitale stylesheet; geen Azure, geen Vercel/Neon, geen mockup); die rewrite is nu in code (PR #25). Protocol v2.10 zet het console-vervolg op die v2.9-UX (Documentenhierarchie, echte wachttaak-badges, Accounts-kamer); dat vervolg blijft verplicht. Protocol v2.13 zet de volgende implementatie op atomaire split, gesloten relaties, per-type bevestiging, high-risk four-eyes en open-origineel op de bestaande kernel (geen Azure, geen Vercel/Neon, geen mockup); die kernelfollow-up is in code. Eigenaarslock 2026-08-29 zet de volgende console-implementatie op alleen de tweecoloms reviewkaart; DAARNA G2/Azure. Protocol v2.14 is LOCKED als het volgende protocol, niet deze PR, en wordt pas geschreven wanneer de eerste officiële bron een datum heeft die serving MUST begrenzen. Protocol v2.12-type/projectie en Protocol v2.11-freeze/locator blijven verplichte wet. Het v2.10-console-vervolg is al in code en wordt niet heropend. Duurzame immutable opslag wordt niet overgeslagen: lokale store is de G0-stand-in tot G0 Azure DEV; publicatie blijft BLOCKED zonder immutable locator (G2).
+
+SA-05 is de enige toegestane route naar trainingsdistributie. Train-ready objecten of technische API-toegang vormen geen datasetrelease. Een latere trainingsdataset vereist een afzonderlijke licentie, reproduceerbaar manifest, model-lineage en live status-/withdrawalverbinding.

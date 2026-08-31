@@ -28,8 +28,13 @@ Machineleesbaar bewijs voor het enige tot nu toe vastgestelde besluit: [`data/as
 | GD-05 | Ondersteunde API-depreciatieperiode | Projecteigenaar | Product/API-eigenaar | Voordat de eerste externe API-consument wordt onboarded | OPEN |
 | GD-06 | Bewaartermijnen voor acquisitierecords, auditlogs, gebruikslogs en vertrouwelijk reviewbewijs | Projecteigenaar | Privacy, security en records management | Voordat Azure DEV extern pilotverkeer verwerkt | OPEN |
 | GD-07 | Benoemde operationele eigenaar voor productiereleases en emergency withdrawal | Projecteigenaar | V&VN-service-eigenaarschap | Voordat een externe pilotrelease wordt geautoriseerd | OPEN |
+| GD-08 | Verplicht inhoudelijk eigenaarschap en actualiteitsverantwoordelijkheid per bron en kennisfamilie | Projecteigenaar | Richtlijnorganisatie, records management en service-eigenaarschap | Voordat de eerste externe pilotrelease wordt geautoriseerd | OPEN |
+| GD-09 | Voorwaarden waaronder reviewbewijs bij een nieuwe bronversie behouden mag blijven | Projecteigenaar | Clinical governance, richtlijnonderzoek en technical/evaluation | Voordat delta-review reviewtaken automatisch mag beperken | OPEN |
+| GD-10 | Conflictstatussen, bronvoorrang, escalatie en fail-closed serving bij botsende bronnen | Projecteigenaar | Clinical governance, richtlijnmethodologie en product/API | Voordat meerdere bronnen dezelfde vraag in een extern pilotcorpus mogen beantwoorden | OPEN |
+| GD-11 | Omvang, frequentie en blokkerende uitkomsten van end-to-end integriteitsreconciliatie | Projecteigenaar | Security/operations, technical en clinical safety | Voordat Azure DEV voor externe pilotgebruikers wordt geopend | OPEN |
+| GD-12 | Minimale eisen voor trainingsdatasetmanifest, model-lineage, updates en withdrawal | Projecteigenaar | Licensing, legal/privacy, AI safety en technical | Voordat Metis-kennis voor modeltraining wordt geëxporteerd of gelicentieerd | OPEN |
 
-OPEN-besluiten mogen niet als established of `PASS` worden behandeld. Een gemiste deadline-gate blijft `BLOCKED`.
+OPEN-besluiten mogen niet als established of `PASS` worden behandeld. Een gemiste deadline-gate blijft `BLOCKED`. GD-08 tot en met GD-12 zijn roadmapwerk: zolang zij OPEN zijn voegen zij geen nieuw productgedrag toe en mogen zij niet als geïmplementeerd worden gepresenteerd.
 
 ## GD-03 — reviewervereisten C3–C6 (ESTABLISHED)
 
