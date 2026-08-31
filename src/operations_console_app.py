@@ -638,14 +638,19 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     opened = state.open_source_passage(snapshot_id=chosen, object_id=obj["object_id"])
                     passage_ok = True
                     passage_html = f"""
-                  <div class="bronpassage">
+                  <aside class="review-card-bronpassage" aria-label="Exacte bronpassage">
                     <h4>Bronpassage</h4>
                     <pre>{_esc(opened.get("passage") or "")}</pre>
                     <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(chosen)}&amp;object={_esc(obj["object_id"])}">Open bronpassage</a></p>
-                  </div>
+                  </aside>
                     """
                 except ConsoleError:
-                    passage_html = '<p class="muted">Bronpassage ontbreekt; type bevestigen en goedkeuren zijn uitgeschakeld tot het origineel open kan.</p>'
+                    passage_html = (
+                        '<aside class="review-card-bronpassage" aria-label="Exacte bronpassage ontbreekt">'
+                        '<h4>Bronpassage</h4>'
+                        '<p class="muted">Bronpassage ontbreekt; type bevestigen en goedkeuren zijn '
+                        'uitgeschakeld tot het origineel open kan.</p></aside>'
+                    )
                 type_disabled = "" if passage_ok else " disabled"
                 approve_disabled = "" if passage_ok else " disabled"
                 four_eyes_html = ""
@@ -665,12 +670,12 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                   </form>
                     """
                 objects_html += f"""
-                <article class="object">
+                <article class="object review-card-two-column">
+                  <section class="review-card-object" aria-label="Kennisobject en reviewbesluit">
                   <h3>{_esc(heading)}</h3>
                   <p class="meta"><span>status <b>{_esc(status)}</b></span><span>huidig type <b>{_esc(obj.get("object_type"))}</b></span>{"<span>voorstel <b>" + _esc(proposed) + "</b></span>" if proposed else ""}</p>
                   {four_eyes_html}
                   <p>{_esc(text)}</p>
-                  {passage_html}
                   {relation_form}
                   <form method="post" action="/review">
                     <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
@@ -689,6 +694,8 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     <textarea id="correction-{_esc(obj["object_id"])}" name="proposed_correction"></textarea>
                     <button class="btn-primary" type="submit">Review vastleggen</button>
                   </form>
+                  </section>
+                  {passage_html}
                 </article>
                 """
         empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
@@ -944,3 +951,39 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
 
 def create_app() -> FastAPI:
     return create_console_app()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
