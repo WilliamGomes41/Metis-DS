@@ -24,6 +24,7 @@
 - Bron 1 en bron 2 blijven `BLOCKED` voor publicatie zolang immutable opslag, definitieve registratie en klinische review ontbreken. Bron 2 is nog BLOCKED op duurzame immutable opslag. Publicatie blijft BLOCKED zonder immutable locator (G2).
 - G0 Local Development is `PASS`. G0 Azure DEV blijft `BLOCKED`. G8 en Azure worden niet als `PASS` of gestart geclaimd. Console-identiteit sluit G8 niet en provisioneert geen Azure AD.
 - G2-bronstore 2026-08-31 (eigenaarsopdracht): V&VN-tenant `venvn.nl`, abonnement Microsoft Azure `8c829c96-1784-4947-8a2b-92027c51fec9`, resourcegroep `AI_Dataservice`, opslagaccount `aidataservice` (westeurope, StorageV2, ZRS), privécontainer `canonical-sources`. Locator `azure://aidataservice/canonical-sources/{sha256}/{filename}`. Container leeg. G2 blijft `BLOCKED`. Geen keys in Git. Runtime/Postgres/Foundry niet gestart.
+- Console-host 2026-08-31 (eigenaarsopdracht): interne Azure Web App-adapter in code (`src/console_asgi.py`). Nog niet live. G0 Azure DEV blijft `BLOCKED` tot de web-app draait. Geen publieke website. Geen Vercel/Neon/LLM.
 - G1 technische protection op `main` is ON. GitHub-ruleset **G1 main** (id `21686159`, aangemaakt 2026-08-27T22:10:53Z) is actief: `main` mag niet worden verwijderd; geen force-push / non-fast-forward; required status checks `test (3.12)` en `test (3.13)` (strict); pull request verplicht vóór merge; 0 vereiste goedkeurende reviews (solo owner). Protected branch, required CI en PR-workflow bestaan nu. Named GD-03-reviewers zijn niet bezet.
 
 ## Implementatievoortgang (deze golf)

@@ -5,6 +5,7 @@ All notable technical changes to V&VN Data Services are recorded here.
 ## [Unreleased]
 
 ### Added
+- Azure App Service host adapter for the internal operations console (`src/console_asgi.py`). Bootstrap accounts from environment only; G2 remains BLOCKED; G0 Azure DEV remains BLOCKED until the web app is live. Not a public website.
 - Owner lock 2026-08-31: G2 Blob store recorded in code (`aidataservice` / `canonical-sources`, West Europe, private). Locator `azure://aidataservice/canonical-sources/{sha256}/{filename}`. Container empty; G2 remains BLOCKED; `publish()` remains G2-BLOCKED; G0 Azure DEV remains BLOCKED. No storage keys in Git.
 - Owner lock 2026-08-29: reviewer bronpassage is two columns on the review card (object left, freeze passage right; stack on narrow). Relations stay proposed checkboxes + confirm; MUST NOT build a graph editor. Next console implementation after this docs lock is the split-screen review card only. Then G2/Azure. `publish()` remains G2-BLOCKED. Docs-only; does not implement the card. v2.14 is not next.
 - Console review completeness on the existing v2.13 kernel: relation checkboxes POST to `confirm_relations()`; type select defaults to disabled «nog niet bevestigd» and does not silently submit heading; type/approve require open-original; `published_object_type()` serves only a confirmed closed type; GET `/v1/knowledge/{id}` 404s/abstains without locator or with unclassified/historical type. `publish()` remains G2-BLOCKED.
