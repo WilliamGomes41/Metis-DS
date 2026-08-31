@@ -812,6 +812,35 @@ def test_header_uses_official_beeldmerk_image_not_constructed_mark(tmp_path: Pat
         assert pirate not in css
 
 
+def test_metis_brand_assets_are_used_for_login_and_authenticated_navigation(tmp_path: Path) -> None:
+    from src.operations_console_app import create_console_app
+
+    wordmark = ROOT / "assets/brand/metis-wordmark.jpg"
+    mark = ROOT / "assets/brand/metis-mark.jpg"
+    assert wordmark.is_file()
+    assert mark.is_file()
+    assert wordmark.read_bytes()[:3] == b"\xff\xd8\xff"
+    assert mark.read_bytes()[:3] == b"\xff\xd8\xff"
+
+    client, _, _ = _html_client(tmp_path)
+    login = client.get("/login").text
+    assert 'src="/brand/metis-wordmark.jpg"' in login
+    assert "Een dienst van" in login
+    assert 'src="/brand/venvn-beeldmerk.png"' in login
+
+    ingest = client.get("/ingest").text
+    assert 'src="/brand/metis-mark.jpg"' in ingest
+    assert "V&amp;VN Data Services" in ingest
+    assert 'class="topbar"' in ingest
+
+    served_wordmark = client.get("/brand/metis-wordmark.jpg")
+    served_mark = client.get("/brand/metis-mark.jpg")
+    assert served_wordmark.status_code == 200
+    assert served_mark.status_code == 200
+    assert served_wordmark.headers["content-type"] == "image/jpeg"
+    assert served_mark.headers["content-type"] == "image/jpeg"
+
+
 def test_via_negativa_is_not_the_heading_of_researcher_rooms(tmp_path: Path) -> None:
     client, console, accounts = _html_client(tmp_path)
     _ingest_html(console, accounts)
@@ -873,4 +902,3 @@ def test_document_keyed_move_wrapper_does_not_rehash(tmp_path: Path) -> None:
     assert moved["family"] == "decubitus"
     assert moved["sha256"] == receipt["sha256"]
     assert moved["clinical_rereview_required"] is False
-
