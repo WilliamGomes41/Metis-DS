@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-label="Metis mark">
+  <title>Metis</title>
+  <rect width="240" height="240" fill="#000000"/>
+  <g fill="none" fill-rule="evenodd">
+    <path d="M48 168c0-1 54-2 78-22 20-16 36-28 74-28" stroke="#0CA1C9" stroke-width="28" stroke-linecap="round"/>
+    <path d="M48 72c0 1 54 2 78 22 20 16 36 28 74 28" stroke="#0CA1C9" stroke-width="28" stroke-linecap="round"/>
+    <path d="M48 120h102c14 0 24-6 42-18" stroke="#502B8A" stroke-width="28" stroke-linecap="round"/>
+    <circle cx="48" cy="72" r="22" fill="#0CA1C9"/>
+    <circle cx="48" cy="120" r="22" fill="#502B8A"/>
+    <circle cx="48" cy="168" r="22" fill="#0CA1C9"/>
+    <circle cx="192" cy="120" r="20" fill="#DF2F00"/>
+  </g>
+</svg>
