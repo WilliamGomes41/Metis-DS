@@ -97,6 +97,34 @@ def _beeldmerk() -> str:
     )
 
 
+def _metis_wordmark() -> str:
+    return (
+        '<img class="metis-wordmark" src="/brand/metis-wordmark.jpg" '
+        'width="1000" height="363" alt="Metis — V&amp;VN Data Services">'
+    )
+
+
+def _metis_mark() -> str:
+    return (
+        '<img class="metis-mark" src="/brand/metis-mark.jpg" '
+        'width="56" height="56" alt="">'
+    )
+
+
+def _login_brand() -> str:
+    return f"""
+    <div class="login-brand">
+      <a class="login-wordmark" href="/login" aria-label="Metis — V&amp;VN Data Services">
+        {_metis_wordmark()}
+      </a>
+      <div class="venvn-endorsement">
+        <span>Een dienst van</span>
+        {_beeldmerk()}
+      </div>
+    </div>
+    """
+
+
 def _page(body: str) -> str:
     return f"""<!doctype html>
 <html lang="nl">
@@ -146,9 +174,12 @@ def _nav(account: dict[str, Any] | None, current: str = "", counts: dict[str, in
     links.append('<a class="quiet" href="/logout">Uitloggen</a>')
     return f"""
     <header class="topbar">
-      <a class="brand" href="/" aria-label="V&amp;VN Data Services">
-        {_beeldmerk()}
-        <span class="brand-name">Data Services</span>
+      <a class="brand metis-brand" href="/" aria-label="Metis — V&amp;VN Data Services">
+        <span class="metis-mark-frame">{_metis_mark()}</span>
+        <span class="brand-copy">
+          <strong>Metis</strong>
+          <span>V&amp;VN Data Services</span>
+        </span>
       </a>
       <nav class="rooms">{"".join(links)}</nav>
       <div class="who">{who}</div>
@@ -293,10 +324,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             return _page(
                 f"""
                 <section class="room login-card">
-                  <a class="brand" href="/login" aria-label="V&amp;VN Data Services">
-                    {_beeldmerk()}
-                    <span class="brand-name">Data Services</span>
-                  </a>
+                  {_login_brand()}
                   <h1>Interne operations console</h1>
                   <p class="lead">Meld je aan om documenten in te leveren, te reviewen of te publiceren.</p>
                   <p><a class="btn-primary" href="/login" style="display:inline-block;text-decoration:none;">Aanmelden</a></p>
@@ -311,10 +339,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         return _page(
             f"""
             <section class="room login-card">
-              <a class="brand" href="/login" aria-label="V&amp;VN Data Services">
-                {_beeldmerk()}
-                <span class="brand-name">Data Services</span>
-              </a>
+              {_login_brand()}
               <h1>Aanmelden</h1>
               <p class="lead">Meld je aan met je interne account. Geen open registratie. Geen gedeelde login.</p>
               <form method="post" action="/login">
