@@ -541,7 +541,9 @@ def test_reviewer_opens_exact_source_passage_v211_locator(tmp_path: Path) -> Non
 
     client = TestClient(create_console_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
-    review_html = client.get(f"/review?document={receipt['snapshot_id']}").text
+    review_html = client.get(
+        f"/review?document={receipt['snapshot_id']}&object={target['object_id']}"
+    ).text
     assert "Bespreek het onderwerp met de zorgvrager." in review_html
     assert "Bronpassage" in review_html
     passage_page = client.get(

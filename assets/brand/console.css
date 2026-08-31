@@ -328,6 +328,15 @@ textarea:focus-visible {
   margin-top: 14px;
 }
 
+.object-index {
+  margin: 12px 0 0;
+  padding-left: 1.2rem;
+}
+
+.object-index li {
+  margin: 0.35rem 0;
+}
+
 .review-card-two-column {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

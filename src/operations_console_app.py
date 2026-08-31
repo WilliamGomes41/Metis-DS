@@ -596,7 +596,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         return RedirectResponse("/tree", status_code=303)
 
     @app.get("/review", response_class=HTMLResponse)
-    def review_get(request: Request, document: str = "") -> str:
+    def review_get(request: Request, document: str = "", object: str = "") -> str:
         account = _require(request)
         chosen = document.strip()
         envelopes = state.list_envelopes()
@@ -622,12 +622,33 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     """
                 )
         objects_html = ""
+        chosen_object_id = object.strip()
         if chosen_row:
             objects_html += f'<div class="doc-card">{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}</div>'
             snapshot_objects = state.snapshot_objects(chosen)
-            for obj in snapshot_objects:
+            if not chosen_object_id:
+                items = []
+                for obj in snapshot_objects:
+                    heading = (obj.get("content") or {}).get("heading") or obj.get("object_type")
+                    status = (obj.get("governance") or {}).get("validation_status") or ""
+                    items.append(
+                        "<li>"
+                        f'<a href="/review?document={_esc(chosen)}&object={_esc(obj["object_id"])}">'
+                        f"{_esc(heading)}</a>"
+                        f' <span class="meta">{_esc(obj.get("object_type") or "")}'
+                        f"{' · ' + _esc(status) if status else ''}</span></li>"
+                    )
+                objects_html += (
+                    '<p class="next">Open één object. Daarna zie je links het kennisobject '
+                    "en rechts de exacte bronpassage.</p>"
+                    f'<ol class="object-index">{"".join(items)}</ol>'
+                )
+            else:
+                obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
+                if obj is None:
+                    raise ConsoleError("unknown_object")
                 heading = (obj.get("content") or {}).get("heading") or obj.get("object_type")
-                text = (obj.get("content") or {}).get("clean_text") or ""
+                obj_text = (obj.get("content") or {}).get("clean_text") or ""
                 status = (obj.get("governance") or {}).get("validation_status") or ""
                 proposed = obj.get("proposed_object_type") or ""
                 confirmed = obj.get("confirmed_object_type") or ""
@@ -641,15 +662,15 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                   <aside class="review-card-bronpassage" aria-label="Exacte bronpassage">
                     <h4>Bronpassage</h4>
                     <pre>{_esc(opened.get("passage") or "")}</pre>
-                    <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(chosen)}&amp;object={_esc(obj["object_id"])}">Open bronpassage</a></p>
+                    <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(chosen)}&object={_esc(obj["object_id"])}">Open bronpassage</a></p>
                   </aside>
                     """
                 except ConsoleError:
                     passage_html = (
                         '<aside class="review-card-bronpassage" aria-label="Exacte bronpassage ontbreekt">'
-                        '<h4>Bronpassage</h4>'
+                        "<h4>Bronpassage</h4>"
                         '<p class="muted">Bronpassage ontbreekt; type bevestigen en goedkeuren zijn '
-                        'uitgeschakeld tot het origineel open kan.</p></aside>'
+                        "uitgeschakeld tot het origineel open kan.</p></aside>"
                     )
                 type_disabled = "" if passage_ok else " disabled"
                 approve_disabled = "" if passage_ok else " disabled"
@@ -670,12 +691,13 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                   </form>
                     """
                 objects_html += f"""
+                <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">Alle objecten</a></p>
                 <article class="object review-card-two-column">
                   <section class="review-card-object" aria-label="Kennisobject en reviewbesluit">
                   <h3>{_esc(heading)}</h3>
                   <p class="meta"><span>status <b>{_esc(status)}</b></span><span>huidig type <b>{_esc(obj.get("object_type"))}</b></span>{"<span>voorstel <b>" + _esc(proposed) + "</b></span>" if proposed else ""}</p>
                   {four_eyes_html}
-                  <p>{_esc(text)}</p>
+                  <p>{_esc(obj_text)}</p>
                   {relation_form}
                   <form method="post" action="/review">
                     <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
@@ -731,7 +753,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
               <article class="object">
                 <pre>{_esc(opened.get("passage") or "")}</pre>
               </article>
-              <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">Terug naar review</a></p>
+              <p><a class="btn-secondary" href="/review?document={_esc(chosen)}&object={_esc(object_id)}">Terug naar review</a></p>
             </section>
             {_help()}
             """
@@ -767,7 +789,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     "operations": [{"op": "set", "path": "content.clean_text", "value": proposed_correction.strip()}],
                 },
             )
-        return RedirectResponse(f"/review?document={snapshot_id}", status_code=303)
+        return RedirectResponse(f"/review?document={snapshot_id}&object={object_id}", status_code=303)
 
     @app.post("/review/relations")
     def review_relations_post(
@@ -790,7 +812,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             object_id=object_id,
             relations=rows,
         )
-        return RedirectResponse(f"/review?document={snapshot_id}", status_code=303)
+        return RedirectResponse(f"/review?document={snapshot_id}&object={object_id}", status_code=303)
 
     @app.get("/publish", response_class=HTMLResponse)
     def publish_get(request: Request) -> str:

@@ -77,13 +77,27 @@ def _ingest(console: OperationsConsole, accounts: dict, data: bytes | None = Non
     )
 
 
-def _review_html(tmp_path: Path, data: bytes | None = None) -> tuple[str, dict, OperationsConsole]:
+def _review_page(console: OperationsConsole, snapshot_id: str, object_id: str | None = None) -> str:
+    client = TestClient(create_console_app(console))
+    client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
+    url = f"/review?document={snapshot_id}"
+    if object_id:
+        url += f"&object={object_id}"
+    return client.get(url).text
+
+
+def _review_html(
+    tmp_path: Path, data: bytes | None = None, object_id: str | None = None
+) -> tuple[str, dict, OperationsConsole]:
     console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=data)
     client = TestClient(create_console_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
-    html = client.get(f"/review?document={receipt['snapshot_id']}").text
+    url = f"/review?document={receipt['snapshot_id']}"
+    if object_id:
+        url += f"&object={object_id}"
+    html = client.get(url).text
     return html, receipt, console
 
 
@@ -107,13 +121,16 @@ def _strip_locator(console: OperationsConsole, snapshot_id: str, object_id: str)
     console._save_objects(snapshot_id, rows)
 
 
-def test_review_card_has_two_column_class(tmp_path: Path) -> None:
+def test_review_document_index_does_not_open_passages(tmp_path: Path) -> None:
     html, receipt, console = _review_html(tmp_path)
     objects = console.snapshot_objects(receipt["snapshot_id"])
     assert objects
-    cards = _cards(html)
-    assert cards, "review card must carry the two-column class"
-    assert len(cards) == len(objects)
+    assert TWO_COLUMN_CLASS not in html
+    assert PASSAGE_COL not in html
+    assert "object-index" in html
+    assert "Bronpassage" not in html
+    for obj in objects:
+        assert obj["object_id"] in html
     assert "envelope" not in html.lower()
     assert "Documentenhiërarchie" in html
     assert "Documentenhierarchie" not in html
@@ -121,14 +138,36 @@ def test_review_card_has_two_column_class(tmp_path: Path) -> None:
     assert "graaf-editor" not in html.lower()
 
 
+def test_review_card_has_two_column_class(tmp_path: Path) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    receipt = _ingest(console, accounts)
+    target = next(
+        obj
+        for obj in console.snapshot_objects(receipt["snapshot_id"])
+        if obj["object_type"] != "document"
+    )
+    html = _review_page(console, receipt["snapshot_id"], target["object_id"])
+    cards = _cards(html)
+    assert cards, "review card must carry the two-column class"
+    assert len(cards) == 1
+    assert target["object_id"] in cards[0]
+    assert "envelope" not in html.lower()
+    assert "draggable" not in html.lower()
+    assert "graaf-editor" not in html.lower()
+
+
 def test_review_card_object_left_bronpassage_right(tmp_path: Path) -> None:
-    html, receipt, console = _review_html(tmp_path)
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    receipt = _ingest(console, accounts)
     objects = [
         obj
         for obj in console.snapshot_objects(receipt["snapshot_id"])
         if obj["object_type"] != "document"
     ]
     rec = next(obj for obj in objects if "Verwijs" in ((obj.get("content") or {}).get("clean_text") or ""))
+    html = _review_page(console, receipt["snapshot_id"], rec["object_id"])
     opened = console.open_source_passage(
         snapshot_id=receipt["snapshot_id"],
         object_id=rec["object_id"],
@@ -208,7 +247,7 @@ def test_type_and_approve_still_disabled_when_passage_cannot_open(tmp_path: Path
 
     client = TestClient(create_console_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
-    html = client.get(f"/review?document={receipt['snapshot_id']}").text
+    html = _review_page(console, receipt["snapshot_id"], target["object_id"])
     assert TWO_COLUMN_CLASS in html
     card = next(block for block in _cards(html) if target["object_id"] in block)
     assert PASSAGE_COL in card

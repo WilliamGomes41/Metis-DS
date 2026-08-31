@@ -5,6 +5,7 @@ All notable technical changes to V&VN Data Services are recorded here.
 ## [Unreleased]
 
 ### Added
+- Review room loads one object card per request (`/review?document=&object=`). Document view lists objects without opening every freeze passage. Fixes Azure App Service 504 Gateway Timeout on large Continentie reviews. Two-column card unchanged. `publish()` remains G2-BLOCKED.
 - Azure App Service host adapter for the internal operations console (`src/console_asgi.py`). Bootstrap accounts from environment only; G2 remains BLOCKED; G0 Azure DEV remains BLOCKED until the web app is live. Not a public website.
 - Owner lock 2026-08-31: G2 Blob store recorded in code (`aidataservice` / `canonical-sources`, West Europe, private). Locator `azure://aidataservice/canonical-sources/{sha256}/{filename}`. Container empty; G2 remains BLOCKED; `publish()` remains G2-BLOCKED; G0 Azure DEV remains BLOCKED. No storage keys in Git.
 - Review card two-column layout (owner lock 2026-08-29): knowledge object left (type, relation checkboxes, decision), exact freeze bronpassage right (v2.11 locators via `open_source_passage`); stacks on narrow. Type/approve stay blocked if the passage cannot open. Relations stay proposed checkboxes + confirm. No graph editor. Implements the already-approved docs lock; not a new protocol version. `publish()` remains G2-BLOCKED. v2.14 is not next.
