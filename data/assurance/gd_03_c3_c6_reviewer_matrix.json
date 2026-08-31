@@ -7,7 +7,7 @@
   "protocol_path": "docs/PROTOCOL_V2_2.md",
   "protocol_section": "16",
   "governance_path": "docs/GOVERNANCE.md",
-  "governance_sha256": "c6dc17ed245ce607014f1cbaa0436ee81ea1144028093efc68365a035fd297e0",
+  "governance_sha256": "ea4a07118a6a82f3f7c3fcd1e48261f64e2239298ee0ad07bccf814122af1bcb",
   "repository": "WilliamGomes41/VENVN-DS",
   "default_branch": "main",
   "decision_date": "2026-08-27",
@@ -55,6 +55,11 @@
     "GD-04",
     "GD-05",
     "GD-06",
-    "GD-07"
+    "GD-07",
+    "GD-08",
+    "GD-09",
+    "GD-10",
+    "GD-11",
+    "GD-12"
   ]
 }
