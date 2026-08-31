@@ -12,11 +12,19 @@ from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 
 ROOT = Path(__file__).resolve().parents[1]
+AZURE_DATA_ROOT = Path("/home/data/metis-console")
 
 
 def _env_path(name: str, default: Path) -> Path:
     raw = os.environ.get(name, "").strip()
     return Path(raw) if raw else default
+
+
+def _default_data_root() -> Path:
+    """Keep Azure runtime data outside the deployment-managed wwwroot."""
+    if os.environ.get("WEBSITE_SITE_NAME", "").strip():
+        return AZURE_DATA_ROOT
+    return ROOT
 
 
 def bootstrap_accounts(console: OperationsConsole) -> None:
@@ -49,7 +57,7 @@ def bootstrap_accounts(console: OperationsConsole) -> None:
 
 
 def build_app() -> object:
-    data_root = _env_path("CONSOLE_DATA_ROOT", ROOT)
+    data_root = _env_path("CONSOLE_DATA_ROOT", _default_data_root())
     console = OperationsConsole(
         root=ROOT,
         source_store=_env_path("CONSOLE_SOURCE_STORE", data_root / "sources" / "private"),
