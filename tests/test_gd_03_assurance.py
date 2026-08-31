@@ -33,7 +33,19 @@ EXPECTED_MATRIX = {
     },
 }
 
-OPEN_SIBLINGS = ("GD-01", "GD-02", "GD-04", "GD-05", "GD-06", "GD-07")
+OPEN_SIBLINGS = (
+    "GD-01",
+    "GD-02",
+    "GD-04",
+    "GD-05",
+    "GD-06",
+    "GD-07",
+    "GD-08",
+    "GD-09",
+    "GD-10",
+    "GD-11",
+    "GD-12",
+)
 
 
 def test_gd03_assurance_matches_governance_bytes_and_is_established() -> None:
