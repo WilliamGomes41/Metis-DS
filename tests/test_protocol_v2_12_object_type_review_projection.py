@@ -30,7 +30,6 @@ def test_v212_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -42,7 +41,6 @@ def test_v212_delta_exists_and_is_the_live_baseline() -> None:
     assert "De geldende normatieve baseline is Protocol v2.10.0" not in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.11.0" not in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.12.0" not in root_protocol
-    assert "**Geldend protocol:** v2.13.0" in handoff
     assert "Protocol v2.12.0" in roadmap
 
 
@@ -75,7 +73,6 @@ def test_v212_hierarchy_points_at_combined_live_version_without_rewriting_v212_d
 def test_v212_keeps_all_v26_through_v210_rules() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "All Protocol v2.6 room rules" in delta
     assert "all Protocol v2.7 first-wave source, retrieve-and-abstain and distribution rules" in delta
     assert "all Protocol v2.8 primary-user and two-axis hierarchy rules" in delta
@@ -104,16 +101,12 @@ def test_v212_keeps_all_v26_through_v210_rules() -> None:
     assert "Alle v2.8-gebruikers-/hiërarchieregels blijven van kracht" in root_protocol
     assert "Alle v2.9-UX-/huisstyleregels blijven van kracht" in root_protocol
     assert "Alle v2.10-console-/nav-/accountsregels blijven van kracht" in root_protocol
-    assert "Chat hoort niet in de console" in handoff
-    assert "deze delta claimt geen bestaande UI en implementeert de console niet" in handoff
-    assert "bestaat nu in code" in handoff
 
 
 def test_v212_does_not_redesign_the_four_layers() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "Do not redesign the four layers (source/evidence → canonical knowledge → governance → product)" in delta
     assert "The problem is semantic classification and the hard binding of review, publication and serving" in delta
     assert "The four layers remain source/evidence → canonical knowledge → governance → product" in delta
@@ -122,14 +115,12 @@ def test_v212_does_not_redesign_the_four_layers() -> None:
     assert "bron/evidence" in root_protocol
     assert "canonieke kennis" in root_protocol
     assert "vier lagen" in roadmap
-    assert "vier lagen" in handoff
 
 
 def test_v212_extraction_is_structure_and_provenance_only() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "Extraction MUST determine structure and provenance only, NOT the meaning of a passage" in delta
     assert "A heading MAY become object_type `heading`" in delta
     assert "Everything that is not a heading MUST default to `unclassified`" in delta
@@ -141,16 +132,12 @@ def test_v212_extraction_is_structure_and_provenance_only() -> None:
     assert "niet de betekenis" in root_protocol
     assert "Extractie MUST alleen structuur en provenance bepalen" in roadmap
     assert "unclassified" in roadmap
-    assert "Extractie MUST alleen structuur en provenance bepalen" in handoff
-    assert "unclassified" in handoff
-    assert "onbevestigd voorstel MUST NOT als gepubliceerd type" in handoff
 
 
 def test_v212_closed_object_type_set_does_not_invent_types() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "`heading`, `definition`, `explanation`, `condition`, `exception`, `recommendation`" in delta
     assert "Operators MUST NOT invent types in the MVP" in delta
     assert "`unclassified` is the default, not a sixth advice type" in delta
@@ -159,15 +146,12 @@ def test_v212_closed_object_type_set_does_not_invent_types() -> None:
     assert "geen zesde advies-type" in root_protocol
     assert "gesloten object-typeset" in roadmap
     assert "geen zesde advies-type" in roadmap
-    assert "gesloten object-typeset" in handoff
-    assert "geen zesde advies-type" in handoff
 
 
 def test_v212_answerability_joins_question_type_and_object_type() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "Answerability MUST join question type × object type" in delta
     assert 'MUST NOT be "only recommendations are supported"' in delta
     assert "supported when the available, reviewed object type is suitable for the claimed question" in delta
@@ -184,16 +168,12 @@ def test_v212_answerability_joins_question_type_and_object_type() -> None:
     assert "geen advies-gewicht" in root_protocol
     assert "vraagtype × objecttype" in roadmap
     assert "handelingsadvies" in roadmap
-    assert "vraagtype × objecttype" in handoff
-    assert "niet alleen recommendations" in handoff
-    assert "geen advies-gewicht" in handoff
 
 
 def test_v212_publish_binds_object_tuple_not_envelope_tick() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "Cutover/publish MUST NOT trust envelope `review_passes` alone" in delta
     assert "`object_id` + `object_version` + `canonical_object_hash` + `confirmed_object_type` + `reviewer` + `decision`" in delta
     assert "Independence rule unchanged (uploader MUST NOT be the only required reviewer)" in delta
@@ -206,16 +186,12 @@ def test_v212_publish_binds_object_tuple_not_envelope_tick() -> None:
     assert "confirmed_object_type" in root_protocol
     assert "review_passes" in roadmap
     assert "canonical_object_hash" in roadmap
-    assert "review_passes" in handoff
-    assert "canonical_object_hash" in handoff
-    assert "niet een envelope-vinkje" in handoff
 
 
 def test_v212_serving_uses_atomic_published_projection() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "The Product API remains a derived read-only layer" in delta
     assert "Serving MUST use a validated published projection" in delta
     assert "Publish, withdraw and supersede MUST replace that projection atomically" in delta
@@ -231,16 +207,12 @@ def test_v212_serving_uses_atomic_published_projection() -> None:
     assert "verouderde projectie" in root_protocol
     assert "gevalideerde gepubliceerde projectie" in roadmap
     assert "atomair" in roadmap
-    assert "gevalideerde gepubliceerde projectie" in handoff
-    assert "MUST NOT live governance per query reconstrueren" in handoff
-    assert "verouderde projectie na withdraw is een protocolfout" in handoff
 
 
 def test_v212_delta_keeps_historical_pr27_lock_while_wiring_lists_v211_live() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "Ingest URL-HTML remains the v2.11 lock (PR #27, not this file)" in delta
     assert "live URL-HTML MUST NOT be a publishable source" in delta
     assert "uploaded freeze-HTML MAY" in delta
@@ -252,14 +224,10 @@ def test_v212_delta_keeps_historical_pr27_lock_while_wiring_lists_v211_live() ->
     assert "docs/PROTOCOL_V2_11_HTML_FREEZE_LOCATOR_DELTA.md" in root_protocol
     assert "plus Protocol v2.11.0" in root_protocol
     assert "Protocol v2.11.0" in roadmap
-    assert "Protocol v2.11.0" in handoff
-    assert "v2.12 MUST NOT v2.11 als substituut" in handoff
     assert "De geldende normatieve baseline is Protocol v2.11.0" not in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.11.0" not in roadmap
-    assert "**Geldend protocol:** v2.11.0" not in handoff
     assert "niet de live baseline" not in root_protocol
     assert "niet de live baseline" not in roadmap
-    assert "niet de live baseline" not in handoff
 
 
 def test_v212_keeps_fail_closed_exclusions_and_gitignore() -> None:
@@ -301,7 +269,6 @@ def test_v212_keeps_fail_closed_exclusions_and_gitignore() -> None:
 
 def test_v212_is_c3_spanning_c5_with_owner_approval_and_does_not_reopen_gd03() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     governance = _read(ROOT / "docs" / "GOVERNANCE.md")
     assert "**Highest change class:** C3 (retrieve-safety / answerability) spanning C5 (review/publish authorization binding)" in delta
     assert "C5 applies only as review/publish authorization binding" in delta
@@ -311,13 +278,6 @@ def test_v212_is_c3_spanning_c5_with_owner_approval_and_does_not_reopen_gd03() -
     assert "PR #26" in delta
     assert "PR #24" in delta
     assert "does not reopen GD-03" in delta
-    assert "GD-03 is ESTABLISHED" in handoff
-    assert "GD-03 is niet langer OPEN" in handoff
-    assert "geen nieuwe protocolversie" in handoff
-    assert "Er worden geen reviewers verzonnen" in handoff
-    assert "Er worden geen namen verzonnen" in handoff
-    assert "G1 technische protection op `main` is ON" in handoff
-    assert "G0 Azure DEV blijft `BLOCKED`" in handoff
     assert "v2.12.0" in governance
     assert "heropent GD-03 niet" in governance
     gd03 = json.loads((ROOT / "data" / "assurance" / "gd_03_c3_c6_reviewer_matrix.json").read_text(encoding="utf-8"))
@@ -329,7 +289,6 @@ def test_v212_is_c3_spanning_c5_with_owner_approval_and_does_not_reopen_gd03() -
 def test_v212_records_kernel_build_order_without_implementing_code_or_starting_azure() -> None:
     delta = _read(DELTA)
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Do not build a mockup" in delta
     assert "The next implementation after this protocol (not this PR) MUST be the Implementation engineer on the existing kernel" in delta
@@ -348,18 +307,12 @@ def test_v212_records_kernel_build_order_without_implementing_code_or_starting_a
     assert "bestaande kernel" in roadmap
     assert "Geen mockup" in roadmap
     assert "VIA de console" in roadmap or "VIA die console" in roadmap
-    assert "Implementation engineer" in handoff
-    assert "bestaande kernel" in handoff
-    assert "geen mockup" in handoff
-    assert "PROTOCOL → tests → code later" in handoff
-    assert "deze v2.12-delta implementeert extract/API/console niet" in handoff
     assert "Protocol v2.12.0" in changelog
     assert "does not implement extract, API or console changes" in changelog
 
 
 def test_v212_keeps_g1_public_mvp_and_forbids_azure_g2_vercel_neon_llm() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     stack = _read(ROOT / "docs" / "STACK_SETUP_BASELINE.md")
     infra = json.loads((ROOT / "config" / "infrastructure_manifest.v1.json").read_text(encoding="utf-8"))
     assert "G1 technical protection remains ON" in delta
@@ -368,8 +321,6 @@ def test_v212_keeps_g1_public_mvp_and_forbids_azure_g2_vercel_neon_llm() -> None
     assert "No Vercel, Neon, or LLM vendor" in delta
     assert "No Azure/Vercel/Neon in this delta" in delta
     assert "Azure/G2 MUST stay out of this delta" in delta
-    assert "G1 technische protection op `main` is ON" in handoff
-    assert "G0 Azure DEV blijft `BLOCKED`" in handoff
     assert "Vercel, Neon and a hosted LLM" in stack
     assert "no vendor is selected" in stack
     assert "No LLM in the MVP" in stack
@@ -395,7 +346,6 @@ def test_v212_keeps_g1_public_mvp_and_forbids_azure_g2_vercel_neon_llm() -> None
 
 def test_v212_does_not_implement_extract_api_or_console_code() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "This protocol-only change does not implement extract, API or console changes" in delta
     assert "Do not rewrite `src/operations_console_*.py`, `src/extract_*.py` or `src/product_api_*.py` in this protocol change" in delta
     assert "This delta does not implement extract, API or console changes" in delta
@@ -410,6 +360,3 @@ def test_v212_does_not_implement_extract_api_or_console_code() -> None:
     assert "skip durable immutable storage" in delta
     assert "reopen or alter GD-03" in delta
     assert "staff named human reviewers" in delta
-    assert "deze v2.12-delta implementeert extract/API/console niet" in handoff
-    assert "Deze delta implementeert de nieuwe UI niet" in handoff
-    assert "geen locator-implementatie, geen Blob, geen G2-PASS" in handoff

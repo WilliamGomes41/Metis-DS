@@ -30,7 +30,6 @@ def test_v28_remains_an_approved_component_of_current_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -38,7 +37,6 @@ def test_v28_remains_an_approved_component_of_current_baseline() -> None:
     assert "docs/PROTOCOL_V2_8_USERS_HIERARCHY_CONSOLE_ORDER_DELTA.md" in root_protocol
     assert "Protocol v2.8.0" in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.7.0" not in root_protocol
-    assert "**Geldend protocol:** v2.13.0" in handoff
     assert "Protocol v2.8.0" in roadmap
 
 
@@ -62,7 +60,6 @@ def test_v28_hierarchy_remains_a_listed_baseline_component() -> None:
 def test_v28_keeps_all_v26_and_v27_rules() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "All Protocol v2.6 console rules and all Protocol v2.7 first-wave source, retrieve-and-abstain and distribution rules remain in force" in delta
     assert "The internal operations console remains authorized DS scope and remains unbuilt" in delta
     assert "four rooms that are not four buttons for one person" in delta
@@ -78,16 +75,12 @@ def test_v28_keeps_all_v26_and_v27_rules() -> None:
     assert "No LLM in the MVP" in delta
     assert "Alle v2.6-consoleregels blijven van kracht" in root_protocol
     assert "Alle v2.7-bron-/API-/distributieregels blijven van kracht" in root_protocol
-    assert "Chat hoort niet in de console" in handoff
-    assert "deze delta claimt geen bestaande UI en implementeert de console niet" in handoff
-    assert "bestaat nu in code" in handoff
 
 
 def test_v28_records_primary_users_not_nurses() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "guideline researchers, who use the console" in delta
     assert "B2B subscribers: an EPD, an institution, or their bot" in delta
     assert "Nurses are not primary users of DS" in delta
@@ -97,13 +90,11 @@ def test_v28_records_primary_users_not_nurses() -> None:
     assert "B2B-abonnees" in root_protocol
     assert "Verpleegkundigen zijn geen primaire DS-gebruikers" in root_protocol
     assert "ontwerp de console niet voor verpleegkundigen" in roadmap
-    assert "ontwerp de console niet voor verpleegkundigen" in handoff
 
 
 def test_v28_records_two_axis_source_hierarchy() -> None:
     delta = _read(DELTA)
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "Heavier class MUST NOT be filled by lighter class" in delta
     assert "`richtlijn` > `handreiking` > `artikel` > `transcript` / `podcast`" in delta
     assert "A podcast MUST NOT replace a guideline in the API even in the same family" in delta
@@ -122,26 +113,21 @@ def test_v28_records_two_axis_source_hierarchy() -> None:
     assert "Unpublished branches MUST abstain" in delta
     assert "klasse/gewicht" in roadmap
     assert "familie × klasse" in roadmap
-    assert "podcast MUST NOT een richtlijn" in handoff
 
 
 def test_v28_clarifies_rag_is_not_the_product() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "RAG on kennisplatform HTML is not the product" in delta
     assert "DS is the owned live curated switch, not a scrape" in delta
     assert "Train-ready structured objects plus a live published-check remain the B2B offer" in delta
     assert "RAG op kennisplatform-HTML is niet het product" in root_protocol
     assert "geen scrape" in root_protocol
-    assert "live gecureerde schakel" in handoff
-    assert "Train-ready gestructureerde objecten plus live publicatiestatuscheck" in handoff
 
 
 def test_v28_records_real_console_mvp_build_order_without_skipping_storage() -> None:
     delta = _read(DELTA)
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "Do not build a mockup" in delta
     assert 'Do not wait for Azure or a finished "DS" before researchers have a real console' in delta
     assert "The next implementation after this delta MUST be a real console MVP, not a mockup" in delta
@@ -162,12 +148,6 @@ def test_v28_records_real_console_mvp_build_order_without_skipping_storage() -> 
     assert "echte console-MVP" in roadmap
     assert "Geen mockup" in roadmap
     assert "VIA de console" in roadmap or "VIA die console" in roadmap
-    assert "Echte console-MVP ingest+review" in handoff
-    assert "geen mockup" in handoff
-    assert "Bron 2 is nog BLOCKED op duurzame immutable opslag" in handoff
-    assert "deze delta claimt geen bestaande UI en implementeert de console niet" in handoff
-    assert "Echte console-MVP ingest+review" in handoff
-    assert "bestaat nu in code" in handoff
     assert "Do not claim the console exists in code" in delta
 
 
@@ -205,7 +185,6 @@ def test_v28_keeps_fail_closed_exclusions_and_gitignore() -> None:
 
 def test_v28_is_c5_spanning_c3_with_owner_approval_and_retrospective_review() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "**Highest change class:** C5" in delta
     assert "spanning C3" in delta
     assert "Named C5 reviewers are not yet staffed" in delta
@@ -213,26 +192,16 @@ def test_v28_is_c5_spanning_c3_with_owner_approval_and_retrospective_review() ->
     assert "Retrospective independent technical and security/operations review remains due" in delta
     assert "PR #19" in delta
     assert "does not reopen GD-03" in delta
-    assert "GD-03 is ESTABLISHED" in handoff
-    assert "GD-03 is niet langer OPEN" in handoff
-    assert "geen nieuwe protocolversie" in handoff
-    assert "Er worden geen reviewers verzonnen" in handoff
-    assert "Er worden geen namen verzonnen" in handoff
-    assert "G1 technische protection op `main` is ON" in handoff
-    assert "G0 Azure DEV blijft `BLOCKED`" in handoff
 
 
 def test_v28_keeps_g1_public_mvp_and_forbids_vercel_neon_llm() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     stack = _read(ROOT / "docs" / "STACK_SETUP_BASELINE.md")
     infra = json.loads((ROOT / "config" / "infrastructure_manifest.v1.json").read_text(encoding="utf-8"))
     assert "G1 technical protection remains ON" in delta
     assert "public under Protocol v2.5" in delta
     assert "G0 Azure DEV remains BLOCKED" in delta
     assert "No Vercel, Neon, or LLM vendor" in delta
-    assert "G1 technische protection op `main` is ON" in handoff
-    assert "G0 Azure DEV blijft `BLOCKED`" in handoff
     assert "Vercel, Neon and a hosted LLM" in stack
     assert "no vendor is selected" in stack
     assert "No LLM in the MVP" in stack
@@ -257,7 +226,6 @@ def test_v28_keeps_g1_public_mvp_and_forbids_vercel_neon_llm() -> None:
 
 def test_v28_does_not_implement_console_or_product_code() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "This protocol-only change does not implement UI or product code" in delta
     assert "Do not implement the console in this protocol change" in delta
     assert "It does not:" in delta
@@ -265,4 +233,3 @@ def test_v28_does_not_implement_console_or_product_code() -> None:
     assert "authorize a mockup as the next implementation" in delta
     assert "skip durable immutable storage or convert G2 to PASS" in delta
     assert "design the console for nurses" in delta
-    assert "deze delta claimt geen bestaande UI en implementeert de console niet" in handoff

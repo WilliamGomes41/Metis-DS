@@ -30,13 +30,11 @@ def test_v24_remains_an_approved_component_of_current_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
 
     assert "**Status:** Approved for project use" in delta
     assert "**Protocol delta version:** 2.4.0" in delta
     assert "docs/PROTOCOL_V2_4_PRODUCT_DISTRIBUTION_DELTA.md" in root_protocol
     assert "Protocol v2.4.0" in root_protocol
-    assert "**Geldend protocol:** v2.13.0" in handoff
     assert "Fase 6 — Externe integratiepilot" in roadmap
 
 

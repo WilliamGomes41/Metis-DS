@@ -30,7 +30,6 @@ def test_v27_remains_an_approved_component_of_current_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -38,7 +37,6 @@ def test_v27_remains_an_approved_component_of_current_baseline() -> None:
     assert "docs/PROTOCOL_V2_7_SOURCE_API_DISTRIBUTION_DELTA.md" in root_protocol
     assert "Protocol v2.7.0" in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.6.0" not in root_protocol
-    assert "**Geldend protocol:** v2.13.0" in handoff
     assert "Protocol v2.7.0" in roadmap
 
 
@@ -60,7 +58,6 @@ def test_v27_hierarchy_remains_a_listed_baseline_component() -> None:
 def test_v27_keeps_all_v26_console_rules() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "All Protocol v2.6 console rules remain in force" in delta
     assert "The internal operations console remains authorized DS scope and remains unbuilt" in delta
     assert "four rooms that are not four buttons for one person" in delta
@@ -71,15 +68,11 @@ def test_v27_keeps_all_v26_console_rules() -> None:
     assert "a public website MUST NOT live in this repository" in delta
     assert "console work MUST NOT replace Fase 2" in delta
     assert "Alle v2.6-consoleregels blijven van kracht" in root_protocol
-    assert "Chat hoort niet in de console" in handoff
-    assert "deze delta claimt geen bestaande UI en implementeert de console niet" in handoff
-    assert "bestaat nu in code" in handoff
 
 
 def test_v27_records_first_wave_source_rules() -> None:
     delta = _read(DELTA)
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "First-wave official files MUST be the HTML page and the PDF only" in delta
     assert "kennisplatform `story.html` boom players MUST be out of the first wave" in delta
     assert "The official file MUST be the kennisplatform freeze, not a living Word document" in delta
@@ -92,7 +85,6 @@ def test_v27_records_first_wave_source_rules() -> None:
     assert "object-level differential comparison" in delta
     assert "The old release MUST stay live until cutover publish" in delta
     assert "story.html" in roadmap
-    assert "story.html" in handoff
 
 
 def test_v27_records_object_level_retrieve_and_abstain_api() -> None:
@@ -114,7 +106,6 @@ def test_v27_records_object_level_retrieve_and_abstain_api() -> None:
 
 def test_v27_records_live_curation_distribution() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     roadmap = _read(ROOT / "ROADMAP.md")
     assert "The DS asset is live curation" in delta
     assert "The default product MUST be a live retrieve-and-abstain subscription" in delta
@@ -125,7 +116,6 @@ def test_v27_records_live_curation_distribution() -> None:
     assert "DS MUST NOT build those bots" in delta
     assert "scoped supersession" in delta
     assert "v2.4 §10" in delta
-    assert "live retrieve-and-abstain-abonnement" in handoff
     assert "Nederlands EPD/ECD" in roadmap
 
 
@@ -145,15 +135,11 @@ def test_v27_records_later_analytics_limits() -> None:
 def test_v27_does_not_skip_fase2_or_claim_console_built() -> None:
     delta = _read(DELTA)
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "Do not skip Fase 2 bron 2 storage" in delta
     assert "The console remains approved-not-built" in delta
     assert "The next concrete task remains bron 2 storage" in delta
     assert "Do not claim the console exists in code" in delta
     assert "Duurzame opslag wordt niet overgeslagen" in roadmap
-    assert "Bron 2 is nog BLOCKED op duurzame immutable opslag" in handoff
-    assert "deze delta claimt geen bestaande UI en implementeert de console niet" in handoff
-    assert "bestaat nu in code" in handoff
 
 
 def test_v27_keeps_fail_closed_exclusions_and_gitignore() -> None:
@@ -190,7 +176,6 @@ def test_v27_keeps_fail_closed_exclusions_and_gitignore() -> None:
 
 def test_v27_is_c5_spanning_c3_with_owner_approval_and_retrospective_review() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "**Highest change class:** C5" in delta
     assert "spanning C3" in delta
     assert "Named C5 reviewers are not yet staffed" in delta
@@ -198,25 +183,16 @@ def test_v27_is_c5_spanning_c3_with_owner_approval_and_retrospective_review() ->
     assert "Retrospective independent technical and security/operations review remains due" in delta
     assert "PR #18" in delta
     assert "does not reopen GD-03" in delta
-    assert "GD-03 is ESTABLISHED" in handoff
-    assert "GD-03 is niet langer OPEN" in handoff
-    assert "geen nieuwe protocolversie" in handoff
-    assert "Er worden geen reviewers verzonnen" in handoff
-    assert "G1 technische protection op `main` is ON" in handoff
-    assert "G0 Azure DEV blijft `BLOCKED`" in handoff
 
 
 def test_v27_keeps_g1_public_mvp_and_forbids_vercel_neon_llm() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     stack = _read(ROOT / "docs" / "STACK_SETUP_BASELINE.md")
     infra = json.loads((ROOT / "config" / "infrastructure_manifest.v1.json").read_text(encoding="utf-8"))
     assert "G1 technical protection remains ON" in delta
     assert "public under Protocol v2.5" in delta
     assert "G0 Azure DEV remains BLOCKED" in delta
     assert "No Vercel, Neon, or LLM vendor" in delta
-    assert "G1 technische protection op `main` is ON" in handoff
-    assert "G0 Azure DEV blijft `BLOCKED`" in handoff
     assert "Vercel, Neon and a hosted LLM" in stack
     assert "no vendor is selected" in stack
     assert "No LLM in the MVP" in stack

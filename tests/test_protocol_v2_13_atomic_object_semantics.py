@@ -33,7 +33,6 @@ def test_v213_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -42,7 +41,6 @@ def test_v213_delta_exists_and_is_the_live_baseline() -> None:
     assert root_protocol.count("De geldende normatieve baseline is Protocol v2.13.0") == 1
     assert "plus Protocol v2.12.0 plus Protocol v2.11.0" in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.12.0" not in root_protocol
-    assert "**Geldend protocol:** v2.13.0 + v2.12.0 + v2.11.0" in handoff
     assert "Protocol v2.13.0" in roadmap
 
 
@@ -59,7 +57,6 @@ def test_v213_architecture_principle_is_law() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "One knowledge object MUST be one confirmable meaning" in delta
     assert "Context MUST live in reviewed relations, not in a blob" in delta
     assert "The canonical store MUST be the only source of truth" in delta
@@ -69,7 +66,6 @@ def test_v213_architecture_principle_is_law() -> None:
     assert "canonieke store" in root_protocol
     assert "wegwerpbaar" in root_protocol
     assert "canonieke store" in roadmap
-    assert "canonieke store" in handoff
 
 
 def test_v213_atomic_objects_forbid_token_budget_identity_and_fusion() -> None:
@@ -137,13 +133,11 @@ def test_v213_open_original_is_review_law_without_a_new_locator_scheme() -> None
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "From every knowledge object the reviewer MUST be able to open the exact source passage" in delta
     assert "Type confirmation without that flow is not acceptable" in delta
     assert "this delta MUST NOT invent a locator scheme" in delta
     assert "exacte bronpassage" in root_protocol
     assert "open-origineel" in roadmap
-    assert "exacte bronpassage" in handoff
 
 
 def test_v213_closed_relations_are_serving_law() -> None:
@@ -176,7 +170,6 @@ def test_v213_closed_relations_are_serving_law() -> None:
 def test_v213_high_risk_four_eyes_is_authorization() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "uploader MUST NOT be the only required reviewer" in delta
     assert "AI / Grok Bot / Metis / Implementation engineer / Auditor MUST NOT count as required reviewers" in delta
     assert "confirmed type is `exception`" in delta
@@ -188,12 +181,10 @@ def test_v213_high_risk_four_eyes_is_authorization() -> None:
     assert "it is an additional required reviewer on that tuple" in delta
     assert "G2 still blocks actual `publish()`" in delta
     assert "four-eyes" in root_protocol
-    assert "four-eyes" in handoff
 
 
 def test_v213_is_c3_spanning_c5_owner_approved_and_does_not_reopen_gd03() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     governance = _read(ROOT / "docs" / "GOVERNANCE.md")
     assert "**Highest change class:** C3 (retrieve-safety / answerability / knowledge model) spanning C5 (high-risk four-eyes review/publish authorization)" in delta
     assert "This delta is owner-approved" in delta
@@ -204,7 +195,6 @@ def test_v213_is_c3_spanning_c5_owner_approved_and_does_not_reopen_gd03() -> Non
     assert "Protocol v2.13.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning C5 four-eyes-autorisatie" in governance
     assert "heropent GD-03 niet" in governance
     assert "Benoemde reviewers blijven onbezet" in governance
-    assert "Er worden geen namen verzonnen" in handoff
     gd03 = json.loads((ROOT / "data" / "assurance" / "gd_03_c3_c6_reviewer_matrix.json").read_text(encoding="utf-8"))
     assert gd03["status"] == "ESTABLISHED"
 
@@ -212,7 +202,6 @@ def test_v213_is_c3_spanning_c5_owner_approved_and_does_not_reopen_gd03() -> Non
 def test_v213_records_kernel_then_g2_and_does_not_write_v214() -> None:
     delta = _read(DELTA)
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Where this delta and Protocol v2.12 §10 conflict on which implementation is next, this delta governs" in delta
     assert "atomic split" in delta
@@ -229,10 +218,6 @@ def test_v213_records_kernel_then_g2_and_does_not_write_v214() -> None:
     assert "LOCKED nu" in roadmap
     assert "LOCKED als het volgende protocol (v2.14), niet deze PR" in roadmap
     assert "MUST NOT Protocol v2.14 worden geschreven" in roadmap
-    assert "Implementation engineer op de bestaande kernel" in handoff
-    assert "Protocol v2.14 is niet de volgende stap" in handoff
-    assert "Metis implementeert niet" in handoff
-    assert "8cfe9dc37a8f3f0bf3548a40abff41acb4fb39ce" in handoff
     assert "Protocol v2.13.0" in changelog
     assert "does not implement extract, relations, open-original, schema or publish()" in changelog
     assert "v2.14 is not next" in changelog
@@ -257,7 +242,6 @@ def test_v213_roadmap_locks_seven_clusters_and_maps_ten_epics() -> None:
 
 def test_v213_does_not_implement_product_code_or_skip_g2() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "It does not:" in delta
     assert "implement extract, relations, console “open original”, schema, Product API, or `publish()`" in delta
     assert "convert G2 to PASS" in delta
@@ -266,6 +250,3 @@ def test_v213_does_not_implement_product_code_or_skip_g2() -> None:
     assert "write Protocol v2.14" in delta
     assert "invent a locator scheme" in delta
     assert "silently add a new quality metric as a protocol gate" in delta
-    assert "deze v2.13-delta implementeert extract, relaties, open-origineel, schema of `publish()` niet" in handoff
-    assert "`publish()` blijft G2-BLOCKED" in handoff
-    assert "G2 overslaan MUST NOT" in handoff

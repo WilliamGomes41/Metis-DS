@@ -26,11 +26,9 @@ def test_v23_approval_manifest_matches_protocol_bytes() -> None:
 def test_v23_remains_an_approved_component_of_current_baseline() -> None:
     protocol = PROTOCOL.read_text(encoding="utf-8")
     root_protocol = (ROOT / "PROTOCOL.md").read_text(encoding="utf-8")
-    handoff = (ROOT / "HANDOFF.md").read_text(encoding="utf-8")
     assert "**Status:** Approved for project use" in protocol
     assert "**Protocol delta version:** 2.3.0" in protocol
     assert "docs/PROTOCOL_V2_3_TECHNICAL_DELTA.md" in root_protocol
-    assert "**Geldend protocol:** v2.13.0" in handoff
 
 
 def test_infrastructure_baseline_is_approved_without_overstating_azure() -> None:

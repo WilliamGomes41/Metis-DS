@@ -2,7 +2,7 @@
 
 ## 1. Doel
 
-Deze werkwijze voorkomt dat implementatiekeuzes stilzwijgend productregels of architectuur worden. Besluitvorming loopt van norm naar planning, actuele toestand, controleerbaar gedrag en pas daarna naar code.
+Deze werkwijze voorkomt dat implementatiekeuzes stilzwijgend productregels of architectuur worden. Besluitvorming loopt van norm naar planning, controleerbaar gedrag en pas daarna naar code. De actuele toestand blijkt uit `main`, tests, CI en commitgeschiedenis.
 
 ## 2. Documenthiërarchie
 
@@ -10,7 +10,6 @@ Deze werkwijze voorkomt dat implementatiekeuzes stilzwijgend productregels of ar
 |---|---|---|
 | `PROTOCOL.md` | Wat moet waar zijn? | Norm, grenzen, invarianten, verantwoordelijkheden en verboden gedrag |
 | `ROADMAP.md` | In welke volgorde realiseren we dit? | Fasen, scope, afhankelijkheden en stopvoorwaarden |
-| `HANDOFF.md` | Waar staan we nu werkelijk? | Gemergede stand, bewijs, blokkades, afwijkingen en eerstvolgende taak |
 | Tests | Hoe bewijzen we conformiteit? | Gold cases, acceptatiecriteria, regressie- en invarianttests |
 | Code | Hoe implementeren we het besloten gedrag? | Minimaal noodzakelijke deterministische en modelondersteunde implementatie |
 
@@ -23,13 +22,11 @@ Een lagere laag mag een hogere laag niet tegenspreken. Bij tegenspraak geldt de 
 3. Toets of de bestaande norm het gewenste gedrag ondubbelzinnig bepaalt.
 4. Wijzig eerst het protocol als een nieuwe regel, grens, verantwoordelijkheid of route nodig is.
 5. Bepaal in de roadmap de volgorde, scope en stopvoorwaarden.
-6. Werk de handoff bij met de actuele uitgangssituatie en één concrete volgende taak.
-7. Leg vóór implementatie de relevante gold cases, acceptatietests of invarianttests vast.
-8. Implementeer de kleinste wijziging die de tests en norm realiseert.
-9. Voer repository-preflight, compilatie, invarianttests, volledige tests en relevante echte cases uit.
-10. Controleer diff, herleidbaarheid, source integrity en vereiste menselijke review.
-11. Merge alleen wanneer alle toepasselijke gates `PASS` zijn; `BLOCKED` blijft een geldige veilige uitkomst.
-12. Werk in dezelfde PR de handoff bij met commit, bewijs, resterende blokkades en volgende taak.
+6. Leg vóór implementatie de relevante gold cases, acceptatietests of invarianttests vast.
+7. Implementeer de kleinste wijziging die de tests en norm realiseert.
+8. Voer repository-preflight, compilatie, invarianttests, volledige tests en relevante echte cases uit.
+9. Controleer diff, herleidbaarheid, source integrity en vereiste menselijke review.
+10. Merge alleen wanneer alle toepasselijke gates `PASS` zijn; `BLOCKED` blijft een geldige veilige uitkomst. De merge, tests en commitgeschiedenis vormen daarna het voortgangsbewijs op `main`.
 
 ## 4. Wanneer het protocol wel of niet verandert
 
@@ -53,7 +50,6 @@ Iedere materiële PR vermeldt minimaal:
 - geraakte protocolsecties, lagen en hoogste wijzigingsklasse;
 - protocolimpact: geen, verduidelijking of nieuwe versie;
 - roadmapfase en effect op scope/stopvoorwaarden;
-- handoffwijziging;
 - vooraf vastgelegde tests of acceptatiecases;
 - uitgevoerde preflight, CI, volledige tests en echte-casevalidatie;
 - source-, schema-, publication-, answerability-, security- en privacy-impact waar toepasselijk;
@@ -61,7 +57,7 @@ Iedere materiële PR vermeldt minimaal:
 - exacte commit/snapshot die iedere reviewer heeft beoordeeld;
 - resterende blokkades, afwijkingen en herstelactie.
 
-Een PR met code maar zonder vereiste test- en handoffwijziging is procesmatig incompleet.
+Een PR met code maar zonder vereiste tests en controleerbaar bewijs is procesmatig incompleet.
 
 Protocol v2.6 keurt een interne operations console goed als DS-oppervlak. Een PR die console-UI, console-identiteit, review-afdwinging of publish-autorisatie toevoegt is minstens C5 spanning C3. Een zorgapp-frontend, chatbot, EPD/ECD-UI of publieke website in deze repository blijft verboden. Chat is geen consoleruimte. Deze protocol-PR implementeert geen UI.
 
@@ -81,12 +77,10 @@ Protocol v2.12 legt extractie als structuur/provenance only, de gesloten object-
 
 CI controleert minimaal dat:
 
-- de vier sturende documenten bestaan;
+- de sturende documenten bestaan;
 - de hiërarchie in alle sturende documenten herkenbaar en consistent is;
 - `PROTOCOL.md` naar precies één geldende versiegebonden protocolspecificatie verwijst;
-- de handoff een geldend protocol, update-datum, authoritative remote, blokkades en eerstvolgende taak bevat;
 - de roadmap fasen en stopvoorwaarden bevat;
 - bestaande architectuur-invarianttests en de volledige testsuite blijven slagen.
 
 Deze documenttests bewijzen geen inhoudelijke goedkeuring. Ze voorkomen wel dat de afgesproken besturingsstructuur onzichtbaar verdwijnt.
-

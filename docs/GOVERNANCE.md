@@ -9,7 +9,7 @@
 
 Dit bestand is **geen vijfde stuurlaag**. De verplichte volgorde blijft:
 
-`PROTOCOL.md → ROADMAP.md → HANDOFF.md → acceptatietests → code`
+`PROTOCOL.md → ROADMAP.md → acceptatietests → code`
 
 Dit record maakt Protocol v2.2 §16 operationeel zichtbaar. Het voegt geen productregel, architectuurgrens, safety-invariant, verantwoordelijkheid of toegestane/verboden route toe. Bij conflict geldt `PROTOCOL.md` en de strengste fail-closed eis.
 
@@ -70,7 +70,7 @@ Protocol v2.2 §2: AI MAY mappings of metadata voorstellen; AI MUST NOT canonica
 
 Operationele toedeling binnen die norm:
 
-- **Grok Bot** implementeert code pas na `protocol → roadmap → handoff → tests`. Grok Bot is geen vereiste C3–C6-reviewer, keurt niet goed en publiceert niet.
+- **Grok Bot** implementeert code pas na `protocol → roadmap → tests`. Grok Bot is geen vereiste C3–C6-reviewer, keurt niet goed en publiceert niet.
 - **Metis** is de V&VN DS-assistent voor protocol, governance en organisatie. Metis is geen vereiste C3–C6-reviewer, keurt niet goed en publiceert niet.
 
 Deze toedeling wijzigt geen protocolverantwoordelijkheid.

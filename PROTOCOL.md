@@ -32,11 +32,11 @@ V&VN Data Services beheert de gevalideerde kennislaag, Product API, interne insp
 
 De verplichte volgorde is:
 
-`PROTOCOL.md → ROADMAP.md → HANDOFF.md → acceptatietests → code`
+`PROTOCOL.md → ROADMAP.md → acceptatietests → code`
 
 De uitvoeringscyclus is:
 
-`probleem of failure → protocoltoets → roadmapbesluit → handoff → tests → code → validatie → handoff`
+`probleem of failure → protocoltoets → roadmapbesluit → tests → code → validatie → main`
 
 De volledige werkwijze en uitzonderingsregels staan in [docs/DEVELOPMENT_WORKFLOW.md](docs/DEVELOPMENT_WORKFLOW.md).
 

@@ -1,6 +1,6 @@
 ## Scope
 
-This repository is V&VN Data Services only. Do not record status, phases or UI of other products in `PROTOCOL.md`, `ROADMAP.md` or `HANDOFF.md`.
+This repository is V&VN Data Services only. Do not record status, phases or UI of other products in `PROTOCOL.md` or `ROADMAP.md`.
 
 ## Change
 
