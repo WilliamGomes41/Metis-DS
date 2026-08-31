@@ -951,39 +951,3 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
 
 def create_app() -> FastAPI:
     return create_console_app()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
