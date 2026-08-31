@@ -1,6 +1,6 @@
 # V&VN Data Services — Actuele handoff
 
-**Bijgewerkt:** 2026-08-29  
+**Bijgewerkt:** 2026-08-31  
 **Geldend protocol:** v2.13.0 + v2.12.0 + v2.11.0  
 **Authoritative remote:** `WilliamGomes41/VENVN-DS` (public during the declared MVP period)  
 **Default branch:** `main`
@@ -23,6 +23,7 @@
 - De exacte officiële HTML-representatie van bron 2 is lokaal geverifieerd en deterministisch geëxtraheerd.
 - Bron 1 en bron 2 blijven `BLOCKED` voor publicatie zolang immutable opslag, definitieve registratie en klinische review ontbreken. Bron 2 is nog BLOCKED op duurzame immutable opslag. Publicatie blijft BLOCKED zonder immutable locator (G2).
 - G0 Local Development is `PASS`. G0 Azure DEV blijft `BLOCKED`. G8 en Azure worden niet als `PASS` of gestart geclaimd. Console-identiteit sluit G8 niet en provisioneert geen Azure AD.
+- G2-bronstore 2026-08-31 (eigenaarsopdracht): V&VN-tenant `venvn.nl`, abonnement Microsoft Azure `8c829c96-1784-4947-8a2b-92027c51fec9`, resourcegroep `AI_Dataservice`, opslagaccount `aidataservice` (westeurope, StorageV2, ZRS), privécontainer `canonical-sources`. Locator `azure://aidataservice/canonical-sources/{sha256}/{filename}`. Container leeg. G2 blijft `BLOCKED`. Geen keys in Git. Runtime/Postgres/Foundry niet gestart.
 - G1 technische protection op `main` is ON. GitHub-ruleset **G1 main** (id `21686159`, aangemaakt 2026-08-27T22:10:53Z) is actief: `main` mag niet worden verwijderd; geen force-push / non-fast-forward; required status checks `test (3.12)` en `test (3.13)` (strict); pull request verplicht vóór merge; 0 vereiste goedkeurende reviews (solo owner). Protected branch, required CI en PR-workflow bestaan nu. Named GD-03-reviewers zijn niet bezet.
 
 ## Implementatievoortgang (deze golf)
@@ -95,7 +96,7 @@ Protocol v2.13 legt de eigenaarsgoedgekeurde lock vast na audit tegen live basel
 Roadmapaanvulling 2026-08-31 (docs/assurance): SA-01 tot en met SA-05 maken bron-/familie-eigenaarschap, delta-review, semantisch conflictbeheer, end-to-end integriteitsreconciliatie en een afzonderlijke trainingsdatasettrack expliciet planbaar. De bijbehorende besluiten GD-08, GD-09, GD-10, GD-11 en GD-12 staan OPEN. Zij zijn geen nieuw protocol en geen geïmplementeerd productgedrag. De bestaande volgorde blijft leidend: eerst de tweekoloms reviewkaart, daarna G2. SA-01, SA-03 en SA-04 hebben een gate vóór de toepasselijke externe pilot; SA-02 volgt op bewijs uit vijf echte richtlijnen; SA-05 blokkeert trainingsexport maar niet de retrieve-and-abstain-pilot.
 
 1. Implementation engineer op de bestaande kernel: atomaire objecten + gesloten relaties + typebevestiging + high-risk four-eyes + open-origineel zijn in code. Console review completeness (relatiebevestiging, type-select, bronpassage-gate, serving-type/locator) is in code. Eigenaarslock 2026-08-29: volgende console-implementatie (niet deze docs-PR) is alleen de tweecoloms reviewkaart — links kennisobject (type, relatietickboxes, besluit), rechts exacte bronpassage (v2.11-locators); smalle schermen stapelen. Relaties blijven voorgestelde checkboxes + bevestigen. MUST NOT een graaf-editor, drag-and-drop of pijlen-tekenen-UI. Typebevestiging blijft geblokkeerd als de passage niet open kan. Metis implementeert niet. Protocol v2.14 is niet de volgende stap.
-2. DAARNA G2 immutable locator / Azure DEV. Die blijven BLOCKED. Niet faken. Capture is geen publicatie. `publish()` blijft G2-BLOCKED. Geen Azure, Vercel, Neon of LLM starten. G2 overslaan MUST NOT.
+2. G2-store staat in Azure (`aidataservice` / `canonical-sources`) en in code. G2 blijft BLOCKED tot een SHA-256-geverifieerde bron in die container ligt en is gebonden. Capture is geen publicatie. `publish()` blijft G2-BLOCKED. Geen runtime, Postgres, Foundry, Vercel, Neon of LLM starten. G2 overslaan MUST NOT.
 3. Retrospectieve onafhankelijke C5-review van PR #4, PR #5, PR #16, Protocol v2.6 / PR #18, Protocol v2.7 / PR #19, Protocol v2.8 / PR #21, de console-implementatie / PR #23, de console-UX-rewrite / PR #25 en Protocol v2.10, plus retrospectieve C3-review van Protocol v2.9, Protocol v2.11, Protocol v2.12 en Protocol v2.13 (C3 spanning C5 four-eyes), volgens de GD-03-matrix; daarna named reviewers bezetten. Er worden geen namen verzonnen.
 4. Holdout B onafhankelijk vergrendelen; geen tuning daarop. GD-01 en GD-02 blijven OPEN tot die gates. False support is een Fase-3-meetlat, geen stille extra gate in v2.13.
 5. Na de MVP: een nieuw plan dat private hosting of een organisatieplan herstelt.

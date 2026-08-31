@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
+from src.g2_source_store import is_g2_locator
+
 HIGH_RISK_FIELDS = (
     "age_boundary",
     "dosage",
@@ -194,7 +196,7 @@ def publish_authorization_contract(
         blockers.append("four_eyes_required")
     # Envelope ticks never authorize publish, even when present.
     _ = envelope_review_passes
-    if not immutable_locator:
+    if not is_g2_locator(immutable_locator):
         blockers.append("blocked_pending_immutable_locator")
     unique_blockers = list(dict.fromkeys(blockers))
     return {
