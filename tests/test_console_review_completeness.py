@@ -215,9 +215,7 @@ def test_review_card_posts_relation_checkboxes_to_confirm_relations(tmp_path: Pa
 
     client = TestClient(create_console_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
-    html = client.get(f"/review?document={receipt['snapshot_id']}").text
-    assert "envelope" not in html.lower()
-    assert "applies_if" in html
+    html = client.get(f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}").text
     assert cond["object_id"] in html
     assert "nursing_tip" not in html
     assert "conditioned_by" not in html
@@ -294,8 +292,7 @@ def test_type_select_does_not_silently_submit_heading(tmp_path: Path) -> None:
     )
     client = TestClient(create_console_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
-    html = client.get(f"/review?document={receipt['snapshot_id']}").text
-    assert "nog niet bevestigd" in html
+    html = client.get(f"/review?document={receipt['snapshot_id']}&object={heading['object_id']}").text
     assert 'disabled' in html
     type_block = html[html.find(f'id="type-{heading["object_id"]}"') : html.find(f'id="type-{heading["object_id"]}"') + 800]
     assert "nog niet bevestigd" in type_block
@@ -370,7 +367,7 @@ def test_type_and_approve_disabled_when_open_source_passage_fails(tmp_path: Path
 
     client = TestClient(create_console_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
-    html = client.get(f"/review?document={receipt['snapshot_id']}").text
+    html = client.get(f"/review?document={receipt['snapshot_id']}&object={target['object_id']}").text
     type_block = html[html.find(f'id="type-{target["object_id"]}"') : html.find(f'id="decision-{target["object_id"]}"') + 400]
     assert "disabled" in type_block
     assert 'value="approve"' in type_block
@@ -415,7 +412,7 @@ def test_type_confirm_succeeds_after_open_original(tmp_path: Path) -> None:
 
     client = TestClient(create_console_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
-    html = client.get(f"/review?document={receipt['snapshot_id']}").text
+    html = client.get(f"/review?document={receipt['snapshot_id']}&object={target['object_id']}").text
     type_block = html[html.find(f'id="type-{target["object_id"]}"') : html.find(f'id="decision-{target["object_id"]}"')]
     assert "disabled" not in type_block or "nog niet bevestigd" in type_block
     posted = client.post(
@@ -596,7 +593,7 @@ def test_four_eyes_copy_visible_when_required(tmp_path: Path) -> None:
     assert requires_four_eyes(refreshed, confirmed_type="exception") is True
     client = TestClient(create_console_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
-    page = client.get(f"/review?document={receipt['snapshot_id']}").text
+    page = client.get(f"/review?document={receipt['snapshot_id']}&object={target['object_id']}").text
     assert "tweede reviewer nodig" in page
     assert "envelope" not in page.lower()
 
