@@ -1,0 +1,22 @@
+{
+  "config_version": "1.0",
+  "gate": "G2",
+  "g2_status": "BLOCKED",
+  "reason": "container_empty_no_bound_source_bytes",
+  "provider": "azure_blob",
+  "directory": "venvn.nl",
+  "subscription_name": "Microsoft Azure",
+  "subscription_id": "8c829c96-1784-4947-8a2b-92027c51fec9",
+  "resource_group": "AI_Dataservice",
+  "storage_account": "aidataservice",
+  "container": "canonical-sources",
+  "region": "westeurope",
+  "account_kind": "StorageV2",
+  "replication": "ZRS",
+  "public_access": "private",
+  "locator_scheme": "azure://{storage_account}/{container}/{sha256}/{filename}",
+  "budget_owner": "V&VN",
+  "operational_owner": "project_owner",
+  "recorded_at": "2026-08-31",
+  "identity_secret_boundary": "no storage keys, connection strings or SAS tokens in Git"
+}

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.g2_source_store import parse_g2_locator
 from src.integrity_kernel import sha256_file
 
 
@@ -36,7 +37,17 @@ def build_record(
     except ValueError as exc:
         raise ValueError("acquired_at_invalid") from exc
 
-    durably_stored = bool(immutable_storage_locator and immutable_storage_locator.strip())
+    checksum = sha256_file(binary_path)
+    locator = immutable_storage_locator.strip() if immutable_storage_locator else None
+    if locator:
+        parsed = parse_g2_locator(locator)
+        if parsed is None:
+            raise ValueError("g2_locator_invalid")
+        if parsed["sha256"] != checksum:
+            raise ValueError("g2_locator_checksum_mismatch")
+        if parsed["filename"] != binary_path.name:
+            raise ValueError("g2_locator_filename_mismatch")
+    durably_stored = bool(locator)
     return {
         "source_id": source_id,
         "title": title,
@@ -47,10 +58,10 @@ def build_record(
         "content_type": content_type,
         "size_bytes": binary_path.stat().st_size,
         "checksum_algorithm": "sha256",
-        "source_checksum": sha256_file(binary_path),
+        "source_checksum": checksum,
         "integrity_status": "verified" if durably_stored else "verified_local",
         "binary_path": str(binary_path.resolve()),
-        "immutable_storage_locator": immutable_storage_locator if durably_stored else None,
+        "immutable_storage_locator": locator if durably_stored else None,
         "acquisition_method": acquisition_method,
         "acquired_at": acquired_at,
         "verified_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),

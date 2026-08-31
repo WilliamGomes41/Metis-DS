@@ -30,6 +30,7 @@ from src.four_eyes_v1 import (
     publish_authorization_contract,
     requires_four_eyes,
 )
+from src.g2_source_store import is_g2_locator
 from src.integrity_kernel import compute_canonical_object_hash, sha256_bytes, stamp_canonical_hashes
 from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES, extract_object_type, is_closed_confirmed_type
 from src.open_original_v1 import OpenOriginalError, open_source_passage
@@ -995,7 +996,7 @@ class OperationsConsole:
                     four_eyes_ok = False
         if four_eyes_needed and not four_eyes_ok:
             blockers.append("four_eyes_required")
-        if not envelope.get("immutable_storage_locator"):
+        if not is_g2_locator(envelope.get("immutable_storage_locator")):
             blockers.append("blocked_pending_immutable_locator")
         unique = list(dict.fromkeys(blockers))
         return {

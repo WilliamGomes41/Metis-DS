@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from src.g2_source_store import build_g2_locator
 from src.integrity_kernel import sha256_file
 from src.register_source_binary import build_record, update_registry
 
@@ -36,6 +37,7 @@ def test_build_record_hashes_exact_bytes(tmp_path: Path):
 def test_immutable_locator_opens_transform_eligibility(tmp_path: Path):
     source = (tmp_path / "source.pdf").resolve()
     source.write_bytes(b"%PDF-1.7\nexact-test-bytes\n")
+    locator = build_g2_locator(sha256=sha256_file(source), filename="source.pdf")
     record = build_record(
         source,
         source_id="source-1",
@@ -45,10 +47,11 @@ def test_immutable_locator_opens_transform_eligibility(tmp_path: Path):
         content_type="application/pdf",
         acquisition_method="official_download",
         acquired_at="2026-08-22T12:00:00Z",
-        immutable_storage_locator="azure://canonical/sha256/test/source.pdf",
+        immutable_storage_locator=locator,
     )
     assert record["integrity_status"] == "verified"
     assert record["publication_eligibility"] == "eligible_for_transform_and_review"
+    assert record["immutable_storage_locator"] == locator
 
 
 def test_build_record_rejects_missing_binary(tmp_path: Path):
