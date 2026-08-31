@@ -328,6 +328,45 @@ textarea:focus-visible {
   margin-top: 14px;
 }
 
+.review-card-two-column {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.review-card-object,
+.review-card-bronpassage {
+  min-width: 0;
+}
+
+.review-card-bronpassage {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--water-light);
+}
+
+.review-card-bronpassage h4 {
+  margin: 0 0 0.6rem;
+  color: var(--paars);
+}
+
+.review-card-bronpassage pre,
+.bronpassage pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0 0 12px;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+}
+
+@media (max-width: 720px) {
+  .review-card-two-column {
+    grid-template-columns: 1fr;
+  }
+}
+
 .help {
   margin-top: 18px;
   color: var(--muted);
