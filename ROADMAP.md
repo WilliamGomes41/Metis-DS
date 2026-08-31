@@ -2,7 +2,7 @@
 
 ## Functie
 
-Deze roadmap bepaalt de uitvoeringsvolgorde van de geldende norm uit `PROTOCOL.md`. De roadmap mag het protocol niet afzwakken of stilzwijgend uitbreiden. `HANDOFF.md` bevat de actuele voortgang; deze roadmap bevat de geplande volgorde en stopvoorwaarden.
+Deze roadmap bepaalt de uitvoeringsvolgorde van de geldende norm uit `PROTOCOL.md`. De roadmap mag het protocol niet afzwakken of stilzwijgend uitbreiden. De gemergede code, tests en commitgeschiedenis op `main` zijn de bron voor actuele voortgang; deze roadmap bevat uitsluitend de geplande volgorde en stopvoorwaarden.
 
 Deze repository is uitsluitend V&VN Data Services. Status, fasen of UI van andere producten horen niet in dit document.
 
@@ -86,7 +86,7 @@ Status: G1-technische protection ON; gezaghebbende remote is public onder Protoc
 - Gezaghebbende remote `WilliamGomes41/VENVN-DS` is public tijdens de gedeclareerde MVP-periode (Protocol v2.5.0). Publiek is niet de latere productiestandaard; na de MVP MUST een nieuw plan private hosting of een organisatieplan herstellen.
 - CI, repository-preflight en architectuur-invarianttests.
 - Protocol v2.13.0 vastgesteld en live plus Protocol v2.12.0 plus Protocol v2.11.0 (v2.2 + v2.3-delta + v2.4-delta + v2.5-delta + v2.6-delta + v2.7-delta + v2.8-delta + v2.9-delta + v2.10-delta + v2.11-delta + v2.12-delta + v2.13-delta), inclusief G0, product-/distributiegrenzen, de MVP-uitzondering voor een publieke remote, de interne operations console als goedgekeurde scope, first-wave bron / retrieve-and-abstain / distributieregels, primaire gebruikers, klasse×familie-hiërarchie, de console-bouwvolgorde, de taakgerichte onderzoeker-UX plus V&VN digitale stylesheet, Documentenhierarchie, wachttaak-badges, de Accounts-kamer (gesloten rollenset), geüploade HTML-freeze, weigering van live URL-HTML, verplichte source locators, fail-closed Product API zonder locator, extractie als structuur/provenance only, gesloten object-typeset met unclassified-default, answerability als vraagtype × objecttype, publish-binding aan het objecttupel, serving vanuit een atomaire gepubliceerde projectie, atomaire objecten, per-type classificatieregels, gesloten relaties, high-risk four-eyes, en open-origineel als reviewwet. Protocol v2.12.0 blijft een geldend onderdeel van die baseline. Protocol v2.11.0 blijft een geldend onderdeel van die baseline. Protocol v2.10.0 blijft een geldend onderdeel van die baseline. Protocol v2.9.0 blijft een geldend onderdeel van die baseline. Protocol v2.8.0 blijft een geldend onderdeel van die baseline.
-- Ontwikkelhiërarchie en handoffdiscipline geborgd.
+- Ontwikkelhiërarchie geborgd; actuele voortgang wordt uit `main`, tests en commitgeschiedenis gelezen.
 - Stackbaseline en machineleesbaar infrastructuurmanifest aanwezig.
 - G0 Local Development: `PASS`; G0 Azure DEV: `BLOCKED` totdat open keuzes zijn opgelost. Geen Azure starten in deze fase.
 - Integrity kernel als enige canonical-hash voor store én publication gate (herstel 2026-08-26).

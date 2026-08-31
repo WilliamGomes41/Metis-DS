@@ -16,7 +16,9 @@ The Fractuurpreventie pilot source binary is not locally available, so the real 
 
 The repository root is the operating surface. Read current work in this order:
 
-`PROTOCOL.md` → `ROADMAP.md` → `HANDOFF.md` → tests → code
+`PROTOCOL.md` → `ROADMAP.md` → tests → code
+
+Actuele voortgang wordt gelezen uit de gemergede code, tests, CI en commitgeschiedenis op `main`.
 
 - `docs/` — current protocol and technical documentation
 - `docs/history/` — historical step, audit and repair reports; not steering documents

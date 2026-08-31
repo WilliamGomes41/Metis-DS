@@ -30,7 +30,6 @@ def test_v25_remains_an_approved_component_of_current_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -38,7 +37,6 @@ def test_v25_remains_an_approved_component_of_current_baseline() -> None:
     assert "docs/PROTOCOL_V2_5_MVP_PUBLIC_REMOTE_DELTA.md" in root_protocol
     assert "Protocol v2.5.0" in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.4.0" not in root_protocol
-    assert "**Geldend protocol:** v2.13.0" in handoff
     assert "Protocol v2.5.0" in roadmap
 
 
@@ -83,7 +81,6 @@ def test_v25_keeps_fail_closed_exclusions_and_gitignore() -> None:
 
 def test_v25_records_g1_protection_without_waiting_on_github_setting() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     required = (
         "required CI checks `test (3.12)` and `test (3.13)`",
         "require a pull request before merging",
@@ -94,8 +91,6 @@ def test_v25_records_g1_protection_without_waiting_on_github_setting() -> None:
     )
     for phrase in required:
         assert phrase in delta
-    assert "G1" in handoff
-    assert "BLOCKED" in handoff
 
 
 def test_v25_accepts_software_artefacts_but_not_canonical_source() -> None:
@@ -118,12 +113,8 @@ def test_v25_requires_private_security_reporting_for_public_mvp() -> None:
 
 def test_v25_is_c5_with_owner_approval_and_retrospective_review() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "**Highest change class:** C5" in delta
     assert "Named C5 reviewers are not yet staffed" in delta
     assert "The project owner approves this delta" in delta
     assert "Retrospective independent technical and security/operations review remains due" in delta
     assert "does not reopen GD-03" in delta
-    assert "GD-03 is ESTABLISHED" in handoff
-    assert "GD-03 is niet langer OPEN" in handoff
-    assert "geen nieuwe protocolversie" in handoff

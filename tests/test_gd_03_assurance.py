@@ -73,21 +73,16 @@ def test_gd03_assurance_matches_governance_bytes_and_is_established() -> None:
     assert constraints["ai_grok_bot_metis_must_not_publish"] is True
 
 
-def test_gd03_human_record_and_handoff_keep_other_decisions_open() -> None:
+def test_gd03_human_record_and_governance_keep_other_decisions_open() -> None:
     governance = GOVERNANCE.read_text(encoding="utf-8")
-    handoff = (ROOT / "HANDOFF.md").read_text(encoding="utf-8")
     roadmap = (ROOT / "ROADMAP.md").read_text(encoding="utf-8")
 
     assert "| GD-03 |" in governance
     assert "ESTABLISHED" in governance
-    assert "GD-03 is ESTABLISHED" in handoff
-    assert "GD-03 is niet langer OPEN" in handoff
-    assert "geen nieuwe protocolversie" in handoff
     assert "GD-03 reviewervereisten ESTABLISHED" in roadmap
 
     for decision_id in OPEN_SIBLINGS:
         assert f"| {decision_id} |" in governance
-        assert decision_id in handoff
 
     assert "OPEN-besluiten mogen niet als established" in governance
     assert "AI, Grok Bot en Metis MUST NOT meetellen" in governance

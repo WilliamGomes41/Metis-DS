@@ -27,7 +27,7 @@ Use short imperative messages, for example:
 
 ## Documentation
 
-Keep the repository root as the operating surface. Historical step, audit and repair writeups belong in `docs/history/`, not the root. Do not add a fifth steering layer; the hierarchy remains `PROTOCOL.md → ROADMAP.md → HANDOFF.md → tests → code`.
+Keep the repository root as the operating surface. Historical step, audit and repair writeups belong in `docs/history/`, not the root. Do not add another steering layer; the hierarchy remains `PROTOCOL.md → ROADMAP.md → tests → code`. Read current progress from merged code, tests, CI and commit history on `main`.
 
 ## Safety rules
 

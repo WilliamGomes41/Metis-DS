@@ -30,7 +30,6 @@ def test_v210_remains_an_approved_component_of_current_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -38,7 +37,6 @@ def test_v210_remains_an_approved_component_of_current_baseline() -> None:
     assert "docs/PROTOCOL_V2_10_CONSOLE_NAV_ACCOUNTS_DELTA.md" in root_protocol
     assert "Protocol v2.10.0" in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.9.0" not in root_protocol
-    assert "**Geldend protocol:** v2.13.0" in handoff
     assert "Protocol v2.10.0" in roadmap
 
 
@@ -63,7 +61,6 @@ def test_v210_hierarchy_remains_a_listed_baseline_component() -> None:
 def test_v210_keeps_all_v26_v27_v28_and_v29_rules() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "All Protocol v2.6 room rules" in delta
     assert "all Protocol v2.7 first-wave source, retrieve-and-abstain and distribution rules" in delta
     assert "all Protocol v2.8 primary-user and two-axis hierarchy rules" in delta
@@ -88,16 +85,12 @@ def test_v210_keeps_all_v26_v27_v28_and_v29_rules() -> None:
     assert "Alle v2.7-bron-/API-/distributieregels blijven van kracht" in root_protocol
     assert "Alle v2.8-gebruikers-/hiërarchieregels blijven van kracht" in root_protocol
     assert "Alle v2.9-UX-/huisstyleregels blijven van kracht" in root_protocol
-    assert "Chat hoort niet in de console" in handoff
-    assert "deze delta claimt geen bestaande UI en implementeert de console niet" in handoff
-    assert "bestaat nu in code" in handoff
 
 
 def test_v210_renames_familieboom_to_documentenhierarchie() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert 'The console room currently labelled "Familieboom" MUST be renamed **Documentenhierarchie**' in delta
     assert "Documentenhierarchie is ordinary Dutch" in delta
     assert "The kernel model remains family × class" in delta
@@ -112,17 +105,13 @@ def test_v210_renames_familieboom_to_documentenhierarchie() -> None:
     assert "familie blijft een haak, geen nieuw bestand" in root_protocol
     assert "Documentenhierarchie" in roadmap
     assert "niet Familieboom" in roadmap
-    assert "Documentenhierarchie" in handoff
-    assert "Familieboom" in handoff
     assert "geen snapshot-id" in root_protocol
-    assert "snapshot-id" in handoff
 
 
 def test_v210_records_waiting_task_badges_as_real_kernel_work() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "Each top nav heading MUST show a visible waiting-task badge" in delta
     assert 'a count, for example "1"' in delta
     assert "when that room has work for the current user" in delta
@@ -145,16 +134,12 @@ def test_v210_records_waiting_task_badges_as_real_kernel_work() -> None:
     assert "Publish-badge impliceert geen G2-PASS" in root_protocol
     assert "wachttaak-badge" in roadmap
     assert "counts MUST geen decoratie zijn" in roadmap
-    assert "wachttaak-badge" in handoff
-    assert "geen decoratie" in handoff
-    assert "MUST NOT impliceren dat publicatie G2 passeerde" in handoff
 
 
 def test_v210_records_accounts_room_with_closed_role_set() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "The console MUST include an **Accounts** room" in delta
     assert "Accounts is identity administration" in delta
     assert "It is not chat" in delta
@@ -185,18 +170,12 @@ def test_v210_records_accounts_room_with_closed_role_set() -> None:
     assert "Accounts-kamer" in roadmap
     assert "GESLOTEN" in roadmap
     assert "console-account" in roadmap
-    assert "Accounts-kamer" in handoff
-    assert "GESLOTEN" in handoff
-    assert "console-account" in handoff
-    assert "geen vijfde klinische kamer" in handoff
-    assert "publisher-rol" in handoff
 
 
 def test_v210_keeps_promote_review_and_family_move_without_rereview() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "Promoting class still MUST require a new review" in delta
     assert "already Protocol v2.8" in delta
     assert "Family move still MUST NOT require clinical re-review" in delta
@@ -206,8 +185,6 @@ def test_v210_keeps_promote_review_and_family_move_without_rereview() -> None:
     assert "familiemove MUST NOT klinische herreview vereisen" in root_protocol
     assert "Klasse promoveren MUST review" in roadmap
     assert "familiemove MUST NOT klinische herreview" in roadmap
-    assert "Klasse promoveren MUST een nieuwe review vereisen" in handoff
-    assert "Familiemove MUST NOT klinische herreview vereisen" in handoff
 
 
 def test_v210_keeps_fail_closed_exclusions_and_gitignore() -> None:
@@ -247,7 +224,6 @@ def test_v210_keeps_fail_closed_exclusions_and_gitignore() -> None:
 
 def test_v210_is_c5_spanning_c3_with_owner_approval_and_retrospective_review() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     governance = _read(ROOT / "docs" / "GOVERNANCE.md")
     assert "**Highest change class:** C5" in delta
     assert "spanning C3" in delta
@@ -258,13 +234,6 @@ def test_v210_is_c5_spanning_c3_with_owner_approval_and_retrospective_review() -
     assert "PR #21" in delta
     assert "PR #24" in delta
     assert "does not reopen GD-03" in delta
-    assert "GD-03 is ESTABLISHED" in handoff
-    assert "GD-03 is niet langer OPEN" in handoff
-    assert "geen nieuwe protocolversie" in handoff
-    assert "Er worden geen reviewers verzonnen" in handoff
-    assert "Er worden geen namen verzonnen" in handoff
-    assert "G1 technische protection op `main` is ON" in handoff
-    assert "G0 Azure DEV blijft `BLOCKED`" in handoff
     assert "v2.10.0" in governance
     assert "heropent GD-03 niet" in governance
     gd03 = json.loads((ROOT / "data" / "assurance" / "gd_03_c3_c6_reviewer_matrix.json").read_text(encoding="utf-8"))
@@ -276,7 +245,6 @@ def test_v210_is_c5_spanning_c3_with_owner_approval_and_retrospective_review() -
 def test_v210_records_console_followup_build_order_without_skipping_g2() -> None:
     delta = _read(DELTA)
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "Do not build a mockup" in delta
     assert "The next implementation after this delta MUST be a console follow-up on the v2.9 UX" in delta
     assert "open PR #25 if still open" in delta
@@ -294,26 +262,16 @@ def test_v210_records_console_followup_build_order_without_skipping_g2() -> None
     assert "VIA de console" in roadmap or "VIA die console" in roadmap
     assert "bestaande kernel" in roadmap
     assert "PR #25" in roadmap
-    assert "console-vervolg" in handoff
-    assert "geen mockup" in handoff
-    assert "PR #25" in handoff
-    assert "Bron 2 is nog BLOCKED op duurzame immutable opslag" in handoff
-    assert "G2-locator blijft de publicatieblocker" in handoff
-    assert "Echte console-MVP ingest+review" in handoff
-    assert "bestaat nu in code" in handoff
 
 
 def test_v210_keeps_g1_public_mvp_and_forbids_vercel_neon_llm() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     stack = _read(ROOT / "docs" / "STACK_SETUP_BASELINE.md")
     infra = json.loads((ROOT / "config" / "infrastructure_manifest.v1.json").read_text(encoding="utf-8"))
     assert "G1 technical protection remains ON" in delta
     assert "public under Protocol v2.5" in delta
     assert "G0 Azure DEV remains BLOCKED" in delta
     assert "No Vercel, Neon, or LLM vendor" in delta
-    assert "G1 technische protection op `main` is ON" in handoff
-    assert "G0 Azure DEV blijft `BLOCKED`" in handoff
     assert "Vercel, Neon and a hosted LLM" in stack
     assert "no vendor is selected" in stack
     assert "No LLM in the MVP" in stack
@@ -339,7 +297,6 @@ def test_v210_keeps_g1_public_mvp_and_forbids_vercel_neon_llm() -> None:
 
 def test_v210_does_not_implement_console_ui_or_product_code() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "This protocol-only change does not implement UI or product code" in delta
     assert "Do not rewrite `src/operations_console_*.py` in this protocol change" in delta
@@ -356,7 +313,5 @@ def test_v210_does_not_implement_console_ui_or_product_code() -> None:
     assert "skip durable immutable storage or convert G2 to PASS" in delta
     assert "reopen or alter GD-03" in delta
     assert "staff named human reviewers" in delta
-    assert "deze v2.10-delta implementeert die follow-up niet" in handoff
-    assert "Deze delta implementeert de nieuwe UI niet" in handoff
     assert "Protocol v2.10.0" in changelog
     assert "does not implement the UI follow-up" in changelog

@@ -26,7 +26,7 @@ It is **not** the authoritative store for canonical clinical source binaries, pr
 
 ## Documentation layout
 
-The repository root is the operating surface: `PROTOCOL.md`, `ROADMAP.md`, `HANDOFF.md`, `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `SECURITY.md`, plus code, config and build files. The steering hierarchy remains `PROTOCOL.md → ROADMAP.md → HANDOFF.md → acceptatietests → code`. `docs/history/` holds one-off step, audit and repair writeups; those files do not add a steering layer and must not be treated as current protocol, roadmap or handoff.
+The repository root is the operating surface: `PROTOCOL.md`, `ROADMAP.md`, `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `SECURITY.md`, plus code, config and build files. The steering hierarchy remains `PROTOCOL.md → ROADMAP.md → acceptatietests → code`. Current progress is read from merged code, tests, CI and commit history on `main`. `docs/history/` holds one-off step, audit and repair writeups; those files do not add a steering layer and must not be treated as current steering documents.
 
 ## Runtime output policy
 

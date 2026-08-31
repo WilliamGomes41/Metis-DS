@@ -30,7 +30,6 @@ def test_v26_remains_an_approved_component_of_current_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -38,7 +37,6 @@ def test_v26_remains_an_approved_component_of_current_baseline() -> None:
     assert "docs/PROTOCOL_V2_6_INTERNAL_OPERATIONS_CONSOLE_DELTA.md" in root_protocol
     assert "Protocol v2.6.0" in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.5.0" not in root_protocol
-    assert "**Geldend protocol:** v2.13.0" in handoff
     assert "Protocol v2.6.0" in roadmap
 
 
@@ -98,12 +96,10 @@ def test_v26_states_four_rooms_independence_and_uploader_rule() -> None:
 
 def test_v26_forbids_chat_in_the_console() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "Chat is not a room in this console" in delta
     assert "later consumer of the Product API" in delta
     assert "G7/C6" in delta
     assert "U1/U2" in delta
-    assert "Chat hoort niet in de console" in handoff
     assert "A chatbot MUST NOT be added to the console" in delta
 
 
@@ -140,7 +136,6 @@ def test_v26_keeps_fail_closed_exclusions_and_gitignore() -> None:
 
 def test_v26_records_identity_without_closing_g8() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     stack = _read(ROOT / "docs" / "STACK_SETUP_BASELINE.md")
     infra = json.loads((ROOT / "config" / "infrastructure_manifest.v1.json").read_text(encoding="utf-8"))
     assert "Accounts and roles are required" in delta
@@ -151,7 +146,6 @@ def test_v26_records_identity_without_closing_g8() -> None:
     assert "internal identity, not public signup" in delta
     assert "does not by itself close G8 or provision Azure AD" in delta
     assert "subject to G0" in delta
-    assert "G0 Azure DEV blijft `BLOCKED`" in handoff
     assert "Vercel, Neon and a hosted LLM" in stack
     assert "no vendor is selected" in stack
     capability_ids = {item["capability_id"] for item in infra["dependencies"]}
@@ -177,21 +171,15 @@ def test_v26_records_identity_without_closing_g8() -> None:
 def test_v26_places_console_after_bron2_storage_not_instead() -> None:
     delta = _read(DELTA)
     roadmap = _read(ROOT / "ROADMAP.md")
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "after bron 2 storage is at least capturable" in delta
     assert "not instead of Fase 2" in delta
     assert "Do not claim the console exists in code" in delta
     assert "Fase 2b — Interne operations console" in roadmap
     assert "Duurzame opslag wordt niet overgeslagen" in roadmap
-    assert "Bron 2 is nog BLOCKED op duurzame immutable opslag" in handoff
-    assert "deze delta claimt geen bestaande UI en implementeert de console niet" in handoff
-    assert "Echte console-MVP ingest+review" in handoff
-    assert "bestaat nu in code" in handoff
 
 
 def test_v26_is_c5_spanning_c3_with_owner_approval_and_retrospective_review() -> None:
     delta = _read(DELTA)
-    handoff = _read(ROOT / "HANDOFF.md")
     assert "**Highest change class:** C5" in delta
     assert "spanning C3" in delta
     assert "Named C5 reviewers are not yet staffed" in delta
@@ -199,8 +187,3 @@ def test_v26_is_c5_spanning_c3_with_owner_approval_and_retrospective_review() ->
     assert "Retrospective independent technical and security/operations review remains due" in delta
     assert "PR #16" in delta
     assert "does not reopen GD-03" in delta
-    assert "GD-03 is ESTABLISHED" in handoff
-    assert "GD-03 is niet langer OPEN" in handoff
-    assert "geen nieuwe protocolversie" in handoff
-    assert "Er worden geen reviewers verzonnen" in handoff
-    assert "G1 technische protection op `main` is ON" in handoff
