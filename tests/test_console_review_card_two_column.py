@@ -128,7 +128,7 @@ def test_review_document_index_does_not_open_passages(tmp_path: Path) -> None:
     assert TWO_COLUMN_CLASS not in html
     assert PASSAGE_COL not in html
     assert "object-index" in html
-    assert "Bronpassage" not in html
+    assert "Onderbouwing uit het brondocument" not in html
     for obj in objects:
         assert obj["object_id"] in html
     assert "envelope" not in html.lower()
@@ -188,12 +188,53 @@ def test_review_card_object_left_bronpassage_right(tmp_path: Path) -> None:
     assert f'id="type-{rec["object_id"]}"' in left
     assert f'id="decision-{rec["object_id"]}"' in left
     assert 'name="relation"' in left
-    assert "Bevestig type" in left
-    assert "Besluit" in left
+    assert "Welk type kennisobject is dit?" in left
+    assert "Wat is je besluit over dit kennisobject?" in left
     assert _esc(opened["passage"]) in right
-    assert "Bronpassage" in right
-    assert "Bevestig type" not in right
-    assert "Besluit" not in right
+    assert "Onderbouwing uit het brondocument" in right
+    assert "Welk type kennisobject is dit?" not in right
+    assert "Wat is je besluit over dit kennisobject?" not in right
+
+
+def test_review_card_uses_clear_labels_and_requires_an_explicit_decision(tmp_path: Path) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    receipt = _ingest(console, accounts)
+    target = next(
+        obj
+        for obj in console.snapshot_objects(receipt["snapshot_id"])
+        if obj["object_type"] != "document"
+    )
+    html = _review_page(console, receipt["snapshot_id"], target["object_id"])
+    card = next(block for block in _cards(html) if target["object_id"] in block)
+    assert "Te beoordelen kennisobject" in card
+    assert '<option value="heading">Kop</option>' in card
+    assert "Onderbouwing uit het brondocument" in card
+    assert '<option value="" selected disabled>Kies een besluit</option>' in card
+    assert '<option value="approve" selected' not in card
+    assert 'data-comment-field hidden' in card
+    assert 'data-correction-field hidden' in card
+    assert 'data-submit-review' in card
+
+
+def test_review_post_requires_explicit_decision_and_comment_when_needed(tmp_path: Path) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    receipt = _ingest(console, accounts)
+    target = next(
+        obj
+        for obj in console.snapshot_objects(receipt["snapshot_id"])
+        if obj["object_type"] != "document"
+    )
+    client = TestClient(create_console_app(console))
+    client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
+    base = {"snapshot_id": receipt["snapshot_id"], "object_id": target["object_id"]}
+    no_decision = client.post("/review", data={**base, "decision": ""})
+    assert no_decision.status_code == 400
+    assert "Kies een besluit" in no_decision.text
+    no_comment = client.post("/review", data={**base, "decision": "revise", "comment": ""})
+    assert no_comment.status_code == 400
+    assert "Geef een toelichting" in no_comment.text
 
 
 def test_review_card_css_two_column_and_stacks_on_narrow() -> None:
@@ -206,13 +247,10 @@ def test_review_card_css_two_column_and_stacks_on_narrow() -> None:
     assert default is not None
     body = default.group(1)
     assert "grid-template-columns" in body or "display: flex" in body or "display:grid" in body.replace(" ", "")
-    two_track = re.search(
+    two_track = body.count("minmax(") >= 2 or re.search(
         r"grid-template-columns:\s*[^;]*1fr[^;]*1fr",
         body,
-    ) or re.search(
-        r"grid-template-columns:\s*repeat\(\s*2\s*,",
-        body,
-    )
+    ) or re.search(r"grid-template-columns:\s*repeat\(\s*2\s*,", body)
     flex_row = "flex-direction: row" in body or (
         "display: flex" in body and "flex-direction: column" not in body
     )
