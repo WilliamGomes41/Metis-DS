@@ -2,7 +2,7 @@
   "config_version": "1.0",
   "gate": "G2",
   "g2_status": "BLOCKED",
-  "reason": "container_empty_no_bound_source_bytes",
+  "reason": "runtime_identity_lacks_container_rbac_no_bound_source_bytes",
   "provider": "azure_blob",
   "directory": "venvn.nl",
   "subscription_name": "Microsoft Azure",
@@ -17,6 +17,6 @@
   "locator_scheme": "azure://{storage_account}/{container}/{sha256}/{filename}",
   "budget_owner": "V&VN",
   "operational_owner": "project_owner",
-  "recorded_at": "2026-08-31",
+  "recorded_at": "2026-09-01",
   "identity_secret_boundary": "no storage keys, connection strings or SAS tokens in Git"
 }

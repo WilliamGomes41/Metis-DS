@@ -5,6 +5,7 @@ All notable technical changes to V&VN Data Services are recorded here.
 ## [Unreleased]
 
 ### Added
+- G2 Azure Blob ingest adapter: console ingest stores exact source bytes content-addressed in the private `canonical-sources` container, reads them back and verifies SHA-256 before creating a snapshot. The `azure://` locator is bound to the envelope, and a missing or corrupt local cache is restored from the verified blob. Authentication uses managed identity/Entra ID only. `publish()` remains fail-closed.
 - Review room loads one object card per request (`/review?document=&object=`). Document view lists objects without opening every freeze passage. Fixes Azure App Service 504 Gateway Timeout on large Continentie reviews. Two-column card unchanged. `publish()` remains G2-BLOCKED.
 - Azure App Service host adapter for the internal operations console (`src/console_asgi.py`). Bootstrap accounts from environment only; G2 remains BLOCKED; G0 Azure DEV remains BLOCKED until the web app is live. Not a public website.
 - Owner lock 2026-08-31: G2 Blob store recorded in code (`aidataservice` / `canonical-sources`, West Europe, private). Locator `azure://aidataservice/canonical-sources/{sha256}/{filename}`. Container empty; G2 remains BLOCKED; `publish()` remains G2-BLOCKED; G0 Azure DEV remains BLOCKED. No storage keys in Git.
