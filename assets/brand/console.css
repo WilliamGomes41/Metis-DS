@@ -280,6 +280,11 @@ button, .btn {
   margin-top: 16px;
 }
 
+.btn-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
 .btn-primary:focus-visible,
 .btn-secondary:focus-visible,
 input:focus-visible,
@@ -401,8 +406,8 @@ textarea:focus-visible {
 
 .review-card-two-column {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr);
+  gap: 24px;
   align-items: start;
 }
 
@@ -423,6 +428,71 @@ textarea:focus-visible {
   color: var(--paars);
 }
 
+.review-document-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  padding: 10px 0 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.review-document-context b { color: var(--text); }
+.review-document-context a { margin-left: auto; }
+
+.review-object-heading { margin-bottom: 16px; }
+.review-object-heading h3 { margin: 0 0 8px; }
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--paars);
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.object-text {
+  border-left: 3px solid var(--water);
+  margin: 0 0 18px;
+  padding: 2px 0 2px 14px;
+}
+
+.review-step,
+.relations {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin: 16px 0 0;
+  padding: 16px;
+}
+
+.review-step h4,
+.relations legend {
+  color: var(--paars);
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.review-step h4 { margin: 0 0 10px; }
+.relations legend { padding: 0 4px; }
+.field-help { color: var(--muted); font-size: 0.92rem; margin: 6px 0 12px; }
+
+.relation-choice {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.relation-copy { margin: 0 0 4px; }
+.relations .check { margin: 0; }
+.relations .btn-secondary { margin-top: 14px; }
+.review-decision-form { margin-top: 18px; }
+.review-decision-form .review-step + .review-step { margin-top: 12px; }
+.decision-comment, .decision-correction { margin-top: 12px; }
+
 .review-card-bronpassage pre,
 .bronpassage pre {
   white-space: pre-wrap;
@@ -436,6 +506,8 @@ textarea:focus-visible {
   .review-card-two-column {
     grid-template-columns: 1fr;
   }
+
+  .review-document-context a { margin-left: 0; }
 }
 
 .help {

@@ -545,7 +545,7 @@ def test_reviewer_opens_exact_source_passage_v211_locator(tmp_path: Path) -> Non
         f"/review?document={receipt['snapshot_id']}&object={target['object_id']}"
     ).text
     assert "Bespreek het onderwerp met de zorgvrager." in review_html
-    assert "Bronpassage" in review_html
+    assert "Onderbouwing uit het brondocument" in review_html
     passage_page = client.get(
         f"/review/bronpassage?document={receipt['snapshot_id']}&object={target['object_id']}"
     )

@@ -34,6 +34,18 @@ HELP_ONCE = (
 )
 STATUS_LABELS = {
     "captured_not_published": "ingevoerd, niet gepubliceerd",
+    "needs_review": "wacht op beoordeling",
+    "approved": "goedgekeurd",
+    "rejected": "afgewezen",
+}
+OBJECT_TYPE_LABELS = {
+    "unclassified": "Nog niet geclassificeerd",
+    "heading": "Kop",
+    "definition": "Definitie",
+    "explanation": "Toelichting",
+    "condition": "Voorwaarde",
+    "exception": "Uitzondering",
+    "recommendation": "Aanbeveling",
 }
 BLOCKER_LABELS = {
     "second_named_reviewer_required": "Nog een andere benoemde reviewer moet goedkeuren.",
@@ -63,6 +75,8 @@ ERROR_COPY = {
     "freeze_bytes_missing": "Het geüploade origineel ontbreekt; type bevestigen is niet toegestaan.",
     "locator_kind_mismatch": "De locator past niet bij dit bestand.",
     "unsupported_locator": "Deze locator kan niet worden geopend.",
+    "invalid_review_decision": "Kies een besluit: goedkeuren, revisie vragen of afwijzen.",
+    "review_comment_required": "Geef een toelichting bij een revisieverzoek of afwijzing.",
 }
 RELATION_LABELS = {
     "applies_if": "geldt indien",
@@ -88,6 +102,10 @@ def _esc(value: Any) -> str:
 
 def _status_label(state: str) -> str:
     return STATUS_LABELS.get(state, state.replace("_", " "))
+
+
+def _object_type_label(value: str | None) -> str:
+    return OBJECT_TYPE_LABELS.get(value or "", (value or "").replace("_", " "))
 
 
 def _beeldmerk() -> str:
@@ -140,6 +158,35 @@ def _page(body: str) -> str:
 {body}
 </div>
 </div>
+<script>
+document.querySelectorAll('[data-review-form]').forEach((form) => {{
+  const decision = form.querySelector('[name="decision"]');
+  const type = form.querySelector('[name="confirmed_object_type"]');
+  const comment = form.querySelector('[name="comment"]');
+  const commentField = form.querySelector('[data-comment-field]');
+  const correctionField = form.querySelector('[data-correction-field]');
+  const hint = form.querySelector('[data-decision-hint]');
+  const submit = form.querySelector('[data-submit-review]');
+  const update = () => {{
+    const value = decision.value;
+    const needsComment = value === 'revise' || value === 'reject';
+    const needsType = value === 'approve';
+    commentField.hidden = !needsComment;
+    correctionField.hidden = value !== 'revise';
+    comment.required = needsComment;
+    type.required = needsType;
+    submit.disabled = !value || (needsType && !type.value) || (needsComment && !comment.value.trim());
+    if (!value) {{ hint.textContent = 'Kies eerst een besluit.'; submit.textContent = 'Review vastleggen'; }}
+    else if (value === 'approve') {{ hint.textContent = 'Bevestig ook het type voordat je goedkeurt.'; submit.textContent = 'Goedkeuring vastleggen'; }}
+    else if (value === 'revise') {{ hint.textContent = 'Licht toe wat aangepast moet worden.'; submit.textContent = 'Revisieverzoek versturen'; }}
+    else {{ hint.textContent = 'Licht toe waarom dit kennisobject wordt afgewezen.'; submit.textContent = 'Afwijzing vastleggen'; }}
+  }};
+  decision.addEventListener('change', update);
+  type.addEventListener('change', update);
+  comment.addEventListener('input', update);
+  update();
+}});
+</script>
 </body>
 </html>
 """
@@ -214,7 +261,7 @@ def _type_options(confirmed: str) -> str:
     ]
     for name in CLOSED_OBJECT_TYPES:
         selected = " selected" if name == confirmed else ""
-        options.append(f'<option value="{name}"{selected}>{name}</option>')
+        options.append(f'<option value="{name}"{selected}>{_esc(_object_type_label(name))}</option>')
     return "".join(options)
 
 
@@ -245,16 +292,18 @@ def _relation_checkboxes(obj: dict[str, Any], objects: list[dict[str, Any]]) -> 
         checked = " checked" if (rel, target_id) in confirmed else ""
         label = RELATION_LABELS.get(rel, rel)
         boxes.append(
-            f'<label class="check">'
+            f'<div class="relation-choice"><p class="relation-copy">Dit kennisobject is '
+            f'<b>{_esc(label)}</b> aan:</p><label class="check">'
             f'<input type="checkbox" name="relation" value="{_esc(rel)}:{_esc(target_id)}"{checked}>'
-            f'{_esc(label)} ({_esc(rel)}) → {_esc(target_text)}</label>'
+            f'<span>{_esc(target_text)}</span></label></div>'
         )
     return (
         '<fieldset class="relations">'
-        "<legend>Voorgestelde relaties</legend>"
+        "<legend>Voorgestelde relatie</legend>"
+        '<p class="field-help">Klopt deze voorgestelde relatie? Vink hem aan om deze te bevestigen.</p>'
         f"{''.join(boxes)}"
         '<button class="btn-secondary" type="submit" form="relations-'
-        f'{_esc(obj["object_id"])}">Relaties bevestigen</button>'
+        f'{_esc(obj["object_id"])}">Relatie bevestigen</button>'
         "</fieldset>"
     )
 
@@ -633,6 +682,15 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                 </div>
               </form>
         """
+        if chosen_row:
+            picker = f"""
+              <div class="review-document-context">
+                <span>Document</span>
+                <b>{_esc(chosen_row["title"])}</b>
+                <span>versie {_esc(chosen_row["version"])}</span>
+                <a href="/review">Ander document kiezen</a>
+              </div>
+            """
         cards = []
         if not chosen:
             for row in envelopes:
@@ -658,8 +716,8 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                         "<li>"
                         f'<a href="/review?document={_esc(chosen)}&object={_esc(obj["object_id"])}">'
                         f"{_esc(heading)}</a>"
-                        f' <span class="meta">{_esc(obj.get("object_type") or "")}'
-                        f"{' · ' + _esc(status) if status else ''}</span></li>"
+                        f' <span class="meta">{_esc(_object_type_label(obj.get("object_type")))}'
+                        f"{' · ' + _esc(_status_label(status)) if status else ''}</span></li>"
                     )
                 objects_html += (
                     f'<ol class="object-index">{"".join(items)}</ol>'
@@ -681,15 +739,15 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     passage_ok = True
                     passage_html = f"""
                   <aside class="review-card-bronpassage" aria-label="Exacte bronpassage">
-                    <h4>Bronpassage</h4>
+                    <h4>Onderbouwing uit het brondocument</h4>
                     <pre>{_esc(opened.get("passage") or "")}</pre>
-                    <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(chosen)}&object={_esc(obj["object_id"])}">Open bronpassage</a></p>
+                    <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(chosen)}&object={_esc(obj["object_id"])}">Bekijk in brondocument</a></p>
                   </aside>
                     """
                 except ConsoleError:
                     passage_html = (
                         '<aside class="review-card-bronpassage" aria-label="Exacte bronpassage ontbreekt">'
-                        "<h4>Bronpassage</h4>"
+                        "<h4>Onderbouwing uit het brondocument</h4>"
                         '<p class="muted">Bronpassage ontbreekt; type bevestigen en goedkeuren zijn '
                         "uitgeschakeld tot het origineel open kan.</p></aside>"
                     )
@@ -712,30 +770,45 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                   </form>
                     """
                 objects_html += f"""
-                <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">Alle objecten</a></p>
+                <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">Terug naar alle objecten</a></p>
                 <article class="object review-card-two-column">
                   <section class="review-card-object" aria-label="Kennisobject en reviewbesluit">
-                  <h3>{_esc(heading)}</h3>
-                  <p class="meta"><span>status <b>{_esc(status)}</b></span><span>huidig type <b>{_esc(obj.get("object_type"))}</b></span>{"<span>voorstel <b>" + _esc(proposed) + "</b></span>" if proposed else ""}</p>
+                  <header class="review-object-heading">
+                    <p class="eyebrow">Te beoordelen kennisobject</p>
+                    <h3>{_esc(heading)}</h3>
+                    <p class="meta"><span>status <b>{_esc(_status_label(status))}</b></span><span>huidig type <b>{_esc(_object_type_label(obj.get("object_type")))}</b></span>{"<span>typevoorstel <b>" + _esc(_object_type_label(proposed)) + "</b></span>" if proposed else ""}</p>
+                  </header>
                   {four_eyes_html}
-                  <p>{_esc(obj_text)}</p>
+                  <div class="object-text"><p>{_esc(obj_text)}</p></div>
                   {relation_form}
-                  <form method="post" action="/review">
+                  <form class="review-decision-form" method="post" action="/review" data-review-form>
                     <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
                     <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
-                    <label for="type-{_esc(obj["object_id"])}">Bevestig type</label>
-                    <select id="type-{_esc(obj["object_id"])}" name="confirmed_object_type"{type_disabled}>{type_options}</select>
-                    <label for="decision-{_esc(obj["object_id"])}">Besluit</label>
-                    <select id="decision-{_esc(obj["object_id"])}" name="decision">
+                    <section class="review-step">
+                      <h4>1. Classificatie</h4>
+                      <label for="type-{_esc(obj["object_id"])}">Welk type kennisobject is dit?</label>
+                      <select id="type-{_esc(obj["object_id"])}" name="confirmed_object_type"{type_disabled}>{type_options}</select>
+                    </section>
+                    <section class="review-step">
+                      <h4>2. Besluit</h4>
+                      <label for="decision-{_esc(obj["object_id"])}">Wat is je besluit over dit kennisobject?</label>
+                      <select id="decision-{_esc(obj["object_id"])}" name="decision" required>
+                      <option value="" selected disabled>Kies een besluit</option>
                       <option value="approve"{approve_disabled}>Goedkeuren</option>
                       <option value="revise">Revisie vragen</option>
                       <option value="reject">Afwijzen</option>
-                    </select>
-                    <label for="comment-{_esc(obj["object_id"])}">Toelichting</label>
-                    <textarea id="comment-{_esc(obj["object_id"])}" name="comment"></textarea>
-                    <label for="correction-{_esc(obj["object_id"])}">Voorgestelde correctie</label>
-                    <textarea id="correction-{_esc(obj["object_id"])}" name="proposed_correction"></textarea>
-                    <button class="btn-primary" type="submit">Review vastleggen</button>
+                      </select>
+                      <p class="field-help" data-decision-hint>Kies eerst een besluit.</p>
+                      <div class="decision-comment" data-comment-field hidden>
+                        <label for="comment-{_esc(obj["object_id"])}">Toelichting</label>
+                        <textarea id="comment-{_esc(obj["object_id"])}" name="comment"></textarea>
+                      </div>
+                      <div class="decision-correction" data-correction-field hidden>
+                        <label for="correction-{_esc(obj["object_id"])}">Voorgestelde correctie</label>
+                        <textarea id="correction-{_esc(obj["object_id"])}" name="proposed_correction"></textarea>
+                      </div>
+                      <button class="btn-primary" type="submit" disabled data-submit-review>Review vastleggen</button>
+                    </section>
                   </form>
                   </section>
                   {passage_html}
@@ -747,7 +820,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             {_nav(account, "review", _counts(account))}
             <section class="room">
               <h1>Review</h1>
-              <p class="lead">Beoordeel objecten: goedkeuren, revisie vragen of afwijzen.</p>
+              <p class="lead">Beoordeel het kennisobject aan de hand van de bron en leg je besluit vast.</p>
               {picker}
               {"".join(cards) if not chosen else ""}
               {objects_html or empty}
@@ -784,12 +857,16 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         request: Request,
         snapshot_id: str = Form(...),
         object_id: str = Form(...),
-        decision: str = Form(...),
+        decision: str = Form(""),
         comment: str = Form(""),
         proposed_correction: str = Form(""),
         confirmed_object_type: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
+        if decision not in {"approve", "revise", "reject"}:
+            raise ConsoleError("invalid_review_decision")
+        if decision in {"revise", "reject"} and not comment.strip():
+            raise ConsoleError("review_comment_required")
         state.review_object(
             actor_id=account["account_id"],
             snapshot_id=snapshot_id,
