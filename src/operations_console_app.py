@@ -107,7 +107,7 @@ def _metis_wordmark() -> str:
 def _metis_mark() -> str:
     return (
         '<img class="metis-mark" src="/brand/metis-mark.jpg" '
-        'width="56" height="56" alt="">'
+        'width="96" height="72" alt="">'
     )
 
 
@@ -136,7 +136,9 @@ def _page(body: str) -> str:
 </head>
 <body>
 <div class="shell">
+<div class="canvas">
 {body}
+</div>
 </div>
 </body>
 </html>
@@ -264,7 +266,7 @@ def _document_card_heading(row: dict[str, Any]) -> str:
       </header>
       <p class="meta">
         <span>versie <b>{_esc(row["version"])}</b></span>
-        <span>familie <b>{_esc(row["family"])}</b></span>
+        <span>onderwerp <b>{_esc(row["family"])}</b></span>
         <span>klasse <b>{_esc(row["class"])}</b></span>
         <span>status <b>{_esc(_status_label(row.get("status") or row.get("state") or ""))}</b></span>
       </p>
@@ -341,7 +343,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             <section class="room login-card">
               {_login_brand()}
               <h1>Aanmelden</h1>
-              <p class="lead">Meld je aan met je interne account. Geen open registratie. Geen gedeelde login.</p>
+              <p class="lead">Interne account. Geen open registratie.</p>
               <form method="post" action="/login">
                 <label for="gebruikersnaam">Gebruikersnaam</label>
                 <input id="gebruikersnaam" name="username" autocomplete="username" required>
@@ -382,9 +384,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             {_nav(account, "ingest", _counts(account))}
             <section class="room">
               <h1>Document inleveren</h1>
-              <p class="lead">Lever een HTML-pagina of PDF in voor review. Continentie is de eerste documentfamilie op dit onderzoekerspad.</p>
-              <p class="next">Daarna: het document verschijnt in de documentenhierarchie en gaat naar review. Publiceren is een later, apart besluit.</p>
-              <p class="statement">Verwacht: titel, versie, familie en klasse, plus minstens één andere reviewer dan jezelf.</p>
+              <p class="lead">Lever HTML of PDF in.</p>
               <form method="post" action="/ingest" enctype="multipart/form-data">
                 <div class="sections">
                   <div class="section">
@@ -416,7 +416,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                         <select id="class_" name="class_">{_class_options()}</select>
                       </div>
                     </div>
-                    <label for="family">Familie</label>
+                    <label for="family">Onderwerp</label>
                     <input id="family" name="family" value="continentie" required>
                     <label for="ingest_kind">Nieuw of nieuwe versie</label>
                     <select id="ingest_kind" name="ingest_kind">
@@ -499,8 +499,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             {_nav(account, "ingest", _counts(account))}
             <section class="room">
               <h1>Document ingeleverd</h1>
-              <p class="lead">Het document is vastgelegd en wacht op review.</p>
-              <p class="next">Volgende stap: open Review en laat een andere benoemde reviewer het document beoordelen.</p>
+              <p class="lead">Vastgelegd en klaar voor review.</p>
               <div class="doc-card">
                 {_document_card_heading({**receipt, "status": receipt["state"]})}
               </div>
@@ -529,8 +528,8 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                           <input type="hidden" name="title" value="{_esc(child["title"])}">
                           <input type="hidden" name="version" value="{_esc(child["version"])}">
                           <input type="hidden" name="family" value="{_esc(child["family"])}">
-                          <label>Nieuwe familie
-                            <input name="new_family" required placeholder="familie">
+                          <label>Nieuw onderwerp
+                            <input name="new_family" required placeholder="onderwerp">
                           </label>
                           <button class="btn-secondary" type="submit">Verplaatsen</button>
                         </form>
@@ -560,7 +559,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     """
                 )
             blocks.append(
-                f'<h2>Familie {_esc(family)}</h2><div class="doc-list">{"".join(cards)}</div>'
+                f'<h2>Onderwerp {_esc(family)}</h2><div class="doc-list">{"".join(cards)}</div>'
             )
         empty = '<p class="muted">Nog geen documenten. Lever eerst een document in.</p>'
         return _page(
@@ -568,8 +567,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             {_nav(account, "tree", _counts(account))}
             <section class="room">
               <h1>Documentenhiërarchie</h1>
-              <p class="lead">Bekijk documenten per familie en klasse. Verplaats een document naar een andere familie, of promoveer de klasse.</p>
-              <p class="next">Verplaatsen is een curatoract (geen herhash). Promoveren vereist daarna opnieuw review.</p>
+              <p class="lead">Documenten per onderwerp en klasse. Verplaatsen of promoveren vanaf het document.</p>
               {"".join(blocks) or empty}
             </section>
             {_help()}
@@ -664,8 +662,6 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                         f"{' · ' + _esc(status) if status else ''}</span></li>"
                     )
                 objects_html += (
-                    '<p class="next">Open één object. Daarna zie je links het kennisobject '
-                    "en rechts de exacte bronpassage.</p>"
                     f'<ol class="object-index">{"".join(items)}</ol>'
                 )
             else:
@@ -751,8 +747,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             {_nav(account, "review", _counts(account))}
             <section class="room">
               <h1>Review</h1>
-              <p class="lead">Beoordeel de objecten van een ingeleverd document. Keur goed, vraag revisie, of wijs af.</p>
-              <p class="next">Een reject of correctie maakt een nieuwe objectversie of blokkeert de oude. De uploader mag niet de enige vereiste reviewer zijn.</p>
+              <p class="lead">Beoordeel objecten: goedkeuren, revisie vragen of afwijzen.</p>
               {picker}
               {"".join(cards) if not chosen else ""}
               {objects_html or empty}
@@ -774,7 +769,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             {_nav(account, "review", _counts(account))}
             <section class="room">
               <h1>Bronpassage</h1>
-              <p class="lead">Open de exacte plaats in het geüploade origineel bij dit kennisobject.</p>
+              <p class="lead">Exacte plaats in het geüploade origineel.</p>
               <article class="object">
                 <pre>{_esc(opened.get("passage") or "")}</pre>
               </article>
@@ -864,8 +859,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             {_nav(account, "publish", _counts(account))}
             <section class="room">
               <h1>Publiceren</h1>
-              <p class="lead">Publiceren is een apart geautoriseerd besluit over een gereviewd document.</p>
-              <p class="next">Zonder duurzame, onwijzigbare opslag blijft publicatie geblokkeerd. Cutover wordt niet gefingeerd. Een telling van vastgelegde documenten is geen publicatie-autorisatie.</p>
+              <p class="lead">Apart besluit over een gereviewd document. Zonder duurzame opslag blijft publicatie geblokkeerd.</p>
               <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen documenten.</p>'}</div>
             </section>
             {_help()}
@@ -934,8 +928,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             {_nav(account, "accounts", _counts(account))}
             <section class="room">
               <h1>Accounts</h1>
-              <p class="lead">Beheer interne gebruikers. Alleen een publisher mag gebruikers aanmaken en rollen toewijzen.</p>
-              <p class="next">Rollen blijven gesloten: researcher, reviewer, publisher. Geen open registratie. Geen gedeelde login.</p>
+              <p class="lead">Interne gebruikers. Alleen een publisher maakt accounts en wijzigt rollen.</p>
               {form}
               <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen accounts.</p>'}</div>
             </section>
