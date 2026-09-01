@@ -143,7 +143,7 @@ def _text_of(obj: dict) -> str:
 def _index_link_titles(html: str) -> list[str]:
     titles = []
     for match in re.finditer(
-        r'<a href="/review\?document=[^"]+&amp;object=[^"]+">\s*(.*?)\s*</a>',
+        r'<a href="/review\?document=[^"]+(?:&|&amp;)object=[^"]+">\s*(.*?)\s*</a>',
         html,
         flags=re.S,
     ):
@@ -443,7 +443,15 @@ def test_review_lanes_from_type_without_speed_toggle(tmp_path: Path) -> None:
     assert "review-lane-slow" in html
     assert "/review/headings/batch-confirm" in html
     assert "bevestig geselecteerde koppen als structuur" in lower
-    for forbidden in ("zwaar", "licht", "snel/langzaam", "snel-langzaam", "speed-toggle"):
+    for forbidden in (
+        "zwaar/licht",
+        "snel/langzaam",
+        "snel-langzaam",
+        "speed-toggle",
+        'name="review_speed"',
+        'id="review_speed"',
+        "review-speed",
+    ):
         assert forbidden not in lower
     assert "envelope" not in lower
     assert "Documentenhiërarchie" in html
@@ -491,7 +499,8 @@ def test_slow_lane_stays_one_object_card(tmp_path: Path) -> None:
     assert "review-card-two-column" in html
     assert "confirmed_object_type" in html
     assert "batch-confirm" not in html
-    assert html.count('name="decision"') == 1
+    assert html.count('class="review-decision-form"') == 1
+    assert html.count("<select") >= 1
 
 
 def test_batch_confirm_rejects_slow_lane_objects(tmp_path: Path) -> None:

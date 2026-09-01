@@ -48,6 +48,22 @@ CONSOLE_VERSION = "operations-console-v1.0.0"
 CAPTURED = "captured_not_published"
 ALLOWED_ROLES = frozenset({"researcher", "reviewer", "publisher"})
 ALLOWED_CLASSES = ("richtlijn", "handreiking", "artikel", "transcript", "podcast")
+SOURCE_VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+)*$")
+YEAR_AS_VERSION_RE = re.compile(r"^(19|20)\d{2}$")
+ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
+NL_DATE_RE = re.compile(r"^(\d{2})-(\d{2})-(\d{4})$")
+REVIEW_TYPE_NAMES = frozenset(
+    {
+        "unclassified",
+        "heading",
+        "definition",
+        "explanation",
+        "condition",
+        "exception",
+        "recommendation",
+        "document",
+    }
+)
 CLASS_ORDER = {
     "richtlijn": 4,
     "handreiking": 3,
@@ -91,6 +107,81 @@ UrlFetcher = Callable[[str], tuple[bytes, str, str]]
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def normalize_ingest_source_date(value: str | None) -> str:
+    """Persist freeze colofon/publicatiedatum as ISO YYYY-MM-DD.
+
+    Screen locale may be DD-MM-YYYY. Stored bytes MUST be ISO, no time/tz.
+    Empty is rejected. Today and ingest-click MUST NOT be substituted.
+    """
+    raw = "" if value is None else str(value)
+    if not raw.strip():
+        raise ConsoleError("source_date_required")
+    if re.search(r"\s", raw):
+        raw = raw.strip()
+        if not raw:
+            raise ConsoleError("source_date_required")
+    iso = None
+    if ISO_DATE_RE.fullmatch(raw):
+        iso = raw
+    else:
+        matched = NL_DATE_RE.fullmatch(raw)
+        if matched:
+            day, month, year = matched.groups()
+            iso = f"{year}-{month}-{day}"
+    if iso is None:
+        raise ConsoleError("invalid_source_date")
+    try:
+        parsed = date.fromisoformat(iso)
+    except ValueError as exc:
+        raise ConsoleError("invalid_source_date") from exc
+    if parsed.isoformat() != iso:
+        raise ConsoleError("invalid_source_date")
+    return iso
+
+
+def validate_ingest_source_version(value: str | None) -> str:
+    """Require dotted non-negative integers. Reject year-as-version and spaces."""
+    raw = "" if value is None else str(value)
+    if not raw:
+        raise ConsoleError("source_version_required")
+    if re.search(r"\s", raw) or raw != raw.strip():
+        raise ConsoleError("invalid_source_version")
+    if YEAR_AS_VERSION_RE.fullmatch(raw) or not SOURCE_VERSION_RE.fullmatch(raw):
+        raise ConsoleError("invalid_source_version")
+    return raw
+
+
+def review_lane(obj: dict[str, Any]) -> str:
+    """Queue routing from confirmed, stored, or proposed type. Not a speed switch."""
+    if obj.get("object_type") == "document":
+        return "document"
+    for candidate in (
+        obj.get("confirmed_object_type"),
+        obj.get("object_type"),
+        obj.get("proposed_object_type"),
+    ):
+        if candidate == "heading":
+            return "fast"
+    return "slow"
+
+
+def review_row_title(obj: dict[str, Any], *, max_len: int = 160) -> str:
+    """Freeze source-passage snippet. MUST NOT use the type name as the title."""
+    content = obj.get("content") or {}
+    text = re.sub(
+        r"\s+",
+        " ",
+        str(content.get("clean_text") or content.get("raw_text") or ""),
+    ).strip()
+    if text and text.casefold() not in REVIEW_TYPE_NAMES:
+        snippet = text
+    else:
+        snippet = str(obj.get("object_id") or "kennisobject")
+    if len(snippet) > max_len:
+        return snippet[: max_len - 1] + "…"
+    return snippet
 
 
 def _slug(value: str) -> str:
@@ -662,8 +753,10 @@ class OperationsConsole:
         if class_ not in ALLOWED_CLASSES:
             raise ConsoleError("invalid_class")
         family_hook = family.strip()
-        if not family_hook or not title.strip() or not version.strip():
+        if not family_hook or not title.strip():
             raise ConsoleError("ingest_fields_required")
+        source_version = validate_ingest_source_version(version)
+        source_date = normalize_ingest_source_date(date)
         reviewers = self._resolve_named_reviewers(named_reviewers, actor_id)
         if url:
             data, fetched_type, fetched_name = self.url_fetcher(url)
@@ -692,7 +785,7 @@ class OperationsConsole:
         _atomic_write_bytes(stored_path, data)
         locator = immutable_locator or f"g0-local:sources/private/{digest}/{Path(filename).name}"
         snapshot_id = f"snap-{digest[:16]}-{uuid.uuid4().hex[:8]}"
-        document_id = f"console-{_slug(family_hook)}-{_slug(title)}-{_slug(version)}-{digest[:8]}"
+        document_id = f"console-{_slug(family_hook)}-{_slug(title)}-{_slug(source_version)}-{digest[:8]}"
         source_id = f"src-{digest[:16]}"
         previous = None
         if ingest_kind == "new_version":
@@ -720,8 +813,8 @@ class OperationsConsole:
                 "source_checksum": digest,
                 "checksum_algorithm": "sha256",
                 "integrity_status": "verified",
-                "publication_date": date or None,
-                "version": version,
+                "publication_date": source_date,
+                "version": source_version,
             }
         }
         objects = transform_generic(spec, manifest, fragments)
@@ -745,8 +838,8 @@ class OperationsConsole:
             "content_kind": kind,
             "ingest_kind": ingest_kind,
             "title": title.strip(),
-            "version": version.strip(),
-            "date": date,
+            "version": source_version,
+            "date": source_date,
             "live_url": live_url or url or "",
             "class": class_,
             "family": family_hook,
@@ -955,6 +1048,45 @@ class OperationsConsole:
             self._bindings[snapshot_id] = invalidate_for_object(self._bindings.get(snapshot_id, []), object_id)
             self._save_bindings()
         return deepcopy(updated)
+
+    def batch_confirm_headings(
+        self,
+        *,
+        actor_id: str,
+        snapshot_id: str,
+        object_ids: Iterable[str],
+    ) -> list[dict[str, Any]]:
+        """Fast-lane confirm of proposed headings as structure, not advice.
+
+        MUST NOT bypass four-eyes when the object is high-risk or is later
+        reclassified onto a high-risk type. Serving still requires confirmed
+        closed types plus the published projection and G2 locator.
+        """
+        self._require_role(actor_id, "reviewer")
+        ids = [str(object_id).strip() for object_id in object_ids if str(object_id).strip()]
+        if not ids:
+            raise ConsoleError("fast_lane_heading_required")
+        current = {row["object_id"]: row for row in self.snapshot_objects(snapshot_id)}
+        for object_id in ids:
+            target = current.get(object_id)
+            if target is None:
+                raise ConsoleError("unknown_object")
+            if review_lane(target) != "fast":
+                raise ConsoleError("fast_lane_heading_required")
+        updated: list[dict[str, Any]] = []
+        for object_id in ids:
+            rows = self.review_object(
+                actor_id=actor_id,
+                snapshot_id=snapshot_id,
+                object_id=object_id,
+                decision="approve",
+                confirmed_object_type="heading",
+            )
+            refreshed = next(row for row in rows if row["object_id"] == object_id)
+            mark_four_eyes_on_object(refreshed, confirmed_type="heading")
+            stamp_canonical_hashes(refreshed)
+            updated.append(deepcopy(refreshed))
+        return updated
 
     def correct_object(
         self,
