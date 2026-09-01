@@ -7,6 +7,7 @@ Chat is not a room.
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -20,6 +21,8 @@ from src.operations_console_v1 import (
     ConsoleError,
     OperationsConsole,
     REPO_ROOT,
+    review_lane,
+    review_row_title,
 )
 from src.serving_relations_v1 import CLOSED_RELATION_TYPES, proposed_relations
 
@@ -77,6 +80,11 @@ ERROR_COPY = {
     "unsupported_locator": "Deze locator kan niet worden geopend.",
     "invalid_review_decision": "Kies een besluit: goedkeuren, revisie vragen of afwijzen.",
     "review_comment_required": "Geef een toelichting bij een revisieverzoek of afwijzing.",
+    "source_date_required": "Vul de publicatiedatum uit het colofon in.",
+    "invalid_source_date": "Gebruik een geldige kalenderdatum.",
+    "source_version_required": "Vul de versie van de freeze in.",
+    "invalid_source_version": "Versie is alleen getallen met punten, bijvoorbeeld 1.0. Geen jaartal en geen v-voorvoegsel.",
+    "fast_lane_heading_required": "Batch-bevestiging geldt alleen voor koppen.",
 }
 RELATION_LABELS = {
     "applies_if": "geldt indien",
@@ -308,6 +316,25 @@ def _relation_checkboxes(obj: dict[str, Any], objects: list[dict[str, Any]]) -> 
     )
 
 
+def _review_location(console: OperationsConsole, snapshot_id: str, object_id: str | None = None) -> str:
+    """Redirect only to a stored snapshot (and optional object), never raw form bytes."""
+    envelope = console._envelope(snapshot_id)
+    snap = quote(str(envelope["snapshot_id"]), safe="")
+    if not object_id:
+        return f"/review?document={snap}"
+    known = next(
+        (
+            row["object_id"]
+            for row in console.snapshot_objects(envelope["snapshot_id"])
+            if row["object_id"] == object_id
+        ),
+        None,
+    )
+    if known is None:
+        raise ConsoleError("unknown_object")
+    return f"/review?document={snap}&object={quote(str(known), safe='')}"
+
+
 def _document_card_heading(row: dict[str, Any]) -> str:
     return f"""
       <header>
@@ -451,14 +478,19 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                         <input id="title" name="title" required>
                       </div>
                       <div>
-                        <label for="version">Versie</label>
-                        <input id="version" name="version" required>
+                        <label for="version">Versie van de freeze</label>
+                        <input id="version" name="version" required pattern="[0-9]+(\\.[0-9]+)*" inputmode="numeric" placeholder="bijv. 2.13" autocomplete="off">
+                        <p class="field-help">Alleen getallen met punten, bijvoorbeeld 1.0 of 2.13. Geen jaartal.</p>
                       </div>
                     </div>
                     <div class="field-row">
                       <div>
-                        <label for="date">Datum</label>
-                        <input id="date" name="date" placeholder="2025-04-01" required>
+                        <label for="date">Publicatiedatum (colofon)</label>
+                        <div class="date-nl-wrap">
+                          <input id="date" name="date" type="date" required lang="nl" autocomplete="off">
+                          <p class="date-nl-display" data-date-nl aria-live="polite">dd-mm-jjjj</p>
+                        </div>
+                        <p class="field-help">Datum uit het colofon / publicatiedatum, weergave dd-mm-jjjj. Leeg is niet toegestaan.</p>
                       </div>
                       <div>
                         <label for="class_">Klasse</label>
@@ -497,6 +529,20 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
               function sync() {{ row.hidden = kind.value !== "new_version"; }}
               kind.addEventListener("change", sync);
               sync();
+              var date = document.getElementById("date");
+              var out = document.querySelector("[data-date-nl]");
+              function showNl() {{
+                if (!date || !out) return;
+                if (!date.value) {{ out.textContent = "dd-mm-jjjj"; return; }}
+                var parts = date.value.split("-");
+                if (parts.length !== 3) {{ out.textContent = "dd-mm-jjjj"; return; }}
+                out.textContent = parts[2] + "-" + parts[1] + "-" + parts[0];
+              }}
+              if (date) {{
+                date.addEventListener("input", showNl);
+                date.addEventListener("change", showNl);
+                showNl();
+              }}
             }})();
             </script>
             """
@@ -708,25 +754,64 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             objects_html += f'<div class="doc-card">{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}</div>'
             snapshot_objects = state.snapshot_objects(chosen)
             if not chosen_object_id:
-                items = []
-                for obj in snapshot_objects:
-                    heading = (obj.get("content") or {}).get("heading") or obj.get("object_type")
+                def _index_item(obj: dict[str, Any], *, checkbox: bool = False) -> str:
+                    title = review_row_title(obj)
                     status = (obj.get("governance") or {}).get("validation_status") or ""
-                    items.append(
-                        "<li>"
-                        f'<a href="/review?document={_esc(chosen)}&object={_esc(obj["object_id"])}">'
-                        f"{_esc(heading)}</a>"
-                        f' <span class="meta">{_esc(_object_type_label(obj.get("object_type")))}'
-                        f"{' · ' + _esc(_status_label(status)) if status else ''}</span></li>"
+                    meta = (
+                        f"{_esc(_object_type_label(obj.get('object_type')))}"
+                        f"{' · ' + _esc(_status_label(status)) if status else ''}"
                     )
-                objects_html += (
-                    f'<ol class="object-index">{"".join(items)}</ol>'
-                )
+                    link = (
+                        f'<a class="review-row-title" href="/review?document={_esc(chosen)}&object={_esc(obj["object_id"])}">'
+                        f"{_esc(title)}</a>"
+                    )
+                    secondary = (
+                        f'<p class="meta">{meta}'
+                        f' <span class="object-id">{_esc(obj["object_id"])}</span></p>'
+                    )
+                    if checkbox:
+                        return (
+                            '<li class="review-row">'
+                            f'<label class="check"><input type="checkbox" name="object_ids" '
+                            f'value="{_esc(obj["object_id"])}">{link}</label>'
+                            f"{secondary}</li>"
+                        )
+                    return f'<li class="review-row">{link}{secondary}</li>'
+
+                fast_objects = [obj for obj in snapshot_objects if review_lane(obj) == "fast"]
+                slow_objects = [
+                    obj for obj in snapshot_objects if review_lane(obj) in {"slow", "document"}
+                ]
+                fast_items = "".join(_index_item(obj, checkbox=True) for obj in fast_objects)
+                slow_items = "".join(_index_item(obj) for obj in slow_objects)
+                fast_block = ""
+                if fast_objects:
+                    fast_block = f"""
+                    <section class="review-lane-fast">
+                      <h2>Koppen (structuur)</h2>
+                      <p class="lead">Bevestig koppen als structuur, niet als advies.</p>
+                      <form method="post" action="/review/headings/batch-confirm">
+                        <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
+                        <ol class="object-index">{fast_items}</ol>
+                        <button class="btn-primary" type="submit">Bevestig geselecteerde koppen als structuur</button>
+                      </form>
+                    </section>
+                    """
+                slow_block = ""
+                if slow_objects:
+                    slow_block = f"""
+                    <section class="review-lane-slow">
+                      <h2>Inhoud</h2>
+                      <p class="lead">Beoordeel elk kennisobject afzonderlijk.</p>
+                      <ol class="object-index">{slow_items}</ol>
+                    </section>
+                    """
+                objects_html += fast_block + slow_block
             else:
                 obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
                 if obj is None:
                     raise ConsoleError("unknown_object")
-                heading = (obj.get("content") or {}).get("heading") or obj.get("object_type")
+                heading = review_row_title(obj)
                 obj_text = (obj.get("content") or {}).get("clean_text") or ""
                 status = (obj.get("governance") or {}).get("validation_status") or ""
                 proposed = obj.get("proposed_object_type") or ""
@@ -886,7 +971,22 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     "operations": [{"op": "set", "path": "content.clean_text", "value": proposed_correction.strip()}],
                 },
             )
-        return RedirectResponse(f"/review?document={snapshot_id}&object={object_id}", status_code=303)
+        return RedirectResponse(_review_location(state, snapshot_id, object_id), status_code=303)
+
+    @app.post("/review/headings/batch-confirm")
+    def review_headings_batch_confirm(
+        request: Request,
+        snapshot_id: str = Form(...),
+        object_ids: list[str] = Form(default=[]),
+    ) -> RedirectResponse:
+        account = _require(request)
+        raw = [object_ids] if isinstance(object_ids, str) else list(object_ids or [])
+        state.batch_confirm_headings(
+            actor_id=account["account_id"],
+            snapshot_id=snapshot_id,
+            object_ids=raw,
+        )
+        return RedirectResponse(_review_location(state, snapshot_id), status_code=303)
 
     @app.post("/review/relations")
     def review_relations_post(
@@ -909,7 +1009,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             object_id=object_id,
             relations=rows,
         )
-        return RedirectResponse(f"/review?document={snapshot_id}&object={object_id}", status_code=303)
+        return RedirectResponse(_review_location(state, snapshot_id, object_id), status_code=303)
 
     @app.get("/publish", response_class=HTMLResponse)
     def publish_get(request: Request) -> str:

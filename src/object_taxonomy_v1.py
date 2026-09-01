@@ -22,6 +22,26 @@ CLOSED_OBJECT_TYPES = (
 CONTAINER_TYPES = frozenset({"document"})
 DEFAULT_OBJECT_TYPE = "unclassified"
 HEADING_TAGS = ("h1", "h2", "h3", "h4", "h5", "h6")
+STRUCTURAL_HEADING_LABELS = frozenset(
+    {
+        "inhoud",
+        "inhoudsopgave",
+        "colofon",
+        "literatuur",
+        "begrippen",
+        "begrippenlijst",
+        "bijlage",
+        "bijlagen",
+        "samenvatting",
+        "inleiding",
+        "aanbevelingen",
+        "doorverwijzen",
+        "verantwoording",
+        "methodiek",
+        "diagnostiek",
+    }
+)
+_NUMBERED_HEADING_RE = re.compile(r"^\d+(?:\.\d+)*\.?\s+\S.{0,100}$")
 CLASS_ORDER = {
     "richtlijn": 4,
     "handreiking": 3,
@@ -41,14 +61,45 @@ _RECOMMENDATION_RE = re.compile(
 )
 
 
+def looks_like_structural_heading(text: str) -> bool:
+    """True for TOC crumbs and short structural titles, not ordinary sentences.
+
+    Numbered clinical prose ('1. Bespreek incontinentie met de patiënt.') is
+    content, not a heading. A terminal period or an advice/meaning cue keeps
+    the object unclassified so it stays in the slow review lane.
+    """
+    blob = re.sub(r"\s+", " ", text or "").strip()
+    if not blob or len(blob) > 120:
+        return False
+    if re.search(r"[.!?]$", blob):
+        return False
+    if blob.casefold() in STRUCTURAL_HEADING_LABELS:
+        return True
+    if not _NUMBERED_HEADING_RE.match(blob):
+        return False
+    if (
+        _DEFINITION_RE.search(blob)
+        or _EXCEPTION_RE.search(blob)
+        or _CONDITION_RE.search(blob)
+        or _EXPLANATION_RE.search(blob)
+        or _RECOMMENDATION_RE.search(blob)
+    ):
+        return False
+    return len(blob.split()) <= 8
+
+
 def fragment_is_heading(fragment: dict[str, Any]) -> bool:
     loc = fragment.get("source_locator") or {}
     value = str(loc.get("locator_value") or "").lower()
-    if loc.get("locator_type") == "web_line_range":
-        return any(f";{tag}:" in value for tag in HEADING_TAGS)
+    if loc.get("locator_type") == "web_line_range" and any(
+        f";{tag}:" in value for tag in HEADING_TAGS
+    ):
+        return True
     heading = re.sub(r"\s+", " ", str(fragment.get("heading") or "")).strip()
     text = re.sub(r"\s+", " ", str(fragment.get("clean_text") or fragment.get("raw_text") or "")).strip()
-    return bool(heading and heading == text)
+    if heading and heading == text:
+        return True
+    return looks_like_structural_heading(text)
 
 
 def propose_object_type(text: str, *, is_heading: bool = False) -> str | None:

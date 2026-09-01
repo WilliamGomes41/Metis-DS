@@ -404,6 +404,63 @@ textarea:focus-visible {
   margin: 0.35rem 0;
 }
 
+.review-lane-fast,
+.review-lane-slow {
+  margin: 16px 0 0;
+}
+
+.review-lane-fast {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 16px 16px;
+  background: var(--water-light);
+}
+
+.review-lane-fast h2,
+.review-lane-slow h2 {
+  margin: 0 0 6px;
+}
+
+.review-lane-fast .lead,
+.review-lane-slow .lead {
+  margin: 0 0 10px;
+}
+
+.object-index .object-id {
+  display: inline-block;
+  margin-left: 0.4rem;
+  color: var(--muted);
+  font-size: 0.85em;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.review-row {
+  margin: 0.55rem 0;
+}
+
+.review-row-title {
+  display: block;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.date-nl-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.date-nl-display {
+  margin: 0;
+  color: var(--paars);
+  font-weight: 650;
+}
+
 .review-card-two-column {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr);
