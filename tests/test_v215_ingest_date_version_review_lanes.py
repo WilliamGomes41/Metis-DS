@@ -19,7 +19,8 @@ from src.four_eyes_v1 import requires_four_eyes
 from src.integrity_kernel import compute_canonical_object_hash
 from src.object_taxonomy_v1 import is_advice_weight, published_object_type
 from src.operations_console_app import create_console_app
-from src.operations_console_v1 import ConsoleError, OperationsConsole
+from src.object_taxonomy_v1 import looks_like_structural_heading
+from src.operations_console_v1 import ConsoleError, OperationsConsole, review_lane
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -355,6 +356,29 @@ def test_new_extract_proposes_heading_for_real_headings_and_toc(tmp_path: Path) 
     assert by_text["Inhoudsopgave"]["object_type"] == "heading"
 
 
+def test_numbered_clinical_prose_is_not_a_heading(tmp_path: Path) -> None:
+    html_src = (
+        "<!doctype html><html lang=\"nl\"><body>"
+        "<h1>Richtlijn Continentie</h1>"
+        "<p>1. Bespreek incontinentie met de patiënt.</p>"
+        "<p>1. Bespreek incontinentie met de patiënt</p>"
+        "<li>1. Inleiding</li>"
+        "</body></html>"
+    ).encode("utf-8")
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    receipt = _ingest(console, accounts, data=html_src, filename="list.html", title="Lijstproza")
+    objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
+    by_text = {_text_of(obj): obj for obj in objects}
+    assert looks_like_structural_heading("1. Bespreek incontinentie met de patiënt.") is False
+    assert looks_like_structural_heading("1. Bespreek incontinentie met de patiënt") is False
+    assert looks_like_structural_heading("1. Inleiding") is True
+    prose = [obj for obj in objects if "Bespreek incontinentie" in _text_of(obj)]
+    assert prose
+    assert all(obj["object_type"] != "heading" for obj in prose)
+    assert by_text["1. Inleiding"]["object_type"] == "heading"
+
+
 def test_ordinary_text_is_not_auto_promoted_to_recommendation(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
@@ -547,9 +571,20 @@ def test_human_can_reclassify_heading_that_is_advice_to_slow(tmp_path: Path) -> 
         if obj["object_id"] == heading["object_id"]
     )
     assert refreshed["confirmed_object_type"] == "recommendation"
+    assert refreshed.get("proposed_object_type") == "heading"
+    assert review_lane(refreshed) == "slow"
     html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
     assert heading["object_id"] in html
     assert "review-lane-slow" in html
+    fast = re.search(r'class="review-lane-fast".*?</section>', html, flags=re.S)
+    if fast:
+        assert heading["object_id"] not in fast.group(0)
+    with pytest.raises(ConsoleError, match="fast_lane_heading_required"):
+        console.batch_confirm_headings(
+            actor_id=accounts["reviewer"]["account_id"],
+            snapshot_id=receipt["snapshot_id"],
+            object_ids=[heading["object_id"]],
+        )
 
 
 # ---------------------------------------------------------------------------

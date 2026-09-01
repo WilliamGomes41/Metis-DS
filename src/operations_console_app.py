@@ -7,6 +7,7 @@ Chat is not a room.
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -313,6 +314,25 @@ def _relation_checkboxes(obj: dict[str, Any], objects: list[dict[str, Any]]) -> 
         f'{_esc(obj["object_id"])}">Relatie bevestigen</button>'
         "</fieldset>"
     )
+
+
+def _review_location(console: OperationsConsole, snapshot_id: str, object_id: str | None = None) -> str:
+    """Redirect only to a stored snapshot (and optional object), never raw form bytes."""
+    envelope = console._envelope(snapshot_id)
+    snap = quote(str(envelope["snapshot_id"]), safe="")
+    if not object_id:
+        return f"/review?document={snap}"
+    known = next(
+        (
+            row["object_id"]
+            for row in console.snapshot_objects(envelope["snapshot_id"])
+            if row["object_id"] == object_id
+        ),
+        None,
+    )
+    if known is None:
+        raise ConsoleError("unknown_object")
+    return f"/review?document={snap}&object={quote(str(known), safe='')}"
 
 
 def _document_card_heading(row: dict[str, Any]) -> str:
@@ -951,7 +971,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     "operations": [{"op": "set", "path": "content.clean_text", "value": proposed_correction.strip()}],
                 },
             )
-        return RedirectResponse(f"/review?document={snapshot_id}&object={object_id}", status_code=303)
+        return RedirectResponse(_review_location(state, snapshot_id, object_id), status_code=303)
 
     @app.post("/review/headings/batch-confirm")
     def review_headings_batch_confirm(
@@ -966,7 +986,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             snapshot_id=snapshot_id,
             object_ids=raw,
         )
-        return RedirectResponse(f"/review?document={snapshot_id}", status_code=303)
+        return RedirectResponse(_review_location(state, snapshot_id), status_code=303)
 
     @app.post("/review/relations")
     def review_relations_post(
@@ -989,7 +1009,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             object_id=object_id,
             relations=rows,
         )
-        return RedirectResponse(f"/review?document={snapshot_id}&object={object_id}", status_code=303)
+        return RedirectResponse(_review_location(state, snapshot_id, object_id), status_code=303)
 
     @app.get("/publish", response_class=HTMLResponse)
     def publish_get(request: Request) -> str:

@@ -154,16 +154,25 @@ def validate_ingest_source_version(value: str | None) -> str:
 
 
 def review_lane(obj: dict[str, Any]) -> str:
-    """Queue routing from confirmed, stored, or proposed type. Not a speed switch."""
+    """Queue routing from the first authoritative type. Not a speed switch.
+
+    Confirmed type wins. Stored type wins over a stale proposal. Proposed
+    type is used only when the object is still unclassified, so a human
+    reclassification to recommendation cannot be batch-overwritten as heading.
+    """
     if obj.get("object_type") == "document":
         return "document"
-    for candidate in (
-        obj.get("confirmed_object_type"),
-        obj.get("object_type"),
-        obj.get("proposed_object_type"),
-    ):
-        if candidate == "heading":
-            return "fast"
+    confirmed = obj.get("confirmed_object_type")
+    stored = obj.get("object_type")
+    proposed = obj.get("proposed_object_type")
+    if confirmed:
+        authoritative = confirmed
+    elif stored and stored != "unclassified":
+        authoritative = stored
+    else:
+        authoritative = proposed
+    if authoritative == "heading":
+        return "fast"
     return "slow"
 
 

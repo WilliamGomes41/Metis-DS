@@ -62,15 +62,30 @@ _RECOMMENDATION_RE = re.compile(
 
 
 def looks_like_structural_heading(text: str) -> bool:
-    """True for TOC crumbs and short structural titles, not ordinary sentences."""
+    """True for TOC crumbs and short structural titles, not ordinary sentences.
+
+    Numbered clinical prose ('1. Bespreek incontinentie met de patiënt.') is
+    content, not a heading. A terminal period or an advice/meaning cue keeps
+    the object unclassified so it stays in the slow review lane.
+    """
     blob = re.sub(r"\s+", " ", text or "").strip()
     if not blob or len(blob) > 120:
         return False
-    if re.search(r"[.!?]$", blob) and not _NUMBERED_HEADING_RE.match(blob):
+    if re.search(r"[.!?]$", blob):
         return False
     if blob.casefold() in STRUCTURAL_HEADING_LABELS:
         return True
-    return bool(_NUMBERED_HEADING_RE.match(blob))
+    if not _NUMBERED_HEADING_RE.match(blob):
+        return False
+    if (
+        _DEFINITION_RE.search(blob)
+        or _EXCEPTION_RE.search(blob)
+        or _CONDITION_RE.search(blob)
+        or _EXPLANATION_RE.search(blob)
+        or _RECOMMENDATION_RE.search(blob)
+    ):
+        return False
+    return len(blob.split()) <= 8
 
 
 def fragment_is_heading(fragment: dict[str, Any]) -> bool:
