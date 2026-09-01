@@ -9,3 +9,5 @@ fastapi==0.128.2
 uvicorn==0.48.0
 python-multipart==0.0.20
 gunicorn==23.0.0
+azure-identity==1.25.3
+azure-storage-blob==12.30.1

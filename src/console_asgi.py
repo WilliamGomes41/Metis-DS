@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from src.g2_source_store import AzureBlobSourceStore
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 
@@ -58,10 +59,17 @@ def bootstrap_accounts(console: OperationsConsole) -> None:
 
 def build_app() -> object:
     data_root = _env_path("CONSOLE_DATA_ROOT", _default_data_root())
+    immutable_store = None
+    source_store_kind = os.environ.get("CONSOLE_IMMUTABLE_SOURCE_STORE", "").strip().lower()
+    if source_store_kind:
+        if source_store_kind != "azure":
+            raise RuntimeError("unsupported_immutable_source_store")
+        immutable_store = AzureBlobSourceStore()
     console = OperationsConsole(
         root=ROOT,
         source_store=_env_path("CONSOLE_SOURCE_STORE", data_root / "sources" / "private"),
         runtime=_env_path("CONSOLE_RUNTIME", data_root / "output" / "runtime" / "operations-console"),
+        immutable_source_store=immutable_store,
     )
     bootstrap_accounts(console)
     return create_console_app(console)

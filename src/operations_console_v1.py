@@ -2,7 +2,8 @@
 
 Protocol v2.6/v2.8: ingest mailbox, family × class tree, named reviewers,
 mandatory review return-loop, local G0 identity. Capture is not publication.
-Local ``sources/private/`` is the G0 stand-in and is explicitly not production.
+Azure deployments can bind exact source bytes to the G2 canonical Blob store;
+local ``sources/private/`` remains the G0 stand-in for local development.
 """
 from __future__ import annotations
 
@@ -30,7 +31,7 @@ from src.four_eyes_v1 import (
     publish_authorization_contract,
     requires_four_eyes,
 )
-from src.g2_source_store import is_g2_locator
+from src.g2_source_store import G2SourceStoreError, ImmutableSourceStore, is_g2_locator
 from src.integrity_kernel import compute_canonical_object_hash, sha256_bytes, stamp_canonical_hashes
 from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES, extract_object_type, is_closed_confirmed_type
 from src.open_original_v1 import OpenOriginalError, open_source_passage
@@ -115,6 +116,13 @@ def _atomic_write(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+
+def _atomic_write_bytes(path: Path, payload: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_bytes(payload)
     tmp.replace(path)
 
 
@@ -247,12 +255,14 @@ class OperationsConsole:
         root: Path,
         source_store: Path | None = None,
         runtime: Path | None = None,
+        immutable_source_store: ImmutableSourceStore | None = None,
         url_fetcher: UrlFetcher | None = None,
         schema_path: Path | None = None,
     ) -> None:
         self.root = Path(root)
         self.source_store = Path(source_store or self.root / "sources" / "private")
         self.runtime = Path(runtime or self.root / "output" / "runtime" / "operations-console")
+        self.immutable_source_store = immutable_source_store
         self.url_fetcher = url_fetcher or default_url_fetcher
         self.schema_path = Path(schema_path or SCHEMA_V12)
         self.source_store.mkdir(parents=True, exist_ok=True)
@@ -593,6 +603,18 @@ class OperationsConsole:
             raise ConsoleError("unknown_object")
         freeze_path = Path(envelope["binary_path"])
         freeze_bytes = freeze_path.read_bytes() if freeze_path.exists() else None
+        expected_digest = str(envelope["sha256"])
+        if freeze_bytes is not None and sha256_bytes(freeze_bytes) != expected_digest:
+            freeze_bytes = None
+        immutable_locator = envelope.get("immutable_storage_locator")
+        if freeze_bytes is None and immutable_locator and self.immutable_source_store is not None:
+            try:
+                freeze_bytes = self.immutable_source_store.load_verified(immutable_locator)
+            except G2SourceStoreError as exc:
+                raise ConsoleError("immutable_source_recovery_failed") from exc
+            if sha256_bytes(freeze_bytes) != expected_digest:
+                raise ConsoleError("immutable_source_recovery_failed")
+            _atomic_write_bytes(freeze_path, freeze_bytes)
         try:
             return open_source_passage(
                 freeze_bytes=freeze_bytes,
@@ -654,11 +676,21 @@ class OperationsConsole:
         if url and kind == "html":
             raise ConsoleError("live_url_html_not_allowed")
         digest = sha256_bytes(data)
+        immutable_locator = None
+        if self.immutable_source_store is not None:
+            try:
+                immutable_locator = self.immutable_source_store.store_verified(
+                    data=data,
+                    sha256=digest,
+                    filename=Path(filename).name,
+                )
+            except (G2SourceStoreError, ValueError) as exc:
+                raise ConsoleError("immutable_source_storage_failed") from exc
         stored_dir = self.source_store / digest
         stored_dir.mkdir(parents=True, exist_ok=True)
         stored_path = stored_dir / Path(filename).name
-        stored_path.write_bytes(data)
-        locator = f"g0-local:sources/private/{digest}/{Path(filename).name}"
+        _atomic_write_bytes(stored_path, data)
+        locator = immutable_locator or f"g0-local:sources/private/{digest}/{Path(filename).name}"
         snapshot_id = f"snap-{digest[:16]}-{uuid.uuid4().hex[:8]}"
         document_id = f"console-{_slug(family_hook)}-{_slug(title)}-{_slug(version)}-{digest[:8]}"
         source_id = f"src-{digest[:16]}"
@@ -703,9 +735,13 @@ class OperationsConsole:
             "sha256": digest,
             "locator": locator,
             "binary_path": str(stored_path.resolve()),
-            "immutable_storage_locator": None,
+            "immutable_storage_locator": immutable_locator,
             "state": CAPTURED,
-            "publication_eligibility": "blocked_pending_immutable_storage",
+            "publication_eligibility": (
+                "eligible_for_transform_and_review"
+                if immutable_locator
+                else "blocked_pending_immutable_storage"
+            ),
             "content_kind": kind,
             "ingest_kind": ingest_kind,
             "title": title.strip(),

@@ -1,14 +1,16 @@
-"""G2 canonical source-store coordinates.
+"""G2 canonical source-store coordinates and verified Azure Blob adapter.
 
-Records the V&VN Azure Blob store. Does not upload bytes, does not
-store keys, and does not convert G2 to PASS.
+The adapter authenticates with Microsoft Entra ID through
+``DefaultAzureCredential``. Storage keys, connection strings and SAS tokens are
+deliberately unsupported.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "g2_source_store.v1.json"
@@ -59,3 +61,88 @@ def parse_g2_locator(locator: str | None) -> dict[str, str] | None:
 
 def is_g2_locator(locator: str | None) -> bool:
     return parse_g2_locator(locator) is not None
+
+
+class G2SourceStoreError(RuntimeError):
+    """Fail-closed error raised when canonical bytes cannot be verified."""
+
+
+class ImmutableSourceStore(Protocol):
+    def store_verified(self, *, data: bytes, sha256: str, filename: str) -> str: ...
+
+    def load_verified(self, locator: str) -> bytes: ...
+
+
+class AzureBlobSourceStore:
+    """Content-addressed canonical source storage backed by Azure Blob."""
+
+    def __init__(self, *, blob_service_client: Any | None = None) -> None:
+        store = load_g2_store()
+        self.account = str(store["storage_account"])
+        self.container = str(store["container"])
+        if blob_service_client is None:
+            try:
+                from azure.identity import DefaultAzureCredential
+                from azure.storage.blob import BlobServiceClient
+            except ImportError as exc:  # pragma: no cover - deployment dependency guard
+                raise G2SourceStoreError("azure_blob_sdk_missing") from exc
+            credential = DefaultAzureCredential()
+            blob_service_client = BlobServiceClient(
+                account_url=f"https://{self.account}.blob.core.windows.net",
+                credential=credential,
+            )
+        self._service = blob_service_client
+
+    @staticmethod
+    def _verify(data: bytes, expected_sha256: str) -> None:
+        actual = hashlib.sha256(data).hexdigest()
+        if actual != expected_sha256:
+            raise G2SourceStoreError("canonical_source_checksum_mismatch")
+
+    def _blob_client(self, *, sha256: str, filename: str) -> Any:
+        locator = build_g2_locator(sha256=sha256, filename=filename)
+        parsed = parse_g2_locator(locator)
+        if parsed is None:  # defensive: build and parse must stay symmetric
+            raise G2SourceStoreError("canonical_source_locator_invalid")
+        return self._service.get_blob_client(
+            container=self.container,
+            blob=f"{parsed['sha256']}/{parsed['filename']}",
+        )
+
+    def store_verified(self, *, data: bytes, sha256: str, filename: str) -> str:
+        locator = build_g2_locator(sha256=sha256, filename=filename)
+        parsed = parse_g2_locator(locator)
+        if parsed is None:  # defensive: build and parse must stay symmetric
+            raise G2SourceStoreError("canonical_source_locator_invalid")
+        name = parsed["filename"]
+        self._verify(data, sha256)
+        blob = self._blob_client(sha256=sha256, filename=name)
+        try:
+            blob.upload_blob(
+                data,
+                overwrite=False,
+                metadata={"sha256": sha256},
+            )
+        except Exception as exc:
+            # A content-addressed object may already exist. In every case the
+            # authoritative read-back below decides whether it is acceptable.
+            if exc.__class__.__name__ != "ResourceExistsError":
+                raise G2SourceStoreError("canonical_source_upload_failed") from exc
+        try:
+            stored = bytes(blob.download_blob().readall())
+        except Exception as exc:
+            raise G2SourceStoreError("canonical_source_readback_failed") from exc
+        self._verify(stored, sha256)
+        return locator
+
+    def load_verified(self, locator: str) -> bytes:
+        parsed = parse_g2_locator(locator)
+        if parsed is None:
+            raise G2SourceStoreError("canonical_source_locator_invalid")
+        blob = self._blob_client(sha256=parsed["sha256"], filename=parsed["filename"])
+        try:
+            data = bytes(blob.download_blob().readall())
+        except Exception as exc:
+            raise G2SourceStoreError("canonical_source_download_failed") from exc
+        self._verify(data, parsed["sha256"])
+        return data
