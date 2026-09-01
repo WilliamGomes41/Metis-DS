@@ -32,6 +32,7 @@ All notable technical changes to V&VN Data Services are recorded here.
 - Historical step, audit and repair reports moved from the repository root to `docs/history/`. The root remains the operating surface; `output/` historical artefacts are unchanged.
 
 ### Fixed
+- Console freeze store paths reject `..` and separators in user-provided filename, snapshot id, and ingest date/version before any filesystem join, so objects and source bytes cannot leave their store directories.
 - Azure console accounts, review state and uploaded source freezes now live under persistent `/home/data/metis-console`, outside deployment-managed `wwwroot`. The Azure startup path has the same fail-safe default, so a ZIP deployment no longer resets operator data when `CONSOLE_DATA_ROOT` is omitted.
 - Restored V&VN Data Services handoff/roadmap after foreign product status was written into this repository.
 - Canonical store now uses the integrity-kernel object hash and exact review snapshot (closes remaining P0 dual-hash).

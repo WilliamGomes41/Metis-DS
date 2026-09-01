@@ -52,6 +52,9 @@ SOURCE_VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+)*$")
 YEAR_AS_VERSION_RE = re.compile(r"^(19|20)\d{2}$")
 ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
 NL_DATE_RE = re.compile(r"^(\d{2})-(\d{2})-(\d{4})$")
+SAFE_PATH_TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$")
+SNAPSHOT_ID_RE = re.compile(r"^snap-[0-9a-f]{16}-[0-9a-f]{8}$")
+STORE_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 REVIEW_TYPE_NAMES = frozenset(
     {
         "unclassified",
@@ -103,6 +106,45 @@ class ConsoleError(ValueError):
 
 
 UrlFetcher = Callable[[str], tuple[bytes, str, str]]
+
+
+def _has_path_escape(value: str) -> bool:
+    return (not value) or value in {".", ".."} or "/" in value or "\\" in value or ".." in value
+
+
+def safe_path_token(value: str, *, pattern: re.Pattern[str] | None = None, code: str = "invalid_store_path") -> str:
+    """Allowlist a single path component. Reject separators and ``..`` before any join."""
+    raw = "" if value is None else str(value)
+    if _has_path_escape(raw):
+        raise ConsoleError(code)
+    matched = (pattern or SAFE_PATH_TOKEN_RE).fullmatch(raw)
+    if matched is None:
+        raise ConsoleError(code)
+    return matched.group(0)
+
+
+def safe_store_filename(value: str) -> str:
+    """Freeze upload name must be a single basename. ``Path.name`` is not enough (``..``)."""
+    return safe_path_token(value, pattern=SAFE_PATH_TOKEN_RE, code="invalid_store_path")
+
+
+def safe_snapshot_id(snapshot_id: str) -> str:
+    return safe_path_token(snapshot_id, pattern=SNAPSHOT_ID_RE, code="unknown_snapshot")
+
+
+def safe_path_under(root: Path, *parts: str) -> Path:
+    """Resolve ``root/parts`` and require the result to stay under ``root``."""
+    if not parts:
+        raise ConsoleError("invalid_store_path")
+    resolved_root = Path(os.path.realpath(os.fspath(root)))
+    tokens = [safe_path_token(part) for part in parts]
+    joined = os.path.join(os.fspath(resolved_root), *tokens)
+    resolved = Path(os.path.realpath(joined))
+    root_s = os.fspath(resolved_root)
+    resolved_s = os.fspath(resolved)
+    if os.path.commonpath([root_s, resolved_s]) != root_s:
+        raise ConsoleError("invalid_store_path")
+    return resolved
 
 
 def utc_now() -> str:
@@ -402,15 +444,22 @@ class OperationsConsole:
         _atomic_write(self._bindings_path, self._bindings)
 
     def _objects_path(self, snapshot_id: str) -> Path:
-        return self._objects_dir / f"{snapshot_id}.jsonl"
+        if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
+            raise ConsoleError("unknown_snapshot")
+        token = safe_snapshot_id(snapshot_id)
+        return safe_path_under(self._objects_dir, f"{token}.jsonl")
 
     def _load_objects(self, snapshot_id: str) -> list[dict[str, Any]]:
+        if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
+            raise ConsoleError("unknown_snapshot")
         path = self._objects_path(snapshot_id)
         if not path.exists():
             return []
         return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
     def _save_objects(self, snapshot_id: str, rows: list[dict[str, Any]]) -> None:
+        if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
+            raise ConsoleError("unknown_snapshot")
         path = self._objects_path(snapshot_id)
         path.write_text(
             "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in rows),
@@ -764,8 +813,16 @@ class OperationsConsole:
         family_hook = family.strip()
         if not family_hook or not title.strip():
             raise ConsoleError("ingest_fields_required")
-        source_version = validate_ingest_source_version(version)
-        source_date = normalize_ingest_source_date(date)
+        source_version = safe_path_token(
+            validate_ingest_source_version(version),
+            pattern=SOURCE_VERSION_RE,
+            code="invalid_source_version",
+        )
+        source_date = safe_path_token(
+            normalize_ingest_source_date(date),
+            pattern=ISO_DATE_RE,
+            code="invalid_source_date",
+        )
         reviewers = self._resolve_named_reviewers(named_reviewers, actor_id)
         if url:
             data, fetched_type, fetched_name = self.url_fetcher(url)
@@ -774,25 +831,27 @@ class OperationsConsole:
         if data is None:
             raise ConsoleError("official_file_or_url_required")
         filename = filename or "source.bin"
+        if ".." in filename or "/" in filename or "\\" in filename:
+            raise ConsoleError("invalid_store_path")
+        filename = safe_store_filename(filename)
         kind = classify_official_file(data, filename, content_type)
         if url and kind == "html":
             raise ConsoleError("live_url_html_not_allowed")
-        digest = sha256_bytes(data)
+        digest = safe_path_token(sha256_bytes(data), pattern=STORE_DIGEST_RE)
         immutable_locator = None
         if self.immutable_source_store is not None:
             try:
                 immutable_locator = self.immutable_source_store.store_verified(
                     data=data,
                     sha256=digest,
-                    filename=Path(filename).name,
+                    filename=filename,
                 )
             except (G2SourceStoreError, ValueError) as exc:
                 raise ConsoleError("immutable_source_storage_failed") from exc
-        stored_dir = self.source_store / digest
-        stored_dir.mkdir(parents=True, exist_ok=True)
-        stored_path = stored_dir / Path(filename).name
+        stored_path = safe_path_under(self.source_store, digest, filename)
+        stored_path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write_bytes(stored_path, data)
-        locator = immutable_locator or f"g0-local:sources/private/{digest}/{Path(filename).name}"
+        locator = immutable_locator or f"g0-local:sources/private/{digest}/{filename}"
         snapshot_id = f"snap-{digest[:16]}-{uuid.uuid4().hex[:8]}"
         document_id = f"console-{_slug(family_hook)}-{_slug(title)}-{_slug(source_version)}-{digest[:8]}"
         source_id = f"src-{digest[:16]}"

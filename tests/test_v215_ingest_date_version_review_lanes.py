@@ -20,7 +20,13 @@ from src.integrity_kernel import compute_canonical_object_hash
 from src.object_taxonomy_v1 import is_advice_weight, published_object_type
 from src.operations_console_app import create_console_app
 from src.object_taxonomy_v1 import looks_like_structural_heading
-from src.operations_console_v1 import ConsoleError, OperationsConsole, review_lane
+from src.operations_console_v1 import (
+    ConsoleError,
+    OperationsConsole,
+    review_lane,
+    safe_path_under,
+    safe_store_filename,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -752,3 +758,103 @@ def test_reclassify_heading_onto_exception_still_needs_four_eyes(tmp_path: Path)
     )
     assert refreshed["confirmed_object_type"] == "exception"
     assert requires_four_eyes(refreshed, confirmed_type="exception") is True
+
+
+# ---------------------------------------------------------------------------
+# Store path confinement — freeze metadata cannot escape the store
+# ---------------------------------------------------------------------------
+
+
+def _files_under(root: Path) -> list[Path]:
+    if not root.exists():
+        return []
+    return [path for path in root.rglob("*") if path.is_file()]
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "../escape.html",
+        "..\\escape.html",
+        "foo/../../etc/passwd",
+        "foo/bar.html",
+        "..",
+        ".",
+        "../..",
+        "/tmp/escape.html",
+        "continentie/../escape.html",
+    ],
+)
+def test_ingest_filename_cannot_escape_source_store(tmp_path: Path, filename: str) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    store = (tmp_path / "sources" / "private").resolve()
+    with pytest.raises(ConsoleError, match="invalid_store_path"):
+        _ingest(console, accounts, filename=filename)
+    for path in _files_under(store):
+        path.resolve().relative_to(store)
+    assert list(tmp_path.rglob("escape.html")) == []
+    assert list(tmp_path.rglob("passwd")) == []
+    assert not (tmp_path / "escape.html").exists()
+
+
+def test_safe_filename_still_accepts_plain_basenames() -> None:
+    assert safe_store_filename("continentie.html") == "continentie.html"
+    assert safe_store_filename("continentie-v2.html") == "continentie-v2.html"
+
+
+def test_objects_path_cannot_escape_runtime_store(tmp_path: Path) -> None:
+    console = _console(tmp_path)
+    objects_dir = console._objects_dir.resolve()
+    runtime = objects_dir.parent.resolve()
+    planted = runtime / "pwned.jsonl"
+    planted.write_text("not-objects\n", encoding="utf-8")
+    for bad in ("../pwned", "..", "foo/bar", "snap-../x", "/tmp/x", "..\\pwned"):
+        with pytest.raises(ConsoleError, match="unknown_snapshot|invalid_store_path"):
+            console._objects_path(bad)
+        with pytest.raises(ConsoleError, match="unknown_snapshot|invalid_store_path"):
+            console._load_objects(bad)
+        with pytest.raises(ConsoleError, match="unknown_snapshot|invalid_store_path"):
+            console._save_objects(bad, [{"object_id": "x"}])
+    assert planted.read_text(encoding="utf-8") == "not-objects\n"
+    for path in _files_under(objects_dir):
+        path.resolve().relative_to(objects_dir)
+    extra = [path for path in _files_under(runtime) if path.resolve() != planted.resolve()]
+    for path in extra:
+        path.resolve().relative_to(objects_dir)
+
+
+def test_safe_path_under_rejects_traversal(tmp_path: Path) -> None:
+    root = (tmp_path / "store").resolve()
+    root.mkdir()
+    inside = safe_path_under(root, "a" * 64, "source.html")
+    inside.parent.mkdir(parents=True, exist_ok=True)
+    inside.write_text("ok", encoding="utf-8")
+    inside.resolve().relative_to(root)
+    with pytest.raises(ConsoleError, match="invalid_store_path"):
+        safe_path_under(root, "..", "escape.html")
+    with pytest.raises(ConsoleError, match="invalid_store_path"):
+        safe_path_under(root, "foo/bar")
+    assert not (tmp_path / "escape.html").exists()
+
+
+@pytest.mark.parametrize("date", ["../2025-04-01", "2025/04/01", "..\\2025-04-01", "2025-04-01/../x"])
+def test_freeze_source_date_with_path_chars_is_rejected(tmp_path: Path, date: str) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    with pytest.raises(ConsoleError, match="invalid_source_date|source_date_required|invalid_store_path"):
+        _ingest(console, accounts, date=date)
+    store = (tmp_path / "sources" / "private").resolve()
+    for path in _files_under(store):
+        path.resolve().relative_to(store)
+
+
+@pytest.mark.parametrize("version", ["../1.0", "1/0", "1\\0", "1.0/../2"])
+def test_freeze_source_version_with_path_chars_is_rejected(tmp_path: Path, version: str) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    with pytest.raises(ConsoleError, match="invalid_source_version|invalid_store_path"):
+        _ingest(console, accounts, version=version)
+    store = (tmp_path / "sources" / "private").resolve()
+    for path in _files_under(store):
+        path.resolve().relative_to(store)
