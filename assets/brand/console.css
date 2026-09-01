@@ -2,6 +2,9 @@
    Digital stylesheet tokens. One secondary family (Water) for the whole console.
    Licensed HK Grotesk / Raleway Bold are not in this repository; fail closed to
    the documented system stack. Do not fetch fonts from a public CDN.
+
+   Workspace: Water-light is only the outer edge. The researcher works on a
+   wide white canvas, not an A4-width card in a blue field.
 */
 
 :root {
@@ -16,6 +19,7 @@
   --line: #c5e4ea;
   --font-body: ui-sans-serif, system-ui, sans-serif;
   --font-heading: ui-sans-serif, system-ui, sans-serif;
+  --edge: 12px;
 }
 
 * { box-sizing: border-box; }
@@ -49,9 +53,18 @@ h3 { font-size: 1.05rem; color: var(--paars); margin: 0 0 0.5rem; }
 a { color: var(--paars); }
 
 .shell {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 20px 20px 48px;
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: var(--edge);
+}
+
+.canvas {
+  background: var(--wit);
+  min-height: calc(100vh - (var(--edge) * 2));
+  border-radius: 18px;
+  padding: 22px 36px 48px;
+  box-shadow: 0 8px 28px rgba(20, 42, 66, 0.06);
 }
 
 .topbar {
@@ -59,22 +72,23 @@ a { color: var(--paars); }
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px 24px;
+  gap: 14px 28px;
   position: sticky;
-  top: 12px;
+  top: 0;
   z-index: 20;
   background: var(--wit);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 14px 18px;
-  margin-bottom: 18px;
-  box-shadow: 0 10px 30px rgba(20, 42, 66, 0.08);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 4px 0 22px;
+  margin: 0 0 40px;
+  box-shadow: none;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
   text-decoration: none;
   color: inherit;
 }
@@ -86,36 +100,36 @@ a { color: var(--paars); }
 }
 
 .metis-brand {
-  gap: 11px;
+  gap: 14px;
   flex: 0 0 auto;
 }
 
 .metis-mark-frame {
   display: block;
-  width: 52px;
-  height: 52px;
-  overflow: hidden;
-  border-radius: 15px;
-  background: var(--zwart);
-  box-shadow: 0 6px 16px rgba(20, 42, 66, 0.16);
+  width: 72px;
+  height: 72px;
+  overflow: visible;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .metis-mark {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .brand-copy {
   display: grid;
-  gap: 1px;
+  gap: 4px;
 }
 
 .brand-copy strong {
   color: #0b1b34;
   font-family: var(--font-heading);
-  font-size: 1.15rem;
+  font-size: 1.2rem;
   line-height: 1.05;
 }
 
@@ -174,22 +188,23 @@ a { color: var(--paars); }
 }
 
 .room {
-  background: var(--wit);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 22px;
-  margin-bottom: 16px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
 }
 
 .lead {
-  margin: 0 0 1rem;
-  max-width: 46rem;
+  margin: 0 0 1.35rem;
+  max-width: none;
+  color: var(--muted);
 }
 
 .next {
-  margin: 0 0 1.25rem;
+  margin: 0 0 1.1rem;
   color: var(--muted);
-  max-width: 46rem;
+  max-width: none;
 }
 
 .statement {
@@ -415,7 +430,7 @@ textarea:focus-visible {
 }
 
 .help {
-  margin-top: 18px;
+  margin-top: 28px;
   color: var(--muted);
   font-size: 0.9rem;
 }
@@ -427,15 +442,17 @@ textarea:focus-visible {
 }
 
 .login-card {
-  max-width: 34rem;
-  margin: clamp(2rem, 7vh, 5rem) auto 0;
+  max-width: 36rem;
+  margin: clamp(1.5rem, 7vh, 4.5rem) auto 0;
   padding: clamp(1.35rem, 4vw, 2.35rem);
-  border-color: rgba(93, 50, 151, 0.18);
-  box-shadow: 0 24px 60px rgba(20, 42, 66, 0.12);
+  border: 1px solid rgba(93, 50, 151, 0.16);
+  border-radius: 16px;
+  background: var(--wit);
+  box-shadow: 0 24px 60px rgba(20, 42, 66, 0.08);
 }
 
 .login-brand {
-  margin: -0.3rem 0 1.75rem;
+  margin: 0 0 2.75rem;
 }
 
 .login-wordmark {
@@ -455,7 +472,7 @@ textarea:focus-visible {
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  padding: 10px 4px 0;
+  padding: 14px 4px 0;
   color: var(--muted);
   font-size: 0.76rem;
 }
@@ -473,23 +490,32 @@ textarea:focus-visible {
     order: 3;
     width: 100%;
   }
+
+  .canvas {
+    padding: 18px 20px 36px;
+  }
 }
 
 @media (max-width: 560px) {
   .shell {
-    padding: 10px 10px 36px;
+    padding: 8px;
   }
 
-  .topbar {
-    top: 6px;
-    padding: 11px 12px;
+  .canvas {
+    min-height: calc(100vh - 16px);
+    padding: 14px 14px 32px;
     border-radius: 14px;
   }
 
+  .topbar {
+    top: 0;
+    padding: 2px 0 18px;
+    margin-bottom: 28px;
+  }
+
   .metis-mark-frame {
-    width: 44px;
-    height: 44px;
-    border-radius: 13px;
+    width: 56px;
+    height: 56px;
   }
 
   .who {
@@ -507,7 +533,11 @@ textarea:focus-visible {
   }
 
   .login-card {
-    margin-top: 1rem;
+    margin-top: 0.75rem;
+  }
+
+  .login-brand {
+    margin-bottom: 2rem;
   }
 }
 
