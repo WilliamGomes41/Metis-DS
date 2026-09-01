@@ -431,6 +431,34 @@ textarea:focus-visible {
   margin-left: 0.4rem;
   color: var(--muted);
   font-size: 0.85em;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.review-row {
+  margin: 0.55rem 0;
+}
+
+.review-row-title {
+  display: block;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.date-nl-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.date-nl-display {
+  margin: 0;
+  color: var(--paars);
+  font-weight: 650;
 }
 
 .review-card-two-column {

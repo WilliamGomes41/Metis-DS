@@ -459,14 +459,17 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                       </div>
                       <div>
                         <label for="version">Versie van de freeze</label>
-                        <input id="version" name="version" required pattern="[0-9]+(\\.[0-9]+)*" inputmode="numeric" placeholder="1.0" autocomplete="off">
+                        <input id="version" name="version" required pattern="[0-9]+(\\.[0-9]+)*" inputmode="numeric" placeholder="bijv. 2.13" autocomplete="off">
                         <p class="field-help">Alleen getallen met punten, bijvoorbeeld 1.0 of 2.13. Geen jaartal.</p>
                       </div>
                     </div>
                     <div class="field-row">
                       <div>
                         <label for="date">Publicatiedatum (colofon)</label>
-                        <input id="date" name="date" type="date" required lang="nl" autocomplete="off">
+                        <div class="date-nl-wrap">
+                          <input id="date" name="date" type="date" required lang="nl" autocomplete="off">
+                          <p class="date-nl-display" data-date-nl aria-live="polite">dd-mm-jjjj</p>
+                        </div>
                         <p class="field-help">Datum uit het colofon / publicatiedatum, weergave dd-mm-jjjj. Leeg is niet toegestaan.</p>
                       </div>
                       <div>
@@ -506,6 +509,20 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
               function sync() {{ row.hidden = kind.value !== "new_version"; }}
               kind.addEventListener("change", sync);
               sync();
+              var date = document.getElementById("date");
+              var out = document.querySelector("[data-date-nl]");
+              function showNl() {{
+                if (!date || !out) return;
+                if (!date.value) {{ out.textContent = "dd-mm-jjjj"; return; }}
+                var parts = date.value.split("-");
+                if (parts.length !== 3) {{ out.textContent = "dd-mm-jjjj"; return; }}
+                out.textContent = parts[2] + "-" + parts[1] + "-" + parts[0];
+              }}
+              if (date) {{
+                date.addEventListener("input", showNl);
+                date.addEventListener("change", showNl);
+                showNl();
+              }}
             }})();
             </script>
             """
@@ -725,20 +742,21 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                         f"{' · ' + _esc(_status_label(status)) if status else ''}"
                     )
                     link = (
-                        f'<a href="/review?document={_esc(chosen)}&object={_esc(obj["object_id"])}">'
+                        f'<a class="review-row-title" href="/review?document={_esc(chosen)}&object={_esc(obj["object_id"])}">'
                         f"{_esc(title)}</a>"
                     )
-                    secondary = f'<span class="object-id">{_esc(obj["object_id"])}</span>'
+                    secondary = (
+                        f'<p class="meta">{meta}'
+                        f' <span class="object-id">{_esc(obj["object_id"])}</span></p>'
+                    )
                     if checkbox:
                         return (
-                            "<li>"
+                            '<li class="review-row">'
                             f'<label class="check"><input type="checkbox" name="object_ids" '
                             f'value="{_esc(obj["object_id"])}">{link}</label>'
-                            f' <span class="meta">{meta}</span> {secondary}</li>'
+                            f"{secondary}</li>"
                         )
-                    return (
-                        f"<li>{link} <span class=\"meta\">{meta}</span> {secondary}</li>"
-                    )
+                    return f'<li class="review-row">{link}{secondary}</li>'
 
                 fast_objects = [obj for obj in snapshot_objects if review_lane(obj) == "fast"]
                 slow_objects = [

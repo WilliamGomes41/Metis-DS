@@ -143,7 +143,7 @@ def _text_of(obj: dict) -> str:
 def _index_link_titles(html: str) -> list[str]:
     titles = []
     for match in re.finditer(
-        r'<a href="/review\?document=[^"]+(?:&|&amp;)object=[^"]+">\s*(.*?)\s*</a>',
+        r'<a[^>]*href="/review\?document=[^"]+(?:&|&amp;)object=[^"]+"[^>]*>\s*(.*?)\s*</a>',
         html,
         flags=re.S,
     ):
