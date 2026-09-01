@@ -133,6 +133,28 @@ def validate_infrastructure_manifest(errors: list[str]) -> None:
             errors.append(f'{prefix} evidence must contain at least one non-empty reference')
 
 
+G2_RUNTIME_PINS = (
+    'azure-identity==1.25.3',
+    'azure-storage-blob==12.30.1',
+)
+
+
+def validate_g2_runtime_pins(errors: list[str]) -> None:
+    pyproject = (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
+    lock = (ROOT / 'requirements.lock').read_text(encoding='utf-8')
+    requirements = (ROOT / 'requirements.txt').read_text(encoding='utf-8')
+    dev_lock = (ROOT / 'requirements-dev.lock').read_text(encoding='utf-8')
+    for pin in G2_RUNTIME_PINS:
+        if pin not in pyproject:
+            errors.append(f'pyproject.toml missing required G2 runtime pin: {pin}')
+        if pin not in lock:
+            errors.append(f'requirements.lock missing required G2 runtime pin: {pin}')
+        if pin not in requirements:
+            errors.append(f'requirements.txt missing required G2 runtime pin: {pin}')
+    if '-r requirements.lock' not in dev_lock:
+        errors.append('requirements-dev.lock must include -r requirements.lock so G2 SDK pins stay in sync')
+
+
 def main() -> int:
     errors: list[str] = []
     for path in files():
@@ -157,6 +179,7 @@ def main() -> int:
             errors.append('config/tenants.v1.json must contain an empty tenants list')
 
     validate_infrastructure_manifest(errors)
+    validate_g2_runtime_pins(errors)
 
     if errors:
         print(json.dumps({'status': 'BLOCKED', 'errors': errors}, indent=2))

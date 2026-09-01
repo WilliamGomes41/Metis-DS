@@ -32,6 +32,24 @@ def g2_gate_status() -> str:
     return status if status == "BLOCKED" else "BLOCKED"
 
 
+def azure_blob_sdk_available() -> bool:
+    try:
+        import azure.identity  # noqa: F401
+        import azure.storage.blob  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def load_azure_blob_sdk() -> tuple[Any, Any]:
+    try:
+        from azure.identity import DefaultAzureCredential
+        from azure.storage.blob import BlobServiceClient
+    except ImportError as exc:
+        raise G2SourceStoreError("azure_blob_sdk_missing") from exc
+    return DefaultAzureCredential, BlobServiceClient
+
+
 def build_g2_locator(*, sha256: str, filename: str) -> str:
     digest = sha256.strip().lower()
     raw = filename.replace("\\", "/")
@@ -81,11 +99,7 @@ class AzureBlobSourceStore:
         self.account = str(store["storage_account"])
         self.container = str(store["container"])
         if blob_service_client is None:
-            try:
-                from azure.identity import DefaultAzureCredential
-                from azure.storage.blob import BlobServiceClient
-            except ImportError as exc:  # pragma: no cover - deployment dependency guard
-                raise G2SourceStoreError("azure_blob_sdk_missing") from exc
+            DefaultAzureCredential, BlobServiceClient = load_azure_blob_sdk()
             credential = DefaultAzureCredential()
             blob_service_client = BlobServiceClient(
                 account_url=f"https://{self.account}.blob.core.windows.net",

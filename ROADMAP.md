@@ -38,7 +38,7 @@ Eigenaarslock 2026-08-28. Deze zeven clusters zijn vastgestelde architectuur (vo
 | 6 | Kwaliteitsevaluatie | 7 Kwaliteitsevaluatie & holdouts | Fase 3 | LOCKED als Fase 3 | Aparte extract- / semantiek- / retrievaltests, false support, negatieve vraagsets, Holdout B. `FAR = 0%` staat al. False support is een Fase-3-meetlat, geen stille extra gate in v2.13. Holdout B MUST NOT worden getuned vanuit console-analytics. |
 | 7 | Security, IAM, secrets, omgevingsscheiding, audit, monitoring, DR, withdrawal-SLA, retention, kosten | 8 Security, IAM & omgevingsscheiding; 9 Audit, monitoring & disaster recovery | Fase 5 / bestaande G8-productiegereedheid | LOCKED als Fase 5 / G8 | MUST NOT vannacht tot protocol worden gemaakt. Geen dump van Fase 5 in v2.13. |
 
-Epic 10 (Immutable storage / G2) is Fase 2, nu BLOCKED, en blijft de publicatieblocker. Die epic is geen achtste cluster: cluster 1 zegt DAARNA G2; publicatie blijft BLOCKED zonder G2-locator. Duurzame immutable opslag wordt niet overgeslagen.
+Epic 10 (Immutable storage / G2) is Fase 2, nu BLOCKED, en blijft de publicatieblocker. Die epic is geen achtste cluster: cluster 1 zegt DAARNA G2; publicatie blijft BLOCKED zonder G2-locator. Duurzame immutable opslag wordt niet overgeslagen. Infra 2026-09-01 (geen G2 PASS): de Azure Blob-adapter bestaat in `src/g2_source_store.py`; `azure-identity==1.25.3` en `azure-storage-blob==12.30.1` zijn runtime-dependencies. Container `canonical-sources` is leeg. G2 blijft BLOCKED. `publish()` blijft fail-closed. G0 Azure DEV blijft BLOCKED.
 
 Tien epics → cluster/fase (kaart, geen tweede locklijst):
 
@@ -99,7 +99,7 @@ Stopvoorwaarde: C3–C6-merges vereisen de vastgestelde GD-03-matrix en onafhank
 
 ### Fase 2 — Canonieke bron 2
 
-Status: technische acquisitie en extractie ontwikkeld; duurzame immutable opslag blijft verplicht. Het onderzoekerspad is de console, geen parallel engineer-only pad. Publicatie blijft BLOCKED zonder immutable locator (G2).
+Status: technische acquisitie en extractie ontwikkeld; duurzame immutable opslag blijft verplicht. Het onderzoekerspad is de console, geen parallel engineer-only pad. Publicatie blijft BLOCKED zonder immutable locator (G2). Blob-adapter bestaat; SDK is runtime-dependency; `canonical-sources` is leeg; G2 blijft BLOCKED; `publish()` blijft fail-closed; G0 Azure DEV blijft BLOCKED. Dit is geen G2 PASS.
 
 - Exacte officiële bronrepresentatie duurzaam en immutable opslaan.
 - First-wave officiële bestanden zijn de HTML-pagina en de PDF; kennisplatform `story.html`-boomplayers vallen buiten de first wave. De officiële file is de kennisplatform-freeze, geen levend Word-document. Officiële first-wave HTML MUST een geüploade freeze-file zijn (exacte bytes). Live URL-HTML MUST bij ingest worden geweigerd (het kennisplatform is een app-shell; line locators zouden aan de verkeerde bytes binden). PDF-upload blijft in. URL-ingest van een PDF MAG blijven (bytes zijn de PDF). URL-ingest van HTML MUST NOT. File-upload HTML/PDF en onmiddellijke byte-freeze van een geüpload bestand blijven verplicht (Protocol v2.11 supersedes v2.7 URL-for-official-files as to HTML). Extractie MUST alleen structuur en provenance bepalen, niet de betekenis; unclassified is de default tot bevestiging (Protocol v2.12). Extractie MUST op betekenisgrenzen splitsen, niet op tokenbudget; fusion van condition in recommendation is het verboden defaultpatroon (Protocol v2.13). Publicatie blijft BLOCKED zonder immutable locator (G2); duurzame immutable opslag wordt niet overgeslagen.
