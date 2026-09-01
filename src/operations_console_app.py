@@ -266,7 +266,7 @@ def _document_card_heading(row: dict[str, Any]) -> str:
       </header>
       <p class="meta">
         <span>versie <b>{_esc(row["version"])}</b></span>
-        <span>familie <b>{_esc(row["family"])}</b></span>
+        <span>onderwerp <b>{_esc(row["family"])}</b></span>
         <span>klasse <b>{_esc(row["class"])}</b></span>
         <span>status <b>{_esc(_status_label(row.get("status") or row.get("state") or ""))}</b></span>
       </p>
@@ -384,7 +384,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             {_nav(account, "ingest", _counts(account))}
             <section class="room">
               <h1>Document inleveren</h1>
-              <p class="lead">Lever HTML of PDF in. Continentie is de eerste familie op dit onderzoekerspad.</p>
+              <p class="lead">Lever HTML of PDF in.</p>
               <form method="post" action="/ingest" enctype="multipart/form-data">
                 <div class="sections">
                   <div class="section">
@@ -416,7 +416,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                         <select id="class_" name="class_">{_class_options()}</select>
                       </div>
                     </div>
-                    <label for="family">Familie</label>
+                    <label for="family">Onderwerp</label>
                     <input id="family" name="family" value="continentie" required>
                     <label for="ingest_kind">Nieuw of nieuwe versie</label>
                     <select id="ingest_kind" name="ingest_kind">
@@ -528,8 +528,8 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                           <input type="hidden" name="title" value="{_esc(child["title"])}">
                           <input type="hidden" name="version" value="{_esc(child["version"])}">
                           <input type="hidden" name="family" value="{_esc(child["family"])}">
-                          <label>Nieuwe familie
-                            <input name="new_family" required placeholder="familie">
+                          <label>Nieuw onderwerp
+                            <input name="new_family" required placeholder="onderwerp">
                           </label>
                           <button class="btn-secondary" type="submit">Verplaatsen</button>
                         </form>
@@ -559,7 +559,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     """
                 )
             blocks.append(
-                f'<h2>Familie {_esc(family)}</h2><div class="doc-list">{"".join(cards)}</div>'
+                f'<h2>Onderwerp {_esc(family)}</h2><div class="doc-list">{"".join(cards)}</div>'
             )
         empty = '<p class="muted">Nog geen documenten. Lever eerst een document in.</p>'
         return _page(
@@ -567,7 +567,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             {_nav(account, "tree", _counts(account))}
             <section class="room">
               <h1>Documentenhiërarchie</h1>
-              <p class="lead">Documenten per familie en klasse. Verplaatsen of promoveren vanaf het document.</p>
+              <p class="lead">Documenten per onderwerp en klasse. Verplaatsen of promoveren vanaf het document.</p>
               {"".join(blocks) or empty}
             </section>
             {_help()}

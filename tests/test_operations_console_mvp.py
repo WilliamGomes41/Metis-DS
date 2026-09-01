@@ -677,7 +677,7 @@ def test_continentie_researcher_path_is_the_console_mailbox(tmp_path: Path) -> N
     ingest_page = client.get("/ingest").text.lower()
     assert "continentie" in ingest_page
     assert "mailbox" in ingest_page or "ingest" in ingest_page
-    assert "onderzoekerspad" in ingest_page
+    assert "onderwerp" in ingest_page
     assert "parallel ingestpad voor engineers" in ingest_page
 
 
