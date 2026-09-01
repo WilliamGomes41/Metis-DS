@@ -30,11 +30,11 @@ def test_css_drops_a4_shell_and_keeps_water_light_edges() -> None:
     assert not re.search(r"body\s*\{[^}]*background:\s*#000000", css)
     assert not re.search(r"\.metis-mark-frame\s*\{[^}]*background:\s*var\(--zwart\)", css)
     assert re.search(r"\.metis-mark-frame\s*\{[^}]*background:\s*transparent", css)
-    assert re.search(r"\.topbar\s*\{[^}]*margin:\s*0 0 40px", css)
+    assert re.search(r"\.topbar\s*\{[^}]*margin:\s*0 0 48px", css)
     assert re.search(r"\.login-brand\s*\{[^}]*margin:\s*0 0 2\.75rem", css)
     source = (ROOT / "src/operations_console_app.py").read_text(encoding="utf-8")
     assert 'class="canvas"' in source
-    assert 'width="72"' in source
+    assert 'width="96"' in source
 
 
 def test_rooms_use_one_short_lead_not_stacked_protocol_prose(tmp_path: Path) -> None:
@@ -62,5 +62,6 @@ def test_rooms_use_one_short_lead_not_stacked_protocol_prose(tmp_path: Path) -> 
     assert "geen gedeelde login" not in primary_login
     publish = client.get("/publish").text.lower()
     assert "publiceren" in publish
+    assert "geblokkeerd" in publish
     accounts = client.get("/accounts").text.lower()
     assert "accounts" in accounts

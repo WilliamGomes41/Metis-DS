@@ -107,7 +107,7 @@ def _metis_wordmark() -> str:
 def _metis_mark() -> str:
     return (
         '<img class="metis-mark" src="/brand/metis-mark.jpg" '
-        'width="72" height="72" alt="">'
+        'width="96" height="72" alt="">'
     )
 
 
@@ -662,7 +662,6 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                         f"{' · ' + _esc(status) if status else ''}</span></li>"
                     )
                 objects_html += (
-                    '<p class="next">Open één object — kennisobject links, bronpassage rechts.</p>'
                     f'<ol class="object-index">{"".join(items)}</ol>'
                 )
             else:
@@ -860,7 +859,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             {_nav(account, "publish", _counts(account))}
             <section class="room">
               <h1>Publiceren</h1>
-              <p class="lead">Apart besluit over een gereviewd document.</p>
+              <p class="lead">Apart besluit over een gereviewd document. Zonder duurzame opslag blijft publicatie geblokkeerd.</p>
               <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen documenten.</p>'}</div>
             </section>
             {_help()}

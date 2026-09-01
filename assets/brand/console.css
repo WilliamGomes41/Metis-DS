@@ -68,11 +68,14 @@ a { color: var(--paars); }
 }
 
 .topbar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "brand who"
+    "rooms rooms";
   align-items: center;
-  justify-content: space-between;
-  gap: 14px 28px;
+  column-gap: 20px;
+  row-gap: 18px;
   position: sticky;
   top: 0;
   z-index: 20;
@@ -80,8 +83,8 @@ a { color: var(--paars); }
   border: 0;
   border-bottom: 1px solid var(--line);
   border-radius: 0;
-  padding: 4px 0 22px;
-  margin: 0 0 40px;
+  padding: 4px 0 24px;
+  margin: 0 0 48px;
   box-shadow: none;
 }
 
@@ -91,6 +94,7 @@ a { color: var(--paars); }
   gap: 14px;
   text-decoration: none;
   color: inherit;
+  grid-area: brand;
 }
 
 .beeldmerk {
@@ -106,12 +110,13 @@ a { color: var(--paars); }
 
 .metis-mark-frame {
   display: block;
-  width: 72px;
+  width: 96px;
   height: 72px;
-  overflow: visible;
+  overflow: hidden;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+  flex: 0 0 auto;
 }
 
 .metis-mark {
@@ -140,11 +145,15 @@ a { color: var(--paars); }
 }
 
 .who {
+  grid-area: who;
+  justify-self: end;
+  text-align: right;
   color: var(--muted);
   font-size: 0.9rem;
 }
 
 .rooms {
+  grid-area: rooms;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -483,12 +492,7 @@ textarea:focus-visible {
 
 @media (max-width: 860px) {
   .topbar {
-    align-items: flex-start;
-  }
-
-  .rooms {
-    order: 3;
-    width: 100%;
+    align-items: start;
   }
 
   .canvas {
@@ -508,18 +512,26 @@ textarea:focus-visible {
   }
 
   .topbar {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "brand"
+      "who"
+      "rooms";
     top: 0;
-    padding: 2px 0 18px;
-    margin-bottom: 28px;
+    row-gap: 10px;
+    padding: 2px 0 16px;
+    margin-bottom: 32px;
   }
 
   .metis-mark-frame {
-    width: 56px;
-    height: 56px;
+    width: 80px;
+    height: 60px;
   }
 
   .who {
-    width: 100%;
+    justify-self: start;
+    text-align: left;
+    width: auto;
   }
 
   .rooms {
