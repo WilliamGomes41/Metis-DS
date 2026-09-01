@@ -18,5 +18,10 @@
   "budget_owner": "V&VN",
   "operational_owner": "project_owner",
   "recorded_at": "2026-09-01",
-  "identity_secret_boundary": "no storage keys, connection strings or SAS tokens in Git"
+  "identity_secret_boundary": "no storage keys, connection strings or SAS tokens in Git",
+  "expected_managed_identity": "vvn-metis-console",
+  "required_rbac_role": "Storage Blob Data Contributor",
+  "required_rbac_scope": "aidataservice/canonical-sources",
+  "activation_app_setting": "CONSOLE_IMMUTABLE_SOURCE_STORE",
+  "activation_app_setting_value": "azure"
 }

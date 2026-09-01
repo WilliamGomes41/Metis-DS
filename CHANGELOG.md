@@ -5,6 +5,7 @@ All notable technical changes to V&VN Data Services are recorded here.
 ## [Unreleased]
 
 ### Added
+- G2-readiness (not G2 PASS): pin Azure Blob SDK in pyproject runtime deps (`azure-identity==1.25.3`, `azure-storage-blob==12.30.1`); report-only Azure preflight (container, `vvn-metis-console` identity, Storage Blob Data Contributor on `aidataservice/canonical-sources` only, SDK, activation setting); activation runbook; inert synthetic SHA-256 smoke (does not run). Adapter already exists. Container `canonical-sources` remains empty. G2 remains BLOCKED; `publish()` remains fail-closed; G0 Azure DEV remains BLOCKED. No live Azure mutation.
 - G2 Azure Blob ingest adapter: console ingest stores exact source bytes content-addressed in the private `canonical-sources` container, reads them back and verifies SHA-256 before creating a snapshot. The `azure://` locator is bound to the envelope, and a missing or corrupt local cache is restored from the verified blob. Authentication uses managed identity/Entra ID only. `publish()` remains fail-closed.
 - Review room loads one object card per request (`/review?document=&object=`). Document view lists objects without opening every freeze passage. Fixes Azure App Service 504 Gateway Timeout on large Continentie reviews. Two-column card unchanged. `publish()` remains G2-BLOCKED.
 - Azure App Service host adapter for the internal operations console (`src/console_asgi.py`). Bootstrap accounts from environment only; G2 remains BLOCKED; G0 Azure DEV remains BLOCKED until the web app is live. Not a public website.
