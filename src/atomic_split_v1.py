@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable
 
-from src.object_taxonomy_v1 import propose_object_type
+from src.object_taxonomy_v1 import is_continuation_fragment, propose_object_type
 
 # Sentence boundary after ., ! or ? when the next claim starts with a capital.
 # Abbreviations such as o.a. / d.w.z. are not treated as meaning boundaries.
@@ -65,6 +65,9 @@ def split_meaning_units(text: str, *, is_heading: bool = False) -> list[str]:
     """Split one confirmable meaning unit per grammatical claim.
 
     Token counts are ignored. Headings stay one structural unit.
+    Trailing clauses (Eventueel / Bijvoorbeeld / Zoals and lowercase hangers)
+    stay with the sentence they complete (Protocol v2.18). This is not fusion
+    of condition into recommendation.
     """
     blob = (text or "").strip()
     if not blob:
@@ -72,7 +75,15 @@ def split_meaning_units(text: str, *, is_heading: bool = False) -> list[str]:
     if is_heading:
         return [blob]
     sentences = split_sentences(blob)
-    return sentences or [blob]
+    if not sentences:
+        return [blob]
+    merged: list[str] = []
+    for sentence in sentences:
+        if merged and is_continuation_fragment(sentence):
+            merged[-1] = re.sub(r"\s+", " ", f"{merged[-1]} {sentence}").strip()
+        else:
+            merged.append(sentence)
+    return merged
 
 
 def token_budget_must_not_define_identity(text: str) -> list[str]:

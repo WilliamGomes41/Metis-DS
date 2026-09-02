@@ -27,6 +27,7 @@ from src.operations_console_v1 import (
     ConsoleError,
     OperationsConsole,
     REPO_ROOT,
+    review_card_sentence,
     review_row_status,
     review_row_title,
     review_stacks,
@@ -832,8 +833,15 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                 obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
                 if obj is None:
                     raise ConsoleError("unknown_object")
-                heading = review_row_title(obj)
+                heading = review_card_sentence(obj)
                 obj_text = (obj.get("content") or {}).get("clean_text") or ""
+                heading_norm = " ".join(heading.split())
+                body_norm = " ".join(str(obj_text).split())
+                object_text_html = ""
+                if body_norm and body_norm != heading_norm and not body_norm.startswith(
+                    heading_norm.rstrip("…")
+                ):
+                    object_text_html = f'<div class="object-text"><p>{_esc(obj_text)}</p></div>'
                 proposed = obj.get("proposed_object_type") or ""
                 confirmed = obj.get("confirmed_object_type") or ""
                 type_options = _type_options(confirmed)
@@ -887,7 +895,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     <p class="meta"><span>status <b>{_esc(review_row_status(obj))}</b></span><span>huidig type <b>{_esc(_object_type_label(obj.get("object_type")))}</b></span>{"<span>typevoorstel <b>" + _esc(_object_type_label(proposed)) + "</b></span>" if proposed else ""}</p>
                   </header>
                   {four_eyes_html}
-                  <div class="object-text"><p>{_esc(obj_text)}</p></div>
+                  {object_text_html}
                   {relation_form}
                   <form class="review-decision-form" method="post" action="/review" data-review-form>
                     <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
