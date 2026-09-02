@@ -1,28 +1,22 @@
 # Metis and Athena brand assets
 
-This directory contains the canonical brand assets for Metis and Athena.
+This directory contains the approved raster brand assets supplied for Metis and Athena.
 
 ## Asset names
 
-- `*-logo.svg`: full lockup (symbol and wordmark), preferred for web and product UI.
-- `*-mark.svg`: standalone symbol, preferred for avatars, favicons and compact UI.
+- `*-logo.png`: approved full lockup on its original light background.
+- `*-mark.png`: approved standalone symbol on its original light background.
 - `*-logo-transparent.png`: transparent raster export for documents and slides.
 - `*-mark-transparent.png`: transparent raster export for documents and slides.
 
 ## Relationship
 
-Metis is the controlled data service: multiple knowledge streams converge into one governed output. Athena is the conversational product built on Metis: one controlled source branches into the user-facing conversation. The mirrored symbols intentionally express this parent–daughter relationship.
+Metis is the controlled data service: multiple knowledge streams converge into one governed output. Athena is the conversational product built on Metis: one controlled source branches into three conversation endpoints. Athena's three endpoints are speech bubbles with three white dots; plain circular endpoints are not an approved Athena mark.
 
 ## Colours
 
-| Name | Hex | Use |
-| --- | --- | --- |
-| Navy | `#0A1B3A` | Wordmarks |
-| Cyan (Metis) | `#13A8D4` | Knowledge streams |
-| Cyan (Athena) | `#49A9C7` | Conversational branches |
-| Purple | `#56309A` | Governed knowledge |
-| Orange-red | `#E72D05` | Controlled output / source |
+The supplied artwork is the colour authority. Values should be sampled from those files when a future vector master is professionally prepared; do not substitute approximate palette values.
 
 ## Usage
 
-Keep the symbol proportions and colours unchanged. Maintain clear space of at least one endpoint radius around every asset. Do not add shadows, outlines, gradients or background shapes. Use the SVG files in applications whenever possible; the PNG files are exports, not editing masters.
+Keep the supplied symbol geometry, proportions, colour treatment and wordmarks unchanged. Maintain clear space of at least one endpoint radius around every asset. Do not redraw the endpoints or replace Athena's speech bubbles with circles. Use the transparent PNG exports where no background is desired. A true vector master should only be added after professional tracing and visual approval.
