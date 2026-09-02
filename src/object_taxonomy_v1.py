@@ -59,6 +59,113 @@ _RECOMMENDATION_RE = re.compile(
     r"\b(?:adviseer|aanbevel|gebruik|verwijs|bespreek|overleg|controleer|start)\w*\b",
     re.I,
 )
+CLOSED_RECOMMENDATION_STRENGTHS = ("doen", "overweeg", "niet_doen")
+STRENGTH_STAMP_LABELS = {
+    "doen": "DOEN",
+    "overweeg": "OVERWEEG",
+    "niet_doen": "NIET DOEN",
+}
+STRENGTH_STAMP_ALIASES = {
+    "doen": "doen",
+    "overweeg": "overweeg",
+    "niet doen": "niet_doen",
+    "niet_doen": "niet_doen",
+    "afraden": "niet_doen",
+}
+STRENGTH_STAMP_SENTENCES = {
+    "doen": "Sterkte van de aanbeveling: DOEN — dit moet de zorgverlener doen.",
+    "overweeg": "Sterkte van de aanbeveling: OVERWEEG — de zorgverlener moet dit overwegen.",
+    "niet_doen": "Sterkte van de aanbeveling: NIET DOEN — de zorgverlener moet dit niet doen.",
+}
+_LIST_NUMBER_RE = re.compile(r"^\d+\.?$")
+_TIMESTAMP_RE = re.compile(
+    r"(?:gemaakt op\s+)?\d{1,2}-\d{1,2}-\d{4}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?",
+    re.I,
+)
+_TRAILING_HANGER_RE = re.compile(
+    r"(?:van|te|de|het|een|en|of|zijn|haar|hun|dit|deze|die|tot|voor|met|op|aan|"
+    r"bij|naar|om|als|dan|dat|specifiek|specifieke)$",
+    re.I,
+)
+
+
+def _normalized_stamp_key(text: str) -> str:
+    blob = re.sub(r"\s+", " ", text or "").strip().casefold()
+    blob = blob.rstrip(".!?:;")
+    return blob
+
+
+def is_strength_stamp(text: str) -> bool:
+    """True only for a bare V&VN strength word, not 'Overweeg verwijzing…'."""
+    return _normalized_stamp_key(text) in STRENGTH_STAMP_ALIASES
+
+
+def stamp_value(text: str) -> str | None:
+    return STRENGTH_STAMP_ALIASES.get(_normalized_stamp_key(text))
+
+
+def is_closed_recommendation_strength(value: str | None) -> bool:
+    return value in CLOSED_RECOMMENDATION_STRENGTHS
+
+
+def recommendation_strength_sentence(value: str | None) -> str:
+    if not is_closed_recommendation_strength(value):
+        return ""
+    return STRENGTH_STAMP_SENTENCES[value]
+
+
+def is_list_number_only(text: str) -> bool:
+    return bool(_LIST_NUMBER_RE.fullmatch(re.sub(r"\s+", "", text or "")))
+
+
+def is_raw_timestamp(text: str) -> bool:
+    blob = re.sub(r"\s+", " ", text or "").strip()
+    if not blob:
+        return False
+    return bool(_TIMESTAMP_RE.fullmatch(blob))
+
+
+def is_lone_trailing_word(text: str) -> bool:
+    blob = re.sub(r"\s+", " ", text or "").strip()
+    if not blob or is_strength_stamp(blob) or looks_like_structural_heading(blob):
+        return False
+    words = re.sub(r"[.!?]+$", "", blob).split()
+    return len(words) == 1
+
+
+def is_truncated_sentence(text: str) -> bool:
+    blob = re.sub(r"\s+", " ", text or "").strip()
+    if not blob or is_strength_stamp(blob) or looks_like_structural_heading(blob):
+        return False
+    if is_list_number_only(blob) or is_raw_timestamp(blob):
+        return True
+    if is_lone_trailing_word(blob):
+        return True
+    if blob[0].islower():
+        return True
+    if re.search(r"[.!?]$", blob):
+        return False
+    last = blob.split()[-1].rstrip(",;:")
+    return bool(_TRAILING_HANGER_RE.fullmatch(last))
+
+
+def is_continuation_fragment(text: str) -> bool:
+    blob = re.sub(r"\s+", " ", text or "").strip()
+    if not blob:
+        return False
+    return blob[0].islower() or is_lone_trailing_word(blob)
+
+
+def is_tiny_confirmable_text(text: str) -> bool:
+    """True when confirmable text cannot stand as one meaning unit."""
+    blob = re.sub(r"\s+", " ", text or "").strip()
+    if not blob:
+        return True
+    if is_list_number_only(blob) or is_strength_stamp(blob) or is_raw_timestamp(blob):
+        return True
+    if is_lone_trailing_word(blob):
+        return True
+    return False
 
 
 def looks_like_structural_heading(text: str) -> bool:
@@ -89,6 +196,9 @@ def looks_like_structural_heading(text: str) -> bool:
 
 
 def fragment_is_heading(fragment: dict[str, Any]) -> bool:
+    text = re.sub(r"\s+", " ", str(fragment.get("clean_text") or fragment.get("raw_text") or "")).strip()
+    if is_strength_stamp(text):
+        return False
     loc = fragment.get("source_locator") or {}
     value = str(loc.get("locator_value") or "").lower()
     if loc.get("locator_type") == "web_line_range" and any(
@@ -96,13 +206,14 @@ def fragment_is_heading(fragment: dict[str, Any]) -> bool:
     ):
         return True
     heading = re.sub(r"\s+", " ", str(fragment.get("heading") or "")).strip()
-    text = re.sub(r"\s+", " ", str(fragment.get("clean_text") or fragment.get("raw_text") or "")).strip()
     if heading and heading == text:
         return True
     return looks_like_structural_heading(text)
 
 
 def propose_object_type(text: str, *, is_heading: bool = False) -> str | None:
+    if is_strength_stamp(text):
+        return None
     if is_heading:
         return "heading"
     blob = text or ""
@@ -120,8 +231,10 @@ def propose_object_type(text: str, *, is_heading: bool = False) -> str | None:
 
 
 def extract_object_type(fragment: dict[str, Any]) -> tuple[str, str | None]:
-    heading = fragment_is_heading(fragment)
     text = (fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
+    if is_strength_stamp(text):
+        return DEFAULT_OBJECT_TYPE, None
+    heading = fragment_is_heading(fragment)
     if heading:
         return "heading", "heading"
     return DEFAULT_OBJECT_TYPE, propose_object_type(text, is_heading=False)

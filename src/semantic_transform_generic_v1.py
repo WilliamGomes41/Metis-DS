@@ -110,6 +110,16 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
                 if item.get("confirmed_object_type")
                 else {}
             ),
+            **(
+                {"proposed_recommendation_strength": item["proposed_recommendation_strength"]}
+                if item.get("proposed_recommendation_strength")
+                else {}
+            ),
+            **(
+                {"confirmed_recommendation_strength": item["confirmed_recommendation_strength"]}
+                if item.get("confirmed_recommendation_strength")
+                else {}
+            ),
             "source": _source(manifest, page),
             "structure": {
                 "section_path": item.get("section_path", []),

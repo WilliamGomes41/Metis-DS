@@ -123,7 +123,11 @@ def _strip_locator(console: OperationsConsole, snapshot_id: str, object_id: str)
 
 def test_review_document_index_does_not_open_passages(tmp_path: Path) -> None:
     html, receipt, console = _review_html(tmp_path)
-    objects = console.snapshot_objects(receipt["snapshot_id"])
+    objects = [
+        obj
+        for obj in console.snapshot_objects(receipt["snapshot_id"])
+        if obj["object_type"] != "document"
+    ]
     assert objects
     assert TWO_COLUMN_CLASS not in html
     assert PASSAGE_COL not in html

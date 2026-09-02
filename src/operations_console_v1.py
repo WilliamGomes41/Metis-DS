@@ -33,7 +33,19 @@ from src.four_eyes_v1 import (
 )
 from src.g2_source_store import G2SourceStoreError, ImmutableSourceStore, is_g2_locator
 from src.integrity_kernel import compute_canonical_object_hash, sha256_bytes, stamp_canonical_hashes
-from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES, extract_object_type, is_closed_confirmed_type
+from src.object_taxonomy_v1 import (
+    CLOSED_OBJECT_TYPES,
+    extract_object_type,
+    is_closed_confirmed_type,
+    is_closed_recommendation_strength,
+    is_continuation_fragment,
+    is_list_number_only,
+    is_raw_timestamp,
+    is_strength_stamp,
+    is_tiny_confirmable_text,
+    is_truncated_sentence,
+    stamp_value,
+)
 from src.open_original_v1 import OpenOriginalError, open_source_passage
 from src.publish_authorization_v1 import invalidate_for_object, still_matches, tuple_record
 from src.review_workflow_v3 import apply_reviews
@@ -219,20 +231,39 @@ def review_lane(obj: dict[str, Any]) -> str:
 
 
 def review_row_title(obj: dict[str, Any], *, max_len: int = 160) -> str:
-    """Freeze source-passage snippet. MUST NOT use the type name as the title."""
+    """Freeze source sentence or real heading. MUST NOT use type name or kernel id."""
     content = obj.get("content") or {}
     text = re.sub(
         r"\s+",
         " ",
         str(content.get("clean_text") or content.get("raw_text") or ""),
     ).strip()
-    if text and text.casefold() not in REVIEW_TYPE_NAMES:
+    if text and text.casefold() not in REVIEW_TYPE_NAMES and not text.startswith(("console-", "snap-")):
         snippet = text
     else:
-        snippet = str(obj.get("object_id") or "kennisobject")
+        snippet = "Kennisobject"
     if len(snippet) > max_len:
         return snippet[: max_len - 1] + "…"
     return snippet
+
+
+def review_row_status(obj: dict[str, Any]) -> str:
+    """Short same-line status. waiting / classified / confirmed in onderzoekerstaal."""
+    confirmed = obj.get("confirmed_object_type")
+    status = (obj.get("governance") or {}).get("validation_status") or ""
+    if status == "approved" or confirmed:
+        if status == "approved":
+            return "bevestigd"
+        return "geclassificeerd"
+    return "wacht"
+
+
+def review_stacks(objects: Iterable[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Koppen (fast heading) vs Inhoud (slow content). Document rows are not stacks."""
+    rows = [obj for obj in objects if obj.get("object_type") != "document"]
+    koppen = [obj for obj in rows if review_lane(obj) == "fast"]
+    inhoud = [obj for obj in rows if review_lane(obj) != "fast"]
+    return koppen, inhoud
 
 
 def _slug(value: str) -> str:
@@ -345,18 +376,50 @@ def _spec_from_fragments(
         }
     ]
     meaning_units: list[dict[str, Any]] = []
+    pending_stamp: str | None = None
+    pending_truncated: dict[str, Any] | None = None
+
+    def emit_unit(spec_item: dict[str, Any]) -> None:
+        nonlocal pending_stamp
+        if pending_stamp and spec_item.get("object_type") != "heading":
+            spec_item["proposed_recommendation_strength"] = pending_stamp
+            pending_stamp = None
+        meaning_units.append(spec_item)
+
+    def merge_text(left: str, right: str) -> str:
+        return re.sub(r"\s+", " ", f"{left} {right}").strip()
+
     for fragment in fragments:
         text = (fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
         if not text:
+            continue
+        if is_strength_stamp(text):
+            pending_stamp = stamp_value(text)
+            continue
+        if is_list_number_only(text) or is_raw_timestamp(text):
             continue
         object_type, proposed = extract_object_type(fragment)
         is_heading = object_type == "heading"
         units = split_meaning_units(text, is_heading=is_heading)
         for index, unit in enumerate(units, 1):
+            if is_strength_stamp(unit):
+                pending_stamp = stamp_value(unit)
+                continue
+            if is_list_number_only(unit) or is_raw_timestamp(unit):
+                continue
+            if pending_truncated is not None and not is_heading and is_continuation_fragment(unit):
+                pending_truncated["text"] = merge_text(pending_truncated["text"], unit)
+                pending_truncated["clean_text"] = pending_truncated["text"]
+                extra_id = fragment.get("fragment_id")
+                if extra_id and extra_id not in pending_truncated["source_fragment_ids"]:
+                    pending_truncated["source_fragment_ids"].append(extra_id)
+                continue
+            if pending_truncated is not None:
+                emit_unit(pending_truncated)
+                pending_truncated = None
             fake = {**fragment, "clean_text": unit, "raw_text": unit}
             if not is_heading:
-                # Keep section heading as structure, but do not let it equal the unit text.
-                if fake.get("heading") == unit:
+                if fake.get("heading") == unit or is_strength_stamp(str(fake.get("heading") or "")):
                     fake["heading"] = None
             unit_type, unit_proposed = extract_object_type(fake)
             if is_heading:
@@ -368,15 +431,29 @@ def _spec_from_fragments(
                 "text": unit,
                 "clean_text": unit,
                 "source_fragment_ids": [fragment["fragment_id"]],
-                "section_path": fragment.get("section_path") or [],
-                "heading": fragment.get("heading"),
+                "section_path": [
+                    part
+                    for part in (fragment.get("section_path") or [])
+                    if not is_strength_stamp(str(part))
+                ],
+                "heading": None if is_strength_stamp(str(fragment.get("heading") or "")) else fragment.get("heading"),
                 "review_track": "clinical",
                 "relations": [],
                 "confirmed_relations": [],
             }
             if unit_proposed:
                 spec_item["proposed_object_type"] = unit_proposed
-            meaning_units.append(spec_item)
+            if (
+                not is_heading
+                and pending_truncated is None
+                and is_truncated_sentence(unit)
+                and not is_tiny_confirmable_text(unit)
+            ):
+                pending_truncated = spec_item
+            else:
+                emit_unit(spec_item)
+    if pending_truncated is not None:
+        emit_unit(pending_truncated)
     proposed_relations_for_units(meaning_units)
     objects.extend(meaning_units)
     return {
@@ -926,6 +1003,66 @@ class OperationsConsole:
         self._save_envelopes()
         return self._receipt(envelope)
 
+    def reextract_unpublished(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
+        """Replace unpublished object identities with a new extract of the same freeze.
+
+        Source hash stays. Published objects MUST NOT be rewritten. MUST NOT hide
+        stored fragments in the UI without this extract.
+        """
+        account = self._account(actor_id)
+        if "researcher" not in account["roles"] and "reviewer" not in account["roles"]:
+            raise ConsoleError("researcher_role_required")
+        envelope = self._envelope(snapshot_id)
+        rows = self._load_objects(snapshot_id)
+        if any((row.get("governance") or {}).get("publication_status") == "published" for row in rows):
+            raise ConsoleError("published_objects_must_not_be_rewritten")
+        freeze_path = Path(envelope["binary_path"])
+        if not freeze_path.is_file():
+            raise ConsoleError("freeze_bytes_missing")
+        freeze_bytes = freeze_path.read_bytes()
+        digest = sha256_bytes(freeze_bytes)
+        if digest != envelope["sha256"]:
+            raise ConsoleError("freeze_bytes_missing")
+        fragments = self._extract(
+            envelope["content_kind"],
+            freeze_path,
+            document_id=envelope["document_id"],
+            source_id=envelope["source_id"],
+        )
+        spec = _spec_from_fragments(
+            document_id=envelope["document_id"],
+            title=envelope["title"],
+            family=envelope["family"],
+            class_=envelope["class"],
+            fragments=fragments,
+            content_kind=envelope["content_kind"],
+        )
+        manifest = {
+            "canonical_source": {
+                "source_id": envelope["source_id"],
+                "title": envelope["title"],
+                "publisher": "V&VN",
+                "source_url": envelope.get("live_url") or "",
+                "source_type": envelope["content_kind"],
+                "source_level": 1,
+                "canonicality": "canonical",
+                "source_checksum": envelope["sha256"],
+                "checksum_algorithm": "sha256",
+                "integrity_status": "verified",
+                "publication_date": envelope["date"],
+                "version": envelope["version"],
+            }
+        }
+        objects = transform_generic(spec, manifest, fragments)
+        envelope["review_passes"] = {}
+        envelope["state"] = CAPTURED
+        self._envelopes[snapshot_id] = envelope
+        self._save_objects(snapshot_id, objects)
+        self._save_envelopes()
+        self._bindings[snapshot_id] = []
+        self._save_bindings()
+        return self._receipt(envelope)
+
     def _extract(self, kind: str, path: Path, *, document_id: str, source_id: str) -> list[dict[str, Any]]:
         if kind == "html":
             return extract_html(path, document_id=document_id, source_id=source_id)
@@ -1029,6 +1166,7 @@ class OperationsConsole:
         comment: str | None = None,
         proposed_correction: str | None = None,
         confirmed_object_type: str | None = None,
+        recommendation_strength: str | None = None,
     ) -> list[dict[str, Any]]:
         reviewer = self._require_role(actor_id, "reviewer")
         if _is_forbidden_identity(reviewer["username"]) or _is_forbidden_identity(reviewer["display_name"]):
@@ -1060,6 +1198,17 @@ class OperationsConsole:
                 target["object_type"] = confirmed
                 mark_four_eyes_on_object(target, confirmed_type=confirmed)
                 stamp_canonical_hashes(target)
+        strength = (recommendation_strength or "").strip() or None
+        if strength:
+            if (confirmed or target.get("confirmed_object_type") or target.get("object_type")) != "recommendation":
+                raise ConsoleError("recommendation_strength_requires_recommendation")
+            if not is_closed_recommendation_strength(strength):
+                raise ConsoleError("unknown_recommendation_strength")
+            if target.get("confirmed_recommendation_strength") != strength:
+                if not apply_type:
+                    target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
+                target["confirmed_recommendation_strength"] = strength
+                stamp_canonical_hashes(target)
         track = target["governance"]["review_track"]
         payload = {
             "object_id": object_id,
@@ -1089,6 +1238,9 @@ class OperationsConsole:
             updated_target["confirmed_object_type"] = confirmed
             updated_target["object_type"] = confirmed
             mark_four_eyes_on_object(updated_target, confirmed_type=confirmed)
+            stamp_canonical_hashes(updated_target)
+        if strength:
+            updated_target["confirmed_recommendation_strength"] = strength
             stamp_canonical_hashes(updated_target)
         history.append(updated_target)
         self._save_objects(snapshot_id, history)

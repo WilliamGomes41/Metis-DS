@@ -14,7 +14,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.four_eyes_v1 import requires_four_eyes
-from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES
+from src.object_taxonomy_v1 import (
+    CLOSED_OBJECT_TYPES,
+    CLOSED_RECOMMENDATION_STRENGTHS,
+    STRENGTH_STAMP_LABELS,
+    recommendation_strength_sentence,
+)
 from src.operations_console_v1 import (
     ALLOWED_CLASSES,
     CONSOLE_VERSION,
@@ -22,7 +27,9 @@ from src.operations_console_v1 import (
     OperationsConsole,
     REPO_ROOT,
     review_lane,
+    review_row_status,
     review_row_title,
+    review_stacks,
 )
 from src.serving_relations_v1 import CLOSED_RELATION_TYPES, proposed_relations
 
@@ -85,6 +92,9 @@ ERROR_COPY = {
     "source_version_required": "Vul de versie van de freeze in.",
     "invalid_source_version": "Versie is alleen getallen met punten, bijvoorbeeld 1.0. Geen jaartal en geen v-voorvoegsel.",
     "fast_lane_heading_required": "Batch-bevestiging geldt alleen voor koppen.",
+    "recommendation_strength_requires_recommendation": "Sterkte hoort alleen bij een aanbeveling.",
+    "unknown_recommendation_strength": "Kies DOEN, OVERWEEG of NIET DOEN.",
+    "published_objects_must_not_be_rewritten": "Gepubliceerde objecten worden niet herschreven.",
 }
 RELATION_LABELS = {
     "applies_if": "geldt indien",
@@ -346,6 +356,35 @@ def _document_card_heading(row: dict[str, Any]) -> str:
         <span>klasse <b>{_esc(row["class"])}</b></span>
         <span>status <b>{_esc(_status_label(row.get("status") or row.get("state") or ""))}</b></span>
       </p>
+    """
+
+
+def _strength_options(selected: str | None) -> str:
+    options = ['<option value="">Nog niet vastgelegd</option>']
+    for name in CLOSED_RECOMMENDATION_STRENGTHS:
+        mark = " selected" if name == selected else ""
+        options.append(
+            f'<option value="{name}"{mark}>{_esc(STRENGTH_STAMP_LABELS[name])}</option>'
+        )
+    return "".join(options)
+
+
+def _stamp_block(obj: dict[str, Any]) -> str:
+    proposed = obj.get("proposed_recommendation_strength") or ""
+    confirmed = obj.get("confirmed_recommendation_strength") or ""
+    shown = confirmed or proposed
+    sentence = recommendation_strength_sentence(shown) if shown else (
+        "Sterkte van de aanbeveling: kies DOEN, OVERWEEG of NIET DOEN."
+    )
+    return f"""
+                    <section class="review-step review-stamp" data-stamp-block>
+                      <h4>Sterkte van de aanbeveling</h4>
+                      <p class="stamp-sentence">{_esc(sentence)}</p>
+                      <label for="strength-{_esc(obj["object_id"])}">Sterkte</label>
+                      <select id="strength-{_esc(obj["object_id"])}" name="recommendation_strength">
+                        {_strength_options(shown or None)}
+                      </select>
+                    </section>
     """
 
 
@@ -719,21 +758,15 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         chosen = document.strip()
         envelopes = state.list_envelopes()
         chosen_row = next((row for row in envelopes if row["snapshot_id"] == chosen), None)
-        picker = f"""
-              <form method="get" action="/review">
-                <label for="document">Document</label>
-                <div class="actions">
-                  <select id="document" name="document">{_document_options(envelopes, chosen)}</select>
-                  <button class="btn-secondary" type="submit">Openen</button>
-                </div>
-              </form>
-        """
+        picker = ""
         if chosen_row:
             picker = f"""
               <div class="review-document-context">
                 <span>Document</span>
                 <b>{_esc(chosen_row["title"])}</b>
                 <span>versie {_esc(chosen_row["version"])}</span>
+                <span>onderwerp {_esc(chosen_row["family"])}</span>
+                <span>klasse {_esc(chosen_row["class"])}</span>
                 <a href="/review">Ander document kiezen</a>
               </div>
             """
@@ -744,7 +777,8 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     f"""
                     <article class="doc-card">
                       {_document_card_heading({**row, "status": row["state"]})}
-                      <p><a class="btn-secondary" href="/review?document={_esc(row["snapshot_id"])}">Reviewen</a></p>
+                      <p class="lead">Wat jij bevestigt, wordt wat een EPD MAG zeggen.</p>
+                      <p><a class="btn-primary" href="/review?document={_esc(row["snapshot_id"])}">Beoordeel</a></p>
                     </article>
                     """
                 )
@@ -756,64 +790,46 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             if not chosen_object_id:
                 def _index_item(obj: dict[str, Any], *, checkbox: bool = False) -> str:
                     title = review_row_title(obj)
-                    status = (obj.get("governance") or {}).get("validation_status") or ""
-                    meta = (
-                        f"{_esc(_object_type_label(obj.get('object_type')))}"
-                        f"{' · ' + _esc(_status_label(status)) if status else ''}"
-                    )
+                    status = review_row_status(obj)
                     link = (
                         f'<a class="review-row-title" href="/review?document={_esc(chosen)}&object={_esc(obj["object_id"])}">'
                         f"{_esc(title)}</a>"
                     )
-                    secondary = (
-                        f'<p class="meta">{meta}'
-                        f' <span class="object-id">{_esc(obj["object_id"])}</span></p>'
-                    )
+                    status_html = f'<span class="review-row-status">{_esc(status)}</span>'
                     if checkbox:
                         return (
                             '<li class="review-row">'
                             f'<label class="check"><input type="checkbox" name="object_ids" '
-                            f'value="{_esc(obj["object_id"])}">{link}</label>'
-                            f"{secondary}</li>"
+                            f'value="{_esc(obj["object_id"])}">{link}{status_html}</label>'
+                            "</li>"
                         )
-                    return f'<li class="review-row">{link}{secondary}</li>'
+                    return f'<li class="review-row">{link}{status_html}</li>'
 
-                fast_objects = [obj for obj in snapshot_objects if review_lane(obj) == "fast"]
-                slow_objects = [
-                    obj for obj in snapshot_objects if review_lane(obj) in {"slow", "document"}
-                ]
-                fast_items = "".join(_index_item(obj, checkbox=True) for obj in fast_objects)
-                slow_items = "".join(_index_item(obj) for obj in slow_objects)
-                fast_block = ""
-                if fast_objects:
-                    fast_block = f"""
+                koppen, inhoud = review_stacks(snapshot_objects)
+                fast_items = "".join(_index_item(obj, checkbox=True) for obj in koppen)
+                slow_items = "".join(_index_item(obj) for obj in inhoud)
+                objects_html += f"""
                     <section class="review-lane-fast">
-                      <h2>Koppen (structuur)</h2>
-                      <p class="lead">Bevestig koppen als structuur, niet als advies.</p>
+                      <h2>Koppen ({len(koppen)})</h2>
+                      <p class="lead">Bevestig koppen als structuur, nooit als advies.</p>
                       <form method="post" action="/review/headings/batch-confirm">
                         <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
                         <ol class="object-index">{fast_items}</ol>
                         <button class="btn-primary" type="submit">Bevestig geselecteerde koppen als structuur</button>
                       </form>
                     </section>
-                    """
-                slow_block = ""
-                if slow_objects:
-                    slow_block = f"""
                     <section class="review-lane-slow">
-                      <h2>Inhoud</h2>
-                      <p class="lead">Beoordeel elk kennisobject afzonderlijk.</p>
+                      <h2>Inhoud ({len(inhoud)})</h2>
+                      <p class="lead">Beoordeel elk kennisobject afzonderlijk. Dit wordt wat een EPD MAG zeggen.</p>
                       <ol class="object-index">{slow_items}</ol>
                     </section>
-                    """
-                objects_html += fast_block + slow_block
+                """
             else:
                 obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
                 if obj is None:
                     raise ConsoleError("unknown_object")
                 heading = review_row_title(obj)
                 obj_text = (obj.get("content") or {}).get("clean_text") or ""
-                status = (obj.get("governance") or {}).get("validation_status") or ""
                 proposed = obj.get("proposed_object_type") or ""
                 confirmed = obj.get("confirmed_object_type") or ""
                 type_options = _type_options(confirmed)
@@ -854,14 +870,17 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     {relation_boxes}
                   </form>
                     """
+                stamp_html = ""
+                if review_lane(obj) != "fast":
+                    stamp_html = _stamp_block(obj)
                 objects_html += f"""
-                <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">Terug naar alle objecten</a></p>
+                <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">Terug naar Inhoud</a></p>
                 <article class="object review-card-two-column">
                   <section class="review-card-object" aria-label="Kennisobject en reviewbesluit">
                   <header class="review-object-heading">
                     <p class="eyebrow">Te beoordelen kennisobject</p>
                     <h3>{_esc(heading)}</h3>
-                    <p class="meta"><span>status <b>{_esc(_status_label(status))}</b></span><span>huidig type <b>{_esc(_object_type_label(obj.get("object_type")))}</b></span>{"<span>typevoorstel <b>" + _esc(_object_type_label(proposed)) + "</b></span>" if proposed else ""}</p>
+                    <p class="meta"><span>status <b>{_esc(review_row_status(obj))}</b></span><span>huidig type <b>{_esc(_object_type_label(obj.get("object_type")))}</b></span>{"<span>typevoorstel <b>" + _esc(_object_type_label(proposed)) + "</b></span>" if proposed else ""}</p>
                   </header>
                   {four_eyes_html}
                   <div class="object-text"><p>{_esc(obj_text)}</p></div>
@@ -874,6 +893,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                       <label for="type-{_esc(obj["object_id"])}">Welk type kennisobject is dit?</label>
                       <select id="type-{_esc(obj["object_id"])}" name="confirmed_object_type"{type_disabled}>{type_options}</select>
                     </section>
+                    {stamp_html}
                     <section class="review-step">
                       <h4>2. Besluit</h4>
                       <label for="decision-{_esc(obj["object_id"])}">Wat is je besluit over dit kennisobject?</label>
@@ -900,12 +920,17 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                 </article>
                 """
         empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
+        lead = (
+            "Beoordeel dit document. Wat jij bevestigt, wordt wat een EPD MAG zeggen."
+            if not chosen
+            else "Beoordeel Koppen als structuur en Inhoud als kennisobject. Dit wordt wat een EPD MAG zeggen."
+        )
         return _page(
             f"""
             {_nav(account, "review", _counts(account))}
             <section class="room">
               <h1>Review</h1>
-              <p class="lead">Beoordeel het kennisobject aan de hand van de bron en leg je besluit vast.</p>
+              <p class="lead">{lead}</p>
               {picker}
               {"".join(cards) if not chosen else ""}
               {objects_html or empty}
@@ -946,6 +971,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         comment: str = Form(""),
         proposed_correction: str = Form(""),
         confirmed_object_type: str = Form(""),
+        recommendation_strength: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
         if decision not in {"approve", "revise", "reject"}:
@@ -960,6 +986,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             comment=comment,
             proposed_correction=proposed_correction,
             confirmed_object_type=confirmed_object_type.strip() or None,
+            recommendation_strength=recommendation_strength.strip() or None,
         )
         if decision == "revise" and proposed_correction.strip():
             state.correct_object(

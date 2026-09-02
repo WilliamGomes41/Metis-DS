@@ -86,6 +86,30 @@
         null
       ]
     },
+    "proposed_recommendation_strength": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "doen",
+        "overweeg",
+        "niet_doen",
+        null
+      ]
+    },
+    "confirmed_recommendation_strength": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "doen",
+        "overweeg",
+        "niet_doen",
+        null
+      ]
+    },
     "source": {
       "type": "object",
       "additionalProperties": false,

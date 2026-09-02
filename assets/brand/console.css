@@ -278,6 +278,8 @@ button, .btn {
   background: var(--paars);
   color: var(--wit);
   margin-top: 16px;
+  display: inline-block;
+  text-decoration: none;
 }
 
 .btn-primary:disabled {
@@ -426,26 +428,50 @@ textarea:focus-visible {
   margin: 0 0 10px;
 }
 
-.object-index .object-id {
-  display: inline-block;
-  margin-left: 0.4rem;
-  color: var(--muted);
-  font-size: 0.85em;
-  max-width: 16rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: bottom;
+.review-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0.4rem 0;
+  flex-wrap: nowrap;
 }
 
-.review-row {
-  margin: 0.55rem 0;
+.review-row .check {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0;
+  width: 100%;
+}
+
+.review-row .check input[type="checkbox"] {
+  width: auto;
+  flex: 0 0 auto;
+  margin: 0;
 }
 
 .review-row-title {
-  display: block;
+  display: inline;
+  flex: 1 1 auto;
+  min-width: 0;
   font-weight: 650;
   line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-row-status {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+.stamp-sentence {
+  margin: 0 0 8px;
+  color: var(--paars);
+  font-weight: 650;
 }
 
 .date-nl-wrap {
