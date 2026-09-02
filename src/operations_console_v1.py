@@ -23,7 +23,8 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
-from src.atomic_split_v1 import proposed_relations_for_units, split_meaning_units
+from src.atomic_split_v1 import proposed_relations_for_units
+from src.context_aware_split_v1 import split_context_aware_units
 from src.extract_html_v1 import extract as extract_html
 from src.extract_pdf_v2 import extract as extract_pdf
 from src.four_eyes_v1 import (
@@ -34,19 +35,8 @@ from src.four_eyes_v1 import (
 from src.g2_source_store import G2SourceStoreError, ImmutableSourceStore, is_g2_locator
 from src.integrity_kernel import compute_canonical_object_hash, sha256_bytes, stamp_canonical_hashes
 from src.object_taxonomy_v1 import (
-    CLOSED_OBJECT_TYPES,
-    extract_object_type,
     is_closed_confirmed_type,
     is_closed_recommendation_strength,
-    is_continuation_fragment,
-    is_kennisplatform_chrome_text,
-    is_list_number_only,
-    is_raw_timestamp,
-    is_strength_stamp,
-    is_tiny_confirmable_text,
-    is_truncated_sentence,
-    normalize_visible_prose,
-    stamp_value,
 )
 from src.open_original_v1 import OpenOriginalError, open_source_passage
 from src.publish_authorization_v1 import invalidate_for_object, still_matches, tuple_record
@@ -456,123 +446,7 @@ def _spec_from_fragments(
             "review_track": "technical",
         }
     ]
-    meaning_units: list[dict[str, Any]] = []
-    pending_stamp: str | None = None
-    pending_truncated: dict[str, Any] | None = None
-    last_content: dict[str, Any] | None = None
-
-    def emit_unit(spec_item: dict[str, Any]) -> None:
-        nonlocal pending_stamp, last_content
-        if pending_stamp and spec_item.get("object_type") != "heading":
-            spec_item["proposed_recommendation_strength"] = pending_stamp
-            pending_stamp = None
-        meaning_units.append(spec_item)
-        if spec_item.get("object_type") != "heading":
-            last_content = spec_item
-
-    def merge_text(left: str, right: str) -> str:
-        return re.sub(r"\s+", " ", f"{left} {right}").strip()
-
-    def continuation_target() -> dict[str, Any] | None:
-        if pending_truncated is not None:
-            return pending_truncated
-        return last_content
-
-    def attach_continuation(unit: str, fragment: dict[str, Any]) -> bool:
-        target = continuation_target()
-        if target is None:
-            return False
-        if unit in target["text"]:
-            return True
-        target["text"] = merge_text(target["text"], unit)
-        target["clean_text"] = target["text"]
-        extra_id = fragment.get("fragment_id")
-        if extra_id and extra_id not in target["source_fragment_ids"]:
-            target["source_fragment_ids"].append(extra_id)
-        return True
-
-    def unique_meaning_units(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        seen: set[str] = set()
-        unique: list[dict[str, Any]] = []
-        for item in rows:
-            key = normalize_visible_prose(item.get("clean_text") or item.get("text") or "")
-            if not key or key in seen:
-                continue
-            seen.add(key)
-            unique.append(item)
-        return unique
-
-    for fragment in fragments:
-        text = (fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
-        if not text:
-            continue
-        if is_kennisplatform_chrome_text(text):
-            continue
-        if is_strength_stamp(text):
-            pending_stamp = stamp_value(text)
-            continue
-        if is_list_number_only(text) or is_raw_timestamp(text):
-            continue
-        object_type, proposed = extract_object_type(fragment)
-        is_heading = object_type == "heading"
-        units = split_meaning_units(text, is_heading=is_heading)
-        for index, unit in enumerate(units, 1):
-            if is_kennisplatform_chrome_text(unit):
-                continue
-            if is_strength_stamp(unit):
-                pending_stamp = stamp_value(unit)
-                continue
-            if is_list_number_only(unit) or is_raw_timestamp(unit):
-                continue
-            if not is_heading and is_continuation_fragment(unit):
-                if attach_continuation(unit, fragment):
-                    continue
-            if pending_truncated is not None:
-                emit_unit(pending_truncated)
-                pending_truncated = None
-            if not is_heading and is_tiny_confirmable_text(unit):
-                continue
-            fake = {**fragment, "clean_text": unit, "raw_text": unit}
-            if not is_heading:
-                if fake.get("heading") == unit or is_strength_stamp(str(fake.get("heading") or "")):
-                    fake["heading"] = None
-            unit_type, unit_proposed = extract_object_type(fake)
-            if is_heading:
-                unit_type, unit_proposed = "heading", "heading"
-            suffix = f"-u{index:02d}" if len(units) > 1 else ""
-            spec_item: dict[str, Any] = {
-                "object_id": f"{document_id}-{fragment['fragment_id']}{suffix}",
-                "object_type": unit_type,
-                "text": unit,
-                "clean_text": unit,
-                "source_fragment_ids": [fragment["fragment_id"]],
-                "section_path": [
-                    part
-                    for part in (fragment.get("section_path") or [])
-                    if not is_strength_stamp(str(part)) and not is_kennisplatform_chrome_text(str(part))
-                ],
-                "heading": None
-                if is_strength_stamp(str(fragment.get("heading") or ""))
-                or is_kennisplatform_chrome_text(str(fragment.get("heading") or ""))
-                else fragment.get("heading"),
-                "review_track": "clinical",
-                "relations": [],
-                "confirmed_relations": [],
-            }
-            if unit_proposed:
-                spec_item["proposed_object_type"] = unit_proposed
-            if (
-                not is_heading
-                and pending_truncated is None
-                and is_truncated_sentence(unit)
-                and not is_tiny_confirmable_text(unit)
-            ):
-                pending_truncated = spec_item
-            else:
-                emit_unit(spec_item)
-    if pending_truncated is not None:
-        emit_unit(pending_truncated)
-    meaning_units = unique_meaning_units(meaning_units)
+    meaning_units = split_context_aware_units(fragments, document_id=document_id)
     proposed_relations_for_units(meaning_units)
     objects.extend(meaning_units)
     return {
