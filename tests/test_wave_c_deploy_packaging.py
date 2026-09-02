@@ -198,7 +198,15 @@ def test_workflows_keep_deploy_inactive_until_named_test_app_exists() -> None:
     assert "vars.METIS_TEST_APP_READY == 'true'" in test_text
     assert "vars.METIS_TEST_APP_READY == 'true'" in prod_text
     assert "workflow_dispatch" in prod_text
+    assert "workflow_dispatch" in test_text
     assert "branches: [main]" not in prod_text
+    assert "branches: [main]" not in test_text
+    assert "\n  push:" not in test_text
+    assert "\n  push:" not in prod_text
+    assert "exit 1" in test_text
+    assert "exit 1" in prod_text
+    assert "Fail-closed until vvn-metis-console-test exists" in test_text
+    assert "Fail-closed until vvn-metis-console-test exists" in prod_text
     assert "require_deploy_activation" in test_text
     assert "require_deploy_activation" in prod_text
 
@@ -212,11 +220,19 @@ def test_workflows_keep_deploy_inactive_until_named_test_app_exists() -> None:
 
 
 def test_merge_to_main_does_not_auto_deploy_while_test_app_missing() -> None:
-    text = _read(ROOT / ".github" / "workflows" / "deploy-test.yml")
-    assert "METIS_TEST_APP_READY" in text
-    assert "vvn-metis-console-test" in text
-    assert "vars.METIS_TEST_APP_READY == 'true'" in text
-    assert "if: ${{ vars.METIS_TEST_APP_READY == 'true' }}" in text
+    test_text = _read(ROOT / ".github" / "workflows" / "deploy-test.yml")
+    prod_text = _read(ROOT / ".github" / "workflows" / "deploy-production.yml")
+    ci_text = _read(ROOT / ".github" / "workflows" / "ci.yml")
+    assert "branches: [main]" not in test_text
+    assert "branches: [main]" not in prod_text
+    assert "\n  push:" not in test_text
+    assert "\n  push:" not in prod_text
+    assert "on:\n  push:" in ci_text or "on:\n  push:" in ci_text.replace("\r\n", "\n")
+    assert "az webapp deploy" in test_text
+    assert "az webapp deploy" in prod_text
+    assert "METIS_TEST_APP_READY" in test_text
+    assert "vvn-metis-console-test" in test_text
+    assert "if: ${{ vars.METIS_TEST_APP_READY == 'true' }}" in test_text
     assert os.environ.get("METIS_TEST_APP_READY", "") != "true"
     with pytest.raises(DeployIdentityError, match="test_app_missing"):
         require_deploy_activation(
@@ -237,6 +253,8 @@ def test_runbook_requires_separate_service_principals_and_app_settings() -> None
     assert "MUST NOT" in runbook or "niet activeren" in runbook.lower() or "inactief" in runbook.lower()
     assert "vvn-metis-console-test" in runbook
     assert "METIS_TEST_APP_READY" in runbook
+    assert "geen" in runbook and "on.push" in runbook
+    assert "MUST NOT PR #82" in runbook or "MUST NOT PR #82 mergen" in runbook
 
 
 def test_wave_c_does_not_open_publish(tmp_path: Path) -> None:

@@ -92,9 +92,10 @@ in de repository.
 ## Werking
 
 1. Een pull request voert CI uit op Python 3.12 en 3.13.
-2. Een merge naar `main` start `deploy-test` alleen als `METIS_TEST_APP_READY=true`.
-   Zolang die variable ontbreekt, blijft de deploy-job inactief; er is geen
-   auto-deploy naar een ontbrekende test-app.
+2. `deploy-test` en `deploy-production` hebben **geen** `on.push`. Merge naar
+   `main` start geen deploy. Zolang `vvn-metis-console-test` niet bestaat
+   blijven beide workflows inactief / fail-closed (`METIS_TEST_APP_READY`
+   ontbreekt). MUST NOT PR #82 mergen (git-archive-only + auto-deploy).
 3. Packaging: `bash scripts/create_azure_deploy_package.sh` (executable of via
    bash). Het ZIP bevat vendored `.python_packages` uit `requirements.txt`.
 4. `--clean true` wist `wwwroot` en MUST NOT `/home/data` wissen.

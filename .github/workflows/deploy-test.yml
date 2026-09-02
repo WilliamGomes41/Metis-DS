@@ -1,14 +1,13 @@
 name: deploy-test
 
-# Protocol v2.22 wave C: MUST NOT activate until Azure App Service
-# vvn-metis-console-test exists. Merge to main MUST NOT auto-deploy to a
-# missing test app. Owner sets GitHub Actions variable METIS_TEST_APP_READY=true
-# only after that named test app exists. This PR does not create that app.
+# Protocol v2.22 wave C / owner lock 2026-09-03: MUST NOT activate until
+# Azure App Service vvn-metis-console-test exists. No on.push deploy to
+# test or production while that app does not exist. Merge to main MUST NOT
+# auto-deploy. Owner sets METIS_TEST_APP_READY=true only after the named
+# test app exists. This PR does not create that app. MUST NOT merge PR #82.
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 permissions:
   contents: read
@@ -23,12 +22,13 @@ jobs:
     name: Fail-closed until vvn-metis-console-test exists
     runs-on: ubuntu-latest
     steps:
-      - name: Do not auto-deploy while the named test app is missing
+      - name: Refuse deploy while the named test app is missing
         run: |
           if [ "${{ vars.METIS_TEST_APP_READY }}" = "true" ]; then
             echo "METIS_TEST_APP_READY is true; deploy job may run"
           else
             echo "deploy-test remains inactive: vvn-metis-console-test is not declared ready"
+            exit 1
           fi
 
   deploy:

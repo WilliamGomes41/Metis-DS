@@ -1,8 +1,9 @@
 name: deploy-production
 
-# Protocol v2.22 wave C: production is manual. MUST NOT activate until
-# Azure App Service vvn-metis-console-test exists. Test identity cannot
-# production; production identity cannot test.
+# Protocol v2.22 wave C / owner lock 2026-09-03: production is manual.
+# No on.push. MUST NOT activate until vvn-metis-console-test exists.
+# Test identity cannot production; production identity cannot test.
+# MUST NOT merge PR #82.
 
 on:
   workflow_dispatch:
@@ -21,9 +22,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  inactive-until-test-app:
+    name: Fail-closed until vvn-metis-console-test exists
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse production deploy while the named test app is missing
+        run: |
+          if [ "${{ vars.METIS_TEST_APP_READY }}" = "true" ]; then
+            echo "METIS_TEST_APP_READY is true; production deploy job may run"
+          else
+            echo "deploy-production remains inactive: vvn-metis-console-test is not declared ready"
+            exit 1
+          fi
+
   deploy:
     name: Deploy ${{ inputs.commit_sha }} to production
     if: ${{ vars.METIS_TEST_APP_READY == 'true' }}
+    needs: inactive-until-test-app
     runs-on: ubuntu-latest
     environment: production
     env:
