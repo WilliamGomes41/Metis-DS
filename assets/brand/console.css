@@ -435,6 +435,19 @@ textarea:focus-visible {
   margin: 0 0 10px;
 }
 
+.review-leftover-unclassified {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white, #fff);
+}
+
+.review-leftover-unclassified p,
+.review-leftover-other {
+  margin: 0;
+}
+
 .review-row {
   display: flex;
   align-items: baseline;

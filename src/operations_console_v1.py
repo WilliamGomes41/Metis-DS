@@ -266,11 +266,80 @@ def review_row_status(obj: dict[str, Any]) -> str:
 
 
 def review_stacks(objects: Iterable[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Koppen (fast heading) vs Inhoud (slow content). Document rows are not stacks."""
+    """Koppen (fast heading) vs all slow content. Document rows are not stacks.
+
+    The old Inhoud enumeration is every slow object, including leftover
+    unclassified. Protocol v2.19 presents slow duty separately: use
+    ``slow_review_duty`` for the researcher-required cards.
+    """
     rows = [obj for obj in objects if obj.get("object_type") != "document"]
     koppen = [obj for obj in rows if review_lane(obj) == "fast"]
     inhoud = [obj for obj in rows if review_lane(obj) != "fast"]
     return koppen, inhoud
+
+
+SLOW_REVIEW_DUTY_TYPES = frozenset({"recommendation", "condition", "exception"})
+
+
+def is_slow_review_duty(obj: dict[str, Any]) -> bool:
+    """True for the researcher-required slow hand work (Protocol v2.19).
+
+    Proposed or stored ``recommendation``, ``condition``, ``exception``, or
+    any high-risk object. Headings stay in Koppen. Leftover unclassified is
+    not this duty. MUST NOT auto-confirm types. MUST NOT treat leftover as
+    light enough to skip four-eyes or to serve.
+    """
+    if obj.get("object_type") == "document":
+        return False
+    if review_lane(obj) == "fast":
+        return False
+    if requires_four_eyes(obj, confirmed_type=obj.get("confirmed_object_type") or None):
+        return True
+    confirmed = obj.get("confirmed_object_type")
+    stored = obj.get("object_type")
+    proposed = obj.get("proposed_object_type")
+    if confirmed in SLOW_REVIEW_DUTY_TYPES:
+        return True
+    if stored in SLOW_REVIEW_DUTY_TYPES:
+        return True
+    if proposed in SLOW_REVIEW_DUTY_TYPES:
+        return True
+    return False
+
+
+def slow_review_duty(objects: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Presented Inhoud cards: recommendation + condition/exception/high-risk."""
+    return [obj for obj in objects if is_slow_review_duty(obj)]
+
+
+def remaining_unclassified(objects: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Leftover unclassified that MUST NOT be equal one-by-one duty cards.
+
+    Stored objects remain. Presentation of duty is not deletion. Hiding
+    stored fragments without a new extract remains forbidden.
+    """
+    rows = [obj for obj in objects if obj.get("object_type") != "document"]
+    leftover: list[dict[str, Any]] = []
+    for obj in rows:
+        if is_slow_review_duty(obj) or review_lane(obj) == "fast":
+            continue
+        if obj.get("confirmed_object_type"):
+            continue
+        stored = obj.get("object_type")
+        if stored and stored != "unclassified":
+            continue
+        leftover.append(obj)
+    return leftover
+
+
+def remaining_not_duty(objects: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Slow objects that are not the presented researcher duty."""
+    rows = [obj for obj in objects if obj.get("object_type") != "document"]
+    return [
+        obj
+        for obj in rows
+        if review_lane(obj) != "fast" and not is_slow_review_duty(obj)
+    ]
 
 
 def _slug(value: str) -> str:
