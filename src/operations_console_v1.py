@@ -39,6 +39,7 @@ from src.object_taxonomy_v1 import (
     is_closed_confirmed_type,
     is_closed_recommendation_strength,
     is_continuation_fragment,
+    is_kennisplatform_chrome_text,
     is_list_number_only,
     is_raw_timestamp,
     is_strength_stamp,
@@ -393,6 +394,8 @@ def _spec_from_fragments(
         text = (fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
         if not text:
             continue
+        if is_kennisplatform_chrome_text(text):
+            continue
         if is_strength_stamp(text):
             pending_stamp = stamp_value(text)
             continue
@@ -402,6 +405,8 @@ def _spec_from_fragments(
         is_heading = object_type == "heading"
         units = split_meaning_units(text, is_heading=is_heading)
         for index, unit in enumerate(units, 1):
+            if is_kennisplatform_chrome_text(unit):
+                continue
             if is_strength_stamp(unit):
                 pending_stamp = stamp_value(unit)
                 continue
@@ -417,6 +422,8 @@ def _spec_from_fragments(
             if pending_truncated is not None:
                 emit_unit(pending_truncated)
                 pending_truncated = None
+            if not is_heading and is_tiny_confirmable_text(unit):
+                continue
             fake = {**fragment, "clean_text": unit, "raw_text": unit}
             if not is_heading:
                 if fake.get("heading") == unit or is_strength_stamp(str(fake.get("heading") or "")):
@@ -434,9 +441,12 @@ def _spec_from_fragments(
                 "section_path": [
                     part
                     for part in (fragment.get("section_path") or [])
-                    if not is_strength_stamp(str(part))
+                    if not is_strength_stamp(str(part)) and not is_kennisplatform_chrome_text(str(part))
                 ],
-                "heading": None if is_strength_stamp(str(fragment.get("heading") or "")) else fragment.get("heading"),
+                "heading": None
+                if is_strength_stamp(str(fragment.get("heading") or ""))
+                or is_kennisplatform_chrome_text(str(fragment.get("heading") or ""))
+                else fragment.get("heading"),
                 "review_track": "clinical",
                 "relations": [],
                 "confirmed_relations": [],

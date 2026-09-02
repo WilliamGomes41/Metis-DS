@@ -168,6 +168,39 @@ def is_tiny_confirmable_text(text: str) -> bool:
     return False
 
 
+KENNISPLATFORM_CHROME_LABELS = frozenset(
+    {
+        "home",
+        "richtlijnen",
+        "meedenken",
+        "tools",
+        "kennisinstituut v&vn",
+        "kennisinstituut v en vn",
+        "veelgestelde vragen",
+        "kennisplatform",
+    }
+)
+
+
+def is_kennisplatform_chrome_text(text: str) -> bool:
+    """True for kennisplatform nav/shell labels. Evidence, not a heading allowlist."""
+    blob = re.sub(r"\s+", " ", text or "").strip().casefold()
+    blob = blob.replace("&amp;", "&").replace("v & vn", "v&vn")
+    return blob in KENNISPLATFORM_CHROME_LABELS
+
+
+def recommendation_strength_ui_applies(obj: dict[str, Any]) -> bool:
+    """Stamp picker belongs only on type recommendation, not unclassified/heading."""
+    confirmed = obj.get("confirmed_object_type") or ""
+    stored = obj.get("object_type") or ""
+    proposed = obj.get("proposed_object_type") or ""
+    if confirmed:
+        return confirmed == "recommendation"
+    if stored and stored != DEFAULT_OBJECT_TYPE:
+        return stored == "recommendation"
+    return proposed == "recommendation"
+
+
 def looks_like_structural_heading(text: str) -> bool:
     """True for TOC crumbs and short structural titles, not ordinary sentences.
 
@@ -197,7 +230,7 @@ def looks_like_structural_heading(text: str) -> bool:
 
 def fragment_is_heading(fragment: dict[str, Any]) -> bool:
     text = re.sub(r"\s+", " ", str(fragment.get("clean_text") or fragment.get("raw_text") or "")).strip()
-    if is_strength_stamp(text):
+    if is_strength_stamp(text) or is_kennisplatform_chrome_text(text):
         return False
     loc = fragment.get("source_locator") or {}
     value = str(loc.get("locator_value") or "").lower()
@@ -232,7 +265,7 @@ def propose_object_type(text: str, *, is_heading: bool = False) -> str | None:
 
 def extract_object_type(fragment: dict[str, Any]) -> tuple[str, str | None]:
     text = (fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
-    if is_strength_stamp(text):
+    if is_strength_stamp(text) or is_kennisplatform_chrome_text(text):
         return DEFAULT_OBJECT_TYPE, None
     heading = fragment_is_heading(fragment)
     if heading:

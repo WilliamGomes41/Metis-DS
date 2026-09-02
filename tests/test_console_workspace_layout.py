@@ -52,7 +52,8 @@ def test_rooms_use_one_short_lead_not_stacked_protocol_prose(tmp_path: Path) -> 
     assert 'class="canvas"' in ingest
     assert 'src="/brand/metis-mark.jpg"' in ingest
     assert "onderwerp" in lower
-    assert "continentie" in lower
+    assert 'id="family"' in ingest
+    assert 'value="continentie"' not in ingest
     assert "onderzoekerspad" not in ingest.split("<details")[0].lower()
     assert "nieuwe familie" not in lower
     tree = client.get("/tree").text.lower()

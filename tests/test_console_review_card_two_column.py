@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from src.open_original_v1 import researcher_visible_prose
 from src.operations_console_app import _esc, create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 
@@ -194,8 +195,12 @@ def test_review_card_object_left_bronpassage_right(tmp_path: Path) -> None:
     assert 'name="relation"' in left
     assert "Welk type kennisobject is dit?" in left
     assert "Wat is je besluit over dit kennisobject?" in left
-    assert _esc(opened["passage"]) in right
+    prose = researcher_visible_prose(opened["passage"])
+    assert _esc(prose) in right
     assert "Onderbouwing uit het brondocument" in right
+    assert "brxe-faadvp" not in right
+    assert "&lt;p&gt;" not in right
+    assert "&lt;div" not in right
     assert "Welk type kennisobject is dit?" not in right
     assert "Wat is je besluit over dit kennisobject?" not in right
 

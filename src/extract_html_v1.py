@@ -16,12 +16,48 @@ from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker
 
-from src.object_taxonomy_v1 import is_strength_stamp
+from src.object_taxonomy_v1 import is_kennisplatform_chrome_text, is_strength_stamp
 
 PARSER_VERSION = "html-visible-text-v1.1.0"
 BLOCK_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6", "p", "li"}
 SKIP_TAGS = {"script", "style", "noscript", "svg"}
 VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+CHROME_SKIP_TAGS = frozenset({"footer"})
+CHROME_NAV_TOKENS = frozenset(
+    {
+        "bricks-nav-menu",
+        "site-nav",
+        "main-navigation",
+        "navbar",
+    }
+)
+CHROME_CLASS_TOKENS = frozenset(
+    {
+        "bricks-menu-item",
+        "bricks-nav-menu",
+        "site-header",
+        "site-footer",
+        "site-nav",
+        "main-navigation",
+        "wp-block-navigation",
+        "wp-block-navigation-item",
+    }
+)
+
+
+def is_kennisplatform_chrome_element(tag: str, classes: set[str] | list[str] | tuple[str, ...]) -> bool:
+    """True for kennisplatform nav/shell markup, not a richtlijn Inhoudsopgave."""
+    tag_l = (tag or "").lower()
+    tokens = {str(item) for item in classes if item}
+    if tokens & CHROME_CLASS_TOKENS:
+        return True
+    if any(token.startswith("menu-item") for token in tokens):
+        return True
+    if tag_l in CHROME_SKIP_TAGS:
+        return True
+    if tag_l == "nav" and tokens & CHROME_NAV_TOKENS:
+        return True
+    return False
 
 
 def _stable_hash(value: dict[str, Any]) -> str:
@@ -43,6 +79,7 @@ class VisibleHTMLParser(HTMLParser):
         self.scope_depth = 0
         self.root_found = root_class is None
         self.skip_depth = 0
+        self.chrome_depth = 0
         self.current: dict[str, Any] | None = None
         self.blocks: list[dict[str, Any]] = []
         self.heading_stack: list[tuple[int, str]] = []
@@ -61,6 +98,10 @@ class VisibleHTMLParser(HTMLParser):
             return
         if self.root_class and tag not in VOID_TAGS:
             self.scope_depth += 1
+        if self.chrome_depth or is_kennisplatform_chrome_element(tag, classes):
+            if tag not in VOID_TAGS:
+                self.chrome_depth += 1
+            return
         if tag in SKIP_TAGS:
             self.skip_depth += 1
             return
@@ -79,7 +120,7 @@ class VisibleHTMLParser(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self.root_class and not self.scope_depth:
             return
-        if self.skip_depth or not self.current:
+        if self.chrome_depth or self.skip_depth or not self.current:
             return
         self.current["parts"].append(data)
         self.current["end_line"] = self.getpos()[0]
@@ -88,13 +129,21 @@ class VisibleHTMLParser(HTMLParser):
         tag = tag.lower()
         if self.root_class and not self.scope_depth:
             return
+        if self.chrome_depth:
+            if tag not in VOID_TAGS:
+                self.chrome_depth = max(0, self.chrome_depth - 1)
+            if self.root_class and tag not in VOID_TAGS:
+                self.scope_depth -= 1
+                if self.scope_depth == 0:
+                    self.root_finished = True
+            return
         if tag in SKIP_TAGS and self.skip_depth:
             self.skip_depth -= 1
         elif not self.skip_depth and self.current and self.current["tag"] == tag:
             text = _clean(" ".join(self.current["parts"]))
             block = self.current
             self.current = None
-            if text:
+            if text and not is_kennisplatform_chrome_text(text):
                 level = int(tag[1]) if tag.startswith("h") and len(tag) == 2 and tag[1].isdigit() else None
                 if level and not is_strength_stamp(text):
                     self.heading_stack = [(lvl, txt) for lvl, txt in self.heading_stack if lvl < level]
