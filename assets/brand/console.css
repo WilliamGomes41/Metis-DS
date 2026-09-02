@@ -532,7 +532,11 @@ textarea:focus-visible {
 .review-document-context a { margin-left: auto; }
 
 .review-object-heading { margin-bottom: 16px; }
-.review-object-heading h3 { margin: 0 0 8px; }
+.review-object-heading h3 {
+  margin: 0 0 8px;
+  border-left: 3px solid var(--water);
+  padding: 2px 0 2px 14px;
+}
 
 .eyebrow {
   margin: 0 0 6px;

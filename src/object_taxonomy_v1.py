@@ -87,6 +87,16 @@ _TRAILING_HANGER_RE = re.compile(
     r"bij|naar|om|als|dan|dat|specifiek|specifieke)$",
     re.I,
 )
+# Evidence starters (Protocol v2.18): Eventueel / Bijvoorbeeld / Zoals — not a closed list.
+_TRAILING_CLAUSE_STARTER_RE = re.compile(
+    r"^(?:"
+    r"eventueel|bijvoorbeeld|bijv\.?|zoals|"
+    r"alsook|waaronder|inclusief|"
+    r"onder andere|o\.a\.|met name|eveneens|tevens|"
+    r"daarnaast|hierbij"
+    r")\b",
+    re.I,
+)
 
 
 def _normalized_stamp_key(text: str) -> str:
@@ -150,10 +160,26 @@ def is_truncated_sentence(text: str) -> bool:
 
 
 def is_continuation_fragment(text: str) -> bool:
+    """True for a trailing clause that MUST stay with the previous sentence.
+
+    Protocol v2.18: extract MUST NOT split a grammatical continuation into a
+    new object. Lowercase hangers and Eventueel / Bijvoorbeeld / Zoals-style
+    starters are evidence, not a closed list. Exception/condition sentences
+    that start a new meaning unit (Tenzij, Behalve, Indien) are not this.
+    """
     blob = re.sub(r"\s+", " ", text or "").strip()
     if not blob:
         return False
-    return blob[0].islower() or is_lone_trailing_word(blob)
+    if is_strength_stamp(blob) or looks_like_structural_heading(blob):
+        return False
+    if blob[0].islower() or is_lone_trailing_word(blob):
+        return True
+    return bool(_TRAILING_CLAUSE_STARTER_RE.match(blob))
+
+
+def normalize_visible_prose(text: str) -> str:
+    """Ordinary whitespace normalisation for freeze-prose identity (v2.18)."""
+    return re.sub(r"\s+", " ", text or "").strip()
 
 
 def is_tiny_confirmable_text(text: str) -> bool:

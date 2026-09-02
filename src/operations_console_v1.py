@@ -45,6 +45,7 @@ from src.object_taxonomy_v1 import (
     is_strength_stamp,
     is_tiny_confirmable_text,
     is_truncated_sentence,
+    normalize_visible_prose,
     stamp_value,
 )
 from src.open_original_v1 import OpenOriginalError, open_source_passage
@@ -248,6 +249,11 @@ def review_row_title(obj: dict[str, Any], *, max_len: int = 160) -> str:
     return snippet
 
 
+def review_card_sentence(obj: dict[str, Any]) -> str:
+    """Open-card freeze sentence once. Full text; not truncated; not a type name."""
+    return review_row_title(obj, max_len=10_000)
+
+
 def review_row_status(obj: dict[str, Any]) -> str:
     """Short same-line status. waiting / classified / confirmed in onderzoekerstaal."""
     confirmed = obj.get("confirmed_object_type")
@@ -379,16 +385,48 @@ def _spec_from_fragments(
     meaning_units: list[dict[str, Any]] = []
     pending_stamp: str | None = None
     pending_truncated: dict[str, Any] | None = None
+    last_content: dict[str, Any] | None = None
 
     def emit_unit(spec_item: dict[str, Any]) -> None:
-        nonlocal pending_stamp
+        nonlocal pending_stamp, last_content
         if pending_stamp and spec_item.get("object_type") != "heading":
             spec_item["proposed_recommendation_strength"] = pending_stamp
             pending_stamp = None
         meaning_units.append(spec_item)
+        if spec_item.get("object_type") != "heading":
+            last_content = spec_item
 
     def merge_text(left: str, right: str) -> str:
         return re.sub(r"\s+", " ", f"{left} {right}").strip()
+
+    def continuation_target() -> dict[str, Any] | None:
+        if pending_truncated is not None:
+            return pending_truncated
+        return last_content
+
+    def attach_continuation(unit: str, fragment: dict[str, Any]) -> bool:
+        target = continuation_target()
+        if target is None:
+            return False
+        if unit in target["text"]:
+            return True
+        target["text"] = merge_text(target["text"], unit)
+        target["clean_text"] = target["text"]
+        extra_id = fragment.get("fragment_id")
+        if extra_id and extra_id not in target["source_fragment_ids"]:
+            target["source_fragment_ids"].append(extra_id)
+        return True
+
+    def unique_meaning_units(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        seen: set[str] = set()
+        unique: list[dict[str, Any]] = []
+        for item in rows:
+            key = normalize_visible_prose(item.get("clean_text") or item.get("text") or "")
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            unique.append(item)
+        return unique
 
     for fragment in fragments:
         text = (fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
@@ -412,13 +450,9 @@ def _spec_from_fragments(
                 continue
             if is_list_number_only(unit) or is_raw_timestamp(unit):
                 continue
-            if pending_truncated is not None and not is_heading and is_continuation_fragment(unit):
-                pending_truncated["text"] = merge_text(pending_truncated["text"], unit)
-                pending_truncated["clean_text"] = pending_truncated["text"]
-                extra_id = fragment.get("fragment_id")
-                if extra_id and extra_id not in pending_truncated["source_fragment_ids"]:
-                    pending_truncated["source_fragment_ids"].append(extra_id)
-                continue
+            if not is_heading and is_continuation_fragment(unit):
+                if attach_continuation(unit, fragment):
+                    continue
             if pending_truncated is not None:
                 emit_unit(pending_truncated)
                 pending_truncated = None
@@ -464,6 +498,7 @@ def _spec_from_fragments(
                 emit_unit(spec_item)
     if pending_truncated is not None:
         emit_unit(pending_truncated)
+    meaning_units = unique_meaning_units(meaning_units)
     proposed_relations_for_units(meaning_units)
     objects.extend(meaning_units)
     return {

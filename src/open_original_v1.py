@@ -99,6 +99,29 @@ def passage_from_pdf_freeze(freeze_bytes: bytes, locator_value: str) -> str:
         doc.close()
 
 
+def _fragment_locators(object_record: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not object_record:
+        return []
+    seen: set[tuple[str, str]] = set()
+    locators: list[dict[str, Any]] = []
+    bags = [object_record]
+    provenance = object_record.get("provenance") or {}
+    bags.append(provenance)
+    nested = object_record.get("knowledge_object") or {}
+    if nested:
+        bags.append(nested)
+        bags.append(nested.get("provenance") or {})
+    for bag in bags:
+        for frag in (bag.get("source_fragments") or []):
+            sl = frag.get("source_locator") or {}
+            key = (str(sl.get("locator_type") or ""), str(sl.get("locator_value") or "").strip())
+            if not key[1] or key in seen:
+                continue
+            seen.add(key)
+            locators.append(sl)
+    return locators
+
+
 def open_source_passage(
     *,
     freeze_bytes: bytes | None,
@@ -113,16 +136,32 @@ def open_source_passage(
         raise OpenOriginalError("freeze_bytes_missing")
     locator_type = loc.get("locator_type")
     value = loc["locator_value"]
-    if locator_type == "web_line_range":
-        if content_kind != "html":
-            raise OpenOriginalError("locator_kind_mismatch")
-        passage = passage_from_html_freeze(freeze_bytes, value)
-    elif locator_type == "page_bbox":
-        if content_kind != "pdf":
-            raise OpenOriginalError("locator_kind_mismatch")
-        passage = passage_from_pdf_freeze(freeze_bytes, value)
-    else:
+    extra = _fragment_locators(object_record)
+
+    def _read(item: dict[str, Any]) -> str:
+        kind = item.get("locator_type") or locator_type
+        item_value = item["locator_value"]
+        if kind == "web_line_range":
+            if content_kind != "html":
+                raise OpenOriginalError("locator_kind_mismatch")
+            return passage_from_html_freeze(freeze_bytes, item_value)
+        if kind == "page_bbox":
+            if content_kind != "pdf":
+                raise OpenOriginalError("locator_kind_mismatch")
+            return passage_from_pdf_freeze(freeze_bytes, item_value)
         raise OpenOriginalError("unsupported_locator")
+
+    if locator_type not in {"web_line_range", "page_bbox"}:
+        raise OpenOriginalError("unsupported_locator")
+    parts: list[str] = []
+    seen_parts: set[str] = set()
+    ordered = [loc] + [item for item in extra if item.get("locator_value") != value]
+    for item in ordered:
+        piece = _read(item)
+        if piece and piece not in seen_parts:
+            seen_parts.add(piece)
+            parts.append(piece)
+    passage = "\n".join(parts) if parts else _read(loc)
     return {
         "locator_type": locator_type,
         "locator_value": value,
