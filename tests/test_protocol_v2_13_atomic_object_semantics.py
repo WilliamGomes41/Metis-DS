@@ -38,7 +38,7 @@ def test_v213_delta_exists_and_is_the_live_baseline() -> None:
     assert "**Status:** Approved for project use" in delta
     assert "**Protocol delta version:** 2.13.0" in delta
     assert "docs/PROTOCOL_V2_13_ATOMIC_OBJECT_SEMANTICS_DELTA.md" in root_protocol
-    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.19.0") == 1
+    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.20.0") == 1
     assert "plus Protocol v2.13.0 plus Protocol v2.12.0 plus Protocol v2.11.0" in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.13.0" not in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.12.0" not in root_protocol
