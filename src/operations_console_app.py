@@ -27,10 +27,13 @@ from src.operations_console_v1 import (
     ConsoleError,
     OperationsConsole,
     REPO_ROOT,
+    remaining_not_duty,
+    remaining_unclassified,
     review_card_sentence,
     review_row_status,
     review_row_title,
     review_stacks,
+    slow_review_duty,
 )
 from src.open_original_v1 import researcher_visible_prose
 from src.serving_relations_v1 import CLOSED_RELATION_TYPES, proposed_relations
@@ -810,9 +813,30 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                         )
                     return f'<li class="review-row">{link}{status_html}</li>'
 
-                koppen, inhoud = review_stacks(snapshot_objects)
+                koppen, _old_inhoud = review_stacks(snapshot_objects)
+                duty = slow_review_duty(snapshot_objects)
+                leftover = remaining_unclassified(snapshot_objects)
+                leftover_ids = {row.get("object_id") for row in leftover}
+                leftover_other = [
+                    obj
+                    for obj in remaining_not_duty(snapshot_objects)
+                    if obj.get("object_id") not in leftover_ids
+                ]
                 fast_items = "".join(_index_item(obj, checkbox=True) for obj in koppen)
-                slow_items = "".join(_index_item(obj) for obj in inhoud)
+                slow_items = "".join(_index_item(obj) for obj in duty)
+                leftover_html = ""
+                if leftover:
+                    leftover_html = f"""
+                      <aside class="review-leftover-unclassified">
+                        <p>Resterend unclassified: {len(leftover)}. Niet als één-voor-één plicht. Unclassified wordt niet geserveerd.</p>
+                      </aside>
+                    """
+                other_html = ""
+                if leftover_other:
+                    other_html = (
+                        f'<p class="review-leftover-other">Overige objecten in de store: '
+                        f"{len(leftover_other)}. Niet de onderzoekerplicht voor handelingsadvies.</p>"
+                    )
                 objects_html += f"""
                     <section class="review-lane-fast">
                       <h2>Koppen ({len(koppen)})</h2>
@@ -824,9 +848,11 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                       </form>
                     </section>
                     <section class="review-lane-slow">
-                      <h2>Inhoud ({len(inhoud)})</h2>
-                      <p class="lead">Beoordeel elk kennisobject afzonderlijk.</p>
+                      <h2>Inhoud ({len(duty)})</h2>
+                      <p class="lead">Beoordeel voorgestelde aanbevelingen plus voorwaarden, uitzonderingen en ieder high-risk object. Dat is de handplicht.</p>
                       <ol class="object-index">{slow_items}</ol>
+                      {leftover_html}
+                      {other_html}
                     </section>
                 """
             else:

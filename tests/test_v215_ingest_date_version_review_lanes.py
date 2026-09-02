@@ -454,8 +454,12 @@ def test_four_thousand_identical_unclassified_titles_is_a_fail(tmp_path: Path) -
     titles = _index_link_titles(html)
     assert "unclassified" not in {title.lower() for title in titles}
     passage_titles = [title for title in titles if "Passage nummer" in title]
-    assert len(passage_titles) == 12
-    assert len(set(passage_titles)) == 12
+    # Protocol v2.19: leftover unclassified is not equal one-by-one duty cards.
+    assert passage_titles == []
+    visible = html
+    assert "Resterend unclassified: 12" in visible or "Resterend unclassified: 12" in re.sub(
+        r"\s+", " ", visible
+    )
 
 
 # ---------------------------------------------------------------------------

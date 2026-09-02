@@ -33,6 +33,7 @@ from src.operations_console_app import create_console_app
 from src.operations_console_v1 import (
     ConsoleError,
     OperationsConsole,
+    remaining_unclassified,
     review_card_sentence,
     review_row_title,
     safe_store_filename,
@@ -544,9 +545,16 @@ def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path) -> None:
     }
     rows.append(planted)
     console._save_objects(receipt["snapshot_id"], rows)
+    leftover = remaining_unclassified(
+        _non_document(console.snapshot_objects(receipt["snapshot_id"]))
+    )
+    assert any(obj["object_id"] == planted["object_id"] for obj in leftover)
     html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
-    assert planted_text in html
-    assert planted["object_id"] in html
+    assert f"Resterend unclassified: {len(leftover)}" in html
+    card = _client(console).get(
+        f"/review?document={receipt['snapshot_id']}&object={planted['object_id']}"
+    ).text
+    assert planted_text in card
     again = console.reextract_unpublished(
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=receipt["snapshot_id"],

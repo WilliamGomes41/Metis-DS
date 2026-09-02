@@ -30,10 +30,12 @@ from src.operations_console_app import create_console_app
 from src.operations_console_v1 import (
     ConsoleError,
     OperationsConsole,
+    remaining_unclassified,
     review_lane,
     review_row_status,
     review_row_title,
     review_stacks,
+    slow_review_duty,
 )
 
 
@@ -314,18 +316,22 @@ def test_koppen_and_inhoud_stacks_show_counts(tmp_path: Path) -> None:
     receipt = _ingest(console, accounts, data=html_src, filename="stacks.html", title="Stacks")
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     koppen, inhoud = review_stacks(objects)
+    duty = slow_review_duty(objects)
+    leftover = remaining_unclassified(objects)
     assert koppen
     assert inhoud
     assert all(review_lane(obj) == "fast" for obj in koppen)
     assert all(review_lane(obj) == "slow" for obj in inhoud)
     html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
     assert re.search(rf"Koppen[^<]*\({len(koppen)}\)", html)
-    assert re.search(rf"Inhoud[^<]*\({len(inhoud)}\)", html)
+    assert re.search(rf"Inhoud[^<]*\({len(duty)}\)", html)
     assert "Koppen" in html
     assert "Inhoud" in html
     assert "review-lane-fast" in html
     assert "review-lane-slow" in html
     assert "/review/headings/batch-confirm" in html
+    if leftover:
+        assert f"Resterend unclassified: {len(leftover)}" in html
     lower = html.lower()
     for forbidden in ("zwaar/licht", "snel/langzaam", "speed-toggle", "envelope"):
         assert forbidden not in lower
@@ -352,7 +358,8 @@ def test_compact_rows_are_source_text_plus_status_not_three_column(tmp_path: Pat
         assert title != "Nog niet geclassificeerd"
         assert not title.startswith("console-")
         assert not title.startswith("snap-")
-    for obj in objects:
+    presented = [obj for obj in objects if review_lane(obj) == "fast" or obj in slow_review_duty(objects)]
+    for obj in presented:
         snippet = _text_of(obj)
         assert any(snippet[:40] in title or title[:40] in snippet for title in titles)
         assert review_row_title(obj) == snippet or review_row_title(obj).startswith(snippet[:40])
@@ -595,9 +602,16 @@ def test_ui_must_not_hide_stored_fragments_without_extract(tmp_path: Path) -> No
     console._save_objects(receipt["snapshot_id"], rows)
     stored = [_text_of(obj) for obj in _non_document(console.snapshot_objects(receipt["snapshot_id"]))]
     assert planted_text in stored
+    leftover = remaining_unclassified(
+        _non_document(console.snapshot_objects(receipt["snapshot_id"]))
+    )
+    assert any(obj["object_id"] == planted["object_id"] for obj in leftover)
     html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
-    assert planted_text in html
-    assert planted["object_id"] in html
+    assert f"Resterend unclassified: {len(leftover)}" in html
+    card = _client(console).get(
+        f"/review?document={receipt['snapshot_id']}&object={planted['object_id']}"
+    ).text
+    assert planted_text in card
     again = console.reextract_unpublished(
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
