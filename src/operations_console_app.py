@@ -23,6 +23,7 @@ from src.object_taxonomy_v1 import (
 )
 from src.operations_console_v1 import (
     ALLOWED_CLASSES,
+    ALLOWED_DELETE_NEXT,
     CONSOLE_VERSION,
     ConsoleError,
     OperationsConsole,
@@ -101,6 +102,10 @@ ERROR_COPY = {
     "recommendation_strength_requires_recommendation": "Sterkte hoort alleen bij een aanbeveling.",
     "unknown_recommendation_strength": "Kies DOEN, OVERWEEG of NIET DOEN.",
     "published_objects_must_not_be_rewritten": "Gepubliceerde objecten worden niet herschreven.",
+    "delete_confirmation_required": "Bevestig eerst dat je dit unpublished document wilt verwijderen.",
+    "published_projection_must_not_be_deleted": "Een gepubliceerde projectie wordt niet verwijderd.",
+    "unpublished_delete_role_required": "Verwijderen van unpublished documenten vereist researcher of reviewer.",
+    "hide_selected_objects_forbidden": "Geselecteerde objecten in een freeze die in Review blijft, worden niet verborgen.",
 }
 RELATION_LABELS = {
     "applies_if": "geldt indien",
@@ -367,6 +372,66 @@ def _document_card_heading(row: dict[str, Any]) -> str:
     """
 
 
+def _can_delete_unpublished(account: dict[str, Any] | None) -> bool:
+    roles = set((account or {}).get("roles") or [])
+    return bool(roles & {"researcher", "reviewer"})
+
+
+def _unpublished_delete_control(
+    row: dict[str, Any],
+    *,
+    account: dict[str, Any] | None,
+    console: OperationsConsole,
+    next_path: str,
+) -> str:
+    """Researcher Dutch delete control. Unpublished snapshots only. Confirm first."""
+    if not _can_delete_unpublished(account):
+        return ""
+    snap = str(row.get("snapshot_id") or "")
+    if not snap:
+        return ""
+    try:
+        if console.snapshot_is_published(snap):
+            return ""
+    except ConsoleError:
+        return ""
+    target = next_path if next_path in ALLOWED_DELETE_NEXT else "/review"
+    return f"""
+      <form class="delete-unpublished" method="post" action="/documents/delete">
+        <input type="hidden" name="snapshot_id" value="{_esc(snap)}">
+        <input type="hidden" name="next" value="{_esc(target)}">
+        <label class="check">
+          <input type="checkbox" name="confirm" value="1">
+          <span>Ik bevestig dat ik dit unpublished document wil verwijderen</span>
+        </label>
+        <button class="btn-secondary" type="submit">Verwijder unpublished document</button>
+      </form>
+    """
+
+
+def _ingested_document_list(
+    console: OperationsConsole,
+    documents: list[dict[str, Any]],
+    account: dict[str, Any],
+) -> str:
+    if not documents:
+        return (
+            "<h2>Ingeleverde documenten</h2>"
+            '<p class="muted">Nog geen documenten.</p>'
+        )
+    cards = []
+    for row in documents:
+        cards.append(
+            f"""
+            <article class="doc-card">
+              {_document_card_heading({**row, "status": row["state"]})}
+              {_unpublished_delete_control(row, account=account, console=console, next_path="/ingest")}
+            </article>
+            """
+        )
+    return f"<h2>Ingeleverde documenten</h2><div class=\"doc-list\">{''.join(cards)}</div>"
+
+
 def _strength_options(selected: str | None) -> str:
     options = ['<option value="">Nog niet vastgelegd</option>']
     for name in CLOSED_RECOMMENDATION_STRENGTHS:
@@ -567,6 +632,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                 </div>
                 <button class="btn-primary" type="submit">Inleveren</button>
               </form>
+              {_ingested_document_list(state, documents, account)}
             </section>
             {_help(room="ingest")}
             <script>
@@ -644,6 +710,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
               <p class="lead">Vastgelegd en klaar voor review.</p>
               <div class="doc-card">
                 {_document_card_heading({**receipt, "status": receipt["state"]})}
+                {_unpublished_delete_control(receipt, account=account, console=state, next_path="/ingest")}
               </div>
               <p><a class="btn-secondary" href="/review">Naar review</a> <a class="btn-secondary" href="/tree">Naar documentenhierarchie</a></p>
             </section>
@@ -697,6 +764,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     <article class="doc-card">
                       {_document_card_heading(child)}
                       <div class="doc-actions">{"".join(actions)}</div>
+                      {_unpublished_delete_control(child, account=account, console=state, next_path="/tree")}
                     </article>
                     """
                 )
@@ -760,6 +828,33 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             )
         return RedirectResponse("/tree", status_code=303)
 
+    @app.post("/documents/delete")
+    def documents_delete(
+        request: Request,
+        snapshot_id: str = Form(...),
+        confirm: str = Form(""),
+        next_path: str = Form("/review", alias="next"),
+        object_ids: list[str] = Form(default=[]),
+    ) -> RedirectResponse:
+        account = _require(request)
+        chosen: list[str] = []
+        if isinstance(object_ids, str):
+            chosen = [object_ids] if object_ids.strip() else []
+        elif object_ids:
+            chosen = [str(item).strip() for item in object_ids if str(item).strip()]
+        if chosen:
+            raise ConsoleError("hide_selected_objects_forbidden")
+        confirmed = str(confirm or "").strip().lower() in {"1", "on", "true", "yes", "ja"}
+        state.delete_unpublished_snapshot(
+            actor_id=account["account_id"],
+            snapshot_id=snapshot_id,
+            confirmed=confirmed,
+        )
+        target = (next_path or "").strip() or "/review"
+        if target not in ALLOWED_DELETE_NEXT:
+            target = "/review"
+        return RedirectResponse(target, status_code=303)
+
     @app.get("/review", response_class=HTMLResponse)
     def review_get(request: Request, document: str = "", object: str = "") -> str:
         account = _require(request)
@@ -787,13 +882,18 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                       {_document_card_heading({**row, "status": row["state"]})}
                       <p class="lead">Beoordeel Koppen als structuur en Inhoud als kennisobjecten.</p>
                       <p><a class="btn-primary" href="/review?document={_esc(row["snapshot_id"])}">Beoordeel</a></p>
+                      {_unpublished_delete_control(row, account=account, console=state, next_path="/review")}
                     </article>
                     """
                 )
         objects_html = ""
         chosen_object_id = object.strip()
         if chosen_row:
-            objects_html += f'<div class="doc-card">{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}</div>'
+            objects_html += (
+                f'<div class="doc-card">{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}'
+                f'{_unpublished_delete_control(chosen_row, account=account, console=state, next_path="/review")}'
+                "</div>"
+            )
             snapshot_objects = state.snapshot_objects(chosen)
             if not chosen_object_id:
                 def _index_item(obj: dict[str, Any], *, checkbox: bool = False) -> str:
