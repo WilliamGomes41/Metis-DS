@@ -1,0 +1,90 @@
+name: deploy-test
+
+# Protocol v2.22 wave C: MUST NOT activate until Azure App Service
+# vvn-metis-console-test exists. Merge to main MUST NOT auto-deploy to a
+# missing test app. Owner sets GitHub Actions variable METIS_TEST_APP_READY=true
+# only after that named test app exists. This PR does not create that app.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: metis-test-deployment
+  cancel-in-progress: true
+
+jobs:
+  inactive-until-test-app:
+    name: Fail-closed until vvn-metis-console-test exists
+    runs-on: ubuntu-latest
+    steps:
+      - name: Do not auto-deploy while the named test app is missing
+        run: |
+          if [ "${{ vars.METIS_TEST_APP_READY }}" = "true" ]; then
+            echo "METIS_TEST_APP_READY is true; deploy job may run"
+          else
+            echo "deploy-test remains inactive: vvn-metis-console-test is not declared ready"
+          fi
+
+  deploy:
+    name: Deploy to test
+    if: ${{ vars.METIS_TEST_APP_READY == 'true' }}
+    needs: inactive-until-test-app
+    runs-on: ubuntu-latest
+    environment: test
+    env:
+      METIS_TEST_APP_READY: ${{ vars.METIS_TEST_APP_READY }}
+      AZURE_TEST_WEBAPP_NAME: ${{ vars.AZURE_TEST_WEBAPP_NAME }}
+      METIS_DEPLOY_ENVIRONMENT: test
+      METIS_DEPLOY_IDENTITY: metis-deploy-test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Fail-closed activation and identity gate
+        run: |
+          python -c "from src.deploy_identity_v1 import require_deploy_activation, require_activation_from_env, TEST_APP; require_deploy_activation(ready_flag='${{ vars.METIS_TEST_APP_READY }}', declared_app=TEST_APP); require_activation_from_env()"
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements-dev.lock
+      - run: pip install --no-deps --no-build-isolation -e .
+      - run: python scripts/repository_preflight.py
+      - run: pytest -q
+      - name: Create fully deployable package with dependencies
+        run: bash scripts/create_azure_deploy_package.sh "$RUNNER_TEMP/metis-console.zip"
+      - name: Sign in to Azure using the test deploy identity
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_TEST_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Configure per-environment storage app settings (no secrets)
+        run: >-
+          az webapp config appsettings set
+          --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}"
+          --name "${{ vars.AZURE_TEST_WEBAPP_NAME }}"
+          --settings
+          G2_STORAGE_ACCOUNT="${{ vars.AZURE_TEST_STORAGE_ACCOUNT || 'aidataservice' }}"
+          G2_BLOB_CONTAINER="${{ vars.AZURE_TEST_BLOB_CONTAINER || 'canonical-sources-test' }}"
+          CONSOLE_DATA_ROOT="/home/data/metis-console-test"
+      - name: Deploy application code only
+        run: >-
+          az webapp deploy
+          --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}"
+          --name "${{ vars.AZURE_TEST_WEBAPP_NAME }}"
+          --src-path "$RUNNER_TEMP/metis-console.zip"
+          --type zip
+          --clean true
+          --async false
+      - name: Verify test health
+        run: >-
+          curl --fail --show-error --silent
+          --retry 12 --retry-delay 5 --retry-connrefused
+          "${{ vars.AZURE_TEST_APP_URL }}/health"
