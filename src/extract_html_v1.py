@@ -16,6 +16,8 @@ from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker
 
+from src.object_taxonomy_v1 import is_strength_stamp
+
 PARSER_VERSION = "html-visible-text-v1.1.0"
 BLOCK_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6", "p", "li"}
 SKIP_TAGS = {"script", "style", "noscript", "svg"}
@@ -94,14 +96,16 @@ class VisibleHTMLParser(HTMLParser):
             self.current = None
             if text:
                 level = int(tag[1]) if tag.startswith("h") and len(tag) == 2 and tag[1].isdigit() else None
-                if level:
+                if level and not is_strength_stamp(text):
                     self.heading_stack = [(lvl, txt) for lvl, txt in self.heading_stack if lvl < level]
                     self.heading_stack.append((level, text))
                     section_path = [txt for _, txt in self.heading_stack]
                     heading = text
                 else:
                     section_path = [txt for _, txt in self.heading_stack]
-                    heading = self.heading_stack[-1][1] if self.heading_stack else None
+                    heading = None if is_strength_stamp(text) else (
+                        self.heading_stack[-1][1] if self.heading_stack else None
+                    )
                 block.update({"text": text, "section_path": section_path, "heading": heading})
                 self.blocks.append(block)
         if self.root_class and tag not in VOID_TAGS:

@@ -52,8 +52,8 @@ def classify_block(text: str, max_size: float, bold: bool) -> str:
         return "background"
     if lower.startswith("risicofactoren scorelijst"):
         return "score_rule"
-    if t in {"DOEN", "OVERWEEG", "AFRADEN"}:
-        return "section"
+    if t in {"DOEN", "OVERWEEG", "AFRADEN", "NIET DOEN"}:
+        return "stamp"
     if max_size >= 16 or (bold and max_size >= 13 and len(t) < 120):
         return "section"
     if "•" in t or re.match(r"^(controleer|informeer|overleg|gebruik|verwijs|adviseer|overweeg)\b", lower):
@@ -156,20 +156,20 @@ def extract(pdf_path: Path, source_url: str, title: str, doc_id: str,
 
             obj_type = classify_block(text, b["max_size"], b["bold"])
             heading = None
+            if obj_type == "stamp":
+                continue
             if obj_type == "section":
                 heading = text.replace("\n", " ").strip()
-                if heading in {"DOEN", "OVERWEEG", "AFRADEN"}:
-                    # action-strength marker, retain under current section
-                    path = section_stack + [heading]
+                if heading in {"DOEN", "OVERWEEG", "AFRADEN", "NIET DOEN"}:
+                    continue
+                # Simple v0.1 heading stack: major heading replaces stack; subheading appends.
+                if b["max_size"] >= 20:
+                    section_stack = [heading]
+                elif b["max_size"] >= 15:
+                    section_stack = section_stack[:1] + [heading] if section_stack else [heading]
                 else:
-                    # Simple v0.1 heading stack: major heading replaces stack; subheading appends.
-                    if b["max_size"] >= 20:
-                        section_stack = [heading]
-                    elif b["max_size"] >= 15:
-                        section_stack = section_stack[:1] + [heading] if section_stack else [heading]
-                    else:
-                        section_stack = section_stack + [heading]
-                    path = section_stack.copy()
+                    section_stack = section_stack + [heading]
+                path = section_stack.copy()
             else:
                 path = section_stack.copy()
 

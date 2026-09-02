@@ -26,7 +26,7 @@ def style(block:dict[str,Any])->tuple[float,bool]:
 
 def classify(text:str,max_size:float,bold:bool)->str:
     t=text.strip()
-    if t in {'DOEN','OVERWEEG','AFRADEN'}: return 'section'
+    if t in {'DOEN','OVERWEEG','AFRADEN','NIET DOEN'}: return 'stamp'
     if max_size>=16 or (bold and max_size>=13 and len(t)<120): return 'section'
     return 'content'
 
@@ -53,12 +53,10 @@ def extract(pdf:Path, *, document_id:str, source_id:str, pages:list[int]|None=No
             max_size,bold=style(block); kind=classify(c,max_size,bold); heading=None
             if kind=='section':
                 heading=c.replace('\n',' ').strip()
-                if heading in {'DOEN','OVERWEEG','AFRADEN'}: path=stack+[heading]
-                else:
-                    if max_size>=20: stack=[heading]
-                    elif max_size>=15: stack=stack[:1]+[heading] if stack else [heading]
-                    else: stack=stack+[heading]
-                    path=stack.copy()
+                if max_size>=20: stack=[heading]
+                elif max_size>=15: stack=stack[:1]+[heading] if stack else [heading]
+                else: stack=stack+[heading]
+                path=stack.copy()
             else: path=stack.copy()
             seq+=1; fid=f'{document_id}-p{page_no:03d}-f{seq:03d}'
             x={'fragment_id':fid,'document_id':document_id,'source_id':source_id,'source_page':page_no,'bbox':bbox,'source_locator':page_bbox_locator(page_no,bbox),'raw_text':raw,'clean_text':c,'section_path':path,'heading':heading,'sequence':seq,'parser_version':PARSER_VERSION,'fragment_hash':'0'*64}
