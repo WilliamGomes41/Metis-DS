@@ -440,7 +440,9 @@ def test_extract_does_not_emit_kennisplatform_chrome_as_objects_or_koppen(
             "bricks-menu-item",
         },
     )
-    assert is_kennisplatform_chrome_element("nav", set())
+    assert is_kennisplatform_chrome_element("nav", {"bricks-nav-menu"})
+    assert is_kennisplatform_chrome_element("nav", {"site-nav"})
+    assert not is_kennisplatform_chrome_element("nav", set())
     assert not is_kennisplatform_chrome_element("h2", set())
     assert not is_kennisplatform_chrome_element("p", {"brxe-text"})
 
@@ -564,6 +566,11 @@ def test_relation_checkbox_label_is_adjacent_not_stretched(tmp_path: Path) -> No
     )
     assert input_rule
     assert "width: auto" in input_rule.group(0)
+    assert re.search(
+        r'input\[type="checkbox"\][^{]*\{[^}]*width:\s*auto',
+        css,
+        flags=re.S,
+    )
     assert "justify-between" not in APP_SOURCE.read_text(encoding="utf-8")
     label = re.search(
         r'<label class="check">\s*<input type="checkbox"[^>]*>\s*<span>Inleiding</span>\s*</label>',

@@ -654,10 +654,15 @@ def test_console_is_not_nurse_care_chat_or_public_website(tmp_path: Path) -> Non
     login = client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"}, follow_redirects=False)
     assert login.status_code in {200, 302, 303}
     ingest_page = client.get("/ingest").text.lower()
-    assert "chat is geen kamer" in ingest_page
+    assert "chat is geen kamer" not in ingest_page
+    assert "over deze console" not in ingest_page
     assert "interne operations console" in ingest_page
     assert "ingest" in ingest_page
     assert "review" in ingest_page
+    health = client.get("/health").json()
+    assert health["chat_room"] is False
+    assert health["nurse_frontend"] is False
+    assert health["product_api"] is False
 
 
 def test_continentie_researcher_path_is_the_console_mailbox(tmp_path: Path) -> None:

@@ -18,11 +18,19 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 from src.object_taxonomy_v1 import is_kennisplatform_chrome_text, is_strength_stamp
 
-PARSER_VERSION = "html-visible-text-v1.2.0"
+PARSER_VERSION = "html-visible-text-v1.1.0"
 BLOCK_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6", "p", "li"}
 SKIP_TAGS = {"script", "style", "noscript", "svg"}
 VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
-CHROME_SKIP_TAGS = frozenset({"nav", "footer"})
+CHROME_SKIP_TAGS = frozenset({"footer"})
+CHROME_NAV_TOKENS = frozenset(
+    {
+        "bricks-nav-menu",
+        "site-nav",
+        "main-navigation",
+        "navbar",
+    }
+)
 CHROME_CLASS_TOKENS = frozenset(
     {
         "bricks-menu-item",
@@ -38,13 +46,18 @@ CHROME_CLASS_TOKENS = frozenset(
 
 
 def is_kennisplatform_chrome_element(tag: str, classes: set[str] | list[str] | tuple[str, ...]) -> bool:
-    """True for kennisplatform nav/shell markup. Not a closed heading list."""
-    if (tag or "").lower() in CHROME_SKIP_TAGS:
-        return True
+    """True for kennisplatform nav/shell markup, not a richtlijn Inhoudsopgave."""
+    tag_l = (tag or "").lower()
     tokens = {str(item) for item in classes if item}
     if tokens & CHROME_CLASS_TOKENS:
         return True
-    return any(token.startswith("menu-item") for token in tokens)
+    if any(token.startswith("menu-item") for token in tokens):
+        return True
+    if tag_l in CHROME_SKIP_TAGS:
+        return True
+    if tag_l == "nav" and tokens & CHROME_NAV_TOKENS:
+        return True
+    return False
 
 
 def _stable_hash(value: dict[str, Any]) -> str:

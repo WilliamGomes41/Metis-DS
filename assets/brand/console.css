@@ -256,6 +256,13 @@ input, select, textarea {
   color: var(--text);
 }
 
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  max-width: none;
+  padding: 0;
+}
+
 textarea { min-height: 88px; }
 
 .actions {
