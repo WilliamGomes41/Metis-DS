@@ -50,6 +50,7 @@ from src.object_taxonomy_v1 import (
 )
 from src.open_original_v1 import OpenOriginalError, open_source_passage
 from src.publish_authorization_v1 import invalidate_for_object, still_matches, tuple_record
+from src.review_ledger import append_event
 from src.review_workflow_v3 import apply_reviews
 from src.revision_workflow import bump_patch, create_revision
 from src.semantic_transform_generic_v1 import transform as transform_generic
@@ -60,6 +61,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_V12 = REPO_ROOT / "schemas" / "knowledge_object.schema.v1.2.json"
 CONSOLE_VERSION = "operations-console-v1.0.0"
 CAPTURED = "captured_not_published"
+PUBLISHED_ENVELOPE_STATES = frozenset({"published", "superseded", "withdrawn"})
+UNPUBLISHED_DELETE_EVENT = "unpublished_snapshot_deleted"
+PUBLISHED_PROJECTION_FILENAME = "published_projection.jsonl"
+ALLOWED_DELETE_NEXT = frozenset({"/ingest", "/review", "/tree"})
 ALLOWED_ROLES = frozenset({"researcher", "reviewer", "publisher"})
 ALLOWED_CLASSES = ("richtlijn", "handreiking", "artikel", "transcript", "podcast")
 SOURCE_VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+)*$")
@@ -1176,6 +1181,127 @@ class OperationsConsole:
         self._bindings[snapshot_id] = []
         self._save_bindings()
         return self._receipt(envelope)
+
+    def snapshot_is_published(self, snapshot_id: str) -> bool:
+        """True when this snapshot is a published projection or has been published."""
+        envelope = self._envelope(snapshot_id)
+        if envelope.get("state") in PUBLISHED_ENVELOPE_STATES:
+            return True
+        if envelope.get("published") is True:
+            return True
+        rows = self._load_objects(snapshot_id)
+        if any((row.get("governance") or {}).get("publication_status") == "published" for row in rows):
+            return True
+        return self._snapshot_in_published_projection(snapshot_id)
+
+    def _published_projection_path(self) -> Path:
+        return self.runtime / PUBLISHED_PROJECTION_FILENAME
+
+    def _snapshot_in_published_projection(self, snapshot_id: str) -> bool:
+        path = self._published_projection_path()
+        if not path.is_file():
+            return False
+        token = safe_snapshot_id(snapshot_id)
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if row.get("snapshot_id") == token:
+                return True
+            meta = row.get("metadata") or {}
+            if meta.get("snapshot_id") == token:
+                return True
+        return False
+
+    def _maybe_remove_unpublished_freeze_bytes(self, envelope: dict[str, Any]) -> bool:
+        """Remove freeze bytes of this unpublished source when no other snapshot uses them.
+
+        MUST NOT walk ``/home/data``. MUST NOT rmtree the source store.
+        """
+        digest = safe_path_token(str(envelope["sha256"]), pattern=STORE_DIGEST_RE)
+        still_used = any(
+            row.get("sha256") == digest and row.get("snapshot_id") != envelope["snapshot_id"]
+            for row in self._envelopes.values()
+        )
+        if still_used:
+            return False
+        filename = safe_store_filename(Path(str(envelope.get("binary_path") or "")).name)
+        stored = safe_path_under(self.source_store, digest, filename)
+        removed = False
+        if stored.is_file():
+            stored.unlink()
+            removed = True
+        parent = stored.parent
+        try:
+            if parent.is_dir() and parent != self.source_store.resolve() and not any(parent.iterdir()):
+                parent.rmdir()
+        except OSError:
+            pass
+        return removed
+
+    def delete_unpublished_snapshot(
+        self,
+        *,
+        actor_id: str,
+        snapshot_id: str,
+        confirmed: bool = False,
+    ) -> dict[str, Any]:
+        """Remove one unpublished captured snapshot from the operations console.
+
+        Whole snapshot only. MUST confirm. MUST NOT delete a published projection.
+        MUST NOT hide selected objects inside a freeze that stays in Review.
+        Four-eyes is not required. Capture is not publication.
+        """
+        if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
+            raise ConsoleError("unknown_snapshot")
+        token = safe_snapshot_id(snapshot_id)
+        account = self._account(actor_id)
+        if _is_forbidden_identity(account["username"]) or _is_forbidden_identity(account["display_name"]):
+            raise ConsoleError("forbidden_reviewer_identity")
+        roles = set(account["roles"])
+        if "researcher" not in roles and "reviewer" not in roles:
+            raise ConsoleError("unpublished_delete_role_required")
+        if not confirmed:
+            raise ConsoleError("delete_confirmation_required")
+        envelope = self._envelope(token)
+        if self.snapshot_is_published(token):
+            raise ConsoleError("published_projection_must_not_be_deleted")
+        title = str(envelope["title"])
+        digest = str(envelope["sha256"])
+        objects_path = self._objects_path(token)
+        if objects_path.is_file():
+            objects_path.unlink()
+        self._envelopes.pop(token, None)
+        self._bindings.pop(token, None)
+        self._save_envelopes()
+        self._save_bindings()
+        freeze_removed = self._maybe_remove_unpublished_freeze_bytes(envelope)
+        append_event(
+            self._ledger_path,
+            event_type=UNPUBLISHED_DELETE_EVENT,
+            object_id=token,
+            object_version=str(envelope.get("version") or ""),
+            actor=account["username"],
+            details={
+                "snapshot_id": token,
+                "sha256": digest,
+                "title": title,
+                "actor_id": actor_id,
+                "display_name": account["display_name"],
+            },
+        )
+        return {
+            "deleted": True,
+            "snapshot_id": token,
+            "sha256": digest,
+            "title": title,
+            "actor": account["username"],
+            "freeze_bytes_removed": freeze_removed,
+            "four_eyes_required": False,
+            "second_named_reviewer_required": False,
+            "capture_is_publication": False,
+            "g2": "BLOCKED",
+        }
 
     def _extract(self, kind: str, path: Path, *, document_id: str, source_id: str) -> list[dict[str, Any]]:
         if kind == "html":
