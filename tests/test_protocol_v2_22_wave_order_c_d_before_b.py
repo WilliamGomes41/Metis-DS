@@ -248,7 +248,7 @@ def test_v222_leaves_v216_through_v221_delta_files_untouched() -> None:
     assert b"**Protocol delta version:** 2.19.0" in v219
     assert b"**Protocol delta version:** 2.20.0" in v220
     assert b"**Protocol delta version:** 2.21.0" in v221
-    new_law = b"Bounded supersession of Protocol v2.21 §3 order A then B then C then D, for next-implementation order only"
+    new_law = b"for next-implementation order only. Waves themselves unchanged"
     assert new_law not in v216
     assert new_law not in v217
     assert new_law not in v218
