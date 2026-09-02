@@ -1,0 +1,13 @@
+{
+  "manifest_version": "1.0",
+  "protocol_version": "2.22.0",
+  "protocol_path": "docs/PROTOCOL_V2_22_WAVE_ORDER_C_D_BEFORE_B_DELTA.md",
+  "protocol_sha256": "78691b9c54d57b5997dfe5819fb383c62f709db8d5a62b8e2d34761a3bd0a013",
+  "repository": "WilliamGomes41/VENVN-DS",
+  "default_branch": "main",
+  "commit_sha": "pending_after_merge",
+  "approval_date": "2026-09-03",
+  "approval_authority": "project_owner",
+  "branch_protection_status": "temporary_procedural_control",
+  "conformance_effect": "does_not_override_gate_status"
+}
