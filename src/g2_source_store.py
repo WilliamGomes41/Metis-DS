@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Protocol
@@ -16,6 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "g2_source_store.v1.json"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 FILENAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+ACCOUNT_RE = re.compile(r"^[a-z0-9]{3,24}$")
+CONTAINER_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$")
 LOCATOR_RE = re.compile(
     r"^azure://(?P<account>[a-z0-9]+)/(?P<container>[a-z0-9-]+)"
     r"/(?P<sha256>[0-9a-f]{64})/(?P<filename>[A-Za-z0-9._-]+)$"
@@ -26,8 +29,29 @@ def load_g2_store() -> dict[str, Any]:
     return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
 
 
+def effective_g2_store() -> dict[str, Any]:
+    """Runtime coordinates from app settings. Git baseline stays in the JSON file.
+
+    Storage account/container MAY come from environment. ``g2_status`` MUST stay
+    BLOCKED: an app-setting MUST NOT open the publication gate.
+    """
+    store = dict(load_g2_store())
+    account = os.environ.get("G2_STORAGE_ACCOUNT", "").strip()
+    container = os.environ.get("G2_BLOB_CONTAINER", "").strip()
+    if account:
+        if ACCOUNT_RE.fullmatch(account) is None:
+            raise ValueError("g2_storage_account_invalid")
+        store["storage_account"] = account
+    if container:
+        if CONTAINER_RE.fullmatch(container) is None:
+            raise ValueError("g2_blob_container_invalid")
+        store["container"] = container
+    store["g2_status"] = "BLOCKED"
+    return store
+
+
 def g2_gate_status() -> str:
-    store = load_g2_store()
+    store = effective_g2_store()
     status = str(store.get("g2_status") or "BLOCKED")
     return status if status == "BLOCKED" else "BLOCKED"
 
@@ -58,7 +82,7 @@ def build_g2_locator(*, sha256: str, filename: str) -> str:
         raise ValueError("g2_locator_checksum_invalid")
     if raw != name or not FILENAME_RE.fullmatch(name):
         raise ValueError("g2_locator_filename_invalid")
-    store = load_g2_store()
+    store = effective_g2_store()
     return f"azure://{store['storage_account']}/{store['container']}/{digest}/{name}"
 
 
@@ -69,7 +93,7 @@ def parse_g2_locator(locator: str | None) -> dict[str, str] | None:
     if match is None:
         return None
     parts = match.groupdict()
-    store = load_g2_store()
+    store = effective_g2_store()
     if parts["account"] != store["storage_account"]:
         return None
     if parts["container"] != store["container"]:
@@ -95,7 +119,7 @@ class AzureBlobSourceStore:
     """Content-addressed canonical source storage backed by Azure Blob."""
 
     def __init__(self, *, blob_service_client: Any | None = None) -> None:
-        store = load_g2_store()
+        store = effective_g2_store()
         self.account = str(store["storage_account"])
         self.container = str(store["container"])
         if blob_service_client is None:

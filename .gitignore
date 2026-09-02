@@ -48,6 +48,8 @@ assets/brand/fonts/**
 # Build artifacts
 build/
 dist/
+.python_packages/
+*.azure-deploy.zip
 
 # Human review returns / audit exports belong in controlled data storage, not source control
 output/v2/review_return/
