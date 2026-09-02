@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-labelledby="title">
+  <title id="title">Metis — V&amp;VN Data Services</title>
+  <g transform="translate(20 18) scale(.63)">
+    <g fill="none" stroke-linecap="round" stroke-width="58">
+      <path d="M82 116h112c70 0 88 140 168 140h66" stroke="#13A8D4"/>
+      <path d="M82 256h346" stroke="#56309A"/>
+      <path d="M82 396h112c70 0 88-140 168-140h66" stroke="#13A8D4"/>
+    </g>
+    <circle cx="82" cy="116" r="47" fill="#13A8D4"/><circle cx="82" cy="256" r="47" fill="#56309A"/>
+    <circle cx="82" cy="396" r="47" fill="#13A8D4"/><circle cx="430" cy="256" r="51" fill="#E72D05"/>
+  </g>
+  <text x="370" y="205" fill="#0A1B3A" font-family="Arial, Helvetica, sans-serif" font-size="164" font-weight="700">Metis</text>
+  <text x="378" y="286" fill="#56309A" font-family="Arial, Helvetica, sans-serif" font-size="57" font-weight="500" letter-spacing="1">V&amp;VN Data Services</text>
+</svg>
