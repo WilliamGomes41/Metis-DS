@@ -8,6 +8,7 @@ PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 from __future__ import annotations
 
 import re
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
@@ -129,6 +130,33 @@ def _text_of(obj: dict) -> str:
     return ((obj.get("content") or {}).get("clean_text") or "").strip()
 
 
+class _VisibleTextParser(HTMLParser):
+    """Visible page text without script/style payloads (avoids tag-filter regexes)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: list[str] = []
+        self._skip = 0
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        if tag.lower() in {"script", "style"}:
+            self._skip += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in {"script", "style"} and self._skip:
+            self._skip -= 1
+
+    def handle_data(self, data: str) -> None:
+        if not self._skip:
+            self.parts.append(data)
+
+
+def _visible_text(html: str) -> str:
+    parser = _VisibleTextParser()
+    parser.feed(html)
+    return " ".join(parser.parts)
+
+
 def _index_link_titles(html: str) -> list[str]:
     titles = []
     for match in re.finditer(
@@ -136,7 +164,7 @@ def _index_link_titles(html: str) -> list[str]:
         html,
         flags=re.S,
     ):
-        titles.append(re.sub(r"<[^>]+>", "", match.group(1)).strip())
+        titles.append(_visible_text(match.group(1)).strip())
     return titles
 
 
@@ -403,8 +431,7 @@ def test_stamps_bind_to_recommendation_not_objects_or_koppen(tmp_path: Path) -> 
     ).text
     assert "Sterkte van de aanbeveling: DOEN — dit moet de zorgverlener doen." in card
     assert "GRADE" not in card
-    visible = re.sub(r"<script[\s\S]*?</script>", " ", card)
-    visible = re.sub(r"<[^>]+>", " ", visible)
+    visible = _visible_text(card)
     assert not re.search(r"\b(weak|conditional)\b", visible, flags=re.I)
     assert "GRADE" not in visible
     assert stamp_value("DOEN") == "doen"
