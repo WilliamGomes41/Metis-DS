@@ -1,0 +1,61 @@
+name: deploy-test
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: metis-test-deployment
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify ${{ github.sha }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements-dev.lock
+      - run: pip install --no-deps --no-build-isolation -e .
+      - run: python scripts/repository_preflight.py
+      - run: python -m compileall -q src
+      - run: pytest -q
+
+  deploy:
+    name: Deploy to test
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create exact source package
+        run: scripts/create_azure_deploy_package.sh "$RUNNER_TEMP/metis-console.zip"
+      - name: Sign in to Azure using GitHub OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy application code only
+        run: >-
+          az webapp deploy
+          --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}"
+          --name "${{ vars.AZURE_TEST_WEBAPP_NAME }}"
+          --src-path "$RUNNER_TEMP/metis-console.zip"
+          --type zip
+          --clean true
+          --async false
+      - name: Verify test health
+        run: >-
+          curl --fail --show-error --silent
+          --retry 12 --retry-delay 5 --retry-connrefused
+          "${{ vars.AZURE_TEST_APP_URL }}/health"
