@@ -675,10 +675,11 @@ def test_continentie_researcher_path_is_the_console_mailbox(tmp_path: Path) -> N
     client = TestClient(create_console_app(console))
     client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
     ingest_page = client.get("/ingest").text.lower()
-    assert "continentie" in ingest_page
+    assert "onderwerp" in ingest_page
     assert "mailbox" in ingest_page or "ingest" in ingest_page
     assert "onderwerp" in ingest_page
-    assert "parallel ingestpad voor engineers" in ingest_page
+    assert "parallel ingestpad voor engineers" not in ingest_page
+    assert "over deze console" not in ingest_page
 
 
 def _html_client(tmp_path: Path) -> tuple[TestClient, OperationsConsole, dict]:

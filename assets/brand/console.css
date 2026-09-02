@@ -570,14 +570,32 @@ textarea:focus-visible {
 }
 
 .relation-copy { margin: 0 0 4px; }
-.relations .check { margin: 0; }
+.relations .check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: auto;
+  max-width: 100%;
+  margin: 0;
+}
+.relations .check input[type="checkbox"] {
+  width: auto;
+  max-width: none;
+  flex: 0 0 auto;
+  margin: 0;
+}
+.relations .check span {
+  flex: 0 1 auto;
+}
 .relations .btn-secondary { margin-top: 14px; }
 .review-decision-form { margin-top: 18px; }
 .review-decision-form .review-step + .review-step { margin-top: 12px; }
 .decision-comment, .decision-correction { margin-top: 12px; }
 
 .review-card-bronpassage pre,
-.bronpassage pre {
+.bronpassage pre,
+.bronpassage-prose {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   margin: 0 0 12px;

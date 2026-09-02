@@ -288,8 +288,9 @@ def test_first_review_screen_names_document_task_and_why(tmp_path: Path) -> None
     assert "Continentie fixture" in html
     assert "richtlijn" in html.lower()
     assert "continentie" in html.lower()
-    assert "EPD" in html
     assert "Beoordeel" in html
+    assert "Dit wordt wat een EPD MAG zeggen." not in html
+    assert "wat een EPD MAG zeggen" not in html
     first = _client(console).get("/review").text
     assert first.count('href="/review?document=') >= 1
 

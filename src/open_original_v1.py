@@ -7,6 +7,8 @@ Missing or empty source_locator fails closed.
 """
 from __future__ import annotations
 
+import re
+from html.parser import HTMLParser
 from io import BytesIO
 from typing import Any
 
@@ -52,6 +54,36 @@ def passage_from_html_freeze(freeze_bytes: bytes, locator_value: str) -> str:
     lines = text.splitlines()
     excerpt = lines[start - 1 : end]
     return "\n".join(excerpt)
+
+
+class _VisibleProseParser(HTMLParser):
+    """Display-only tag stripper. Locators stay on freeze bytes."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._skip = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() in {"script", "style", "noscript"}:
+            self._skip += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in {"script", "style", "noscript"} and self._skip:
+            self._skip -= 1
+
+    def handle_data(self, data: str) -> None:
+        if not self._skip:
+            self.parts.append(data)
+
+
+def researcher_visible_prose(passage: str) -> str:
+    """Readable sentence for the researcher surface. Never tags or CSS classes."""
+    text = passage or ""
+    parser = _VisibleProseParser()
+    parser.feed(text)
+    parser.close()
+    return re.sub(r"\s+", " ", "".join(parser.parts)).strip()
 
 
 def passage_from_pdf_freeze(freeze_bytes: bytes, locator_value: str) -> str:

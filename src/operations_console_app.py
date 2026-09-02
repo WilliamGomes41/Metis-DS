@@ -19,6 +19,7 @@ from src.object_taxonomy_v1 import (
     CLOSED_RECOMMENDATION_STRENGTHS,
     STRENGTH_STAMP_LABELS,
     recommendation_strength_sentence,
+    recommendation_strength_ui_applies,
 )
 from src.operations_console_v1 import (
     ALLOWED_CLASSES,
@@ -26,16 +27,17 @@ from src.operations_console_v1 import (
     ConsoleError,
     OperationsConsole,
     REPO_ROOT,
-    review_lane,
     review_row_status,
     review_row_title,
     review_stacks,
 )
+from src.open_original_v1 import researcher_visible_prose
 from src.serving_relations_v1 import CLOSED_RELATION_TYPES, proposed_relations
 
 SERVICE_VERSION = CONSOLE_VERSION
 COOKIE = "console_session"
 BRAND_DIR = REPO_ROOT / "assets" / "brand"
+RESEARCHER_ROOMS = frozenset({"ingest", "tree", "review"})
 HELP_ONCE = (
     "Interne operations console voor richtlijnonderzoekers en reviewers. "
     "Dit is niet de Product API. Niet ontworpen voor verpleegkundigen. "
@@ -210,7 +212,9 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
 """
 
 
-def _help() -> str:
+def _help(*, room: str = "") -> str:
+    if room in RESEARCHER_ROOMS:
+        return ""
     return f"""
     <details class="help">
       <summary>Over deze console</summary>
@@ -537,7 +541,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                       </div>
                     </div>
                     <label for="family">Onderwerp</label>
-                    <input id="family" name="family" value="continentie" required>
+                    <input id="family" name="family" required autocomplete="off">
                     <label for="ingest_kind">Nieuw of nieuwe versie</label>
                     <select id="ingest_kind" name="ingest_kind">
                       <option value="new">Nieuw document</option>
@@ -560,7 +564,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                 <button class="btn-primary" type="submit">Inleveren</button>
               </form>
             </section>
-            {_help()}
+            {_help(room="ingest")}
             <script>
             (function () {{
               var kind = document.getElementById("ingest_kind");
@@ -639,7 +643,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
               </div>
               <p><a class="btn-secondary" href="/review">Naar review</a> <a class="btn-secondary" href="/tree">Naar documentenhierarchie</a></p>
             </section>
-            {_help()}
+            {_help(room="ingest")}
             """
         )
 
@@ -704,7 +708,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
               <p class="lead">Documenten per onderwerp en klasse. Verplaatsen of promoveren vanaf het document.</p>
               {"".join(blocks) or empty}
             </section>
-            {_help()}
+            {_help(room="tree")}
             """
         )
 
@@ -777,7 +781,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     f"""
                     <article class="doc-card">
                       {_document_card_heading({**row, "status": row["state"]})}
-                      <p class="lead">Wat jij bevestigt, wordt wat een EPD MAG zeggen.</p>
+                      <p class="lead">Beoordeel Koppen als structuur en Inhoud als kennisobjecten.</p>
                       <p><a class="btn-primary" href="/review?document={_esc(row["snapshot_id"])}">Beoordeel</a></p>
                     </article>
                     """
@@ -820,7 +824,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     </section>
                     <section class="review-lane-slow">
                       <h2>Inhoud ({len(inhoud)})</h2>
-                      <p class="lead">Beoordeel elk kennisobject afzonderlijk. Dit wordt wat een EPD MAG zeggen.</p>
+                      <p class="lead">Beoordeel elk kennisobject afzonderlijk.</p>
                       <ol class="object-index">{slow_items}</ol>
                     </section>
                 """
@@ -841,7 +845,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     passage_html = f"""
                   <aside class="review-card-bronpassage" aria-label="Exacte bronpassage">
                     <h4>Onderbouwing uit het brondocument</h4>
-                    <pre>{_esc(opened.get("passage") or "")}</pre>
+                    <p class="bronpassage-prose">{_esc(researcher_visible_prose(opened.get("passage") or ""))}</p>
                     <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(chosen)}&object={_esc(obj["object_id"])}">Bekijk in brondocument</a></p>
                   </aside>
                     """
@@ -871,7 +875,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                   </form>
                     """
                 stamp_html = ""
-                if review_lane(obj) != "fast":
+                if recommendation_strength_ui_applies(obj):
                     stamp_html = _stamp_block(obj)
                 objects_html += f"""
                 <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">Terug naar Inhoud</a></p>
@@ -920,11 +924,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                 </article>
                 """
         empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
-        lead = (
-            "Beoordeel dit document. Wat jij bevestigt, wordt wat een EPD MAG zeggen."
-            if not chosen
-            else "Beoordeel Koppen als structuur en Inhoud als kennisobject. Dit wordt wat een EPD MAG zeggen."
-        )
+        lead = "Beoordeel Koppen als structuur en Inhoud als kennisobjecten."
         return _page(
             f"""
             {_nav(account, "review", _counts(account))}
@@ -935,7 +935,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
               {"".join(cards) if not chosen else ""}
               {objects_html or empty}
             </section>
-            {_help()}
+            {_help(room="review")}
             """
         )
 
@@ -954,11 +954,11 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
               <h1>Bronpassage</h1>
               <p class="lead">Exacte plaats in het geüploade origineel.</p>
               <article class="object">
-                <pre>{_esc(opened.get("passage") or "")}</pre>
+                <p class="bronpassage-prose">{_esc(researcher_visible_prose(opened.get("passage") or ""))}</p>
               </article>
               <p><a class="btn-secondary" href="/review?document={_esc(chosen)}&object={_esc(object_id)}">Terug naar review</a></p>
             </section>
-            {_help()}
+            {_help(room="review")}
             """
         )
 
