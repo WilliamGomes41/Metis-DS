@@ -5,7 +5,7 @@
 **Approval date:** 2026-09-02  
 **Approved by:** Project owner  
 **Extends:** Protocol v2.16.0  
-**Highest change class:** C3 spanning review-surface / retrieve-safety (slogan copy, via-negativa help, raw-HTML bronpassage, and site chrome as objects bias assessment)  
+**Highest change class:** C3 spanning review-surface / retrieve-safety (slogan copy, via-negativa help, raw-HTML bronpassage, site chrome as objects, stamp UI on non-recommendation, and stretched relation checkboxes bias assessment)  
 **Normative language:** MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are normative requirements
 
 ## 1. Purpose
@@ -22,12 +22,13 @@ Live evidence the same day:
 - Ingest field Onderwerp is hardcoded `value="continentie"` in GET `/ingest`. Owner: the field MUST be empty on a fresh new ingest. This is not browser cache. Class MAY still default to `richtlijn` (closed set); this delta MUST NOT expand scope to class.
 - Bronpassage right column rendered freeze HTML as `<pre>` of raw bytes (`</h3><div class="brxe-faadvp brxe-text"><p>…`). The researcher MUST see the same readable sentence as the knowledge object, without HTML tags, CSS class names, or kennisplatform markup. Protocol v2.11 freeze bytes and locators stay exact (MUST NOT reserialize or re-save the freeze). The researcher surface is visible prose derived from that locator, not the raw tag soup. Open-origineel remains required before type confirm.
 - Extract emitted kennisplatform chrome as objects/headings (Home, Richtlijnen, Meedenken, Kennisinstituut V&VN, Tools, Veelgestelde vragen, duplicated). Those MUST NOT be knowledge objects and MUST NOT land in Koppen. Koppen = real guideline TOC/section titles of the richtlijn body, not site nav.
+- Owner photos the same day after PR #74 opened: (1) a review card titled **Tools**, unclassified, snippet the single word Tools, right column raw HTML of the kennisplatform nav (`<li class="menu-item … bricks-menu-item"><a href="https://kennisplatform.venvn.nl/tools/">Tools</a></li>`), and **Sterkte van de aanbeveling** (DOEN/OVERWEEG/NIET DOEN picker) on that Tools object; owner: “Je krijgt soms nogsteeds 1 woord”; (2) relations layout “Dit kennisobject is onderliggend aan:” with a checkbox far left and the label **Inleiding** far right, huge empty gap; owner: vinkje and Inleiding still lie very far apart; (3) bronpassage for the doelgroep sentence still shows `</h3><div class="brxe-faadvp brxe-text"><p>De richtlijn is bedoeld voor …`; owner asked “Is dat hoe het definitief eruit gaat zien?” — recorded answer NO. Owner: “Ik zie inleiding, doel, doelgroep en aanleiding vaker voorkomen; ik ga ervanuit dat dit voor meerdere delen geldt.” These MUST NOT remain. One-word chrome remains a fail (Protocol v2.16 tiny-objects plus this chrome rule). Stamps exist only on type `recommendation`. The v2.16 compact-row bar MUST also bind relation checkboxes. Bronpassage prose is per-object / whole freeze, not one card. Inleiding, Doel, Doelgroep and Aanleiding are examples of sections the law covers, not a closed list.
 - 2641 unclassified on one richtlijn remains a fail of the review surface (Protocol v2.15 / v2.16 bar unchanged).
 - Serving fail-closed unchanged: only confirmed `recommendation` MAY be `supported`. Four-eyes unchanged. `publish()` remains G2-BLOCKED. Capture is not publication. Unpublished Continentie MAY be re-extracted after this law; source SHA-256 stays; unpublished object identities MAY be replaced. MUST NOT hide stored fragments without a new extract.
 
 Live baseline on `main` before this delta is Protocol v2.16.0 plus Protocol v2.15.0 plus Protocol v2.13.0 plus Protocol v2.12.0 plus Protocol v2.11.0. Protocol v2.2.0, v2.3.0, v2.4.0, v2.5.0, v2.6.0, v2.7.0, v2.8.0, v2.9.0, v2.10.0, v2.11.0, v2.12.0, v2.13.0, v2.15.0, v2.16.0 and this delta jointly form normative baseline v2.17.0. Protocol v2.14 (lifecycle names and `valid_from` / `valid_until` serving bounds; captured → classified → reviewed → approved → published → superseded → withdrawn → archived) is LOCKED as the later lifecycle/time delta and MUST NOT be written now. This file is not Protocol v2.14.
 
-This is a **bounded supersession**. It does NOT reopen Protocol v2.11 freeze/locator (except the researcher-visible prose derived from those locators), Protocol v2.12 types/projection, Protocol v2.13 atomic objects/relations/four-eyes, Protocol v2.15 ingest-date/version/type-lanes, Protocol v2.16 one-door / stacks / compact-rows / stamps / tiny-objects (except the copy, help, Onderwerp, bronpassage-display and chrome-extract readings superseded here), G2, Azure, LLM, or Protocol v2.14 time/lifecycle. It does NOT reopen four-eyes or publish as C5. The v2.12 closed serving typeset remains UNCHANGED:
+This is a **bounded supersession**. It does NOT reopen Protocol v2.11 freeze/locator (except the researcher-visible prose derived from those locators), Protocol v2.12 types/projection, Protocol v2.13 atomic objects/relations/four-eyes, Protocol v2.15 ingest-date/version/type-lanes, Protocol v2.16 one-door / stacks / compact-rows / stamps / tiny-objects (except the copy, help, Onderwerp, bronpassage-display, chrome-extract, stamp-UI-on-non-recommendation, stretched-relation-checkbox and next-implementation readings superseded here), G2, Azure, LLM, or Protocol v2.14 time/lifecycle. It does NOT reopen four-eyes or publish as C5. The v2.12 closed serving typeset remains UNCHANGED:
 
 `heading`, `definition`, `explanation`, `condition`, `exception`, `recommendation`
 
@@ -35,11 +36,11 @@ plus `unclassified` as default, not a sixth advice type. Operators MUST NOT inve
 
 Four layers remain: source/evidence → canonical knowledge → governance → product. This delta MUST NOT invent a fifth layer and MUST NOT collapse those four.
 
-All Protocol v2.6 room rules, all Protocol v2.7 first-wave source, retrieve-and-abstain and distribution rules (except the v2.11 HTML-URL supersession), all Protocol v2.8 primary-user and two-axis hierarchy rules, all Protocol v2.9 researcher-task UX and V&VN digital-brand rules (except the short-help via-negativa reading superseded in section 4), all Protocol v2.10 Documentenhierarchie, waiting-task badge and Accounts-room rules, all Protocol v2.11 freeze/locator rules (except researcher-visible bronpassage prose in section 6), all Protocol v2.12 type/review/projection rules, all Protocol v2.13 atomic-object, classification, closed-relation and high-risk four-eyes rules, all Protocol v2.15 ingest-date, ingest-version and type-based review-lane rules, and all Protocol v2.16 one-door, two-stack, compact-row, stamp and tiny-object rules remain in force, except the slogan, HELP_ONCE via-negativa, prefilled-Onderwerp, raw-HTML-bronpassage, site-chrome-object and next-implementation readings superseded in sections 3–8 and 10. This protocol-only change does not implement console Python, extract, kernel, Product API or `publish()`. Do not rewrite `src/operations_console_*.py`, `src/extract_*.py` or `src/product_api_*.py` in this protocol change.
+All Protocol v2.6 room rules, all Protocol v2.7 first-wave source, retrieve-and-abstain and distribution rules (except the v2.11 HTML-URL supersession), all Protocol v2.8 primary-user and two-axis hierarchy rules, all Protocol v2.9 researcher-task UX and V&VN digital-brand rules (except the short-help via-negativa reading superseded in section 4), all Protocol v2.10 Documentenhierarchie, waiting-task badge and Accounts-room rules, all Protocol v2.11 freeze/locator rules (except researcher-visible bronpassage prose in section 6), all Protocol v2.12 type/review/projection rules, all Protocol v2.13 atomic-object, classification, closed-relation and high-risk four-eyes rules, all Protocol v2.15 ingest-date, ingest-version and type-based review-lane rules, and all Protocol v2.16 one-door, two-stack, compact-row, stamp and tiny-object rules remain in force, except the slogan, HELP_ONCE via-negativa, prefilled-Onderwerp, raw-HTML-bronpassage, site-chrome-object, stamp-UI-on-non-recommendation, stretched-relation-checkbox and next-implementation readings superseded in sections 3–9 and 12. This protocol-only change does not implement console Python, extract, kernel, Product API or `publish()`. Do not rewrite `src/operations_console_*.py`, `src/extract_*.py` or `src/product_api_*.py` in this protocol change.
 
-This delta is a **scoped supersession** of any reading that (1) required or allowed the EPD MAG slogan as Review lead copy, including Protocol v2.16 §3 “why it matters (this becomes what an EPD may say)”; (2) allowed HELP_ONCE via-negativa on researcher rooms, including Protocol v2.9 §4 “they MAY appear once in a short help”; (3) allowed a prefilled Onderwerp / family on a fresh new ingest; (4) allowed bronpassage to show raw HTML freeze slices as the researcher right column; (5) allowed site chrome to be extracted as `heading` / `unclassified` objects or to land in Koppen; or that the next console work after Protocol v2.16 is only the v2.16 door/stacks/rows/stamps/tiny-objects wave (that code is on `main`). Where this delta and those readings conflict, this delta governs. Durable immutable storage is not skipped. The G2 locator remains the publication blocker. Capture remains not publication. For all other requirements, the stricter fail-closed requirement applies.
+This delta is a **scoped supersession** of any reading that (1) required or allowed the EPD MAG slogan as Review lead copy, including Protocol v2.16 §3 “why it matters (this becomes what an EPD may say)” and the entire sentence “Dit wordt wat een EPD MAG zeggen.”; (2) allowed HELP_ONCE via-negativa on researcher rooms, including Protocol v2.9 §4 “they MAY appear once in a short help”; (3) allowed a prefilled Onderwerp / family on a fresh new ingest; (4) allowed bronpassage to show raw HTML freeze slices as the researcher right column, including as a one-card exception; (5) allowed site chrome to be extracted as `heading` / `unclassified` objects or to land in Koppen, including a one-word **Tools** object; (6) allowed **Sterkte van de aanbeveling** / DOEN/OVERWEEG/NIET DOEN picker on a non-`recommendation` object; (7) allowed relation checkbox and target title to stretch to opposite edges of the viewport; or that the next console work after Protocol v2.16 is only the v2.16 door/stacks/rows/stamps/tiny-objects wave (that code is on `main`). Where this delta and those readings conflict, this delta governs. Durable immutable storage is not skipped. The G2 locator remains the publication blocker. Capture remains not publication. For all other requirements, the stricter fail-closed requirement applies.
 
-This delta also sets the next concrete implementation after merge. Protocol v2.16 §10 set the next console implementation as one door **Beoordeel**, two named stacks, compact rows, stamps, no tiny objects, and a new extract of unpublished Continentie. That code is now on `main`. Where this delta and Protocol v2.16 conflict on which implementation is next, this delta governs. The next implementation after this protocol merges MUST be the Implementation engineer on the existing kernel/console for exactly this wave (researcher copy without slogans; empty Onderwerp on a fresh ingest; bronpassage readable prose; no chrome objects; re-extract unpublished Continentie). THEN William click-through of the running console (not screenshots). THEN Azure ZIP of that `main` from a V&VN-trusted device. THEN G2. Do not start Azure in this change. Azure ZIP is after William accepts the live Review page. Protocol v2.14 is still not written and is still not the next step. v2.11 freeze/locator, v2.12 type/projection, v2.13 atomic objects/relations/four-eyes, v2.15 ingest date/version/type-lanes and v2.16 one-door/stacks/rows/stamps/tiny-objects remain required law, except the bounded supersessions in this file.
+This delta also sets the next concrete implementation after merge. Protocol v2.16 §10 set the next console implementation as one door **Beoordeel**, two named stacks, compact rows, stamps, no tiny objects, and a new extract of unpublished Continentie. That code is now on `main`. Where this delta and Protocol v2.16 conflict on which implementation is next, this delta governs. The next implementation after this protocol merges MUST be the Implementation engineer on the existing kernel/console for exactly this wave (researcher copy without slogans; empty Onderwerp on a fresh ingest; bronpassage readable prose on every object; no chrome objects including one-word Tools/Home/Richtlijnen/Meedenken; recommendation-strength UI only on `recommendation`; compact relation checkboxes with label adjacent to the checkbox; re-extract unpublished Continentie). THEN William click-through of the running console (not screenshots). THEN Azure ZIP of that `main` from a V&VN-trusted device. THEN G2. Do not start Azure in this change. Azure ZIP is after William accepts the live Review page. Protocol v2.14 is still not written and is still not the next step. v2.11 freeze/locator, v2.12 type/projection, v2.13 atomic objects/relations/four-eyes, v2.15 ingest date/version/type-lanes and v2.16 one-door/stacks/rows/stamps/tiny-objects remain required law, except the bounded supersessions in this file.
 
 This is not a GD-03 knowledge-publish. G2 remains the publication blocker.
 
@@ -141,13 +142,13 @@ UI copy MUST be researcher language. MUST NOT be slogans. MUST NOT say “wat ee
 
 Lead copy MUST say what to do on this screen, without marketing. On Review that is: Beoordeel **Koppen** as structure, **Inhoud** as knowledge objects.
 
-Owner evidence 2026-09-02 (`main` `2b760b293b9a`, Continentie): Review still showed “Wat jij bevestigt, wordt wat een EPD MAG zeggen.” and “Dit wordt wat een EPD MAG zeggen.” Those MUST NOT remain.
+Owner evidence 2026-09-02 (`main` `2b760b293b9a`, Continentie): Review still showed “Wat jij bevestigt, wordt wat een EPD MAG zeggen.” and “Dit wordt wat een EPD MAG zeggen.” Those MUST NOT remain. The entire sentence “Dit wordt wat een EPD MAG zeggen.” MAG weg. Keep this forbid; do not weaken it.
 
 - Within one screen the researcher MUST know which document this is and what to do now (which stack, which primary button). The Protocol v2.16 “why it matters (this becomes what an EPD may say)” reading is superseded: lead copy MUST NOT add a slogan or a single-subscriber claim as the reason.
 - Primary action MUST remain visually obvious. Kernel ids MUST NOT be the row title.
 - On-screen copy MUST still say what the researcher can do here, what happens next, and what is expected of them (Protocol v2.9 §4 task copy), without slogans.
 - MUST NOT use marketing statements, product promises, or subscriber-class claims as room lead copy.
-- Example of lawful Review lead copy: “Beoordeel Koppen als structuur en Inhoud als kennisobjecten.” Example of forbidden copy: “Wat jij bevestigt, wordt wat een EPD MAG zeggen.”
+- Example of lawful Review lead copy: “Beoordeel Koppen als structuur en Inhoud als kennisobjecten.” Example of forbidden copy: “Wat jij bevestigt, wordt wat een EPD MAG zeggen.” Forbidden also: the entire sentence “Dit wordt wat een EPD MAG zeggen.”
 
 ## 4. No via-negativa on researcher rooms
 
@@ -176,8 +177,10 @@ Owner evidence 2026-09-02: GET `/ingest` hardcoded `value="continentie"`. This i
 
 The researcher right column MUST show the same readable sentence as the knowledge object. MUST NOT show raw HTML freeze slices, HTML tags, CSS class names, or kennisplatform markup as the researcher surface.
 
-Owner evidence 2026-09-02: bronpassage rendered freeze HTML as `<pre>` of raw bytes (`</h3><div class="brxe-faadvp brxe-text"><p>…`). That MUST NOT remain.
+Owner evidence 2026-09-02: bronpassage rendered freeze HTML as `<pre>` of raw bytes (`</h3><div class="brxe-faadvp brxe-text"><p>…`). Owner photo the same day after PR #74: bronpassage for the doelgroep sentence still shows `</h3><div class="brxe-faadvp brxe-text"><p>De richtlijn is bedoeld voor …`. Owner asked “Is dat hoe het definitief eruit gaat zien?” Recorded answer: **NO**. That MUST NOT remain.
 
+- This bronpassage prose rule is **per-object / whole freeze**, not a one-off on one card. Same law for every object and every section.
+- Researcher bronpassage MUST be the readable sentence, never tags. MUST NOT show raw HTML freeze slices, HTML tags, CSS class names, or kennisplatform markup as the researcher surface on any object.
 - Protocol v2.11 freeze bytes and locators stay exact. MUST NOT reserialize, pretty-print, or re-save the freeze. Locators remain on freeze bytes (`provenance.source_fragments`; HTML `web_line_range`). This delta MUST NOT invent a locator scheme.
 - The researcher surface is visible prose derived from that locator, not the raw tag soup.
 - The left-column knowledge object and the right-column bronpassage MUST present the same readable sentence (the confirmable meaning unit), not a markup dump of the locator slice.
@@ -189,16 +192,40 @@ Owner evidence 2026-09-02: bronpassage rendered freeze HTML as `<pre>` of raw by
 
 Extract MUST NOT emit kennisplatform chrome as knowledge objects and MUST NOT land that chrome in Koppen. Koppen MUST be real guideline TOC / section titles of the richtlijn body, not site nav.
 
-Owner evidence 2026-09-02: extract emitted kennisplatform chrome as objects/headings (Home, Richtlijnen, Meedenken, Kennisinstituut V&VN, Tools, Veelgestelde vragen, duplicated). Those MUST NOT remain.
+Owner evidence 2026-09-02: extract emitted kennisplatform chrome as objects/headings (Home, Richtlijnen, Meedenken, Kennisinstituut V&VN, Tools, Veelgestelde vragen, duplicated). Owner photo the same day after PR #74: a review card titled **Tools**, unclassified, snippet the single word Tools, right column raw HTML of the kennisplatform nav (`<li class="menu-item … bricks-menu-item"><a href="https://kennisplatform.venvn.nl/tools/">Tools</a></li>`). Owner: “Je krijgt soms nogsteeds 1 woord”. Those MUST NOT remain.
 
+- One-word site chrome MUST NOT be an object. One-word chrome remains a fail under Protocol v2.16 tiny-objects **and** this chrome rule. Tools, Home, Richtlijnen, Meedenken and the rest of kennisplatform nav MUST NOT be knowledge objects.
 - Chrome includes site navigation, platform chrome, duplicated nav labels, and kennisplatform shell headings that are not titles of the richtlijn body. The listed labels are evidence, not an exhaustive closed set.
 - Chrome MUST NOT become `heading`. Chrome MUST NOT become `unclassified`. Chrome MUST NOT become any other stored object type.
+- Recommendation-strength UI (**Sterkte van de aanbeveling**, the DOEN/OVERWEEG/NIET DOEN picker) MUST NOT appear except on type `recommendation`. A nav word MUST NOT get a recommendation-strength control. Stamps exist only on type `recommendation` (Protocol v2.16 unchanged). Showing that picker on unclassified **Tools** is forbidden.
 - **Koppen** remains the v2.15 fast lane under a researcher name: real table-of-contents / section titles from the freeze (structure). Batch-confirm as structure, never as advice. Headings MUST NOT be served as handelingsadvies.
 - Extract MUST still propose `heading` for real source headings / TOC / structural crumbs of the richtlijn body so they do not all land as `unclassified` (Protocol v2.15), except DOEN/OVERWEEG/NIET DOEN (Protocol v2.16) and chrome (this delta).
 - Where this sentence and Protocol v2.15 “Extract MUST propose `heading` for real source headings / TOC / structural crumbs” conflict for site chrome, this delta governs.
 - MUST NOT add a new object type for chrome, page, or nav. Chrome is not stored.
 
-## 8. Unclassified bar unchanged; unpublished Continentie re-extract
+## 8. Compact relation checkboxes
+
+Protocol v2.16 already forbade stretching status / checkbox / text into disconnected columns across the viewport. That bar MUST also bind relation checkboxes on the object card.
+
+Owner photo 2026-09-02 after PR #74: “Dit kennisobject is onderliggend aan:” then a checkbox far left and the label **Inleiding** far right, huge empty gap. Owner: vinkje and Inleiding still lie very far apart. That MUST NOT remain.
+
+- The relation label MUST sit immediately next to its checkbox.
+- MUST NOT stretch checkbox and target title to opposite edges of the viewport.
+- A checkbox MAY sit on the same compact line as its target title. It MUST NOT float in a far-left column with empty white space to the title.
+- This is the same compact-row law as Protocol v2.16 §6, applied to relation checkboxes (`applies_if`, `except_if`, `defines`, `explains`, `supported_by`, `supersedes`, `parent` / `child`, including “onderliggend aan”).
+- MUST NOT invent a relation-graph editor (Protocol v2.13 / 2026-08-29 lock unchanged).
+
+## 9. Whole freeze, every object, every section
+
+These rules (no slogans, no one-word chrome, compact relation checkboxes, bronpassage prose not HTML, recommendation-strength UI only on `recommendation`) apply to the **whole freeze / every object / every section**. Not a one-off on one card.
+
+Owner: “Ik zie inleiding, doel, doelgroep en aanleiding vaker voorkomen; ik ga ervanuit dat dit voor meerdere delen geldt.” Confirmed.
+
+- **Inleiding**, **Doel**, **Doelgroep** and **Aanleiding** are examples of sections the law covers, not a closed list.
+- The rest of the richtlijn body is in scope on the same terms. Operators MUST NOT treat a later section as exempt because the photo was of Tools, Inleiding, or doelgroep.
+- Same law for Koppen and Inhoud. Same law for every object version extracted from this freeze.
+
+## 10. Unclassified bar unchanged; unpublished Continentie re-extract
 
 2641 unclassified on one richtlijn remains a fail of the review surface. The Protocol v2.15 / v2.16 bar is unchanged: a page of thousands of identical `unclassified` titles, tiny objects, or chrome-as-objects MUST NOT be accepted as workload.
 
@@ -208,7 +235,7 @@ Freeze source bytes and SHA-256 stay. Existing published objects are not silentl
 - Published objects, if any later exist, MUST NOT be silently rewritten. Identity of published hashed objects stays until a new source version / snapshot under existing v2.7 / v2.12 / v2.13 rules.
 - This delta MUST NOT rewrite Protocol v2.13 split rules except as already bounded by Protocol v2.16 tiny objects. Token-budget chunking still MUST NOT define object identity. Fusion of condition into recommendation remains the forbidden default.
 
-## 9. Unchanged fail-closed product boundary
+## 11. Unchanged fail-closed product boundary
 
 The console MUST NOT be a nurse-facing care app, chatbot, public website, or EPD UI. Chat is not a room. Publication remains fail-closed without G2. This delta does not implement console, extract, review queues, API or `publish()`. This delta does not implement the new UI.
 
@@ -227,21 +254,23 @@ The following rules remain mandatory and are not relaxed by this delta:
 
 `.gitignore` already covers the source, secret, tenant, review and runtime classes and MUST be kept.
 
-G1 technical protection remains ON. The authoritative remote remains public under Protocol v2.5 during the declared MVP period. G0 Azure DEV remains BLOCKED. No Azure/Vercel/Neon in this delta. No Vercel, Neon, or LLM vendor. No locator implementation, no Blob, no claiming G2 PASS. No huisstyle-bar-only tweaks without the bar in sections 3–8.
+G1 technical protection remains ON. The authoritative remote remains public under Protocol v2.5 during the declared MVP period. G0 Azure DEV remains BLOCKED. No Azure/Vercel/Neon in this delta. No Vercel, Neon, or LLM vendor. No locator implementation, no Blob, no claiming G2 PASS. No huisstyle-bar-only tweaks without the bar in sections 3–9.
 
-## 10. Build order
+## 12. Build order
 
 This PR is protocol-only. PROTOCOL → tests → code later. Do not change `src/operations_console_*.py`, `src/extract_*.py` or `src/product_api_*.py`.
 
-Do not build a mockup. Do not wait for Azure, Vercel, Neon or a finished "DS" before the Review page has researcher copy without slogans, empty Onderwerp on a fresh ingest, bronpassage readable prose, and an extract that does not emit chrome as objects.
+Do not build a mockup. Do not wait for Azure, Vercel, Neon or a finished "DS" before the Review page has researcher copy without slogans, empty Onderwerp on a fresh ingest, bronpassage readable prose on every object, an extract that does not emit chrome (including one-word Tools) as objects, recommendation-strength UI only on `recommendation`, and relation checkboxes with the label adjacent to the checkbox.
 
 Where this delta and Protocol v2.16 conflict on which implementation is next, this delta governs. The v2.16 one-door / stacks / compact-rows / stamps / tiny-objects wave is already in code on `main`. The next implementation after this protocol merges MUST be the Implementation engineer on the existing kernel/console for exactly this wave:
 
-1. researcher copy without slogans (lead copy says what to do: Beoordeel Koppen as structure, Inhoud as knowledge objects; MUST NOT say “wat een EPD MAG zeggen”; MUST NOT claim a single subscriber class);
+1. researcher copy without slogans (lead copy says what to do: Beoordeel Koppen as structure, Inhoud as knowledge objects; MUST NOT say “wat een EPD MAG zeggen”; the entire sentence “Dit wordt wat een EPD MAG zeggen.” MAG weg; MUST NOT claim a single subscriber class);
 2. empty Onderwerp / family on a fresh new ingest;
-3. bronpassage right column as readable prose derived from the v2.11 locator (MUST NOT dump raw HTML tag soup; freeze bytes stay exact);
-4. extract MUST NOT emit kennisplatform chrome as knowledge objects or Koppen;
-5. re-extract unpublished Continentie on the same freeze SHA-256 so the page can pass this bar; unpublished object identities MAY be replaced; MUST NOT hide stored fragments without that extract;
+3. bronpassage right column as readable prose derived from the v2.11 locator on **every object** (MUST NOT dump raw HTML tag soup; freeze bytes stay exact; recorded answer to “Is dat hoe het definitief eruit gaat zien?” is NO);
+4. extract MUST NOT emit kennisplatform chrome as knowledge objects or Koppen, including one-word Tools/Home/Richtlijnen/Meedenken;
+5. recommendation-strength UI (**Sterkte van de aanbeveling**) MUST NOT appear except on type `recommendation`;
+6. relation checkbox and its label MUST be adjacent (MUST NOT stretch across the viewport);
+7. re-extract unpublished Continentie on the same freeze SHA-256 so the page can pass this bar on the whole freeze; unpublished object identities MAY be replaced; MUST NOT hide stored fragments without that extract;
 
 THEN William click-through of the running console (not screenshots). THEN Azure ZIP of that `main` from a V&VN-trusted device. THEN G2. Do not start Azure in this change. Azure ZIP is after William accepts the live Review page. Azure/G2 MUST stay out of this delta (no locator implementation, no Blob, no claiming G2 PASS). This delta does not implement `publish()` PASS.
 
@@ -249,21 +278,21 @@ v2.11 freeze/locator, v2.12 type/projection, v2.13 atomic objects/relations/four
 
 Protocol v2.14 (lifecycle names and `valid_from` / `valid_until` serving bounds) is LOCKED as a later protocol, not this file, and is still not the next step. This delta MUST NOT write Protocol v2.14. Lock v2.14 only when the first official source has a date that must bound serving. G2 still blocks publish, so that wait is for a real dated source, not for more UX deltas. Ingest source date on the freeze is not `valid_from` / `valid_until`.
 
-Out of scope for this PR and this delta: Azure deploy, G2 PASS, Protocol v2.14, LLM, Vercel/Neon, new object types, GRADE English labels, relation-graph editor, huisstyle-bar-only tweaks without the bar in sections 3–8, `publish()` PASS, Blob, managed identity, app settings, expanding empty-Onderwerp to class default, rewriting freeze bytes.
+Out of scope for this PR and this delta: Azure deploy, G2 PASS, Protocol v2.14, LLM, Vercel/Neon, new object types, GRADE English labels, relation-graph editor, huisstyle-bar-only tweaks without the bar in sections 3–9, `publish()` PASS, Blob, managed identity, app settings, expanding empty-Onderwerp to class default, rewriting freeze bytes.
 
 This does not skip durable immutable storage. The local store remains the console stand-in until G0 Azure DEV. Publication remains BLOCKED without an immutable locator, as in existing G2 rules. The G2 locator remains the publication blocker; it is not the next implementation. Capture remains not publication. G2 locator still required to publish.
 
-## 11. Change class and review
+## 13. Change class and review
 
-This is a protocol version change, not a silent C0 documentation edit. The highest class is **C3 spanning review-surface / retrieve-safety** (slogan copy, via-negativa help, raw-HTML bronpassage, and site chrome as objects bias assessment). This is not a C5 reopen of four-eyes or publish. Treat the highest class as **C3 spanning review-surface / retrieve-safety**. This delta does not reopen GD-03. This is not a GD-03 knowledge-publish.
+This is a protocol version change, not a silent C0 documentation edit. The highest class is **C3 spanning review-surface / retrieve-safety** (slogan copy, via-negativa help, raw-HTML bronpassage, site chrome as objects, stamp UI on non-recommendation, and stretched relation checkboxes bias assessment). This is not a C5 reopen of four-eyes or publish. Treat the highest class as **C3 spanning review-surface / retrieve-safety**. This delta does not reopen GD-03. This is not a GD-03 knowledge-publish.
 
 This delta is owner-approved. Named C3 reviewers are not yet staffed. Named reviewers are not staffed. Retrospective independent clinical and technical review remains due, using the same pattern as Protocol v2.16 / PR #72, Protocol v2.15 / PR #70, Protocol v2.13 / PR #32, Protocol v2.12 / PR #29, Protocol v2.11 / PR #27, Protocol v2.10 / PR #26, Protocol v2.9 / PR #24, Protocol v2.8 / PR #21, Protocol v2.7 / PR #19, Protocol v2.6 / PR #18, Protocol v2.5 / PR #16 (and HANDOFF.md for PR #4 and PR #5). This delta does not invent a separate named C5 staff.
 
-Any later implementation of researcher copy without slogans, empty Onderwerp on a fresh ingest, bronpassage readable prose, chrome suppression, or a new extract of unpublished Continentie remains separately classified, including at least C3 spanning review-surface / retrieve-safety.
+Any later implementation of researcher copy without slogans, empty Onderwerp on a fresh ingest, bronpassage readable prose, chrome suppression, stamp UI only on `recommendation`, compact relation checkboxes, or a new extract of unpublished Continentie remains separately classified, including at least C3 spanning review-surface / retrieve-safety.
 
-## 12. Gates and approval effect
+## 14. Gates and approval effect
 
-Approval of v2.17 establishes that UI copy MUST be researcher language and MUST NOT be slogans, MUST NOT say “wat een EPD MAG zeggen”, and MUST NOT claim a single subscriber class; that Review lead copy MUST say what to do on this screen (Beoordeel Koppen as structure, Inhoud as knowledge objects) without marketing; that via-negativa MUST NOT appear on researcher rooms including collapsed help “Over deze console”; that Onderwerp / family MUST be empty on a fresh new ingest and MUST NOT be prefilled `continentie`; that bronpassage MUST show the same readable sentence as the knowledge object without HTML tags, CSS class names, or kennisplatform markup, while v2.11 freeze bytes and locators stay exact (MUST NOT reserialize or re-save the freeze); that Open-origineel remains required before type confirm; that extract MUST NOT emit kennisplatform chrome as knowledge objects or Koppen (Koppen = real guideline TOC / section titles of the richtlijn body, not site nav); that 2641 unclassified on one richtlijn remains a fail of the review surface (v2.15 / v2.16 bar unchanged); and that unpublished Continentie MAY be re-extracted after this law on the same source SHA-256, unpublished object identities MAY be replaced, and MUST NOT hide stored fragments without a new extract. Serving / G2 unchanged: only confirmed `recommendation` MAY `supported` / handelingsadvies; the machine MUST NOT decide that something is light enough to serve; four-eyes unchanged; G2 remains the publication blocker; `publish()` remains G2-BLOCKED; capture is not publication. It does not:
+Approval of v2.17 establishes that UI copy MUST be researcher language and MUST NOT be slogans, MUST NOT say “wat een EPD MAG zeggen”, MUST NOT keep the entire sentence “Dit wordt wat een EPD MAG zeggen.”, and MUST NOT claim a single subscriber class; that Review lead copy MUST say what to do on this screen (Beoordeel Koppen as structure, Inhoud as knowledge objects) without marketing; that via-negativa MUST NOT appear on researcher rooms including collapsed help “Over deze console”; that Onderwerp / family MUST be empty on a fresh new ingest and MUST NOT be prefilled `continentie`; that bronpassage MUST show the same readable sentence as the knowledge object without HTML tags, CSS class names, or kennisplatform markup, on every object / the whole freeze (recorded answer to “Is dat hoe het definitief eruit gaat zien?” is NO), while v2.11 freeze bytes and locators stay exact (MUST NOT reserialize or re-save the freeze); that Open-origineel remains required before type confirm; that extract MUST NOT emit kennisplatform chrome as knowledge objects or Koppen, including one-word Tools/Home/Richtlijnen/Meedenken (Koppen = real guideline TOC / section titles of the richtlijn body, not site nav); that recommendation-strength UI MUST NOT appear except on type `recommendation`; that relation checkbox and its label MUST be adjacent (MUST NOT stretch across the viewport); that these rules apply to the whole freeze / every object / every section (Inleiding, Doel, Doelgroep, Aanleiding are examples, not a closed list); that 2641 unclassified on one richtlijn remains a fail of the review surface (v2.15 / v2.16 bar unchanged); and that unpublished Continentie MAY be re-extracted after this law on the same source SHA-256, unpublished object identities MAY be replaced, and MUST NOT hide stored fragments without a new extract. Serving / G2 unchanged: only confirmed `recommendation` MAY `supported` / handelingsadvies; the machine MUST NOT decide that something is light enough to serve; four-eyes unchanged; G2 remains the publication blocker; `publish()` remains G2-BLOCKED; capture is not publication. It does not:
 
 - implement console Python, extract, kernel, Product API, or `publish()`;
 - convert G2 to PASS;
@@ -294,7 +323,7 @@ Approval of v2.17 establishes that UI copy MUST be researcher language and MUST 
 - dump raw HTML tag soup, CSS class names or kennisplatform markup as the researcher bronpassage;
 - reopen Protocol v2.12 types/projection, or Protocol v2.13 atomic objects/relations/four-eyes;
 - reopen Protocol v2.15 ingest date, ingest version, or type-based lanes except the heading-proposal rules superseded by v2.16 stamps and by this chrome rule;
-- reopen Protocol v2.16 one-door, two-stack, compact-row, stamp or tiny-object rules except the slogan, help, Onderwerp, bronpassage-display, chrome-extract and next-implementation readings superseded here;
+- reopen Protocol v2.16 one-door, two-stack, compact-row, stamp or tiny-object rules except the slogan, help, Onderwerp, bronpassage-display, chrome-extract, stamp-UI-on-non-recommendation, stretched-relation-checkbox and next-implementation readings superseded here;
 - require or allow “wat een EPD MAG zeggen” or any EPD MAG slogan as Review lead copy;
 - claim a single subscriber class on researcher pages;
 - allow HELP_ONCE via-negativa on researcher rooms, including collapsed “Over deze console”;
@@ -307,7 +336,7 @@ Approval of v2.17 establishes that UI copy MUST be researcher language and MUST 
 - let the uploader be the only required reviewer, or let AI, Grok Bot, Metis, the Implementation engineer or the Auditor count as required reviewers;
 - authorize live URL-HTML, LLM in the core API, nurse-facing console, chat, hospital protocols, patient data, Vercel/Neon, or treating Azure as the knowledge model;
 - start Azure, Vercel, Neon or an LLM vendor;
-- implement Blob, managed identity, or huisstyle-bar-only tweaks without the bar in sections 3–8;
+- implement Blob, managed identity, or huisstyle-bar-only tweaks without the bar in sections 3–9;
 - treat capture as publication;
 - reopen or alter GD-03;
 - close GD-01, GD-02, GD-04, GD-05, GD-06 or GD-07;

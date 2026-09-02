@@ -68,6 +68,8 @@ def test_v217_researcher_copy_no_slogans() -> None:
     assert "UI copy MUST be researcher language" in delta
     assert "MUST NOT be slogans" in delta
     assert "MUST NOT say “wat een EPD MAG zeggen”" in delta
+    assert "The entire sentence “Dit wordt wat een EPD MAG zeggen.” MAG weg" in delta
+    assert "Keep this forbid; do not weaken it" in delta
     assert "MUST NOT claim a single subscriber class" in delta
     assert "Beoordeel **Koppen** as structure, **Inhoud** as knowledge objects" in delta
     assert "The Protocol v2.16 “why it matters (this becomes what an EPD may say)” reading is superseded" in delta
@@ -156,7 +158,7 @@ def test_v217_four_eyes_and_serving_law_unchanged() -> None:
 def test_v217_is_c3_spanning_review_surface_owner_approved_and_does_not_reopen_gd03() -> None:
     delta = _read(DELTA)
     governance = _read(ROOT / "docs" / "GOVERNANCE.md")
-    assert "**Highest change class:** C3 spanning review-surface / retrieve-safety (slogan copy, via-negativa help, raw-HTML bronpassage, and site chrome as objects bias assessment)" in delta
+    assert "**Highest change class:** C3 spanning review-surface / retrieve-safety (slogan copy, via-negativa help, raw-HTML bronpassage, site chrome as objects, stamp UI on non-recommendation, and stretched relation checkboxes bias assessment)" in delta
     assert "This is not a C5 reopen of four-eyes or publish" in delta
     assert "This delta is owner-approved" in delta
     assert "Named C3 reviewers are not yet staffed" in delta
@@ -191,3 +193,75 @@ def test_v217_records_researcher_surface_wave_then_g2_and_does_not_implement_pro
     assert "leeg Onderwerp" in roadmap
     assert "bronpassage" in roadmap
     assert "kennisplatform-chrome" in roadmap
+    assert "recommendation-strength UI only on `recommendation`" in delta
+    assert "compact relation checkboxes with label adjacent to the checkbox" in delta
+    assert "bronpassage readable prose on every object" in delta
+    assert "one-word Tools/Home/Richtlijnen/Meedenken" in delta
+
+
+def test_v217_one_word_site_chrome_must_not_be_an_object() -> None:
+    delta = _read(DELTA)
+    root_protocol = _read(ROOT / "PROTOCOL.md")
+    roadmap = _read(ROOT / "ROADMAP.md")
+    assert "One-word site chrome MUST NOT be an object" in delta
+    assert "One-word chrome remains a fail under Protocol v2.16 tiny-objects **and** this chrome rule" in delta
+    assert "Tools, Home, Richtlijnen, Meedenken and the rest of kennisplatform nav MUST NOT be knowledge objects" in delta
+    assert "Je krijgt soms nogsteeds 1 woord" in delta
+    assert "a review card titled **Tools**, unclassified, snippet the single word Tools" in delta
+    assert "één-woord Tools" in root_protocol
+    assert "één-woord Tools" in roadmap
+    assert "Tools/Home/Richtlijnen/Meedenken MUST NOT objecten zijn" in root_protocol
+
+
+def test_v217_recommendation_strength_ui_only_on_recommendation() -> None:
+    delta = _read(DELTA)
+    root_protocol = _read(ROOT / "PROTOCOL.md")
+    roadmap = _read(ROOT / "ROADMAP.md")
+    assert "Recommendation-strength UI (**Sterkte van de aanbeveling**, the DOEN/OVERWEEG/NIET DOEN picker) MUST NOT appear except on type `recommendation`" in delta
+    assert "A nav word MUST NOT get a recommendation-strength control" in delta
+    assert "Stamps exist only on type `recommendation`" in delta
+    assert "Showing that picker on unclassified **Tools** is forbidden" in delta
+    assert "stempel-UI" in root_protocol
+    assert "MUST NOT verschijnen behalve op type `recommendation`" in root_protocol
+    assert "stempel-UI alleen op recommendation" in roadmap
+
+
+def test_v217_relation_checkbox_and_label_must_be_adjacent() -> None:
+    delta = _read(DELTA)
+    root_protocol = _read(ROOT / "PROTOCOL.md")
+    roadmap = _read(ROOT / "ROADMAP.md")
+    assert "The relation label MUST sit immediately next to its checkbox" in delta
+    assert "MUST NOT stretch checkbox and target title to opposite edges of the viewport" in delta
+    assert "That bar MUST also bind relation checkboxes on the object card" in delta
+    assert "vinkje and Inleiding still lie very far apart" in delta
+    assert "relatielabel MUST direct naast het vinkje zitten" in root_protocol
+    assert "MUST NOT checkbox en doeltitel naar tegenoverliggende randen van de viewport spreiden" in root_protocol
+    assert "compacte relatiecheckboxes" in roadmap
+
+
+def test_v217_bronpassage_prose_rule_is_per_object_whole_freeze() -> None:
+    delta = _read(DELTA)
+    root_protocol = _read(ROOT / "PROTOCOL.md")
+    roadmap = _read(ROOT / "ROADMAP.md")
+    assert "This bronpassage prose rule is **per-object / whole freeze**, not a one-off on one card" in delta
+    assert "Same law for every object and every section" in delta
+    assert "Researcher bronpassage MUST be the readable sentence, never tags" in delta
+    assert "Recorded answer: **NO**" in delta
+    assert "Is dat hoe het definitief eruit gaat zien?" in delta
+    assert "ieder object / de hele freeze" in root_protocol
+    assert "opgenomen antwoord op «Is dat hoe het definitief eruit gaat zien?» is NEE" in root_protocol
+    assert "ieder object / de hele freeze" in roadmap
+
+
+def test_v217_inleiding_doel_doelgroep_aanleiding_are_examples_not_a_closed_list() -> None:
+    delta = _read(DELTA)
+    root_protocol = _read(ROOT / "PROTOCOL.md")
+    roadmap = _read(ROOT / "ROADMAP.md")
+    assert "**Inleiding**, **Doel**, **Doelgroep** and **Aanleiding** are examples of sections the law covers, not a closed list" in delta
+    assert "These rules (no slogans, no one-word chrome, compact relation checkboxes, bronpassage prose not HTML, recommendation-strength UI only on `recommendation`) apply to the **whole freeze / every object / every section**" in delta
+    assert "Ik zie inleiding, doel, doelgroep en aanleiding vaker voorkomen" in delta
+    assert "Operators MUST NOT treat a later section as exempt because the photo was of Tools, Inleiding, or doelgroep" in delta
+    assert "Inleiding, Doel, Doelgroep, Aanleiding zijn voorbeelden, geen gesloten lijst" in root_protocol
+    assert "Inleiding, Doel, Doelgroep en Aanleiding zijn voorbeelden, geen gesloten lijst" in roadmap
+    assert "hele freeze / ieder object / iedere sectie" in root_protocol
+    assert "hele freeze / ieder object / iedere sectie" in roadmap

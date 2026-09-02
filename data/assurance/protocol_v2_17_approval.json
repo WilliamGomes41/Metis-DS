@@ -2,7 +2,7 @@
   "manifest_version": "1.0",
   "protocol_version": "2.17.0",
   "protocol_path": "docs/PROTOCOL_V2_17_REVIEW_PAGE_RESEARCHER_SURFACE_DELTA.md",
-  "protocol_sha256": "5b2d60aeec8fd706f9cd9571c2c9507dd78748d24624cec110151b188f16c7ff",
+  "protocol_sha256": "91fafbe24e3ab1e5399da7343c0b4d5cf8964cae92619637b8992f68121efc7a",
   "repository": "WilliamGomes41/VENVN-DS",
   "default_branch": "main",
   "commit_sha": "pending_after_merge",
