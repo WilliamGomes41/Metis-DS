@@ -68,23 +68,32 @@ def test_v223_does_not_redesign_the_four_layers_or_write_v214() -> None:
     assert "MUST NOT Protocol v2.14 worden geschreven" in roadmap
 
 
-def test_v223_zip_of_a566af56_remains_before_this_wave() -> None:
+def test_v223_first_delete_cut_then_one_zip_of_that_sha() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
     changelog = _read(ROOT / "CHANGELOG.md")
-    assert "This delta MUST NOT change the live path" in delta
-    assert "William Cloud Shell ZIP of A+C+D SHA `a566af56c8c88e76cb4de7fa51642b408705da02`" in delta
-    assert "Simplification is AFTER that ZIP, not instead of it" in delta
+    assert "first DELETE cut, then one ZIP of that SHA" in delta
+    assert "MUST NOT ZIP `a566af56` if that forces a second ZIP after cleanup" in delta
+    assert "Two Cloud Shell ZIPs is refused" in delta
+    assert "happens on main BEFORE any Cloud Shell ZIP" in delta
+    assert "Then ONE Cloud Shell ZIP of that resulting SHA" in delta
+    assert "A+C+D already on main, plus v2.20 delete control, plus the first DELETE cut" in delta
+    assert "Wave B still after that one ZIP + ingest" in delta or "Wave B (G2 evidence/smoke) AFTER that one ZIP + ingest" in delta
     assert "This protocol PR is not that ZIP" in delta
     assert "MUST NOT treat this protocol PR as Azure ZIP" in delta
     assert "PR #82 stays closed/unmerged" in delta
-    assert "volgende live-stap blijft William Cloud Shell ZIP van A+C+D SHA `a566af56`" in root_protocol
-    assert "vereenvoudiging is NA die ZIP, niet in plaats daarvan" in root_protocol
+    assert "eerste DELETE-snede, daarna één ZIP van die SHA" in root_protocol
+    assert "MUST NOT a566af56 ZIP-pen als dat een tweede ZIP forceert" in root_protocol
+    assert "Twee Cloud Shell ZIPs zijn geweigerd" in root_protocol
     assert "PR #82 blijft gesloten/ongemerged" in root_protocol
     assert "a566af56c8c88e76cb4de7fa51642b408705da02" in roadmap
-    assert "vereenvoudiging is NA die ZIP, niet in plaats daarvan" in roadmap
-    assert "ZIP of a566af56 remains before this wave" in changelog or "ZIP of `a566af56` remains before this wave" in changelog
+    assert "eerste DELETE-snede, daarna één ZIP van die SHA" in roadmap
+    assert "MUST NOT a566af56 ZIP-pen als dat een tweede ZIP forceert" in roadmap
+    assert "Twee Cloud Shell ZIPs zijn geweigerd" in roadmap
+    assert "first DELETE cut, then one ZIP of that SHA" in changelog
+    assert "MUST NOT ZIP a566af56 if that forces a second ZIP" in changelog
+    assert "Two Cloud Shell ZIPs is refused" in changelog
 
 
 def test_v223_auditor_verdict_is_request_simplification_not_gd03() -> None:
@@ -184,27 +193,29 @@ def test_v223_integrity_sprint_and_dual_review_queue_are_planned_not_silent_dele
     assert "review-queue" in roadmap
 
 
-def test_v223_next_implementation_after_zip_is_one_deletion_pr() -> None:
+def test_v223_next_implementation_is_one_deletion_pr_before_one_zip() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
     changelog = _read(ROOT / "CHANGELOG.md")
-    assert "The next **code** implementation AFTER that ZIP (and only then) MUST be one deletion PR" in delta
+    assert "The next **code** implementation MUST be one deletion PR on the existing kernel/repo (first DELETE cut plus integrity-sprint fixture retarget)" in delta
+    assert "on main BEFORE any Cloud Shell ZIP" in delta
     assert "existing pytest only" in delta
     assert "MUST NOT touch the splitter or console in that PR" in delta
     assert "Implementation MUST re-prove no live callers before each delete" in delta
     assert "If a named file still has a live caller, leave it and report" in delta
     assert "MUST NOT implement the deletion PR in this PR" in delta
     assert "Do not change `src/operations_console_*.py`, `src/extract_*.py` or `src/product_api_*.py`" in delta
-    assert "volgende implementatie NA die ZIP is één deletion-PR" in root_protocol
+    assert "volgende implementatie VÓÓR die ZIP is één deletion-PR" in root_protocol
     assert "bestaande pytest only" in root_protocol
     assert "MUST NOT splitter of console in die PR raken" in root_protocol
     assert "Implementation MUST opnieuw bewijzen dat er geen live callers zijn vóór iedere delete" in root_protocol
     assert "één deletion-PR" in roadmap
+    assert "volgende implementatie VÓÓR die ZIP is één deletion-PR" in roadmap
     assert "Protocol v2.23.0" in changelog
     assert "does not implement console, extract or Azure" in changelog
     assert "v2.14 is not this and is not next" in changelog
-    assert "Next implementation after the ZIP of `a566af56` is one deletion PR" in changelog
+    assert "Next implementation is one deletion PR on main BEFORE any Cloud Shell ZIP" in changelog
 
 
 def test_v223_handoff_must_not_be_recreated() -> None:
@@ -231,7 +242,7 @@ def test_v223_keeps_continentie_evidence_and_every_guideline_law() -> None:
 def test_v223_is_c3_spanning_review_surface_owner_approved_and_does_not_reopen_gd03() -> None:
     delta = _read(DELTA)
     governance = _read(ROOT / "docs" / "GOVERNANCE.md")
-    assert "**Highest change class:** C3 spanning review-surface / retrieve-safety (Auditor REQUEST SIMPLIFICATION after A+C+D on main; first DELETE cut of unused src modules; ZIP of a566af56 remains before this wave)" in delta
+    assert "**Highest change class:** C3 spanning review-surface / retrieve-safety (Auditor REQUEST SIMPLIFICATION after A+C+D on main; first DELETE cut, then one ZIP of that SHA; MUST NOT ZIP a566af56 if that forces a second ZIP)" in delta
     assert "This is not a C5 reopen of four-eyes or publish" in delta
     assert "This delta is owner-approved" in delta
     assert "Named C3 reviewers are not yet staffed" in delta
@@ -261,21 +272,19 @@ def test_v223_leaves_v216_through_v222_delta_files_untouched() -> None:
     assert b"**Protocol delta version:** 2.21.0" in v221
     assert b"**Protocol delta version:** 2.22.0" in v222
     new_law = b"first DELETE cut, zero-caller src/ modules only"
-    assert new_law not in v216
-    assert new_law not in v217
-    assert new_law not in v218
-    assert new_law not in v219
-    assert new_law not in v220
-    assert new_law not in v221
-    assert new_law not in v222
+    live_path = b"first DELETE cut, then one ZIP of that SHA"
+    for old in (v216, v217, v218, v219, v220, v221, v222):
+        assert new_law not in old
+        assert live_path not in old
     assert new_law in DELTA.read_bytes()
+    assert live_path in DELTA.read_bytes()
 
 
 def test_v223_does_not_reopen_serving_typeset_stamps_chrome_duty() -> None:
     delta = _read(DELTA)
     assert "Do not reopen serving typeset, stamps, chrome, slogans, bronpassage-prose, empty Onderwerp, relation-checkbox adjacency, review-duty / queue presentation, unpublished-snapshot delete, or wave A/B/C/D definitions except as already required" in delta
     assert "The v2.12 closed serving typeset remains UNCHANGED" in delta
-    assert "This delta’s bar is the first DELETE cut after that ZIP" in delta
+    assert "This delta’s bar is the first DELETE cut, then one ZIP of that SHA" in delta
 
 
 def test_v223_out_of_scope_matches_owner_lock() -> None:
