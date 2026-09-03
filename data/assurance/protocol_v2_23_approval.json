@@ -1,0 +1,13 @@
+{
+  "manifest_version": "1.0",
+  "protocol_version": "2.23.0",
+  "protocol_path": "docs/PROTOCOL_V2_23_CODE_SURFACE_SIMPLIFICATION_DELTA.md",
+  "protocol_sha256": "d0402c7ee07e1a8f07c960f48e3275022c5f2090bdbe4c93169710d02861e6a7",
+  "repository": "WilliamGomes41/VENVN-DS",
+  "default_branch": "main",
+  "commit_sha": "pending_after_merge",
+  "approval_date": "2026-09-03",
+  "approval_authority": "project_owner",
+  "branch_protection_status": "temporary_procedural_control",
+  "conformance_effect": "does_not_override_gate_status"
+}
