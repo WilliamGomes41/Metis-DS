@@ -1,8 +1,8 @@
 {
   "manifest_version": "1.0",
-  "protocol_version": "2.23.0",
-  "protocol_path": "docs/PROTOCOL_V2_23_CODE_SURFACE_SIMPLIFICATION_DELTA.md",
-  "protocol_sha256": "8a4df01dc0666efc7e3dc7761864f0d2b4323c6d697de741d07c3a44cc9994e1",
+  "protocol_version": "2.24.0",
+  "protocol_path": "docs/PROTOCOL_V2_24_CONSOLE_RETRIEVAL_DEPLOY_SPLIT_DELTA.md",
+  "protocol_sha256": "bc6f179031deacf399f94cfbbefdd46b9416c5a741f5f1268b023c873fed9d41",
   "repository": "WilliamGomes41/VENVN-DS",
   "default_branch": "main",
   "commit_sha": "pending_after_merge",

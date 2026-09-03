@@ -288,6 +288,20 @@ def test_approved_v223_delta_manifest_is_supported(tmp_path: Path):
     assert manifest["commit_sha"] == "a" * 40
 
 
+def test_approved_v224_delta_manifest_is_supported(tmp_path: Path):
+    protocol = tmp_path / "PROTOCOL_V2_24_CONSOLE_RETRIEVAL_DEPLOY_SPLIT_DELTA.md"
+    protocol.write_text(
+        "**Status:** Approved for project use\n"
+        "**Protocol delta version:** 2.24.0\n"
+        "**Approval date:** 2026-09-03\n",
+        encoding="utf-8",
+    )
+    manifest = build_manifest(protocol, "b" * 40)
+    assert manifest["protocol_version"] == "2.24.0"
+    assert manifest["approval_date"] == "2026-09-03"
+    assert manifest["commit_sha"] == "b" * 40
+
+
 def test_draft_protocol_cannot_receive_approval_manifest(tmp_path: Path):
     protocol = tmp_path / "PROTOCOL.md"
     protocol.write_text(

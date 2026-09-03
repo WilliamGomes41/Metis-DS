@@ -32,6 +32,8 @@ G2-readiness (PR #69) already pinned `azure-identity==1.25.3` / `azure-storage-b
 
 This is not a GD-03 knowledge-publish. G2 remains the publication blocker. Metis, the Implementation engineer and the Auditor MUST NOT count as GD-03 reviewers, MUST NOT approve, and MUST NOT publish.
 
+Index/conflict pointer: Protocol v2.24.0 SUPERSEDES any reading that the Azure operations-console ZIP MAY include numpy, sklearn, scipy, or scikit-learn; that console_asgi MAY import embedding_provider / vector retrieval / hybrid retrieval at process start; that Product API MUST share the Review-console App Service worker; that this split opens publish() or G2; that console accounts are API tenants; or that unpublished review snapshots are shared with the Product API. Where this file and Protocol v2.24 conflict on those readings, Protocol v2.24 governs. First DELETE cut, keep list, two-products, CLI review-queue plan, PR #82 closed, and HANDOFF.md MUST NOT be recreated remain.
+
 ## 2. Unchanged v2.6 through v2.22 rules
 
 The four layers remain source/evidence → canonical knowledge → governance → product. This delta MUST NOT invent a fifth layer and MUST NOT collapse those four.
