@@ -1,4 +1,5 @@
 -r requirements.lock
+-r requirements-retrieval.txt
 pytest==9.0.2
 coverage==7.13.3
 setuptools==82.0.1

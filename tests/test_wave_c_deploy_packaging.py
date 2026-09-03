@@ -10,8 +10,11 @@ from pathlib import Path
 import pytest
 
 from src.azure_deploy_package import (
+    CONSOLE_REQUIREMENTS_NAME,
+    FORBIDDEN_CONSOLE_PACKAGES,
     RUNTIME_DATA_MARKERS,
     DeployPackageError,
+    default_console_requirements,
     package_contains_runtime_data,
     write_deploy_zip,
 )
@@ -38,6 +41,14 @@ DIGEST = "b" * 64
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def test_packaging_defaults_to_console_requirements_not_retrieval_extra() -> None:
+    assert default_console_requirements(ROOT) == ROOT / CONSOLE_REQUIREMENTS_NAME
+    assert default_console_requirements(ROOT).is_file()
+    script = _read(ROOT / "scripts" / "create_azure_deploy_package.sh")
+    assert "requirements-console.txt" in script
+    assert "MUST NOT vendor numpy, sklearn, scipy" in script
 
 
 def test_packaging_script_is_invoked_via_bash_and_is_executable() -> None:
@@ -74,8 +85,23 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
     assert "scripts/azure_console_startup.sh" in names
     assert "src/console_asgi.py" in names
     assert "requirements.txt" in names
+    assert CONSOLE_REQUIREMENTS_NAME in names
+    assert "requirements-retrieval.txt" not in names
     assert not any(package_contains_runtime_data(name) for name in names)
     assert not any("git archive" in name for name in names)
+    forbidden_hits = [
+        name
+        for name in names
+        if name.startswith(".python_packages/")
+        and any(
+            part.split("-", 1)[0].split(".", 1)[0].lower().replace("_", "-")
+            in FORBIDDEN_CONSOLE_PACKAGES
+            or part.lower().startswith("scikit_learn")
+            or part.lower().startswith("scikit-learn")
+            for part in name.replace("\\", "/").split("/")
+        )
+    ]
+    assert forbidden_hits == [], f"console ZIP vendored forbidden packages: {forbidden_hits[:20]}"
 
 
 def test_packaging_excludes_runtime_data_and_does_not_overwrite_home_data(tmp_path: Path) -> None:

@@ -97,7 +97,10 @@ in de repository.
    blijven beide workflows inactief / fail-closed (`METIS_TEST_APP_READY`
    ontbreekt). MUST NOT PR #82 mergen (git-archive-only + auto-deploy).
 3. Packaging: `bash scripts/create_azure_deploy_package.sh` (executable of via
-   bash). Het ZIP bevat vendored `.python_packages` uit `requirements.txt`.
+   bash). Het ZIP bevat vendored `.python_packages` uit `requirements-console.txt`
+   (Protocol v2.24; MUST NOT numpy/sklearn/scipy). `requirements-retrieval.txt`
+   blijft de zwaardere extra voor Product API / TF-IDF en gaat niet in het
+   console-pakket.
 4. `--clean true` wist `wwwroot` en MUST NOT `/home/data` wissen.
 5. Production is handmatig: `deploy-production` met een volledige SHA die al
    op `main` ligt, na protection/approval, met de production-identiteit.
