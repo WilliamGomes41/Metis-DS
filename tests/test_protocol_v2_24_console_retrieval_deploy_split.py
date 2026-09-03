@@ -264,7 +264,7 @@ def test_v224_data_boundary_technically_enforceable() -> None:
     assert "Unpublished review store and researcher console accounts MUST NOT be reachable with Product API credentials" in delta
     assert "“We don’t do that” is not enough" in delta or '"We don\'t do that" is not enough' in delta
     assert "Do not build the API App Service in this PR" in delta
-    assert "datagrens MUST technisch afdwingbaar zijn" in root_protocol
+    assert "MUST de datagrens technisch afdwingbaar zijn" in root_protocol
     assert "MUST NOT bereikbaar zijn met Product API-credentials" in root_protocol
     assert "«We doen dat niet» is niet genoeg" in root_protocol
     assert "technically enforceable" in changelog
