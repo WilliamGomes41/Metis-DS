@@ -176,17 +176,38 @@ def test_adapter_fail_closed_when_sdk_missing(monkeypatch: pytest.MonkeyPatch) -
         AzureBlobSourceStore()
 
 
+def _requirement_declares_pin(path: Path, pin: str, *, _seen: set[Path] | None = None) -> bool:
+    resolved = path.resolve()
+    seen = _seen if _seen is not None else set()
+    if resolved in seen or not resolved.is_file():
+        return False
+    seen.add(resolved)
+    text = resolved.read_text(encoding="utf-8")
+    if pin in text:
+        return True
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if line.startswith("-r ") or line.startswith("--requirement "):
+            included = resolved.parent / line.split(None, 1)[1]
+            if _requirement_declares_pin(included, pin, _seen=seen):
+                return True
+    return False
+
+
 def test_pyproject_and_lock_files_pin_the_same_azure_sdk() -> None:
     pins = ("azure-identity==1.25.3", "azure-storage-blob==12.30.1")
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    lock = (ROOT / "requirements.lock").read_text(encoding="utf-8")
-    requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+    lock = ROOT / "requirements.lock"
+    requirements = ROOT / "requirements.txt"
+    console = ROOT / "requirements-console.txt"
     dev_lock = (ROOT / "requirements-dev.lock").read_text(encoding="utf-8")
     for pin in pins:
         assert pin in pyproject
-        assert pin in lock
-        assert pin in requirements
+        assert _requirement_declares_pin(lock, pin)
+        assert _requirement_declares_pin(requirements, pin)
+        assert pin in console.read_text(encoding="utf-8")
     assert "-r requirements.lock" in dev_lock
+    assert "-r requirements-retrieval.txt" in dev_lock
 
 
 def test_activation_runbook_is_docs_only() -> None:

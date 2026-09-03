@@ -2,6 +2,8 @@
 # Create a fully deployable Azure ZIP with vendored Python dependencies.
 # git-archive-only is not enough (Protocol v2.22 wave C).
 # MUST NOT include runtime data. MUST NOT overwrite /home/data.
+# Protocol v2.24: pack requirements-console.txt, not the retrieval/ML extra.
+# MUST NOT vendor numpy, sklearn, scipy, or scikit-learn.
 set -euo pipefail
 
 output_path="${1:?usage: bash scripts/create_azure_deploy_package.sh <output-path>}"

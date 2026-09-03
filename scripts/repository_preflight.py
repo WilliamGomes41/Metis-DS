@@ -139,20 +139,60 @@ G2_RUNTIME_PINS = (
 )
 
 
+def _requirement_files_declare_pin(paths: list[Path], pin: str) -> bool:
+    seen: set[Path] = set()
+    queue = list(paths)
+    include_re = re.compile(r'^(?:-r|--requirement)\s+(\S+)')
+    while queue:
+        path = queue.pop()
+        resolved = path.resolve()
+        if resolved in seen or not resolved.is_file():
+            continue
+        seen.add(resolved)
+        text = resolved.read_text(encoding='utf-8')
+        if pin in text:
+            return True
+        for raw in text.splitlines():
+            line = raw.split('#', 1)[0].strip()
+            match = include_re.match(line)
+            if match:
+                queue.append(resolved.parent / match.group(1))
+    return False
+
+
 def validate_g2_runtime_pins(errors: list[str]) -> None:
     pyproject = (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
-    lock = (ROOT / 'requirements.lock').read_text(encoding='utf-8')
-    requirements = (ROOT / 'requirements.txt').read_text(encoding='utf-8')
+    lock = ROOT / 'requirements.lock'
+    requirements = ROOT / 'requirements.txt'
+    console = ROOT / 'requirements-console.txt'
+    retrieval = ROOT / 'requirements-retrieval.txt'
     dev_lock = (ROOT / 'requirements-dev.lock').read_text(encoding='utf-8')
     for pin in G2_RUNTIME_PINS:
         if pin not in pyproject:
             errors.append(f'pyproject.toml missing required G2 runtime pin: {pin}')
-        if pin not in lock:
+        if not _requirement_files_declare_pin([lock], pin):
             errors.append(f'requirements.lock missing required G2 runtime pin: {pin}')
-        if pin not in requirements:
+        if not _requirement_files_declare_pin([requirements], pin):
             errors.append(f'requirements.txt missing required G2 runtime pin: {pin}')
+        if pin not in console.read_text(encoding='utf-8'):
+            errors.append(f'requirements-console.txt missing required G2 runtime pin: {pin}')
     if '-r requirements.lock' not in dev_lock:
         errors.append('requirements-dev.lock must include -r requirements.lock so G2 SDK pins stay in sync')
+    if '-r requirements-retrieval.txt' not in dev_lock:
+        errors.append('requirements-dev.lock must include -r requirements-retrieval.txt so CI can test retrieval extras')
+    if not console.is_file():
+        errors.append('requirements-console.txt is required for the thin console pack')
+    if not retrieval.is_file():
+        errors.append('requirements-retrieval.txt is required for the Product API / retrieval extra')
+    forbidden = ('numpy', 'sklearn', 'scipy', 'scikit-learn')
+    console_text = console.read_text(encoding='utf-8').lower() if console.is_file() else ''
+    for name in forbidden:
+        if re.search(rf'(?m)^{re.escape(name)}\b', console_text):
+            errors.append(f'requirements-console.txt MUST NOT declare {name}')
+    retrieval_text = retrieval.read_text(encoding='utf-8').lower() if retrieval.is_file() else ''
+    for name in ('scikit-learn', 'numpy', 'scipy'):
+        if not re.search(rf'(?m)^{re.escape(name)}\b', retrieval_text):
+            errors.append(f'requirements-retrieval.txt must keep the heavier extra pin: {name}')
 
 
 def main() -> int:
