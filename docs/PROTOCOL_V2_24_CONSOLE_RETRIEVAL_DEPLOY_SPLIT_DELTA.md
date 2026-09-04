@@ -34,6 +34,8 @@ G2-readiness (PR #69) already pinned `azure-identity==1.25.3` / `azure-storage-b
 
 This is not a GD-03 knowledge-publish. G2 remains the publication blocker. Metis, the Implementation engineer and the Auditor MUST NOT count as GD-03 reviewers, MUST NOT approve, and MUST NOT publish.
 
+Index/conflict pointer: Protocol v2.25.0 SUPERSEDES any reading that kennisplatform `story.html` boom players MUST stay entirely out of the MVP / first console as a knowledge class, and any reading that the only MVP document classes are guideline HTML/PDF without a boom path. Where this file and Protocol v2.25 conflict on those readings, or on which implementation is next, Protocol v2.25 governs: beslisboom class is in MVP for researcher ingest+review; the Storyline player package is not the Product API surface and MUST NOT be the nurse console; next code is Forge on the existing kernel/console for exactly the beslisboom path wave. Thin console ZIP, one shared kernel, Product API later, split does not open publish/G2, and HANDOFF.md MUST NOT be recreated remain.
+
 ## 2. Unchanged v2.6 through v2.23 rules
 
 The four layers remain source/evidence → canonical knowledge → governance → product. This delta MUST NOT invent a fifth layer and MUST NOT collapse those four.
