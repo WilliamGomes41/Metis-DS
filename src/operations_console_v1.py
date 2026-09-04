@@ -24,6 +24,21 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from src.atomic_split_v1 import proposed_relations_for_units
+from src.beslisboom_path_v1 import (
+    CLOSED_BOOM_TYPES,
+    CLOSED_KLASSEN,
+    boom_freeze_errors,
+    boom_spec_from_fragments,
+    extract_boom_fragments,
+    is_confirmable_type_for_path,
+    is_geen_actie_outcome,
+    is_live_rest_sole_source,
+    is_live_rest_url,
+    map_geen_actie,
+    outcome_review_errors,
+    review_path_for_klasse,
+    stamp_boom_flags,
+)
 from src.context_aware_split_v1 import split_context_aware_units
 from src.extract_html_v1 import extract as extract_html
 from src.extract_pdf_v2 import extract as extract_pdf
@@ -35,7 +50,6 @@ from src.four_eyes_v1 import (
 from src.g2_source_store import G2SourceStoreError, ImmutableSourceStore, is_g2_locator
 from src.integrity_kernel import compute_canonical_object_hash, sha256_bytes, stamp_canonical_hashes
 from src.object_taxonomy_v1 import (
-    is_closed_confirmed_type,
     is_closed_recommendation_strength,
 )
 from src.open_original_v1 import OpenOriginalError, open_source_passage
@@ -56,7 +70,7 @@ UNPUBLISHED_DELETE_EVENT = "unpublished_snapshot_deleted"
 PUBLISHED_PROJECTION_FILENAME = "published_projection.jsonl"
 ALLOWED_DELETE_NEXT = frozenset({"/ingest", "/review", "/tree"})
 ALLOWED_ROLES = frozenset({"researcher", "reviewer", "publisher"})
-ALLOWED_CLASSES = ("richtlijn", "handreiking", "artikel", "transcript", "podcast")
+ALLOWED_CLASSES = CLOSED_KLASSEN
 SOURCE_VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+)*$")
 YEAR_AS_VERSION_RE = re.compile(r"^(19|20)\d{2}$")
 ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
@@ -74,6 +88,9 @@ REVIEW_TYPE_NAMES = frozenset(
         "exception",
         "recommendation",
         "document",
+        "path",
+        "node",
+        "outcome",
     }
 )
 CLASS_ORDER = {
@@ -82,6 +99,7 @@ CLASS_ORDER = {
     "artikel": 2,
     "transcript": 1,
     "podcast": 1,
+    "beslisboom": 0,
 }
 FORBIDDEN_REVIEWER_IDENTITIES = frozenset(
     {
@@ -204,24 +222,40 @@ def validate_ingest_source_version(value: str | None) -> str:
     return raw
 
 
-def review_lane(obj: dict[str, Any]) -> str:
+def _authoritative_review_type(obj: dict[str, Any]) -> str | None:
+    confirmed = obj.get("confirmed_object_type")
+    stored = obj.get("object_type")
+    proposed = obj.get("proposed_object_type")
+    if confirmed:
+        return confirmed
+    if stored and stored != "unclassified":
+        return stored
+    return proposed
+
+
+def inferred_review_path(obj: dict[str, Any]) -> str:
+    authoritative = _authoritative_review_type(obj)
+    if authoritative in CLOSED_BOOM_TYPES or obj.get("proposed_object_type") in CLOSED_BOOM_TYPES:
+        return "boom"
+    return "richtlijn"
+
+
+def review_lane(obj: dict[str, Any], review_path: str | None = None) -> str:
     """Queue routing from the first authoritative type. Not a speed switch.
 
     Confirmed type wins. Stored type wins over a stale proposal. Proposed
     type is used only when the object is still unclassified, so a human
     reclassification to recommendation cannot be batch-overwritten as heading.
+    On the boom path, ``path`` is structure (fast) and never advice.
     """
     if obj.get("object_type") == "document":
         return "document"
-    confirmed = obj.get("confirmed_object_type")
-    stored = obj.get("object_type")
-    proposed = obj.get("proposed_object_type")
-    if confirmed:
-        authoritative = confirmed
-    elif stored and stored != "unclassified":
-        authoritative = stored
-    else:
-        authoritative = proposed
+    path = review_path or inferred_review_path(obj)
+    authoritative = _authoritative_review_type(obj)
+    if path == "boom":
+        if authoritative == "path":
+            return "fast"
+        return "slow"
     if authoritative == "heading":
         return "fast"
     return "slow"
@@ -260,51 +294,62 @@ def review_row_status(obj: dict[str, Any]) -> str:
     return "wacht"
 
 
-def review_stacks(objects: Iterable[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def review_stacks(
+    objects: Iterable[dict[str, Any]],
+    review_path: str | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Koppen (fast heading) vs all slow content. Document rows are not stacks.
 
     The old Inhoud enumeration is every slow object, including leftover
     unclassified. Protocol v2.19 presents slow duty separately: use
-    ``slow_review_duty`` for the researcher-required cards.
+    ``slow_review_duty`` for the researcher-required cards. On the boom
+    path the fast stack is ``path`` structure.
     """
     rows = [obj for obj in objects if obj.get("object_type") != "document"]
-    koppen = [obj for obj in rows if review_lane(obj) == "fast"]
-    inhoud = [obj for obj in rows if review_lane(obj) != "fast"]
+    koppen = [obj for obj in rows if review_lane(obj, review_path=review_path) == "fast"]
+    inhoud = [obj for obj in rows if review_lane(obj, review_path=review_path) != "fast"]
     return koppen, inhoud
 
 
 SLOW_REVIEW_DUTY_TYPES = frozenset({"recommendation", "condition", "exception"})
+SLOW_BOOM_DUTY_TYPES = frozenset({"node", "outcome"})
 
 
-def is_slow_review_duty(obj: dict[str, Any]) -> bool:
+def is_slow_review_duty(obj: dict[str, Any], review_path: str | None = None) -> bool:
     """True for the researcher-required slow hand work (Protocol v2.19).
 
     Proposed or stored ``recommendation``, ``condition``, ``exception``, or
     any high-risk object. Headings stay in Koppen. Leftover unclassified is
     not this duty. MUST NOT auto-confirm types. MUST NOT treat leftover as
-    light enough to skip four-eyes or to serve.
+    light enough to skip four-eyes or to serve. On the boom path, ``node``
+    and ``outcome`` are the duty types.
     """
     if obj.get("object_type") == "document":
         return False
-    if review_lane(obj) == "fast":
+    path = review_path or inferred_review_path(obj)
+    if review_lane(obj, review_path=path) == "fast":
         return False
     if requires_four_eyes(obj, confirmed_type=obj.get("confirmed_object_type") or None):
         return True
+    duty_types = SLOW_BOOM_DUTY_TYPES if path == "boom" else SLOW_REVIEW_DUTY_TYPES
     confirmed = obj.get("confirmed_object_type")
     stored = obj.get("object_type")
     proposed = obj.get("proposed_object_type")
-    if confirmed in SLOW_REVIEW_DUTY_TYPES:
+    if confirmed in duty_types:
         return True
-    if stored in SLOW_REVIEW_DUTY_TYPES:
+    if stored in duty_types:
         return True
-    if proposed in SLOW_REVIEW_DUTY_TYPES:
+    if proposed in duty_types:
         return True
     return False
 
 
-def slow_review_duty(objects: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+def slow_review_duty(
+    objects: Iterable[dict[str, Any]],
+    review_path: str | None = None,
+) -> list[dict[str, Any]]:
     """Presented Inhoud cards: recommendation + condition/exception/high-risk."""
-    return [obj for obj in objects if is_slow_review_duty(obj)]
+    return [obj for obj in objects if is_slow_review_duty(obj, review_path=review_path)]
 
 
 def remaining_unclassified(objects: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -751,7 +796,8 @@ class OperationsConsole:
         reviewer = self._require_role(actor_id, "reviewer")
         if actor_id not in self._envelope(snapshot_id)["named_reviewers"]:
             raise ConsoleError("reviewer_not_named_on_snapshot")
-        if not is_closed_confirmed_type(confirmed_object_type):
+        review_path = review_path_for_klasse(self._envelope(snapshot_id)["class"])
+        if not is_confirmable_type_for_path(confirmed_object_type, review_path):
             raise ConsoleError("unknown_object_type")
         current = self.snapshot_objects(snapshot_id)
         target = next((row for row in current if row["object_id"] == object_id), None)
@@ -894,6 +940,15 @@ class OperationsConsole:
             code="invalid_source_date",
         )
         reviewers = self._resolve_named_reviewers(named_reviewers, actor_id)
+        review_path = review_path_for_klasse(class_)
+        candidate_url = url or live_url or ""
+        if review_path == "boom" and is_live_rest_url(candidate_url):
+            if data is None or is_live_rest_sole_source(
+                data=data or b"",
+                live_url=candidate_url,
+                filename=filename or "",
+            ):
+                raise ConsoleError("live_rest_not_sole_source")
         if url:
             data, fetched_type, fetched_name = self.url_fetcher(url)
             filename = filename or fetched_name
@@ -904,7 +959,21 @@ class OperationsConsole:
         if ".." in filename or "/" in filename or "\\" in filename:
             raise ConsoleError("invalid_store_path")
         filename = safe_store_filename(filename)
-        kind = classify_official_file(data, filename, content_type)
+        if review_path == "boom":
+            freeze_errors = boom_freeze_errors(
+                data=data,
+                filename=filename,
+                live_url=live_url or url or "",
+            )
+            if "story_html_alone_insufficient" in freeze_errors:
+                raise ConsoleError("story_html_alone_insufficient")
+            if "live_rest_sole_source" in freeze_errors:
+                raise ConsoleError("live_rest_not_sole_source")
+            if freeze_errors:
+                raise ConsoleError(freeze_errors[0])
+            kind = "boom"
+        else:
+            kind = classify_official_file(data, filename, content_type)
         if url and kind == "html":
             raise ConsoleError("live_url_html_not_allowed")
         digest = safe_path_token(sha256_bytes(data), pattern=STORE_DIGEST_RE)
@@ -930,22 +999,23 @@ class OperationsConsole:
             if not replaces_snapshot_id:
                 raise ConsoleError("replaces_snapshot_id_required")
             previous = self._envelope(replaces_snapshot_id)
-        fragments = self._extract(kind, stored_path, document_id=document_id, source_id=source_id)
-        spec = _spec_from_fragments(
+        fragments, spec = self._fragments_and_spec(
+            kind,
+            stored_path,
+            data=data,
             document_id=document_id,
+            source_id=source_id,
             title=title.strip(),
             family=family_hook,
             class_=class_,
-            fragments=fragments,
-            content_kind=kind,
         )
         manifest = {
             "canonical_source": {
                 "source_id": source_id,
                 "title": title.strip(),
                 "publisher": "V&VN",
-                "source_url": live_url or url or "",
-                "source_type": kind,
+                "source_url": live_url or url or f"urn:vvn:freeze:{digest}",
+                "source_type": "interactive_tree" if kind == "boom" else kind,
                 "source_level": 1,
                 "canonicality": "canonical",
                 "source_checksum": digest,
@@ -956,6 +1026,8 @@ class OperationsConsole:
             }
         }
         objects = transform_generic(spec, manifest, fragments)
+        if kind == "boom":
+            stamp_boom_flags(objects, fragments)
         object_diff = None
         if previous:
             object_diff = self._diff_objects(self.snapshot_objects(previous["snapshot_id"]), objects)
@@ -1016,19 +1088,15 @@ class OperationsConsole:
         digest = sha256_bytes(freeze_bytes)
         if digest != envelope["sha256"]:
             raise ConsoleError("freeze_bytes_missing")
-        fragments = self._extract(
+        fragments, spec = self._fragments_and_spec(
             envelope["content_kind"],
             freeze_path,
+            data=freeze_bytes,
             document_id=envelope["document_id"],
             source_id=envelope["source_id"],
-        )
-        spec = _spec_from_fragments(
-            document_id=envelope["document_id"],
             title=envelope["title"],
             family=envelope["family"],
             class_=envelope["class"],
-            fragments=fragments,
-            content_kind=envelope["content_kind"],
         )
         manifest = {
             "canonical_source": {
@@ -1036,7 +1104,7 @@ class OperationsConsole:
                 "title": envelope["title"],
                 "publisher": "V&VN",
                 "source_url": envelope.get("live_url") or "",
-                "source_type": envelope["content_kind"],
+                "source_type": "interactive_tree" if envelope["content_kind"] == "boom" else envelope["content_kind"],
                 "source_level": 1,
                 "canonicality": "canonical",
                 "source_checksum": envelope["sha256"],
@@ -1047,6 +1115,8 @@ class OperationsConsole:
             }
         }
         objects = transform_generic(spec, manifest, fragments)
+        if envelope["content_kind"] == "boom":
+            stamp_boom_flags(objects, fragments)
         envelope["review_passes"] = {}
         envelope["state"] = CAPTURED
         self._envelopes[snapshot_id] = envelope
@@ -1180,7 +1250,45 @@ class OperationsConsole:
     def _extract(self, kind: str, path: Path, *, document_id: str, source_id: str) -> list[dict[str, Any]]:
         if kind == "html":
             return extract_html(path, document_id=document_id, source_id=source_id)
+        if kind == "boom":
+            return extract_boom_fragments(path.read_bytes(), document_id=document_id, source_id=source_id)
         return extract_pdf(path, document_id=document_id, source_id=source_id)
+
+    def _fragments_and_spec(
+        self,
+        kind: str,
+        path: Path,
+        *,
+        data: bytes,
+        document_id: str,
+        source_id: str,
+        title: str,
+        family: str,
+        class_: str,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        if kind == "boom":
+            try:
+                fragments = extract_boom_fragments(data, document_id=document_id, source_id=source_id)
+            except ValueError as exc:
+                raise ConsoleError("invalid_boom_freeze") from exc
+            spec = boom_spec_from_fragments(
+                document_id=document_id,
+                title=title,
+                family=family,
+                class_=class_,
+                fragments=fragments,
+            )
+            return fragments, spec
+        fragments = self._extract(kind, path, document_id=document_id, source_id=source_id)
+        spec = _spec_from_fragments(
+            document_id=document_id,
+            title=title,
+            family=family,
+            class_=class_,
+            fragments=fragments,
+            content_kind=kind,
+        )
+        return fragments, spec
 
     def _diff_objects(self, previous: list[dict[str, Any]], current: list[dict[str, Any]]) -> dict[str, Any]:
         def key(row: dict[str, Any]) -> str:
@@ -1296,14 +1404,15 @@ class OperationsConsole:
         if not confirmed and target.get("confirmed_object_type"):
             confirmed = target["confirmed_object_type"]
         apply_type = bool(confirmed_object_type)
+        review_path = review_path_for_klasse(envelope["class"])
         if decision == "approve" or apply_type:
             self._require_open_original(snapshot_id, object_id)
         if decision == "approve":
-            if not is_closed_confirmed_type(confirmed):
+            if not is_confirmable_type_for_path(confirmed, review_path):
                 raise ConsoleError("unknown_object_type")
             apply_type = True
         if apply_type and confirmed:
-            if not is_closed_confirmed_type(confirmed):
+            if not is_confirmable_type_for_path(confirmed, review_path):
                 raise ConsoleError("unknown_object_type")
             if target.get("object_type") != "document":
                 if target.get("confirmed_object_type") != confirmed:
@@ -1312,9 +1421,26 @@ class OperationsConsole:
                 target["object_type"] = confirmed
                 mark_four_eyes_on_object(target, confirmed_type=confirmed)
                 stamp_canonical_hashes(target)
+        if decision == "approve" and confirmed == "outcome":
+            errors = outcome_review_errors(target, peers=current)
+            if errors:
+                raise ConsoleError("outcome_review_failed", ",".join(errors))
         strength = (recommendation_strength or "").strip() or None
+        stamp_type = confirmed or target.get("confirmed_object_type") or target.get("object_type")
+        if not strength and decision == "approve" and stamp_type == "outcome":
+            text = str((target.get("content") or {}).get("clean_text") or "")
+            if is_geen_actie_outcome(text):
+                mapped = map_geen_actie(text)
+                strength = mapped["strength"]
+                target["no_action"] = True
+                metadata = target.setdefault("metadata", {})
+                metadata["no_action"] = True
+        if decision == "approve" and stamp_type == "outcome":
+            effective = strength or target.get("confirmed_recommendation_strength")
+            if not effective:
+                raise ConsoleError("outcome_strength_required")
         if strength:
-            if (confirmed or target.get("confirmed_object_type") or target.get("object_type")) != "recommendation":
+            if stamp_type not in {"recommendation", "outcome"}:
                 raise ConsoleError("recommendation_strength_requires_recommendation")
             if not is_closed_recommendation_strength(strength):
                 raise ConsoleError("unknown_recommendation_strength")
@@ -1353,8 +1479,15 @@ class OperationsConsole:
             updated_target["object_type"] = confirmed
             mark_four_eyes_on_object(updated_target, confirmed_type=confirmed)
             stamp_canonical_hashes(updated_target)
+        if target.get("confirmed_relations"):
+            updated_target["confirmed_relations"] = target["confirmed_relations"]
         if strength:
             updated_target["confirmed_recommendation_strength"] = strength
+            stamp_canonical_hashes(updated_target)
+        if target.get("no_action"):
+            updated_target["no_action"] = True
+            metadata = updated_target.setdefault("metadata", {})
+            metadata["no_action"] = True
             stamp_canonical_hashes(updated_target)
         history.append(updated_target)
         self._save_objects(snapshot_id, history)
@@ -1400,12 +1533,14 @@ class OperationsConsole:
         ids = [str(object_id).strip() for object_id in object_ids if str(object_id).strip()]
         if not ids:
             raise ConsoleError("fast_lane_heading_required")
+        review_path = review_path_for_klasse(self._envelope(snapshot_id)["class"])
+        structure_type = "path" if review_path == "boom" else "heading"
         current = {row["object_id"]: row for row in self.snapshot_objects(snapshot_id)}
         for object_id in ids:
             target = current.get(object_id)
             if target is None:
                 raise ConsoleError("unknown_object")
-            if review_lane(target) != "fast":
+            if review_lane(target, review_path=review_path) != "fast":
                 raise ConsoleError("fast_lane_heading_required")
         updated: list[dict[str, Any]] = []
         for object_id in ids:
@@ -1414,7 +1549,7 @@ class OperationsConsole:
                 snapshot_id=snapshot_id,
                 object_id=object_id,
                 decision="approve",
-                confirmed_object_type="heading",
+                confirmed_object_type=structure_type,
             )
             refreshed = next(row for row in rows if row["object_id"] == object_id)
             mark_four_eyes_on_object(refreshed, confirmed_type="heading")

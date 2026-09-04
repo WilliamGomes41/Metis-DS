@@ -53,7 +53,10 @@
         "exception",
         "out_of_scope",
         "supersession",
-        "unclassified"
+        "unclassified",
+        "path",
+        "node",
+        "outcome"
       ]
     },
     "proposed_object_type": {
@@ -68,6 +71,9 @@
         "condition",
         "exception",
         "recommendation",
+        "path",
+        "node",
+        "outcome",
         null
       ]
     },
@@ -83,6 +89,9 @@
         "condition",
         "exception",
         "recommendation",
+        "path",
+        "node",
+        "outcome",
         null
       ]
     },
@@ -109,6 +118,25 @@
         "niet_doen",
         null
       ]
+    },
+    "scorelist": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "no_action": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "metadata": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": true
     },
     "source": {
       "type": "object",
