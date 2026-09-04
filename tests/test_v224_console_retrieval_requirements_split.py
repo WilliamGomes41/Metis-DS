@@ -64,6 +64,7 @@ ALLOWED_CONSOLE_PACKAGES = frozenset(
         "gunicorn",
         "azure-identity",
         "azure-storage-blob",
+        "cryptography",
     }
 )
 
@@ -116,6 +117,11 @@ def test_v224_console_requirements_exclude_sklearn_stack() -> None:
     assert requirements_contain_forbidden_packages(console) == frozenset()
     assert requirements_contain_forbidden_packages(ROOT / "requirements.txt") == frozenset()
     assert default_console_requirements(ROOT) == console
+
+
+def test_v224_console_pins_azure_linux_compatible_cryptography() -> None:
+    requirements = (ROOT / CONSOLE_REQUIREMENTS_NAME).read_text(encoding="utf-8")
+    assert "cryptography==44.0.3" in requirements.splitlines()
 
 
 def test_v224_retrieval_extra_keeps_sklearn_stack() -> None:
