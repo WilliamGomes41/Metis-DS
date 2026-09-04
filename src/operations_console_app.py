@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.four_eyes_v1 import requires_four_eyes
+from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES, review_path_for_klasse
 from src.object_taxonomy_v1 import (
     CLOSED_OBJECT_TYPES,
     CLOSED_RECOMMENDATION_STRENGTHS,
@@ -63,6 +64,9 @@ OBJECT_TYPE_LABELS = {
     "condition": "Voorwaarde",
     "exception": "Uitzondering",
     "recommendation": "Aanbeveling",
+    "path": "Pad",
+    "node": "Knoop",
+    "outcome": "Uitkomst",
 }
 BLOCKER_LABELS = {
     "second_named_reviewer_required": "Nog een andere benoemde reviewer moet goedkeuren.",
@@ -76,7 +80,16 @@ ERROR_COPY = {
     "uploader_cannot_be_sole_required_reviewer": "De uploader mag reviewer zijn, maar niet de enige.",
     "word_not_first_wave": "Word-bestanden horen niet bij de first wave. Lever HTML of PDF in.",
     "story_html_boom_player_out_of_first_wave": "Kennisplatform-boomplayers horen niet bij de first wave.",
-    "official_file_or_url_required": "Kies een HTML- of PDF-bestand, of een URL.",
+    "story_html_alone_insufficient": "story.html alleen is onvoldoende. Lever een gehashte boom-freeze in.",
+    "live_rest_not_sole_source": "Live kennisplatform-REST is niet de bron van waarheid. Lever een gehashte boom-freeze in.",
+    "live_rest_sole_source": "Live kennisplatform-REST is niet de bron van waarheid. Lever een gehashte boom-freeze in.",
+    "outcome_review_failed": "Deze uitkomst kan niet worden bevestigd. Bind via geldt-indien, splits kogels of vul de lege uitkomst.",
+    "outcome_relation_unconfirmed": "Bevestig eerst de geldt-indienrelatie naar een node of pad.",
+    "outcome_strength_required": "Kies DOEN, OVERWEEG of NIET DOEN voor een handelingsuitkomst.",
+    "empty_boom_freeze": "De boom-freeze heeft geen nodes en uitkomsten.",
+    "invalid_boom_freeze": "Dit bestand is geen geldige beslisboom-freeze.",
+    "condition_fused_into_outcome": "Een voorwaarde mag niet alleen in de uitkomsttekst zitten. Bind via geldt-indien.",
+    "official_file_or_url_required": "Kies een HTML-, PDF- of boom-freezebestand, of een URL.",
     "named_reviewers_required": "Kies minstens één andere reviewer dan jezelf.",
     "publisher_role_required": "Publiceren vereist de rol publisher.",
     "reviewer_role_required": "Review vereist de rol reviewer.",
@@ -285,12 +298,13 @@ def _document_options(rows: list[dict[str, Any]], selected: str = "") -> str:
     return "".join(options)
 
 
-def _type_options(confirmed: str) -> str:
+def _type_options(confirmed: str, *, review_path: str = "richtlijn") -> str:
     placeholder_selected = " selected" if not confirmed else ""
     options = [
         f'<option value="" disabled{placeholder_selected}>nog niet bevestigd</option>'
     ]
-    for name in CLOSED_OBJECT_TYPES:
+    names = CLOSED_BOOM_TYPES if review_path == "boom" else CLOSED_OBJECT_TYPES
+    for name in names:
         selected = " selected" if name == confirmed else ""
         options.append(f'<option value="{name}"{selected}>{_esc(_object_type_label(name))}</option>')
     return "".join(options)
@@ -572,12 +586,12 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             {_nav(account, "ingest", _counts(account))}
             <section class="room">
               <h1>Document inleveren</h1>
-              <p class="lead">Lever HTML of PDF in.</p>
+              <p class="lead">Lever HTML, PDF of een gehashte beslisboom-freeze in. Klasse bepaalt het reviewpad.</p>
               <form method="post" action="/ingest" enctype="multipart/form-data">
                 <div class="sections">
                   <div class="section">
                     <h3>Bron</h3>
-                    <label for="file">Bestand (HTML of PDF)</label>
+                    <label for="file">Bestand (HTML, PDF of boom-freeze)</label>
                     <input id="file" type="file" name="file">
                     <label for="url">Of PDF-URL (exacte bytes worden direct vastgelegd)</label>
                     <input id="url" name="url" placeholder="https://...">
@@ -895,6 +909,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                 "</div>"
             )
             snapshot_objects = state.snapshot_objects(chosen)
+            review_path = review_path_for_klasse(chosen_row["class"])
             if not chosen_object_id:
                 def _index_item(obj: dict[str, Any], *, checkbox: bool = False) -> str:
                     title = review_row_title(obj)
@@ -913,8 +928,8 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                         )
                     return f'<li class="review-row">{link}{status_html}</li>'
 
-                koppen, _old_inhoud = review_stacks(snapshot_objects)
-                duty = slow_review_duty(snapshot_objects)
+                koppen, _old_inhoud = review_stacks(snapshot_objects, review_path=review_path)
+                duty = slow_review_duty(snapshot_objects, review_path=review_path)
                 leftover = remaining_unclassified(snapshot_objects)
                 leftover_ids = {row.get("object_id") for row in leftover}
                 leftover_other = [
@@ -937,19 +952,31 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                         f'<p class="review-leftover-other">Overige objecten in de store: '
                         f"{len(leftover_other)}. Niet de onderzoekerplicht voor handelingsadvies.</p>"
                     )
+                if review_path == "boom":
+                    fast_title = f"Paden ({len(koppen)})"
+                    fast_lead = "Bevestig paden als structuur, nooit als advies."
+                    fast_button = "Bevestig geselecteerde paden als structuur"
+                    slow_title = f"Knopen en uitkomsten ({len(duty)})"
+                    slow_lead = "Beoordeel knopen die advies poorten en uitkomsten. Dat is de handplicht."
+                else:
+                    fast_title = f"Koppen ({len(koppen)})"
+                    fast_lead = "Bevestig koppen als structuur, nooit als advies."
+                    fast_button = "Bevestig geselecteerde koppen als structuur"
+                    slow_title = f"Inhoud ({len(duty)})"
+                    slow_lead = "Beoordeel voorgestelde aanbevelingen plus voorwaarden, uitzonderingen en ieder high-risk object. Dat is de handplicht."
                 objects_html += f"""
                     <section class="review-lane-fast">
-                      <h2>Koppen ({len(koppen)})</h2>
-                      <p class="lead">Bevestig koppen als structuur, nooit als advies.</p>
+                      <h2>{fast_title}</h2>
+                      <p class="lead">{fast_lead}</p>
                       <form method="post" action="/review/headings/batch-confirm">
                         <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
                         <ol class="object-index">{fast_items}</ol>
-                        <button class="btn-primary" type="submit">Bevestig geselecteerde koppen als structuur</button>
+                        <button class="btn-primary" type="submit">{fast_button}</button>
                       </form>
                     </section>
                     <section class="review-lane-slow">
-                      <h2>Inhoud ({len(duty)})</h2>
-                      <p class="lead">Beoordeel voorgestelde aanbevelingen plus voorwaarden, uitzonderingen en ieder high-risk object. Dat is de handplicht.</p>
+                      <h2>{slow_title}</h2>
+                      <p class="lead">{slow_lead}</p>
                       <ol class="object-index">{slow_items}</ol>
                       {leftover_html}
                       {other_html}
@@ -970,7 +997,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     object_text_html = f'<div class="object-text"><p>{_esc(obj_text)}</p></div>'
                 proposed = obj.get("proposed_object_type") or ""
                 confirmed = obj.get("confirmed_object_type") or ""
-                type_options = _type_options(confirmed)
+                type_options = _type_options(confirmed, review_path=review_path)
                 passage_ok = False
                 passage_html = ""
                 try:

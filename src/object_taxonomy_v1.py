@@ -48,6 +48,7 @@ CLASS_ORDER = {
     "artikel": 2,
     "transcript": 1,
     "podcast": 1,
+    "beslisboom": 0,
 }
 HISTORICAL_FACT_TYPES = HISTORICAL_NON_SERVING_TYPES
 
@@ -216,15 +217,16 @@ def is_kennisplatform_chrome_text(text: str) -> bool:
 
 
 def recommendation_strength_ui_applies(obj: dict[str, Any]) -> bool:
-    """Stamp picker belongs only on type recommendation, not unclassified/heading."""
+    """Stamp picker belongs on recommendation, or on an actionable boom outcome."""
     confirmed = obj.get("confirmed_object_type") or ""
     stored = obj.get("object_type") or ""
     proposed = obj.get("proposed_object_type") or ""
+    allowed = {"recommendation", "outcome"}
     if confirmed:
-        return confirmed == "recommendation"
+        return confirmed in allowed
     if stored and stored != DEFAULT_OBJECT_TYPE:
-        return stored == "recommendation"
-    return proposed == "recommendation"
+        return stored in allowed
+    return proposed in allowed
 
 
 def looks_like_structural_heading(text: str) -> bool:

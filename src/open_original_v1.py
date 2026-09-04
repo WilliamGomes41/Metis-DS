@@ -35,6 +35,27 @@ def parse_web_line_range(locator_value: str) -> tuple[int, int]:
     return start, end
 
 
+def parse_web_byte_span(locator_value: str) -> tuple[int, int] | None:
+    parts: dict[str, str] = {}
+    for item in locator_value.split(";"):
+        if ":" not in item:
+            continue
+        key, value = item.split(":", 1)
+        parts[key] = value
+    raw = parts.get("bytes")
+    if raw is None:
+        return None
+    start_s, _, end_s = raw.partition("-")
+    try:
+        start = int(start_s)
+        end = int(end_s or start_s)
+    except ValueError as exc:
+        raise OpenOriginalError("unsupported_locator") from exc
+    if start < 0 or end <= start:
+        raise OpenOriginalError("unsupported_locator")
+    return start, end
+
+
 def parse_page_bbox(locator_value: str) -> tuple[int, list[float]]:
     # page:1;bbox:x0,y0,x1,y1
     parts = dict(
@@ -49,6 +70,12 @@ def parse_page_bbox(locator_value: str) -> tuple[int, list[float]]:
 
 def passage_from_html_freeze(freeze_bytes: bytes, locator_value: str) -> str:
     """Read the exact freeze bytes. MUST NOT reserialize, pretty-print, or re-save."""
+    span = parse_web_byte_span(locator_value)
+    if span is not None:
+        start, end = span
+        if end > len(freeze_bytes):
+            raise OpenOriginalError("unsupported_locator")
+        return freeze_bytes[start:end].decode("utf-8")
     text = freeze_bytes.decode("utf-8")
     start, end = parse_web_line_range(locator_value)
     lines = text.splitlines()
@@ -142,7 +169,7 @@ def open_source_passage(
         kind = item.get("locator_type") or locator_type
         item_value = item["locator_value"]
         if kind == "web_line_range":
-            if content_kind != "html":
+            if content_kind not in {"html", "boom", "json"}:
                 raise OpenOriginalError("locator_kind_mismatch")
             return passage_from_html_freeze(freeze_bytes, item_value)
         if kind == "page_bbox":

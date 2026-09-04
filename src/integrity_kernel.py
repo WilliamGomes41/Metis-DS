@@ -71,6 +71,8 @@ def canonical_object_payload(obj: dict[str, Any]) -> dict[str, Any]:
         "confirmed_relations",
         "proposed_recommendation_strength",
         "confirmed_recommendation_strength",
+        "no_action",
+        "metadata",
     ):
         if extra in obj:
             payload[extra] = deepcopy(obj.get(extra))
