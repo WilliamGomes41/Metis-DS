@@ -272,7 +272,7 @@ def test_v225_next_code_is_forge_beslisboom_path_not_this_pr() -> None:
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
     changelog = _read(ROOT / "CHANGELOG.md")
-    assert "Next **code** MUST be Forge (Implementation engineer) on the existing kernel/console for **exactly** the beslisboom path wave" in delta
+    assert "The next **code** MUST be Forge (Implementation engineer) on the existing kernel/console for **exactly** the beslisboom path wave" in delta
     assert "ingest path chooser (`richtlijn`|`beslisboom`)" in delta
     assert "MUST NOT activate Product API boom serving in that first code wave unless separately GO’d" in delta or "MUST NOT activate Product API boom serving in that first code wave unless separately GO'd" in delta
     assert "MUST NOT open G2/`publish()`" in delta
