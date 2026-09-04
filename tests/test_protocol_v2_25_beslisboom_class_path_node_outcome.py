@@ -156,16 +156,33 @@ def test_v225_no_unqualified_claim_story_html_wholly_out_of_mvp() -> None:
                 )
 
 
-def test_v225_ingest_path_chooser_richtlijn_or_beslisboom() -> None:
+def test_v225_klasse_includes_beslisboom_and_selects_review_path() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
     roadmap = _read(ROOT / "ROADMAP.md")
-    assert "At Inleveren the researcher MUST choose an ingest/review **path**: `richtlijn` OR `beslisboom`" in delta
+    changelog = _read(ROOT / "CHANGELOG.md")
+    assert "SUPERSEDES any reading that Inleveren needs a separate path control distinct from Klasse" in delta
+    assert "Closed Klasse set MUST include `beslisboom`" in delta
+    assert "Operators MUST NOT invent other Klasse values" in delta
+    assert "Choosing Klasse = `beslisboom` MUST select the boom review path (`path` / `node` / `outcome`)" in delta
+    assert "Choosing Klasse = `richtlijn` | `handreiking` | `artikel` | `transcript` | `podcast` MUST select the existing non-boom (richtlijn-style) review path / stacks for that document" in delta
+    assert "MUST NOT invent boom types on those classes" in delta
+    assert "Klasse includes beslisboom; Klasse choice selects review path" in delta
+    assert "At Inleveren the researcher MUST choose **Klasse** from the closed set" in delta
+    assert "Operators MUST NOT add a second chooser labeled “path”" in delta
+    assert "`richtlijn` | `handreiking` | `artikel` | `transcript` | `podcast` | `beslisboom`" in delta
+    assert "Family × class remains" in delta
     assert "Paths MAY differ for the same family" in delta
-    assert "richtlijn" in root_protocol
-    assert "beslisboom" in root_protocol
+    assert "Klasse-keuze selecteert het reviewpad" in root_protocol
+    assert "MUST NOT een aparte tweede kiezer «pad»" in root_protocol
+    assert "gesloten set" in root_protocol and "beslisboom" in root_protocol
     assert "Inleveren" in root_protocol
-    assert "richtlijn" in roadmap and "beslisboom" in roadmap
+    assert "Klasse includes beslisboom; Klasse choice selects review path" in root_protocol
+    assert "Klasse includes beslisboom; Klasse choice selects review path" in roadmap
+    assert "Klasse-keuze selecteert het reviewpad" in roadmap
+    assert "MUST NOT een aparte tweede kiezer «pad»" in roadmap
+    assert "Klasse includes beslisboom; Klasse choice selects review path" in changelog
+    assert "separate path control distinct from Klasse" in changelog
 
 
 def test_v225_closed_boom_types_and_scorelist_choice() -> None:
@@ -273,7 +290,7 @@ def test_v225_next_code_is_forge_beslisboom_path_not_this_pr() -> None:
     roadmap = _read(ROOT / "ROADMAP.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "The next **code** MUST be Forge (Implementation engineer) on the existing kernel/console for **exactly** the beslisboom path wave" in delta
-    assert "ingest path chooser (`richtlijn`|`beslisboom`)" in delta
+    assert "Klasse includes beslisboom; Klasse choice selects review path" in delta
     assert "MUST NOT activate Product API boom serving in that first code wave unless separately GO’d" in delta or "MUST NOT activate Product API boom serving in that first code wave unless separately GO'd" in delta
     assert "MUST NOT open G2/`publish()`" in delta
     assert "no Cloud Shell ZIP required for this delta alone" in delta
@@ -326,7 +343,7 @@ def test_v225_keeps_continentie_evidence_and_every_guideline_law() -> None:
 def test_v225_is_c3_spanning_review_surface_owner_approved_and_does_not_reopen_gd03() -> None:
     delta = _read(DELTA)
     governance = _read(ROOT / "docs" / "GOVERNANCE.md")
-    assert "**Highest change class:** C3 spanning review-surface / retrieve-safety (MVP beslisboom document class with closed boom types `path` / `node` / `outcome`; ingest path `richtlijn` OR `beslisboom`; boom freeze+locator; boom MUST NOT outrank a confirmed `richtlijn` recommendation of the same family; console remains not a nurse tree player; no Forge code; no G2 PASS; `publish()` stays G2-BLOCKED)" in delta
+    assert "**Highest change class:** C3 spanning review-surface / retrieve-safety (MVP beslisboom document class with closed boom types `path` / `node` / `outcome`; closed Klasse set includes `beslisboom`; Klasse choice selects review path; boom freeze+locator; boom MUST NOT outrank a confirmed `richtlijn` recommendation of the same family; console remains not a nurse tree player; no Forge code; no G2 PASS; `publish()` stays G2-BLOCKED)" in delta
     assert "This is not a C5 reopen of four-eyes or publish" in delta
     assert "This delta is owner-approved" in delta
     assert "Named C3 reviewers are not yet staffed" in delta

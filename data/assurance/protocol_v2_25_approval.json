@@ -2,7 +2,7 @@
   "manifest_version": "1.0",
   "protocol_version": "2.25.0",
   "protocol_path": "docs/PROTOCOL_V2_25_BESLISBOOM_CLASS_PATH_NODE_OUTCOME_DELTA.md",
-  "protocol_sha256": "19843b00baf4181d6e475d2f9f8729ff6970f4cbba6c991516e8c0958a334813",
+  "protocol_sha256": "5be8a07f2ca1235f6697f77de761e605e9fa8b5a182d57168dae869de6b07645",
   "repository": "WilliamGomes41/VENVN-DS",
   "default_branch": "main",
   "commit_sha": "pending_after_merge",
