@@ -1,12 +1,12 @@
 {
   "manifest_version": "1.0",
-  "protocol_version": "2.24.0",
-  "protocol_path": "docs/PROTOCOL_V2_24_CONSOLE_RETRIEVAL_DEPLOY_SPLIT_DELTA.md",
-  "protocol_sha256": "fec39756e65d48f921c8bfcf79fcc336f7ba4e4b621c4b0568155c16546dd50b",
+  "protocol_version": "2.25.0",
+  "protocol_path": "docs/PROTOCOL_V2_25_BESLISBOOM_CLASS_PATH_NODE_OUTCOME_DELTA.md",
+  "protocol_sha256": "5be8a07f2ca1235f6697f77de761e605e9fa8b5a182d57168dae869de6b07645",
   "repository": "WilliamGomes41/VENVN-DS",
   "default_branch": "main",
   "commit_sha": "pending_after_merge",
-  "approval_date": "2026-09-03",
+  "approval_date": "2026-09-04",
   "approval_authority": "project_owner",
   "branch_protection_status": "temporary_procedural_control",
   "conformance_effect": "does_not_override_gate_status"
