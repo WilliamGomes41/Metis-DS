@@ -55,6 +55,8 @@ G2 remains BLOCKED. `publish()` remains G2-BLOCKED. This protocol does not claim
 
 This is not a GD-03 knowledge-publish. G2 remains the publication blocker. Metis, the Implementation engineer and the Auditor MUST NOT count as GD-03 reviewers, MUST NOT approve, and MUST NOT publish.
 
+Index/conflict pointer: Protocol v2.28.0 SUPERSEDES the v2.27 reading that the next code after this file is still the only next Forge wave. Where this file and Protocol v2.28 conflict on which implementation is next: the v2.27 delete wave may already be in flight under separate Metis GO; Protocol v2.28's next Forge wave is Blocks A+B (structural heading / parent-list navigation + confirmed-type Sterkte gate) after its own GO. ROADMAP MUST state both. v2.27 unpublished-delete Documentenhiërarchie only + type-to-confirm exact title remains law. HANDOFF.md MUST NOT be recreated, G2 remains BLOCKED, and `publish()` stays G2-BLOCKED remain.
+
 ## 2. Unchanged v2.6 through v2.26 rules
 
 The four layers remain source/evidence → canonical knowledge → governance → product. This delta MUST NOT invent a fifth layer and MUST NOT collapse those four.
