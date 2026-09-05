@@ -87,15 +87,19 @@ def confirmed_relations(obj: dict[str, Any]) -> list[dict[str, Any]]:
     explicit = obj.get("confirmed_relations")
     if explicit is None and "metadata" in obj:
         explicit = (obj.get("metadata") or {}).get("confirmed_relations")
-    source = explicit if explicit is not None else []
-    out: list[dict[str, Any]] = []
-    for row in source:
-        item = normalize_relation(row)
-        if item:
-            item["confirmed"] = True
-            out.append(item)
-    if out:
+    if explicit is not None:
+        out: list[dict[str, Any]] = []
+        for row in explicit:
+            if row.get("confirmed") is False:
+                continue
+            item = normalize_relation(row)
+            if item:
+                item["confirmed"] = True
+                out.append(item)
+        # Presence is authoritative, including an explicitly cleared list.
         return out
+
+    out = []
     # A relation marked confirmed:true on the proposed list may bind.
     for row in proposed_relations(obj):
         raw = next(
