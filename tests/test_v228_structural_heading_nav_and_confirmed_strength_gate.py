@@ -389,6 +389,147 @@ def test_block_a_confirm_relations_rejects_invalid_heading_parent(tmp_path: Path
     )
 
 
+def test_block_a_confirm_child_relation_updates_canonical_parent(tmp_path: Path) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    receipt = _ingest(console, accounts)
+    rows = console._load_objects(receipt["snapshot_id"])
+    parent = {
+        "object_id": "planted-54",
+        "object_type": "heading",
+        "proposed_object_type": "heading",
+        "object_version": "1.0",
+        "content": {"clean_text": "5.4 Diagnostiek", "raw_text": "5.4 Diagnostiek"},
+        "heading_role": "body",
+        "relations": [],
+        "confirmed_relations": [],
+        "parent_object_id": None,
+        "governance": {"review_track": "clinical", "validation_status": "needs_review"},
+        "provenance": {"source_fragments": []},
+    }
+    child = {
+        **parent,
+        "object_id": "planted-541",
+        "content": {"clean_text": "5.4.1 Anamnese", "raw_text": "5.4.1 Anamnese"},
+    }
+    rows.extend([parent, child])
+    console._save_objects(receipt["snapshot_id"], rows)
+
+    confirmed = console.confirm_relations(
+        actor_id=accounts["reviewer"]["account_id"],
+        snapshot_id=receipt["snapshot_id"],
+        object_id="planted-541",
+        relations=[{"relation_type": "child", "target_object_id": "planted-54"}],
+    )
+    assert confirmed["parent_object_id"] == "planted-54"
+
+    cleared = console.confirm_relations(
+        actor_id=accounts["reviewer"]["account_id"],
+        snapshot_id=receipt["snapshot_id"],
+        object_id="planted-541",
+        relations=[],
+    )
+    assert cleared["parent_object_id"] is None
+
+
+def test_block_a_confirm_parent_relation_updates_child_record(tmp_path: Path) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    receipt = _ingest(console, accounts)
+    rows = console._load_objects(receipt["snapshot_id"])
+    parent = {
+        "object_id": "inverse-54",
+        "object_type": "heading",
+        "proposed_object_type": "heading",
+        "object_version": "1.0",
+        "content": {"clean_text": "5.4 Diagnostiek", "raw_text": "5.4 Diagnostiek"},
+        "heading_role": "body",
+        "relations": [],
+        "confirmed_relations": [],
+        "parent_object_id": None,
+        "governance": {"review_track": "clinical", "validation_status": "needs_review"},
+        "provenance": {"source_fragments": []},
+    }
+    child = {
+        **parent,
+        "object_id": "inverse-541",
+        "content": {"clean_text": "5.4.1 Anamnese", "raw_text": "5.4.1 Anamnese"},
+    }
+    rows.extend([parent, child])
+    console._save_objects(receipt["snapshot_id"], rows)
+
+    console.confirm_relations(
+        actor_id=accounts["reviewer"]["account_id"],
+        snapshot_id=receipt["snapshot_id"],
+        object_id="inverse-54",
+        relations=[{"relation_type": "parent", "target_object_id": "inverse-541"}],
+    )
+    live_child = next(
+        row
+        for row in console.snapshot_objects(receipt["snapshot_id"])
+        if row["object_id"] == "inverse-541"
+    )
+    assert live_child["parent_object_id"] == "inverse-54"
+
+
+def test_block_a_clearing_stale_parent_relation_preserves_new_parent(tmp_path: Path) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    receipt = _ingest(console, accounts)
+    rows = console._load_objects(receipt["snapshot_id"])
+    ancestor = {
+        "object_id": "reparent-5",
+        "object_type": "heading",
+        "proposed_object_type": "heading",
+        "object_version": "1.0",
+        "content": {"clean_text": "5 Onderzoek", "raw_text": "5 Onderzoek"},
+        "heading_role": "body",
+        "relations": [],
+        "confirmed_relations": [],
+        "parent_object_id": None,
+        "governance": {"review_track": "clinical", "validation_status": "needs_review"},
+        "provenance": {"source_fragments": []},
+    }
+    parent = {
+        **ancestor,
+        "object_id": "reparent-54",
+        "content": {"clean_text": "5.4 Diagnostiek", "raw_text": "5.4 Diagnostiek"},
+    }
+    child = {
+        **ancestor,
+        "object_id": "reparent-541",
+        "content": {"clean_text": "5.4.1 Anamnese", "raw_text": "5.4.1 Anamnese"},
+    }
+    rows.extend([ancestor, parent, child])
+    console._save_objects(receipt["snapshot_id"], rows)
+
+    console.confirm_relations(
+        actor_id=accounts["reviewer"]["account_id"],
+        snapshot_id=receipt["snapshot_id"],
+        object_id="reparent-54",
+        relations=[{"relation_type": "parent", "target_object_id": "reparent-541"}],
+    )
+    console.confirm_relations(
+        actor_id=accounts["reviewer"]["account_id"],
+        snapshot_id=receipt["snapshot_id"],
+        object_id="reparent-541",
+        relations=[{"relation_type": "child", "target_object_id": "reparent-5"}],
+    )
+
+    console.confirm_relations(
+        actor_id=accounts["reviewer"]["account_id"],
+        snapshot_id=receipt["snapshot_id"],
+        object_id="reparent-54",
+        relations=[],
+    )
+    live_child = next(
+        row
+        for row in console.snapshot_objects(receipt["snapshot_id"])
+        if row["object_id"] == "reparent-541"
+    )
+    assert live_child["parent_object_id"] == "reparent-5"
+
+
 def test_block_a_console_parent_list_is_body_structure_onderzoekers_taal(
     tmp_path: Path,
 ) -> None:

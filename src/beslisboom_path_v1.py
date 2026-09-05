@@ -13,7 +13,7 @@ from typing import Any, Iterable
 
 from src.four_eyes_v1 import HIGH_RISK_FIELDS
 from src.object_taxonomy_v1 import CLASS_ORDER, CLOSED_OBJECT_TYPES, source_class_of
-from src.serving_relations_v1 import serving_relation_type
+from src.serving_relations_v1 import binding_relations
 
 CLOSED_BOOM_TYPES = ("path", "node", "outcome")
 CLOSED_KLASSEN = (
@@ -101,16 +101,11 @@ def _looks_fused_condition(text: str) -> bool:
 
 
 def _confirmed_applies_if(obj: dict[str, Any]) -> list[dict[str, Any]]:
-    rows = []
-    for row in obj.get("confirmed_relations") or []:
-        if serving_relation_type(row.get("relation_type")) != "applies_if":
-            continue
-        if not row.get("target_object_id"):
-            continue
-        if row.get("confirmed") is False:
-            continue
-        rows.append(row)
-    return rows
+    return [
+        row
+        for row in binding_relations(obj)
+        if row["relation_type"] == "applies_if"
+    ]
 
 
 def outcome_review_errors(obj: dict[str, Any], peers: Iterable[dict[str, Any]] | None = None) -> list[str]:

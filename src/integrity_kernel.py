@@ -196,17 +196,76 @@ def validate_source_fragments(obj: dict[str, Any], raw_objects: dict[str, dict[s
 
 def validate_parent_relations(objects: Iterable[dict[str, Any]]) -> list[str]:
     rows = list(objects)
-    ids = {o["object_id"] for o in rows}
+    by_id = {o["object_id"]: o for o in rows}
+    ids = set(by_id)
     errors: list[str] = []
     for o in rows:
+        oid = o["object_id"]
         parent = o.get("parent_object_id")
+        if parent == oid:
+            errors.append(f"self_parent:{oid}")
         if parent and parent not in ids:
-            errors.append(f"missing_parent:{o['object_id']}:{parent}")
+            errors.append(f"missing_parent:{oid}:{parent}")
         for rel in o.get("relations") or []:
             target = rel.get("target_object_id")
+            if target == oid:
+                errors.append(f"self_relation:{oid}:{rel.get('relation_type')}")
             if target and target not in ids:
-                errors.append(f"missing_relation_target:{o['object_id']}:{target}")
-    return errors
+                errors.append(f"missing_relation_target:{oid}:{target}")
+
+    # parent_object_id is the canonical hierarchy edge. It must be acyclic.
+    for start in by_id:
+        seen: set[str] = set()
+        current = start
+        while current in by_id:
+            if current in seen:
+                errors.append(f"parent_cycle:{start}")
+                break
+            seen.add(current)
+            parent = by_id[current].get("parent_object_id")
+            if not parent:
+                break
+            current = str(parent)
+
+    # When a confirmed child relation is stored as well, it must agree with
+    # the canonical parent edge. Proposed relations are deliberately ignored.
+    from src.heading_parent_list_v1 import (
+        is_heading_object,
+        mark_heading_roles,
+        parent_proposal_may_bind,
+    )
+    from src.serving_relations_v1 import binding_relations
+
+    marked_rows = mark_heading_roles(rows)
+    marked_by_id = {o["object_id"]: o for o in marked_rows}
+
+    for o in rows:
+        oid = o["object_id"]
+        parent = o.get("parent_object_id")
+        relation_parents = {
+            rel["target_object_id"]
+            for rel in binding_relations(o)
+            if rel["relation_type"] == "child"
+        }
+        if relation_parents and relation_parents != ({parent} if parent else set()):
+            errors.append(f"parent_relation_mismatch:{oid}")
+
+        for child_id in {
+            rel["target_object_id"]
+            for rel in binding_relations(o)
+            if rel["relation_type"] == "parent"
+        }:
+            child = by_id.get(child_id)
+            if child is not None and child.get("parent_object_id") != oid:
+                errors.append(f"parent_relation_mismatch:{child_id}")
+
+        if parent and parent in marked_by_id:
+            marked_object = marked_by_id[oid]
+            parent_obj = marked_by_id[parent]
+            if is_heading_object(marked_object) and is_heading_object(parent_obj):
+                if not parent_proposal_may_bind(marked_object, parent_obj, marked_rows):
+                    errors.append(f"invalid_parent_structure:{oid}:{parent}")
+    return list(dict.fromkeys(errors))
 
 def load_verified_source_registry(path: Path) -> dict[str, str]:
     if not path.exists():
