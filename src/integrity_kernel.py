@@ -250,6 +250,15 @@ def validate_parent_relations(objects: Iterable[dict[str, Any]]) -> list[str]:
         if relation_parents and relation_parents != ({parent} if parent else set()):
             errors.append(f"parent_relation_mismatch:{oid}")
 
+        for child_id in {
+            rel["target_object_id"]
+            for rel in binding_relations(o)
+            if rel["relation_type"] == "parent"
+        }:
+            child = by_id.get(child_id)
+            if child is not None and child.get("parent_object_id") != oid:
+                errors.append(f"parent_relation_mismatch:{child_id}")
+
         if parent and parent in marked_by_id:
             marked_object = marked_by_id[oid]
             parent_obj = marked_by_id[parent]
