@@ -342,7 +342,7 @@ def test_changed_confirmed_relations_invalidate_publish_authorization(tmp_path: 
     accounts = _accounts(console)
     html = """<!doctype html><html lang="nl"><body>
 <h1>Voorbeeldrichtlijn</h1>
-<p>Bij een cliënt van 70 jaar of ouder.</p>
+<p>Wanneer de cliënt 70 jaar of ouder is.</p>
 <p>Verwijs naar de huisarts.</p>
 </body></html>"""
     receipt = _ingest_html(console, accounts, data=html.encode("utf-8"), filename="rel.html")
