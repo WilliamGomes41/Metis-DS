@@ -524,10 +524,48 @@ textarea:focus-visible {
 }
 
 .review-card-two-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.review-cockpit-copy {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.why-selected {
+  margin: 0 0 8px;
+}
+
+.broncontext-freeze {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr);
-  gap: 24px;
-  align-items: start;
+  gap: 8px;
+}
+
+.broncontext-heading {
+  margin: 0;
+  color: var(--paars);
+  font-weight: 650;
+}
+
+.broncontext-prev,
+.broncontext-next {
+  margin: 0;
+}
+
+mark.broncontext-marked {
+  background: #ffe08a;
+  color: inherit;
+  padding: 0 0.15em;
+}
+
+.heading-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
 }
 
 .review-card-object,

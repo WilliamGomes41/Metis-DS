@@ -17,10 +17,8 @@ from src.four_eyes_v1 import requires_four_eyes
 from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES, review_path_for_klasse
 from src.klasse_wijzigen_v1 import is_cross_model_class_change
 from src.heading_parent_list_v1 import (
-    heading_role,
     heading_visible_text,
     is_heading_object,
-    mark_heading_roles,
     parent_choice_list,
     parent_proposal_may_bind,
     parse_outline_number,
@@ -33,6 +31,15 @@ from src.object_taxonomy_v1 import (
     recommendation_strength_ui_applies,
 )
 from src.admission_gate_v1 import admission_of, blocked_audit_lane
+from src.review_cockpit_v1 import (
+    SUITABILITY_VALUES,
+    broncontext_parts,
+    confirmable_proposed_type,
+    found_under_path,
+    map_eindoordeel,
+    proposed_type_of,
+    why_selected,
+)
 from src.operations_console_v1 import (
     ALLOWED_CLASSES,
     ALLOWED_DELETE_NEXT,
@@ -69,6 +76,7 @@ STATUS_LABELS = {
 }
 OBJECT_TYPE_LABELS = {
     "unclassified": "Nog niet geclassificeerd",
+    "factual_finding": "Feitelijke constatering",
     "heading": "Kop",
     "definition": "Definitie",
     "explanation": "Toelichting",
@@ -117,7 +125,8 @@ ERROR_COPY = {
     "freeze_bytes_missing": "Het geüploade origineel ontbreekt; type bevestigen is niet toegestaan.",
     "locator_kind_mismatch": "De locator past niet bij dit bestand.",
     "unsupported_locator": "Deze locator kan niet worden geopend.",
-    "invalid_review_decision": "Kies een besluit: goedkeuren, revisie vragen of afwijzen.",
+    "invalid_review_decision": "Kies een eindoordeel: goedkeuren, goedkeuren na correctie, afwijzen of later beoordelen.",
+    "suitability_required": "Kies of de passage geschikt is.",
     "review_comment_required": "Geef een toelichting bij een revisieverzoek of afwijzing.",
     "source_date_required": "Vul de publicatiedatum uit het colofon in.",
     "invalid_source_date": "Gebruik een geldige kalenderdatum.",
@@ -223,7 +232,11 @@ def _page(body: str) -> str:
 <script>
 document.querySelectorAll('[data-review-form]').forEach((form) => {{
   const decision = form.querySelector('[name="decision"]');
+  const eindoordeel = form.querySelectorAll('[name="eindoordeel"]');
   const type = form.querySelector('[name="confirmed_object_type"]');
+  const typeAction = form.querySelectorAll('[name="type_action"]');
+  const typeChooser = form.querySelector('[data-type-chooser]');
+  const proposed = form.querySelector('[name="proposed_object_type"]');
   const comment = form.querySelector('[name="comment"]');
   const commentField = form.querySelector('[data-comment-field]');
   const correctionField = form.querySelector('[data-correction-field]');
@@ -231,34 +244,92 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
   const submit = form.querySelector('[data-submit-review]');
   const stamp = form.querySelector('[data-stamp-block]');
   const strength = form.querySelector('[name="recommendation_strength"]');
+  const chooser = form.querySelector('[data-heading-chooser]');
+  const search = form.querySelector('[data-heading-search]');
+  const posAction = form.querySelectorAll('[name="documentpositie_action"]');
+  const suitability = form.querySelectorAll('[name="suitability"]');
   const strengthTypes = new Set(['recommendation', 'outcome']);
+  const selected = (nodes) => {{
+    const hit = Array.from(nodes || []).find((node) => node.checked);
+    return hit ? hit.value : '';
+  }};
+  const liveType = () => {{
+    const action = selected(typeAction);
+    if (action === 'dit_klopt' && proposed && proposed.value) return proposed.value;
+    return type ? type.value : '';
+  }};
   const updateStamp = () => {{
-    const liveType = type.value;
-    const show = strengthTypes.has(liveType);
+    const card = form.closest('[data-confirmed-type]');
+    const confirmedType = card ? (card.getAttribute('data-confirmed-type') || '') : '';
+    const changingType = selected(typeAction) === 'type_wijzigen';
+    const confirmingProposal = selected(typeAction) === 'dit_klopt';
+    const show = strengthTypes.has(liveType()) && (
+      strengthTypes.has(confirmedType) || changingType || confirmingProposal
+    );
     if (stamp) stamp.hidden = !show;
     if (strength) {{
       strength.disabled = !show;
       if (!show) strength.value = '';
     }}
   }};
+  const updateChooser = () => {{
+    if (chooser) chooser.hidden = selected(posAction) !== 'andere_kop';
+    if (typeChooser) typeChooser.hidden = selected(typeAction) !== 'type_wijzigen';
+    if (type) {{
+      if (selected(typeAction) === 'dit_klopt' && proposed && proposed.value) {{
+        type.value = proposed.value;
+      }}
+      type.hidden = selected(typeAction) !== 'type_wijzigen';
+    }}
+  }};
   const update = () => {{
-    const value = decision.value;
-    const needsComment = value === 'revise' || value === 'reject';
-    const needsType = value === 'approve';
-    commentField.hidden = !needsComment;
-    correctionField.hidden = value !== 'revise';
-    comment.required = needsComment;
-    type.required = needsType;
-    submit.disabled = !value || (needsType && !type.value) || (needsComment && !comment.value.trim());
-    if (!value) {{ hint.textContent = 'Kies eerst een besluit.'; submit.textContent = 'Review vastleggen'; }}
-    else if (value === 'approve') {{ hint.textContent = 'Bevestig ook het type voordat je goedkeurt.'; submit.textContent = 'Goedkeuring vastleggen'; }}
-    else if (value === 'revise') {{ hint.textContent = 'Licht toe wat aangepast moet worden.'; submit.textContent = 'Revisieverzoek versturen'; }}
-    else {{ hint.textContent = 'Licht toe waarom dit kennisobject wordt afgewezen.'; submit.textContent = 'Afwijzing vastleggen'; }}
+    const value = selected(eindoordeel) || (decision ? decision.value : '');
+    if (decision && selected(eindoordeel)) {{
+      if (value === 'goedkeuren') decision.value = 'approve';
+      else if (value === 'goedkeuren_na_correctie') decision.value = 'revise';
+      else if (value === 'afwijzen') decision.value = 'reject';
+      else if (value === 'later_beoordelen') decision.value = 'later';
+    }}
+    const mapped = decision ? decision.value : value;
+    const needsComment = mapped === 'reject' || value === 'afwijzen';
+    const needsCorrection = mapped === 'revise' || value === 'goedkeuren_na_correctie';
+    const needsType = mapped === 'approve' || value === 'goedkeuren';
+    if (commentField) commentField.hidden = !needsComment;
+    if (correctionField) correctionField.hidden = !needsCorrection;
+    if (comment) comment.required = needsComment;
+    if (type) type.required = needsType && selected(typeAction) === 'type_wijzigen';
+    const hasType = !needsType || liveType();
+    const hasComment = !needsComment || (comment && comment.value.trim());
+    const hasSuitability = Boolean(selected(suitability));
+    if (submit) {{
+      submit.disabled = !value || !hasType || !hasComment || !hasSuitability;
+      submit.textContent = 'Review opslaan en volgende';
+    }}
+    if (hint) {{
+      if (!value) hint.textContent = 'Kies een eindoordeel.';
+      else if (!hasSuitability) hint.textContent = 'Kies of de passage geschikt is.';
+      else if (needsType && !liveType()) hint.textContent = 'Bevestig eerst het type.';
+      else hint.textContent = '';
+    }}
+    updateChooser();
     updateStamp();
   }};
-  decision.addEventListener('change', update);
-  type.addEventListener('change', update);
-  comment.addEventListener('input', update);
+  eindoordeel.forEach((node) => node.addEventListener('change', update));
+  typeAction.forEach((node) => node.addEventListener('change', update));
+  posAction.forEach((node) => node.addEventListener('change', update));
+  suitability.forEach((node) => node.addEventListener('change', update));
+  if (type) type.addEventListener('change', update);
+  if (comment) comment.addEventListener('input', update);
+  if (decision) decision.addEventListener('change', update);
+  if (search && chooser) {{
+    search.addEventListener('input', () => {{
+      const query = search.value.trim().toLowerCase();
+      chooser.querySelectorAll('[data-parent-choice-list] li').forEach((item) => {{
+        item.hidden = Boolean(query) && !item.textContent.toLowerCase().includes(query);
+      }});
+    }});
+  }}
+  updateChooser();
   updateStamp();
   update();
 }});
@@ -332,14 +403,15 @@ def _document_options(rows: list[dict[str, Any]], selected: str = "") -> str:
     return "".join(options)
 
 
-def _type_options(confirmed: str, *, review_path: str = "richtlijn") -> str:
-    placeholder_selected = " selected" if not confirmed else ""
+def _type_options(confirmed: str, *, review_path: str = "richtlijn", proposed: str = "") -> str:
+    shown = confirmed or proposed
+    placeholder_selected = " selected" if not shown else ""
     options = [
         f'<option value="" disabled{placeholder_selected}>nog niet bevestigd</option>'
     ]
     names = CLOSED_BOOM_TYPES if review_path == "boom" else CLOSED_OBJECT_TYPES
     for name in names:
-        selected = " selected" if name == confirmed else ""
+        selected = " selected" if name == shown else ""
         options.append(f'<option value="{name}"{selected}>{_esc(_object_type_label(name))}</option>')
     return "".join(options)
 
@@ -524,39 +596,13 @@ def _stamp_block(obj: dict[str, Any], *, hidden: bool = False) -> str:
     """
 
 
-def _parent_choice_block(
+def _heading_chooser(
     obj: dict[str, Any],
     objects: list[dict[str, Any]],
     snapshot_id: str,
-    *,
-    include_submit: bool = False,
 ) -> str:
-    marked = mark_heading_roles(objects)
-    toc_rows = [
-        row
-        for row in marked
-        if is_heading_object(row) and heading_role(row, marked) == "toc"
-    ]
     choice = parent_choice_list(objects)
-    toc_items = []
-    for row in toc_rows:
-        text = heading_visible_text(row)
-        toc_items.append(f'<li data-heading-role="toc">{_esc(text)}</li>')
-    toc_html = ""
-    if toc_items:
-        toc_html = (
-            '<aside class="toc-headings" aria-label="Inhoudsopgave">'
-            "<p class=\"field-help\">Inhoudsopgave-regels zijn gemarkeerd en horen niet in de ouderlijst.</p>"
-            f"<ul>{''.join(toc_items)}</ul>"
-            "</aside>"
-        )
-    confirmed_parent = {
-        row.get("target_object_id")
-        for row in (obj.get("confirmed_relations") or [])
-        if row.get("relation_type") == "child"
-    }
     snap = quote(str(snapshot_id), safe="")
-    form_id = f'relations-{_esc(obj["object_id"])}'
     choice_items = []
     for row in choice:
         text = heading_visible_text(row)
@@ -576,39 +622,63 @@ def _parent_choice_block(
                 f'<a href="{_esc(href)}">{_esc(text)}</a>{locator}</li>'
             )
             continue
-        selected = ""
-        if object_id in confirmed_parent:
-            if not is_heading_object(obj) or not is_heading_object(row) or parent_proposal_may_bind(
-                obj, row, objects
-            ):
-                selected = " checked"
+        if is_heading_object(obj) and is_heading_object(row) and not parent_proposal_may_bind(
+            obj, row, objects
+        ):
+            choice_items.append(
+                f'<li data-heading-role="body"{outline_attr}{object_attr}>'
+                f'<a href="{_esc(href)}">{_esc(text)}</a>{locator}</li>'
+            )
+            continue
         choice_items.append(
             f'<li data-heading-role="body"{outline_attr}{object_attr}>'
-            f'<label class="parent-choice-row">'
-            f'<input type="radio" name="parent_choice" value="{_esc(object_id)}" form="{form_id}"{selected}>'
             f'<a href="{_esc(href)}">{_esc(text)}</a>{locator}'
-            f"</label></li>"
+            f'<label class="heading-select"><input type="radio" name="parent_choice" value="{_esc(object_id)}">'
+            f" Kies</label></li>"
         )
-    if not choice_items and not toc_html:
+    if not choice_items:
         return ""
-    list_html = ""
-    if choice_items:
-        list_html = f'<ol class="parent-choice-rows">{"".join(choice_items)}</ol>'
-    submit = ""
-    if include_submit and choice_items:
-        submit = (
-            '<button class="btn-secondary" type="submit" '
-            f'form="{form_id}">Ouder kiezen</button>'
+    return f"""
+                    <div data-heading-chooser hidden>
+                      <p>Koppen in de hoofdtekst</p>
+                      <label>Zoek een kop
+                        <input type="search" data-heading-search autocomplete="off">
+                      </label>
+                      <div data-parent-choice-list>
+                        <ol class="parent-choice-rows">{"".join(choice_items)}</ol>
+                      </div>
+                    </div>
+    """
+
+
+def _broncontext_html(obj: dict[str, Any], snapshot_id: str, object_id: str, passage_ok: bool) -> str:
+    parts = broncontext_parts(obj)
+    lines = []
+    for ancestor in parts["ancestor_headings"]:
+        lines.append(f'<p class="broncontext-heading">{_esc(ancestor)}</p>')
+    if parts["current_heading"]:
+        lines.append(f'<p class="broncontext-heading">{_esc(parts["current_heading"])}</p>')
+    if parts["previous_paragraph"]:
+        lines.append(f'<p class="broncontext-prev">{_esc(parts["previous_paragraph"])}</p>')
+    marked = parts["source_text_exact"]
+    if marked:
+        lines.append(
+            f'<p class="broncontext-marked"><mark class="broncontext-marked">{_esc(marked)}</mark></p>'
+        )
+    if parts["next_paragraph"]:
+        lines.append(f'<p class="broncontext-next">{_esc(parts["next_paragraph"])}</p>')
+    missing = ""
+    if not passage_ok:
+        missing = (
+            '<p class="muted">De exacte plaats in het origineel kan niet worden geopend; '
+            "goedkeuren blijft uitgeschakeld.</p>"
         )
     return f"""
-                  <section class="parent-choice" aria-label="Koppen uit de hoofdtekst">
-                    {toc_html}
-                    <div data-parent-choice-list>
-                      <h4>Koppen uit de hoofdtekst</h4>
-                      <p class="field-help">Ouderkeuze volgt de documentstructuur uit het documentlichaam, niet de inhoudsopgave. Kies een kop of open de kop om te navigeren.</p>
-                      {list_html}
-                      {submit}
-                    </div>
+                  <section class="review-card-bronpassage review-broncontext" data-review-step="b" aria-label="Broncontext">
+                    <h4>Broncontext</h4>
+                    <div class="broncontext-freeze">{"".join(lines)}</div>
+                    {missing}
+                    <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(snapshot_id)}&object={_esc(object_id)}">Open volledige richtlijn</a></p>
                   </section>
     """
 
@@ -1201,28 +1271,18 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                         f"<p>{_esc(merged_text)}</p>"
                         "</div>"
                     )
-                proposed = obj.get("proposed_object_type") or ""
+                proposed = proposed_type_of(obj)
+                confirmable = confirmable_proposed_type(obj)
                 confirmed = obj.get("confirmed_object_type") or ""
-                type_options = _type_options(confirmed, review_path=review_path)
+                type_options = _type_options(
+                    confirmed, review_path=review_path, proposed=confirmable
+                )
                 passage_ok = False
-                passage_html = ""
                 try:
-                    opened = state.open_source_passage(snapshot_id=chosen, object_id=obj["object_id"])
+                    state.open_source_passage(snapshot_id=chosen, object_id=obj["object_id"])
                     passage_ok = True
-                    passage_html = f"""
-                  <aside class="review-card-bronpassage" aria-label="Exacte bronpassage">
-                    <h4>Onderbouwing uit het brondocument</h4>
-                    <p class="bronpassage-prose">{_esc(researcher_visible_prose(opened.get("passage") or ""))}</p>
-                    <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(chosen)}&object={_esc(obj["object_id"])}">Bekijk in brondocument</a></p>
-                  </aside>
-                    """
                 except ConsoleError:
-                    passage_html = (
-                        '<aside class="review-card-bronpassage" aria-label="Exacte bronpassage ontbreekt">'
-                        "<h4>Onderbouwing uit het brondocument</h4>"
-                        '<p class="muted">Bronpassage ontbreekt; type bevestigen en goedkeuren zijn '
-                        "uitgeschakeld tot het origineel open kan.</p></aside>"
-                    )
+                    passage_ok = False
                 type_disabled = "" if passage_ok else " disabled"
                 approve_disabled = "" if passage_ok else " disabled"
                 four_eyes_html = ""
@@ -1231,57 +1291,73 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                         '<div class="banner warn">Dit object vereist four-eyes: '
                         "<b>tweede reviewer nodig</b>.</div>"
                     )
-                relation_form = ""
-                relation_boxes = _relation_checkboxes(obj, snapshot_objects)
-                parent_choice_html = _parent_choice_block(
-                    obj,
-                    snapshot_objects,
-                    chosen,
-                    include_submit=not bool(relation_boxes),
-                )
-                if parent_choice_html or relation_boxes:
-                    relation_form = f"""
-                  <form id="relations-{_esc(obj["object_id"])}" method="post" action="/review/relations">
-                    <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
-                    <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
-                    {relation_boxes}
-                  </form>
-                    """
                 stamp_html = _stamp_block(
                     obj, hidden=not recommendation_strength_ui_applies(obj)
                 )
+                path_text = found_under_path(obj)
+                chooser_html = _heading_chooser(obj, snapshot_objects, chosen)
+                broncontext_html = _broncontext_html(
+                    obj, chosen, obj["object_id"], passage_ok
+                )
+                proposed_label = _object_type_label(proposed or confirmable)
                 objects_html += f"""
                 <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">Terug naar Inhoud</a></p>
-                <article class="object review-card-two-column">
-                  <section class="review-card-object" aria-label="Kennisobject en reviewbesluit">
-                  <header class="review-object-heading">
-                    <p class="eyebrow">Te beoordelen kennisobject</p>
-                    <h3>{_esc(heading)}</h3>
-                    <p class="meta"><span>status <b>{_esc(review_row_status(obj))}</b></span><span>huidig type <b>{_esc(_object_type_label(obj.get("object_type")))}</b></span>{"<span>typevoorstel <b>" + _esc(_object_type_label(proposed)) + "</b></span>" if proposed else ""}</p>
-                  </header>
-                  {four_eyes_html}
-                  {object_text_html}
-                  {parent_choice_html}
-                  {relation_form}
+                <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
+                  <div class="review-cockpit-copy">
+                    <p>Je beoordeelt één geselecteerde passage.</p>
+                    <p>De volledige richtlijn blijft ongewijzigd.</p>
+                    <p>Metis maakt geschikte passages apart bruikbaar.</p>
+                  </div>
                   <form class="review-decision-form" method="post" action="/review" data-review-form>
                     <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
                     <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
-                    <section class="review-step">
-                      <h4>1. Classificatie</h4>
-                      <label for="type-{_esc(obj["object_id"])}">Welk type kennisobject is dit?</label>
-                      <select id="type-{_esc(obj["object_id"])}" name="confirmed_object_type"{type_disabled}>{type_options}</select>
+                    <input type="hidden" name="proposed_object_type" value="{_esc(confirmable)}">
+                    <input type="hidden" name="found_under" value="{_esc(path_text)}">
+                    <input type="hidden" name="decision" value="">
+                    {four_eyes_html}
+                    <section class="review-card-object review-step" data-review-step="a" aria-label="Geselecteerde passage">
+                      <p class="eyebrow">Geselecteerde passage</p>
+                      <h3>{_esc(heading)}</h3>
+                      <p class="why-selected">{_esc(why_selected(obj))}</p>
+                      <p class="meta"><span>status <b>{_esc(review_row_status(obj))}</b></span></p>
+                      {object_text_html}
+                    </section>
+                    {broncontext_html}
+                    <section class="review-step" data-review-step="c">
+                      <h4>Geschiktheid</h4>
+                      <label class="check"><input type="radio" name="suitability" value="ja"> Ja</label>
+                      <label class="check"><input type="radio" name="suitability" value="mist_context"> mist context</label>
+                      <label class="check"><input type="radio" name="suitability" value="samenvoegen"> samenvoegen</label>
+                      <label class="check"><input type="radio" name="suitability" value="alleen_onderbouwing"> alleen onderbouwing</label>
+                      <label class="check"><input type="radio" name="suitability" value="geen_kenniseenheid"> geen kenniseenheid</label>
+                    </section>
+                    <section class="review-step" data-review-step="d">
+                      <h4>Documentpositie</h4>
+                      <p>Gevonden onder: <b>{_esc(path_text or "het document")}</b></p>
+                      <label class="check"><input type="radio" name="documentpositie_action" value="dit_klopt" checked> Dit klopt</label>
+                      <label class="check"><input type="radio" name="documentpositie_action" value="andere_kop"> Andere kop kiezen</label>
+                      {chooser_html}
+                    </section>
+                    <section class="review-step" data-review-step="e">
+                      <h4>Type</h4>
+                      <p>Metis stelt voor: <b>{_esc(proposed_label)}</b></p>
+                      <label class="check"><input type="radio" name="type_action" value="dit_klopt" checked> Dit klopt</label>
+                      <label class="check"><input type="radio" name="type_action" value="type_wijzigen"> Type wijzigen</label>
+                      <div data-type-chooser hidden>
+                        <label for="type-{_esc(obj["object_id"])}">Ander type</label>
+                        <select id="type-{_esc(obj["object_id"])}" name="confirmed_object_type" hidden{type_disabled}>{type_options}</select>
+                      </div>
                     </section>
                     {stamp_html}
-                    <section class="review-step">
-                      <h4>2. Besluit</h4>
-                      <label for="decision-{_esc(obj["object_id"])}">Wat is je besluit over dit kennisobject?</label>
-                      <select id="decision-{_esc(obj["object_id"])}" name="decision" required>
-                      <option value="" selected disabled>Kies een besluit</option>
-                      <option value="approve"{approve_disabled}>Goedkeuren</option>
-                      <option value="revise">Revisie vragen</option>
-                      <option value="reject">Afwijzen</option>
-                      </select>
-                      <p class="field-help" data-decision-hint>Kies eerst een besluit.</p>
+                    <section class="review-step" data-review-step="f">
+                      <h4>Eindoordeel</h4>
+                      <fieldset id="decision-{_esc(obj["object_id"])}">
+                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren"{approve_disabled}> Goedkeuren</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren_na_correctie"> Goedkeuren na correctie</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="afwijzen"> Afwijzen</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="later_beoordelen"> Later beoordelen</label>
+                      </fieldset>
+                      <p class="field-help" data-decision-hint>Kies een eindoordeel.</p>
                       <div class="decision-comment" data-comment-field hidden>
                         <label for="comment-{_esc(obj["object_id"])}">Toelichting</label>
                         <textarea id="comment-{_esc(obj["object_id"])}" name="comment"></textarea>
@@ -1290,11 +1366,9 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                         <label for="correction-{_esc(obj["object_id"])}">Voorgestelde correctie</label>
                         <textarea id="correction-{_esc(obj["object_id"])}" name="proposed_correction"></textarea>
                       </div>
-                      <button class="btn-primary" type="submit" disabled data-submit-review>Review vastleggen</button>
+                      <button class="btn-primary" type="submit" disabled data-submit-review>Review opslaan en volgende</button>
                     </section>
                   </form>
-                  </section>
-                  {passage_html}
                 </article>
                 """
         empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
@@ -1346,23 +1420,46 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         proposed_correction: str = Form(""),
         confirmed_object_type: str = Form(""),
         recommendation_strength: str = Form(""),
+        suitability: str = Form(""),
+        eindoordeel: str = Form(""),
+        documentpositie_action: str = Form(""),
+        found_under: str = Form(""),
+        parent_choice: str = Form(""),
+        type_action: str = Form(""),
+        proposed_object_type: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
-        if decision not in {"approve", "revise", "reject"}:
+        mapped = map_eindoordeel(eindoordeel, decision)
+        if eindoordeel == "later_beoordelen" or mapped == "later":
+            mapped = "later"
+        elif mapped not in {"approve", "revise", "reject"}:
             raise ConsoleError("invalid_review_decision")
-        if decision in {"revise", "reject"} and not comment.strip():
-            raise ConsoleError("review_comment_required")
+        if mapped in {"revise", "reject"} and not comment.strip():
+            if eindoordeel == "goedkeuren_na_correctie":
+                comment = "Goedkeuren na correctie"
+            else:
+                raise ConsoleError("review_comment_required")
+        if (suitability or "").strip() not in SUITABILITY_VALUES:
+            raise ConsoleError("suitability_required")
+        if type_action == "dit_klopt" and not confirmed_object_type.strip():
+            confirmed_object_type = proposed_object_type
         state.review_object(
             actor_id=account["account_id"],
             snapshot_id=snapshot_id,
             object_id=object_id,
-            decision=decision,
+            decision=mapped,
             comment=comment,
             proposed_correction=proposed_correction,
             confirmed_object_type=confirmed_object_type.strip() or None,
             recommendation_strength=recommendation_strength.strip() or None,
+            suitability=suitability.strip() or None,
+            eindoordeel=eindoordeel.strip() or None,
+            documentpositie_action=documentpositie_action.strip() or None,
+            found_under=found_under.strip() or None,
+            parent_choice=parent_choice.strip() or None,
+            type_action=type_action.strip() or None,
         )
-        if decision == "revise" and proposed_correction.strip():
+        if mapped == "revise" and proposed_correction.strip():
             state.correct_object(
                 actor_id=account["account_id"],
                 snapshot_id=snapshot_id,
@@ -1372,7 +1469,11 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     "operations": [{"op": "set", "path": "content.clean_text", "value": proposed_correction.strip()}],
                 },
             )
-        return RedirectResponse(_review_location(state, snapshot_id, object_id), status_code=303)
+        nxt = state.next_review_object_id(snapshot_id, object_id)
+        return RedirectResponse(
+            _review_location(state, snapshot_id, nxt or None),
+            status_code=303,
+        )
 
     @app.post("/review/headings/batch-confirm")
     def review_headings_batch_confirm(

@@ -29,6 +29,17 @@ from src.admission_gate_v1 import (
     apply_admission_gate,
     is_admission_blocked,
 )
+from src.review_cockpit_v1 import (
+    SUITABILITY_VALUES,
+    confirmable_proposed_type,
+    found_under_path,
+    map_eindoordeel,
+    merge_heading_parent_relations,
+    next_ordinary_object_id,
+    resolve_found_under_parent,
+    review_passage_record,
+    review_passage_requested,
+)
 from src.atomic_split_v1 import proposed_relations_for_units
 from src.beslisboom_path_v1 import (
     CLOSED_BOOM_TYPES,
@@ -1730,17 +1741,32 @@ class OperationsConsole:
             raise ConsoleError("source_identity_must_not_change")
         return receipt
 
+    def next_review_object_id(self, snapshot_id: str, object_id: str) -> str:
+        envelope = self._envelope(snapshot_id)
+        review_path = review_path_for_klasse(envelope["class"])
+        return next_ordinary_object_id(
+            self.snapshot_objects(snapshot_id),
+            object_id,
+            review_path=review_path,
+        )
+
     def review_object(
         self,
         *,
         actor_id: str,
         snapshot_id: str,
         object_id: str,
-        decision: str,
+        decision: str = "",
         comment: str | None = None,
         proposed_correction: str | None = None,
         confirmed_object_type: str | None = None,
         recommendation_strength: str | None = None,
+        suitability: str | None = None,
+        eindoordeel: str | None = None,
+        documentpositie_action: str | None = None,
+        found_under: str | None = None,
+        parent_choice: str | None = None,
+        type_action: str | None = None,
     ) -> list[dict[str, Any]]:
         reviewer = self._require_role(actor_id, "reviewer")
         if _is_forbidden_identity(reviewer["username"]) or _is_forbidden_identity(reviewer["display_name"]):
@@ -1748,25 +1774,112 @@ class OperationsConsole:
         envelope = self._envelope(snapshot_id)
         if actor_id not in envelope["named_reviewers"]:
             raise ConsoleError("reviewer_not_named_on_snapshot")
+        mapped = map_eindoordeel(eindoordeel or "", decision)
+        if mapped:
+            decision = mapped
         current = self.snapshot_objects(snapshot_id)
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
+        if type_action == "dit_klopt" and not confirmed_object_type:
+            confirmed_object_type = confirmable_proposed_type(target) or None
+        parent_id = (parent_choice or "").strip()
+        if not parent_id and documentpositie_action == "dit_klopt":
+            parent_id = resolve_found_under_parent(target, current)
+        store_passage = review_passage_requested(
+            suitability=suitability or "",
+            eindoordeel=eindoordeel or "",
+            type_action=type_action or "",
+            documentpositie_action=documentpositie_action or "",
+            found_under=found_under or "",
+            parent_choice=parent_choice or "",
+        )
+        path_text = (found_under or "").strip()
+        if store_passage and not path_text:
+            path_text = found_under_path(target)
+        if (eindoordeel or "").strip() and (suitability or "").strip() not in SUITABILITY_VALUES:
+            raise ConsoleError("suitability_required")
+        if decision not in {"approve", "revise", "reject", "later"}:
+            raise ConsoleError("invalid_review_decision")
         confirmed = confirmed_object_type
         if not confirmed and target.get("confirmed_object_type"):
             confirmed = target["confirmed_object_type"]
         apply_type = bool(confirmed_object_type)
         review_path = review_path_for_klasse(envelope["class"])
-        if is_admission_blocked(target, review_path=review_path) and (
-            decision == "approve" or apply_type
-        ):
-            raise ConsoleError("blocked_candidate_not_reviewable")
-        if decision == "approve" or apply_type:
-            self._require_open_original(snapshot_id, object_id)
-        if decision == "approve":
-            if not is_confirmable_type_for_path(confirmed, review_path):
+        if decision != "later":
+            if is_admission_blocked(target, review_path=review_path) and (
+                decision == "approve" or apply_type
+            ):
+                raise ConsoleError("blocked_candidate_not_reviewable")
+            if decision == "approve" or apply_type:
+                self._require_open_original(snapshot_id, object_id)
+            if decision == "approve":
+                if not is_confirmable_type_for_path(confirmed, review_path):
+                    raise ConsoleError("unknown_object_type")
+                apply_type = True
+            if apply_type and confirmed and not is_confirmable_type_for_path(confirmed, review_path):
                 raise ConsoleError("unknown_object_type")
-            apply_type = True
+            if decision == "approve" and confirmed == "outcome":
+                errors = outcome_review_errors(target, peers=current)
+                if errors:
+                    raise ConsoleError("outcome_review_failed", ",".join(errors))
+            stamp_type = confirmed or target.get("confirmed_object_type") or target.get("object_type")
+            strength_preview = (recommendation_strength or "").strip() or None
+            if decision == "approve" and stamp_type == "outcome":
+                effective = strength_preview or target.get("confirmed_recommendation_strength")
+                if not effective and not is_geen_actie_outcome(
+                    str((target.get("content") or {}).get("clean_text") or "")
+                ):
+                    raise ConsoleError("outcome_strength_required")
+            if strength_preview:
+                if stamp_type in {"recommendation", "outcome"}:
+                    if not is_closed_recommendation_strength(strength_preview):
+                        raise ConsoleError("unknown_recommendation_strength")
+                else:
+                    will_clear = apply_type and confirmed and target.get(
+                        "confirmed_recommendation_strength"
+                    )
+                    if not will_clear:
+                        raise ConsoleError("recommendation_strength_requires_recommendation")
+        if parent_id and parent_id != object_id:
+            self.confirm_relations(
+                actor_id=actor_id,
+                snapshot_id=snapshot_id,
+                object_id=object_id,
+                relations=merge_heading_parent_relations(
+                    target.get("confirmed_relations"),
+                    parent_id,
+                ),
+            )
+            current = self.snapshot_objects(snapshot_id)
+            target = next((row for row in current if row["object_id"] == object_id), None)
+            if target is None:
+                raise ConsoleError("unknown_object")
+        passage = (
+            review_passage_record(
+                suitability=suitability or "",
+                eindoordeel=eindoordeel or "",
+                type_action=type_action or "",
+                documentpositie_action=documentpositie_action or "",
+                found_under=path_text,
+                parent_object_id=parent_id,
+            )
+            if store_passage
+            else None
+        )
+        if decision == "later":
+            saved = deepcopy(target)
+            if passage:
+                metadata = saved.setdefault("metadata", {})
+                metadata["review_passage"] = passage
+            history = [
+                row
+                for row in self._load_objects(snapshot_id)
+                if not (row["object_id"] == object_id and row["object_version"] == saved["object_version"])
+            ]
+            history.append(saved)
+            self._save_objects(snapshot_id, history)
+            return deepcopy(self.snapshot_objects(snapshot_id))
         if apply_type and confirmed:
             if not is_confirmable_type_for_path(confirmed, review_path):
                 raise ConsoleError("unknown_object_type")
@@ -1837,6 +1950,10 @@ class OperationsConsole:
             if not (row["object_id"] == object_id and row["object_version"] == target["object_version"])
         ]
         updated_target = next(row for row in updated if row["object_id"] == object_id)
+        passage_meta = dict(passage) if passage else {}
+        if passage_meta:
+            metadata = updated_target.setdefault("metadata", {})
+            metadata["review_passage"] = passage_meta
         if confirmed and updated_target.get("object_type") != "document":
             updated_target["confirmed_object_type"] = confirmed
             updated_target["object_type"] = confirmed
@@ -1869,6 +1986,10 @@ class OperationsConsole:
                 reviewer_id=actor_id,
                 decision=decision,
             )
+            if passage_meta:
+                binding["suitability"] = passage_meta.get("suitability")
+                binding["eindoordeel"] = passage_meta.get("eindoordeel")
+                binding["documentpositie"] = passage_meta.get("documentpositie")
             rows = [
                 item
                 for item in self._bindings.get(snapshot_id, [])
