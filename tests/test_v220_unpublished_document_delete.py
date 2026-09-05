@@ -188,7 +188,7 @@ def _freeze_path(console: OperationsConsole, envelope: dict) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# 1. Delete control on document card and Review chooser (unpublished only)
+# 1. Delete control on Documentenhiërarchie only (v2.27 supersedes card/chooser)
 # ---------------------------------------------------------------------------
 
 
@@ -200,24 +200,25 @@ def test_delete_control_on_document_card_and_review_chooser(tmp_path: Path) -> N
     client = _client(console)
 
     ingest_html = client.get("/ingest").text
-    assert DELETE_LABEL in ingest_html
+    assert DELETE_LABEL not in ingest_html
     assert snap in ingest_html
-    assert CONFIRM_COPY in ingest_html
 
     chooser = client.get("/review").text
-    assert DELETE_LABEL in chooser
+    assert DELETE_LABEL not in chooser
     assert snap in chooser
     assert "Beoordeel" in chooser
-    assert CONFIRM_COPY in chooser
 
     tree = client.get("/tree").text
     assert "Documentenhiërarchie" in tree
     assert DELETE_LABEL in tree
     assert snap in tree
+    assert CONFIRM_COPY in tree
+    assert 'name="confirm_title"' in tree
+    assert "Continentie fixture" in _visible_text(tree)
 
     chosen = client.get(f"/review?document={snap}").text
-    assert DELETE_LABEL in chosen
-    assert CONFIRM_COPY in chosen
+    assert DELETE_LABEL not in chosen
+    assert "Beoordeel" in chosen
 
     assert "envelope" not in _visible_text(chooser).lower()
     assert "envelope" not in _visible_text(tree).lower()
@@ -245,6 +246,7 @@ def test_delete_label_is_researcher_dutch() -> None:
     assert DELETE_LABEL in source
     assert "Verwijder unpublished document" in source
     assert 'name="confirm"' in source
+    assert 'name="confirm_title"' in source
 
 
 # ---------------------------------------------------------------------------
@@ -286,7 +288,8 @@ def test_http_no_confirm_does_not_delete(tmp_path: Path) -> None:
     assert response.status_code == 400
     assert snap in {row["snapshot_id"] for row in console.list_envelopes()}
     assert _objects_path(console, snap).is_file()
-    assert DELETE_LABEL in client.get("/review").text
+    assert DELETE_LABEL not in client.get("/review").text
+    assert DELETE_LABEL in client.get("/tree").text
 
 
 def test_confirmed_delete_runs(tmp_path: Path) -> None:
@@ -298,6 +301,7 @@ def test_confirmed_delete_runs(tmp_path: Path) -> None:
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=snap,
         confirmed=True,
+        confirm_title="Weg",
     )
     assert deleted["snapshot_id"] == snap
     assert deleted["deleted"] is True
@@ -317,7 +321,12 @@ def test_after_delete_snapshot_gone_from_inleveren_review_tree(tmp_path: Path) -
     client = _client(console)
     response = client.post(
         "/documents/delete",
-        data={"snapshot_id": gone["snapshot_id"], "confirm": "1", "next": "/review"},
+        data={
+            "snapshot_id": gone["snapshot_id"],
+            "confirm": "1",
+            "confirm_title": "Weg",
+            "next": "/tree",
+        },
         follow_redirects=False,
     )
     assert response.status_code in {303, 302}
@@ -352,6 +361,7 @@ def test_after_delete_objects_and_envelope_gone(tmp_path: Path) -> None:
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=snap,
         confirmed=True,
+        confirm_title="Objecten weg",
     )
     assert snap not in console._envelopes
     assert objects_path.exists() is False
@@ -373,6 +383,7 @@ def test_freeze_bytes_of_unpublished_source_may_be_removed(tmp_path: Path) -> No
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
         confirmed=True,
+        confirm_title="Freeze mee",
     )
     assert freeze.exists() is False
     assert digest_dir.exists() is False or any(digest_dir.iterdir()) is False
@@ -395,6 +406,7 @@ def test_shared_freeze_bytes_kept_when_other_snapshot_remains(tmp_path: Path) ->
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=first["snapshot_id"],
         confirmed=True,
+        confirm_title="Eerste",
     )
     assert freeze.is_file()
     assert second["snapshot_id"] in {row["snapshot_id"] for row in console.list_envelopes()}
@@ -414,6 +426,7 @@ def test_audit_ledger_records_who_when_snapshot_sha_title(tmp_path: Path) -> Non
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
         confirmed=True,
+        confirm_title="Audit titel",
     )
     events = [
         row
@@ -452,6 +465,7 @@ def test_published_objects_must_not_be_deleted(tmp_path: Path) -> None:
             actor_id=accounts["researcher"]["account_id"],
             snapshot_id=snap,
             confirmed=True,
+            confirm_title="Gepubliceerde objecten",
         )
     assert snap in {row["snapshot_id"] for row in console.list_envelopes()}
     assert _objects_path(console, snap).is_file()
@@ -481,11 +495,13 @@ def test_published_projection_file_is_not_deleted(tmp_path: Path) -> None:
             actor_id=accounts["researcher"]["account_id"],
             snapshot_id=planted["snapshot_id"],
             confirmed=True,
+            confirm_title="In projectie",
         )
     console.delete_unpublished_snapshot(
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=live["snapshot_id"],
         confirmed=True,
+        confirm_title="Live unpublished",
     )
     assert projection.is_file()
     assert projection.read_bytes() == original
@@ -504,6 +520,7 @@ def test_published_envelope_state_must_not_be_deleted(tmp_path: Path) -> None:
             actor_id=accounts["researcher"]["account_id"],
             snapshot_id=receipt["snapshot_id"],
             confirmed=True,
+            confirm_title="State published",
         )
 
 
@@ -527,6 +544,7 @@ def test_hide_selected_objects_in_staying_freeze_is_forbidden(tmp_path: Path) ->
         data={
             "snapshot_id": snap,
             "confirm": "1",
+            "confirm_title": "Niet verbergen",
             "object_ids": target["object_id"],
             "next": "/review",
         },
@@ -568,6 +586,7 @@ def test_other_snapshots_untouched(tmp_path: Path) -> None:
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=gone["snapshot_id"],
         confirmed=True,
+        confirm_title="Verwijderen",
     )
     still = console._envelope(keep["snapshot_id"])
     assert still["title"] == "Houden"
@@ -592,6 +611,7 @@ def test_delete_does_not_wipe_home_data_or_unrelated_files(tmp_path: Path) -> No
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
         confirmed=True,
+        confirm_title="Geen wipe",
     )
     assert unrelated.read_text(encoding="utf-8") == "keep"
     assert fake_home.read_text(encoding="utf-8") == "store"
@@ -634,6 +654,7 @@ def test_uploader_may_delete_without_second_reviewer_or_four_eyes(tmp_path: Path
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
         confirmed=True,
+        confirm_title="Uploader delete",
     )
     assert deleted["deleted"] is True
     assert deleted["four_eyes_required"] is False
@@ -648,6 +669,7 @@ def test_reviewer_may_delete_unpublished_they_did_not_upload(tmp_path: Path) -> 
         actor_id=accounts["reviewer"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
         confirmed=True,
+        confirm_title="Reviewer delete",
     )
     assert receipt["snapshot_id"] not in {row["snapshot_id"] for row in console.list_envelopes()}
 
@@ -666,6 +688,7 @@ def test_publisher_only_is_not_the_delete_operator(tmp_path: Path) -> None:
     client = _client(console, "publisher.carla")
     html = client.get("/review").text
     assert DELETE_LABEL not in html
+    assert DELETE_LABEL not in client.get("/tree").text
 
 
 def test_forbidden_identities_are_not_the_delete_operator() -> None:
@@ -690,6 +713,7 @@ def test_delete_is_not_publication_and_g2_still_blocks(tmp_path: Path) -> None:
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=gone["snapshot_id"],
         confirmed=True,
+        confirm_title="Opruimen",
     )
     published = console.publish(
         actor_id=accounts["publisher"]["account_id"],
