@@ -32,7 +32,7 @@ from src.object_taxonomy_v1 import (
     recommendation_strength_sentence,
     recommendation_strength_ui_applies,
 )
-from src.admission_gate_v1 import blocked_audit_lane
+from src.admission_gate_v1 import admission_of, blocked_audit_lane
 from src.operations_console_v1 import (
     ALLOWED_CLASSES,
     ALLOWED_DELETE_NEXT,
@@ -1193,6 +1193,14 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     heading_norm.rstrip("…")
                 ):
                     object_text_html = f'<div class="object-text"><p>{_esc(obj_text)}</p></div>'
+                expand_merge = (admission_of(obj).get("expand_merge") or {})
+                merged_text = str(expand_merge.get("merged_text") or "").strip()
+                if expand_merge.get("performed") and merged_text:
+                    object_text_html += (
+                        '<div class="object-expand-merge">'
+                        f"<p>{_esc(merged_text)}</p>"
+                        "</div>"
+                    )
                 proposed = obj.get("proposed_object_type") or ""
                 confirmed = obj.get("confirmed_object_type") or ""
                 type_options = _type_options(confirmed, review_path=review_path)

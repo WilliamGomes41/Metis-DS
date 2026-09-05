@@ -1,8 +1,9 @@
-"""Phase 1 admission gate for richtlijn inhoudelijke candidates.
+"""Admission gate for richtlijn inhoudelijke candidates (v2.30 Phase 1+2).
 
 Hard gate only. Soft scores / volume / ship-then-fix MUST NOT open it.
-Boom path/node/outcome stay on the existing boom path. Passage register is
-not a Phase-1 admission prerequisite. Full context scan is later.
+Phase 2 adds the deep context window and full ``context_scan_done``
+semantics. Boom path/node/outcome stay on the existing boom path.
+Passage register is not an admission prerequisite.
 """
 from __future__ import annotations
 
@@ -435,17 +436,43 @@ def admit_candidate(
     candidate: dict[str, Any],
     *,
     soft_scores: dict[str, Any] | None = None,
+    skip_context_scan: bool = False,
+    context_unnecessary: bool = False,
+    checked_signals: list[str] | None = None,
 ) -> dict[str, Any]:
     """Hard-admit one candidate. ``soft_scores`` MAY rank only and MUST NOT open."""
     del soft_scores  # ranking only; never opens the gate
+    skip_context_scan = bool(skip_context_scan or candidate.get("skip_context_scan"))
     absent_required = [
         field
         for field in REQUIRED_CANDIDATE_FIELDS
         if field not in candidate and field not in {"gate_result", "reason_codes"}
     ]
-    row = build_candidate_record(**candidate)
+    row = build_candidate_record(**{k: v for k, v in candidate.items() if k != "skip_context_scan"})
     _enrich_from_text(row)
     codes: list[str] = []
+    if skip_context_scan:
+        codes.append("context_scan_not_done")
+        row["context_scan_done"] = False
+    else:
+        from src.context_scan_v1 import apply_scan_to_candidate, headings_from_section_path, scan_deep_context
+
+        current, ancestors = headings_from_section_path(row.get("section_path"))
+        current = str(row.get("current_heading") or current)
+        ancestors = list(row.get("ancestor_headings") or ancestors)
+        scan = scan_deep_context(
+            candidate_paragraph=str(row.get("candidate_text") or row.get("source_text_exact") or ""),
+            previous_paragraph=str(row.get("context_before") or row.get("previous_paragraph") or ""),
+            next_paragraph=str(row.get("context_after") or row.get("next_paragraph") or ""),
+            current_heading=current,
+            ancestor_headings=ancestors,
+            section_path=list(row.get("section_path") or []),
+            related_candidates=list(row.get("related_candidates") or []),
+        )
+        row = apply_scan_to_candidate(row, scan)
+    recorded_signals = list(checked_signals) if checked_signals is not None else list(row.get("checked_signals") or [])
+    if context_unnecessary and not recorded_signals:
+        codes.append("context_unnecessary_unrecorded")
     source = str(row.get("source_text_exact") or row.get("candidate_text") or "")
     text = str(row.get("candidate_text") or source)
 
@@ -539,10 +566,20 @@ def admit_candidate(
         codes.append("supported_object_missing")
         codes.append("no_independent_claim")
 
-    # Phase 1 MUST NOT emit context_scan_not_done.
+    if (
+        row.get("context_scan_done")
+        and (row.get("expand_merge") or {}).get("performed")
+        and row.get("exceptions_detected")
+    ):
+        codes = [code for code in codes if code != "source_fidelity_failure"]
+
+    scan = row.get("context_scan") if isinstance(row.get("context_scan"), dict) else {}
+    if scan.get("necessary_context_disposition") == "block":
+        codes.append("context_necessary_unresolved")
+
     unique: list[str] = []
     for code in codes:
-        if code == "context_scan_not_done":
+        if code == "context_scan_not_done" and row.get("context_scan_done"):
             continue
         if code not in unique:
             unique.append(code)
@@ -588,6 +625,10 @@ def _source_text_exact_for_object(
     return _object_text(obj)
 
 
+def _is_heading_object(obj: dict[str, Any]) -> bool:
+    return obj.get("object_type") == "heading" or obj.get("proposed_object_type") == "heading"
+
+
 def _neighbor_text(objects: list[dict[str, Any]], index: int, step: int) -> str:
     cursor = index + step
     while 0 <= cursor < len(objects):
@@ -597,6 +638,28 @@ def _neighbor_text(objects: list[dict[str, Any]], index: int, step: int) -> str:
             continue
         return _object_text(row)
     return ""
+
+
+def _paragraph_neighbor_text(objects: list[dict[str, Any]], index: int, step: int) -> str:
+    cursor = index + step
+    while 0 <= cursor < len(objects):
+        row = objects[cursor]
+        if row.get("object_type") == "document" or _is_heading_object(row):
+            cursor += step
+            continue
+        return _object_text(row)
+    return ""
+
+
+def _heading_window(obj: dict[str, Any]) -> tuple[str, list[str]]:
+    path = [str(part).strip() for part in ((obj.get("structure") or {}).get("section_path") or []) if str(part).strip()]
+    heading = str((obj.get("structure") or {}).get("heading") or "").strip()
+    if heading:
+        ancestors = [part for part in path if part != heading]
+        return heading, ancestors
+    if path:
+        return path[-1], path[:-1]
+    return "", []
 
 
 def _target_for(obj: dict[str, Any], objects: list[dict[str, Any]], index: int) -> str:
@@ -638,6 +701,9 @@ def candidate_from_object(
     if not proposed and _CONDITION_RE.search(text):
         proposed = "condition"
     target = _target_for(obj, objects, index)
+    current_heading, ancestor_headings = _heading_window(obj)
+    previous_paragraph = _paragraph_neighbor_text(objects, index, -1)
+    next_paragraph = _paragraph_neighbor_text(objects, index, 1)
     fields: dict[str, Any] = {
         "candidate_id": obj.get("object_id") or f"cand-{index}",
         "document_id": obj.get("document_id") or "",
@@ -649,8 +715,12 @@ def candidate_from_object(
         "source_text_exact": source_exact,
         "candidate_text": text,
         "proposed_type": proposed,
-        "context_before": _neighbor_text(objects, index, -1),
-        "context_after": _neighbor_text(objects, index, 1),
+        "context_before": previous_paragraph or _neighbor_text(objects, index, -1),
+        "context_after": next_paragraph or _neighbor_text(objects, index, 1),
+        "previous_paragraph": previous_paragraph,
+        "next_paragraph": next_paragraph,
+        "current_heading": current_heading,
+        "ancestor_headings": ancestor_headings,
     }
     if proposed == "condition":
         fields["condition_span"] = text
