@@ -30,6 +30,8 @@ This delta also sets the next concrete implementation after merge. Protocol v2.1
 
 This is not a GD-03 knowledge-publish. G2 remains the publication blocker.
 
+Index/conflict pointer: Protocol v2.30.0 SUPERSEDES any reading of this file that every assertive sentence MUST enter the ordinary review queue. Where this file and Protocol v2.30 conflict on admission into the ordinary queue, Protocol v2.30 governs: a knowledge object MAY be proposed ONLY when all required fields for the proposed type are filled with literal localizable source text; missing required field → gate_result=blocked; there is no duty to objectify every sentence; there is a duty to assess normative/application-critical knowledge. v2.19 Koppen-batch / slow-duty recommendation+condition+exception+high-risk / leftover-unclassified-MUST-NOT-be-equal-one-by-one-cards law remains. HANDOFF.md MUST NOT be recreated, G2 remains BLOCKED, and `publish()` stays G2-BLOCKED remain.
+
 ## 2. Unchanged v2.6, v2.7, v2.8, v2.9, v2.10, v2.11, v2.12, v2.13, v2.15, v2.16, v2.17 and v2.18 rules
 
 The four layers remain source/evidence → canonical knowledge → governance → product. This delta MUST NOT invent a fifth layer and MUST NOT collapse those four.

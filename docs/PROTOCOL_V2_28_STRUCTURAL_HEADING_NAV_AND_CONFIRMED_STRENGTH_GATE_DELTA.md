@@ -90,6 +90,8 @@ G2 remains BLOCKED. `publish()` remains G2-BLOCKED. This protocol does not claim
 
 This is not a GD-03 knowledge-publish. G2 remains the publication blocker. Metis, the Implementation engineer and the Auditor MUST NOT count as GD-03 reviewers, MUST NOT approve, and MUST NOT publish.
 
+Index/conflict pointer: Protocol v2.30.0 SUPERSEDES any reading of this file that the primary reviewer surface MUST always show a TOC list + full parent list + a separate Relatie bevestigen. Where this file and Protocol v2.30 conflict on the primary documentpositie surface, Protocol v2.30 governs: primary UI MUST use ordinary language only (Gevonden onder / Dit klopt / Andere kop kiezen); full hierarchy ONLY after Andere kop; body headings only; TOC excluded. v2.28 Block A structural validity and Block B Sterkte-on-confirmed-type remain. HANDOFF.md MUST NOT be recreated, G2 remains BLOCKED, and `publish()` stays G2-BLOCKED remain.
+
 ## 2. Unchanged v2.6 through v2.27 rules
 
 The four layers remain source/evidence → canonical knowledge → governance → product. This delta MUST NOT invent a fifth layer and MUST NOT collapse those four.

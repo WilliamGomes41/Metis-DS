@@ -23,7 +23,7 @@ def test_governance_documents_exist() -> None:
 
 def test_protocol_has_one_versioned_norm_and_required_hierarchy() -> None:
     protocol = _read("PROTOCOL.md")
-    assert protocol.count("De geldende normatieve baseline is Protocol v2.29.0") == 1
+    assert protocol.count("De geldende normatieve baseline is Protocol v2.30.0") == 1
     assert "plus Protocol v2.20.0" in protocol
     assert "plus Protocol v2.18.0" in protocol
     assert "plus Protocol v2.17.0" in protocol

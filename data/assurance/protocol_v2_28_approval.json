@@ -2,7 +2,7 @@
   "manifest_version": "1.0",
   "protocol_version": "2.28.0",
   "protocol_path": "docs/PROTOCOL_V2_28_STRUCTURAL_HEADING_NAV_AND_CONFIRMED_STRENGTH_GATE_DELTA.md",
-  "protocol_sha256": "9a5d196fc7615681bb5c7af1121e7b4ab8a31b8409d3edf39740961fbfcd6785",
+  "protocol_sha256": "267152bc6f6f4267eb460f9dd948c31ff6e859678cc1b7232493b28d78749cc4",
   "repository": "WilliamGomes41/VENVN-DS",
   "default_branch": "main",
   "commit_sha": "pending_after_merge",

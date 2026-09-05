@@ -2,7 +2,7 @@
   "manifest_version": "1.0",
   "protocol_version": "2.16.0",
   "protocol_path": "docs/PROTOCOL_V2_16_REVIEW_PAGE_RESEARCHER_BAR_DELTA.md",
-  "protocol_sha256": "7018fc3894f79040bca2913eec8070e55b5efaf51e254a9dee2a658883a70f82",
+  "protocol_sha256": "3190aa067d495a74eaecdbd3223134853dbf3b6d168884491fd558e4d5e6d25b",
   "repository": "WilliamGomes41/VENVN-DS",
   "default_branch": "main",
   "commit_sha": "pending_after_merge",
