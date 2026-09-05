@@ -125,6 +125,27 @@ def test_v230_block_a_hard_gate_literal_source_not_soft_scores() -> None:
     assert "hard gate" in _read(ROOT / "CHANGELOG.md") or "harde poort" in _read(ROOT / "CHANGELOG.md")
 
 
+def test_v230_block_a_no_tradeoff_ui_polish_must_not_excuse_bad_candidates() -> None:
+    text = _block_a_text()
+    assert "There MUST be NO tradeoff" in text
+    assert "UI polish MUST NOT excuse bad candidates" in text
+    assert "~5/10" in text
+    assert "soft scores / volume / “ship then fix” MUST NOT open the hard gate" in text or 'soft scores / volume / "ship then fix" MUST NOT open the hard gate' in text
+    assert "Blocked candidates MUST NOT enter the ordinary review queue" in text
+    assert "ship then fix" in text
+    assert "volume" in text
+    root_protocol = _read(ROOT / "PROTOCOL.md")
+    roadmap = _read(ROOT / "ROADMAP.md")
+    changelog = _read(ROOT / "CHANGELOG.md")
+    for surface in (root_protocol, roadmap, changelog):
+        assert "There MUST be NO tradeoff" in surface
+        assert "UI polish MUST NOT excuse bad candidates" in surface
+        assert "~5/10" in surface
+        assert "blocked candidates MUST NOT enter the ordinary review queue" in surface or "Blocked candidates MUST NOT enter the ordinary review queue" in surface
+        assert "ship then fix" in surface
+        assert "volume" in surface
+
+
 def test_v230_block_a_required_candidate_fields_and_admission() -> None:
     text = _block_a_text()
     for field in (
@@ -450,6 +471,9 @@ def test_v230_out_of_scope_matches_owner_lock() -> None:
     assert "adding numpy/sklearn" in delta
     assert "touching Azure deploy packaging" in delta
     assert "filling missing required fields with “impliciet” prose" in delta or 'filling missing required fields with "impliciet" prose' in delta
+    assert "ship then fix" in delta
+    assert "UI polish" in delta
+    assert "blocked candidates enter the ordinary review queue" in delta
 
 
 def test_v230_no_product_feature_code_in_this_pr() -> None:

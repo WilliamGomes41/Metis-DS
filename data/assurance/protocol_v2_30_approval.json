@@ -2,7 +2,7 @@
   "manifest_version": "1.0",
   "protocol_version": "2.30.0",
   "protocol_path": "docs/PROTOCOL_V2_30_OBJECT_CONTRACT_HARD_ADMISSION_GATE_AND_REVIEWER_PASSAGE_FLOW_DELTA.md",
-  "protocol_sha256": "6050f08c5b80cf5e3e24381742cbe1421ba60cf730654b4601833d80379e3477",
+  "protocol_sha256": "aed179c7c3b3d5a4c08e0966ab5c11070fda11a1f7483e7efac1aefffd81b1ff",
   "repository": "WilliamGomes41/VENVN-DS",
   "default_branch": "main",
   "commit_sha": "pending_after_merge",

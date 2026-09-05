@@ -2,7 +2,7 @@
   "manifest_version": "1.0",
   "protocol_version": "2.19.0",
   "protocol_path": "docs/PROTOCOL_V2_19_REVIEW_DUTY_QUEUE_DELTA.md",
-  "protocol_sha256": "0bfffb17ca6c208423b693b0b74f3ec27c56ab8c948fe02d36df1ac4abec6338",
+  "protocol_sha256": "99f2f508945e3171d3062e12701cb71059c7cd67d72ce0793b76d5a12d1c0324",
   "repository": "WilliamGomes41/VENVN-DS",
   "default_branch": "main",
   "commit_sha": "pending_after_merge",
