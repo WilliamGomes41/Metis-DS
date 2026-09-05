@@ -97,3 +97,30 @@ def test_numbered_heading_parent_must_be_structurally_valid() -> None:
         "invalid_parent_structure:heading-5-4-1:heading-2"
         in validate_parent_relations([child, wrong_parent])
     )
+
+
+def test_hierarchy_validation_marks_heading_roles_once(monkeypatch) -> None:
+    import src.heading_parent_list_v1 as headings
+
+    calls = 0
+    original = headings.mark_heading_roles
+
+    def counted(rows):
+        nonlocal calls
+        calls += 1
+        return original(rows)
+
+    monkeypatch.setattr(headings, "mark_heading_roles", counted)
+    parent = {
+        **_object("heading-5"),
+        "object_type": "heading",
+        "content": {"clean_text": "5 Aanbevelingen"},
+    }
+    child = {
+        **_object("heading-5-4", parent="heading-5"),
+        "object_type": "heading",
+        "content": {"clean_text": "5.4 Diagnostiek"},
+    }
+
+    assert validate_parent_relations([parent, child]) == []
+    assert calls == 1
