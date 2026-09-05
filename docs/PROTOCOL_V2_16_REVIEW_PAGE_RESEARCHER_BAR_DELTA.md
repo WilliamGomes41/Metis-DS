@@ -35,6 +35,8 @@ This delta also sets the next concrete implementation after merge. Protocol v2.1
 
 Index/conflict pointer: Protocol v2.28.0 SUPERSEDES any reading of this file that stamp UI MAY appear based solely on `proposed_object_type` without human type confirm. Where this file and Protocol v2.28 conflict on the Sterkte gate, Protocol v2.28 governs: Sterkte visible and active ONLY when stored/confirmed type is Aanbeveling (`recommendation`) OR an actionable boom `outcome`; a machine proposal `recommendation` MUST NOT activate/show Sterkte. v2.16 stamp-on-recommendation law remains (DOEN/OVERWEEG/NIET DOEN are stamps on `recommendation`, not objects, not Koppen rows, not a new type); the gate becomes confirmed/stored type. HANDOFF.md MUST NOT be recreated, G2 remains BLOCKED, and `publish()` stays G2-BLOCKED remain.
 
+Index/conflict pointer: Protocol v2.30.0 SUPERSEDES any reading of this file that type UI MAY start from only “nog niet bevestigd” without a Metis proposal + evidence, or that admission MAY be subjective. Where this file and Protocol v2.30 conflict on admission or type UI, Protocol v2.30 governs: a knowledge object MAY be proposed ONLY when all required fields for the proposed type are filled with literal localizable source text; type UI MUST show the Metis proposal + Dit klopt / Type wijzigen. v2.16 one-door / stacks / stamps / tiny-objects law remains. HANDOFF.md MUST NOT be recreated, G2 remains BLOCKED, and `publish()` stays G2-BLOCKED remain.
+
 ## 2. Unchanged v2.6, v2.7, v2.8, v2.9, v2.10, v2.11, v2.12, v2.13 and v2.15 rules
 
 The four layers remain source/evidence → canonical knowledge → governance → product. This delta MUST NOT invent a fifth layer and MUST NOT collapse those four.
