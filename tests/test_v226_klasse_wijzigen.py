@@ -204,7 +204,14 @@ def test_cross_model_requires_reextract_new_graph_prior_objects_audit_history(tm
     boom = _ingest_boom(console, accounts)
     prior = console.snapshot_objects(boom["snapshot_id"])
     prior_ids = [row["object_id"] for row in prior]
-    prior_types = {row.get("object_type") or row.get("proposed_object_type") for row in prior}
+    prior_types = {
+        row.get("confirmed_object_type") or row.get("object_type") or row.get("proposed_object_type")
+        for row in prior
+    } | {
+        row.get("proposed_object_type")
+        for row in prior
+        if row.get("proposed_object_type")
+    }
     freeze_before = Path(boom["binary_path"]).read_bytes()
     identity = _source_identity(boom)
 

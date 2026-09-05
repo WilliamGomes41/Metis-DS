@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.four_eyes_v1 import requires_four_eyes
 from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES, review_path_for_klasse
+from src.klasse_wijzigen_v1 import is_cross_model_class_change
 from src.object_taxonomy_v1 import (
     CLOSED_OBJECT_TYPES,
     CLOSED_RECOMMENDATION_STRENGTHS,
@@ -115,10 +116,16 @@ ERROR_COPY = {
     "recommendation_strength_requires_recommendation": "Sterkte hoort alleen bij een aanbeveling.",
     "unknown_recommendation_strength": "Kies DOEN, OVERWEEG of NIET DOEN.",
     "published_objects_must_not_be_rewritten": "Gepubliceerde objecten worden niet herschreven.",
+    "unknown_snapshot": "Dit document is niet gevonden.",
     "delete_confirmation_required": "Bevestig eerst dat je dit unpublished document wilt verwijderen.",
     "published_projection_must_not_be_deleted": "Een gepubliceerde projectie wordt niet verwijderd.",
     "unpublished_delete_role_required": "Verwijderen van unpublished documenten vereist researcher of reviewer.",
     "hide_selected_objects_forbidden": "Geselecteerde objecten in een freeze die in Review blijft, worden niet verborgen.",
+    "cross_model_direct_change_blocked": "Directe klassewijziging tussen niet-boom en beslisboom is geblokkeerd. Re-extract van dezelfde freeze is vereist.",
+    "class_change_confirmation_required": "Bevestig eerst de consequentie van Klasse wijzigen.",
+    "published_class_change_blocked": "Een gepubliceerd document wordt niet herschreven. Klasse wijzigen blijft fail-closed.",
+    "cross_model_reextract_required": "Cross-model vereist re-extract van dezelfde freeze naar een nieuwe objectgrafiek.",
+    "source_identity_must_not_change": "De bron blijft ongewijzigd: SHA-256, titel, versie en herkomst wijzigen niet.",
 }
 RELATION_LABELS = {
     "applies_if": "geldt indien",
@@ -769,7 +776,16 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                           <label>Nieuwe klasse
                             <select name="new_class">{_class_options(child["class"])}</select>
                           </label>
-                          <button class="btn-secondary" type="submit">Promoveren</button>
+                          <div class="klasse-wijzigen-consequence">
+                            <p>De bron blijft ongewijzigd: freeze-bytes, SHA-256, titel, versie en herkomst wijzigen niet.</p>
+                            <p>Same-model (richtlijn-pad onderling): objecten blijven; in deze golf geldt volle herreview.</p>
+                            <p>Cross-model (niet-boom ↔ beslisboom): directe wijziging is geblokkeerd; re-extract van dezelfde freeze is vereist; nieuwe objectgrafiek; volle herreview; eerdere objecten blijven als audithistorie.</p>
+                          </div>
+                          <label class="check">
+                            <input type="checkbox" name="confirm" value="1">
+                            <span>Ik bevestig de consequentie van Klasse wijzigen</span>
+                          </label>
+                          <button class="btn-secondary" type="submit">Klasse wijzigen</button>
                         </form>
                         """
                     )
@@ -791,7 +807,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             {_nav(account, "tree", _counts(account))}
             <section class="room">
               <h1>Documentenhiërarchie</h1>
-              <p class="lead">Documenten per onderwerp en klasse. Verplaatsen of promoveren vanaf het document.</p>
+              <p class="lead">Documenten per onderwerp en klasse. Verplaatsen of klasse wijzigen vanaf het document.</p>
               {"".join(blocks) or empty}
             </section>
             {_help(room="tree")}
@@ -828,17 +844,34 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         title: str = Form(""),
         version: str = Form(""),
         family: str = Form(""),
+        confirm: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
+        confirmed = str(confirm or "").strip().lower() in {"1", "on", "true", "yes", "ja"}
+        if not confirmed:
+            raise ConsoleError("class_change_confirmation_required")
         if snapshot_id.strip():
-            state.promote_class(actor_id=account["account_id"], snapshot_id=snapshot_id, new_class=new_class)
+            current = next(
+                (row for row in state.list_envelopes() if row["snapshot_id"] == snapshot_id),
+                None,
+            )
+            if current is None:
+                raise ConsoleError("unknown_snapshot")
+            state.promote_class(
+                actor_id=account["account_id"],
+                snapshot_id=snapshot_id,
+                new_class=new_class,
+                reextract=is_cross_model_class_change(current["class"], new_class),
+            )
         else:
+            document = state.resolve_document(title=title, version=version, family=family)
             state.promote_class_document(
                 actor_id=account["account_id"],
                 title=title,
                 version=version,
                 family=family,
                 new_class=new_class,
+                reextract=is_cross_model_class_change(document["class"], new_class),
             )
         return RedirectResponse("/tree", status_code=303)
 
