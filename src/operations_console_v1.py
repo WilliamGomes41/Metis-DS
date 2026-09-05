@@ -912,7 +912,14 @@ class OperationsConsole:
             peer = next((item for item in current if item.get("object_id") == child_id), None)
             if peer is None:
                 continue
-            desired_parent = object_id if child_id in confirmed_children else None
+            if child_id in confirmed_children:
+                desired_parent = object_id
+            else:
+                # Only undo the parent assignment that this relation created.
+                # The child may have been re-parented independently since then.
+                if peer.get("parent_object_id") != object_id:
+                    continue
+                desired_parent = None
             if peer.get("parent_object_id") == desired_parent:
                 continue
             updated_peer = deepcopy(peer)
