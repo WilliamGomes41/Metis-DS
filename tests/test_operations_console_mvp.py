@@ -754,7 +754,7 @@ def test_family_tree_exposes_move_and_promote_on_listed_document(tmp_path: Path)
     assert "continentie fixture" in lower
     assert "1.0" in html
     assert "verplaatsen" in lower
-    assert "promoveren" in lower
+    assert "klasse wijzigen" in lower
     assert 'action="/tree/move"' in html
     assert 'action="/tree/promote"' in html
     assert _visible_named_inputs(html, "snapshot_id") == []
