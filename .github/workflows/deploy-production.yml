@@ -1,7 +1,7 @@
 name: deploy-production
 
 # Protocol v2.22 wave C / owner lock 2026-09-03: production is manual.
-# No on.push. MUST NOT activate until vvn-metis-console-test exists.
+# No on.push. Production-only temporary release path (Protocol v2.29).
 # Test identity cannot production; production identity cannot test.
 # MUST NOT merge PR #82.
 
@@ -22,27 +22,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  inactive-until-test-app:
-    name: Fail-closed until vvn-metis-console-test exists
-    runs-on: ubuntu-latest
-    steps:
-      - name: Refuse production deploy while the named test app is missing
-        run: |
-          if [ "${{ vars.METIS_TEST_APP_READY }}" = "true" ]; then
-            echo "METIS_TEST_APP_READY is true; production deploy job may run"
-          else
-            echo "deploy-production remains inactive: vvn-metis-console-test is not declared ready"
-            exit 1
-          fi
-
   deploy:
     name: Deploy ${{ inputs.commit_sha }} to production
-    if: ${{ vars.METIS_TEST_APP_READY == 'true' }}
-    needs: inactive-until-test-app
     runs-on: ubuntu-latest
     environment: production
     env:
-      METIS_TEST_APP_READY: ${{ vars.METIS_TEST_APP_READY }}
       AZURE_PRODUCTION_WEBAPP_NAME: ${{ vars.AZURE_PRODUCTION_WEBAPP_NAME }}
       METIS_DEPLOY_ENVIRONMENT: production
       METIS_DEPLOY_IDENTITY: metis-deploy-production
@@ -62,9 +46,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Fail-closed activation and identity gate
+      - name: Fail-closed production identity and target gate
         run: |
-          python -c "from src.deploy_identity_v1 import require_deploy_activation, require_activation_from_env, TEST_APP; require_deploy_activation(ready_flag='${{ vars.METIS_TEST_APP_READY }}', declared_app=TEST_APP); require_activation_from_env()"
+          python -c "from src.deploy_identity_v1 import assert_deploy_allowed; assert_deploy_allowed(environment='production', identity='${METIS_DEPLOY_IDENTITY}', target_app='${AZURE_PRODUCTION_WEBAPP_NAME}')"
       - run: python -m pip install --upgrade pip
       - run: pip install -r requirements-dev.lock
       - run: pip install --no-deps --no-build-isolation -e .
