@@ -36,14 +36,14 @@ Review UI order + ONE save is normative. v2.28 Sterkte-on-confirmed-type remains
 
 ROADMAP MUST state four Forge phases after separate Metis GOs:
 
-1. fields + contracts + hard gate + reason codes + dJG regression
-2. context / refs / abbrev / comparisons / expand-merge
+1. fields + contracts + hard gate + reason codes + dJG regression + minimal adjacent `context_before` / `context_after` (richtlijn inhoudelijke candidates only; boom stays v2.25)
+2. context / refs / abbrev / comparisons / expand-merge (deep context window; full `context_scan_done`)
 3. review UI + open-bron real context + collapsed document position
-4. passage register + coverage + gold + metrics
+4. passage register + coverage + gold + metrics (passage register MUST NOT be a Phase-1 admission prerequisite)
 
 This PR is protocol-only. MUST NOT implement any Forge phase in this PR. MUST NOT recreate `HANDOFF.md`. MUST NOT open G2/`publish()`.
 
-v2.29 temporary production-only deploy remains law (UNCHANGED). v2.28 Sterkte-on-confirmed-type remains law (UNCHANGED). v2.27 unpublished-delete Documentenhiërarchie + type-to-confirm remains law (UNCHANGED). v2.26 Klasse wijzigen first wave is already on `main`. v2.25 boom path UNCHANGED. Four layers UNCHANGED. Console remains not a nurse tree player. Metis / Forge / Auditor MUST NOT count as GD-03 reviewers.
+v2.29 temporary production-only deploy remains law (UNCHANGED). v2.28 Sterkte-on-confirmed-type remains law (UNCHANGED). v2.27 unpublished-delete Documentenhiërarchie + type-to-confirm remains law (UNCHANGED). v2.26 Klasse wijzigen first wave is already on `main`. v2.25 boom path UNCHANGED — Phase-1 hard admission contracts apply to richtlijn inhoudelijke candidates; boom `path` / `node` / `outcome` follow Protocol v2.25 until a separate boom-gate GO. Four layers UNCHANGED. Console remains not a nurse tree player. Metis / Forge / Auditor MUST NOT count as GD-03 reviewers.
 
 Live baseline on `main` before this delta is Protocol v2.29.0 plus Protocol v2.28.0 plus Protocol v2.27.0 plus Protocol v2.26.0 plus Protocol v2.25.0 plus Protocol v2.24.0 plus Protocol v2.23.0 plus Protocol v2.22.0 plus Protocol v2.21.0 plus Protocol v2.20.0 plus Protocol v2.19.0 plus Protocol v2.18.0 plus Protocol v2.17.0 plus Protocol v2.16.0 plus Protocol v2.15.0 plus Protocol v2.13.0 plus Protocol v2.12.0 plus Protocol v2.11.0. Protocol v2.2.0, v2.3.0, v2.4.0, v2.5.0, v2.6.0, v2.7.0, v2.8.0, v2.9.0, v2.10.0, v2.11.0, v2.12.0, v2.13.0, v2.15.0, v2.16.0, v2.17.0, v2.18.0, v2.19.0, v2.20.0, v2.21.0, v2.22.0, v2.23.0, v2.24.0, v2.25.0, v2.26.0, v2.27.0, v2.28.0, v2.29.0 and this delta jointly form normative baseline v2.30.0. Protocol v2.14 (lifecycle names and `valid_from` / `valid_until` serving bounds; captured → classified → reviewed → approved → published → superseded → withdrawn → archived) is LOCKED as the later lifecycle/time delta and MUST NOT be written now. This file is not Protocol v2.14.
 
@@ -55,7 +55,7 @@ The v2.12 closed serving typeset for the **richtlijn** path remains UNCHANGED:
 
 `heading`, `definition`, `explanation`, `condition`, `exception`, `recommendation`
 
-plus `unclassified` as default, not a sixth advice type. Operators MUST NOT invent serving types on the richtlijn path. Admission/review **type contracts** in this delta (Aanbeveling, Definitie, Voorwaarde, Uitzondering, Feitelijke constatering, Toelichting) are the required-field contracts for proposing a candidate. Feitelijke constatering is an admission/review contract for a factual claim; it MUST NOT invent a seventh closed serving type; it MUST NOT be served as handelingsadvies; it MUST NOT enter the ordinary queue as Aanbeveling.
+plus `unclassified` as default, not a sixth advice type. Operators MUST NOT invent serving types on the richtlijn path. Admission/review **type contracts** in this delta (Aanbeveling, Definitie, Voorwaarde, Uitzondering, Feitelijke constatering, Toelichting) are the required-field contracts for proposing a **richtlijn-path** candidate. They do NOT apply to boom `path` / `node` / `outcome` (Protocol v2.25 UNCHANGED until a separate boom-gate GO). Feitelijke constatering is an admission/review contract for a factual claim; it MUST NOT invent a seventh closed serving type; when confirmed it MUST map to existing closed serving type `explanation`; it MUST NOT be served as recommendation / handelingsadvies; it MUST NOT enter the ordinary queue as Aanbeveling.
 
 The v2.25 closed boom-path typeset remains UNCHANGED:
 
@@ -130,24 +130,28 @@ Before a candidate MAY enter human review, the candidate record MUST carry all o
 
 Empty arrays are allowed where the scan found nothing (for example `conditions_detected=[]` after a completed scan). A missing field (the field is absent, or a required span is empty when the type contract requires it) is not an empty-array success. `gate_result` MUST be exactly `allowed` or `blocked`. `reason_codes[]` MUST be present; it MAY be empty only when `gate_result=allowed` and no warning codes apply.
 
-Admission MUST require all of the following at once:
+Admission MUST require all of the following at once **on the completed pipeline** (after Forge phases 1–2 exist):
 
 1. a full carrying sentence
 2. `subject_span`
 3. `predicate_span`
 4. a valid locator (`source_locator_start` / `source_locator_end` against the hashed freeze; Protocol v2.11)
-5. `type_contract` complete for `proposed_type`
+5. `type_contract` complete for `proposed_type` (richtlijn-path contracts in this section; boom excluded — see below)
 6. `type_evidence` present (`type_evidence_spans` pointing at literal freeze text)
 7. no unresolved core reference
 8. no incomplete comparison
-9. context scan done
+9. context scan done (full Phase-2 window)
 10. found constraints processed (detected conditions / exceptions / comparisons / references / abbreviations either resolved, linked, or turned into a hard `reason_code`)
 
-Failure of any one item → `gate_result=blocked`.
+Failure of any one **active** item → `gate_result=blocked`.
+
+**Phase-1 admission set (normative now, so a conforming Phase-1 MUST be able to emit `allowed`):** items 1–6 PLUS a **minimal** `context_before` / `context_after` taken from the adjacent sentence or paragraph, sufficient for the hard gate and the dJG regression. Phase 1 MUST also emit the catalog hard `reason_codes` those checks produce. Phase 1 MUST NOT treat `context_scan_not_done` as a universal hard block on every candidate. Phase 1 MUST NOT empty the ordinary review queue with `context_scan_not_done` merely because the Phase-2 deep context window does not yet exist. The full context scan (candidate paragraph + previous paragraph + next paragraph + current + ancestor headings; conditions/exceptions linking; expand/merge) is Phase 2. Passage-register assignment is Phase 4 and MUST NOT be a Phase-1 admission prerequisite. Until Phase 4 exists, a missing passage-register status MUST NOT by itself set `gate_result=blocked`.
+
+This Phase-1 hard-gate scope applies to **richtlijn inhoudelijke candidates** only (`richtlijn` | `handreiking` | `artikel` | `transcript` | `podcast`). Boom types `path` / `node` / `outcome` remain under Protocol v2.25 closed contracts UNCHANGED. This delta MUST NOT force boom candidates through the six richtlijn contracts and MUST NOT invent incomplete boom contracts. A boom candidate MUST NOT receive `type_contract_incomplete` merely because it is `path`, `node`, or `outcome`. Boom candidates follow Protocol v2.25 until a **separate boom-gate GO**.
 
 ## 5. Block A — Type contracts
 
-Closed admission/review type contracts (Dutch name + English closed token). Operators MUST NOT invent other admission contracts in this delta.
+Closed admission/review type contracts for the **richtlijn path** (Dutch name + English closed token). Operators MUST NOT invent other admission contracts in this delta. Operators MUST NOT invent boom admission contracts in this delta. Boom `path` / `node` / `outcome` stay Protocol v2.25 until a separate boom-gate GO.
 
 ### Aanbeveling (`recommendation`)
 
@@ -178,7 +182,9 @@ MUST include: `exception_span` + `exception_target`. Missing target → `excepti
 
 ### Feitelijke constatering (`factual_finding`)
 
-MUST include: `factual_claim_span` from literal freeze text. MUST NOT be proposed or queued as Aanbeveling. MUST NOT invent a seventh closed serving type. MUST NOT be served as handelingsadvies. A factual comparison without a comparison target is still blocked (`comparison_target_missing`) even as Feitelijke constatering.
+MUST include: `factual_claim_span` from literal freeze text. This is an admission/review **contract**, not a serving type. MUST NOT invent a seventh closed serving type. MUST NOT be proposed, queued, confirmed, or served as Aanbeveling / `recommendation` / handelingsadvies. A factual comparison without a comparison target is still blocked (`comparison_target_missing`) even under this contract.
+
+**Canonical mapping (explicit):** when a Feitelijke constatering is confirmed, the stored/confirmed serving type MUST be the existing closed type `explanation`. Confirm → `explanation`. MUST NOT serve that object as recommendation / handelingsadvies (Protocol v2.13: `explanation` MUST NOT receive advice-weight). Type-confirmation MUST NOT write `confirmed_object_type=factual_finding`. If the passage cannot be confirmed as `explanation` under the Toelichting contract (no `support_span` / no `supported_object`), it MUST remain blocked from serving (`supported_object_missing` and/or `no_independent_claim`) until it maps. Prefer confirm → `explanation` when the support link exists.
 
 ### Toelichting (`explanation`)
 
@@ -213,7 +219,7 @@ Additional deterministic codes that the admission list requires. Implementation 
 | `locator_invalid` | locator missing, empty, or not bound to the hashed freeze |
 | `type_contract_incomplete` | a required field of the proposed type contract is missing |
 | `type_evidence_missing` | `type_evidence_spans` empty or not literal freeze text |
-| `context_scan_not_done` | required context scan was not performed |
+| `context_scan_not_done` | required **Phase-2** full context scan was not performed **after Phase 2 exists**. Phase 1 MUST NOT emit this code for every candidate merely because the Phase-2 scanner is not yet implemented. Phase 1 uses minimal adjacent `context_before` / `context_after` instead. |
 | `context_necessary_unresolved` | necessary context was found and was neither included nor linked |
 | `context_unnecessary_unrecorded` | the machine claims context is unnecessary without recording checked signals |
 
@@ -313,15 +319,17 @@ v2.28 Sterkte-on-confirmed-type remains: Sterkte appears only after stored/confi
 
 ## 12. Validation pipeline, publication gate, metrics, gold, Forge phases
 
-Validation pipeline order is normative:
+Validation pipeline order is normative for the **completed** law (after the matching Forge phases exist):
 
 1. Freeze / locator integrity (Protocol v2.11; `source_hash`; valid locator)
-2. Passage register status assignment (section 7; MUST NOT silently drop)
-3. Hard admission gate (sections 3–6; required fields + type contract + evidence)
-4. Context scan (section 7)
+2. Passage register status assignment (section 7; MUST NOT silently drop) — **Phase 4**; MUST NOT be a Phase-1 admission prerequisite
+3. Hard admission gate (sections 3–6; required fields + richtlijn type contract + evidence + Phase-1 minimal adjacent context)
+4. Full context scan (section 7) — **Phase 2** deep window (conditions/exceptions linking, expand/merge, refs/abbrev/comparisons). Phase 1 uses only minimal adjacent `context_before` / `context_after`.
 5. `reason_codes[]` + `gate_result`
 6. Human review of `allowed` candidates only, in the section 11 order
 7. Publication gate — still G2-BLOCKED; `publish()` stays G2-BLOCKED
+
+**Phase-1 runnable pipeline** (so Phase 1 can admit `allowed` candidates): step 1 → step 3 with the Phase-1 admission set (required fields, richtlijn type contracts, hard blocks, reason codes, dJG regression, minimal adjacent context) → step 5 → step 6 for those `allowed` candidates. MUST NOT insert step 2 before the Phase-1 gate. MUST NOT require step 4 as a Phase-1 hard block. A conforming Phase-1 implementation MUST NOT return `context_scan_not_done` for every candidate.
 
 Soft scores MAY run in parallel for ranking. They MUST NOT sit before the hard gate as an opener. They MUST NOT replace `reason_codes`. Soft scores / volume / “ship then fix” MUST NOT open the hard gate. Human review in this pipeline is of `allowed` candidates only. Blocked candidates MUST NOT enter the ordinary review queue.
 
@@ -337,10 +345,10 @@ A gold standard is required before claiming extract quality. MUST NOT claim extr
 
 ROADMAP MUST state four Forge phases after separate Metis GOs. This PR is protocol-only. MUST NOT implement those phases here.
 
-1. fields + contracts + hard gate + reason codes + dJG regression
-2. context / refs / abbrev / comparisons / expand-merge
+1. fields + contracts + hard gate + reason codes + dJG regression + minimal adjacent `context_before` / `context_after` (richtlijn inhoudelijke candidates only; boom stays v2.25)
+2. context / refs / abbrev / comparisons / expand-merge (deep context window; full `context_scan_done`)
 3. review UI + open-bron real context + collapsed document position
-4. passage register + coverage + gold + metrics
+4. passage register + coverage + gold + metrics (passage register MUST NOT be a Phase-1 admission prerequisite)
 
 ## 13. Unchanged fail-closed product boundary
 
@@ -371,10 +379,10 @@ Do not build a mockup. Do not wait for Azure, Vercel, Neon or a finished "DS" be
 
 After this protocol merges:
 
-1. Next code after this protocol's own Metis GO MUST be Forge (Implementation engineer) on the existing kernel/console for **exactly** phase 1 (fields + contracts + hard gate + reason codes + dJG regression), with tests-before-code — NOT this PR.
-2. Phase 2 (context / refs / abbrev / comparisons / expand-merge) MUST wait for its own Metis GO.
+1. Next code after this protocol's own Metis GO MUST be Forge (Implementation engineer) on the existing kernel/console for **exactly** phase 1 (fields + richtlijn contracts + hard gate + reason codes + dJG regression + minimal adjacent context; boom stays v2.25; MUST NOT empty the ordinary queue with `context_scan_not_done`; passage register is not a Phase-1 admission prerequisite), with tests-before-code — NOT this PR.
+2. Phase 2 (context / refs / abbrev / comparisons / expand-merge; deep context window) MUST wait for its own Metis GO.
 3. Phase 3 (review UI + open-bron real context + collapsed document position) MUST wait for its own Metis GO.
-4. Phase 4 (passage register + coverage + gold + metrics) MUST wait for its own Metis GO.
+4. Phase 4 (passage register + coverage + gold + metrics) MUST wait for its own Metis GO. Passage register MUST NOT be a Phase-1 admission prerequisite.
 5. MUST NOT open G2/`publish()`. G2 still BLOCKED; `publish()` still G2-BLOCKED.
 6. MUST NOT Azure ZIP, nurse UI, or recreate `HANDOFF.md`.
 7. Until those Forge GOs, no Cloud Shell ZIP required for this delta alone. MUST NOT treat this protocol PR as Azure ZIP. MUST NOT Cloud Shell this protocol PR.

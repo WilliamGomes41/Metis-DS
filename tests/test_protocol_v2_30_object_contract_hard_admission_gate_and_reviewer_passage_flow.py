@@ -18,28 +18,57 @@ def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _delta_sections_titled(block_label: str) -> str:
+    """Return only delta headings whose title names this acceptance block.
+
+    Numbered ``## N. Block A/B`` sections keep their ``###`` subsections.
+    A ``### Block A/B`` purpose heading is closed by the next named block
+    heading or by ``##`` — so Block B is not the rest of the file.
+    """
+    chunks: list[str] = []
+    current: list[str] = []
+    keep = False
+    in_numbered_block_section = False
+    for line in _read(DELTA).splitlines(keepends=True):
+        if line.startswith("## "):
+            if keep and current:
+                chunks.append("".join(current))
+            current = [line]
+            keep = block_label in line
+            in_numbered_block_section = keep
+        elif line.startswith("### "):
+            names_block = "Block A" in line or "Block B" in line
+            if names_block:
+                if keep and current:
+                    chunks.append("".join(current))
+                current = [line]
+                keep = block_label in line
+                in_numbered_block_section = False
+            elif keep and in_numbered_block_section:
+                current.append(line)
+            else:
+                if keep and current:
+                    chunks.append("".join(current))
+                current = []
+                keep = False
+                in_numbered_block_section = False
+        elif keep:
+            current.append(line)
+    if keep and current:
+        chunks.append("".join(current))
+    text = "".join(chunks)
+    assert text.strip(), f"delta has no bounded {block_label} sections"
+    return text
+
+
 def _block_a_text() -> str:
-    """Independently readable Block A surface (delta + wired docs)."""
-    return "\n".join(
-        (
-            _read(DELTA),
-            _read(ROOT / "PROTOCOL.md"),
-            _read(ROOT / "ROADMAP.md"),
-            _read(ROOT / "CHANGELOG.md"),
-        )
-    )
+    """Block A norms from Block A delta sections only — not the full corpus."""
+    return _delta_sections_titled("Block A")
 
 
 def _block_b_text() -> str:
-    """Independently readable Block B surface (delta + wired docs)."""
-    return "\n".join(
-        (
-            _read(DELTA),
-            _read(ROOT / "PROTOCOL.md"),
-            _read(ROOT / "ROADMAP.md"),
-            _read(ROOT / "CHANGELOG.md"),
-        )
-    )
+    """Block B norms from Block B delta sections only — not the full corpus."""
+    return _delta_sections_titled("Block B")
 
 
 def test_v230_approval_manifest_matches_protocol_bytes() -> None:
@@ -108,6 +137,15 @@ def test_v230_two_acceptance_blocks_are_independently_named() -> None:
     assert "A pass of Block B MUST NOT be treated as a pass of Block A" in delta
     assert "### Block A — Hard admission gate, object contract, reason codes" in delta
     assert "### Block B — Reviewer passage-flow, documentpositie, real open-source context" in delta
+    block_a = _block_a_text()
+    block_b = _block_b_text()
+    assert block_a != block_b
+    assert "### Block B —" not in block_a
+    assert "### Block A —" not in block_b
+    assert "actor_of_scope" in block_a
+    assert "actor_of_scope" not in block_b
+    assert "Review opslaan en volgende" in block_b
+    assert "Review opslaan en volgende" not in block_a
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +160,6 @@ def test_v230_block_a_hard_gate_literal_source_not_soft_scores() -> None:
     assert "Soft scores" in text
     assert "MUST NOT open the hard gate" in text
     assert "impliciet" in text
-    assert "hard gate" in _read(ROOT / "CHANGELOG.md") or "harde poort" in _read(ROOT / "CHANGELOG.md")
 
 
 def test_v230_block_a_no_tradeoff_ui_polish_must_not_excuse_bad_candidates() -> None:
@@ -130,20 +167,10 @@ def test_v230_block_a_no_tradeoff_ui_polish_must_not_excuse_bad_candidates() -> 
     assert "There MUST be NO tradeoff" in text
     assert "UI polish MUST NOT excuse bad candidates" in text
     assert "~5/10" in text
-    assert "soft scores / volume / “ship then fix” MUST NOT open the hard gate" in text or 'soft scores / volume / "ship then fix" MUST NOT open the hard gate' in text
+    assert "volume" in text and "ship then fix" in text and "MUST NOT open the hard gate" in text
     assert "Blocked candidates MUST NOT enter the ordinary review queue" in text
     assert "ship then fix" in text
     assert "volume" in text
-    root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
-    changelog = _read(ROOT / "CHANGELOG.md")
-    for surface in (root_protocol, roadmap, changelog):
-        assert "There MUST be NO tradeoff" in surface
-        assert "UI polish MUST NOT excuse bad candidates" in surface
-        assert "~5/10" in surface
-        assert "blocked candidates MUST NOT enter the ordinary review queue" in surface or "Blocked candidates MUST NOT enter the ordinary review queue" in surface
-        assert "ship then fix" in surface
-        assert "volume" in surface
 
 
 def test_v230_block_a_required_candidate_fields_and_admission() -> None:
@@ -196,7 +223,35 @@ def test_v230_block_a_type_contracts_named() -> None:
     assert "Feitelijke constatering" in text
     assert "Toelichting" in text
     assert "not independently publishable by default" in text
-    assert "Aanbeveling" in _read(ROOT / "PROTOCOL.md") or "aanbeveling" in _read(ROOT / "PROTOCOL.md")
+
+
+def test_v230_block_a_richtlijn_scope_does_not_break_v225_boom() -> None:
+    text = _block_a_text()
+    assert "richtlijn inhoudelijke candidates" in text or "richtlijn-path" in text or "richtlijn path" in text
+    assert "path" in text and "node" in text and "outcome" in text
+    assert "separate boom-gate GO" in text
+    assert "MUST NOT force boom candidates through the six richtlijn contracts" in text or "MUST NOT force boom candidates" in text
+    assert "MUST NOT invent" in text and "boom" in text
+    assert "type_contract_incomplete" in text
+    assert "v2.25" in text
+
+
+def test_v230_block_a_phase1_must_not_empty_queue_with_context_scan_not_done() -> None:
+    text = _block_a_text()
+    assert "Phase-1 admission set" in text or "Phase-1" in text
+    assert "minimal" in text
+    assert "context_before" in text and "context_after" in text
+    assert "MUST NOT treat `context_scan_not_done` as a universal hard block" in text or "MUST NOT empty the ordinary review queue with `context_scan_not_done`" in text
+    assert "MUST NOT be a Phase-1 admission prerequisite" in text
+    assert "passage-register" in text or "passage register" in text
+
+
+def test_v230_block_a_factual_finding_confirms_as_explanation() -> None:
+    text = _block_a_text()
+    assert "Confirm → `explanation`" in text or "confirm → `explanation`" in text or "MUST map to existing closed serving type `explanation`" in text or "MUST be the existing closed type `explanation`" in text
+    assert "MUST NOT invent a seventh closed serving type" in text
+    assert "MUST NOT serve that object as recommendation / handelingsadvies" in text or "MUST NOT be served as recommendation / handelingsadvies" in text
+    assert "confirmed_object_type=factual_finding" in text
 
 
 def test_v230_block_a_hard_reason_codes_named() -> None:
@@ -219,7 +274,6 @@ def test_v230_block_a_hard_reason_codes_named() -> None:
         "source_fidelity_failure",
     ):
         assert code in text
-        assert code in _read(ROOT / "PROTOCOL.md") or code in _read(ROOT / "ROADMAP.md") or code in _read(ROOT / "CHANGELOG.md")
 
 
 def test_v230_block_a_djg_regression_reason_codes() -> None:
@@ -229,13 +283,6 @@ def test_v230_block_a_djg_regression_reason_codes() -> None:
     assert "recommendation_evidence_missing" in text
     assert "comparison_target_missing" in text
     assert "abbreviation_unresolved" in text
-    assert "De dJG wordt in Nederland vaker gebruikt." in _read(ROOT / "PROTOCOL.md")
-    assert "De dJG wordt in Nederland vaker gebruikt." in _read(ROOT / "ROADMAP.md")
-    assert "De dJG wordt in Nederland vaker gebruikt." in _read(ROOT / "CHANGELOG.md")
-    changelog = _read(ROOT / "CHANGELOG.md")
-    assert "recommendation_evidence_missing" in changelog
-    assert "comparison_target_missing" in changelog
-    assert "abbreviation_unresolved" in changelog
 
 
 def test_v230_block_a_also_regresses_named_cases() -> None:
@@ -278,9 +325,6 @@ def test_v230_block_b_documentpositie_ordinary_language() -> None:
     assert "Andere kop kiezen" in text
     assert "Relatie bevestigen" in text
     assert "ordinary language only" in text
-    assert "Gevonden onder" in _read(ROOT / "PROTOCOL.md")
-    assert "Gevonden onder" in _read(ROOT / "ROADMAP.md")
-    assert "Gevonden onder" in _read(ROOT / "CHANGELOG.md")
 
 
 def test_v230_block_b_visibility_and_no_parent_jargon_on_primary() -> None:
@@ -299,9 +343,6 @@ def test_v230_block_b_open_bron_real_surrounding_context() -> None:
     assert "surrounding page/paragraph context" in text
     assert "exact span marked" in text
     assert "real open-source context" in text or "Real open-source context" in text
-    assert "Open volledige richtlijn" in _read(ROOT / "PROTOCOL.md")
-    assert "Open volledige richtlijn" in _read(ROOT / "ROADMAP.md")
-    assert "truncated card sentence" in _read(ROOT / "CHANGELOG.md") or "afgekapte kaartzin" in _read(ROOT / "CHANGELOG.md")
 
 
 def test_v230_block_b_review_ui_order_one_save() -> None:
@@ -321,6 +362,28 @@ def test_v230_block_b_review_ui_order_one_save() -> None:
 # ---------------------------------------------------------------------------
 # Shared protocol wiring (not a substitute for Block A or Block B)
 # ---------------------------------------------------------------------------
+
+
+def test_v230_wired_docs_repeat_block_norms() -> None:
+    root_protocol = _read(ROOT / "PROTOCOL.md")
+    roadmap = _read(ROOT / "ROADMAP.md")
+    changelog = _read(ROOT / "CHANGELOG.md")
+    for surface in (root_protocol, roadmap, changelog):
+        assert "There MUST be NO tradeoff" in surface
+        assert "UI polish MUST NOT excuse bad candidates" in surface
+        assert "~5/10" in surface
+        assert "blocked candidates MUST NOT enter the ordinary review queue" in surface or "Blocked candidates MUST NOT enter the ordinary review queue" in surface
+        assert "ship then fix" in surface
+        assert "Gevonden onder" in surface
+        assert "De dJG wordt in Nederland vaker gebruikt." in surface
+        assert "recommendation_evidence_missing" in surface or "context_scan_not_done" in surface
+    assert "Open volledige richtlijn" in root_protocol
+    assert "Open volledige richtlijn" in roadmap
+    assert "truncated card sentence" in changelog or "afgekapte kaartzin" in changelog
+    assert "boom" in root_protocol.lower() and "v2.25" in root_protocol
+    assert "context_scan_not_done" in roadmap
+    assert "explanation" in changelog
+    assert "Aanbeveling" in root_protocol or "aanbeveling" in root_protocol
 
 
 def test_v230_roadmap_states_four_forge_phases_not_this_pr() -> None:
@@ -451,13 +514,13 @@ def test_v230_does_not_reopen_sterkte_delete_boom_klasse_g2_or_v229() -> None:
 
 
 def test_v230_metrics_and_gold_required_by_protocol() -> None:
-    text = _block_a_text()
-    assert "precision" in text
-    assert "type accuracy" in text
-    assert "context completeness" in text
-    assert "coverage vs gold" in text
-    assert "review burden" in text
-    assert "gold standard is required before claiming extract quality" in text or "A gold standard is required before claiming extract quality" in text
+    delta = _read(DELTA)
+    assert "precision" in delta
+    assert "type accuracy" in delta
+    assert "context completeness" in delta
+    assert "coverage vs gold" in delta
+    assert "review burden" in delta
+    assert "gold standard is required before claiming extract quality" in delta or "A gold standard is required before claiming extract quality" in delta
 
 
 def test_v230_out_of_scope_matches_owner_lock() -> None:

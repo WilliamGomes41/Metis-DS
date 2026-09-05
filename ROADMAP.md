@@ -82,10 +82,10 @@ Metrics (precision, type accuracy, context completeness, coverage vs gold, revie
 
 ROADMAP noemt vier Forge-fases na aparte Metis-GO’s. Volgende code ná deze protocol's eigen Metis-GO MUST Forge op de bestaande console zijn voor precies:
 
-1. Fase 1: velden + contracten + harde poort + reason codes + dJG-regressie;
-2. Fase 2 (eigen GO): context / refs / abbrev / comparisons / expand-merge;
+1. Fase 1: velden + contracten (richtlijn inhoudelijke kandidaten) + harde poort + reason codes + dJG-regressie + minimale `context_before`/`context_after` uit de aangrenzende zin/paragraaf; MUST NOT iedere kandidaat met `context_scan_not_done` blokkeren; boom `path`/`node`/`outcome` blijft Protocol v2.25 tot een aparte boom-gate GO; passage-register is GEEN fase-1-toelatingsvoorwaarde;
+2. Fase 2 (eigen GO): context / refs / abbrev / comparisons / expand-merge (diep venster; full context scan);
 3. Fase 3 (eigen GO): review-UI + open-bron echte context + ingeklapte documentpositie;
-4. Fase 4 (eigen GO): passage-register + coverage + gold + metrics.
+4. Fase 4 (eigen GO): passage-register + coverage + gold + metrics (passage-register MUST NOT een fase-1-toelatingsvoorwaarde zijn).
 
 MUST NOT Forge-fases in deze protocol-PR implementeren. MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
 
