@@ -1,8 +1,8 @@
 {
   "manifest_version": "1.0",
-  "protocol_version": "2.26.0",
-  "protocol_path": "docs/PROTOCOL_V2_26_KLASSE_WIJZIGEN_CONTROLLED_RECLASSIFICATION_DELTA.md",
-  "protocol_sha256": "fbf7b4658a8897fceb4ae05ec9ef422f453e851c72d6e110e18fb180e6d57629",
+  "protocol_version": "2.27.0",
+  "protocol_path": "docs/PROTOCOL_V2_27_UNPUBLISHED_DELETE_DOCUMENTENHIERARCHIE_TYPE_CONFIRM_DELTA.md",
+  "protocol_sha256": "f935ebe88a70c889de235b12443f51647df1e937c4a980c8bb2166136c032c2f",
   "repository": "WilliamGomes41/VENVN-DS",
   "default_branch": "main",
   "commit_sha": "pending_after_merge",

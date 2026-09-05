@@ -30,6 +30,8 @@ This delta also sets the next concrete implementation after merge. Protocol v2.1
 
 This is not a GD-03 knowledge-publish. G2 remains the publication blocker.
 
+Index/conflict pointer: Protocol v2.27.0 SUPERSEDES any reading of this file that delete MUST appear on the document card / Review-chooser as alternative surfaces. Where this file and Protocol v2.27 conflict on the delete surface, Protocol v2.27 governs: unpublished document delete MUST be available from exactly one console place — **Documentenhiërarchie** — and MUST type-to-confirm the exact document title (title shown; without exact match delete MUST NOT run). MUST NOT offer Verwijder unpublished document from Inleveren, Review, Publiceren, Accounts, or any other room. MUST NOT invent a separate Delete room/kamer. Unpublished-only, confirm, audit-ledger, no published delete, no SSH/wipe of `/home/data`, four-eyes not required, `PROTOCOL.md` every-guideline law, HANDOFF.md MUST NOT be recreated, G2 remains BLOCKED, and `publish()` stays G2-BLOCKED remain.
+
 ## 2. Unchanged v2.6, v2.7, v2.8, v2.9, v2.10, v2.11, v2.12, v2.13, v2.15, v2.16, v2.17, v2.18 and v2.19 rules
 
 The four layers remain source/evidence → canonical knowledge → governance → product. This delta MUST NOT invent a fifth layer and MUST NOT collapse those four.

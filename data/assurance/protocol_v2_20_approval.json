@@ -2,7 +2,7 @@
   "manifest_version": "1.0",
   "protocol_version": "2.20.0",
   "protocol_path": "docs/PROTOCOL_V2_20_UNPUBLISHED_DOCUMENT_DELETE_DELTA.md",
-  "protocol_sha256": "90383b89780042e391a8a4faf028eece8b2697cb957667a8cea0c2c4fb31a745",
+  "protocol_sha256": "e8d8a4e9fc320d7b11ba7fd41af315a31bdca9bbaeb71dedd62518e2e229d92b",
   "repository": "WilliamGomes41/VENVN-DS",
   "default_branch": "main",
   "commit_sha": "pending_after_merge",
