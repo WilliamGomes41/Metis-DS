@@ -118,6 +118,7 @@ ERROR_COPY = {
     "published_objects_must_not_be_rewritten": "Gepubliceerde objecten worden niet herschreven.",
     "unknown_snapshot": "Dit document is niet gevonden.",
     "delete_confirmation_required": "Bevestig eerst dat je dit unpublished document wilt verwijderen.",
+    "delete_title_confirmation_required": "Typ de exacte documenttitel om te bevestigen.",
     "published_projection_must_not_be_deleted": "Een gepubliceerde projectie wordt niet verwijderd.",
     "unpublished_delete_role_required": "Verwijderen van unpublished documenten vereist researcher of reviewer.",
     "hide_selected_objects_forbidden": "Geselecteerde objecten in een freeze die in Review blijft, worden niet verborgen.",
@@ -405,7 +406,9 @@ def _unpublished_delete_control(
     console: OperationsConsole,
     next_path: str,
 ) -> str:
-    """Researcher Dutch delete control. Unpublished snapshots only. Confirm first."""
+    """Researcher Dutch delete control. Documentenhiërarchie only. Type-to-confirm title."""
+    if next_path != "/tree":
+        return ""
     if not _can_delete_unpublished(account):
         return ""
     snap = str(row.get("snapshot_id") or "")
@@ -416,11 +419,19 @@ def _unpublished_delete_control(
             return ""
     except ConsoleError:
         return ""
-    target = next_path if next_path in ALLOWED_DELETE_NEXT else "/review"
+    title = str(row.get("title") or "")
+    target = next_path if next_path in ALLOWED_DELETE_NEXT else "/tree"
     return f"""
       <form class="delete-unpublished" method="post" action="/documents/delete">
         <input type="hidden" name="snapshot_id" value="{_esc(snap)}">
         <input type="hidden" name="next" value="{_esc(target)}">
+        <p class="delete-title-confirm">
+          <span>Documenttitel</span>
+          <strong class="delete-title-shown">{_esc(title)}</strong>
+        </p>
+        <label>Typ de exacte documenttitel
+          <input name="confirm_title" autocomplete="off" required>
+        </label>
         <label class="check">
           <input type="checkbox" name="confirm" value="1">
           <span>Ik bevestig dat ik dit unpublished document wil verwijderen</span>
@@ -446,7 +457,6 @@ def _ingested_document_list(
             f"""
             <article class="doc-card">
               {_document_card_heading({**row, "status": row["state"]})}
-              {_unpublished_delete_control(row, account=account, console=console, next_path="/ingest")}
             </article>
             """
         )
@@ -731,7 +741,6 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
               <p class="lead">Vastgelegd en klaar voor review.</p>
               <div class="doc-card">
                 {_document_card_heading({**receipt, "status": receipt["state"]})}
-                {_unpublished_delete_control(receipt, account=account, console=state, next_path="/ingest")}
               </div>
               <p><a class="btn-secondary" href="/review">Naar review</a> <a class="btn-secondary" href="/tree">Naar documentenhierarchie</a></p>
             </section>
@@ -880,7 +889,8 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         request: Request,
         snapshot_id: str = Form(...),
         confirm: str = Form(""),
-        next_path: str = Form("/review", alias="next"),
+        confirm_title: str = Form(""),
+        next_path: str = Form("/tree", alias="next"),
         object_ids: list[str] = Form(default=[]),
     ) -> RedirectResponse:
         account = _require(request)
@@ -896,10 +906,11 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             actor_id=account["account_id"],
             snapshot_id=snapshot_id,
             confirmed=confirmed,
+            confirm_title=confirm_title,
         )
-        target = (next_path or "").strip() or "/review"
+        target = (next_path or "").strip() or "/tree"
         if target not in ALLOWED_DELETE_NEXT:
-            target = "/review"
+            target = "/tree"
         return RedirectResponse(target, status_code=303)
 
     @app.get("/review", response_class=HTMLResponse)
@@ -929,7 +940,6 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                       {_document_card_heading({**row, "status": row["state"]})}
                       <p class="lead">Beoordeel Koppen als structuur en Inhoud als kennisobjecten.</p>
                       <p><a class="btn-primary" href="/review?document={_esc(row["snapshot_id"])}">Beoordeel</a></p>
-                      {_unpublished_delete_control(row, account=account, console=state, next_path="/review")}
                     </article>
                     """
                 )
@@ -938,7 +948,6 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         if chosen_row:
             objects_html += (
                 f'<div class="doc-card">{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}'
-                f'{_unpublished_delete_control(chosen_row, account=account, console=state, next_path="/review")}'
                 "</div>"
             )
             snapshot_objects = state.snapshot_objects(chosen)

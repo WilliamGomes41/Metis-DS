@@ -1195,10 +1195,12 @@ class OperationsConsole:
         actor_id: str,
         snapshot_id: str,
         confirmed: bool = False,
+        confirm_title: str = "",
     ) -> dict[str, Any]:
         """Remove one unpublished captured snapshot from the operations console.
 
-        Whole snapshot only. MUST confirm. MUST NOT delete a published projection.
+        Whole snapshot only. MUST confirm. MUST type-to-confirm the exact title.
+        MUST NOT delete a published projection.
         MUST NOT hide selected objects inside a freeze that stays in Review.
         Four-eyes is not required. Capture is not publication.
         """
@@ -1217,6 +1219,8 @@ class OperationsConsole:
         if self.snapshot_is_published(token):
             raise ConsoleError("published_projection_must_not_be_deleted")
         title = str(envelope["title"])
+        if confirm_title != title:
+            raise ConsoleError("delete_title_confirmation_required")
         digest = str(envelope["sha256"])
         objects_path = self._objects_path(token)
         if objects_path.is_file():
