@@ -31,6 +31,7 @@ from src.object_taxonomy_v1 import (
     recommendation_strength_ui_applies,
 )
 from src.admission_gate_v1 import admission_of, blocked_audit_lane
+from src.extract_coverage_v1 import coverage_panel_rows
 from src.review_cockpit_v1 import (
     SUITABILITY_VALUES,
     broncontext_parts,
@@ -480,6 +481,30 @@ def _review_location(console: OperationsConsole, snapshot_id: str, object_id: st
     if known is None:
         raise ConsoleError("unknown_object")
     return f"/review?document={snap}&object={quote(str(known), safe='')}"
+
+
+def _coverage_panel(objects: list[dict[str, Any]]) -> str:
+    rows = coverage_panel_rows(objects)
+    if not rows:
+        return ""
+    items = []
+    for row in rows:
+        parts = [
+            f"{_esc(label)} {count}"
+            for label, count in (row.get("labels") or {}).items()
+            if count
+        ]
+        detail = ", ".join(parts) if parts else "geen passages"
+        items.append(
+            f"<li><b>{_esc(row['section'])}</b> — {detail}</li>"
+        )
+    return f"""
+      <aside class="review-coverage" aria-label="Dekking per kop">
+        <h2>Dekking per kop</h2>
+        <p class="lead">Alleen normatieve en toepassingskritische kennis hoeft een kenniseenheid te worden. Niet iedere zin.</p>
+        <ul>{"".join(items)}</ul>
+      </aside>
+    """
 
 
 def _document_card_heading(row: dict[str, Any]) -> str:
@@ -1249,6 +1274,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                       {other_html}
                     </section>
                     {blocked_html}
+                    {_coverage_panel(snapshot_objects)}
                 """
             else:
                 obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)

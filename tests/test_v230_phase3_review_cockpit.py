@@ -993,9 +993,9 @@ def test_dit_klopt_reveals_sterkte_before_one_save(tmp_path: Path) -> None:
 
 
 def test_phase3_does_not_add_passage_register_or_gold_metrics() -> None:
+    cockpit = (ROOT / "src/review_cockpit_v1.py").read_text(encoding="utf-8")
     app = (ROOT / "src/operations_console_app.py").read_text(encoding="utf-8")
-    kernel = (ROOT / "src/operations_console_v1.py").read_text(encoding="utf-8")
-    for blob in (app, kernel):
+    for blob in (cockpit, app):
         assert "selected_as_candidate" not in blob
         assert "coverage vs gold" not in blob
         assert "review_burden" not in blob

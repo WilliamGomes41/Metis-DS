@@ -8,6 +8,15 @@ from pathlib import Path
 ALLOWED_CLASSES = {"fact", "condition_score", "exception", "version_conflict", "no_answer"}
 ALLOWED_BEHAVIORS = {"retrieve", "abstain", "current_published_only"}
 ALLOWED_MODES = {"published_corpus", "fixture_only", "deferred"}
+EXTRACT_GOLD_KIND = "extract_quality"
+EXTRACT_GOLD_CLASSES = {"normative", "support", "excluded", "context", "heading"}
+EXTRACT_REGISTER_STATUSES = {
+    "selected_as_candidate",
+    "used_as_context",
+    "linked_as_support",
+    "excluded_with_reason",
+    "not_yet_assessed",
+}
 
 
 def validate(data: dict) -> dict:
@@ -35,6 +44,44 @@ def validate(data: dict) -> dict:
         "no_answer_share":round(counts["no_answer"]/total,3) if total else 0,
         "errors":errors,
         "warnings":warnings,
+    }
+
+
+def validate_extract_gold(data: dict) -> dict:
+    errors = []
+    warnings = []
+    if (data.get("kind") or "").strip() != EXTRACT_GOLD_KIND:
+        errors.append("kind_must_be_extract_quality")
+    if not data.get("source_fixture"):
+        errors.append("source_fixture_missing")
+    rules = data.get("rules") if isinstance(data.get("rules"), dict) else {}
+    if rules.get("gold_required_before_quality_claim") is not True:
+        errors.append("gold_required_before_quality_claim")
+    if rules.get("soft_scores_must_not_claim_quality") is not True:
+        errors.append("soft_scores_must_not_claim_quality")
+    passages = data.get("passages") or []
+    ids = [row.get("id") for row in passages]
+    if len(ids) != len(set(ids)):
+        errors.append("duplicate_passage_ids")
+    for i, row in enumerate(passages):
+        prefix = f"passages[{i}]"
+        if row.get("class") not in EXTRACT_GOLD_CLASSES:
+            errors.append(f"{prefix}:invalid_class")
+        if not str(row.get("source_text") or "").strip():
+            errors.append(f"{prefix}:source_text_missing")
+        if not str(row.get("section") or "").strip():
+            errors.append(f"{prefix}:section_missing")
+        status = row.get("expected_register_status")
+        if status not in EXTRACT_REGISTER_STATUSES:
+            errors.append(f"{prefix}:invalid_register_status")
+        allowed = row.get("allowed_register_statuses") or []
+        if any(item not in EXTRACT_REGISTER_STATUSES for item in allowed):
+            errors.append(f"{prefix}:invalid_allowed_register_status")
+    return {
+        "status": "PASS" if not errors else "BLOCKED",
+        "passages": len(passages),
+        "errors": errors,
+        "warnings": warnings,
     }
 
 

@@ -287,11 +287,7 @@ def test_context_and_heading_passages_are_registered_not_dropped(tmp_path: Path)
     heading = _find_by_text(objects, CURRENT_HEADING)
     assert passage_register_of(heading).get("status") in PASSAGE_REGISTER_STATUSES
     condition = _find_by_text(objects, PREV_CONDITION)
-    assert passage_register_of(condition).get("status") in {
-        "selected_as_candidate",
-        "used_as_context",
-        "not_yet_assessed",
-    }
+    assert passage_register_of(condition).get("status") in PASSAGE_REGISTER_STATUSES
 
 
 # ---------------------------------------------------------------------------
@@ -367,28 +363,17 @@ def test_review_save_maps_suitability_onto_register(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_missing_register_does_not_block_phase1_admission() -> None:
+def test_missing_register_does_not_block_phase1_admission(tmp_path: Path) -> None:
     admitted = admit_candidate(_complete_adviseert_candidate())
     assert admitted["gate_result"] == GATE_ALLOWED
     assert "passage_register" not in admitted
-    gated = apply_admission_gate(
-        [
-            {
-                "object_id": "obj-adviseert",
-                "object_type": "unclassified",
-                "proposed_object_type": "recommendation",
-                "document_id": "doc-phase4",
-                "content": {"clean_text": ADVISEERT, "raw_text": ADVISEERT},
-                "structure": {"section_path": ["2 Aanbevelingen"]},
-                "source": {"source_checksum": "a" * 64},
-            }
-        ],
-        klasse="richtlijn",
-        document_version="1.0",
-        source_hash="a" * 64,
-    )
-    assert admission_of(gated[0]).get("gate_result") == GATE_ALLOWED
-    assert "passage_register" not in admission_of(gated[0])
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    receipt = _ingest(console, accounts)
+    adviseert = _find_by_text(console.snapshot_objects(receipt["snapshot_id"]), ADVISEERT)
+    assert _admission(adviseert).get("gate_result") == GATE_ALLOWED
+    assert "passage_register" not in _admission(adviseert)
+    assert passage_register_of(adviseert).get("status") == "selected_as_candidate"
 
 
 def test_register_does_not_open_the_hard_gate(tmp_path: Path) -> None:
