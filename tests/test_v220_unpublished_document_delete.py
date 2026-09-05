@@ -824,11 +824,10 @@ def test_v216_through_v219_review_extract_still_holds(tmp_path: Path) -> None:
     body = _visible_text(object_text.group(1)) if object_text else ""
     assert body == "" or re.sub(r"\s+", " ", body) != re.sub(r"\s+", " ", heading)
     assert is_kennisplatform_chrome_text("Tools") is True
-    assert recommendation_strength_ui_applies(rec) is (
-        rec.get("proposed_object_type") == "recommendation"
-        or rec.get("object_type") == "recommendation"
-        or rec.get("confirmed_object_type") == "recommendation"
+    stored = rec.get("confirmed_object_type") or (
+        rec.get("object_type") if rec.get("object_type") not in {None, "", "unclassified"} else None
     )
+    assert recommendation_strength_ui_applies(rec) is (stored in {"recommendation", "outcome"})
     passage = researcher_visible_prose(
         console.open_source_passage(
             snapshot_id=receipt["snapshot_id"], object_id=rec["object_id"]
