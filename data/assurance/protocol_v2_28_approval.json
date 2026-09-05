@@ -1,8 +1,8 @@
 {
   "manifest_version": "1.0",
-  "protocol_version": "2.27.0",
-  "protocol_path": "docs/PROTOCOL_V2_27_UNPUBLISHED_DELETE_DOCUMENTENHIERARCHIE_TYPE_CONFIRM_DELTA.md",
-  "protocol_sha256": "9627927dbebb9de0bde67a18ea3363bd2e99423c471aabf7cead3d6a2fb3abea",
+  "protocol_version": "2.28.0",
+  "protocol_path": "docs/PROTOCOL_V2_28_STRUCTURAL_HEADING_NAV_AND_CONFIRMED_STRENGTH_GATE_DELTA.md",
+  "protocol_sha256": "9a5d196fc7615681bb5c7af1121e7b4ab8a31b8409d3edf39740961fbfcd6785",
   "repository": "WilliamGomes41/VENVN-DS",
   "default_branch": "main",
   "commit_sha": "pending_after_merge",

@@ -44,6 +44,8 @@ This delta also sets the next concrete implementation after merge. Protocol v2.1
 
 This is not a GD-03 knowledge-publish. G2 remains the publication blocker.
 
+Index/conflict pointer: Protocol v2.28.0 SUPERSEDES any reading of this file that stamp UI MAY appear based solely on `proposed_object_type` without human type confirm, including the reading that recommendation-strength UI MAY appear on a machine-proposed `recommendation`. Where this file and Protocol v2.28 conflict on the Sterkte gate, Protocol v2.28 governs: Sterkte visible and active ONLY when stored/confirmed type is Aanbeveling (`recommendation`) OR an actionable boom `outcome`; live UI before submit; previously chosen strength MUST NOT be actively saved after type changes away. v2.17 stamp-UI-on-recommendation and nav-word-MUST-NOT-get-a-picker law remain; the gate becomes confirmed/stored type. HANDOFF.md MUST NOT be recreated, G2 remains BLOCKED, and `publish()` stays G2-BLOCKED remain.
+
 ## 2. Unchanged v2.6, v2.7, v2.8, v2.9, v2.10, v2.11, v2.12, v2.13, v2.15 and v2.16 rules
 
 The four layers remain source/evidence → canonical knowledge → governance → product. This delta MUST NOT invent a fifth layer and MUST NOT collapse those four.
