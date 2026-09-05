@@ -208,7 +208,7 @@ def test_test_and_production_identities_cannot_cross() -> None:
         )
 
 
-def test_workflows_keep_deploy_inactive_until_named_test_app_exists() -> None:
+def test_test_stays_inactive_but_production_has_manual_production_only_path() -> None:
     test_text = _read(ROOT / ".github" / "workflows" / "deploy-test.yml")
     prod_text = _read(ROOT / ".github" / "workflows" / "deploy-production.yml")
 
@@ -222,7 +222,9 @@ def test_workflows_keep_deploy_inactive_until_named_test_app_exists() -> None:
     assert "AZURE_PRODUCTION_WEBAPP_NAME" in prod_text
     assert "AZURE_TEST_WEBAPP_NAME" in test_text
     assert "vars.METIS_TEST_APP_READY == 'true'" in test_text
-    assert "vars.METIS_TEST_APP_READY == 'true'" in prod_text
+    assert "vars.METIS_TEST_APP_READY == 'true'" not in prod_text
+    assert "assert_deploy_allowed" in prod_text
+    assert "Validate exact main commit" in prod_text
     assert "workflow_dispatch" in prod_text
     assert "workflow_dispatch" in test_text
     assert "branches: [main]" not in prod_text
@@ -230,11 +232,11 @@ def test_workflows_keep_deploy_inactive_until_named_test_app_exists() -> None:
     assert "\n  push:" not in test_text
     assert "\n  push:" not in prod_text
     assert "exit 1" in test_text
-    assert "exit 1" in prod_text
+    assert "az webapp deploy" in prod_text
     assert "Fail-closed until vvn-metis-console-test exists" in test_text
-    assert "Fail-closed until vvn-metis-console-test exists" in prod_text
+    assert "Fail-closed until vvn-metis-console-test exists" not in prod_text
     assert "require_deploy_activation" in test_text
-    assert "require_deploy_activation" in prod_text
+    assert "require_deploy_activation" not in prod_text
 
     with pytest.raises(DeployIdentityError, match="test_app_missing"):
         require_deploy_activation(ready_flag="", declared_app=TEST_APP)
@@ -280,7 +282,7 @@ def test_runbook_requires_separate_service_principals_and_app_settings() -> None
     assert "vvn-metis-console-test" in runbook
     assert "METIS_TEST_APP_READY" in runbook
     assert "geen" in runbook and "on.push" in runbook
-    assert "MUST NOT PR #82" in runbook or "MUST NOT PR #82 mergen" in runbook
+    assert "v2.29" in runbook
 
 
 def test_wave_c_does_not_open_publish(tmp_path: Path) -> None:

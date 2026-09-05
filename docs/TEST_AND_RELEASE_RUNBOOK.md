@@ -2,11 +2,10 @@
 
 ## Doel
 
-Golf C herstelt de PR #82-fouten. `deploy-test` en `deploy-production` blijven
-**inactief / fail-closed** tot Azure App Service `vvn-metis-console-test`
-bestaat. Merge naar `main` deployt **niet** automatisch naar een ontbrekende
-test-app. Zet GitHub Actions-variable `METIS_TEST_APP_READY=true` pas nadat
-die benoemde test-app bestaat. Deze repository maakt die App Service niet.
+Golf C herstelt de PR #82-fouten. `deploy-test` blijft **inactief / fail-closed**
+tot Azure App Service `vvn-metis-console-test` bestaat. Op grond van Protocol
+v2.29 MAG `deploy-production` tijdelijk handmatig zonder test-app worden
+gestart. Merge naar `main` deployt nooit automatisch.
 
 Een deployment vervangt applicatiecode in `wwwroot` (`--clean true`);
 runtime-data blijft buiten het pakket onder `/home/data` en in Blob Storage.
@@ -93,9 +92,8 @@ in de repository.
 
 1. Een pull request voert CI uit op Python 3.12 en 3.13.
 2. `deploy-test` en `deploy-production` hebben **geen** `on.push`. Merge naar
-   `main` start geen deploy. Zolang `vvn-metis-console-test` niet bestaat
-   blijven beide workflows inactief / fail-closed (`METIS_TEST_APP_READY`
-   ontbreekt). MUST NOT PR #82 mergen (git-archive-only + auto-deploy).
+   `main` start geen deploy. Zolang `vvn-metis-console-test` niet bestaat blijft
+   de testworkflow fail-closed. Productie kan tijdelijk handmatig via v2.29.
 3. Packaging: `bash scripts/create_azure_deploy_package.sh` (executable of via
    bash). Het ZIP bevat vendored `.python_packages` uit `requirements-console.txt`
    (Protocol v2.24; MUST NOT numpy/sklearn/scipy). `requirements-retrieval.txt`
