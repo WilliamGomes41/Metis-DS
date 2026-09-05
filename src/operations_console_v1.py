@@ -816,6 +816,8 @@ class OperationsConsole:
             target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
         target["confirmed_object_type"] = confirmed_object_type
         target["object_type"] = confirmed_object_type
+        if confirmed_object_type not in {"recommendation", "outcome"}:
+            target.pop("confirmed_recommendation_strength", None)
         mark_four_eyes_on_object(target, confirmed_type=confirmed_object_type)
         stamp_canonical_hashes(target)
         history = [
@@ -851,6 +853,21 @@ class OperationsConsole:
             confirmed = confirm_relation_set(relations)
         except ValueError as exc:
             raise ConsoleError("unknown_relation_type") from exc
+        from src.heading_parent_list_v1 import is_heading_object, parent_proposal_may_bind
+
+        for row in confirmed:
+            if row.get("relation_type") not in {"parent", "child"}:
+                continue
+            peer = next((item for item in current if item.get("object_id") == row.get("target_object_id")), None)
+            if peer is None:
+                continue
+            if row["relation_type"] == "child":
+                child, parent = target, peer
+            else:
+                child, parent = peer, target
+            if is_heading_object(child) and is_heading_object(parent):
+                if not parent_proposal_may_bind(child, parent, current):
+                    raise ConsoleError("invalid_parent_structure")
         if target.get("confirmed_relations") != confirmed:
             target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
         target["confirmed_relations"] = confirmed
@@ -1660,6 +1677,13 @@ class OperationsConsole:
                 raise ConsoleError("outcome_review_failed", ",".join(errors))
         strength = (recommendation_strength or "").strip() or None
         stamp_type = confirmed or target.get("confirmed_object_type") or target.get("object_type")
+        strength_allowed = stamp_type in {"recommendation", "outcome"}
+        previous_strength = target.get("confirmed_recommendation_strength")
+        if apply_type and confirmed and not strength_allowed and previous_strength:
+            if target.get("confirmed_object_type") != confirmed:
+                target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
+            target.pop("confirmed_recommendation_strength", None)
+            strength = None
         if not strength and decision == "approve" and stamp_type == "outcome":
             text = str((target.get("content") or {}).get("clean_text") or "")
             if is_geen_actie_outcome(text):
@@ -1716,6 +1740,9 @@ class OperationsConsole:
             updated_target["confirmed_relations"] = target["confirmed_relations"]
         if strength:
             updated_target["confirmed_recommendation_strength"] = strength
+            stamp_canonical_hashes(updated_target)
+        elif apply_type and confirmed and confirmed not in {"recommendation", "outcome"}:
+            updated_target.pop("confirmed_recommendation_strength", None)
             stamp_canonical_hashes(updated_target)
         if target.get("no_action"):
             updated_target["no_action"] = True

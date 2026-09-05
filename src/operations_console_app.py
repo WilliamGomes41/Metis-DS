@@ -16,6 +16,15 @@ from fastapi.staticfiles import StaticFiles
 from src.four_eyes_v1 import requires_four_eyes
 from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES, review_path_for_klasse
 from src.klasse_wijzigen_v1 import is_cross_model_class_change
+from src.heading_parent_list_v1 import (
+    heading_role,
+    heading_visible_text,
+    is_heading_object,
+    mark_heading_roles,
+    parent_choice_list,
+    parent_proposal_may_bind,
+    parse_outline_number,
+)
 from src.object_taxonomy_v1 import (
     CLOSED_OBJECT_TYPES,
     CLOSED_RECOMMENDATION_STRENGTHS,
@@ -114,6 +123,7 @@ ERROR_COPY = {
     "invalid_source_version": "Versie is alleen getallen met punten, bijvoorbeeld 1.0. Geen jaartal en geen v-voorvoegsel.",
     "fast_lane_heading_required": "Batch-bevestiging geldt alleen voor koppen.",
     "recommendation_strength_requires_recommendation": "Sterkte hoort alleen bij een aanbeveling.",
+    "invalid_parent_structure": "Deze ouder is niet structureel geldig. Kies een kop die hiërarchisch boven dit object staat.",
     "unknown_recommendation_strength": "Kies DOEN, OVERWEEG of NIET DOEN.",
     "published_objects_must_not_be_rewritten": "Gepubliceerde objecten worden niet herschreven.",
     "unknown_snapshot": "Dit document is niet gevonden.",
@@ -217,6 +227,18 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
   const correctionField = form.querySelector('[data-correction-field]');
   const hint = form.querySelector('[data-decision-hint]');
   const submit = form.querySelector('[data-submit-review]');
+  const stamp = form.querySelector('[data-stamp-block]');
+  const strength = form.querySelector('[name="recommendation_strength"]');
+  const strengthTypes = new Set(['recommendation', 'outcome']);
+  const updateStamp = () => {{
+    const liveType = type.value;
+    const show = strengthTypes.has(liveType);
+    if (stamp) stamp.hidden = !show;
+    if (strength) {{
+      strength.disabled = !show;
+      if (!show) strength.value = '';
+    }}
+  }};
   const update = () => {{
     const value = decision.value;
     const needsComment = value === 'revise' || value === 'reject';
@@ -230,10 +252,12 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
     else if (value === 'approve') {{ hint.textContent = 'Bevestig ook het type voordat je goedkeurt.'; submit.textContent = 'Goedkeuring vastleggen'; }}
     else if (value === 'revise') {{ hint.textContent = 'Licht toe wat aangepast moet worden.'; submit.textContent = 'Revisieverzoek versturen'; }}
     else {{ hint.textContent = 'Licht toe waarom dit kennisobject wordt afgewezen.'; submit.textContent = 'Afwijzing vastleggen'; }}
+    updateStamp();
   }};
   decision.addEventListener('change', update);
   type.addEventListener('change', update);
   comment.addEventListener('input', update);
+  updateStamp();
   update();
 }});
 </script>
@@ -343,6 +367,10 @@ def _relation_checkboxes(obj: dict[str, Any], objects: list[dict[str, Any]]) -> 
             or target_id
         )
         checked = " checked" if (rel, target_id) in confirmed else ""
+        if rel in {"child", "parent"} and is_heading_object(obj) and is_heading_object(target):
+            child, parent = (obj, target) if rel == "child" else (target, obj)
+            if not parent_proposal_may_bind(child, parent, objects):
+                checked = ""
         label = RELATION_LABELS.get(rel, rel)
         boxes.append(
             f'<div class="relation-choice"><p class="relation-copy">Dit kennisobject is '
@@ -473,22 +501,113 @@ def _strength_options(selected: str | None) -> str:
     return "".join(options)
 
 
-def _stamp_block(obj: dict[str, Any]) -> str:
+def _stamp_block(obj: dict[str, Any], *, hidden: bool = False) -> str:
     proposed = obj.get("proposed_recommendation_strength") or ""
     confirmed = obj.get("confirmed_recommendation_strength") or ""
     shown = confirmed or proposed
     sentence = recommendation_strength_sentence(shown) if shown else (
         "Sterkte van de aanbeveling: kies DOEN, OVERWEEG of NIET DOEN."
     )
+    hidden_attr = " hidden" if hidden else ""
+    disabled_attr = " disabled" if hidden else ""
     return f"""
-                    <section class="review-step review-stamp" data-stamp-block>
+                    <section class="review-step review-stamp" data-stamp-block{hidden_attr}>
                       <h4>Sterkte van de aanbeveling</h4>
                       <p class="stamp-sentence">{_esc(sentence)}</p>
                       <label for="strength-{_esc(obj["object_id"])}">Sterkte</label>
-                      <select id="strength-{_esc(obj["object_id"])}" name="recommendation_strength">
+                      <select id="strength-{_esc(obj["object_id"])}" name="recommendation_strength"{disabled_attr}>
                         {_strength_options(shown or None)}
                       </select>
                     </section>
+    """
+
+
+def _parent_choice_block(
+    obj: dict[str, Any],
+    objects: list[dict[str, Any]],
+    snapshot_id: str,
+    *,
+    include_submit: bool = False,
+) -> str:
+    marked = mark_heading_roles(objects)
+    toc_rows = [
+        row
+        for row in marked
+        if is_heading_object(row) and heading_role(row, marked) == "toc"
+    ]
+    choice = parent_choice_list(objects)
+    toc_items = []
+    for row in toc_rows:
+        text = heading_visible_text(row)
+        toc_items.append(f'<li data-heading-role="toc">{_esc(text)}</li>')
+    toc_html = ""
+    if toc_items:
+        toc_html = (
+            '<aside class="toc-headings" aria-label="Inhoudsopgave">'
+            "<p class=\"field-help\">Inhoudsopgave-regels zijn gemarkeerd en horen niet in de ouderlijst.</p>"
+            f"<ul>{''.join(toc_items)}</ul>"
+            "</aside>"
+        )
+    confirmed_parent = {
+        row.get("target_object_id")
+        for row in (obj.get("confirmed_relations") or [])
+        if row.get("relation_type") == "child"
+    }
+    snap = quote(str(snapshot_id), safe="")
+    form_id = f'relations-{_esc(obj["object_id"])}'
+    choice_items = []
+    for row in choice:
+        text = heading_visible_text(row)
+        outline = parse_outline_number(text)
+        outline_attr = f' data-outline="{".".join(str(part) for part in outline)}"' if outline else ""
+        locator = ""
+        loc = (row.get("provenance") or {}).get("source_locator") or row.get("source_locator") or {}
+        page = loc.get("page") or loc.get("locator_value")
+        if page:
+            locator = f' <span class="muted">({_esc(page)})</span>'
+        object_id = str(row.get("object_id") or "")
+        href = f"/review?document={snap}&object={quote(object_id, safe='')}"
+        object_attr = f' data-object-id="{_esc(object_id)}"' if object_id else ""
+        if not object_id or object_id == obj.get("object_id"):
+            choice_items.append(
+                f'<li data-heading-role="body"{outline_attr}{object_attr}>'
+                f'<a href="{_esc(href)}">{_esc(text)}</a>{locator}</li>'
+            )
+            continue
+        selected = ""
+        if object_id in confirmed_parent:
+            if not is_heading_object(obj) or not is_heading_object(row) or parent_proposal_may_bind(
+                obj, row, objects
+            ):
+                selected = " checked"
+        choice_items.append(
+            f'<li data-heading-role="body"{outline_attr}{object_attr}>'
+            f'<label class="parent-choice-row">'
+            f'<input type="radio" name="parent_choice" value="{_esc(object_id)}" form="{form_id}"{selected}>'
+            f'<a href="{_esc(href)}">{_esc(text)}</a>{locator}'
+            f"</label></li>"
+        )
+    if not choice_items and not toc_html:
+        return ""
+    list_html = ""
+    if choice_items:
+        list_html = f'<ol class="parent-choice-rows">{"".join(choice_items)}</ol>'
+    submit = ""
+    if include_submit and choice_items:
+        submit = (
+            '<button class="btn-secondary" type="submit" '
+            f'form="{form_id}">Ouder kiezen</button>'
+        )
+    return f"""
+                  <section class="parent-choice" aria-label="Koppen uit de hoofdtekst">
+                    {toc_html}
+                    <div data-parent-choice-list>
+                      <h4>Koppen uit de hoofdtekst</h4>
+                      <p class="field-help">Ouderkeuze volgt de documentstructuur uit het documentlichaam, niet de inhoudsopgave. Kies een kop of open de kop om te navigeren.</p>
+                      {list_html}
+                      {submit}
+                    </div>
+                  </section>
     """
 
 
@@ -1069,7 +1188,13 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     )
                 relation_form = ""
                 relation_boxes = _relation_checkboxes(obj, snapshot_objects)
-                if relation_boxes:
+                parent_choice_html = _parent_choice_block(
+                    obj,
+                    snapshot_objects,
+                    chosen,
+                    include_submit=not bool(relation_boxes),
+                )
+                if parent_choice_html or relation_boxes:
                     relation_form = f"""
                   <form id="relations-{_esc(obj["object_id"])}" method="post" action="/review/relations">
                     <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
@@ -1077,9 +1202,9 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     {relation_boxes}
                   </form>
                     """
-                stamp_html = ""
-                if recommendation_strength_ui_applies(obj):
-                    stamp_html = _stamp_block(obj)
+                stamp_html = _stamp_block(
+                    obj, hidden=not recommendation_strength_ui_applies(obj)
+                )
                 objects_html += f"""
                 <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">Terug naar Inhoud</a></p>
                 <article class="object review-card-two-column">
@@ -1091,6 +1216,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                   </header>
                   {four_eyes_html}
                   {object_text_html}
+                  {parent_choice_html}
                   {relation_form}
                   <form class="review-decision-form" method="post" action="/review" data-review-form>
                     <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
@@ -1224,6 +1350,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         snapshot_id: str = Form(...),
         object_id: str = Form(...),
         relation: list[str] = Form(default=[]),
+        parent_choice: str = Form(default=""),
     ) -> RedirectResponse:
         account = _require(request)
         raw = [relation] if isinstance(relation, str) else list(relation or [])
@@ -1233,6 +1360,14 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             if not sep or not rel_type or not target:
                 raise ConsoleError("unknown_relation_type")
             rows.append({"relation_type": rel_type, "target_object_id": target})
+        chosen_parent = (parent_choice or "").strip()
+        if chosen_parent and chosen_parent != object_id:
+            already = any(
+                row.get("relation_type") == "child" and row.get("target_object_id") == chosen_parent
+                for row in rows
+            )
+            if not already:
+                rows.append({"relation_type": "child", "target_object_id": chosen_parent})
         state.confirm_relations(
             actor_id=account["account_id"],
             snapshot_id=snapshot_id,

@@ -490,10 +490,8 @@ def test_recommendation_strength_picker_absent_unless_type_is_recommendation(
     assert recommendation_strength_ui_applies(heading) is False
     if (body.get("proposed_object_type") or body.get("object_type")) != "recommendation":
         assert recommendation_strength_ui_applies(body) is False
-        assert "Sterkte van de aanbeveling" not in heading_page
-        assert "data-stamp-block" not in heading_page
-        assert "Sterkte van de aanbeveling" not in body_page
-        assert "data-stamp-block" not in body_page
+        assert re.search(r"data-stamp-block(?:\s+hidden|[^>]*\shidden)", heading_page)
+        assert re.search(r"data-stamp-block(?:\s+hidden|[^>]*\shidden)", body_page)
     planted = {
         **body,
         "object_id": f"{body['object_id']}-tools-fail",
@@ -509,15 +507,13 @@ def test_recommendation_strength_picker_absent_unless_type_is_recommendation(
     tools_card = _client(console).get(
         f"/review?document={receipt['snapshot_id']}&object={planted['object_id']}"
     ).text
-    assert "Sterkte van de aanbeveling" not in tools_card
-    assert "data-stamp-block" not in tools_card
-    assert "DOEN" not in _visible_text(tools_card) or "name=\"recommendation_strength\"" not in tools_card
+    assert re.search(r"data-stamp-block(?:\s+hidden|[^>]*\shidden)", tools_card)
     rec = {
         "object_type": "unclassified",
         "proposed_object_type": "recommendation",
         "confirmed_object_type": None,
     }
-    assert recommendation_strength_ui_applies(rec) is True
+    assert recommendation_strength_ui_applies(rec) is False
     heading_type = {
         "object_type": "heading",
         "proposed_object_type": "heading",
@@ -601,7 +597,7 @@ def test_whole_freeze_rule_is_not_a_closed_heading_list(tmp_path: Path) -> None:
         assert "brxe-faadvp" not in page
         assert "&lt;div" not in page
         if obj["object_type"] != "recommendation" and obj.get("proposed_object_type") != "recommendation":
-            assert "data-stamp-block" not in page
+            assert re.search(r"data-stamp-block(?:\s+hidden|[^>]*\shidden)", page)
     verantwoording = by_text["Verantwoording"]
     opened = console.open_source_passage(
         snapshot_id=receipt["snapshot_id"],

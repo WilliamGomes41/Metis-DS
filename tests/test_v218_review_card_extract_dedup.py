@@ -617,9 +617,10 @@ def test_v217_chrome_slogan_bronpassage_prose_still_holds(tmp_path: Path) -> Non
     card = _client(console).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
-    assert "Sterkte van de aanbeveling" not in card or recommendation_strength_ui_applies(rec)
-    if rec.get("proposed_object_type") != "recommendation" and rec.get("object_type") != "recommendation":
-        assert "data-stamp-block" not in card
+    if recommendation_strength_ui_applies(rec):
+        assert "Sterkte van de aanbeveling" in card
+    else:
+        assert re.search(r"data-stamp-block(?:\s+hidden|[^>]*\shidden)", card)
     right = _bronpassage_column(card)
     assert "brxe-" not in right
     assert "&lt;p&gt;" not in right
