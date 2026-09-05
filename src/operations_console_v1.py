@@ -63,7 +63,11 @@ from src.review_ledger import append_event
 from src.review_workflow_v3 import apply_reviews
 from src.revision_workflow import bump_patch, create_revision
 from src.semantic_transform_generic_v1 import transform as transform_generic
-from src.serving_relations_v1 import confirm_relation_set, is_closed_relation_type
+from src.serving_relations_v1 import (
+    binding_relations,
+    confirm_relation_set,
+    is_closed_relation_type,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -868,9 +872,10 @@ class OperationsConsole:
             if is_heading_object(child) and is_heading_object(parent):
                 if not parent_proposal_may_bind(child, parent, current):
                     raise ConsoleError("invalid_parent_structure")
+        previous_relations = binding_relations(target)
         previous_child_relations = [
             row
-            for row in (target.get("confirmed_relations") or [])
+            for row in previous_relations
             if row.get("relation_type") == "child"
         ]
         confirmed_parents = [
@@ -891,14 +896,45 @@ class OperationsConsole:
             target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
         target["confirmed_relations"] = confirmed
         stamp_canonical_hashes(target)
+
+        previous_children = {
+            row["target_object_id"]
+            for row in previous_relations
+            if row.get("relation_type") == "parent"
+        }
+        confirmed_children = {
+            row["target_object_id"]
+            for row in confirmed
+            if row.get("relation_type") == "parent"
+        }
+        peer_updates: list[dict[str, Any]] = []
+        for child_id in previous_children | confirmed_children:
+            peer = next((item for item in current if item.get("object_id") == child_id), None)
+            if peer is None:
+                continue
+            desired_parent = object_id if child_id in confirmed_children else None
+            if peer.get("parent_object_id") == desired_parent:
+                continue
+            updated_peer = deepcopy(peer)
+            updated_peer["parent_object_id"] = desired_parent
+            updated_peer["object_version"] = bump_patch(
+                str(updated_peer.get("object_version") or "1.0")
+            )
+            stamp_canonical_hashes(updated_peer)
+            peer_updates.append(updated_peer)
         history = [
             row
             for row in self._load_objects(snapshot_id)
             if not (row["object_id"] == object_id and row["object_version"] == target["object_version"])
         ]
         history.append(target)
+        history.extend(peer_updates)
         self._save_objects(snapshot_id, history)
         self._bindings[snapshot_id] = invalidate_for_object(self._bindings.get(snapshot_id, []), object_id)
+        for peer in peer_updates:
+            self._bindings[snapshot_id] = invalidate_for_object(
+                self._bindings.get(snapshot_id, []), peer["object_id"]
+            )
         self._save_bindings()
         _ = reviewer
         return deepcopy(target)
