@@ -21,6 +21,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 CONSOLE_REQUIREMENTS_NAME = "requirements-console.txt"
+AZURE_MANYLINUX_PLATFORM = "manylinux2014_x86_64"
+AZURE_PYTHON_VERSION = "3.12"
+AZURE_PYTHON_ABI = "cp312"
+AZURE_NATIVE_WHEEL_PACKAGES = ("cryptography",)
 INCLUDE_DIRS = (
     "src",
     "scripts",
@@ -96,6 +100,28 @@ def requirement_package_names(path: Path, *, _seen: set[Path] | None = None) -> 
         if match:
             names.add(match.group(1).lower().replace("_", "-"))
     return names
+
+
+def pinned_requirement(path: Path, package: str) -> str:
+    """Return the exact pinned requirement, following requirement includes."""
+    resolved = Path(path).resolve()
+    wanted = package.lower().replace("_", "-")
+    for raw in resolved.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        include = _INCLUDE_RE.match(line)
+        if include:
+            try:
+                return pinned_requirement(resolved.parent / include.group(1), package)
+            except DeployPackageError:
+                continue
+        match = _REQ_NAME_RE.match(line)
+        if match and match.group(1).lower().replace("_", "-") == wanted:
+            if "==" not in line:
+                raise DeployPackageError(f"azure_native_requirement_must_be_pinned:{wanted}")
+            return line
+    raise DeployPackageError(f"azure_native_requirement_missing:{wanted}")
 
 
 def requirements_contain_forbidden_packages(path: Path) -> frozenset[str]:
@@ -214,6 +240,36 @@ def write_deploy_zip(
             str(vendor),
         ]
         subprocess.run(command, check=True, cwd=root)
+        # The package may be built on a newer Linux host than Azure App Service.
+        # Re-resolve native security wheels against Azure's glibc-compatible
+        # manylinux2014 baseline instead of shipping host-specific binaries.
+        declared_packages = requirement_package_names(requirements)
+        for package in AZURE_NATIVE_WHEEL_PACKAGES:
+            if package not in declared_packages:
+                continue
+            native_command = [
+                command[0],
+                "-m",
+                "pip",
+                "install",
+                "--upgrade",
+                "--force-reinstall",
+                "--no-compile",
+                "--no-deps",
+                "--only-binary=:all:",
+                "--platform",
+                AZURE_MANYLINUX_PLATFORM,
+                "--implementation",
+                "cp",
+                "--python-version",
+                AZURE_PYTHON_VERSION,
+                "--abi",
+                AZURE_PYTHON_ABI,
+                pinned_requirement(requirements, package),
+                "-t",
+                str(vendor),
+            ]
+            subprocess.run(native_command, check=True, cwd=root)
         if not any(vendor.iterdir()):
             raise DeployPackageError("dependencies_missing")
         _refuse_fat_vendor_tree(vendor)
