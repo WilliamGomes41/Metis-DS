@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from src.azure_deploy_package import (
+    AZURE_MANYLINUX_PLATFORM,
     CONSOLE_REQUIREMENTS_NAME,
     FORBIDDEN_CONSOLE_PACKAGES,
     RUNTIME_DATA_MARKERS,
@@ -79,6 +80,9 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
     assert output.is_file()
     with zipfile.ZipFile(output) as archive:
         names = set(archive.namelist())
+        cryptography_rust = archive.read(
+            ".python_packages/cryptography/hazmat/bindings/_rust.abi3.so"
+        )
     assert any(name.startswith(".python_packages/") for name in names)
     assert any(name.endswith("gunicorn/__init__.py") or "/gunicorn/" in name for name in names)
     assert any("fastapi" in name for name in names)
@@ -89,6 +93,9 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
     assert "requirements-retrieval.txt" not in names
     assert not any(package_contains_runtime_data(name) for name in names)
     assert not any("git archive" in name for name in names)
+    assert AZURE_MANYLINUX_PLATFORM == "manylinux2014_x86_64"
+    assert b"GLIBC_2.33" not in cryptography_rust
+    assert b"GLIBC_2.34" not in cryptography_rust
     forbidden_hits = [
         name
         for name in names
