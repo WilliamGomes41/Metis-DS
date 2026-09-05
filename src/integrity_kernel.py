@@ -229,8 +229,15 @@ def validate_parent_relations(objects: Iterable[dict[str, Any]]) -> list[str]:
 
     # When a confirmed child relation is stored as well, it must agree with
     # the canonical parent edge. Proposed relations are deliberately ignored.
-    from src.heading_parent_list_v1 import is_heading_object, parent_proposal_may_bind
+    from src.heading_parent_list_v1 import (
+        is_heading_object,
+        mark_heading_roles,
+        parent_proposal_may_bind,
+    )
     from src.serving_relations_v1 import binding_relations
+
+    marked_rows = mark_heading_roles(rows)
+    marked_by_id = {o["object_id"]: o for o in marked_rows}
 
     for o in rows:
         oid = o["object_id"]
@@ -243,10 +250,11 @@ def validate_parent_relations(objects: Iterable[dict[str, Any]]) -> list[str]:
         if relation_parents and relation_parents != ({parent} if parent else set()):
             errors.append(f"parent_relation_mismatch:{oid}")
 
-        if parent and parent in by_id:
-            parent_obj = by_id[parent]
-            if is_heading_object(o) and is_heading_object(parent_obj):
-                if not parent_proposal_may_bind(o, parent_obj, rows):
+        if parent and parent in marked_by_id:
+            marked_object = marked_by_id[oid]
+            parent_obj = marked_by_id[parent]
+            if is_heading_object(marked_object) and is_heading_object(parent_obj):
+                if not parent_proposal_may_bind(marked_object, parent_obj, marked_rows):
                     errors.append(f"invalid_parent_structure:{oid}:{parent}")
     return list(dict.fromkeys(errors))
 
