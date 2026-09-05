@@ -79,6 +79,7 @@ def canonical_object_payload(obj: dict[str, Any]) -> dict[str, Any]:
         if extra == "metadata":
             md = deepcopy(obj.get(extra) or {})
             md.pop("admission", None)
+            md.pop("passage_register", None)
             if md:
                 payload[extra] = md
             continue

@@ -29,6 +29,7 @@ from src.admission_gate_v1 import (
     apply_admission_gate,
     is_admission_blocked,
 )
+from src.passage_register_v1 import apply_passage_register, apply_register_from_review
 from src.review_cockpit_v1 import (
     SUITABILITY_VALUES,
     confirmable_proposed_type,
@@ -1142,6 +1143,7 @@ class OperationsConsole:
                 document_version=source_version,
                 source_hash=digest,
             )
+        objects = apply_passage_register(objects)
         object_diff = None
         if previous:
             object_diff = self._diff_objects(self.snapshot_objects(previous["snapshot_id"]), objects)
@@ -1239,6 +1241,7 @@ class OperationsConsole:
                 document_version=envelope["version"],
                 source_hash=envelope["sha256"],
             )
+        objects = apply_passage_register(objects)
         envelope["review_passes"] = {}
         envelope["state"] = CAPTURED
         self._envelopes[snapshot_id] = envelope
@@ -1636,12 +1639,14 @@ class OperationsConsole:
                 content_kind=envelope["content_kind"],
             )
             objects = transform_generic(spec, self._class_change_manifest(envelope), fragments)
-            return apply_admission_gate(
-                objects,
-                klasse=new_class,
-                fragments=fragments,
-                document_version=envelope["version"],
-                source_hash=envelope["sha256"],
+            return apply_passage_register(
+                apply_admission_gate(
+                    objects,
+                    klasse=new_class,
+                    fragments=fragments,
+                    document_version=envelope["version"],
+                    source_hash=envelope["sha256"],
+                )
             )
         fragments, spec = self._fragments_and_spec(
             envelope["content_kind"],
@@ -1654,12 +1659,14 @@ class OperationsConsole:
             class_=new_class,
         )
         objects = transform_generic(spec, self._class_change_manifest(envelope), fragments)
-        return apply_admission_gate(
-            objects,
-            klasse=new_class,
-            fragments=fragments,
-            document_version=envelope["version"],
-            source_hash=envelope["sha256"],
+        return apply_passage_register(
+            apply_admission_gate(
+                objects,
+                klasse=new_class,
+                fragments=fragments,
+                document_version=envelope["version"],
+                source_hash=envelope["sha256"],
+            )
         )
 
     def promote_class(
@@ -1872,6 +1879,7 @@ class OperationsConsole:
             if passage:
                 metadata = saved.setdefault("metadata", {})
                 metadata["review_passage"] = passage
+                saved = apply_register_from_review(saved, suitability=suitability or "")
             history = [
                 row
                 for row in self._load_objects(snapshot_id)
@@ -1954,6 +1962,10 @@ class OperationsConsole:
         if passage_meta:
             metadata = updated_target.setdefault("metadata", {})
             metadata["review_passage"] = passage_meta
+            updated_target = apply_register_from_review(
+                updated_target,
+                suitability=suitability or "",
+            )
         if confirmed and updated_target.get("object_type") != "document":
             updated_target["confirmed_object_type"] = confirmed
             updated_target["object_type"] = confirmed
@@ -2083,6 +2095,7 @@ class OperationsConsole:
                 source_hash=envelope["sha256"],
             )
             revised = next(row for row in gated if row["object_id"] == object_id)
+            revised = apply_passage_register([revised])[0]
         history = self._load_objects(snapshot_id)
         history.append(revised)
         self._save_objects(snapshot_id, history)
