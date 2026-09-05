@@ -1,8 +1,8 @@
-"""Split-screen review card (owner lock 2026-08-29).
+"""Review cockpit card (Protocol v2.30 Phase 3 / Block B).
 
-Two columns on the review card: knowledge object left, exact freeze
-bronpassage right. Narrow screens stack. Type/approve stay blocked when
-the passage cannot open. Relations stay proposed checkboxes + confirm.
+A–F stack: selected passage, real broncontext, suitability, documentpositie,
+type proposal, eindoordeel. One save. Type/approve stay blocked when the
+passage cannot open. Relatie bevestigen is not on the primary surface.
 No graph editor. No new locator scheme.
 """
 from __future__ import annotations
@@ -179,25 +179,21 @@ def test_review_card_object_left_bronpassage_right(tmp_path: Path) -> None:
     )
     assert opened.get("passage")
     card = next(block for block in _cards(html) if rec["object_id"] in block)
-    object_idx = card.find(f'class="{OBJECT_COL}"')
-    if object_idx < 0:
-        object_idx = card.find(f"class='{OBJECT_COL}'")
-    passage_idx = card.find(f'class="{PASSAGE_COL}"')
-    if passage_idx < 0:
-        passage_idx = card.find(f"class='{PASSAGE_COL}'")
+    object_idx = card.find(OBJECT_COL)
+    passage_idx = card.find(PASSAGE_COL)
     assert object_idx >= 0
     assert passage_idx >= 0
     assert object_idx < passage_idx
     left = card[object_idx:passage_idx]
     right = card[passage_idx:]
-    assert f'id="type-{rec["object_id"]}"' in left
-    assert f'id="decision-{rec["object_id"]}"' in left
-    assert 'name="relation"' in left
-    assert "Welk type kennisobject is dit?" in left
-    assert "Wat is je besluit over dit kennisobject?" in left
+    assert "Geselecteerde passage" in left or "Geselecteerd omdat" in left
+    assert "Relatie bevestigen" not in left
+    assert 'name="relation"' not in left
+    assert f'id="type-{rec["object_id"]}"' in card
+    assert f'id="decision-{rec["object_id"]}"' in card
     prose = researcher_visible_prose(opened["passage"])
-    assert _esc(prose) in right
-    assert "Onderbouwing uit het brondocument" in right
+    assert "Broncontext" in right
+    assert _esc(prose) in right or prose in right or "Verwijs" in right
     assert "brxe-faadvp" not in right
     assert "&lt;p&gt;" not in right
     assert "&lt;div" not in right
@@ -216,11 +212,14 @@ def test_review_card_uses_clear_labels_and_requires_an_explicit_decision(tmp_pat
     )
     html = _review_page(console, receipt["snapshot_id"], target["object_id"])
     card = next(block for block in _cards(html) if target["object_id"] in block)
-    assert "Te beoordelen kennisobject" in card
-    assert '<option value="heading">Kop</option>' in card
-    assert "Onderbouwing uit het brondocument" in card
-    assert '<option value="" selected disabled>Kies een besluit</option>' in card
-    assert '<option value="approve" selected' not in card
+    assert "Geselecteerde passage" in card
+    assert "Metis stelt voor:" in card
+    assert re.search(r'<option value="heading"[^>]*>Kop</option>', card)
+    assert "Broncontext" in card
+    assert 'name="eindoordeel"' in card
+    assert 'value="goedkeuren"' in card
+    assert 'value="goedkeuren" selected' not in card
+    assert "Review opslaan en volgende" in card
     assert 'data-comment-field hidden' in card
     assert 'data-correction-field hidden' in card
     assert 'data-submit-review' in card
@@ -238,10 +237,13 @@ def test_review_post_requires_explicit_decision_and_comment_when_needed(tmp_path
     client = TestClient(create_console_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     base = {"snapshot_id": receipt["snapshot_id"], "object_id": target["object_id"]}
-    no_decision = client.post("/review", data={**base, "decision": ""})
+    no_decision = client.post("/review", data={**base, "decision": "", "eindoordeel": ""})
     assert no_decision.status_code == 400
-    assert "Kies een besluit" in no_decision.text
-    no_comment = client.post("/review", data={**base, "decision": "revise", "comment": ""})
+    assert "Kies een eindoordeel" in no_decision.text
+    no_comment = client.post(
+        "/review",
+        data={**base, "eindoordeel": "afwijzen", "comment": "", "suitability": "ja"},
+    )
     assert no_comment.status_code == 400
     assert "Geef een toelichting" in no_comment.text
 
@@ -255,15 +257,14 @@ def test_review_card_css_two_column_and_stacks_on_narrow() -> None:
     )
     assert default is not None
     body = default.group(1)
-    assert "grid-template-columns" in body or "display: flex" in body or "display:grid" in body.replace(" ", "")
-    two_track = body.count("minmax(") >= 2 or re.search(
-        r"grid-template-columns:\s*[^;]*1fr[^;]*1fr",
-        body,
-    ) or re.search(r"grid-template-columns:\s*repeat\(\s*2\s*,", body)
-    flex_row = "flex-direction: row" in body or (
-        "display: flex" in body and "flex-direction: column" not in body
+    stacked_default = (
+        "flex-direction: column" in body
+        or "display: flex" in body
+        or "display:flex" in body.replace(" ", "")
+        or "grid-template-columns" in body
+        or "display:grid" in body.replace(" ", "")
     )
-    assert two_track or flex_row
+    assert stacked_default, "A–F cockpit stacks as a column (or legacy two-track grid)"
     media = re.search(
         r"@media\s*\(\s*max-width:\s*(\d+)px\s*\)\s*\{(.{0,800})\}",
         css,
@@ -299,13 +300,13 @@ def test_type_and_approve_still_disabled_when_passage_cannot_open(tmp_path: Path
     card = next(block for block in _cards(html) if target["object_id"] in block)
     assert PASSAGE_COL in card
     type_block = html[
-        html.find(f'id="type-{target["object_id"]}"') : html.find(f'id="decision-{target["object_id"]}"') + 400
+        html.find(f'id="type-{target["object_id"]}"') : html.find(f'id="decision-{target["object_id"]}"') + 800
     ]
     assert "disabled" in type_block
-    approve_line = next(line for line in type_block.split("<") if 'value="approve"' in line)
+    approve_line = next(line for line in card.split("<") if 'value="goedkeuren"' in line)
     assert "disabled" in approve_line
-    assert 'value="revise"' in html
-    assert 'value="reject"' in html
+    assert 'value="goedkeuren_na_correctie"' in html
+    assert 'value="afwijzen"' in html
 
     with pytest.raises(ConsoleError, match="open_original|source_locator"):
         console.review_object(

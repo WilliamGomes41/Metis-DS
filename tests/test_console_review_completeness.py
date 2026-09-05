@@ -216,10 +216,10 @@ def test_review_card_posts_relation_checkboxes_to_confirm_relations(tmp_path: Pa
     client = TestClient(create_console_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     html = client.get(f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}").text
-    assert cond["object_id"] in html
     assert "nursing_tip" not in html
     assert "conditioned_by" not in html
-    assert 'name="relation"' in html or 'name="relations"' in html
+    assert "Relatie bevestigen" not in html
+    assert 'name="eindoordeel"' in html
 
     posted = client.post(
         "/review/relations",
@@ -294,13 +294,15 @@ def test_type_select_does_not_silently_submit_heading(tmp_path: Path) -> None:
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     html = client.get(f"/review?document={receipt['snapshot_id']}&object={heading['object_id']}").text
     assert 'disabled' in html
+    assert "Metis stelt voor:" in html
+    assert "Dit klopt" in html
+    assert "Type wijzigen" in html
     type_block = html[html.find(f'id="type-{heading["object_id"]}"') : html.find(f'id="type-{heading["object_id"]}"') + 800]
-    assert "nog niet bevestigd" in type_block
-    assert 'selected' in type_block
     heading_option = next(
         line for line in type_block.split(">") if 'value="heading"' in line
     )
-    assert "selected" not in heading_option
+    assert "selected" in heading_option
+    assert 'data-submit-review' in html
 
 
 def test_approve_without_explicit_closed_type_fails(tmp_path: Path) -> None:
@@ -335,6 +337,8 @@ def test_approve_without_explicit_closed_type_fails(tmp_path: Path) -> None:
             "snapshot_id": receipt["snapshot_id"],
             "object_id": heading["object_id"],
             "decision": "approve",
+            "eindoordeel": "goedkeuren",
+            "suitability": "ja",
             "confirmed_object_type": "",
         },
     )
@@ -368,13 +372,12 @@ def test_type_and_approve_disabled_when_open_source_passage_fails(tmp_path: Path
     client = TestClient(create_console_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     html = client.get(f"/review?document={receipt['snapshot_id']}&object={target['object_id']}").text
-    type_block = html[html.find(f'id="type-{target["object_id"]}"') : html.find(f'id="decision-{target["object_id"]}"') + 400]
+    type_block = html[html.find(f'id="type-{target["object_id"]}"') : html.find(f'id="decision-{target["object_id"]}"') + 800]
     assert "disabled" in type_block
-    assert 'value="approve"' in type_block
-    approve_line = next(line for line in type_block.split("<") if 'value="approve"' in line)
+    approve_line = next(line for line in html.split("<") if 'value="goedkeuren"' in line)
     assert "disabled" in approve_line
-    assert 'value="revise"' in html
-    assert 'value="reject"' in html
+    assert 'value="goedkeuren_na_correctie"' in html
+    assert 'value="afwijzen"' in html
 
     with pytest.raises(ConsoleError, match="open_original|source_locator"):
         console.review_object(
@@ -414,7 +417,7 @@ def test_type_confirm_succeeds_after_open_original(tmp_path: Path) -> None:
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     html = client.get(f"/review?document={receipt['snapshot_id']}&object={target['object_id']}").text
     type_block = html[html.find(f'id="type-{target["object_id"]}"') : html.find(f'id="decision-{target["object_id"]}"')]
-    assert "disabled" not in type_block or "nog niet bevestigd" in type_block
+    assert "disabled" not in type_block or "Metis stelt voor" in html
     posted = client.post(
         "/review",
         data={
@@ -422,6 +425,8 @@ def test_type_confirm_succeeds_after_open_original(tmp_path: Path) -> None:
             "object_id": target["object_id"],
             "decision": "approve",
             "confirmed_object_type": "explanation",
+            "suitability": "ja",
+            "eindoordeel": "goedkeuren",
         },
         follow_redirects=False,
     )

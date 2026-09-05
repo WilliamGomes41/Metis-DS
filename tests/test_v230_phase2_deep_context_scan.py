@@ -732,8 +732,8 @@ def test_phase2_ingest_records_deep_window_and_wires_scan(tmp_path: Path) -> Non
         f"/review?document={receipt['snapshot_id']}&object={calcium['object_id']}"
     ).text
     assert "hypercalciëmie" in card
-    assert "Gevonden onder" not in card
-    assert "Review opslaan en volgende" not in card
+    assert "Gevonden onder" in card
+    assert "Review opslaan en volgende" in card
 
 
 def test_boom_ingest_still_skips_richtlijn_phase2(tmp_path: Path) -> None:

@@ -141,6 +141,11 @@ class _VisibleTextParser(HTMLParser):
         self._hidden_stack.append(hidden)
         if hidden:
             self._hidden += 1
+        if tag.lower() in {
+            "area", "base", "br", "col", "embed", "hr", "img", "input",
+            "link", "meta", "param", "source", "track", "wbr",
+        }:
+            self.handle_endtag(tag)
 
     def handle_endtag(self, tag: str) -> None:
         if tag.lower() in {"script", "style"} and self._skip:
@@ -544,8 +549,8 @@ def test_block_a_console_parent_list_is_body_structure_onderzoekers_taal(
     visible = _visible_text(html)
     assert "data-parent-choice-list" in html
     assert "hoofdtekst" in html.lower() or "documentlichaam" in visible.lower()
-    assert "Inhoudsopgave" in html
-    assert 'data-heading-role="toc"' in html
+    assert "Gevonden onder" in html
+    assert "Andere kop kiezen" in html
     assert 'data-heading-role="body"' in html
     assert "envelope" not in html.lower()
     assert "Documentenhiërarchie" in html
@@ -554,6 +559,13 @@ def test_block_a_console_parent_list_is_body_structure_onderzoekers_taal(
         html,
     )
     assert toc_choice is None
+    chooser = re.search(
+        r'data-heading-chooser[\s\S]*?</div>',
+        html,
+    )
+    if chooser:
+        assert "Inhoudsopgave" not in chooser.group(0)
+        assert 'data-heading-role="toc"' not in chooser.group(0)
     assert "checked" not in html or "planted-2" not in html
 
 
@@ -746,7 +758,7 @@ def test_block_a_parent_choice_rows_are_actionable(tmp_path: Path) -> None:
     assert 'name="parent_choice"' in html
     assert 'type="radio"' in html
     assert f'value="{parent["object_id"]}"' in html
-    assert 'action="/review/relations"' in html
+    assert "Relatie bevestigen" not in html
     posted = _client(console).post(
         "/review/relations",
         data={

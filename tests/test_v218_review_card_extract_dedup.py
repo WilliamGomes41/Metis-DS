@@ -221,7 +221,7 @@ def _chrome_freeze() -> bytes:
 
 def _object_column(html: str) -> str:
     card = re.search(
-        r'<article class="object review-card-two-column".*?</article>',
+        r'<article class="object[^"]*review-card-two-column[^"]*".*?</article>',
         html,
         flags=re.S,
     )
@@ -236,7 +236,7 @@ def _object_column(html: str) -> str:
 
 def _bronpassage_column(html: str) -> str:
     card = re.search(
-        r'<article class="object review-card-two-column".*?</article>',
+        r'<article class="object[^"]*review-card-two-column[^"]*".*?</article>',
         html,
         flags=re.S,
     )

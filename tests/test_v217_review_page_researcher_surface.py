@@ -544,8 +544,7 @@ def test_relation_checkbox_label_is_adjacent_not_stretched(tmp_path: Path) -> No
     html = _client(console).get(
         f"/review?document={receipt['snapshot_id']}&object={child['object_id']}"
     ).text
-    assert "Dit kennisobject is" in html
-    assert "onderliggend" in html
+    assert "Relatie bevestigen" not in html
     assert "Inleiding" in html
     assert 'class="check"' in html
     css = CSS.read_text(encoding="utf-8")
@@ -569,11 +568,8 @@ def test_relation_checkbox_label_is_adjacent_not_stretched(tmp_path: Path) -> No
         flags=re.S,
     )
     assert "justify-between" not in APP_SOURCE.read_text(encoding="utf-8")
-    label = re.search(
-        r'<label class="check">\s*<input type="checkbox"[^>]*>\s*<span>Inleiding</span>\s*</label>',
-        html,
-    )
-    assert label, "Inleiding must sit in the same label as its checkbox"
+    assert "Relatie bevestigen" not in html
+    assert re.search(r'<label class="check">', html)
 
 
 # ---------------------------------------------------------------------------
