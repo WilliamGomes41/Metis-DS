@@ -58,6 +58,8 @@ G2 remains BLOCKED. `publish()` remains G2-BLOCKED. This protocol does not claim
 
 This is not a GD-03 knowledge-publish. G2 remains the publication blocker. Metis, the Implementation engineer and the Auditor MUST NOT count as GD-03 reviewers, MUST NOT approve, and MUST NOT publish.
 
+Index/conflict pointer: Protocol v2.27.0 SUPERSEDES the v2.26 reading that the next code is still the Klasse wijzigen first wave. That Forge wave is already on `main` (PR #97). Where this file and Protocol v2.27 conflict on which implementation is next, Protocol v2.27 governs: next code is Forge on the existing console for unpublished-delete Documentenhiërarchie only + type-to-confirm exact title. Selective invalidation + published-candidate remain later law under this file, after that delete-surface wave. v2.26 Klasse wijzigen architecture (invalidate only what the class change substantively affects; source unchanged; same-model vs cross-model; published never rewritten; **Klasse wijzigen** label), HANDOFF.md MUST NOT be recreated, G2 remains BLOCKED, and `publish()` stays G2-BLOCKED remain.
+
 ## 2. Unchanged v2.6 through v2.25 rules
 
 The four layers remain source/evidence → canonical knowledge → governance → product. This delta MUST NOT invent a fifth layer and MUST NOT collapse those four.
