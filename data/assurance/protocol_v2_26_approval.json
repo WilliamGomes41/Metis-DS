@@ -1,12 +1,12 @@
 {
   "manifest_version": "1.0",
-  "protocol_version": "2.25.0",
-  "protocol_path": "docs/PROTOCOL_V2_25_BESLISBOOM_CLASS_PATH_NODE_OUTCOME_DELTA.md",
-  "protocol_sha256": "366b8acc3ac5fc9ae001576656508fd04153e5f3a09107ccbc1034cf60b2fae3",
+  "protocol_version": "2.26.0",
+  "protocol_path": "docs/PROTOCOL_V2_26_KLASSE_WIJZIGEN_CONTROLLED_RECLASSIFICATION_DELTA.md",
+  "protocol_sha256": "3a6e37eef62735b5cdef8010e0af69f4fbb7a90afbf593b9d7130a0a0218fb2a",
   "repository": "WilliamGomes41/VENVN-DS",
   "default_branch": "main",
   "commit_sha": "pending_after_merge",
-  "approval_date": "2026-09-04",
+  "approval_date": "2026-09-05",
   "approval_authority": "project_owner",
   "branch_protection_status": "temporary_procedural_control",
   "conformance_effect": "does_not_override_gate_status"
