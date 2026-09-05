@@ -217,16 +217,19 @@ def is_kennisplatform_chrome_text(text: str) -> bool:
 
 
 def recommendation_strength_ui_applies(obj: dict[str, Any]) -> bool:
-    """Stamp picker belongs on recommendation, or on an actionable boom outcome."""
+    """Sterkte is active only on stored/confirmed recommendation or outcome.
+
+    A machine proposal MUST NOT show the picker. proposed_object_type alone
+    is not enough.
+    """
     confirmed = obj.get("confirmed_object_type") or ""
     stored = obj.get("object_type") or ""
-    proposed = obj.get("proposed_object_type") or ""
     allowed = {"recommendation", "outcome"}
     if confirmed:
         return confirmed in allowed
     if stored and stored != DEFAULT_OBJECT_TYPE:
         return stored in allowed
-    return proposed in allowed
+    return False
 
 
 def looks_like_structural_heading(text: str) -> bool:
