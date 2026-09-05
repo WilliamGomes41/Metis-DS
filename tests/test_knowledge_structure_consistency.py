@@ -80,6 +80,20 @@ def test_confirmed_child_relation_must_match_canonical_parent() -> None:
     assert "parent_relation_mismatch:child" in errors
 
 
+def test_confirmed_inverse_parent_relation_must_match_child_record() -> None:
+    parent = _object("parent")
+    parent["confirmed_relations"] = [
+        {
+            "relation_type": "parent",
+            "target_object_id": "child",
+            "confirmed": True,
+        }
+    ]
+    assert "parent_relation_mismatch:child" in validate_parent_relations(
+        [parent, _object("child")]
+    )
+
+
 def test_numbered_heading_parent_must_be_structurally_valid() -> None:
     child = {
         **_object("heading-5-4-1", parent="heading-2"),
