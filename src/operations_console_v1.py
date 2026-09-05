@@ -868,7 +868,26 @@ class OperationsConsole:
             if is_heading_object(child) and is_heading_object(parent):
                 if not parent_proposal_may_bind(child, parent, current):
                     raise ConsoleError("invalid_parent_structure")
-        if target.get("confirmed_relations") != confirmed:
+        previous_child_relations = [
+            row
+            for row in (target.get("confirmed_relations") or [])
+            if row.get("relation_type") == "child"
+        ]
+        confirmed_parents = [
+            row["target_object_id"]
+            for row in confirmed
+            if row.get("relation_type") == "child"
+        ]
+        if len(confirmed_parents) > 1:
+            raise ConsoleError("multiple_parents_not_allowed")
+        canonical_parent_changed = False
+        if confirmed_parents:
+            canonical_parent_changed = target.get("parent_object_id") != confirmed_parents[0]
+            target["parent_object_id"] = confirmed_parents[0]
+        elif previous_child_relations:
+            canonical_parent_changed = target.get("parent_object_id") is not None
+            target["parent_object_id"] = None
+        if target.get("confirmed_relations") != confirmed or canonical_parent_changed:
             target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
         target["confirmed_relations"] = confirmed
         stamp_canonical_hashes(target)
