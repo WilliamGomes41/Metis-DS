@@ -140,6 +140,7 @@ def test_toegang_routes_auth_and_url_ingest_paths() -> None:
 def test_beschikbaarheid_ingest_and_heavy_paths() -> None:
     preflight = _load()
     for path in (
+        "src/ingest_limits_v1.py",
         "src/extract_html_v1.py",
         "src/extract_pdf_v2.py",
         "src/semantic_transform_v21.py",

@@ -6,6 +6,7 @@ Chat is not a room.
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from urllib.parse import quote
 
@@ -40,6 +41,11 @@ from src.review_cockpit_v1 import (
     map_eindoordeel,
     proposed_type_of,
     why_selected,
+)
+from src.ingest_limits_v1 import (
+    INGEST_PAYLOAD_TOO_LARGE,
+    install_ingest_limits,
+    read_upload_limited,
 )
 from src.operations_console_v1 import (
     ALLOWED_CLASSES,
@@ -149,6 +155,7 @@ ERROR_COPY = {
     "published_class_change_blocked": "Een gepubliceerd document wordt niet herschreven. Klasse wijzigen blijft fail-closed.",
     "cross_model_reextract_required": "Cross-model vereist re-extract van dezelfde freeze naar een nieuwe objectgrafiek.",
     "source_identity_must_not_change": "De bron blijft ongewijzigd: SHA-256, titel, versie en herkomst wijzigen niet.",
+    INGEST_PAYLOAD_TOO_LARGE: "Het bestand of de download is te groot. Lever een kleiner HTML- of PDF-bestand in.",
 }
 RELATION_LABELS = {
     "applies_if": "geldt indien",
@@ -710,6 +717,7 @@ def _broncontext_html(obj: dict[str, Any], snapshot_id: str, object_id: str, pas
 
 def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
     state = console or OperationsConsole(root=REPO_ROOT)
+    install_ingest_limits(state)
     app = FastAPI(
         title="V&VN Data Services Internal Operations Console",
         version=SERVICE_VERSION,
@@ -929,11 +937,12 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         content_type = None
         if file is not None and file.filename:
             filename = file.filename
-            data = await file.read()
+            data = await read_upload_limited(file)
             content_type = file.content_type
         if isinstance(named_reviewers, str):
             named_reviewers = [named_reviewers] if named_reviewers.strip() else []
-        receipt = state.ingest(
+        receipt = await asyncio.to_thread(
+            state.ingest,
             actor_id=account["account_id"],
             filename=filename,
             data=data or None,

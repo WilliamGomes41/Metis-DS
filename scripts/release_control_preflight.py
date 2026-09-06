@@ -75,6 +75,8 @@ PATH_RULES: dict[str, tuple[str, ...]] = {
         "src/*authorization*.py",
     ),
     "beschikbaarheid": (
+        "src/ingest_limits_v1.py",
+        "src/ingest*.py",
         "src/extract_html_v1.py",
         "src/extract_pdf_v2.py",
         "src/semantic_transform_v2.py",
