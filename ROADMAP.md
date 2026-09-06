@@ -104,6 +104,10 @@ Die Forge-golf is in code (exact-bind op `resolve_found_under_parent`; tests-bef
 
 Die Forge-golf is in code (`_save_objects`: unique temp + `os.replace`; per-snapshot lock; optimistic revision check fails closed with `snapshot_object_write_conflict`). Geen torn/empty snapshot-JSONL bij interrupt; geen stille last-write-wins tussen twee reviewers op dezelfde snapshot. ROADMAP #112 backlog MAG apart landen. MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. `publish()` blijft G2-BLOCKED.
 
+## Ingest beschikbaarheid (audit wave 2)
+
+Die Forge-golf is in code (console `POST /ingest`: `asyncio.to_thread` so extract/ingest does not block the async event loop; fail-closed upload/download size limit `DEFAULT_INGEST_MAX_BYTES` / `CONSOLE_INGEST_MAX_BYTES`, reject `ingest_payload_too_large`). Smoke: overlapping ingest + other request for ≥2 users. MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. `publish()` blijft G2-BLOCKED. Wave 3 SSRF/session/Secure, wave 4 metrics/gold en wave 5 simplify blijven later.
+
 ## Eigenaarslock 2026-09-05 — Objectcontract, harde toelatingspoort, reason codes en reviewer passage-flow (Protocol v2.30)
 
 Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. Eigenaar (William Gomes) 2026-09-05 (Metis CoS GO) lockte één protocolcut met twee onafhankelijk toetsbare acceptatieblokken (Block A harde toelatingspoort / objectcontract / reason codes; Block B reviewer passage-flow / documentpositie / echte open-source broncontext).

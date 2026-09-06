@@ -4,6 +4,9 @@ All notable technical changes to V&VN Data Services are recorded here.
 
 ## [Unreleased]
 
+### Added
+- Console ingest beschikbaarheid (ROADMAP wave 2): blocking `state.ingest` / extract runs off the async event loop via `asyncio.to_thread`; fail-closed upload and URL-download size limits (`DEFAULT_INGEST_MAX_BYTES` = 32 MiB, override `CONSOLE_INGEST_MAX_BYTES`). Oversize rejects with `ingest_payload_too_large` before/during ingest. Evidence: event-loop stays responsive, two overlapping users, size-limit fail-closed. Audit wave 2 only. `publish()` remains G2-BLOCKED. Not SSRF/session/Secure, not metrics/gold, not ROADMAP simplification, not Azure.
+
 ### Fixed
 - Review object snapshot JSONL saves (`_save_objects` and review RMW callers): unique temp + `os.replace` so an interrupt cannot leave a torn or empty objects file; per-snapshot lock plus optimistic revision check fails closed with `snapshot_object_write_conflict` instead of silent last-write-wins between overlapping reviewers. Shared fixed `.tmp` names removed from `_atomic_write` / `_atomic_write_bytes`. Audit wave 1 only. `publish()` remains G2-BLOCKED. Not ingest off-eventloop, not SSRF/session, not metrics/gold, not ROADMAP simplification, not Azure.
 
