@@ -329,3 +329,55 @@ def test_dot_github_paths_keep_leading_dot() -> None:
     report = _load().classify_paths([".github/workflows/ci.yml"])
     assert ".github/workflows/ci.yml" in report["releasebewijs"]["paths"]
     assert "github/workflows/ci.yml" not in report["releasebewijs"]["paths"]
+
+
+def test_diff_filter_includes_deletions() -> None:
+    preflight = _load()
+    assert "D" in preflight.DIFF_FILTER
+    for letter in "ACMRD":
+        assert letter in preflight.DIFF_FILTER
+
+
+def test_deleted_product_paths_still_require_their_category() -> None:
+    item = _load().classify_paths(["src/review_ledger.py"])["opslag"]
+    assert item["status"] == "required"
+    assert "src/review_ledger.py" in item["paths"]
+
+
+def test_discover_includes_deleted_product_paths(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    (repo / "src").mkdir(parents=True)
+    (repo / "src" / "review_ledger.py").write_text("ledger = True\n", encoding="utf-8")
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(["git", "config", "user.email", "t@t.test"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "base"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "rm", "src/review_ledger.py"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "delete ledger"], cwd=repo, check=True, capture_output=True)
+    preflight = _load()
+    paths = preflight.discover_changed_paths(repo, "HEAD~1")
+    assert "src/review_ledger.py" in paths
+    assert preflight.classify_paths(paths)["opslag"]["status"] == "required"
+
+
+def test_service_app_inspection_api_is_toegang() -> None:
+    item = _load().classify_paths(["src/service_app.py"])["toegang"]
+    assert item["status"] == "required"
+    assert "src/service_app.py" in item["paths"]
+
+
+def test_unresolved_base_fails_closed_instead_of_working_tree_passthrough() -> None:
+    result = _run_cli(["--base", "definitely-not-a-ref", "--tests-root", str(ROOT / "tests")])
+    assert result.returncode == 2
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "BLOCKED"
+    errors = " ".join(payload.get("errors") or []).lower()
+    assert "definitely-not-a-ref" in errors
+    assert "unresolved" in errors
+
+
+def test_discover_unresolved_base_raises(tmp_path: Path) -> None:
+    preflight = _load()
+    with pytest.raises(RuntimeError, match="unresolved"):
+        preflight.discover_changed_paths(ROOT, "definitely-not-a-ref")
