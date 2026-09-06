@@ -183,8 +183,9 @@ def test_context_completeness_does_not_treat_scan_done_alone_as_complete() -> No
     gold = _gold(_selected_row(TRUE_A, "G-A"))
     objects = [_obj(TRUE_A, selected=True, scan_done=True, before="", after="")]
     metrics = compute_extract_metrics(objects, gold=gold)
-    # Score-must-drop: scan flag alone is not captured context.
-    assert metrics["context_completeness"] == 0.0
+    # Unannotated gold: completeness is undefined. Scan flag is not neighbor context.
+    assert metrics["context_completeness"] is None
+    assert metrics["neighbor_context_present"] == 0.0
 
 
 def test_context_completeness_requires_captured_neighbor_context() -> None:
@@ -197,7 +198,8 @@ def test_context_completeness_requires_captured_neighbor_context() -> None:
         after="Tenzij er hypercalciëmie bestaat.",
     )
     metrics = compute_extract_metrics([complete], gold=gold)
-    assert metrics["context_completeness"] == 1.0
+    assert metrics["context_completeness"] is None
+    assert metrics["neighbor_context_present"] == 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -295,8 +297,10 @@ def test_independent_gold_includes_missed_knowledge_and_false_admits() -> None:
     assert false_admits
     source_ids = {row.get("source_id") for row in gold["passages"]}
     assert len(source_ids) >= 2
-    assert gold_supports_independent_quality_claim(gold) is True
-    assert extract_quality_claim_allowed([], gold=gold) is True
+    # v231_wave4 fixture gold remains a regression set. Self-declared
+    # independence booleans MUST NOT open a quality claim.
+    assert gold_supports_independent_quality_claim(gold) is False
+    assert extract_quality_claim_allowed([], gold=gold) is False
 
 
 def test_independent_gold_is_not_the_phase4_register_fixture() -> None:
@@ -339,15 +343,15 @@ def test_holdout_includes_missed_and_false_admits_from_multiple_sources() -> Non
     assert holdout["golden_set_id"] != gold["golden_set_id"]
 
 
-def test_metrics_on_independent_gold_may_claim_and_must_expose_counts() -> None:
+def test_metrics_on_wave4_fixture_gold_expose_counts_but_cannot_claim() -> None:
     gold = load_extract_gold(INDEPENDENT_GOLD)
     objects = [
         _obj(TRUE_A, selected=True, before="voor", after="na"),
         _obj(FALSE_C, selected=True, before="voor", after="na"),
     ]
     metrics = compute_extract_metrics(objects, gold=gold)
-    assert metrics["quality_claim_allowed"] is True
-    assert metrics["reason"] == ""
+    assert metrics["quality_claim_allowed"] is False
+    assert metrics["reason"]
     assert "true_positives" in metrics
     assert "false_positives" in metrics
     assert "false_negatives" in metrics
