@@ -30,6 +30,13 @@ Zet minimaal deze **app settings** (geen secrets) op de **test-app**:
 | `WEBSITE_RUN_FROM_PACKAGE` | niet instellen |
 | `SCM_DO_BUILD_DURING_DEPLOYMENT` | `false` (Oryx-during-deploy gaf HTTP_504 op B1) |
 | Start-up command | `bash scripts/azure_console_startup.sh` |
+| `WEB_CONCURRENCY` | unset or `1` (one Gunicorn worker; >1 is out of bound) |
+| `CONSOLE_INSTANCE_COUNT` | unset or `1` (one instance; >1 is out of bound) |
+
+Supported topology is one Gunicorn worker / one instance / sequential
+writes. Do not scale out workers or instances. See
+[RUNTIME_DATA_RECOVERY.md](RUNTIME_DATA_RECOVERY.md) and
+`src/topology_bound_v1.py`.
 
 Zet op **productie**:
 
@@ -40,6 +47,8 @@ Zet op **productie**:
 | `G2_BLOB_CONTAINER` | `canonical-sources` |
 | `SCM_DO_BUILD_DURING_DEPLOYMENT` | `false` |
 | Start-up command | `bash scripts/azure_console_startup.sh` |
+| `WEB_CONCURRENCY` | unset or `1` (one Gunicorn worker; >1 is out of bound) |
+| `CONSOLE_INSTANCE_COUNT` | unset or `1` (one instance; >1 is out of bound) |
 
 Per-omgeving opslag loopt via deze app settings. Er komen geen storage keys,
 connection strings of SAS-tokens in Git. `CONSOLE_IMMUTABLE_SOURCE_STORE=azure`

@@ -160,6 +160,8 @@ Remediatie 4 (Wave-4 quality claim): die Forge-golf is in code (v231_wave4 fixtu
 
 5. **Topology bound (scale)** — Documenteer de ondersteunde topologie: huidig één Gunicorn-worker / één instance / sequentiële writes. Voorkom per ongeluk multi-writer scale. Vóór meerdere writers: consistent mutate-pad voor accounts/envelopes/bindings (session reload/lock-patroon). CONFIGURE nu; EXTEND bij schalen.
 
+Remediatie 5 (topology bound): die Forge-golf is in code (één Gunicorn-worker / één instance / sequentiële writes; fail-closed op multi-worker / multi-instance via `src/topology_bound_v1.py`).
+
 **Release-preflight risico** — markers/comments MUST NOT als live-releasebewijs worden behandeld; houd alleen metadata die naar concrete checks wijst.
 
 **Aparte releasecheck (blijft buiten de remediaties)** — ongewijzigd t.o.v. de post-v2.31 backlog: geteste commit SHA → gebouwd pakket/artifact → daadwerkelijk draaiende versie; herstelbaarheid van code én reviewgegevens. MUST NOT Azure ZIP autoriseren. MUST NOT G2/`publish()` openen. Dit MAG geen zesde implementatiegolf worden.

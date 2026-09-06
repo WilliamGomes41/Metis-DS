@@ -16,7 +16,7 @@ python -m compileall -q src
 pytest -q
 ```
 
-`scripts/release_control_preflight.py` names the Metis skill checks (`scope/belofte`, `opslag`, `beschikbaarheid`, `toegang`, `kwaliteit`, `metrics`, `slop`, `releasebewijs`) as `required` or `n.v.t.` from changed paths. CI must run this mapping after `repository_preflight.py` and must fail when a `required` category has no matching test marker or evidence path. Do not drop that step from `.github/workflows/ci.yml`; the skill names the checks so they cannot be forgotten. Product categories (`opslag`–`metrics`) stay `n.v.t.` until a product path is in the diff.
+`scripts/release_control_preflight.py` names the Metis skill checks (`scope/belofte`, `opslag`, `beschikbaarheid`, `toegang`, `kwaliteit`, `metrics`, `slop`, `releasebewijs`) as `required` or `n.v.t.` from changed paths. CI must run this mapping after `repository_preflight.py` and must fail when a `required` category has no matching test marker or evidence path. Do not drop that step from `.github/workflows/ci.yml`; the skill names the checks so they cannot be forgotten. Product categories (`opslag`–`metrics`) stay `n.v.t.` until a product path is in the diff. Markers and `# release-control-evidence:` comments are metadata pointing at those concrete checks; they are not live-release evidence.
 
 ## Commit convention
 

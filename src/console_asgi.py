@@ -2,6 +2,10 @@
 
 Internal researcher surface only. Not a public website. G2 remains BLOCKED.
 Bootstrap passwords come from environment, never from Git.
+
+Supported topology (Post-#120 remediation 5): one Gunicorn worker /
+one instance / sequential writes. ``build_app()`` fail-closes if a
+multi-writer assumption is declared. EXTEND for multiple writers is later.
 """
 from __future__ import annotations
 
@@ -11,6 +15,7 @@ from pathlib import Path
 from src.g2_source_store import AzureBlobSourceStore
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
+from src.topology_bound_v1 import assert_supported_topology
 
 ROOT = Path(__file__).resolve().parents[1]
 AZURE_DATA_ROOT = Path("/home/data/metis-console")
@@ -58,6 +63,7 @@ def bootstrap_accounts(console: OperationsConsole) -> None:
 
 
 def build_app() -> object:
+    assert_supported_topology()
     data_root = _env_path("CONSOLE_DATA_ROOT", _default_data_root())
     immutable_store = None
     source_store_kind = os.environ.get("CONSOLE_IMMUTABLE_SOURCE_STORE", "").strip().lower()

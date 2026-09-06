@@ -5,6 +5,10 @@ Fail-closed: a `required` category without a matching test marker or
 evidence path (and any extra tokens that category demands) BLOCKS CI.
 Product categories opslag–metrics stay n.v.t. until a product path is
 in the diff. Stdlib only; does not replace repository_preflight.py.
+
+Markers and `# release-control-evidence:` comments are metadata pointing
+at concrete checks (this script and the matching tests). They are not
+live-release evidence.
 """
 from __future__ import annotations
 
@@ -331,6 +335,7 @@ def evaluate_release_control(
             "Path mapping is src/-prefix tooling, not a semantic diff of _save_objects. "
             "Product categories 2–6 stay n.v.t. until a product PR hits those paths. "
             "Evidence counts only when the marked test file is in the evaluated diff. "
+            "Markers/comments are metadata pointing to concrete checks; they are not live-release evidence. "
             "Auditor verdict is not in this job."
         ),
         "advies": (
@@ -345,6 +350,7 @@ def evaluate_release_control(
         "report": report,
         "errors": errors,
         "checked_paths": changed,
+        "live_release_evidence": False,
     }
 
 
