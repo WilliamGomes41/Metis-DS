@@ -100,6 +100,10 @@ Acceptatie/regressies: `Preventie` vs `Preventie van vallen` — Dit klopt MUST 
 
 Die Forge-golf is in code (exact-bind op `resolve_found_under_parent`; tests-before-code). MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. Eigenaarslock 2026-09-06 (post-v2.31 betrouwbaarheid- en bewijsbacklog) supersedes de lezing dat de volgende *code* ná die al gelande exact-bind-golf nog die Forge-golf is: volgende code ná aparte Metis GO per golf is die ROADMAP-backlog (start golf 1 tenzij de eigenaar anders zegt). Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
 
+## Reviewopslag betrouwbaarheid (audit wave 1)
+
+Die Forge-golf is in code (`_save_objects`: unique temp + `os.replace`; per-snapshot lock; optimistic revision check fails closed with `snapshot_object_write_conflict`). Geen torn/empty snapshot-JSONL bij interrupt; geen stille last-write-wins tussen twee reviewers op dezelfde snapshot. ROADMAP #112 backlog MAG apart landen. MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. `publish()` blijft G2-BLOCKED.
+
 ## Eigenaarslock 2026-09-05 — Objectcontract, harde toelatingspoort, reason codes en reviewer passage-flow (Protocol v2.30)
 
 Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. Eigenaar (William Gomes) 2026-09-05 (Metis CoS GO) lockte één protocolcut met twee onafhankelijk toetsbare acceptatieblokken (Block A harde toelatingspoort / objectcontract / reason codes; Block B reviewer passage-flow / documentpositie / echte open-source broncontext).
