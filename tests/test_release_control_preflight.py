@@ -215,7 +215,7 @@ def test_evaluate_fails_when_required_metrics_lacks_score_must_drop(tmp_path: Pa
         encoding="utf-8",
     )
     result = preflight.evaluate_release_control(
-        paths=["src/extract_metrics_v1.py"],
+        paths=["src/extract_metrics_v1.py", "tests/test_metrics_partial.py"],
         tests_root=tests_root,
     )
     assert result["status"] == "BLOCKED"
@@ -245,12 +245,42 @@ def test_evaluate_passes_when_required_has_matching_marker_and_tokens(tmp_path: 
         encoding="utf-8",
     )
     result = preflight.evaluate_release_control(
-        paths=["src/operations_console_v1.py"],
+        paths=["src/operations_console_v1.py", "tests/test_opslag_guard.py"],
         tests_root=tests_root,
     )
     assert result["status"] == "PASS"
     assert result["errors"] == []
     assert result["categories"]["opslag"]["evidence"]
+
+
+def test_historical_markers_do_not_satisfy_unrelated_product_change(tmp_path: Path) -> None:
+    preflight = _load()
+    tests_root = tmp_path / "tests"
+    tests_root.mkdir()
+    (tests_root / "test_historical_opslag.py").write_text(
+        "# release-control-evidence: opslag concurrent stale\n"
+        "# release-control-evidence: scope/belofte\n"
+        "# release-control-evidence: slop\n"
+        "# release-control-evidence: releasebewijs\n"
+        "import pytest\n"
+        "pytestmark = [\n"
+        "    pytest.mark.release_control_opslag,\n"
+        "    pytest.mark.release_control_scope_belofte,\n"
+        "    pytest.mark.release_control_slop,\n"
+        "    pytest.mark.release_control_releasebewijs,\n"
+        "]\n"
+        "def test_save_objects_rejects_stale_concurrent_write():\n"
+        "    assert True\n",
+        encoding="utf-8",
+    )
+    result = preflight.evaluate_release_control(
+        paths=["src/canonical_store.py"],
+        tests_root=tests_root,
+    )
+    assert result["status"] == "BLOCKED"
+    errors = " ".join(result["errors"]).lower()
+    assert "opslag" in errors
+    assert result["categories"]["opslag"]["evidence"] == []
 
 
 def test_evaluate_tooling_paths_pass_against_this_suite() -> None:
