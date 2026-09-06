@@ -106,6 +106,11 @@ def test_v210_renames_familieboom_to_documentenhierarchie() -> None:
     assert "Documentenhierarchie" in roadmap
     assert "niet Familieboom" in roadmap
     assert "geen snapshot-id" in root_protocol
+    # Protocol v2.32 SUPERSEDES Documentenhierarchie as live UI law; historical delta text stays.
+    assert "**Documenten**" in root_protocol
+    assert "v2.32 SUPERSEDEERT die live heading-lezing" in root_protocol
+    assert "**Documenten**" in roadmap
+    assert "MUST **Documenten** zijn" in roadmap
 
 
 def test_v210_records_waiting_task_badges_as_real_kernel_work() -> None:

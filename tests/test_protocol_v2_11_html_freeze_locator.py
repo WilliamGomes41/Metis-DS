@@ -35,7 +35,7 @@ def test_v211_delta_exists_and_is_a_live_baseline_component() -> None:
     assert "**Status:** Approved for project use" in delta
     assert "**Protocol delta version:** 2.11.0" in delta
     assert "docs/PROTOCOL_V2_11_HTML_FREEZE_LOCATOR_DELTA.md" in root_protocol
-    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.31.0") == 1
+    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.32.0") == 1
     assert "plus Protocol v2.12.0" in root_protocol
     assert "plus Protocol v2.11.0" in root_protocol
     assert "De geldende normatieve baseline is Protocol v2.11.0" not in root_protocol
@@ -47,7 +47,7 @@ def test_v211_delta_exists_and_is_a_live_baseline_component() -> None:
 def test_v211_hierarchy_points_at_combined_live_baseline() -> None:
     root_protocol = _read(ROOT / "PROTOCOL.md")
     delta = _read(DELTA)
-    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.31.0") == 1
+    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.32.0") == 1
     assert "plus Protocol v2.12.0" in root_protocol
     assert "plus Protocol v2.11.0" in root_protocol
     assert "docs/PROTOCOL_V2_2.md" in root_protocol
@@ -99,6 +99,9 @@ def test_v211_keeps_all_v26_through_v210_rules() -> None:
     assert "via-negativa MUST NOT be the primary on-screen copy" in delta
     assert "the console MUST use the V&VN digital stylesheet" in delta
     assert "the console room heading MUST be Documentenhierarchie" in delta
+    # Historical v2.11 delta text may keep that heading. Live UI law is Protocol v2.32 **Documenten**.
+    assert "**Documenten**" in root_protocol
+    assert "v2.32 SUPERSEDEERT die live heading-lezing" in root_protocol
     assert "CLOSED role set" in delta
     assert "Alle v2.6-consoleregels blijven van kracht" in root_protocol
     assert "Alle v2.7-bron-/API-/distributieregels blijven van kracht" in root_protocol

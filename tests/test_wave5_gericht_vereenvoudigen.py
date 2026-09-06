@@ -374,7 +374,7 @@ def test_roadmap_live_norm_is_readable_and_historical_stacks_are_demoted() -> No
     assert "MUST NOT G2/`publish()` openen" in roadmap
     assert "HANDOFF.md MUST NOT opnieuw worden aangemaakt" in roadmap
     assert not (ROOT / "HANDOFF.md").exists()
-    assert "De geldende normatieve baseline is Protocol v2.31.0" in _read(ROOT / "PROTOCOL.md")
+    assert "De geldende normatieve baseline is Protocol v2.32.0" in _read(ROOT / "PROTOCOL.md")
     assert not (ROOT / "docs" / "PROTOCOL_V2_32_RELIABILITY_EVIDENCE_BACKLOG_DELTA.md").exists()
 
 
