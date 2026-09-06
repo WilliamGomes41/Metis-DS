@@ -2,13 +2,13 @@
 
 Locks the owner ask of 2026-09-07 (William Gomes / Metis CoS): logged-in
 `/` MUST be duty-first (Metis Design mock). PR #127 sketch B sparse
-one-CTA home is SUPERSEDED as the locked home. Die Forge-golf is nog
-NIET in code — await aparte Metis GO.
+one-CTA home is SUPERSEDED as the locked home. Die Forge-golf is in
+code (duty-first home). Historical lock paragraphs keep the original
+«nog NIET in code» ROADMAP-only sentence.
 
-This PR is ROADMAP + CHANGELOG + pointer tests only. No PROTOCOL.md
-rewrite, no new PROTOCOL_V2_* delta, no src/ product code, no Forge
-implementation. Markers here are CI metadata pointing at these text
-checks; they are not live-release proof.
+No PROTOCOL.md rewrite, no new PROTOCOL_V2_* delta. Markers here are
+CI metadata pointing at these text checks; they are not live-release
+proof.
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: slop
@@ -55,9 +55,11 @@ def test_roadmap_records_duty_first_home_owner_lock() -> None:
     assert "ROADMAP-lock" in _lock_section()
     assert "Geen productcode" in _lock_section() or "geen productcode" in _lock_section()
     assert "Die Forge-golf is nog NIET in code" in _lock_section()
+    assert "Die Forge-golf is in code" in _lock_section()
     assert "aparte Metis GO" in _lock_section()
     assert "duty-first" in changelog.lower() or "Duty-first" in changelog
     assert "Die Forge-golf is nog NIET in code" in changelog
+    assert "Die Forge-golf is in code" in changelog
     assert "await aparte Metis GO" in changelog
     assert "duty-first home ROADMAP 2026-09-07" in roadmap
 
@@ -75,7 +77,11 @@ def test_roadmap_supersedes_sketch_b_as_locked_home() -> None:
     assert "#127" in live
     assert "landing sketch b" in live.lower()
     assert "Bron inleveren" in live
-    assert "Die Forge-golf is nog NIET in code" in live
+    duty_live = next(
+        line for line in live.splitlines() if "duty-first" in line.lower() or "sketch B" in line
+    )
+    assert "Die Forge-golf is in code" in duty_live
+    assert "nog NIET in code" not in duty_live
     assert "SUPERSEDES #127" in changelog or "SUPERSEDES #127 sketch B" in changelog
     assert "sketch B" in changelog
 
@@ -139,21 +145,14 @@ def test_roadmap_states_out_of_scope_and_does_not_open_g2() -> None:
     assert "NOT Protocol" in changelog or "NOT PROTOCOL" in changelog
 
 
-def test_duty_first_pr_does_not_rewrite_protocol_or_add_src() -> None:
+def test_duty_first_does_not_rewrite_protocol_and_is_in_console() -> None:
     root_protocol = _read(ROOT / "PROTOCOL.md")
     assert root_protocol.count("De geldende normatieve baseline is Protocol v2.32.0") == 1
     assert not (ROOT / "docs" / "PROTOCOL_V2_33_DUTY_FIRST_HOME_DELTA.md").exists()
     assert not (ROOT / "docs" / "PROTOCOL_V2_32_DUTY_FIRST_HOME_DELTA.md").exists()
-    src_hits = []
-    needles = (
-        "Duty-first home SUPERSEDEERT sketch B",
-        "Waar wil je verder?",
-        "Kies wat je nu wilt doen.",
-        "Openstaand reviewwerk",
-    )
-    for path in (ROOT / "src").glob("*.py"):
-        text = path.read_text(encoding="utf-8")
-        if any(needle in text for needle in needles):
-            src_hits.append(path.name)
-    assert src_hits == [], f"docs-only PR must not add duty-first home product code in src/: {src_hits}"
+    src = _read(ROOT / "src" / "operations_console_app.py")
+    assert "Waar wil je verder?" in src
+    assert "Kies wat je nu wilt doen." in src
+    assert "Openstaand reviewwerk" in src
+    assert "duty-card" in src
     assert not (ROOT / "HANDOFF.md").exists()

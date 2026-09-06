@@ -19,7 +19,7 @@ Wat nu de code stuurt:
 - Ingest: geüploade HTML-freeze; Live URL-HTML MUST bij ingest worden geweigerd; URL-ingest van een PDF MAG blijven; URL-ingest van HTML MUST NOT. HTML wordt niet geheel verboden. Protocol v2.11 supersedes v2.7 URL-for-official-files as to HTML.
 - Klasse `beslisboom` (`path` / `node` / `outcome`); Klasse-keuze selecteert het reviewpad; MUST NOT een aparte tweede kiezer «pad». Klasse wijzigen i.p.v. Promoveren (v2.26); selectieve invalidatie + published-candidate blijven later.
 - Console is onderzoeker-oppervlak, niet voor verpleegkundigen. Product API blijft G2-gesloten. Azure ZIP / nurse UI / PROTOCOL.md-rewrite blijven buiten deze golf.
-- `#127` landing sketch B (gecentreerde spaarzame home, één primair **Bron inleveren** + stille secondaries) staat in code maar is **superseded** als gelockte home. Gelockte logged-in `/` is duty-first (Metis Design: nav **Home** eerste kamer en current op `/`; MUST NOT Inleveren current markeren op home; heading «Waar wil je verder?» + lead «Kies wat je nu wilt doen.»; drie kaarten Review / Inleveren / Documenten). Die Forge-golf is nog NIET in code — await aparte Metis GO. `/tree` heading **Documenten** UNCHANGED (v2.32). Post-auth landt op `/`, niet `/ingest`. Zie Eigenaarslock 2026-09-07 — Duty-first home SUPERSEDEERT sketch B.
+- `#127` landing sketch B (gecentreerde spaarzame home, één primair **Bron inleveren** + stille secondaries) staat in code maar is **superseded** als gelockte home. Gelockte logged-in `/` is duty-first (Metis Design: nav **Home** eerste kamer en current op `/`; MUST NOT Inleveren current markeren op home; heading «Waar wil je verder?» + lead «Kies wat je nu wilt doen.»; drie kaarten Review / Inleveren / Documenten). Die Forge-golf is in code. `/tree` heading **Documenten** UNCHANGED (v2.32). Post-auth landt op `/`, niet `/ingest`. Zie Eigenaarslock 2026-09-07 — Duty-first home SUPERSEDEERT sketch B.
 - Post-v2.31 ROADMAP-golven 1–5 staan in code (#113–#120). Die vereenvoudigingsgolf is in code. MUST NOT een zesde implementatiegolf verzinnen. Golven 1–5 dekken multiuser-betrouwbaarheid en onafhankelijke extractkwaliteit niet volledig; zie Eigenaarslock 2026-09-06 — Post-#120 audit acceptatiecorrectie.
 - Controlled-MVP backlog (ROADMAP, nog niet in code): Review «Recent activity» (read-only); exact SHA-256 duplicate ingest guard; release identity + GitHub→Azure deploy authorization. Die Forge-golf is nog NIET in code — await aparte Metis GO. App Service B2 is compute, niet de GitHub→Azure-poort. Zie Eigenaarslock 2026-09-06 — Controlled-MVP Recent activity, SHA-256-dup-guard en release-identity.
 
@@ -39,7 +39,7 @@ Geen herhaalde stapel. Iedere rij wijst naar de Eigenaarslock; die secties blijv
 | v2.32 | **Documenten** UI-kamernaam; kernel familie × klasse ONGEWIJZIGD; v2.27-delete blijft één `/tree`-plaats | v2.10/later «heading MUST be Documentenhierarchie» |
 | post-v2.31 ROADMAP | vijf golven (geen golf 6); golven 1–5 in code (#113–#120); Die vereenvoudigingsgolf is in code; Post-#120 audit acceptatiecorrectie | «volgende code is nog exact-bind»; «golven 1–5 dekken multiuser-betrouwbaarheid / onafhankelijke extractkwaliteit volledig» |
 | controlled-MVP ROADMAP 2026-09-06 | lock only (A Recent activity; B SHA-256-dup-guard; C release-identity/OIDC); Die Forge-golf is nog NIET in code | «SKU-upgrade lost GitHub→Azure»; «auto main→Azure aan»; Slack-presence in MVP; fuzzy duplicate |
-| duty-first home ROADMAP 2026-09-07 | lock only: logged-in `/` duty-first drie kaarten; Home eerste kamer; post-auth `/`; `/tree` Documenten UNCHANGED; Die Forge-golf is nog NIET in code | #127 sketch B spaarzame één-CTA-home als gelockte primary home; quiet-only secondaries; Slack presence |
+| duty-first home ROADMAP 2026-09-07 | logged-in `/` duty-first drie kaarten; Home eerste kamer; post-auth `/`; `/tree` Documenten UNCHANGED; Die Forge-golf is in code | #127 sketch B spaarzame één-CTA-home als gelockte primary home; quiet-only secondaries; Slack presence |
 
 ## Niet-onderhandelbare doelen
 
@@ -149,6 +149,8 @@ Logged-in `/` MUST de duty-first home zijn die de Metis Design-mock volgt:
 - MUST NOT `src/` productcode.
 
 MUST NOT implementeren in deze PR. Volgende console-UX alleen ná **aparte Metis GO**. MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
+
+Die Forge-golf is in code (duty-first home: nav **Home** eerste kamer en current op `/`; MUST NOT Inleveren current op home; heading «Waar wil je verder?» + lead «Kies wat je nu wilt doen.»; drie kaarten Review / Inleveren / Documenten; post-auth `/`; `/tree` **Documenten** UNCHANGED; mobile nav wrapt zodat Publiceren niet tot «Pub» clip). Tests-before-code. MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. `publish()` blijft G2-BLOCKED.
 
 ## Eigenaarslock 2026-09-06 — Controlled-MVP Recent activity, SHA-256-dup-guard en release-identity (ROADMAP)
 
