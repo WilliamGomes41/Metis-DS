@@ -7,6 +7,7 @@ Chat is not a room.
 from __future__ import annotations
 
 import asyncio
+import html
 from typing import Any
 from urllib.parse import quote
 
@@ -54,6 +55,7 @@ from src.operations_console_v1 import (
     ConsoleError,
     OperationsConsole,
     REPO_ROOT,
+    SNAPSHOT_OBJECT_WRITE_CONFLICT,
     remaining_not_duty,
     remaining_unclassified,
     review_card_sentence,
@@ -156,6 +158,10 @@ ERROR_COPY = {
     "cross_model_reextract_required": "Cross-model vereist re-extract van dezelfde freeze naar een nieuwe objectgrafiek.",
     "source_identity_must_not_change": "De bron blijft ongewijzigd: SHA-256, titel, versie en herkomst wijzigen niet.",
     INGEST_PAYLOAD_TOO_LARGE: "Het bestand of de download is te groot. Lever een kleiner HTML- of PDF-bestand in.",
+    SNAPSHOT_OBJECT_WRITE_CONFLICT: (
+        "Deze beoordeling is niet opgeslagen. Het document is tussentijds gewijzigd. "
+        "Je invoer staat nog in het formulier; sla opnieuw op."
+    ),
 }
 RELATION_LABELS = {
     "applies_if": "geldt indien",
@@ -169,14 +175,12 @@ RELATION_LABELS = {
 }
 
 
+def _checked(selected: str, value: str) -> str:
+    return " checked" if selected == value else ""
+
+
 def _esc(value: Any) -> str:
-    return (
-        str(value or "")
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
+    return html.escape(str(value or ""), quote=True)
 
 
 def _status_label(state: str) -> str:
@@ -1138,10 +1142,50 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             target = "/tree"
         return RedirectResponse(target, status_code=303)
 
-    @app.get("/review", response_class=HTMLResponse)
-    def review_get(request: Request, document: str = "", object: str = "") -> str:
-        account = _require(request)
+    def _render_review_room(
+        account: dict[str, Any],
+        document: str = "",
+        object: str = "",
+        *,
+        draft: dict[str, str] | None = None,
+        conflict: bool = False,
+    ) -> str:
         chosen = document.strip()
+        draft = {
+            key: html.escape(str(value or ""), quote=True)
+            for key, value in (draft or {}).items()
+        }
+        closed_eindoordeel = frozenset(
+            {"goedkeuren", "goedkeuren_na_correctie", "afwijzen", "later_beoordelen"}
+        )
+        closed_pos = frozenset({"dit_klopt", "andere_kop"})
+        closed_type_action = frozenset({"dit_klopt", "type_wijzigen"})
+        closed_types = frozenset(CLOSED_OBJECT_TYPES) | frozenset(CLOSED_BOOM_TYPES)
+        suitability_draft = draft.get("suitability", "")
+        if suitability_draft not in SUITABILITY_VALUES:
+            suitability_draft = ""
+        eindoordeel_draft = draft.get("eindoordeel", "")
+        if eindoordeel_draft not in closed_eindoordeel:
+            eindoordeel_draft = ""
+        pos_action_draft = draft.get("documentpositie_action") or "dit_klopt"
+        if pos_action_draft not in closed_pos:
+            pos_action_draft = "dit_klopt"
+        type_action_draft = draft.get("type_action") or "dit_klopt"
+        if type_action_draft not in closed_type_action:
+            type_action_draft = "dit_klopt"
+        comment_draft = draft.get("comment", "")
+        correction_draft = draft.get("proposed_correction", "")
+        confirmed_type_draft = draft.get("confirmed_object_type", "")
+        if confirmed_type_draft not in closed_types:
+            confirmed_type_draft = ""
+        conflict_html = ""
+        if conflict:
+            conflict_html = (
+                f'<div class="banner err" data-stale-write-conflict '
+                f'data-error-code="{_esc(SNAPSHOT_OBJECT_WRITE_CONFLICT)}">'
+                f"{_esc(ERROR_COPY[SNAPSHOT_OBJECT_WRITE_CONFLICT])}</div>"
+                f'<p class="muted">{_esc(SNAPSHOT_OBJECT_WRITE_CONFLICT)}</p>'
+            )
         envelopes = state.list_envelopes()
         chosen_row = next((row for row in envelopes if row["snapshot_id"] == chosen), None)
         picker = ""
@@ -1310,7 +1354,9 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                 confirmable = confirmable_proposed_type(obj)
                 confirmed = obj.get("confirmed_object_type") or ""
                 type_options = _type_options(
-                    confirmed, review_path=review_path, proposed=confirmable
+                    confirmed_type_draft or confirmed,
+                    review_path=review_path,
+                    proposed=confirmable,
                 )
                 passage_ok = False
                 try:
@@ -1350,6 +1396,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     <input type="hidden" name="found_under" value="{_esc(path_text)}">
                     <input type="hidden" name="decision" value="">
                     {four_eyes_html}
+                    {conflict_html}
                     <section class="review-card-object review-step" data-review-step="a" aria-label="Geselecteerde passage">
                       <p class="eyebrow">Geselecteerde passage</p>
                       <h3>{_esc(heading)}</h3>
@@ -1360,24 +1407,24 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     {broncontext_html}
                     <section class="review-step" data-review-step="c">
                       <h4>Geschiktheid</h4>
-                      <label class="check"><input type="radio" name="suitability" value="ja"> Ja</label>
-                      <label class="check"><input type="radio" name="suitability" value="mist_context"> mist context</label>
-                      <label class="check"><input type="radio" name="suitability" value="samenvoegen"> samenvoegen</label>
-                      <label class="check"><input type="radio" name="suitability" value="alleen_onderbouwing"> alleen onderbouwing</label>
-                      <label class="check"><input type="radio" name="suitability" value="geen_kenniseenheid"> geen kenniseenheid</label>
+                      <label class="check"><input type="radio" name="suitability" value="ja"{_checked(suitability_draft, "ja")}> Ja</label>
+                      <label class="check"><input type="radio" name="suitability" value="mist_context"{_checked(suitability_draft, "mist_context")}> mist context</label>
+                      <label class="check"><input type="radio" name="suitability" value="samenvoegen"{_checked(suitability_draft, "samenvoegen")}> samenvoegen</label>
+                      <label class="check"><input type="radio" name="suitability" value="alleen_onderbouwing"{_checked(suitability_draft, "alleen_onderbouwing")}> alleen onderbouwing</label>
+                      <label class="check"><input type="radio" name="suitability" value="geen_kenniseenheid"{_checked(suitability_draft, "geen_kenniseenheid")}> geen kenniseenheid</label>
                     </section>
                     <section class="review-step" data-review-step="d">
                       <h4>Documentpositie</h4>
                       <p>Gevonden onder: <b>{_esc(path_text or "het document")}</b></p>
-                      <label class="check"><input type="radio" name="documentpositie_action" value="dit_klopt" checked> Dit klopt</label>
-                      <label class="check"><input type="radio" name="documentpositie_action" value="andere_kop"> Andere kop kiezen</label>
+                      <label class="check"><input type="radio" name="documentpositie_action" value="dit_klopt"{_checked(pos_action_draft, "dit_klopt")}> Dit klopt</label>
+                      <label class="check"><input type="radio" name="documentpositie_action" value="andere_kop"{_checked(pos_action_draft, "andere_kop")}> Andere kop kiezen</label>
                       {chooser_html}
                     </section>
                     <section class="review-step" data-review-step="e">
                       <h4>Type</h4>
                       <p>Metis stelt voor: <b>{_esc(proposed_label)}</b></p>
-                      <label class="check"><input type="radio" name="type_action" value="dit_klopt" checked> Dit klopt</label>
-                      <label class="check"><input type="radio" name="type_action" value="type_wijzigen"> Type wijzigen</label>
+                      <label class="check"><input type="radio" name="type_action" value="dit_klopt"{_checked(type_action_draft, "dit_klopt")}> Dit klopt</label>
+                      <label class="check"><input type="radio" name="type_action" value="type_wijzigen"{_checked(type_action_draft, "type_wijzigen")}> Type wijzigen</label>
                       <div data-type-chooser hidden>
                         <label for="type-{_esc(obj["object_id"])}">Ander type</label>
                         <select id="type-{_esc(obj["object_id"])}" name="confirmed_object_type" hidden{type_disabled}>{type_options}</select>
@@ -1387,19 +1434,19 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     <section class="review-step" data-review-step="f">
                       <h4>Eindoordeel</h4>
                       <fieldset id="decision-{_esc(obj["object_id"])}">
-                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren"{approve_disabled}> Goedkeuren</label>
-                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren_na_correctie"> Goedkeuren na correctie</label>
-                      <label class="check"><input type="radio" name="eindoordeel" value="afwijzen"> Afwijzen</label>
-                      <label class="check"><input type="radio" name="eindoordeel" value="later_beoordelen"> Later beoordelen</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren"{approve_disabled}{_checked(eindoordeel_draft, "goedkeuren")}> Goedkeuren</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren_na_correctie"{_checked(eindoordeel_draft, "goedkeuren_na_correctie")}> Goedkeuren na correctie</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="afwijzen"{_checked(eindoordeel_draft, "afwijzen")}> Afwijzen</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="later_beoordelen"{_checked(eindoordeel_draft, "later_beoordelen")}> Later beoordelen</label>
                       </fieldset>
                       <p class="field-help" data-decision-hint>Kies een eindoordeel.</p>
                       <div class="decision-comment" data-comment-field hidden>
                         <label for="comment-{_esc(obj["object_id"])}">Toelichting</label>
-                        <textarea id="comment-{_esc(obj["object_id"])}" name="comment"></textarea>
+                        <textarea id="comment-{_esc(obj["object_id"])}" name="comment">{html.escape(comment_draft, quote=True)}</textarea>
                       </div>
                       <div class="decision-correction" data-correction-field hidden>
                         <label for="correction-{_esc(obj["object_id"])}">Voorgestelde correctie</label>
-                        <textarea id="correction-{_esc(obj["object_id"])}" name="proposed_correction"></textarea>
+                        <textarea id="correction-{_esc(obj["object_id"])}" name="proposed_correction">{html.escape(correction_draft, quote=True)}</textarea>
                       </div>
                       <button class="btn-primary" type="submit" disabled data-submit-review>Review opslaan en volgende</button>
                     </section>
@@ -1414,12 +1461,21 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             <section class="room">
               <h1>Review</h1>
               <p class="lead">{lead}</p>
+              {conflict_html if not chosen_object_id else ""}
               {picker}
               {"".join(cards) if not chosen else ""}
               {objects_html or empty}
             </section>
             {_help(room="review")}
             """
+        )
+
+    @app.get("/review", response_class=HTMLResponse)
+    def review_get(request: Request, document: str = "", object: str = "") -> str:
+        return _render_review_room(
+            _require(request),
+            html.escape(document, quote=True),
+            html.escape(object, quote=True),
         )
 
     @app.get("/review/bronpassage", response_class=HTMLResponse)
@@ -1478,22 +1534,53 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             raise ConsoleError("suitability_required")
         if type_action == "dit_klopt" and not confirmed_object_type.strip():
             confirmed_object_type = proposed_object_type
-        state.review_object(
-            actor_id=account["account_id"],
-            snapshot_id=snapshot_id,
-            object_id=object_id,
-            decision=mapped,
-            comment=comment,
-            proposed_correction=proposed_correction,
-            confirmed_object_type=confirmed_object_type.strip() or None,
-            recommendation_strength=recommendation_strength.strip() or None,
-            suitability=suitability.strip() or None,
-            eindoordeel=eindoordeel.strip() or None,
-            documentpositie_action=documentpositie_action.strip() or None,
-            found_under=found_under.strip() or None,
-            parent_choice=parent_choice.strip() or None,
-            type_action=type_action.strip() or None,
-        )
+        try:
+            state.review_object(
+                actor_id=account["account_id"],
+                snapshot_id=snapshot_id,
+                object_id=object_id,
+                decision=mapped,
+                comment=comment,
+                proposed_correction=proposed_correction,
+                confirmed_object_type=confirmed_object_type.strip() or None,
+                recommendation_strength=recommendation_strength.strip() or None,
+                suitability=suitability.strip() or None,
+                eindoordeel=eindoordeel.strip() or None,
+                documentpositie_action=documentpositie_action.strip() or None,
+                found_under=found_under.strip() or None,
+                parent_choice=parent_choice.strip() or None,
+                type_action=type_action.strip() or None,
+            )
+        except ConsoleError as exc:
+            if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT:
+                raise
+            state.refresh_objects_expected_revision(
+                snapshot_id,
+                exc.current_revision,
+            )
+            return HTMLResponse(
+                _render_review_room(
+                    account,
+                    html.escape(snapshot_id, quote=True),
+                    html.escape(object_id, quote=True),
+                    draft={
+                        "suitability": html.escape(suitability, quote=True),
+                        "documentpositie_action": html.escape(documentpositie_action, quote=True),
+                        "found_under": html.escape(found_under, quote=True),
+                        "parent_choice": html.escape(parent_choice, quote=True),
+                        "type_action": html.escape(type_action, quote=True),
+                        "confirmed_object_type": html.escape(confirmed_object_type, quote=True),
+                        "recommendation_strength": html.escape(recommendation_strength, quote=True),
+                        "eindoordeel": html.escape(eindoordeel, quote=True),
+                        "decision": html.escape(decision, quote=True),
+                        "comment": html.escape(comment, quote=True),
+                        "proposed_correction": html.escape(proposed_correction, quote=True),
+                        "proposed_object_type": html.escape(proposed_object_type, quote=True),
+                    },
+                    conflict=True,
+                ),
+                status_code=409,
+            )
         if mapped == "revise" and proposed_correction.strip():
             state.correct_object(
                 actor_id=account["account_id"],

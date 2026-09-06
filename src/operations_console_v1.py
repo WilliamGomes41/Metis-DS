@@ -160,8 +160,15 @@ PBKDF2_ROUNDS = 80_000
 
 
 class ConsoleError(ValueError):
-    def __init__(self, code: str, message: str | None = None) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str | None = None,
+        *,
+        current_revision: str | None = None,
+    ) -> None:
         self.code = code
+        self.current_revision = current_revision
         super().__init__(message or code)
 
 
@@ -680,10 +687,25 @@ class OperationsConsole:
             expected = self._objects_expected_revs().get(snapshot_id)
             current_rev = _file_revision(path)
             if expected is not None and current_rev != expected:
-                raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+                raise ConsoleError(
+                    SNAPSHOT_OBJECT_WRITE_CONFLICT,
+                    current_revision=current_rev,
+                )
             payload = _objects_jsonl_bytes(rows)
             _atomic_replace_bytes(path, payload)
             self._objects_expected_revs()[snapshot_id] = hashlib.sha256(payload).hexdigest()
+
+    def refresh_objects_expected_revision(
+        self,
+        snapshot_id: str,
+        revision: str | None = None,
+    ) -> str:
+        """Remember the current snapshot file revision so a retry can proceed."""
+        if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
+            raise ConsoleError("unknown_snapshot")
+        current = revision if revision else _file_revision(self._objects_path(snapshot_id))
+        self._objects_expected_revs()[snapshot_id] = current
+        return current
 
     def _account(self, account_id: str) -> dict[str, Any]:
         account = self._accounts.get(account_id)
