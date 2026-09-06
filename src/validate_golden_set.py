@@ -9,7 +9,22 @@ ALLOWED_CLASSES = {"fact", "condition_score", "exception", "version_conflict", "
 ALLOWED_BEHAVIORS = {"retrieve", "abstain", "current_published_only"}
 ALLOWED_MODES = {"published_corpus", "fixture_only", "deferred"}
 EXTRACT_GOLD_KIND = "extract_quality"
-EXTRACT_GOLD_CLASSES = {"normative", "support", "excluded", "context", "heading"}
+EXTRACT_GOLD_CLASSES = {
+    "normative",
+    "support",
+    "excluded",
+    "context",
+    "heading",
+    "missed",
+    "false_admit",
+}
+EXTRACT_GOLD_ROLES = {
+    "missed_knowledge",
+    "false_admit",
+    "true_positive_expected",
+    "true_negative",
+}
+INDEPENDENT_EXTRACT_GOLD_STATUSES = {"independent_representative", "locked_holdout"}
 EXTRACT_REGISTER_STATUSES = {
     "selected_as_candidate",
     "used_as_context",
@@ -52,7 +67,8 @@ def validate_extract_gold(data: dict) -> dict:
     warnings = []
     if (data.get("kind") or "").strip() != EXTRACT_GOLD_KIND:
         errors.append("kind_must_be_extract_quality")
-    if not data.get("source_fixture"):
+    sources = data.get("sources") if isinstance(data.get("sources"), list) else []
+    if not data.get("source_fixture") and not sources:
         errors.append("source_fixture_missing")
     rules = data.get("rules") if isinstance(data.get("rules"), dict) else {}
     if rules.get("gold_required_before_quality_claim") is not True:
@@ -67,6 +83,9 @@ def validate_extract_gold(data: dict) -> dict:
         prefix = f"passages[{i}]"
         if row.get("class") not in EXTRACT_GOLD_CLASSES:
             errors.append(f"{prefix}:invalid_class")
+        role = row.get("role")
+        if role and role not in EXTRACT_GOLD_ROLES:
+            errors.append(f"{prefix}:invalid_role")
         if not str(row.get("source_text") or "").strip():
             errors.append(f"{prefix}:source_text_missing")
         if not str(row.get("section") or "").strip():
@@ -77,6 +96,15 @@ def validate_extract_gold(data: dict) -> dict:
         allowed = row.get("allowed_register_statuses") or []
         if any(item not in EXTRACT_REGISTER_STATUSES for item in allowed):
             errors.append(f"{prefix}:invalid_allowed_register_status")
+    gold_status = str(data.get("status") or "")
+    if gold_status in INDEPENDENT_EXTRACT_GOLD_STATUSES:
+        if len(sources) < 2:
+            errors.append("independent_gold_requires_multiple_sources")
+        roles = {str(row.get("role") or row.get("class") or "") for row in passages}
+        if "missed_knowledge" not in roles and "missed" not in roles:
+            errors.append("independent_gold_requires_missed_knowledge")
+        if "false_admit" not in roles:
+            errors.append("independent_gold_requires_false_admits")
     return {
         "status": "PASS" if not errors else "BLOCKED",
         "passages": len(passages),

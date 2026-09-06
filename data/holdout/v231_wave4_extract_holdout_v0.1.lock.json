@@ -1,0 +1,6 @@
+{
+  "holdout_file": "data/holdout/v231_wave4_extract_holdout_v0.1.json",
+  "sha256": "5c0d49c8cb12b3019f8218594d62292941269ecc6c6f49b4c79bf413d14a3acb",
+  "locked_at": "2026-09-06T13:30:00+02:00",
+  "rule": "No extract, admission-gate, or metric-definition change may be tuned on this holdout. A future extract change requires a new independent holdout. Phase-4 fixture gold is not this evidence."
+}
