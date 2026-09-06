@@ -245,6 +245,6 @@ def test_remediation_5_does_not_open_multi_writer_extend_or_protocol() -> None:
     assert "EXTEND" in module
     assert "accounts/envelopes/bindings" in module or "session reload" in module
     root_protocol = (ROOT / "PROTOCOL.md").read_text(encoding="utf-8")
-    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.31.0") == 1
+    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.32.0") == 1
     assert not (ROOT / "docs" / "PROTOCOL_V2_32_TOPOLOGY_BOUND_DELTA.md").exists()
     assert not (ROOT / "HANDOFF.md").exists()

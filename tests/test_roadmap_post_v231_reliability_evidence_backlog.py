@@ -138,7 +138,7 @@ def test_roadmap_sharpens_existing_five_waves_without_inventing_a_sixth() -> Non
 
 def test_roadmap_only_pr_does_not_rewrite_protocol_or_add_src_product_code() -> None:
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.31.0") == 1
+    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.32.0") == 1
     assert not (ROOT / "docs" / "PROTOCOL_V2_32_RELIABILITY_EVIDENCE_BACKLOG_DELTA.md").exists()
     src_hits = []
     for path in (ROOT / "src").glob("*.py"):

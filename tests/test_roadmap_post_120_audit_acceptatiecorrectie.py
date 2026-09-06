@@ -97,7 +97,7 @@ def test_roadmap_releasecheck_stays_outside_remediations() -> None:
 
 def test_acceptatiecorrectie_pr_does_not_rewrite_protocol_or_add_src() -> None:
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.31.0") == 1
+    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.32.0") == 1
     assert not (ROOT / "docs" / "PROTOCOL_V2_32_RELIABILITY_EVIDENCE_BACKLOG_DELTA.md").exists()
     assert not (ROOT / "docs" / "PROTOCOL_V2_32_AUDIT_ACCEPTATIECORRECTIE_DELTA.md").exists()
     src_hits = []
