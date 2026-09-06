@@ -219,7 +219,24 @@ def classify_paths(paths: Sequence[str]) -> dict[str, dict[str, Any]]:
     return report
 
 
-def collect_evidence(tests_root: Path | str) -> dict[str, dict[str, Any]]:
+def _path_in_changed(evidence_path: str, changed: Sequence[str]) -> bool:
+    ev = _posix(evidence_path)
+    ev_name = Path(ev).name
+    for raw in changed:
+        ch = _posix(raw)
+        if not ch:
+            continue
+        if ev == ch or ev.endswith("/" + ch) or ch.endswith("/" + ev):
+            return True
+        if ev_name == Path(ch).name and (ev.startswith("tests/") or ch.startswith("tests/")):
+            return True
+    return False
+
+
+def collect_evidence(
+    tests_root: Path | str,
+    changed_paths: Sequence[str] | None = None,
+) -> dict[str, dict[str, Any]]:
     root = Path(tests_root)
     collected: dict[str, dict[str, Any]] = {
         category: {"paths": [], "tokens": set()} for category in SKILL_CATEGORIES
@@ -238,6 +255,8 @@ def collect_evidence(tests_root: Path | str) -> dict[str, dict[str, Any]]:
                 rel = f"{root.name}/{rel}"
         except ValueError:
             rel = path.name
+        if changed_paths is not None and not _path_in_changed(rel, changed_paths):
+            continue
         slugs_in_file = set(MARKER_LINE_RE.findall(text))
         for match in EVIDENCE_RE.finditer(text):
             category = match.group(1).strip()
@@ -267,7 +286,7 @@ def evaluate_release_control(
     tests_root: Path | str,
 ) -> dict[str, Any]:
     categories = classify_paths(paths)
-    evidence = collect_evidence(tests_root)
+    evidence = collect_evidence(tests_root, changed_paths=paths)
     errors: list[str] = []
     for category, item in categories.items():
         found_paths = list(evidence[category]["paths"])
@@ -309,6 +328,7 @@ def evaluate_release_control(
         "onzekerheid": (
             "Path mapping is src/-prefix tooling, not a semantic diff of _save_objects. "
             "Product categories 2–6 stay n.v.t. until a product PR hits those paths. "
+            "Evidence counts only when the marked test file is in the evaluated diff. "
             "Auditor verdict is not in this job."
         ),
         "advies": (
