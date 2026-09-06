@@ -1,0 +1,156 @@
+{
+  "golden_set_id": "v231-wave4-language-variation-gold-v0.1",
+  "kind": "extract_quality",
+  "version": "0.1",
+  "status": "language_variation",
+  "source_fixture": "data/fixtures/v231_wave4_language_variation.html",
+  "scope": "Admission-gate / regex extract language variation: alternative formulations, negations, conditions, exceptions, references. Measures false admits and misses. Not an independent quality claim.",
+  "rules": {
+    "gold_required_before_quality_claim": true,
+    "soft_scores_must_not_claim_quality": true,
+    "single_guideline_without_gold_is_not_quality": true,
+    "no_duty_to_objectify_every_sentence": true,
+    "unknown_register_status_rejected": true
+  },
+  "sources": [
+    {
+      "id": "language-variation",
+      "fixture": "data/fixtures/v231_wave4_language_variation.html",
+      "family": "fractuurpreventie"
+    }
+  ],
+  "passages": [
+    {
+      "id": "LV-ALT-01",
+      "source_id": "language-variation",
+      "class": "missed",
+      "role": "missed_knowledge",
+      "variation": "alternative_formulation",
+      "section": "2 Aanbevelingen",
+      "source_text": "Het wordt aanbevolen de risicofactoren scorelijst te gebruiken bij iedere intake.",
+      "proposed_type": "recommendation",
+      "expected_register_status": "selected_as_candidate",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "LV-ALT-02",
+      "source_id": "language-variation",
+      "class": "missed",
+      "role": "missed_knowledge",
+      "variation": "alternative_formulation",
+      "section": "2 Aanbevelingen",
+      "source_text": "Men dient de cliënt te verwijzen bij een vastgesteld verhoogd fractuurrisico.",
+      "proposed_type": "recommendation",
+      "expected_register_status": "selected_as_candidate",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "LV-ALT-03",
+      "source_id": "language-variation",
+      "class": "missed",
+      "role": "missed_knowledge",
+      "variation": "alternative_formulation",
+      "section": "2 Aanbevelingen",
+      "source_text": "Calciumsuppletie is geïndiceerd bij iedere intake.",
+      "proposed_type": "recommendation",
+      "expected_register_status": "selected_as_candidate",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "LV-NEG-01",
+      "source_id": "language-variation",
+      "class": "false_admit",
+      "role": "false_admit",
+      "variation": "negation",
+      "section": "2 Aanbevelingen",
+      "source_text": "De werkgroep adviseert dit niet als klinische aanbeveling op te vatten.",
+      "proposed_type": "recommendation",
+      "expected_register_status": "excluded_with_reason",
+      "expected_gate": "blocked"
+    },
+    {
+      "id": "LV-ED-01",
+      "source_id": "language-variation",
+      "class": "false_admit",
+      "role": "false_admit",
+      "variation": "editorial",
+      "section": "2 Aanbevelingen",
+      "source_text": "De werkgroep adviseert de lezer eerst de inleiding te lezen.",
+      "proposed_type": "recommendation",
+      "expected_register_status": "excluded_with_reason",
+      "expected_gate": "blocked"
+    },
+    {
+      "id": "LV-COND-01",
+      "source_id": "language-variation",
+      "class": "missed",
+      "role": "missed_knowledge",
+      "variation": "condition",
+      "section": "2 Aanbevelingen",
+      "source_text": "Als de cliënt 60 jaar of ouder is, geldt extra aandacht voor botgezondheid.",
+      "proposed_type": "condition",
+      "expected_register_status": "selected_as_candidate",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "LV-COND-02",
+      "source_id": "language-variation",
+      "class": "missed",
+      "role": "missed_knowledge",
+      "variation": "condition",
+      "section": "2 Aanbevelingen",
+      "source_text": "Op voorwaarde dat de cliënt 60 jaar of ouder is, geldt extra aandacht.",
+      "proposed_type": "condition",
+      "expected_register_status": "selected_as_candidate",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "LV-EXC-01",
+      "source_id": "language-variation",
+      "class": "missed",
+      "role": "missed_knowledge",
+      "variation": "exception",
+      "section": "2 Aanbevelingen",
+      "source_text": "Met uitzondering van hypercalciëmie mag calcium worden gegeven.",
+      "proposed_type": "exception",
+      "expected_register_status": "selected_as_candidate",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "LV-REF-01",
+      "source_id": "language-variation",
+      "class": "excluded",
+      "role": "true_negative",
+      "variation": "reference",
+      "section": "2 Aanbevelingen",
+      "source_text": "Zie ook module 3 voor de cutoff van het risico.",
+      "proposed_type": "recommendation",
+      "expected_register_status": "excluded_with_reason",
+      "expected_gate": "blocked"
+    },
+    {
+      "id": "LV-REF-02",
+      "source_id": "language-variation",
+      "class": "excluded",
+      "role": "true_negative",
+      "variation": "reference",
+      "section": "2 Aanbevelingen",
+      "source_text": "Conform tabel 4 geldt de cutoff van het risico.",
+      "proposed_type": "recommendation",
+      "expected_register_status": "excluded_with_reason",
+      "expected_gate": "blocked"
+    },
+    {
+      "id": "LV-OK-01",
+      "source_id": "language-variation",
+      "class": "normative",
+      "role": "true_positive_expected",
+      "variation": "canonical_adviseert",
+      "section": "2 Aanbevelingen",
+      "source_text": "De werkgroep adviseert de verpleegkundige de risicofactoren scorelijst te gebruiken bij iedere intake.",
+      "proposed_type": "recommendation",
+      "expected_register_status": "selected_as_candidate",
+      "expected_gate": "allowed"
+    }
+  ]
+}

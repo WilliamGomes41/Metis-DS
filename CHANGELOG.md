@@ -5,6 +5,9 @@ All notable technical changes to V&VN Data Services are recorded here.
 ## [Unreleased]
 
 ### Added
+- Independent extract-quality measurement (ROADMAP wave 4): `extract_metrics_v1` precision counts false positives (teller/noemer = TP / TP+FP); `context_completeness` requires captured neighbor context and MUST NOT treat `context_scan_done` alone as complete; a quality claim requires independent/representative multi-source gold (missed knowledge + false admits) — Phase-4 fixture gold and any non-empty fixture MUST NOT open a claim. Language-variation admission cases measure false admits and misses on alternative formulations, negations, conditions, exceptions and references. Evidence: `tests/test_extract_metrics_independent_quality.py`, `tests/test_admission_language_variation.py`. `publish()` remains G2-BLOCKED. Not wave 5 simplify, not Azure, not PROTOCOL.
+
+### Added
 - Security harden (ROADMAP wave 3): URL-ingest fail-closed SSRF (loopback, link-local, RFC1918, metadata/CGNAT) with redirect-hop revalidation; wave-2 size limits still apply (`CONSOLE_INGEST_MAX_BYTES`). Sessions persist with wave-1 lock + atomic replace + retry; `expires_at` is enforced on read (missing expiry is invalid; expired stays invalid after restart). Login `Set-Cookie` includes `Secure` (HttpOnly/SameSite=Lax kept; PBKDF2/salt/compare_digest unchanged). Evidence: `tests/test_security_harden_wave3.py`. `publish()` remains G2-BLOCKED. Not wave 4 metrics/gold, not wave 5 simplify, not Azure, not PROTOCOL.
 
 ### Added

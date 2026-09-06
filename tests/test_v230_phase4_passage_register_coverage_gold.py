@@ -466,7 +466,9 @@ def test_metrics_with_gold_record_the_required_hooks(tmp_path: Path) -> None:
     objects = _passages(console.snapshot_objects(receipt["snapshot_id"]))
     gold = json.loads(EXTRACT_GOLD.read_text(encoding="utf-8"))
     metrics = compute_extract_metrics(objects, gold=gold)
-    assert metrics["quality_claim_allowed"] is True
+    # Phase-4 fixture gold still records hooks; it MUST NOT open a quality claim.
+    assert metrics["quality_claim_allowed"] is False
+    assert metrics["reason"] == "independent_representative_gold_required"
     for name in (
         "precision",
         "type_accuracy",
