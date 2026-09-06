@@ -1,16 +1,29 @@
 """ROADMAP pointer tests for the post-v2.31 reliability & evidence backlog.
 
 Locks the owner ask of 2026-09-06 (William / Metis CoS): ordered ROADMAP
-waves after Protocol v2.31 / Forge exact-bind on main tip 019978b.
+waves after Protocol v2.31 / Forge exact-bind on main tip 019978b, plus
+the same-day sharpened acceptance on those five waves (no sixth wave).
 This PR is ROADMAP + CHANGELOG only. No PROTOCOL.md rewrite, no new
 PROTOCOL_V2_* delta, no src/ product code, no Forge implementation.
+
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
+
+pytestmark = [
+    pytest.mark.release_control_scope_belofte,
+    pytest.mark.release_control_slop,
+    pytest.mark.release_control_releasebewijs,
+]
 
 
 def _read(path: Path) -> str:
@@ -87,6 +100,40 @@ def test_roadmap_waves_are_backlog_not_protocol_law_and_not_this_pr() -> None:
     assert "MUST NOT claim extract quality from green CI or Phase 4 fixture gold" in changelog
     assert "Forge must not self-certify" in changelog
     assert not (ROOT / "HANDOFF.md").exists()
+
+
+def test_roadmap_sharpens_existing_five_waves_without_inventing_a_sixth() -> None:
+    roadmap = _read(ROOT / "ROADMAP.md")
+    changelog = _read(ROOT / "CHANGELOG.md")
+    assert "verscherpte acceptatiecriteria op dezelfde vijf golven" in roadmap
+    assert "geen nieuwe golven" in roadmap
+    assert "Aparte releasecheck (buiten de vijf golven)" in roadmap
+    assert "Herleidbare release en herstel" in roadmap
+    assert "echte gebruikershandeling" in roadmap
+    assert "MUST NOT Azure ZIP autoriseren" in roadmap
+    assert "scripts/release_control_preflight.py" in roadmap
+    assert "geen zesde implementatiegolf" in roadmap
+    assert "Per-golf afsluiting" in roadmap
+    assert "concreet testbewijs" in roadmap
+    assert "claim geen incident-proof zonder tests" in roadmap
+    assert "geen succesmelding" in roadmap
+    assert "Fail-closed op store alleen is onvoldoende" in roadmap
+    assert "nog niet in UI bewezen" in roadmap
+    assert "4d569f3" in roadmap
+    assert "PR #113" in roadmap
+    assert "9436e99" in roadmap
+    assert "PR #115" in roadmap
+    assert "gelijktijdig inloggen/uitloggen MUST NOT sessiegegevens verliezen" in roadmap
+    assert "verlopen sessies MUST ongeldig blijven na herstart" in roadmap
+    assert "taalvariatie" in roadmap
+    assert "onterecht toegelaten" in roadmap
+    assert "MUST NOT een zesde implementatiegolf verzinnen" in roadmap
+    assert "NO new waves" in changelog
+    assert "not a sixth implementation wave" in changelog
+    assert "MUST NOT invent wave 6" in changelog
+    assert "golf 6" not in roadmap.lower() or "geen golf 6" in roadmap
+    wave_6_as_backlog = "6. **" in roadmap[roadmap.index("Geordende volgende implementatiegolven") : roadmap.index("**Aparte releasecheck")]
+    assert not wave_6_as_backlog
 
 
 def test_roadmap_only_pr_does_not_rewrite_protocol_or_add_src_product_code() -> None:
