@@ -1,12 +1,12 @@
 {
   "manifest_version": "1.0",
-  "protocol_version": "2.30.0",
-  "protocol_path": "docs/PROTOCOL_V2_30_OBJECT_CONTRACT_HARD_ADMISSION_GATE_AND_REVIEWER_PASSAGE_FLOW_DELTA.md",
-  "protocol_sha256": "b8d91fce401f20deba06bd6b5c2383bbf8aacf9b8b35373f1ac8c0c474f24482",
+  "protocol_version": "2.31.0",
+  "protocol_path": "docs/PROTOCOL_V2_31_DIT_KLOPT_EXACT_HEADING_BIND_DELTA.md",
+  "protocol_sha256": "a5e0badb6e44c62572fa9e950cf79e0b5a3b244eed6d58e310521a6f3d0cd256",
   "repository": "WilliamGomes41/VENVN-DS",
   "default_branch": "main",
   "commit_sha": "pending_after_merge",
-  "approval_date": "2026-09-05",
+  "approval_date": "2026-09-06",
   "approval_authority": "project_owner",
   "branch_protection_status": "temporary_procedural_control",
   "conformance_effect": "does_not_override_gate_status"

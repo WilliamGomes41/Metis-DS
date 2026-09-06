@@ -486,3 +486,5 @@ Approval of v2.30 establishes that the owner locked two independently testable a
 - treat a pass of Block A as a pass of Block B, or a pass of Block B as a pass of Block A.
 
 The immutable checksum and authoritative merge commit MUST be recorded after merge in the protocol approval manifest. Until that merge, `commit_sha` in the approval manifest MUST remain a clearly incomplete field. Metis records the merge commit checksum after merge.
+
+Index/conflict pointer: Protocol v2.31.0 SUPERSEDES any reading of this file that Dit klopt MAY bind via partial title containment (`last in text`, `text in last`, startswith-as-bind, fuzzy, or first-hit among substring candidates). Where this file and Protocol v2.31 conflict on Dit klopt heading bind, Protocol v2.31 governs: exact visible heading title match after normalization; zero or ambiguous exact matches MUST fail closed to Andere kop kiezen; MUST NOT invent a parent. v2.30 Block A admission, Block B ordinary language (Gevonden onder / Dit klopt / Andere kop), Phase 1–4 admission/register, HANDOFF.md MUST NOT be recreated, G2 remains BLOCKED, and `publish()` stays G2-BLOCKED remain.
