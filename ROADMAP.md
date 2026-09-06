@@ -152,6 +152,8 @@ Remediaties 1–2 (store-consistentie): die Forge-golf is in code (form-bound sn
 
 3. **Wave-3 SSRF connection bind (HIGH wanneer URL-ingest exposed is)** — Valideer, verbind daarna alleen met het gecontroleerde IP met correcte Host/TLS-hostnamevalidatie; herhaal per redirect — OF equivalent gecontroleerde egress. Test wisselende DNS-antwoorden zonder echte interne netwerkaanvallen. EXTEND/REUSE.
 
+Remediatie 3 (Wave-3 SSRF connection bind): die Forge-golf is in code (connect pinned to validated IP; Host/TLS-hostname voor de oorspronkelijke naam; re-validate/re-bind per redirect).
+
 4. **Wave-4 quality claim incomplete (HIGH voor claims)** — Huidig gold/holdout = development/regressie only. MUST NOT een onafhankelijke kwaliteitsclaim toestaan op fixture-labels / zelfverklaarde booleans. Lever apart geselecteerd goud op echte richtlijnen (bronidentiteit, annotatieregels, reviewers, gelockte scope); scheid train vs holdout op bron-/documentniveau; lock moment + versies; overlapchecks. Herstel metrics: eenheid/noemer; match op bron+passage met 1:1-toewijzing; expliciete duplicaten; contextmaat eerlijk benoemd of tegen geannoteerde verwachtingen; burden-metric MUST NOT als voortgang lezen wanneer die ongedefinieerd is. CONFIGURE/EXTEND.
 
 5. **Topology bound (scale)** — Documenteer de ondersteunde topologie: huidig één Gunicorn-worker / één instance / sequentiële writes. Voorkom per ongeluk multi-writer scale. Vóór meerdere writers: consistent mutate-pad voor accounts/envelopes/bindings (session reload/lock-patroon). CONFIGURE nu; EXTEND bij schalen.

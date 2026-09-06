@@ -1,14 +1,18 @@
-"""Security harden (ROADMAP wave 3).
+"""Security harden (ROADMAP wave 3) + Post-#120 SSRF connection bind.
 
 URL-ingest MUST fail-closed on SSRF to internal destinations and on
 redirects to those destinations, while still respecting wave-2 size
-limits (`CONSOLE_INGEST_MAX_BYTES`). Sessions MUST expire with real
-enforcement (expired tokens rejected; still invalid after process
-restart). Login Set-Cookie MUST include Secure (keep HttpOnly/SameSite).
-Concurrent login/logout MUST NOT lose session data. Session persist
-joins wave-1 store patterns (lock / atomic replace / fail-closed).
-PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here. publish() stays
-G2-BLOCKED. Wave 4 metrics/gold and wave 5 simplify stay out of scope.
+limits (`CONSOLE_INGEST_MAX_BYTES`). After those destination checks,
+connect MUST bind to the validated IP (Host + TLS hostname stay the
+original name). Re-validate and re-bind on every redirect hop — no
+silent DNS-rebinding between resolve and connect. Sessions MUST expire
+with real enforcement (expired tokens rejected; still invalid after
+process restart). Login Set-Cookie MUST include Secure (keep
+HttpOnly/SameSite). Concurrent login/logout MUST NOT lose session data.
+Session persist joins wave-1 store patterns (lock / atomic replace /
+fail-closed). PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
+publish() stays G2-BLOCKED. Wave 4 metrics/gold and wave 5 simplify
+stay out of scope.
 
 Multiuser session-store checklist: concurrency, interrupt, retry,
 version-compat.
@@ -22,7 +26,10 @@ version-compat.
 """
 from __future__ import annotations
 
+import ipaddress
 import json
+import socket
+import ssl
 import threading
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -54,6 +61,17 @@ INTERNAL_URLS = (
     "http://metadata.google.internal/computeMetadata/v1/",
     "https://127.0.0.1:8443/secret",
 )
+
+# Public-looking pins (not RFC1918/TEST-NET — those count as private
+# in ipaddress). The harness never opens a real socket to them or to the
+# private rebound answer; only the validated pin is rewritten to the
+# local PDF server.
+PDF_BODY = b"%PDF-1.4 connection-bind\n"
+PUBLIC_PIN_A = "8.8.8.8"
+PUBLIC_PIN_B = "1.1.1.1"
+PRIVATE_REBIND = "169.254.169.254"
+REBIND_HOST = "rebind.example.test"
+HOP_HOST = "hop.example.test"
 
 pytestmark = [
     pytest.mark.release_control_toegang,
@@ -105,6 +123,101 @@ def _ingest_redirect_handler():
     from src.ingest_limits_v1 import IngestRedirectHandler
 
     return IngestRedirectHandler()
+
+
+class _PdfHandler(BaseHTTPRequestHandler):
+    hosts: list[str]
+    paths: list[str]
+    redirect_to: str | None = None
+
+    def do_GET(self) -> None:  # noqa: N802
+        type(self).hosts.append(self.headers.get("Host") or "")
+        type(self).paths.append(self.path)
+        if type(self).redirect_to and self.path in {"/start", "/redir"}:
+            self.send_response(302)
+            self.send_header("Location", type(self).redirect_to)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "application/pdf")
+        self.send_header("Content-Length", str(len(PDF_BODY)))
+        self.end_headers()
+        self.wfile.write(PDF_BODY)
+
+    def log_message(self, *_args) -> None:
+        return
+
+
+def _serve_pdf(*, redirect_to: str | None = None) -> tuple[HTTPServer, type[_PdfHandler]]:
+    location = redirect_to
+
+    class Handler(_PdfHandler):
+        hosts = []
+        paths = []
+        redirect_to = location
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, Handler
+
+
+def _install_alternating_dns(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    answers: dict[str, list[str]],
+    connect_log: list[str],
+    local_port: int,
+) -> None:
+    """Alternate DNS answers. Connect to a private IP is refused here.
+
+    A connect to a documented public pin is rewritten to the local server
+    so the test never attacks a real internal network.
+    """
+    from src.ingest_limits_v1 import _ip_is_blocked
+
+    remaining = {key.lower(): list(value) for key, value in answers.items()}
+    real_cc = socket.create_connection
+
+    def fake_getaddrinfo(host, port, *args, **kwargs):  # noqa: ANN001
+        raw = str(host).strip("[]")
+        try:
+            ipaddress.ip_address(raw)
+        except ValueError:
+            key = raw.lower()
+            if key not in remaining:
+                raise socket.gaierror(socket.EAI_NONAME, "test dns")
+            pool = remaining[key]
+            ip = pool[0] if len(pool) == 1 else pool.pop(0)
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, int(port or 0)))]
+        family = socket.AF_INET6 if ":" in raw else socket.AF_INET
+        return [(family, socket.SOCK_STREAM, 6, "", (raw, int(port or 0)))]
+
+    public_pins = {
+        ip
+        for seq in answers.values()
+        for ip in seq
+        if not _ip_is_blocked(ipaddress.ip_address(ip))
+    }
+
+    def fake_create_connection(address, timeout=None, source_address=None):  # noqa: ANN001
+        host, port = address[0], address[1]
+        try:
+            ip = str(ipaddress.ip_address(str(host).strip("[]")))
+            connect_log.append(ip)
+        except ValueError:
+            connect_log.append(f"hostname:{host}")
+            infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+            ip = str(infos[0][4][0])
+            connect_log.append(ip)
+        if _ip_is_blocked(ipaddress.ip_address(ip)):
+            raise OSError(f"test harness refused connect to blocked {ip}")
+        if ip in public_pins:
+            return real_cc(("127.0.0.1", local_port), timeout, source_address)
+        return real_cc((ip, port), timeout, source_address)
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(socket, "create_connection", fake_create_connection)
 
 
 def test_ssrf_rejects_internal_destinations() -> None:
@@ -171,8 +284,10 @@ def test_url_fetch_still_respects_wave2_max_bytes(
     assert caught.value.code == INGEST_PAYLOAD_TOO_LARGE
     source = (ROOT / "src" / "ingest_limits_v1.py").read_text(encoding="utf-8")
     assert "assert_url_destination_allowed" in source
+    assert "pin_url_destination" in source
     assert "enforce_ingest_payload_size" in source
     assert "fetch_url_limited" in source
+    assert "CONSOLE_INGEST_MAX_BYTES" in source
 
 
 def test_login_cookie_is_secure_httponly_samesite(tmp_path: Path) -> None:
@@ -447,6 +562,164 @@ def test_redirect_server_hop_to_metadata_is_rejected() -> None:
         with pytest.raises(ConsoleError) as caught:
             default_url_fetcher(url)
         assert caught.value.code == URL_DESTINATION_NOT_ALLOWED
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_ssrf_dns_rebind_pins_connect_to_validated_ip(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Resolve returns a public pin, later answers rebound private.
+
+    Connect MUST use the validated IP (not the rebound private). Host
+    stays the original hostname. No real internal connect is attempted.
+    """
+    server, handler = _serve_pdf()
+    connect_log: list[str] = []
+    try:
+        port = server.server_port
+        _install_alternating_dns(
+            monkeypatch,
+            answers={REBIND_HOST: [PUBLIC_PIN_A, PRIVATE_REBIND]},
+            connect_log=connect_log,
+            local_port=port,
+        )
+        data, content_type, filename = default_url_fetcher(
+            f"http://{REBIND_HOST}:{port}/doc.pdf"
+        )
+        assert data == PDF_BODY
+        assert "pdf" in content_type.lower()
+        assert filename == "doc.pdf"
+        assert PUBLIC_PIN_A in connect_log
+        assert PRIVATE_REBIND not in connect_log
+        assert any(entry.startswith("hostname:") for entry in connect_log) is False
+        assert handler.hosts
+        host_header = handler.hosts[0]
+        assert host_header.split(":")[0] == REBIND_HOST
+        assert PUBLIC_PIN_A not in host_header
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_ssrf_dns_rebind_never_connects_to_private_answer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Even if the implementation fails closed instead of pinning, the
+    private rebound IP MUST NOT be the connect target.
+    """
+    server, _handler = _serve_pdf()
+    connect_log: list[str] = []
+    try:
+        port = server.server_port
+        _install_alternating_dns(
+            monkeypatch,
+            answers={REBIND_HOST: [PUBLIC_PIN_A, PRIVATE_REBIND]},
+            connect_log=connect_log,
+            local_port=port,
+        )
+        try:
+            default_url_fetcher(f"http://{REBIND_HOST}:{port}/doc.pdf")
+        except ConsoleError as exc:
+            assert exc.code in {URL_DESTINATION_NOT_ALLOWED, "url_snapshot_failed"}
+            # url_snapshot_failed is only acceptable if we never touched private.
+        assert PRIVATE_REBIND not in connect_log
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_ssrf_https_sni_stays_original_hostname_when_dns_rebinds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """TLS hostname/SNI MUST stay the original name, not the pinned IP."""
+    recorded_sni: list[str | None] = []
+
+    def spy_wrap(self, sock, *args, server_hostname=None, **kwargs):  # noqa: ANN001
+        recorded_sni.append(server_hostname)
+        return sock
+
+    monkeypatch.setattr(ssl.SSLContext, "wrap_socket", spy_wrap)
+    server, handler = _serve_pdf()
+    connect_log: list[str] = []
+    try:
+        port = server.server_port
+        _install_alternating_dns(
+            monkeypatch,
+            answers={REBIND_HOST: [PUBLIC_PIN_A, PRIVATE_REBIND]},
+            connect_log=connect_log,
+            local_port=port,
+        )
+        data, content_type, _filename = default_url_fetcher(
+            f"https://{REBIND_HOST}:{port}/doc.pdf"
+        )
+        assert data == PDF_BODY
+        assert "pdf" in content_type.lower()
+        assert recorded_sni
+        assert recorded_sni[0] == REBIND_HOST
+        assert PUBLIC_PIN_A not in (recorded_sni[0] or "")
+        assert PRIVATE_REBIND not in connect_log
+        assert handler.hosts
+        assert handler.hosts[0].split(":")[0] == REBIND_HOST
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_ssrf_redirect_hop_revalidates_and_rebinds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each redirect hop is resolved, validated, and bound again."""
+    server, handler = _serve_pdf()
+    connect_log: list[str] = []
+    try:
+        port = server.server_port
+        handler.redirect_to = f"http://{HOP_HOST}:{port}/doc.pdf"
+        _install_alternating_dns(
+            monkeypatch,
+            answers={
+                REBIND_HOST: [PUBLIC_PIN_A],
+                HOP_HOST: [PUBLIC_PIN_B, PRIVATE_REBIND],
+            },
+            connect_log=connect_log,
+            local_port=port,
+        )
+        data, _content_type, _filename = default_url_fetcher(
+            f"http://{REBIND_HOST}:{port}/start"
+        )
+        assert data == PDF_BODY
+        assert PUBLIC_PIN_A in connect_log
+        assert PUBLIC_PIN_B in connect_log
+        assert PRIVATE_REBIND not in connect_log
+        assert any(entry.startswith("hostname:") for entry in connect_log) is False
+        assert handler.hosts[0].split(":")[0] == REBIND_HOST
+        assert handler.hosts[-1].split(":")[0] == HOP_HOST
+        assert PUBLIC_PIN_B not in handler.hosts[-1]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_ssrf_redirect_from_pinned_public_to_metadata_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hop whose Location is metadata/private MUST fail closed."""
+    server, handler = _serve_pdf()
+    connect_log: list[str] = []
+    try:
+        port = server.server_port
+        handler.redirect_to = "http://169.254.169.254/latest/meta-data"
+        _install_alternating_dns(
+            monkeypatch,
+            answers={REBIND_HOST: [PUBLIC_PIN_A]},
+            connect_log=connect_log,
+            local_port=port,
+        )
+        with pytest.raises(ConsoleError) as caught:
+            default_url_fetcher(f"http://{REBIND_HOST}:{port}/start")
+        assert caught.value.code == URL_DESTINATION_NOT_ALLOWED
+        assert PRIVATE_REBIND not in connect_log
     finally:
         server.shutdown()
         server.server_close()
