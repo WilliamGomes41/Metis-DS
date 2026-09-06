@@ -5,6 +5,9 @@ All notable technical changes to V&VN Data Services are recorded here.
 ## [Unreleased]
 
 ### Added
+- Security harden (ROADMAP wave 3): URL-ingest fail-closed SSRF (loopback, link-local, RFC1918, metadata/CGNAT) with redirect-hop revalidation; wave-2 size limits still apply (`CONSOLE_INGEST_MAX_BYTES`). Sessions persist with wave-1 lock + atomic replace + retry; `expires_at` is enforced on read (missing expiry is invalid; expired stays invalid after restart). Login `Set-Cookie` includes `Secure` (HttpOnly/SameSite=Lax kept; PBKDF2/salt/compare_digest unchanged). Evidence: `tests/test_security_harden_wave3.py`. `publish()` remains G2-BLOCKED. Not wave 4 metrics/gold, not wave 5 simplify, not Azure, not PROTOCOL.
+
+### Added
 - Console ingest beschikbaarheid (ROADMAP wave 2): blocking `state.ingest` / extract runs off the async event loop via `asyncio.to_thread`; fail-closed upload and URL-download size limits (`DEFAULT_INGEST_MAX_BYTES` = 32 MiB, override `CONSOLE_INGEST_MAX_BYTES`). Oversize rejects with `ingest_payload_too_large` before/during ingest. Evidence: event-loop stays responsive, two overlapping users, size-limit fail-closed. Audit wave 2 only. `publish()` remains G2-BLOCKED. Not SSRF/session/Secure, not metrics/gold, not ROADMAP simplification, not Azure.
 
 ### Fixed

@@ -1,12 +1,17 @@
-"""Fail-closed ingest payload size limits for the operations console.
+"""Fail-closed ingest payload size limits and URL-destination guards.
 
-ROADMAP wave 2 (beschikbaarheid). Upload and URL-download bytes are rejected
-when they exceed a documented, env-overridable maximum. Defaults are safe
-for first-wave HTML/PDF. PROTOCOL.md is not edited. publish() stays G2-BLOCKED.
+ROADMAP wave 2 (beschikbaarheid): upload/URL-download bytes are rejected
+when they exceed a documented, env-overridable maximum.
+
+ROADMAP wave 3 (toegang): URL-ingest MUST NOT follow SSRF to internal
+destinations; each redirect hop is re-validated. PROTOCOL.md is not
+edited. publish() stays G2-BLOCKED.
 """
 from __future__ import annotations
 
+import ipaddress
 import os
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -17,7 +22,20 @@ from src.operations_console_v1 import ConsoleError, OperationsConsole, UrlFetche
 DEFAULT_INGEST_MAX_BYTES = 32 * 1024 * 1024
 ENV_INGEST_MAX_BYTES = "CONSOLE_INGEST_MAX_BYTES"
 INGEST_PAYLOAD_TOO_LARGE = "ingest_payload_too_large"
+URL_DESTINATION_NOT_ALLOWED = "url_destination_not_allowed"
 _READ_CHUNK = 64 * 1024
+_BLOCKED_HOSTNAMES = frozenset(
+    {
+        "localhost",
+        "localhost.localdomain",
+        "metadata",
+        "metadata.google.internal",
+        "metadata.azure.com",
+    }
+)
+_BLOCKED_NETWORKS = (
+    ipaddress.ip_network("100.64.0.0/10"),
+)
 
 
 def ingest_max_bytes() -> int:
@@ -58,19 +76,79 @@ async def read_upload_limited(upload) -> bytes:
     return b"".join(chunks)
 
 
-def fetch_url_limited(url: str) -> tuple[bytes, str, str]:
-    """GET ``url`` with Content-Length and streamed-body size checks. No SSRF changes."""
+def _ip_is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        return _ip_is_blocked(ip.ipv4_mapped)
+    if (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    ):
+        return True
+    return any(ip in network for network in _BLOCKED_NETWORKS)
+
+
+def assert_url_destination_allowed(url: str) -> None:
+    """Fail-closed: reject loopback, link-local, RFC1918, metadata, and userinfo."""
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme not in {"http", "https"}:
         raise ConsoleError("url_scheme_not_allowed")
+    if parsed.username is not None or parsed.password is not None:
+        raise ConsoleError(URL_DESTINATION_NOT_ALLOWED)
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
+        raise ConsoleError(URL_DESTINATION_NOT_ALLOWED)
+    if host in _BLOCKED_HOSTNAMES or host.endswith(".localhost"):
+        raise ConsoleError(URL_DESTINATION_NOT_ALLOWED)
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        literal = None
+    if literal is not None:
+        if _ip_is_blocked(literal):
+            raise ConsoleError(URL_DESTINATION_NOT_ALLOWED)
+        return
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise ConsoleError(URL_DESTINATION_NOT_ALLOWED) from exc
+    if not infos:
+        raise ConsoleError(URL_DESTINATION_NOT_ALLOWED)
+    for info in infos:
+        addr = info[4][0]
+        try:
+            resolved = ipaddress.ip_address(addr)
+        except ValueError as exc:
+            raise ConsoleError(URL_DESTINATION_NOT_ALLOWED) from exc
+        if _ip_is_blocked(resolved):
+            raise ConsoleError(URL_DESTINATION_NOT_ALLOWED)
+
+
+class IngestRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Re-validate every redirect hop. Internal Location MUST fail closed."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        assert_url_destination_allowed(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def fetch_url_limited(url: str) -> tuple[bytes, str, str]:
+    """GET ``url`` after SSRF checks, with Content-Length and streamed-body size checks."""
+    assert_url_destination_allowed(url)
+    parsed = urllib.parse.urlparse(url)
     limit = ingest_max_bytes()
     request = urllib.request.Request(
         url,
         method="GET",
         headers={"User-Agent": "vvn-operations-console/1.0"},
     )
+    opener = urllib.request.build_opener(IngestRedirectHandler)
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with opener.open(request, timeout=30) as response:
             declared = response.headers.get("Content-Length")
             if declared is not None and str(declared).strip():
                 try:
