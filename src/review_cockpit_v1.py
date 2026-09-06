@@ -5,10 +5,26 @@ kernel. MUST NOT invent serving types. Passage register is Phase 4.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from src.admission_gate_v1 import admission_of, ordinary_review_queue, serving_type_for_admission_type
-from src.heading_parent_list_v1 import heading_visible_text, parent_choice_list
+from src.heading_parent_list_v1 import (
+    heading_visible_text,
+    parent_choice_list,
+    parent_proposal_may_bind,
+    parse_outline_number,
+)
+
+_BIND_OUTLINE_RE = re.compile(r"^(\d+(?:\.\d+)*)\.?(?:\s+|$)")
+
+
+def _normalize_heading_bind_text(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "")).strip()
+
+
+def _heading_bind_title(text: str) -> str:
+    return _BIND_OUTLINE_RE.sub("", _normalize_heading_bind_text(text)).strip()
 
 
 SUITABILITY_VALUES = (
@@ -140,12 +156,37 @@ def resolve_found_under_parent(obj: dict[str, Any], objects: list[dict[str, Any]
     path = found_under_path(obj)
     if not path:
         return ""
-    last = path.split(" › ")[-1].strip()
+    last = _normalize_heading_bind_text(path.split(" › ")[-1])
+    if not last:
+        return ""
+    last_title = _heading_bind_title(last)
+    last_outline = parse_outline_number(last)
+    matches: list[dict[str, Any]] = []
     for row in parent_choice_list(objects):
         text = heading_visible_text(row)
-        if text == last or last in text or text in last:
-            return str(row.get("object_id") or "")
-    return ""
+        if not text:
+            continue
+        if last_title:
+            if _heading_bind_title(text) == last_title:
+                matches.append(row)
+        elif text == last:
+            matches.append(row)
+    chosen: dict[str, Any] | None = None
+    if len(matches) == 1:
+        chosen = matches[0]
+    elif last_outline is not None:
+        outlined = [
+            row
+            for row in matches
+            if parse_outline_number(heading_visible_text(row)) == last_outline
+        ]
+        if len(outlined) == 1:
+            chosen = outlined[0]
+    if chosen is None:
+        return ""
+    if not parent_proposal_may_bind(obj, chosen, objects):
+        return ""
+    return str(chosen.get("object_id") or "")
 
 
 def map_eindoordeel(eindoordeel: str, decision: str = "") -> str:
