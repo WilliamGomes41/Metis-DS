@@ -249,7 +249,7 @@ def test_promote_class_cross_model_objects_save_failure_disk_wins_on_restart(
     _assert_unpromoted(console, tmp_path, snapshot_id, "beslisboom", original_statuses=original_statuses)
     restarted = _restart(tmp_path)
     assert [row["object_id"] for row in restarted.snapshot_objects(snapshot_id)] == original_ids
-    assert console._envelopes[snapshot_id].get("prior_processing_history") == (
+    assert (console._envelopes[snapshot_id].get("prior_processing_history") or []) == (
         _disk_envelope(console, snapshot_id).get("prior_processing_history") or []
     )
 
