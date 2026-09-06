@@ -7,6 +7,15 @@ type-to-confirm. Logged-in `/` is a centered sparse home (sketch B);
 post-auth redirect lands on that home, not `/ingest`.
 PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here. publish() stays
 G2-BLOCKED. Kernel family × class UNCHANGED.
+
+Markers in this file are CI metadata pointing at these checks
+(scripts/release_control_preflight.py and this suite). They are not
+live-release evidence.
+
+# release-control-evidence: toegang
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from __future__ import annotations
 
@@ -15,10 +24,19 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlparse
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
+
+
+pytestmark = [
+    pytest.mark.release_control_toegang,
+    pytest.mark.release_control_scope_belofte,
+    pytest.mark.release_control_slop,
+    pytest.mark.release_control_releasebewijs,
+]
 
 
 ROOT = Path(__file__).resolve().parents[1]
