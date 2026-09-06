@@ -19,8 +19,9 @@ Wat nu de code stuurt:
 - Ingest: geüploade HTML-freeze; Live URL-HTML MUST bij ingest worden geweigerd; URL-ingest van een PDF MAG blijven; URL-ingest van HTML MUST NOT. HTML wordt niet geheel verboden. Protocol v2.11 supersedes v2.7 URL-for-official-files as to HTML.
 - Klasse `beslisboom` (`path` / `node` / `outcome`); Klasse-keuze selecteert het reviewpad; MUST NOT een aparte tweede kiezer «pad». Klasse wijzigen i.p.v. Promoveren (v2.26); selectieve invalidatie + published-candidate blijven later.
 - Console is onderzoeker-oppervlak, niet voor verpleegkundigen. Product API blijft G2-gesloten. Azure ZIP / nurse UI / PROTOCOL.md-rewrite blijven buiten deze golf.
-- Landing sketch B (gecentreerde spaarzame home, primair **Bron inleveren**) + `/tree` heading **Documenten** staan in code. Post-auth landt op die home, niet `/ingest`.
+- `#127` landing sketch B (gecentreerde spaarzame home, één primair **Bron inleveren** + stille secondaries) staat in code maar is **superseded** als gelockte home. Gelockte logged-in `/` is duty-first (Metis Design: nav **Home** eerste kamer en current op `/`; MUST NOT Inleveren current markeren op home; heading «Waar wil je verder?» + lead «Kies wat je nu wilt doen.»; drie kaarten Review / Inleveren / Documenten). Die Forge-golf is nog NIET in code — await aparte Metis GO. `/tree` heading **Documenten** UNCHANGED (v2.32). Post-auth landt op `/`, niet `/ingest`. Zie Eigenaarslock 2026-09-07 — Duty-first home SUPERSEDEERT sketch B.
 - Post-v2.31 ROADMAP-golven 1–5 staan in code (#113–#120). Die vereenvoudigingsgolf is in code. MUST NOT een zesde implementatiegolf verzinnen. Golven 1–5 dekken multiuser-betrouwbaarheid en onafhankelijke extractkwaliteit niet volledig; zie Eigenaarslock 2026-09-06 — Post-#120 audit acceptatiecorrectie.
+- Controlled-MVP backlog (ROADMAP, nog niet in code): Review «Recent activity» (read-only); exact SHA-256 duplicate ingest guard; release identity + GitHub→Azure deploy authorization. Die Forge-golf is nog NIET in code — await aparte Metis GO. App Service B2 is compute, niet de GitHub→Azure-poort. Zie Eigenaarslock 2026-09-06 — Controlled-MVP Recent activity, SHA-256-dup-guard en release-identity.
 
 ### Historische supersessie-index
 
@@ -37,6 +38,8 @@ Geen herhaalde stapel. Iedere rij wijst naar de Eigenaarslock; die secties blijv
 | v2.25–v2.31 | boom-klasse; Klasse wijzigen; Documentenhiërarchie-delete; Sterkte-poort; harde poort; exact-bind | zie de bijbehorende Eigenaarslock |
 | v2.32 | **Documenten** UI-kamernaam; kernel familie × klasse ONGEWIJZIGD; v2.27-delete blijft één `/tree`-plaats | v2.10/later «heading MUST be Documentenhierarchie» |
 | post-v2.31 ROADMAP | vijf golven (geen golf 6); golven 1–5 in code (#113–#120); Die vereenvoudigingsgolf is in code; Post-#120 audit acceptatiecorrectie | «volgende code is nog exact-bind»; «golven 1–5 dekken multiuser-betrouwbaarheid / onafhankelijke extractkwaliteit volledig» |
+| controlled-MVP ROADMAP 2026-09-06 | lock only (A Recent activity; B SHA-256-dup-guard; C release-identity/OIDC); Die Forge-golf is nog NIET in code | «SKU-upgrade lost GitHub→Azure»; «auto main→Azure aan»; Slack-presence in MVP; fuzzy duplicate |
+| duty-first home ROADMAP 2026-09-07 | lock only: logged-in `/` duty-first drie kaarten; Home eerste kamer; post-auth `/`; `/tree` Documenten UNCHANGED; Die Forge-golf is nog NIET in code | #127 sketch B spaarzame één-CTA-home als gelockte primary home; quiet-only secondaries; Slack presence |
 
 ## Niet-onderhandelbare doelen
 
@@ -100,6 +103,118 @@ Deze werkstromen maken expliciet wat nog nodig is om Metis betrouwbaar op te sch
 
 SA-01 tot en met SA-04 concretiseren noodzakelijke live-assurance. SA-05 blokkeert de retrieve-and-abstain-pilot niet, maar blokkeert ieder gebruik van Metis als trainingsdataset.
 
+## Eigenaarslock 2026-09-07 — Duty-first home SUPERSEDEERT sketch B (ROADMAP)
+
+ROADMAP-lock. **Geen Protocol v2.33. Geen PROTOCOL.md-rewrite. Geen `PROTOCOL_V2_*` nieuwe delta. Geen productcode. Geen Forge-implementatie in deze PR.** Geen live-GO. Geen Azure-mutatie in deze PR. Geen golf 6. Metis is documenteigenaar. Eigenaar (William Gomes / Metis CoS) 2026-09-07 lockte dat de gelockte logged-in home **duty-first** is en dat PR **#127** sketch B (spaarzame home) **superseded** is. Die Forge-golf is nog NIET in code — await aparte Metis GO (tenzij William later GO zegt). MUST NOT console-productcode in deze PR implementeren.
+
+Dit is **geen** zesde post-v2.31 implementatiegolf, **geen** nieuwe PROTOCOL-wet, **geen** G2/`publish()`-opening.
+
+`publish()` blijft G2-BLOCKED; dat is **intentioneel, geen bug**. Deze ROADMAP claimt geen G2 PASS. Continentie-bewijszinnen in v2.16–v2.19 MUST blijven. PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only. HANDOFF.md MUST NOT opnieuw worden aangemaakt. Vier lagen ONGEWIJZIGD. v2.25-boompad ONGEWIJZIGD. v2.26 Klasse wijzigen-architectuur ONGEWIJZIGD. v2.27 unpublished-delete blijft één plaats + type-to-confirm ONGEWIJZIGD. v2.28 Sterkte-on-confirmed-type ONGEWIJZIGD. v2.29 tijdelijke productie-only deploy ONGEWIJZIGD. v2.30 Block B gewone taal ONGEWIJZIGD. Fase 1–4 toelating/register ONGEWIJZIGD. v2.31 **Dit klopt** exacte kop-bind ONGEWIJZIGD. v2.32 **Documenten** UI-kamernaam UNCHANGED. Console blijft geen verpleegkundige boomspeler. Metis / Forge / Auditor MUST NOT als GD-03-reviewers meetellen.
+
+### SUPERSEDES sketch B landing
+
+PR **#127** shipte landing sketch B: gecentreerde spaarzame home; één primair **Bron inleveren** + stille/quiet secondary links; post-auth → `/`. Eigenaar 2026-09-07 lockt dat dit **superseded** is als het gelockte home-patroon. Sketch B blijft in code tot een aparte Forge-golf; het is niet langer de lock.
+
+### New locked home (duty-first)
+
+Logged-in `/` MUST de duty-first home zijn die de Metis Design-mock volgt:
+
+- Nav MUST **Home** als eerste kamer bevatten; Home is current op `/`. MUST NOT **Inleveren** als current markeren op home.
+- Heading: «Waar wil je verder?» + lead «Kies wat je nu wilt doen.»
+- Drie kaarten (MUST NOT één spaarzame CTA):
+  1. **Openstaand reviewwerk** — badge met wachtcount (bijv. «N wachten») + primair **Naar review** → `/review`
+  2. **Bron inleveren** — korte hulp «PDF of HTML-freeze toevoegen» + **Naar inleveren** → `/ingest`
+  3. **Documenten** — «Zoeken, openen of verwijderen» + **Naar documenten** → `/tree`
+- Post-auth redirect landt nog steeds op `/` (home), niet `/ingest`.
+- `/tree` kamernaam **Documenten** UNCHANGED (v2.32).
+
+### OUT OF SCOPE (deze lock én deze PR)
+
+- Sketch B spaarzame één-knops-home als primary home-patroon
+- Quiet-only secondaries als het primary home-patroon
+- Slack presence / Slack-style live presence / typing / page-open heartbeat
+- PROTOCOL.md-rewrite / `PROTOCOL_V2_*` delta
+- G2/`publish()`
+- HANDOFF.md heraanmaken
+- Azure ZIP als deze PR
+- Nurse UI
+- Productcode / Forge-implementatie in deze PR
+
+### Acceptatie (deze ROADMAP-PR)
+
+- Deze Eigenaarslock-sectie lockt duty-first home, SUPERSEDES #127 sketch B, acceptatiecriteria en OUT OF SCOPE.
+- Die Forge-golf is nog NIET in code — await aparte Metis GO.
+- CHANGELOG Unreleased docs-note.
+- Pointertests locken deze tekst.
+- MUST NOT `src/` productcode.
+
+MUST NOT implementeren in deze PR. Volgende console-UX alleen ná **aparte Metis GO**. MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
+
+## Eigenaarslock 2026-09-06 — Controlled-MVP Recent activity, SHA-256-dup-guard en release-identity (ROADMAP)
+
+ROADMAP-lock. **Geen Protocol v2.33. Geen PROTOCOL.md-rewrite. Geen `PROTOCOL_V2_*` nieuwe delta. Geen productcode. Geen Forge-implementatie in deze PR.** Geen live-GO. Geen Azure-mutatie in deze PR. Geen golf 6. Metis is documenteigenaar. Eigenaar (William Gomes / Metis CoS) 2026-09-06 lockte **drie kleine controlled-MVP backlog-items** op ROADMAP only. Die Forge-golf is nog NIET in code — await aparte Metis GO. MUST NOT console/ingest-productcode in deze PR implementeren.
+
+Dit is **geen** zesde post-v2.31 implementatiegolf, **geen** nieuwe PROTOCOL-wet, **geen** G2/`publish()`-opening.
+
+`publish()` blijft G2-BLOCKED; dat is **intentioneel, geen bug**. Deze ROADMAP claimt geen G2 PASS. Continentie-bewijszinnen in v2.16–v2.19 MUST blijven. PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only. HANDOFF.md MUST NOT opnieuw worden aangemaakt. Vier lagen ONGEWIJZIGD. v2.25-boompad ONGEWIJZIGD. v2.26 Klasse wijzigen-architectuur ONGEWIJZIGD. v2.27 unpublished-delete blijft één plaats + type-to-confirm ONGEWIJZIGD. v2.28 Sterkte-on-confirmed-type ONGEWIJZIGD. v2.29 tijdelijke productie-only deploy ONGEWIJZIGD. v2.30 Block B gewone taal ONGEWIJZIGD. Fase 1–4 toelating/register ONGEWIJZIGD. v2.31 **Dit klopt** exacte kop-bind ONGEWIJZIGD. v2.32 **Documenten** UI-kamernaam ONGEWIJZIGD. Console blijft geen verpleegkundige boomspeler. Metis / Forge / Auditor MUST NOT als GD-03-reviewers meetellen. Single-writer topology (één Gunicorn-worker / één instance / sequentiële writes) blijft.
+
+Oordeel al afgesproken: **Controlled MVP pilot GO-with-constraints**; brede productierollout nog niet. Deze lock ontgrendelt eerlijke deploy/rollback en twee smalle console-MVP-items — geen feature-werk in deze PR.
+
+### Item A — Review «Recent activity» (read-only)
+
+Rechterpaneel op het Review-scherm van het document dat beoordeeld wordt.
+
+- Newest first; alleen document-scoped (niet globaal).
+- Read-only view over het **bestaande** append-only / hash-chained review ledger (`event_type`, `object_id`, `object_version`, actor, timestamp / `occurred_at`, details) plus bestaande review-decision events (reviewer, decision, comment, proposed correction).
+- Voorbeeldrijen: Bert approved object N; Anne changed type explanation→condition; Dirk requested revision; Anne uploaded document.
+- MUST NOT Slack-style live presence / typing / page-open heartbeat bouwen. Presence is OUT OF SCOPE (later alleen als de pilot erom vraagt).
+- Geen nieuw write-pad; geen DB; single-writer topology niet verzwakken.
+
+### Item B — Exact SHA-256 duplicate ingest guard
+
+- Bij upload, ná SHA-256 van de exacte bytes: als de digest al bestaat → **BLOCK** het aanmaken van een nieuwe snapshot (default block, geen loutere waarschuwing).
+- Toon de bestaande documentidentiteit (title, version, uploader, status) + primaire actie **Open existing document**.
+- Rationale: huidige ingest gebruikt `snapshot_id = snap-{digest[:16]}-{uuid}` zodat identieke bytes twee snapshots kunnen maken; immutable source-byte identity impliceert geen legitieme tweede onafhankelijke kopie van identieke bytes.
+- Alleen exact binary duplicate. Fuzzy / text-similarity duplicate detection is OUT OF SCOPE voor de pilot.
+- Geen DB; geen architectuurwijziging; single-writer blijft.
+
+### Item C — Release identity + GitHub→Azure deploy authorization (controlled MVP)
+
+Owner note 2026-09-06: App Service **B2 is compute**, niet de poort voor GitHub→Azure. Auto main→Azure blijft intentioneel UIT (`workflow_dispatch` only) tot identity is gefixt. MUST NOT App Service SKU-upgrade (B2 → hoger) als pipeline-fix.
+
+Lock als ROADMAP-backlog (docs only; await aparte Metis GO / infra-werk — NOT a Forge product-code wave unless later scoped):
+
+1. Fix GitHub Actions `deploy-production` OIDC/login failure («No subscriptions found») — federated identity + subscription rights voor `metis-deploy-production` / production environment. NOT «upgrade App Service SKU».
+2. Maak live release identity fail-closed: de exacte tested commit SHA die op `vvn-metis-console` draait MUST kenbaar zijn (health of equivalent), distinct from `main` tip.
+3. Rollback drill constraints: bewaar prior known-good ZIP/artifact; `--clean true` MUST NOT `/home/data` raken; pre-deploy export van `/home/data/metis-console` vóór risicovolle deploys; restore-oefening blijft verplicht vóór brede rollout.
+4. OUT OF SCOPE voor deze lock: enabling auto-deploy on every main push; B2→hoger SKU als pipeline-fix; G2/`publish()`; HANDOFF.md heraanmaken.
+
+### Acceptatie (deze ROADMAP-PR)
+
+- Deze Eigenaarslock-sectie lockt Items A+B+C, acceptatiecriteria en OUT OF SCOPE.
+- Die Forge-golf is nog NIET in code — await aparte Metis GO.
+- CHANGELOG Unreleased docs-note.
+- Pointertests locken deze tekst.
+- MUST NOT `src/` productcode.
+
+### OUT OF SCOPE (deze lock én deze PR)
+
+- Slack-achtige live presence / typing / page-open heartbeat
+- Fuzzy / text-similarity duplicate detection
+- Auto-deploy op iedere main-push / auto main→Azure aanzetten
+- App Service SKU-upgrade (B2 → hoger) als pipeline-fix
+- G2/`publish()`
+- HANDOFF.md heraanmaken
+- PROTOCOL.md-rewrite / `PROTOCOL_V2_*` delta
+- Azure ZIP als deze PR
+- Nurse UI
+- Nieuwe DB / architectuurwijziging / weakening single-writer topology
+- Nieuw write-pad voor activity
+
+MUST NOT implementeren in deze PR. Volgende code / infra alleen ná **aparte Metis GO**. Item C MAG later als infra/OIDC-werk, niet als Forge-productcodegolf tenzij later scoped. Items A+B MAGEN ná aparte Metis Forge GO (tests-before-code) op de bestaande console.
+
+MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
+
 ## Eigenaarslock 2026-09-06 — Documenten UI-kamernaam (Protocol v2.32)
 
 Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. Eigenaar (William Gomes) 2026-09-06 (Metis CoS) lockte de live consolekamerheading op **Documenten**.
@@ -112,7 +227,7 @@ Protocol v2.27 unpublished-delete blijft precies één consoleplaats: diezelfde 
 
 Landing-page sketch B (gecentreerde spaarzame home, primair **Bron inleveren**) is BUITEN deze protocol-PR. Volgende console-UX ná deze protocolmerge is Forge landing sketch B + console-rename naar **Documenten**, alleen ná **aparte Metis GO**. MUST NOT die Forge-code in deze protocol-PR implementeren. MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
 
-Die Forge-golf is in code: landing sketch B + console-rename naar **Documenten**. `/tree` blijft; v2.27 unpublished-delete blijft één plaats.
+Die Forge-golf is in code: landing sketch B + console-rename naar **Documenten**. `/tree` blijft; v2.27 unpublished-delete blijft één plaats. Eigenaarslock 2026-09-07 (duty-first home) SUPERSEDEERT de lezing dat sketch B de gelockte logged-in home blijft; `/tree` **Documenten** blijft.
 
 ## Eigenaarslock 2026-09-06 — Post-v2.31 betrouwbaarheid- en bewijsbacklog (ROADMAP)
 
