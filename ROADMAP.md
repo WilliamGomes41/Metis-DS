@@ -166,6 +166,8 @@ Geordende remediaties (aparte Metis GO per item later; start met store-consisten
 
 Remediaties 1–2 (store-consistentie): die Forge-golf is in code (form-bound snapshotrevisie; copy-then-commit voor `promote_class` en peers).
 
+Pilot review-write serialization: die Forge-golf is in code (volle store-transacties serialiseren; conflict/stale path laat de winner op disk; form+revisie co-read; ingest-extract houdt geen exclusieve review-store lock). Extends #122/#125; geen nieuwe architectuur of DB.
+
 3. **Wave-3 SSRF connection bind (HIGH wanneer URL-ingest exposed is)** — Valideer, verbind daarna alleen met het gecontroleerde IP met correcte Host/TLS-hostnamevalidatie; herhaal per redirect — OF equivalent gecontroleerde egress. Test wisselende DNS-antwoorden zonder echte interne netwerkaanvallen. EXTEND/REUSE.
 
 Remediatie 3 (Wave-3 SSRF connection bind): die Forge-golf is in code (connect pinned to validated IP; Host/TLS-hostname voor de oorspronkelijke naam; re-validate/re-bind per redirect).

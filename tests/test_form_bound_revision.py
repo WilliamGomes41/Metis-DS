@@ -404,3 +404,40 @@ def test_batch_confirm_carries_and_compares_form_revision(tmp_path: Path) -> Non
     assert SNAPSHOT_WRITE_CONFLICT in body or "data-stale-write-conflict" in body
     stored = {row["object_id"]: row for row in console._load_objects(snapshot_id)}
     assert any(row.get("reliability_marker") == "batch-concurrent-winner" for row in stored.values())
+
+
+def test_form_content_and_revision_are_co_read_not_separate_gets(tmp_path: Path) -> None:
+    """GET MUST pin revision to the same objects generation as the shown fields."""
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    receipt = _ingest(console, accounts)
+    snapshot_id = receipt["snapshot_id"]
+    target = _content_rows(console, snapshot_id)[0]
+    original = _file_revision(console._objects_path(snapshot_id))
+    real = console.snapshot_objects
+
+    def raced(snapshot_id_arg: str, include_blocked: bool = False, *, for_update: bool = False):
+        rows = real(snapshot_id_arg, include_blocked, for_update=for_update)
+        other = OperationsConsole(
+            root=tmp_path,
+            source_store=tmp_path / "sources" / "private",
+            runtime=tmp_path / "output" / "runtime" / "operations-console",
+        )
+        loaded = other._load_objects(snapshot_id_arg)
+        for row in loaded:
+            if row["object_id"] == target["object_id"]:
+                row["reliability_marker"] = "form-coread-winner"
+        other._save_objects(snapshot_id_arg, loaded)
+        return rows
+
+    console.snapshot_objects = raced  # type: ignore[method-assign]
+    client = _client(console, "researcher.anne")
+    body, revision = _open_review_form(client, snapshot_id, target["object_id"])
+    live = _file_revision(console._objects_path(snapshot_id))
+    assert live != original
+    shown_winner = "form-coread-winner" in body
+    if shown_winner:
+        assert revision == live
+    else:
+        assert revision == original
+        assert revision != live

@@ -1069,8 +1069,7 @@ def _render_review_room(
             f'<div class="doc-card">{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}'
             "</div>"
         )
-        snapshot_objects = console.snapshot_objects(chosen)
-        snapshot_revision = console.objects_revision(chosen)
+        snapshot_objects, snapshot_revision = console.snapshot_objects_and_revision(chosen)
         review_path = review_path_for_klasse(chosen_row["class"])
         if not chosen_object_id:
             objects_html += _render_review_index(
