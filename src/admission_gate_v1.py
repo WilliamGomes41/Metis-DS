@@ -157,6 +157,21 @@ _LITERAL_CONTRACT_FIELDS = {
     "factual_finding": ("factual_claim_span",),
     "explanation": ("support_span",),
 }
+_CONTRACT_MISSING_CODES = {
+    "recommendation_evidence_span": ("recommendation_evidence_missing",),
+    "condition_target": ("condition_target_missing",),
+    "exception_target": ("exception_target_missing",),
+    "supported_object": ("supported_object_missing",),
+}
+_TARGET_EXTRAS = (
+    ("exception", "exception_target", "exception_target_missing", True),
+    ("condition", "condition_target", "condition_target_missing", False),
+    ("explanation", "supported_object", "supported_object_missing", True),
+)
+_ABSENT_FIELD_CODES = {
+    "subject_span": "subject_missing",
+    "predicate_span": "predicate_missing",
+}
 
 
 def serving_type_for_admission_type(proposed_type: str) -> str:
@@ -297,114 +312,113 @@ def _has_recommendation_evidence(text: str) -> bool:
     return bool(_ADVICE_EVIDENCE_RE.search(text))
 
 
+def _fill_absent(row: dict[str, Any], **fields: Any) -> None:
+    for key, value in fields.items():
+        if value and not row.get(key):
+            row[key] = value
+
+
+def _first_words(text: str, count: int) -> str:
+    words = text.split()
+    return " ".join(words[:count]) if words else ""
+
+
+def _cue_or_prefix(pattern: re.Pattern[str], text: str, fallback: str = "") -> list[str]:
+    match = pattern.search(text)
+    token = match.group(0) if match else (fallback or text[:20])
+    return [token] if token else []
+
+
+def _enrich_recommendation(candidate: dict[str, Any], text: str) -> None:
+    parsed = _ADVISEERT_PARSE_RE.search(text)
+    advice = _ADVICE_EVIDENCE_RE.search(text)
+    evidence = text if _has_recommendation_evidence(text) else ""
+    if parsed:
+        _fill_absent(
+            candidate,
+            subject_span=parsed.group("subject"),
+            predicate_span=parsed.group("predicate"),
+            actor_of_scope=parsed.group("actor") or parsed.group("subject"),
+            action_object_or_goal=(parsed.group("object") or "").strip(),
+            recommended_action=parsed.group("action"),
+            recommendation_evidence_span=evidence,
+            type_evidence_spans=[parsed.group("predicate")],
+        )
+        return
+    if not advice:
+        return
+    _fill_absent(candidate, predicate_span=advice.group(0))
+    if not candidate.get("recommended_action"):
+        te = _TE_INF_RE.search(text)
+        candidate["recommended_action"] = te.group(0) if te else str(candidate.get("predicate_span") or "")
+    actors = _ACTOR_RE.findall(text)
+    if not actors:
+        neighbors = " ".join(
+            [
+                str(candidate.get("context_before") or ""),
+                str(candidate.get("context_after") or ""),
+            ]
+        )
+        actors = _ACTOR_RE.findall(neighbors)
+    if actors:
+        _fill_absent(candidate, actor_of_scope=actors[-1] if len(actors) > 1 else actors[0])
+    if not candidate.get("action_object_or_goal"):
+        te = _TE_INF_RE.search(text)
+        if te:
+            words = text[: te.start()].strip().split()
+            candidate["action_object_or_goal"] = " ".join(words[-4:]) if words else ""
+        else:
+            words = re.sub(r"^[A-Za-zÀ-ÿ]+\s+", "", text).strip().rstrip(".").split()
+            candidate["action_object_or_goal"] = " ".join(words[:6])
+    _fill_absent(
+        candidate,
+        recommendation_evidence_span=evidence,
+        type_evidence_spans=[candidate["predicate_span"]] if candidate.get("predicate_span") else None,
+    )
+
+
 def _enrich_from_text(candidate: dict[str, Any]) -> None:
     text = str(candidate.get("source_text_exact") or candidate.get("candidate_text") or "")
-    parsed = _ADVISEERT_PARSE_RE.search(text)
-    if parsed:
-        if not candidate.get("subject_span"):
-            candidate["subject_span"] = parsed.group("subject")
-        if not candidate.get("predicate_span"):
-            candidate["predicate_span"] = parsed.group("predicate")
-        actor = parsed.group("actor") or parsed.group("subject")
-        if not candidate.get("actor_of_scope") and actor:
-            candidate["actor_of_scope"] = actor
-        if not candidate.get("action_object_or_goal") and parsed.group("object"):
-            candidate["action_object_or_goal"] = parsed.group("object").strip()
-        if not candidate.get("recommended_action") and parsed.group("action"):
-            candidate["recommended_action"] = parsed.group("action")
-        if not candidate.get("recommendation_evidence_span") and _has_recommendation_evidence(text):
-            candidate["recommendation_evidence_span"] = text
-        if not candidate.get("type_evidence_spans"):
-            candidate["type_evidence_spans"] = [parsed.group("predicate")]
-    elif _ADVICE_EVIDENCE_RE.search(text):
-        if not candidate.get("predicate_span"):
-            match = _ADVICE_EVIDENCE_RE.search(text)
-            if match:
-                candidate["predicate_span"] = match.group(0)
-        if not candidate.get("recommended_action"):
-            te = _TE_INF_RE.search(text)
-            candidate["recommended_action"] = (
-                te.group(0) if te else str(candidate.get("predicate_span") or "")
-            )
-        actors = _ACTOR_RE.findall(text)
-        if not actors:
-            neighbors = " ".join(
-                [
-                    str(candidate.get("context_before") or ""),
-                    str(candidate.get("context_after") or ""),
-                ]
-            )
-            actors = _ACTOR_RE.findall(neighbors)
-        if not candidate.get("actor_of_scope") and actors:
-            candidate["actor_of_scope"] = actors[-1] if len(actors) > 1 else actors[0]
-        if not candidate.get("action_object_or_goal"):
-            te = _TE_INF_RE.search(text)
-            if te:
-                before = text[: te.start()].strip()
-                words = before.split()
-                candidate["action_object_or_goal"] = " ".join(words[-4:]) if words else ""
-            else:
-                words = re.sub(r"^[A-Za-zÀ-ÿ]+\s+", "", text).strip().rstrip(".").split()
-                candidate["action_object_or_goal"] = " ".join(words[:6])
-        if not candidate.get("recommendation_evidence_span") and _has_recommendation_evidence(text):
-            candidate["recommendation_evidence_span"] = text
-        if not candidate.get("type_evidence_spans") and candidate.get("predicate_span"):
-            candidate["type_evidence_spans"] = [candidate["predicate_span"]]
-    if not candidate.get("subject_span"):
-        words = text.split()
-        if words:
-            candidate["subject_span"] = " ".join(words[:3])
-    if not candidate.get("predicate_span"):
-        match = _VERB_RE.search(text)
-        if match:
-            candidate["predicate_span"] = match.group(0)
+    _enrich_recommendation(candidate, text)
+    _fill_absent(candidate, subject_span=_first_words(text, 3))
+    verb = _VERB_RE.search(text)
+    if verb:
+        _fill_absent(candidate, predicate_span=verb.group(0))
     proposed = candidate.get("proposed_type")
     if proposed == "definition":
-        if not candidate.get("defined_term"):
-            words = text.split()
-            candidate["defined_term"] = " ".join(words[:3]) if words else ""
-        if not candidate.get("definiens_span") and " is " in f" {text} ":
-            candidate["definiens_span"] = text
+        _fill_absent(
+            candidate,
+            defined_term=_first_words(text, 3),
+            definiens_span=text if " is " in f" {text} " else "",
+        )
         if not candidate.get("type_evidence_spans"):
-            match = _DEFINITION_CUE_RE.search(text)
-            evidence = match.group(0) if match else str(candidate.get("defined_term") or "")
-            if evidence:
-                candidate["type_evidence_spans"] = [evidence]
-    if proposed == "condition":
-        if not candidate.get("condition_span"):
-            candidate["condition_span"] = text
+            candidate["type_evidence_spans"] = _cue_or_prefix(
+                _DEFINITION_CUE_RE, text, str(candidate.get("defined_term") or "")
+            )
+    elif proposed == "condition":
+        _fill_absent(candidate, condition_span=text)
         if not candidate.get("type_evidence_spans"):
-            match = _CONDITION_RE.search(text)
-            candidate["type_evidence_spans"] = [match.group(0)] if match else [text[:20]]
-    if proposed == "exception":
-        if not candidate.get("exception_span"):
-            candidate["exception_span"] = text
+            candidate["type_evidence_spans"] = _cue_or_prefix(_CONDITION_RE, text)
+    elif proposed == "exception":
+        _fill_absent(candidate, exception_span=text)
         if not candidate.get("type_evidence_spans"):
-            match = _EXCEPTION_RE.search(text)
-            candidate["type_evidence_spans"] = [match.group(0)] if match else [text[:20]]
-    if proposed == "factual_finding" and not candidate.get("factual_claim_span"):
-        candidate["factual_claim_span"] = text
-    if proposed == "explanation":
-        if not candidate.get("support_span"):
-            candidate["support_span"] = text
-    if not candidate.get("conditions_detected"):
-        candidate["conditions_detected"] = _scan_conditions(text)
-    if not candidate.get("exceptions_detected"):
-        candidate["exceptions_detected"] = _scan_exceptions(text)
+            candidate["type_evidence_spans"] = _cue_or_prefix(_EXCEPTION_RE, text)
+    elif proposed == "factual_finding":
+        _fill_absent(candidate, factual_claim_span=text)
+    elif proposed == "explanation":
+        _fill_absent(candidate, support_span=text)
     markers, targets = _scan_comparisons(text)
-    if not candidate.get("comparison_markers"):
-        candidate["comparison_markers"] = markers
-    if not candidate.get("comparison_targets"):
-        candidate["comparison_targets"] = targets
     detected, resolved = _scan_abbreviations(text)
-    if not candidate.get("abbreviations_detected"):
-        candidate["abbreviations_detected"] = detected
-    if not candidate.get("abbreviations_resolved"):
-        candidate["abbreviations_resolved"] = [
-            token for token in detected if token in _KNOWN_ABBREVS
-        ] or resolved
-    if not candidate.get("references_detected"):
-        candidate["references_detected"] = _scan_references(text)
+    _fill_absent(
+        candidate,
+        conditions_detected=_scan_conditions(text),
+        exceptions_detected=_scan_exceptions(text),
+        comparison_markers=markers,
+        comparison_targets=targets,
+        abbreviations_detected=detected,
+        abbreviations_resolved=[token for token in detected if token in _KNOWN_ABBREVS] or resolved,
+        references_detected=_scan_references(text),
+    )
 
 
 def _has_impliciet_filler(candidate: dict[str, Any]) -> bool:
@@ -430,6 +444,23 @@ def _has_impliciet_filler(candidate: dict[str, Any]) -> bool:
         if _IMPLICIET_RE.search(str(candidate.get(key) or "")):
             return True
     return False
+
+
+def _require_literal(value: Any, corpus: str, missing: str, codes: list[str]) -> None:
+    if not str(value or "").strip():
+        codes.append(missing)
+    elif corpus and not _literal(value, corpus):
+        codes.extend((missing, "span_not_in_source", "source_fidelity_failure"))
+
+
+def _unique_reason_codes(codes: list[str], *, scan_done: bool) -> list[str]:
+    unique: list[str] = []
+    for code in codes:
+        if code == "context_scan_not_done" and scan_done:
+            continue
+        if code not in unique:
+            unique.append(code)
+    return unique
 
 
 def admit_candidate(
@@ -475,79 +506,45 @@ def admit_candidate(
         codes.append("context_unnecessary_unrecorded")
     source = str(row.get("source_text_exact") or row.get("candidate_text") or "")
     text = str(row.get("candidate_text") or source)
+    corpus = _localize_corpus(row)
+    proposed = str(row.get("proposed_type") or "")
 
     for field in absent_required:
-        if field == "subject_span":
-            codes.append("subject_missing")
-        elif field == "predicate_span":
-            codes.append("predicate_missing")
-        else:
-            codes.append("type_contract_incomplete")
-
-    corpus = _localize_corpus(row)
-    if not str(row.get("subject_span") or "").strip():
-        codes.append("subject_missing")
-    elif corpus and not _literal(row.get("subject_span"), corpus):
-        codes.append("subject_missing")
-        codes.append("span_not_in_source")
-        codes.append("source_fidelity_failure")
-    if not str(row.get("predicate_span") or "").strip():
-        codes.append("predicate_missing")
-    elif corpus and not _literal(row.get("predicate_span"), corpus):
-        codes.append("predicate_missing")
-        codes.append("span_not_in_source")
-        codes.append("source_fidelity_failure")
-
+        codes.append(_ABSENT_FIELD_CODES.get(field, "type_contract_incomplete"))
+    _require_literal(row.get("subject_span"), corpus, "subject_missing", codes)
+    _require_literal(row.get("predicate_span"), corpus, "predicate_missing", codes)
     if _word_count(text) < 3 or not _VERB_RE.search(text):
         codes.append("incomplete_sentence")
         if _word_count(text) < 3:
             codes.append("no_independent_claim")
-
-    start = str(row.get("source_locator_start") or "").strip()
-    end = str(row.get("source_locator_end") or "").strip()
-    if not start or not end:
+    if not str(row.get("source_locator_start") or "").strip() or not str(row.get("source_locator_end") or "").strip():
         codes.append("locator_invalid")
-
     evidence = [span for span in (row.get("type_evidence_spans") or []) if str(span or "").strip()]
     if not evidence:
         codes.append("type_evidence_missing")
     elif corpus and any(not _literal(span, corpus) for span in evidence):
-        codes.append("type_evidence_missing")
-        codes.append("span_not_in_source")
-        codes.append("source_fidelity_failure")
+        codes.extend(("type_evidence_missing", "span_not_in_source", "source_fidelity_failure"))
 
-    proposed = str(row.get("proposed_type") or "")
     for field in TYPE_CONTRACT_FIELDS.get(proposed, ()):
+        extra = _CONTRACT_MISSING_CODES.get(field, ())
         if not _present(row.get(field)):
             codes.append("type_contract_incomplete")
-            if field == "recommendation_evidence_span":
-                codes.append("recommendation_evidence_missing")
-            elif field == "condition_target":
-                codes.append("condition_target_missing")
-            elif field == "exception_target":
-                codes.append("exception_target_missing")
-            elif field == "supported_object":
-                codes.append("supported_object_missing")
+            codes.extend(extra)
             break
         if field in _LITERAL_CONTRACT_FIELDS.get(proposed, ()) and corpus and not _literal(row.get(field), corpus):
-            codes.append("type_contract_incomplete")
-            codes.append("span_not_in_source")
-            codes.append("source_fidelity_failure")
-            if field == "recommendation_evidence_span":
-                codes.append("recommendation_evidence_missing")
+            codes.extend(("type_contract_incomplete", "span_not_in_source", "source_fidelity_failure"))
+            codes.extend(extra)
             break
 
-    if proposed == "recommendation":
-        if not _has_recommendation_evidence(source) or not _present(row.get("recommendation_evidence_span")):
-            codes.append("recommendation_evidence_missing")
-
+    if proposed == "recommendation" and (
+        not _has_recommendation_evidence(source) or not _present(row.get("recommendation_evidence_span"))
+    ):
+        codes.append("recommendation_evidence_missing")
     if _has_impliciet_filler(row):
         codes.append("source_fidelity_failure")
-
     if _EXCEPTION_RE.search(source) and not _EXCEPTION_RE.search(text):
         codes.append("source_fidelity_failure")
         row["exceptions_detected"] = []
-
     if row.get("comparison_markers") and not row.get("comparison_targets"):
         codes.append("comparison_target_missing")
     detected_ab = [a for a in (row.get("abbreviations_detected") or []) if a not in _KNOWN_ABBREVS]
@@ -556,35 +553,27 @@ def admit_candidate(
         codes.append("abbreviation_unresolved")
     if row.get("references_detected") and not row.get("references_resolved"):
         codes.append("unresolved_reference")
+    for kind, field, code, independent in _TARGET_EXTRAS:
+        if proposed == kind and not _present(row.get(field)):
+            codes.append(code)
+            codes += ("no_independent_claim",) * bool(independent)
 
-    if proposed == "exception" and not _present(row.get("exception_target")):
-        codes.append("exception_target_missing")
-        codes.append("no_independent_claim")
-    if proposed == "condition" and not _present(row.get("condition_target")):
-        codes.append("condition_target_missing")
-    if proposed == "explanation" and not _present(row.get("supported_object")):
-        codes.append("supported_object_missing")
-        codes.append("no_independent_claim")
-
+    merge = row.get("expand_merge")
     if (
-        row.get("context_scan_done")
-        and (row.get("expand_merge") or {}).get("performed")
+        isinstance(merge, dict)
+        and merge.get("performed")
+        and row.get("context_scan_done")
         and row.get("exceptions_detected")
     ):
         codes = [code for code in codes if code != "source_fidelity_failure"]
-
-    scan = row.get("context_scan") if isinstance(row.get("context_scan"), dict) else {}
+    scan = row.get("context_scan")
+    if not isinstance(scan, dict):
+        scan = {}
     if scan.get("necessary_context_disposition") == "block":
         codes.append("context_necessary_unresolved")
-
-    unique: list[str] = []
-    for code in codes:
-        if code == "context_scan_not_done" and row.get("context_scan_done"):
-            continue
-        if code not in unique:
-            unique.append(code)
+    unique = _unique_reason_codes(codes, scan_done=bool(row.get("context_scan_done")))
     row["reason_codes"] = unique
-    row["gate_result"] = GATE_BLOCKED if unique else GATE_ALLOWED
+    row["gate_result"] = (GATE_ALLOWED, GATE_BLOCKED)[bool(unique)]
     return row
 
 

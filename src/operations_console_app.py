@@ -645,37 +645,28 @@ def _heading_chooser(
     for row in choice:
         text = heading_visible_text(row)
         outline = parse_outline_number(text)
-        outline_attr = f' data-outline="{".".join(str(part) for part in outline)}"' if outline else ""
-        locator = ""
         loc = (row.get("provenance") or {}).get("source_locator") or row.get("source_locator") or {}
         page = loc.get("page") or loc.get("locator_value")
-        if page:
-            locator = f' <span class="muted">({_esc(page)})</span>'
         object_id = str(row.get("object_id") or "")
-        href = f"/review?document={snap}&object={quote(object_id, safe='')}"
-        object_attr = f' data-object-id="{_esc(object_id)}"' if object_id else ""
-        if not object_id or object_id == obj.get("object_id"):
-            choice_items.append(
-                f'<li data-heading-role="body"{outline_attr}{object_attr}>'
-                f'<a href="{_esc(href)}">{_esc(text)}</a>{locator}</li>'
-            )
-            continue
-        if is_heading_object(obj) and is_heading_object(row) and not parent_proposal_may_bind(
-            obj, row, objects
-        ):
-            choice_items.append(
-                f'<li data-heading-role="body"{outline_attr}{object_attr}>'
-                f'<a href="{_esc(href)}">{_esc(text)}</a>{locator}</li>'
-            )
-            continue
-        choice_items.append(
-            f'<li data-heading-role="body"{outline_attr}{object_attr}>'
-            f'<a href="{_esc(href)}">{_esc(text)}</a>{locator}'
-            f'<label class="heading-select"><input type="radio" name="parent_choice" value="{_esc(object_id)}">'
-            f" Kies</label></li>"
+        attrs = f' data-object-id="{_esc(object_id)}"' * bool(object_id)
+        if outline:
+            attrs = f' data-outline="{".".join(str(part) for part in outline)}"' + attrs
+        locator = f' <span class="muted">({_esc(page)})</span>' * bool(page)
+        blocked = (
+            is_heading_object(obj)
+            and is_heading_object(row)
+            and not parent_proposal_may_bind(obj, row, objects)
         )
-    if not choice_items:
-        return ""
+        may_select = bool(object_id) and object_id != obj.get("object_id") and not blocked
+        radio = (
+            f'<label class="heading-select"><input type="radio" name="parent_choice" '
+            f'value="{_esc(object_id)}"> Kies</label>'
+        ) * may_select
+        choice_items.append(
+            f'<li data-heading-role="body"{attrs}>'
+            f'<a href="/review?document={snap}&object={quote(object_id, safe="")}">{_esc(text)}</a>'
+            f"{locator}{radio}</li>"
+        )
     return f"""
                     <div data-heading-chooser hidden>
                       <p>Koppen in de hoofdtekst</p>
@@ -719,6 +710,349 @@ def _broncontext_html(obj: dict[str, Any], snapshot_id: str, object_id: str, pas
                     <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(snapshot_id)}&object={_esc(object_id)}">Open volledige richtlijn</a></p>
                   </section>
     """
+
+
+_REVIEW_DRAFT_SETS = {
+    "suitability": frozenset(SUITABILITY_VALUES),
+    "eindoordeel": frozenset(
+        {"goedkeuren", "goedkeuren_na_correctie", "afwijzen", "later_beoordelen"}
+    ),
+    "documentpositie_action": frozenset({"dit_klopt", "andere_kop"}),
+    "type_action": frozenset({"dit_klopt", "type_wijzigen"}),
+}
+_REVIEW_DRAFT_DEFAULTS = {
+    "documentpositie_action": "dit_klopt",
+    "type_action": "dit_klopt",
+}
+_BLOCKED_SHOWN_TYPES = frozenset(
+    {"recommendation", "condition", "exception", "definition", "explanation"}
+)
+
+
+def _sanitize_review_draft(draft: dict[str, str] | None) -> dict[str, str]:
+    escaped = {
+        key: html.escape(str(value or ""), quote=True)
+        for key, value in (draft or {}).items()
+    }
+    closed_types = frozenset(CLOSED_OBJECT_TYPES) | frozenset(CLOSED_BOOM_TYPES)
+    for key, allowed in _REVIEW_DRAFT_SETS.items():
+        default = _REVIEW_DRAFT_DEFAULTS.get(key, "")
+        value = escaped.get(key, "") or default
+        escaped[key] = value if value in allowed else default
+    confirmed = escaped.get("confirmed_object_type", "")
+    escaped["confirmed_object_type"] = confirmed if confirmed in closed_types else ""
+    return escaped
+
+
+def _review_conflict_html(conflict: bool) -> str:
+    if not conflict:
+        return ""
+    return (
+        f'<div class="banner err" data-stale-write-conflict '
+        f'data-error-code="{_esc(SNAPSHOT_OBJECT_WRITE_CONFLICT)}">'
+        f"{_esc(ERROR_COPY[SNAPSHOT_OBJECT_WRITE_CONFLICT])}</div>"
+        f'<p class="muted">{_esc(SNAPSHOT_OBJECT_WRITE_CONFLICT)}</p>'
+    )
+
+
+def _review_index_item(obj: dict[str, Any], snapshot_id: str, *, checkbox: bool = False) -> str:
+    title = review_row_title(obj)
+    status = review_row_status(obj)
+    link = (
+        f'<a class="review-row-title" href="/review?document={_esc(snapshot_id)}&object={_esc(obj["object_id"])}">'
+        f"{_esc(title)}</a>"
+    )
+    status_html = f'<span class="review-row-status">{_esc(status)}</span>'
+    if checkbox:
+        return (
+            '<li class="review-row">'
+            f'<label class="check"><input type="checkbox" name="object_ids" '
+            f'value="{_esc(obj["object_id"])}">{link}{status_html}</label>'
+            "</li>"
+        )
+    return f'<li class="review-row">{link}{status_html}</li>'
+
+
+def _review_lane_copy(review_path: str, koppen: list[dict[str, Any]], duty: list[dict[str, Any]]) -> dict[str, str]:
+    if review_path == "boom":
+        return {
+            "fast_title": f"Paden ({len(koppen)})",
+            "fast_lead": "Bevestig paden als structuur, nooit als advies.",
+            "fast_button": "Bevestig geselecteerde paden als structuur",
+            "slow_title": f"Knopen en uitkomsten ({len(duty)})",
+            "slow_lead": "Beoordeel knopen die advies poorten en uitkomsten. Dat is de handplicht.",
+        }
+    return {
+        "fast_title": f"Koppen ({len(koppen)})",
+        "fast_lead": "Bevestig koppen als structuur, nooit als advies.",
+        "fast_button": "Bevestig geselecteerde koppen als structuur",
+        "slow_title": f"Inhoud ({len(duty)})",
+        "slow_lead": "Beoordeel voorgestelde aanbevelingen plus voorwaarden, uitzonderingen en ieder high-risk object. Dat is de handplicht.",
+    }
+
+
+def _render_review_index(
+    snapshot_id: str,
+    snapshot_objects: list[dict[str, Any]],
+    review_path: str,
+) -> str:
+    koppen, _old_inhoud = review_stacks(snapshot_objects, review_path=review_path)
+    duty = slow_review_duty(snapshot_objects, review_path=review_path)
+    leftover = remaining_unclassified(snapshot_objects)
+    leftover_ids = {row.get("object_id") for row in leftover}
+    leftover_other = [
+        obj
+        for obj in remaining_not_duty(snapshot_objects)
+        if obj.get("object_id") not in leftover_ids
+    ]
+    blocked = blocked_audit_lane(snapshot_objects) if review_path != "boom" else []
+    leftover_html = ""
+    if leftover:
+        leftover_html = f"""
+                      <aside class="review-leftover-unclassified">
+                        <p>Resterend unclassified: {len(leftover)}. Niet als één-voor-één plicht. Unclassified wordt niet geserveerd.</p>
+                      </aside>
+                    """
+    other_html = ""
+    if leftover_other:
+        other_html = (
+            f'<p class="review-leftover-other">Overige objecten in de store: '
+            f"{len(leftover_other)}. Niet de onderzoekerplicht voor handelingsadvies.</p>"
+        )
+    blocked_html = ""
+    if blocked:
+        shown = [
+            obj
+            for obj in blocked
+            if (obj.get("proposed_object_type") or obj.get("confirmed_object_type") or obj.get("object_type"))
+            in _BLOCKED_SHOWN_TYPES
+        ]
+        hidden = [obj for obj in blocked if obj not in shown]
+        hidden_ids = " ".join(_esc(obj["object_id"]) for obj in hidden)
+        shown_list = (
+            f'<ol class="object-index">{"".join(_review_index_item(obj, snapshot_id) for obj in shown)}</ol>'
+            if shown
+            else ""
+        )
+        hidden_html = f'<p class="review-blocked-store-ids">{hidden_ids}</p>' if hidden_ids else ""
+        blocked_html = f"""
+                      <aside class="review-blocked-audit" aria-label="Geblokkeerde kandidaten">
+                        <p>Geblokkeerde kandidaten (poort): {len(blocked)}. Niet de gewone beoordelingsplicht.</p>
+                        {shown_list}
+                        {hidden_html}
+                      </aside>
+                    """
+    copy = _review_lane_copy(review_path, koppen, duty)
+    return f"""
+                    <section class="review-lane-fast">
+                      <h2>{copy["fast_title"]}</h2>
+                      <p class="lead">{copy["fast_lead"]}</p>
+                      <form method="post" action="/review/headings/batch-confirm">
+                        <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
+                        <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, checkbox=True) for obj in koppen)}</ol>
+                        <button class="btn-primary" type="submit">{copy["fast_button"]}</button>
+                      </form>
+                    </section>
+                    <section class="review-lane-slow">
+                      <h2>{copy["slow_title"]}</h2>
+                      <p class="lead">{copy["slow_lead"]}</p>
+                      <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id) for obj in duty)}</ol>
+                      {leftover_html}
+                      {other_html}
+                    </section>
+                    {blocked_html}
+                    {_coverage_panel(snapshot_objects)}
+                """
+
+
+def _render_review_card(
+    console: OperationsConsole,
+    snapshot_id: str,
+    obj: dict[str, Any],
+    snapshot_objects: list[dict[str, Any]],
+    review_path: str,
+    draft: dict[str, str],
+    conflict_html: str,
+) -> str:
+    heading = review_card_sentence(obj)
+    obj_text = (obj.get("content") or {}).get("clean_text") or ""
+    heading_norm = " ".join(heading.split())
+    body_norm = " ".join(str(obj_text).split())
+    object_text_html = ""
+    if body_norm and body_norm != heading_norm and not body_norm.startswith(heading_norm.rstrip("…")):
+        object_text_html = f'<div class="object-text"><p>{_esc(obj_text)}</p></div>'
+    expand_merge = admission_of(obj).get("expand_merge") or {}
+    merged_text = str(expand_merge.get("merged_text") or "").strip()
+    if expand_merge.get("performed") and merged_text:
+        object_text_html += f'<div class="object-expand-merge"><p>{_esc(merged_text)}</p></div>'
+    proposed = proposed_type_of(obj)
+    confirmable = confirmable_proposed_type(obj)
+    confirmed = obj.get("confirmed_object_type") or ""
+    type_options = _type_options(
+        draft.get("confirmed_object_type") or confirmed,
+        review_path=review_path,
+        proposed=confirmable,
+    )
+    try:
+        console.open_source_passage(snapshot_id=snapshot_id, object_id=obj["object_id"])
+        passage_ok = True
+    except ConsoleError:
+        passage_ok = False
+    disabled = "" if passage_ok else " disabled"
+    four_eyes_html = ""
+    if requires_four_eyes(obj, confirmed_type=confirmed or None):
+        four_eyes_html = (
+            '<div class="banner warn">Dit object vereist four-eyes: '
+            "<b>tweede reviewer nodig</b>.</div>"
+        )
+    path_text = found_under_path(obj)
+    proposed_label = _object_type_label(proposed or confirmable)
+    return f"""
+                <p><a class="btn-secondary" href="/review?document={_esc(snapshot_id)}">Terug naar Inhoud</a></p>
+                <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
+                  <div class="review-cockpit-copy">
+                    <p>Je beoordeelt één geselecteerde passage.</p>
+                    <p>De volledige richtlijn blijft ongewijzigd.</p>
+                    <p>Metis maakt geschikte passages apart bruikbaar.</p>
+                  </div>
+                  <form class="review-decision-form" method="post" action="/review" data-review-form>
+                    <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
+                    <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
+                    <input type="hidden" name="proposed_object_type" value="{_esc(confirmable)}">
+                    <input type="hidden" name="found_under" value="{_esc(path_text)}">
+                    <input type="hidden" name="decision" value="">
+                    {four_eyes_html}
+                    {conflict_html}
+                    <section class="review-card-object review-step" data-review-step="a" aria-label="Geselecteerde passage">
+                      <p class="eyebrow">Geselecteerde passage</p>
+                      <h3>{_esc(heading)}</h3>
+                      <p class="why-selected">{_esc(why_selected(obj))}</p>
+                      <p class="meta"><span>status <b>{_esc(review_row_status(obj))}</b></span></p>
+                      {object_text_html}
+                    </section>
+                    {_broncontext_html(obj, snapshot_id, obj["object_id"], passage_ok)}
+                    <section class="review-step" data-review-step="c">
+                      <h4>Geschiktheid</h4>
+                      <label class="check"><input type="radio" name="suitability" value="ja"{_checked(draft.get("suitability", ""), "ja")}> Ja</label>
+                      <label class="check"><input type="radio" name="suitability" value="mist_context"{_checked(draft.get("suitability", ""), "mist_context")}> mist context</label>
+                      <label class="check"><input type="radio" name="suitability" value="samenvoegen"{_checked(draft.get("suitability", ""), "samenvoegen")}> samenvoegen</label>
+                      <label class="check"><input type="radio" name="suitability" value="alleen_onderbouwing"{_checked(draft.get("suitability", ""), "alleen_onderbouwing")}> alleen onderbouwing</label>
+                      <label class="check"><input type="radio" name="suitability" value="geen_kenniseenheid"{_checked(draft.get("suitability", ""), "geen_kenniseenheid")}> geen kenniseenheid</label>
+                    </section>
+                    <section class="review-step" data-review-step="d">
+                      <h4>Documentpositie</h4>
+                      <p>Gevonden onder: <b>{_esc(path_text or "het document")}</b></p>
+                      <label class="check"><input type="radio" name="documentpositie_action" value="dit_klopt"{_checked(draft.get("documentpositie_action", ""), "dit_klopt")}> Dit klopt</label>
+                      <label class="check"><input type="radio" name="documentpositie_action" value="andere_kop"{_checked(draft.get("documentpositie_action", ""), "andere_kop")}> Andere kop kiezen</label>
+                      {_heading_chooser(obj, snapshot_objects, snapshot_id)}
+                    </section>
+                    <section class="review-step" data-review-step="e">
+                      <h4>Type</h4>
+                      <p>Metis stelt voor: <b>{_esc(proposed_label)}</b></p>
+                      <label class="check"><input type="radio" name="type_action" value="dit_klopt"{_checked(draft.get("type_action", ""), "dit_klopt")}> Dit klopt</label>
+                      <label class="check"><input type="radio" name="type_action" value="type_wijzigen"{_checked(draft.get("type_action", ""), "type_wijzigen")}> Type wijzigen</label>
+                      <div data-type-chooser hidden>
+                        <label for="type-{_esc(obj["object_id"])}">Ander type</label>
+                        <select id="type-{_esc(obj["object_id"])}" name="confirmed_object_type" hidden{disabled}>{type_options}</select>
+                      </div>
+                    </section>
+                    {_stamp_block(obj, hidden=not recommendation_strength_ui_applies(obj))}
+                    <section class="review-step" data-review-step="f">
+                      <h4>Eindoordeel</h4>
+                      <fieldset id="decision-{_esc(obj["object_id"])}">
+                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren"{disabled}{_checked(draft.get("eindoordeel", ""), "goedkeuren")}> Goedkeuren</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren_na_correctie"{_checked(draft.get("eindoordeel", ""), "goedkeuren_na_correctie")}> Goedkeuren na correctie</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="afwijzen"{_checked(draft.get("eindoordeel", ""), "afwijzen")}> Afwijzen</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="later_beoordelen"{_checked(draft.get("eindoordeel", ""), "later_beoordelen")}> Later beoordelen</label>
+                      </fieldset>
+                      <p class="field-help" data-decision-hint>Kies een eindoordeel.</p>
+                      <div class="decision-comment" data-comment-field hidden>
+                        <label for="comment-{_esc(obj["object_id"])}">Toelichting</label>
+                        <textarea id="comment-{_esc(obj["object_id"])}" name="comment">{html.escape(draft.get("comment", ""), quote=True)}</textarea>
+                      </div>
+                      <div class="decision-correction" data-correction-field hidden>
+                        <label for="correction-{_esc(obj["object_id"])}">Voorgestelde correctie</label>
+                        <textarea id="correction-{_esc(obj["object_id"])}" name="proposed_correction">{html.escape(draft.get("proposed_correction", ""), quote=True)}</textarea>
+                      </div>
+                      <button class="btn-primary" type="submit" disabled data-submit-review>Review opslaan en volgende</button>
+                    </section>
+                  </form>
+                </article>
+                """
+
+
+def _render_review_room(
+    console: OperationsConsole,
+    account: dict[str, Any],
+    document: str = "",
+    object: str = "",
+    *,
+    counts: dict[str, int] | None = None,
+    draft: dict[str, str] | None = None,
+    conflict: bool = False,
+) -> str:
+    chosen = document.strip()
+    chosen_object_id = object.strip()
+    draft = _sanitize_review_draft(draft)
+    conflict_html = _review_conflict_html(conflict)
+    envelopes = console.list_envelopes()
+    chosen_row = next((row for row in envelopes if row["snapshot_id"] == chosen), None)
+    picker = ""
+    if chosen_row:
+        picker = f"""
+              <div class="review-document-context">
+                <span>Document</span>
+                <b>{_esc(chosen_row["title"])}</b>
+                <span>versie {_esc(chosen_row["version"])}</span>
+                <span>onderwerp {_esc(chosen_row["family"])}</span>
+                <span>klasse {_esc(chosen_row["class"])}</span>
+                <a href="/review">Ander document kiezen</a>
+              </div>
+            """
+    cards = []
+    if not chosen:
+        for row in envelopes:
+            cards.append(
+                f"""
+                    <article class="doc-card">
+                      {_document_card_heading({**row, "status": row["state"]})}
+                      <p class="lead">Beoordeel Koppen als structuur en Inhoud als kennisobjecten.</p>
+                      <p><a class="btn-primary" href="/review?document={_esc(row["snapshot_id"])}">Beoordeel</a></p>
+                    </article>
+                    """
+            )
+    objects_html = ""
+    if chosen_row:
+        objects_html = (
+            f'<div class="doc-card">{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}'
+            "</div>"
+        )
+        snapshot_objects = console.snapshot_objects(chosen)
+        review_path = review_path_for_klasse(chosen_row["class"])
+        if not chosen_object_id:
+            objects_html += _render_review_index(chosen, snapshot_objects, review_path)
+        else:
+            obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
+            if obj is None:
+                raise ConsoleError("unknown_object")
+            objects_html += _render_review_card(
+                console, chosen, obj, snapshot_objects, review_path, draft, conflict_html
+            )
+    empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
+    return _page(
+        f"""
+            {_nav(account, "review", counts)}
+            <section class="room">
+              <h1>Review</h1>
+              <p class="lead">Beoordeel Koppen als structuur en Inhoud als kennisobjecten.</p>
+              {conflict_html if not chosen_object_id else ""}
+              {picker}
+              {"".join(cards) if not chosen else ""}
+              {objects_html or empty}
+            </section>
+            {_help(room="review")}
+            """
+    )
 
 
 def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
@@ -1144,340 +1478,15 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             target = "/tree"
         return RedirectResponse(target, status_code=303)
 
-    def _render_review_room(
-        account: dict[str, Any],
-        document: str = "",
-        object: str = "",
-        *,
-        draft: dict[str, str] | None = None,
-        conflict: bool = False,
-    ) -> str:
-        chosen = document.strip()
-        draft = {
-            key: html.escape(str(value or ""), quote=True)
-            for key, value in (draft or {}).items()
-        }
-        closed_eindoordeel = frozenset(
-            {"goedkeuren", "goedkeuren_na_correctie", "afwijzen", "later_beoordelen"}
-        )
-        closed_pos = frozenset({"dit_klopt", "andere_kop"})
-        closed_type_action = frozenset({"dit_klopt", "type_wijzigen"})
-        closed_types = frozenset(CLOSED_OBJECT_TYPES) | frozenset(CLOSED_BOOM_TYPES)
-        suitability_draft = draft.get("suitability", "")
-        if suitability_draft not in SUITABILITY_VALUES:
-            suitability_draft = ""
-        eindoordeel_draft = draft.get("eindoordeel", "")
-        if eindoordeel_draft not in closed_eindoordeel:
-            eindoordeel_draft = ""
-        pos_action_draft = draft.get("documentpositie_action") or "dit_klopt"
-        if pos_action_draft not in closed_pos:
-            pos_action_draft = "dit_klopt"
-        type_action_draft = draft.get("type_action") or "dit_klopt"
-        if type_action_draft not in closed_type_action:
-            type_action_draft = "dit_klopt"
-        comment_draft = draft.get("comment", "")
-        correction_draft = draft.get("proposed_correction", "")
-        confirmed_type_draft = draft.get("confirmed_object_type", "")
-        if confirmed_type_draft not in closed_types:
-            confirmed_type_draft = ""
-        conflict_html = ""
-        if conflict:
-            conflict_html = (
-                f'<div class="banner err" data-stale-write-conflict '
-                f'data-error-code="{_esc(SNAPSHOT_OBJECT_WRITE_CONFLICT)}">'
-                f"{_esc(ERROR_COPY[SNAPSHOT_OBJECT_WRITE_CONFLICT])}</div>"
-                f'<p class="muted">{_esc(SNAPSHOT_OBJECT_WRITE_CONFLICT)}</p>'
-            )
-        envelopes = state.list_envelopes()
-        chosen_row = next((row for row in envelopes if row["snapshot_id"] == chosen), None)
-        picker = ""
-        if chosen_row:
-            picker = f"""
-              <div class="review-document-context">
-                <span>Document</span>
-                <b>{_esc(chosen_row["title"])}</b>
-                <span>versie {_esc(chosen_row["version"])}</span>
-                <span>onderwerp {_esc(chosen_row["family"])}</span>
-                <span>klasse {_esc(chosen_row["class"])}</span>
-                <a href="/review">Ander document kiezen</a>
-              </div>
-            """
-        cards = []
-        if not chosen:
-            for row in envelopes:
-                cards.append(
-                    f"""
-                    <article class="doc-card">
-                      {_document_card_heading({**row, "status": row["state"]})}
-                      <p class="lead">Beoordeel Koppen als structuur en Inhoud als kennisobjecten.</p>
-                      <p><a class="btn-primary" href="/review?document={_esc(row["snapshot_id"])}">Beoordeel</a></p>
-                    </article>
-                    """
-                )
-        objects_html = ""
-        chosen_object_id = object.strip()
-        if chosen_row:
-            objects_html += (
-                f'<div class="doc-card">{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}'
-                "</div>"
-            )
-            snapshot_objects = state.snapshot_objects(chosen)
-            review_path = review_path_for_klasse(chosen_row["class"])
-            if not chosen_object_id:
-                def _index_item(obj: dict[str, Any], *, checkbox: bool = False) -> str:
-                    title = review_row_title(obj)
-                    status = review_row_status(obj)
-                    link = (
-                        f'<a class="review-row-title" href="/review?document={_esc(chosen)}&object={_esc(obj["object_id"])}">'
-                        f"{_esc(title)}</a>"
-                    )
-                    status_html = f'<span class="review-row-status">{_esc(status)}</span>'
-                    if checkbox:
-                        return (
-                            '<li class="review-row">'
-                            f'<label class="check"><input type="checkbox" name="object_ids" '
-                            f'value="{_esc(obj["object_id"])}">{link}{status_html}</label>'
-                            "</li>"
-                        )
-                    return f'<li class="review-row">{link}{status_html}</li>'
-
-                koppen, _old_inhoud = review_stacks(snapshot_objects, review_path=review_path)
-                duty = slow_review_duty(snapshot_objects, review_path=review_path)
-                leftover = remaining_unclassified(snapshot_objects)
-                leftover_ids = {row.get("object_id") for row in leftover}
-                leftover_other = [
-                    obj
-                    for obj in remaining_not_duty(snapshot_objects)
-                    if obj.get("object_id") not in leftover_ids
-                ]
-                blocked = blocked_audit_lane(snapshot_objects) if review_path != "boom" else []
-                fast_items = "".join(_index_item(obj, checkbox=True) for obj in koppen)
-                slow_items = "".join(_index_item(obj) for obj in duty)
-                leftover_html = ""
-                if leftover:
-                    leftover_html = f"""
-                      <aside class="review-leftover-unclassified">
-                        <p>Resterend unclassified: {len(leftover)}. Niet als één-voor-één plicht. Unclassified wordt niet geserveerd.</p>
-                      </aside>
-                    """
-                other_html = ""
-                if leftover_other:
-                    other_html = (
-                        f'<p class="review-leftover-other">Overige objecten in de store: '
-                        f"{len(leftover_other)}. Niet de onderzoekerplicht voor handelingsadvies.</p>"
-                    )
-                blocked_html = ""
-                if blocked:
-                    typed = frozenset(
-                        {
-                            "recommendation",
-                            "condition",
-                            "exception",
-                            "definition",
-                            "explanation",
-                        }
-                    )
-                    shown = [
-                        obj
-                        for obj in blocked
-                        if (obj.get("proposed_object_type") or obj.get("confirmed_object_type") or obj.get("object_type"))
-                        in typed
-                    ]
-                    hidden = [obj for obj in blocked if obj not in shown]
-                    blocked_items = "".join(_index_item(obj) for obj in shown)
-                    hidden_ids = " ".join(_esc(obj["object_id"]) for obj in hidden)
-                    hidden_html = (
-                        f'<p class="review-blocked-store-ids">{hidden_ids}</p>' if hidden_ids else ""
-                    )
-                    shown_list = (
-                        f'<ol class="object-index">{blocked_items}</ol>' if blocked_items else ""
-                    )
-                    blocked_html = f"""
-                      <aside class="review-blocked-audit" aria-label="Geblokkeerde kandidaten">
-                        <p>Geblokkeerde kandidaten (poort): {len(blocked)}. Niet de gewone beoordelingsplicht.</p>
-                        {shown_list}
-                        {hidden_html}
-                      </aside>
-                    """
-                if review_path == "boom":
-                    fast_title = f"Paden ({len(koppen)})"
-                    fast_lead = "Bevestig paden als structuur, nooit als advies."
-                    fast_button = "Bevestig geselecteerde paden als structuur"
-                    slow_title = f"Knopen en uitkomsten ({len(duty)})"
-                    slow_lead = "Beoordeel knopen die advies poorten en uitkomsten. Dat is de handplicht."
-                else:
-                    fast_title = f"Koppen ({len(koppen)})"
-                    fast_lead = "Bevestig koppen als structuur, nooit als advies."
-                    fast_button = "Bevestig geselecteerde koppen als structuur"
-                    slow_title = f"Inhoud ({len(duty)})"
-                    slow_lead = "Beoordeel voorgestelde aanbevelingen plus voorwaarden, uitzonderingen en ieder high-risk object. Dat is de handplicht."
-                objects_html += f"""
-                    <section class="review-lane-fast">
-                      <h2>{fast_title}</h2>
-                      <p class="lead">{fast_lead}</p>
-                      <form method="post" action="/review/headings/batch-confirm">
-                        <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
-                        <ol class="object-index">{fast_items}</ol>
-                        <button class="btn-primary" type="submit">{fast_button}</button>
-                      </form>
-                    </section>
-                    <section class="review-lane-slow">
-                      <h2>{slow_title}</h2>
-                      <p class="lead">{slow_lead}</p>
-                      <ol class="object-index">{slow_items}</ol>
-                      {leftover_html}
-                      {other_html}
-                    </section>
-                    {blocked_html}
-                    {_coverage_panel(snapshot_objects)}
-                """
-            else:
-                obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
-                if obj is None:
-                    raise ConsoleError("unknown_object")
-                heading = review_card_sentence(obj)
-                obj_text = (obj.get("content") or {}).get("clean_text") or ""
-                heading_norm = " ".join(heading.split())
-                body_norm = " ".join(str(obj_text).split())
-                object_text_html = ""
-                if body_norm and body_norm != heading_norm and not body_norm.startswith(
-                    heading_norm.rstrip("…")
-                ):
-                    object_text_html = f'<div class="object-text"><p>{_esc(obj_text)}</p></div>'
-                expand_merge = (admission_of(obj).get("expand_merge") or {})
-                merged_text = str(expand_merge.get("merged_text") or "").strip()
-                if expand_merge.get("performed") and merged_text:
-                    object_text_html += (
-                        '<div class="object-expand-merge">'
-                        f"<p>{_esc(merged_text)}</p>"
-                        "</div>"
-                    )
-                proposed = proposed_type_of(obj)
-                confirmable = confirmable_proposed_type(obj)
-                confirmed = obj.get("confirmed_object_type") or ""
-                type_options = _type_options(
-                    confirmed_type_draft or confirmed,
-                    review_path=review_path,
-                    proposed=confirmable,
-                )
-                passage_ok = False
-                try:
-                    state.open_source_passage(snapshot_id=chosen, object_id=obj["object_id"])
-                    passage_ok = True
-                except ConsoleError:
-                    passage_ok = False
-                type_disabled = "" if passage_ok else " disabled"
-                approve_disabled = "" if passage_ok else " disabled"
-                four_eyes_html = ""
-                if requires_four_eyes(obj, confirmed_type=confirmed or None):
-                    four_eyes_html = (
-                        '<div class="banner warn">Dit object vereist four-eyes: '
-                        "<b>tweede reviewer nodig</b>.</div>"
-                    )
-                stamp_html = _stamp_block(
-                    obj, hidden=not recommendation_strength_ui_applies(obj)
-                )
-                path_text = found_under_path(obj)
-                chooser_html = _heading_chooser(obj, snapshot_objects, chosen)
-                broncontext_html = _broncontext_html(
-                    obj, chosen, obj["object_id"], passage_ok
-                )
-                proposed_label = _object_type_label(proposed or confirmable)
-                objects_html += f"""
-                <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">Terug naar Inhoud</a></p>
-                <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
-                  <div class="review-cockpit-copy">
-                    <p>Je beoordeelt één geselecteerde passage.</p>
-                    <p>De volledige richtlijn blijft ongewijzigd.</p>
-                    <p>Metis maakt geschikte passages apart bruikbaar.</p>
-                  </div>
-                  <form class="review-decision-form" method="post" action="/review" data-review-form>
-                    <input type="hidden" name="snapshot_id" value="{_esc(chosen)}">
-                    <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
-                    <input type="hidden" name="proposed_object_type" value="{_esc(confirmable)}">
-                    <input type="hidden" name="found_under" value="{_esc(path_text)}">
-                    <input type="hidden" name="decision" value="">
-                    {four_eyes_html}
-                    {conflict_html}
-                    <section class="review-card-object review-step" data-review-step="a" aria-label="Geselecteerde passage">
-                      <p class="eyebrow">Geselecteerde passage</p>
-                      <h3>{_esc(heading)}</h3>
-                      <p class="why-selected">{_esc(why_selected(obj))}</p>
-                      <p class="meta"><span>status <b>{_esc(review_row_status(obj))}</b></span></p>
-                      {object_text_html}
-                    </section>
-                    {broncontext_html}
-                    <section class="review-step" data-review-step="c">
-                      <h4>Geschiktheid</h4>
-                      <label class="check"><input type="radio" name="suitability" value="ja"{_checked(suitability_draft, "ja")}> Ja</label>
-                      <label class="check"><input type="radio" name="suitability" value="mist_context"{_checked(suitability_draft, "mist_context")}> mist context</label>
-                      <label class="check"><input type="radio" name="suitability" value="samenvoegen"{_checked(suitability_draft, "samenvoegen")}> samenvoegen</label>
-                      <label class="check"><input type="radio" name="suitability" value="alleen_onderbouwing"{_checked(suitability_draft, "alleen_onderbouwing")}> alleen onderbouwing</label>
-                      <label class="check"><input type="radio" name="suitability" value="geen_kenniseenheid"{_checked(suitability_draft, "geen_kenniseenheid")}> geen kenniseenheid</label>
-                    </section>
-                    <section class="review-step" data-review-step="d">
-                      <h4>Documentpositie</h4>
-                      <p>Gevonden onder: <b>{_esc(path_text or "het document")}</b></p>
-                      <label class="check"><input type="radio" name="documentpositie_action" value="dit_klopt"{_checked(pos_action_draft, "dit_klopt")}> Dit klopt</label>
-                      <label class="check"><input type="radio" name="documentpositie_action" value="andere_kop"{_checked(pos_action_draft, "andere_kop")}> Andere kop kiezen</label>
-                      {chooser_html}
-                    </section>
-                    <section class="review-step" data-review-step="e">
-                      <h4>Type</h4>
-                      <p>Metis stelt voor: <b>{_esc(proposed_label)}</b></p>
-                      <label class="check"><input type="radio" name="type_action" value="dit_klopt"{_checked(type_action_draft, "dit_klopt")}> Dit klopt</label>
-                      <label class="check"><input type="radio" name="type_action" value="type_wijzigen"{_checked(type_action_draft, "type_wijzigen")}> Type wijzigen</label>
-                      <div data-type-chooser hidden>
-                        <label for="type-{_esc(obj["object_id"])}">Ander type</label>
-                        <select id="type-{_esc(obj["object_id"])}" name="confirmed_object_type" hidden{type_disabled}>{type_options}</select>
-                      </div>
-                    </section>
-                    {stamp_html}
-                    <section class="review-step" data-review-step="f">
-                      <h4>Eindoordeel</h4>
-                      <fieldset id="decision-{_esc(obj["object_id"])}">
-                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren"{approve_disabled}{_checked(eindoordeel_draft, "goedkeuren")}> Goedkeuren</label>
-                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren_na_correctie"{_checked(eindoordeel_draft, "goedkeuren_na_correctie")}> Goedkeuren na correctie</label>
-                      <label class="check"><input type="radio" name="eindoordeel" value="afwijzen"{_checked(eindoordeel_draft, "afwijzen")}> Afwijzen</label>
-                      <label class="check"><input type="radio" name="eindoordeel" value="later_beoordelen"{_checked(eindoordeel_draft, "later_beoordelen")}> Later beoordelen</label>
-                      </fieldset>
-                      <p class="field-help" data-decision-hint>Kies een eindoordeel.</p>
-                      <div class="decision-comment" data-comment-field hidden>
-                        <label for="comment-{_esc(obj["object_id"])}">Toelichting</label>
-                        <textarea id="comment-{_esc(obj["object_id"])}" name="comment">{html.escape(comment_draft, quote=True)}</textarea>
-                      </div>
-                      <div class="decision-correction" data-correction-field hidden>
-                        <label for="correction-{_esc(obj["object_id"])}">Voorgestelde correctie</label>
-                        <textarea id="correction-{_esc(obj["object_id"])}" name="proposed_correction">{html.escape(correction_draft, quote=True)}</textarea>
-                      </div>
-                      <button class="btn-primary" type="submit" disabled data-submit-review>Review opslaan en volgende</button>
-                    </section>
-                  </form>
-                </article>
-                """
-        empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
-        lead = "Beoordeel Koppen als structuur en Inhoud als kennisobjecten."
-        return _page(
-            f"""
-            {_nav(account, "review", _counts(account))}
-            <section class="room">
-              <h1>Review</h1>
-              <p class="lead">{lead}</p>
-              {conflict_html if not chosen_object_id else ""}
-              {picker}
-              {"".join(cards) if not chosen else ""}
-              {objects_html or empty}
-            </section>
-            {_help(room="review")}
-            """
-        )
-
     @app.get("/review", response_class=HTMLResponse)
     def review_get(request: Request, document: str = "", object: str = "") -> str:
+        account = _require(request)
         return _render_review_room(
-            _require(request),
+            state,
+            account,
             html.escape(document, quote=True),
             html.escape(object, quote=True),
+            counts=_counts(account),
         )
 
     @app.get("/review/bronpassage", response_class=HTMLResponse)
@@ -1562,9 +1571,11 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             )
             return HTMLResponse(
                 _render_review_room(
+                    state,
                     account,
                     html.escape(snapshot_id, quote=True),
                     html.escape(object_id, quote=True),
+                    counts=_counts(account),
                     draft={
                         "suitability": html.escape(suitability, quote=True),
                         "documentpositie_action": html.escape(documentpositie_action, quote=True),
