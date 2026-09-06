@@ -7,21 +7,25 @@ local ``sources/private/`` remains the G0 stand-in for local development.
 """
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
 import re
 import secrets
+import tempfile
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
 import zipfile
+from contextlib import contextmanager, suppress
 from copy import deepcopy
 from datetime import date, datetime, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Iterator
 
 from src.admission_gate_v1 import (
     GATE_BLOCKED,
@@ -91,6 +95,7 @@ from src.serving_relations_v1 import (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_V12 = REPO_ROOT / "schemas" / "knowledge_object.schema.v1.2.json"
 CONSOLE_VERSION = "operations-console-v1.0.0"
+SNAPSHOT_OBJECT_WRITE_CONFLICT = "snapshot_object_write_conflict"
 CAPTURED = "captured_not_published"
 PUBLISHED_ENVELOPE_STATES = frozenset({"published", "superseded", "withdrawn"})
 UNPUBLISHED_DELETE_EVENT = "unpublished_snapshot_deleted"
@@ -431,18 +436,43 @@ def _hash_password(password: str, salt_hex: str | None = None) -> tuple[str, str
     return salt.hex(), digest.hex()
 
 
-def _atomic_write(path: Path, payload: Any) -> None:
+def _atomic_replace_bytes(path: Path, payload: bytes) -> None:
+    """Write ``payload`` via a unique temp file in the same directory, then replace.
+
+    MUST NOT use a shared fixed ``path.suffix + ".tmp"`` name (concurrent writers
+    race). ``os.replace`` is atomic on the same filesystem; an interrupt during
+    the temp write leaves the destination intact.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    tmp.replace(path)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
+    os.close(fd)
+    tmp = Path(tmp_name)
+    try:
+        tmp.write_bytes(payload)
+        os.replace(tmp, path)
+    except Exception:
+        with suppress(OSError):
+            tmp.unlink()
+        raise
+
+
+def _atomic_write(path: Path, payload: Any) -> None:
+    text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    _atomic_replace_bytes(path, text.encode("utf-8"))
 
 
 def _atomic_write_bytes(path: Path, payload: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_bytes(payload)
-    tmp.replace(path)
+    _atomic_replace_bytes(path, payload)
+
+
+def _objects_jsonl_bytes(rows: list[dict[str, Any]]) -> bytes:
+    return "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in rows).encode("utf-8")
+
+
+def _file_revision(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def default_url_fetcher(url: str) -> tuple[bytes, str, str]:
@@ -570,6 +600,9 @@ class OperationsConsole:
             self._bindings = {key: list(value) for key, value in loaded.items()}
         else:
             self._bindings = {}
+        self._objects_lock_guard = threading.Lock()
+        self._objects_thread_locks: dict[str, threading.RLock] = {}
+        self._objects_tls = threading.local()
 
     def _load_map(self, path: Path) -> dict[str, dict[str, Any]]:
         if not path.exists():
@@ -594,22 +627,63 @@ class OperationsConsole:
         token = safe_snapshot_id(snapshot_id)
         return safe_path_under(self._objects_dir, f"{token}.jsonl")
 
-    def _load_objects(self, snapshot_id: str) -> list[dict[str, Any]]:
+    def _objects_thread_lock(self, snapshot_id: str) -> threading.RLock:
+        with self._objects_lock_guard:
+            lock = self._objects_thread_locks.get(snapshot_id)
+            if lock is None:
+                lock = threading.RLock()
+                self._objects_thread_locks[snapshot_id] = lock
+            return lock
+
+    def _objects_expected_revs(self) -> dict[str, str]:
+        revs = getattr(self._objects_tls, "expected", None)
+        if revs is None:
+            revs = {}
+            self._objects_tls.expected = revs
+        return revs
+
+    @contextmanager
+    def _objects_write_lock(self, snapshot_id: str) -> Iterator[None]:
+        path = self._objects_path(snapshot_id)
+        lock_path = path.with_name(path.name + ".lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with self._objects_thread_lock(snapshot_id):
+            with open(lock_path, "a+b") as handle:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                try:
+                    yield
+                finally:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+    def _load_objects(self, snapshot_id: str, *, remember: bool = True) -> list[dict[str, Any]]:
         if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
             raise ConsoleError("unknown_snapshot")
-        path = self._objects_path(snapshot_id)
-        if not path.exists():
-            return []
-        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        with self._objects_write_lock(snapshot_id):
+            path = self._objects_path(snapshot_id)
+            if not path.exists():
+                text = ""
+                rows: list[dict[str, Any]] = []
+            else:
+                text = path.read_text(encoding="utf-8")
+                rows = [json.loads(line) for line in text.splitlines() if line.strip()]
+            if remember:
+                expected = self._objects_expected_revs()
+                if snapshot_id not in expected:
+                    expected[snapshot_id] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            return rows
 
     def _save_objects(self, snapshot_id: str, rows: list[dict[str, Any]]) -> None:
         if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
             raise ConsoleError("unknown_snapshot")
-        path = self._objects_path(snapshot_id)
-        path.write_text(
-            "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in rows),
-            encoding="utf-8",
-        )
+        with self._objects_write_lock(snapshot_id):
+            path = self._objects_path(snapshot_id)
+            expected = self._objects_expected_revs().get(snapshot_id)
+            current_rev = _file_revision(path)
+            if expected is not None and current_rev != expected:
+                raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+            payload = _objects_jsonl_bytes(rows)
+            _atomic_replace_bytes(path, payload)
+            self._objects_expected_revs()[snapshot_id] = hashlib.sha256(payload).hexdigest()
 
     def _account(self, account_id: str) -> dict[str, Any]:
         account = self._accounts.get(account_id)
@@ -761,7 +835,7 @@ class OperationsConsole:
         publish = 0
         tree = 0
         for envelope in self._envelopes.values():
-            objects = self._load_objects(envelope["snapshot_id"])
+            objects = self._load_objects(envelope["snapshot_id"], remember=False)
             statuses = {(row.get("governance") or {}).get("validation_status") for row in objects}
             if envelope.get("uploader_account_id") == account_id and statuses & {"revise", "rejected"}:
                 ingest += 1
@@ -788,7 +862,7 @@ class OperationsConsole:
                     if account_id in (envelope.get("named_reviewers") or [])
                     and any(
                         (row.get("governance") or {}).get("validation_status") == "needs_review"
-                        for row in self._load_objects(envelope["snapshot_id"])
+                        for row in self._load_objects(envelope["snapshot_id"], remember=False)
                     )
                 ]
             )
@@ -829,7 +903,7 @@ class OperationsConsole:
         review_path = review_path_for_klasse(self._envelope(snapshot_id)["class"])
         if not is_confirmable_type_for_path(confirmed_object_type, review_path):
             raise ConsoleError("unknown_object_type")
-        current = self.snapshot_objects(snapshot_id)
+        current = self.snapshot_objects(snapshot_id, for_update=True)
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
@@ -868,7 +942,7 @@ class OperationsConsole:
         reviewer = self._require_role(actor_id, "reviewer")
         if actor_id not in self._envelope(snapshot_id)["named_reviewers"]:
             raise ConsoleError("reviewer_not_named_on_snapshot")
-        current = self.snapshot_objects(snapshot_id)
+        current = self.snapshot_objects(snapshot_id, for_update=True)
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
@@ -1258,7 +1332,7 @@ class OperationsConsole:
             return True
         if envelope.get("published") is True:
             return True
-        rows = self._load_objects(snapshot_id)
+        rows = self._load_objects(snapshot_id, remember=False)
         if any((row.get("governance") or {}).get("publication_status") == "published" for row in rows):
             return True
         return self._snapshot_in_published_projection(snapshot_id)
@@ -1435,9 +1509,15 @@ class OperationsConsole:
     def _receipt(self, envelope: dict[str, Any]) -> dict[str, Any]:
         return deepcopy(envelope)
 
-    def snapshot_objects(self, snapshot_id: str, include_blocked: bool = False) -> list[dict[str, Any]]:
+    def snapshot_objects(
+        self,
+        snapshot_id: str,
+        include_blocked: bool = False,
+        *,
+        for_update: bool = False,
+    ) -> list[dict[str, Any]]:
         self._envelope(snapshot_id)
-        rows = self._load_objects(snapshot_id)
+        rows = self._load_objects(snapshot_id, remember=for_update)
         if include_blocked:
             return deepcopy(rows)
         current: dict[str, dict[str, Any]] = {}
@@ -1784,7 +1864,7 @@ class OperationsConsole:
         mapped = map_eindoordeel(eindoordeel or "", decision)
         if mapped:
             decision = mapped
-        current = self.snapshot_objects(snapshot_id)
+        current = self.snapshot_objects(snapshot_id, for_update=True)
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
@@ -2067,7 +2147,7 @@ class OperationsConsole:
         account = self._account(actor_id)
         if "researcher" not in account["roles"] and "reviewer" not in account["roles"]:
             raise ConsoleError("correction_role_required")
-        current = self.snapshot_objects(snapshot_id)
+        current = self.snapshot_objects(snapshot_id, for_update=True)
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
