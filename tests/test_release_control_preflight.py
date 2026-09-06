@@ -398,6 +398,19 @@ def test_service_app_inspection_api_is_toegang() -> None:
     assert "src/service_app.py" in item["paths"]
 
 
+def test_release_control_markers_are_not_live_release_evidence() -> None:
+    """Markers/comments are metadata pointing at concrete checks, not live proof."""
+    result = _load().evaluate_release_control(paths=TOOLING_PATHS, tests_root=ROOT / "tests")
+    assert result["status"] == "PASS"
+    assert result.get("live_release_evidence") is False
+    report = result["report"]
+    uncertainty = str(report["onzekerheid"]).lower()
+    bewijs = str(report["bewijs"]).lower()
+    assert "not live-release" in uncertainty or "niet als live-release" in uncertainty
+    assert "marker" in uncertainty or "metadata" in uncertainty
+    assert "live-release" not in bewijs or "not live-release" in uncertainty
+
+
 def test_unresolved_base_fails_closed_instead_of_working_tree_passthrough() -> None:
     result = _run_cli(["--base", "definitely-not-a-ref", "--tests-root", str(ROOT / "tests")])
     assert result.returncode == 2
