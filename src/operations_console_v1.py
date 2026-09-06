@@ -631,6 +631,9 @@ class OperationsConsole:
         self._objects_thread_locks: dict[str, threading.RLock] = {}
         self._objects_tls = threading.local()
         self._sessions_thread_lock = threading.RLock()
+        self._store_thread_lock = threading.RLock()
+        self._store_lock_depth = 0
+        self._store_lock_handle: Any = None
         self._prepared_envelopes: dict[str, Any] | None = None
         self._prepared_bindings: dict[str, Any] | None = None
 
@@ -674,13 +677,65 @@ class OperationsConsole:
         if last_error is not None:
             raise last_error
 
+    @contextmanager
+    def _store_write_lock(self) -> Iterator[None]:
+        """Exclusive lock for one complete store transaction (shared maps + files).
+
+        MUST NOT be held across ingest extract. Review POSTs take this only for
+        the durable commit, not for heavy parse/transform. Re-entrant for
+        ``_save_envelopes`` / ``_save_bindings`` called from ``_commit_prepared_store``.
+        """
+        lock_path = self.runtime / "store.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with self._store_thread_lock:
+            first = self._store_lock_depth == 0
+            if first:
+                handle = open(lock_path, "a+b")
+                try:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                except Exception:
+                    handle.close()
+                    raise
+                self._store_lock_handle = handle
+            self._store_lock_depth += 1
+            try:
+                yield
+            finally:
+                self._store_lock_depth -= 1
+                if first:
+                    handle = self._store_lock_handle
+                    self._store_lock_handle = None
+                    if handle is not None:
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                        handle.close()
+
+    def _rebase_snapshot_map(
+        self,
+        live: dict[str, Any],
+        prepared: dict[str, Any],
+        snapshot_id: str,
+    ) -> dict[str, Any]:
+        """Apply one snapshot's prepared entry onto the live map.
+
+        A caller's full-map copy may be stale on other keys. Only this
+        snapshot's record is published; other writers' committed keys stay.
+        """
+        merged = deepcopy(live)
+        if snapshot_id in prepared:
+            merged[snapshot_id] = deepcopy(prepared[snapshot_id])
+        else:
+            merged.pop(snapshot_id, None)
+        return merged
+
     def _save_envelopes(self) -> None:
-        payload = getattr(self, "_prepared_envelopes", None)
-        _atomic_write(self._envelopes_path, self._envelopes if payload is None else payload)
+        with self._store_write_lock():
+            payload = getattr(self, "_prepared_envelopes", None)
+            _atomic_write(self._envelopes_path, self._envelopes if payload is None else payload)
 
     def _save_bindings(self) -> None:
-        payload = getattr(self, "_prepared_bindings", None)
-        _atomic_write(self._bindings_path, self._bindings if payload is None else payload)
+        with self._store_write_lock():
+            payload = getattr(self, "_prepared_bindings", None)
+            _atomic_write(self._bindings_path, self._bindings if payload is None else payload)
 
     def _objects_path(self, snapshot_id: str) -> Path:
         if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
@@ -822,45 +877,66 @@ class OperationsConsole:
         objects: tuple[str, list[dict[str, Any]]] | None = None,
         expected_revision: str | None = None,
         ledger_fn: Callable[[], None] | None = None,
+        snapshot_id: str | None = None,
     ) -> None:
-        """Write prepared copies, then publish in-process maps only after success."""
-        prior_envelopes = deepcopy(self._envelopes)
-        prior_bindings = deepcopy(self._bindings)
-        prior_objects: tuple[str, bytes | None] | None = None
-        if objects is not None:
-            path = self._objects_path(objects[0])
-            prior_objects = (objects[0], path.read_bytes() if path.exists() else None)
-        prior_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
-        self._prepared_envelopes = envelopes
-        self._prepared_bindings = bindings
-        try:
+        """Write one complete store transaction, then publish in-process maps.
+
+        Serializes objects/envelopes/bindings/ledger writes. Rebases shared
+        maps so a stale full-map copy cannot clobber another writer's
+        already-committed keys. Conflict or mid-write failure rolls back
+        only files this transaction actually wrote.
+        """
+        with self._store_write_lock():
+            sid = snapshot_id or (objects[0] if objects is not None else None)
+            if envelopes is not None and sid:
+                envelopes = self._rebase_snapshot_map(self._envelopes, envelopes, sid)
+            if bindings is not None and sid:
+                bindings = self._rebase_snapshot_map(self._bindings, bindings, sid)
+            prior_envelopes = deepcopy(self._envelopes)
+            prior_bindings = deepcopy(self._bindings)
+            prior_objects: tuple[str, bytes | None] | None = None
             if objects is not None:
-                self._save_objects_pinned(
-                    objects[0],
-                    objects[1],
-                    expected_revision,
+                path = self._objects_path(objects[0])
+                prior_objects = (objects[0], path.read_bytes() if path.exists() else None)
+            prior_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
+            self._prepared_envelopes = envelopes
+            self._prepared_bindings = bindings
+            wrote_objects = False
+            wrote_envelopes = False
+            wrote_bindings = False
+            wrote_ledger = False
+            try:
+                if objects is not None:
+                    self._save_objects_pinned(
+                        objects[0],
+                        objects[1],
+                        expected_revision,
+                    )
+                    wrote_objects = True
+                if envelopes is not None:
+                    self._save_envelopes()
+                    wrote_envelopes = True
+                if bindings is not None:
+                    self._save_bindings()
+                    wrote_bindings = True
+                if ledger_fn is not None:
+                    ledger_fn()
+                    wrote_ledger = True
+            except Exception:
+                self._rollback_store_files(
+                    objects_snapshot=prior_objects if wrote_objects else None,
+                    envelopes=prior_envelopes if wrote_envelopes else None,
+                    bindings=prior_bindings if wrote_bindings else None,
+                    ledger_size=prior_ledger if wrote_ledger else None,
                 )
+                raise
+            finally:
+                self._prepared_envelopes = None
+                self._prepared_bindings = None
             if envelopes is not None:
-                self._save_envelopes()
+                self._envelopes = envelopes
             if bindings is not None:
-                self._save_bindings()
-            if ledger_fn is not None:
-                ledger_fn()
-        except Exception:
-            self._rollback_store_files(
-                objects_snapshot=prior_objects,
-                envelopes=prior_envelopes if envelopes is not None else None,
-                bindings=prior_bindings if bindings is not None else None,
-                ledger_size=prior_ledger,
-            )
-            raise
-        finally:
-            self._prepared_envelopes = None
-            self._prepared_bindings = None
-        if envelopes is not None:
-            self._envelopes = envelopes
-        if bindings is not None:
-            self._bindings = bindings
+                self._bindings = bindings
 
     def _account(self, account_id: str) -> dict[str, Any]:
         account = self._accounts.get(account_id)
@@ -1453,9 +1529,11 @@ class OperationsConsole:
             "acquired_at": utc_now(),
             "console_version": CONSOLE_VERSION,
         }
-        self._envelopes[snapshot_id] = envelope
-        self._save_objects(snapshot_id, objects)
-        self._save_envelopes()
+        prepared_envelopes = {snapshot_id: envelope}
+        self._commit_prepared_store(
+            objects=(snapshot_id, objects),
+            envelopes=prepared_envelopes,
+        )
         return self._receipt(envelope)
 
     def reextract_unpublished(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
@@ -1516,14 +1594,15 @@ class OperationsConsole:
                 source_hash=envelope["sha256"],
             )
         objects = apply_passage_register(objects)
-        envelope["review_passes"] = {}
-        envelope["state"] = CAPTURED
-        self._envelopes[snapshot_id] = envelope
-        self._save_objects(snapshot_id, objects)
-        self._save_envelopes()
-        self._bindings[snapshot_id] = []
-        self._save_bindings()
-        return self._receipt(envelope)
+        prepared_envelope = deepcopy(envelope)
+        prepared_envelope["review_passes"] = {}
+        prepared_envelope["state"] = CAPTURED
+        self._commit_prepared_store(
+            objects=(snapshot_id, objects),
+            envelopes={snapshot_id: prepared_envelope},
+            bindings={snapshot_id: []},
+        )
+        return self._receipt(prepared_envelope)
 
     def snapshot_is_published(self, snapshot_id: str) -> bool:
         """True when this snapshot is a published projection or has been published."""
@@ -1608,6 +1687,22 @@ class OperationsConsole:
             raise ConsoleError("unpublished_delete_role_required")
         if not confirmed:
             raise ConsoleError("delete_confirmation_required")
+        with self._store_write_lock():
+            return self._delete_unpublished_snapshot_locked(
+                actor_id=actor_id,
+                token=token,
+                account=account,
+                confirm_title=confirm_title,
+            )
+
+    def _delete_unpublished_snapshot_locked(
+        self,
+        *,
+        actor_id: str,
+        token: str,
+        account: dict[str, Any],
+        confirm_title: str,
+    ) -> dict[str, Any]:
         envelope = self._envelope(token)
         if self.snapshot_is_published(token):
             raise ConsoleError("published_projection_must_not_be_deleted")
@@ -1724,6 +1819,33 @@ class OperationsConsole:
         for row in rows:
             current[row["object_id"]] = row
         return deepcopy(list(current.values()))
+
+    def snapshot_objects_and_revision(
+        self,
+        snapshot_id: str,
+        include_blocked: bool = False,
+    ) -> tuple[list[dict[str, Any]], str]:
+        """Read snapshot objects and the form-bound revision from one file load.
+
+        MUST NOT use ``threading.local`` as the GET→POST pin. The revision is
+        the SHA-256 of the objects file bytes that produced these rows.
+        """
+        self._envelope(snapshot_id)
+        with self._objects_write_lock(snapshot_id):
+            path = self._objects_path(snapshot_id)
+            if not path.exists():
+                text = ""
+                rows: list[dict[str, Any]] = []
+            else:
+                text = path.read_text(encoding="utf-8")
+                rows = [json.loads(line) for line in text.splitlines() if line.strip()]
+            revision = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        if include_blocked:
+            return deepcopy(rows), revision
+        current: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            current[row["object_id"]] = row
+        return deepcopy(list(current.values())), revision
 
     def family_tree(self) -> dict[str, Any]:
         families: dict[str, dict[str, Any]] = {}

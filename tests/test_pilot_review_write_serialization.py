@@ -237,18 +237,16 @@ def test_overlapping_store_commits_keep_both_envelope_mutations(tmp_path: Path) 
     snap_a = _ingest(console, accounts, title="Snapshot Alpha", version="1.0")["snapshot_id"]
     snap_b = _ingest(console, accounts, title="Snapshot Beta", version="1.1")["snapshot_id"]
     assert snap_a != snap_b
-    barrier = threading.Barrier(2)
     errors: list[BaseException] = []
     real_save = OperationsConsole._save_objects
     write_trace: list[str] = []
     trace_lock = threading.Lock()
 
-    def gated_save(self: OperationsConsole, target: str, rows: list[dict], **kwargs) -> None:
+    def traced_save(self: OperationsConsole, target: str, rows: list[dict], **kwargs) -> None:
         real_save(self, target, rows, **kwargs)
         if target in {snap_a, snap_b}:
             with trace_lock:
                 write_trace.append(f"objects:{target}")
-            barrier.wait(timeout=8)
 
     real_env = OperationsConsole._save_envelopes
 
@@ -257,7 +255,7 @@ def test_overlapping_store_commits_keep_both_envelope_mutations(tmp_path: Path) 
         with trace_lock:
             write_trace.append("envelopes")
 
-    console._save_objects = gated_save.__get__(console, OperationsConsole)  # type: ignore[method-assign]
+    console._save_objects = traced_save.__get__(console, OperationsConsole)  # type: ignore[method-assign]
     console._save_envelopes = traced_envelopes.__get__(console, OperationsConsole)  # type: ignore[method-assign]
 
     def promoter(snapshot_id: str, actor_id: str) -> None:
@@ -310,80 +308,37 @@ def test_overlapping_store_commits_keep_both_envelope_mutations(tmp_path: Path) 
 
 
 def test_conflict_does_not_rollback_winner_already_committed_work(tmp_path: Path) -> None:
-    """Promise 2: loser/stale rollback MUST NOT undo the winner on disk."""
+    """Promise 2: loser/stale path MUST NOT undo the winner on disk."""
     console = _console(tmp_path)
     accounts = _accounts(console)
     snap_a = _ingest(console, accounts, title="Winner snapshot", version="1.0")["snapshot_id"]
     snap_b = _ingest(console, accounts, title="Loser snapshot", version="1.1")["snapshot_id"]
-    a_objects_done = threading.Event()
-    b_captured = threading.Event()
-    errors: list[BaseException] = []
-    real_save = OperationsConsole._save_objects
-    real_commit = OperationsConsole._commit_prepared_store
-
-    def gated_save(self: OperationsConsole, target: str, rows: list[dict], **kwargs) -> None:
-        real_save(self, target, rows, **kwargs)
-        if target == snap_a:
-            a_objects_done.set()
-            assert b_captured.wait(timeout=8), "loser never captured stale priors"
-
-    def loser_or_winner_commit(self: OperationsConsole, **kwargs) -> None:
-        objects = kwargs.get("objects")
-        if objects is not None and objects[0] == snap_b:
-            assert a_objects_done.wait(timeout=8), "winner objects never landed"
-            prior_envelopes = deepcopy(self._envelopes)
-            prior_disk = json.loads(self._envelopes_path.read_text(encoding="utf-8"))
-            assert prior_disk[snap_a]["class"] == "richtlijn"
-            b_captured.set()
-            for _ in range(80):
-                live = json.loads(self._envelopes_path.read_text(encoding="utf-8"))
-                if live[snap_a]["class"] == "handreiking":
-                    break
-                time.sleep(0.025)
-            self._rollback_store_files(envelopes=prior_envelopes)
-            raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
-        return real_commit(self, **kwargs)
-
-    console._save_objects = gated_save.__get__(console, OperationsConsole)  # type: ignore[method-assign]
-    console._commit_prepared_store = loser_or_winner_commit.__get__(  # type: ignore[method-assign]
-        console, OperationsConsole
+    stale_envelopes = deepcopy(_disk_envelopes(console))
+    assert stale_envelopes[snap_a]["class"] == "richtlijn"
+    console.promote_class(
+        actor_id=accounts["reviewer"]["account_id"],
+        snapshot_id=snap_a,
+        new_class="handreiking",
     )
+    assert _disk_envelopes(console)[snap_a]["class"] == "handreiking"
 
-    def winner() -> None:
-        try:
-            console.promote_class(
-                actor_id=accounts["reviewer"]["account_id"],
-                snapshot_id=snap_a,
-                new_class="handreiking",
-            )
-        except Exception as exc:  # pragma: no cover - winner must commit
-            errors.append(exc)
+    rows_b = console._load_objects(snap_b)
+    with pytest.raises(ConsoleError) as caught:
+        console._commit_prepared_store(
+            objects=(snap_b, rows_b),
+            envelopes=stale_envelopes,
+            expected_revision="stale-conflict-pin",
+        )
+    assert caught.value.code == SNAPSHOT_OBJECT_WRITE_CONFLICT
+    assert _disk_envelopes(console)[snap_a]["class"] == "handreiking"
 
-    def loser() -> None:
-        try:
-            console.promote_class(
-                actor_id=accounts["reviewer"]["account_id"],
-                snapshot_id=snap_b,
-                new_class="handreiking",
-            )
-        except ConsoleError as exc:
-            if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT:
-                errors.append(exc)
-        except Exception as exc:  # pragma: no cover - unexpected
-            errors.append(exc)
-
-    threads = [
-        threading.Thread(target=winner, name="winner-promote"),
-        threading.Thread(target=loser, name="loser-promote"),
-    ]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join(timeout=20)
-        assert not thread.is_alive()
-    assert errors == []
+    console._commit_prepared_store(
+        objects=(snap_b, rows_b),
+        envelopes=stale_envelopes,
+    )
     disk = _disk_envelopes(console)
     assert disk[snap_a]["class"] == "handreiking"
+    assert snap_b in disk
     restarted = _restart(tmp_path)
     assert restarted._envelopes[snap_a]["class"] == "handreiking"
     assert _disk_envelopes(restarted)[snap_a]["class"] == "handreiking"
