@@ -7,6 +7,7 @@ Chat is not a room.
 from __future__ import annotations
 
 import asyncio
+import html
 from typing import Any
 from urllib.parse import quote
 
@@ -179,13 +180,7 @@ def _checked(selected: str, value: str) -> str:
 
 
 def _esc(value: Any) -> str:
-    return (
-        str(value or "")
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
+    return html.escape(str(value or ""), quote=True)
 
 
 def _status_label(state: str) -> str:
@@ -1156,14 +1151,33 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         conflict: bool = False,
     ) -> str:
         chosen = document.strip()
-        draft = {key: str(value or "") for key, value in (draft or {}).items()}
+        draft = {
+            key: html.escape(str(value or ""), quote=True)
+            for key, value in (draft or {}).items()
+        }
+        closed_eindoordeel = frozenset(
+            {"goedkeuren", "goedkeuren_na_correctie", "afwijzen", "later_beoordelen"}
+        )
+        closed_pos = frozenset({"dit_klopt", "andere_kop"})
+        closed_type_action = frozenset({"dit_klopt", "type_wijzigen"})
+        closed_types = frozenset(CLOSED_OBJECT_TYPES) | frozenset(CLOSED_BOOM_TYPES)
         suitability_draft = draft.get("suitability", "")
+        if suitability_draft not in SUITABILITY_VALUES:
+            suitability_draft = ""
         eindoordeel_draft = draft.get("eindoordeel", "")
+        if eindoordeel_draft not in closed_eindoordeel:
+            eindoordeel_draft = ""
         pos_action_draft = draft.get("documentpositie_action") or "dit_klopt"
+        if pos_action_draft not in closed_pos:
+            pos_action_draft = "dit_klopt"
         type_action_draft = draft.get("type_action") or "dit_klopt"
+        if type_action_draft not in closed_type_action:
+            type_action_draft = "dit_klopt"
         comment_draft = draft.get("comment", "")
         correction_draft = draft.get("proposed_correction", "")
         confirmed_type_draft = draft.get("confirmed_object_type", "")
+        if confirmed_type_draft not in closed_types:
+            confirmed_type_draft = ""
         conflict_html = ""
         if conflict:
             conflict_html = (
@@ -1428,11 +1442,11 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                       <p class="field-help" data-decision-hint>Kies een eindoordeel.</p>
                       <div class="decision-comment" data-comment-field hidden>
                         <label for="comment-{_esc(obj["object_id"])}">Toelichting</label>
-                        <textarea id="comment-{_esc(obj["object_id"])}" name="comment">{_esc(comment_draft)}</textarea>
+                        <textarea id="comment-{_esc(obj["object_id"])}" name="comment">{html.escape(comment_draft, quote=True)}</textarea>
                       </div>
                       <div class="decision-correction" data-correction-field hidden>
                         <label for="correction-{_esc(obj["object_id"])}">Voorgestelde correctie</label>
-                        <textarea id="correction-{_esc(obj["object_id"])}" name="proposed_correction">{_esc(correction_draft)}</textarea>
+                        <textarea id="correction-{_esc(obj["object_id"])}" name="proposed_correction">{html.escape(correction_draft, quote=True)}</textarea>
                       </div>
                       <button class="btn-primary" type="submit" disabled data-submit-review>Review opslaan en volgende</button>
                     </section>
@@ -1458,7 +1472,11 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
 
     @app.get("/review", response_class=HTMLResponse)
     def review_get(request: Request, document: str = "", object: str = "") -> str:
-        return _render_review_room(_require(request), document, object)
+        return _render_review_room(
+            _require(request),
+            html.escape(document, quote=True),
+            html.escape(object, quote=True),
+        )
 
     @app.get("/review/bronpassage", response_class=HTMLResponse)
     def review_bronpassage(request: Request, document: str = "", object: str = "") -> str:
@@ -1543,21 +1561,21 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             return HTMLResponse(
                 _render_review_room(
                     account,
-                    snapshot_id,
-                    object_id,
+                    html.escape(snapshot_id, quote=True),
+                    html.escape(object_id, quote=True),
                     draft={
-                        "suitability": suitability,
-                        "documentpositie_action": documentpositie_action,
-                        "found_under": found_under,
-                        "parent_choice": parent_choice,
-                        "type_action": type_action,
-                        "confirmed_object_type": confirmed_object_type,
-                        "recommendation_strength": recommendation_strength,
-                        "eindoordeel": eindoordeel,
-                        "decision": decision,
-                        "comment": comment,
-                        "proposed_correction": proposed_correction,
-                        "proposed_object_type": proposed_object_type,
+                        "suitability": html.escape(suitability, quote=True),
+                        "documentpositie_action": html.escape(documentpositie_action, quote=True),
+                        "found_under": html.escape(found_under, quote=True),
+                        "parent_choice": html.escape(parent_choice, quote=True),
+                        "type_action": html.escape(type_action, quote=True),
+                        "confirmed_object_type": html.escape(confirmed_object_type, quote=True),
+                        "recommendation_strength": html.escape(recommendation_strength, quote=True),
+                        "eindoordeel": html.escape(eindoordeel, quote=True),
+                        "decision": html.escape(decision, quote=True),
+                        "comment": html.escape(comment, quote=True),
+                        "proposed_correction": html.escape(proposed_correction, quote=True),
+                        "proposed_object_type": html.escape(proposed_object_type, quote=True),
                     },
                     conflict=True,
                 ),
