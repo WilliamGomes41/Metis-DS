@@ -66,6 +66,7 @@ PATH_RULES: dict[str, tuple[str, ...]] = {
     "toegang": (
         "src/operations_console_app.py",
         "src/console_asgi.py",
+        "src/service_app.py",
         "src/product_security_v1.py",
         "src/product_api_v1.py",
         "src/eligibility_policy.py",
@@ -154,6 +155,7 @@ MARKER_LINE_RE = re.compile(
 )
 EVIDENCE_RE = re.compile(r"^\s*#\s*release-control-evidence:\s*(\S+)(.*)$", re.IGNORECASE | re.MULTILINE)
 TOKEN_SPLIT_RE = re.compile(r"[\s,;/]+")
+DIFF_FILTER = "ACMRD"
 
 
 def _posix(path: str) -> str:
@@ -324,7 +326,27 @@ def evaluate_release_control(
     }
 
 
-def discover_changed_paths(repo_root: Path, base: str | None) -> list[str]:
+def _git(repo_root: Path, args: Sequence[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _ref_is_commit(repo_root: Path, ref: str) -> bool:
+    proc = _git(repo_root, ["rev-parse", "--verify", f"{ref}^{{commit}}"])
+    return proc.returncode == 0
+
+
+def discover_changed_paths(
+    repo_root: Path,
+    base: str | None,
+    *,
+    allow_working_tree: bool = False,
+) -> list[str]:
     env_paths = os.environ.get("RELEASE_CONTROL_PATHS")
     if env_paths:
         return [line.strip() for line in env_paths.splitlines() if line.strip()]
@@ -334,27 +356,26 @@ def discover_changed_paths(repo_root: Path, base: str | None) -> list[str]:
         github_base = os.environ.get("GITHUB_BASE_REF")
         resolved_base = f"origin/{github_base}" if github_base else "origin/main"
 
-    candidates = (
-        ["git", "diff", "--name-only", "--diff-filter=ACMR", f"{resolved_base}...HEAD"],
-        ["git", "diff", "--name-only", "--diff-filter=ACMR", f"{resolved_base}..HEAD"],
-        ["git", "diff", "--name-only", "--diff-filter=ACMR", "HEAD"],
-    )
+    if not _ref_is_commit(repo_root, resolved_base):
+        raise RuntimeError(f"unresolved release-control base: {resolved_base}")
+
     last_error = ""
-    for command in candidates:
+    for spec in (f"{resolved_base}...HEAD", f"{resolved_base}..HEAD"):
         try:
-            proc = subprocess.run(
-                command,
-                cwd=repo_root,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+            proc = _git(repo_root, ["diff", "--name-only", f"--diff-filter={DIFF_FILTER}", spec])
         except OSError as exc:
             last_error = str(exc)
             continue
         if proc.returncode == 0:
             return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
         last_error = proc.stderr.strip() or proc.stdout.strip() or f"exit {proc.returncode}"
+
+    if allow_working_tree:
+        proc = _git(repo_root, ["diff", "--name-only", f"--diff-filter={DIFF_FILTER}", "HEAD"])
+        if proc.returncode == 0:
+            return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+        last_error = proc.stderr.strip() or proc.stdout.strip() or f"exit {proc.returncode}"
+
     raise RuntimeError(f"unable to discover changed paths against {resolved_base}: {last_error}")
 
 
@@ -364,12 +385,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--base", default=None, help="Git merge-base ref (default origin/main)")
     parser.add_argument("--tests-root", default=None, help="Root scanned for evidence markers")
     parser.add_argument("--repo-root", default=None, help="Repository root")
+    parser.add_argument(
+        "--allow-working-tree",
+        action="store_true",
+        help="Only if explicitly requested: fall back to uncommitted HEAD diff",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     repo_root = Path(args.repo_root).resolve() if args.repo_root else ROOT
     tests_root = Path(args.tests_root) if args.tests_root else repo_root / "tests"
     try:
-        paths = list(args.paths) if args.paths else discover_changed_paths(repo_root, args.base)
+        paths = (
+            list(args.paths)
+            if args.paths
+            else discover_changed_paths(
+                repo_root,
+                args.base,
+                allow_working_tree=args.allow_working_tree,
+            )
+        )
     except RuntimeError as exc:
         print(json.dumps({"status": "BLOCKED", "errors": [str(exc)]}, indent=2))
         return 2
