@@ -148,6 +148,8 @@ Geordende remediaties (aparte Metis GO per item later; start met store-consisten
 
 2. **Failed-write process consistency — `promote_class` and peers (HIGH)** — Bereid mutaties voor op een kopie; publiceer in-process staat alleen ná succesvolle duurzame commit. Definieer herstelbare commitvolgorde / kleine transactie over objects/envelopes/bindings/ledger-bestanden. Tests: geïnjecteerde save-failures op grenzen + console-herstart bewijst dat disk wint. EXTEND/REUSE; geen verplichte DB-herschrijving.
 
+Remediaties 1–2 (store-consistentie): die Forge-golf is in code (form-bound snapshotrevisie; copy-then-commit voor `promote_class` en peers).
+
 3. **Wave-3 SSRF connection bind (HIGH wanneer URL-ingest exposed is)** — Valideer, verbind daarna alleen met het gecontroleerde IP met correcte Host/TLS-hostnamevalidatie; herhaal per redirect — OF equivalent gecontroleerde egress. Test wisselende DNS-antwoorden zonder echte interne netwerkaanvallen. EXTEND/REUSE.
 
 4. **Wave-4 quality claim incomplete (HIGH voor claims)** — Huidig gold/holdout = development/regressie only. MUST NOT een onafhankelijke kwaliteitsclaim toestaan op fixture-labels / zelfverklaarde booleans. Lever apart geselecteerd goud op echte richtlijnen (bronidentiteit, annotatieregels, reviewers, gelockte scope); scheid train vs holdout op bron-/documentniveau; lock moment + versies; overlapchecks. Herstel metrics: eenheid/noemer; match op bron+passage met 1:1-toewijzing; expliciete duplicaten; contextmaat eerlijk benoemd of tegen geannoteerde verwachtingen; burden-metric MUST NOT als voortgang lezen wanneer die ongedefinieerd is. CONFIGURE/EXTEND.

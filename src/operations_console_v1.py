@@ -631,6 +631,8 @@ class OperationsConsole:
         self._objects_thread_locks: dict[str, threading.RLock] = {}
         self._objects_tls = threading.local()
         self._sessions_thread_lock = threading.RLock()
+        self._prepared_envelopes: dict[str, Any] | None = None
+        self._prepared_bindings: dict[str, Any] | None = None
 
     def _load_map(self, path: Path) -> dict[str, dict[str, Any]]:
         if not path.exists():
@@ -673,10 +675,12 @@ class OperationsConsole:
             raise last_error
 
     def _save_envelopes(self) -> None:
-        _atomic_write(self._envelopes_path, self._envelopes)
+        payload = getattr(self, "_prepared_envelopes", None)
+        _atomic_write(self._envelopes_path, self._envelopes if payload is None else payload)
 
     def _save_bindings(self) -> None:
-        _atomic_write(self._bindings_path, self._bindings)
+        payload = getattr(self, "_prepared_bindings", None)
+        _atomic_write(self._bindings_path, self._bindings if payload is None else payload)
 
     def _objects_path(self, snapshot_id: str) -> Path:
         if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
@@ -729,14 +733,30 @@ class OperationsConsole:
                     expected[snapshot_id] = hashlib.sha256(text.encode("utf-8")).hexdigest()
             return rows
 
-    def _save_objects(self, snapshot_id: str, rows: list[dict[str, Any]]) -> None:
+    def objects_revision(self, snapshot_id: str) -> str:
+        """Current snapshot objects-file revision. Bound to the file, not TLS."""
+        if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
+            raise ConsoleError("unknown_snapshot")
+        return _file_revision(self._objects_path(snapshot_id))
+
+    def _save_objects(
+        self,
+        snapshot_id: str,
+        rows: list[dict[str, Any]],
+        *,
+        expected_revision: str | None = None,
+    ) -> None:
         if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
             raise ConsoleError("unknown_snapshot")
         with self._objects_write_lock(snapshot_id):
             path = self._objects_path(snapshot_id)
-            expected = self._objects_expected_revs().get(snapshot_id)
+            pinned = (
+                expected_revision
+                if expected_revision is not None
+                else self._objects_expected_revs().get(snapshot_id)
+            )
             current_rev = _file_revision(path)
-            if expected is not None and current_rev != expected:
+            if pinned is not None and current_rev != pinned:
                 raise ConsoleError(
                     SNAPSHOT_OBJECT_WRITE_CONFLICT,
                     current_revision=current_rev,
@@ -744,6 +764,17 @@ class OperationsConsole:
             payload = _objects_jsonl_bytes(rows)
             _atomic_replace_bytes(path, payload)
             self._objects_expected_revs()[snapshot_id] = hashlib.sha256(payload).hexdigest()
+
+    def _save_objects_pinned(
+        self,
+        snapshot_id: str,
+        rows: list[dict[str, Any]],
+        expected_revision: str | None = None,
+    ) -> None:
+        if expected_revision is None:
+            self._save_objects(snapshot_id, rows)
+            return
+        self._save_objects(snapshot_id, rows, expected_revision=expected_revision)
 
     def refresh_objects_expected_revision(
         self,
@@ -756,6 +787,80 @@ class OperationsConsole:
         current = revision if revision else _file_revision(self._objects_path(snapshot_id))
         self._objects_expected_revs()[snapshot_id] = current
         return current
+
+    def _rollback_store_files(
+        self,
+        *,
+        objects_snapshot: tuple[str, bytes | None] | None = None,
+        envelopes: dict[str, Any] | None = None,
+        bindings: dict[str, Any] | None = None,
+        ledger_size: int | None = None,
+    ) -> None:
+        if objects_snapshot is not None:
+            snapshot_id, prior = objects_snapshot
+            path = self._objects_path(snapshot_id)
+            if prior is None:
+                with suppress(OSError):
+                    path.unlink()
+            else:
+                _atomic_replace_bytes(path, prior)
+        if envelopes is not None:
+            _atomic_write(self._envelopes_path, envelopes)
+        if bindings is not None:
+            _atomic_write(self._bindings_path, bindings)
+        if ledger_size is not None and self._ledger_path.exists():
+            current = self._ledger_path.stat().st_size
+            if current > ledger_size:
+                with self._ledger_path.open("r+b") as handle:
+                    handle.truncate(ledger_size)
+
+    def _commit_prepared_store(
+        self,
+        *,
+        envelopes: dict[str, Any] | None = None,
+        bindings: dict[str, Any] | None = None,
+        objects: tuple[str, list[dict[str, Any]]] | None = None,
+        expected_revision: str | None = None,
+        ledger_fn: Callable[[], None] | None = None,
+    ) -> None:
+        """Write prepared copies, then publish in-process maps only after success."""
+        prior_envelopes = deepcopy(self._envelopes)
+        prior_bindings = deepcopy(self._bindings)
+        prior_objects: tuple[str, bytes | None] | None = None
+        if objects is not None:
+            path = self._objects_path(objects[0])
+            prior_objects = (objects[0], path.read_bytes() if path.exists() else None)
+        prior_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
+        self._prepared_envelopes = envelopes
+        self._prepared_bindings = bindings
+        try:
+            if objects is not None:
+                self._save_objects_pinned(
+                    objects[0],
+                    objects[1],
+                    expected_revision,
+                )
+            if envelopes is not None:
+                self._save_envelopes()
+            if bindings is not None:
+                self._save_bindings()
+            if ledger_fn is not None:
+                ledger_fn()
+        except Exception:
+            self._rollback_store_files(
+                objects_snapshot=prior_objects,
+                envelopes=prior_envelopes if envelopes is not None else None,
+                bindings=prior_bindings if bindings is not None else None,
+                ledger_size=prior_ledger,
+            )
+            raise
+        finally:
+            self._prepared_envelopes = None
+            self._prepared_bindings = None
+        if envelopes is not None:
+            self._envelopes = envelopes
+        if bindings is not None:
+            self._bindings = bindings
 
     def _account(self, account_id: str) -> dict[str, Any]:
         account = self._accounts.get(account_id)
@@ -981,6 +1086,7 @@ class OperationsConsole:
         snapshot_id: str,
         object_id: str,
         confirmed_object_type: str,
+        expected_revision: str | None = None,
     ) -> dict[str, Any]:
         reviewer = self._require_role(actor_id, "reviewer")
         if actor_id not in self._envelope(snapshot_id)["named_reviewers"]:
@@ -1011,9 +1117,13 @@ class OperationsConsole:
             if not (row["object_id"] == object_id and row["object_version"] == target["object_version"])
         ]
         history.append(target)
-        self._save_objects(snapshot_id, history)
-        self._bindings[snapshot_id] = invalidate_for_object(self._bindings.get(snapshot_id, []), object_id)
-        self._save_bindings()
+        new_bindings = deepcopy(self._bindings)
+        new_bindings[snapshot_id] = invalidate_for_object(new_bindings.get(snapshot_id, []), object_id)
+        self._commit_prepared_store(
+            objects=(snapshot_id, history),
+            bindings=new_bindings,
+            expected_revision=expected_revision,
+        )
         return deepcopy(target)
 
     def confirm_relations(
@@ -1023,6 +1133,7 @@ class OperationsConsole:
         snapshot_id: str,
         object_id: str,
         relations: list[dict[str, Any]],
+        expected_revision: str | None = None,
     ) -> dict[str, Any]:
         reviewer = self._require_role(actor_id, "reviewer")
         if actor_id not in self._envelope(snapshot_id)["named_reviewers"]:
@@ -1117,13 +1228,17 @@ class OperationsConsole:
         ]
         history.append(target)
         history.extend(peer_updates)
-        self._save_objects(snapshot_id, history)
-        self._bindings[snapshot_id] = invalidate_for_object(self._bindings.get(snapshot_id, []), object_id)
+        new_bindings = deepcopy(self._bindings)
+        new_bindings[snapshot_id] = invalidate_for_object(new_bindings.get(snapshot_id, []), object_id)
         for peer in peer_updates:
-            self._bindings[snapshot_id] = invalidate_for_object(
-                self._bindings.get(snapshot_id, []), peer["object_id"]
+            new_bindings[snapshot_id] = invalidate_for_object(
+                new_bindings.get(snapshot_id, []), peer["object_id"]
             )
-        self._save_bindings()
+        self._commit_prepared_store(
+            objects=(snapshot_id, history),
+            bindings=new_bindings,
+            expected_revision=expected_revision,
+        )
         _ = reviewer
         return deepcopy(target)
 
@@ -1845,23 +1960,26 @@ class OperationsConsole:
         account = self._require_role(actor_id, "reviewer")
         if new_class not in ALLOWED_CLASSES:
             raise ConsoleError("invalid_class")
-        envelope = self._envelope(snapshot_id)
+        live = self._envelope(snapshot_id)
         if self.snapshot_is_published(snapshot_id):
             raise ConsoleError("published_class_change_blocked")
-        from_class = envelope["class"]
+        from_class = live["class"]
         if new_class == from_class:
             raise ConsoleError("class_unchanged")
-        identity_before = source_identity_fields(envelope)
-        freeze_path = Path(envelope["binary_path"])
+        identity_before = source_identity_fields(live)
+        freeze_path = Path(live["binary_path"])
         if not freeze_path.is_file():
             raise ConsoleError("freeze_bytes_missing")
         freeze_bytes = freeze_path.read_bytes()
-        if sha256_bytes(freeze_bytes) != envelope["sha256"]:
+        if sha256_bytes(freeze_bytes) != live["sha256"]:
             raise ConsoleError("freeze_bytes_missing")
+        envelope = deepcopy(live)
+        new_envelopes = deepcopy(self._envelopes)
+        new_bindings = deepcopy(self._bindings)
         if is_cross_model_class_change(from_class, new_class):
             if not reextract:
                 raise ConsoleError("cross_model_direct_change_blocked")
-            prior = self._load_objects(snapshot_id)
+            prior = deepcopy(self._load_objects(snapshot_id))
             new_objects = self._reextract_objects_for_klasse(envelope, new_class, freeze_bytes)
             archived = self._archive_prior_objects(
                 snapshot_id=snapshot_id,
@@ -1877,36 +1995,43 @@ class OperationsConsole:
             history.append(archived)
             envelope["prior_processing_history"] = history
             self._full_rereview_rows(new_objects)
-            self._save_objects(snapshot_id, new_objects)
-            self._envelopes[snapshot_id] = envelope
-            self._bindings[snapshot_id] = []
-            self._save_bindings()
-            self._save_envelopes()
-            self._record_class_change_event(
-                account=account,
-                envelope=envelope,
-                from_class=from_class,
-                to_class=new_class,
-                model="cross_model",
+            new_envelopes[snapshot_id] = envelope
+            new_bindings[snapshot_id] = []
+            self._commit_prepared_store(
+                objects=(snapshot_id, new_objects),
+                envelopes=new_envelopes,
+                bindings=new_bindings,
+                ledger_fn=lambda: self._record_class_change_event(
+                    account=account,
+                    envelope=envelope,
+                    from_class=from_class,
+                    to_class=new_class,
+                    model="cross_model",
+                ),
             )
             receipt = self._receipt(envelope)
             if source_identity_fields(receipt) != identity_before:
                 raise ConsoleError("source_identity_must_not_change")
             return receipt
-        rows = self._load_objects(snapshot_id)
+        rows = deepcopy(self._load_objects(snapshot_id))
         envelope["class"] = new_class
         envelope["clinical_rereview_required"] = True
         envelope["review_passes"] = {}
         self._full_rereview_rows(rows)
-        self._save_objects(snapshot_id, rows)
-        self._save_envelopes()
-        self._invalidate_all_bindings(snapshot_id)
-        self._record_class_change_event(
-            account=account,
-            envelope=envelope,
-            from_class=from_class,
-            to_class=new_class,
-            model="same_model",
+        new_envelopes[snapshot_id] = envelope
+        new_bindings[snapshot_id] = invalidate_for_object(new_bindings.get(snapshot_id, []), "")
+        new_bindings[snapshot_id] = [{**row, "valid": False} for row in new_bindings.get(snapshot_id, [])]
+        self._commit_prepared_store(
+            objects=(snapshot_id, rows),
+            envelopes=new_envelopes,
+            bindings=new_bindings,
+            ledger_fn=lambda: self._record_class_change_event(
+                account=account,
+                envelope=envelope,
+                from_class=from_class,
+                to_class=new_class,
+                model="same_model",
+            ),
         )
         receipt = self._receipt(envelope)
         if source_identity_fields(receipt) != identity_before:
@@ -1939,6 +2064,7 @@ class OperationsConsole:
         found_under: str | None = None,
         parent_choice: str | None = None,
         type_action: str | None = None,
+        expected_revision: str | None = None,
     ) -> list[dict[str, Any]]:
         reviewer = self._require_role(actor_id, "reviewer")
         if _is_forbidden_identity(reviewer["username"]) or _is_forbidden_identity(reviewer["display_name"]):
@@ -2022,7 +2148,10 @@ class OperationsConsole:
                     target.get("confirmed_relations"),
                     parent_id,
                 ),
+                expected_revision=expected_revision,
             )
+            if expected_revision is not None:
+                expected_revision = self.objects_revision(snapshot_id)
             current = self.snapshot_objects(snapshot_id)
             target = next((row for row in current if row["object_id"] == object_id), None)
             if target is None:
@@ -2051,7 +2180,7 @@ class OperationsConsole:
                 if not (row["object_id"] == object_id and row["object_version"] == saved["object_version"])
             ]
             history.append(saved)
-            self._save_objects(snapshot_id, history)
+            self._save_objects_pinned(snapshot_id, history, expected_revision)
             return deepcopy(self.snapshot_objects(snapshot_id))
         if apply_type and confirmed:
             if not is_confirmable_type_for_path(confirmed, review_path):
@@ -2150,10 +2279,19 @@ class OperationsConsole:
             metadata["no_action"] = True
             stamp_canonical_hashes(updated_target)
         history.append(updated_target)
-        self._save_objects(snapshot_id, history)
+        new_envelopes = None
+        new_bindings = deepcopy(self._bindings)
         if decision == "approve":
-            envelope["review_passes"][actor_id] = {"passed": True, "at": utc_now(), "object_id": object_id}
-            self._save_envelopes()
+            new_envelopes = deepcopy(self._envelopes)
+            new_envelopes[snapshot_id] = deepcopy(envelope)
+            new_envelopes[snapshot_id]["review_passes"] = dict(
+                new_envelopes[snapshot_id].get("review_passes") or {}
+            )
+            new_envelopes[snapshot_id]["review_passes"][actor_id] = {
+                "passed": True,
+                "at": utc_now(),
+                "object_id": object_id,
+            }
             binding = tuple_record(
                 object_id=object_id,
                 object_version=updated_target["object_version"],
@@ -2169,15 +2307,22 @@ class OperationsConsole:
                 binding["documentpositie"] = passage_meta.get("documentpositie")
             rows = [
                 item
-                for item in self._bindings.get(snapshot_id, [])
+                for item in new_bindings.get(snapshot_id, [])
                 if not (item.get("object_id") == object_id and item.get("reviewer_id") == actor_id)
             ]
             rows.append(binding)
-            self._bindings[snapshot_id] = rows
-            self._save_bindings()
+            new_bindings[snapshot_id] = rows
         else:
-            self._bindings[snapshot_id] = invalidate_for_object(self._bindings.get(snapshot_id, []), object_id)
-            self._save_bindings()
+            new_bindings[snapshot_id] = invalidate_for_object(
+                new_bindings.get(snapshot_id, []),
+                object_id,
+            )
+        self._commit_prepared_store(
+            objects=(snapshot_id, history),
+            envelopes=new_envelopes,
+            bindings=new_bindings,
+            expected_revision=expected_revision,
+        )
         return deepcopy(updated)
 
     def batch_confirm_headings(
@@ -2186,6 +2331,7 @@ class OperationsConsole:
         actor_id: str,
         snapshot_id: str,
         object_ids: Iterable[str],
+        expected_revision: str | None = None,
     ) -> list[dict[str, Any]]:
         """Fast-lane confirm of proposed headings as structure, not advice.
 
@@ -2207,6 +2353,7 @@ class OperationsConsole:
             if review_lane(target, review_path=review_path) != "fast":
                 raise ConsoleError("fast_lane_heading_required")
         updated: list[dict[str, Any]] = []
+        pin = expected_revision
         for object_id in ids:
             rows = self.review_object(
                 actor_id=actor_id,
@@ -2214,7 +2361,10 @@ class OperationsConsole:
                 object_id=object_id,
                 decision="approve",
                 confirmed_object_type=structure_type,
+                expected_revision=pin,
             )
+            if pin is not None:
+                pin = self.objects_revision(snapshot_id)
             refreshed = next(row for row in rows if row["object_id"] == object_id)
             mark_four_eyes_on_object(refreshed, confirmed_type="heading")
             stamp_canonical_hashes(refreshed)
@@ -2263,12 +2413,18 @@ class OperationsConsole:
             revised = apply_passage_register([revised])[0]
         history = self._load_objects(snapshot_id)
         history.append(revised)
-        self._save_objects(snapshot_id, history)
-        envelope["review_passes"] = {}
-        envelope["clinical_rereview_required"] = True
-        self._save_envelopes()
-        self._bindings[snapshot_id] = invalidate_for_object(self._bindings.get(snapshot_id, []), object_id)
-        self._save_bindings()
+        new_envelopes = deepcopy(self._envelopes)
+        new_envelope = deepcopy(envelope)
+        new_envelope["review_passes"] = {}
+        new_envelope["clinical_rereview_required"] = True
+        new_envelopes[snapshot_id] = new_envelope
+        new_bindings = deepcopy(self._bindings)
+        new_bindings[snapshot_id] = invalidate_for_object(new_bindings.get(snapshot_id, []), object_id)
+        self._commit_prepared_store(
+            objects=(snapshot_id, history),
+            envelopes=new_envelopes,
+            bindings=new_bindings,
+        )
         return deepcopy(revised)
 
     def silently_edit_object(self, snapshot_id: str, object_id: str, _patch: dict[str, Any]) -> None:

@@ -744,15 +744,51 @@ def _sanitize_review_draft(draft: dict[str, str] | None) -> dict[str, str]:
     return escaped
 
 
-def _review_conflict_html(conflict: bool) -> str:
+def _review_conflict_html(
+    conflict: bool,
+    *,
+    current: dict[str, Any] | None = None,
+    draft: dict[str, str] | None = None,
+) -> str:
     if not conflict:
         return ""
-    return (
+    banner = (
         f'<div class="banner err" data-stale-write-conflict '
         f'data-error-code="{_esc(SNAPSHOT_OBJECT_WRITE_CONFLICT)}">'
         f"{_esc(ERROR_COPY[SNAPSHOT_OBJECT_WRITE_CONFLICT])}</div>"
         f'<p class="muted">{_esc(SNAPSHOT_OBJECT_WRITE_CONFLICT)}</p>'
     )
+    diffs: list[str] = []
+    if current is not None and draft is not None:
+        passage = (current.get("metadata") or {}).get("review_passage") or {}
+        current_suit = str(passage.get("suitability") or "")
+        draft_suit = str(draft.get("suitability") or "").strip()
+        if current_suit and current_suit != draft_suit:
+            diffs.append(
+                '<div data-diff-field="suitability">'
+                f"<dt>Geschiktheid nu in de store</dt><dd>{_esc(current_suit)}</dd>"
+                f"<dt>Jouw concept</dt><dd>{_esc(draft_suit)}</dd></div>"
+            )
+        current_eindoordeel = str(passage.get("eindoordeel") or "")
+        draft_eindoordeel = str(draft.get("eindoordeel") or "").strip()
+        if current_eindoordeel and current_eindoordeel != draft_eindoordeel:
+            diffs.append(
+                '<div data-diff-field="eindoordeel">'
+                f"<dt>Eindoordeel nu in de store</dt><dd>{_esc(current_eindoordeel)}</dd>"
+                f"<dt>Jouw concept</dt><dd>{_esc(draft_eindoordeel)}</dd></div>"
+            )
+    extra = ""
+    if diffs:
+        extra = (
+            '<aside data-stale-write-differences>'
+            "<p>Huidige verschillen ten opzichte van jouw concept:</p>"
+            f"<dl>{''.join(diffs)}</dl></aside>"
+        )
+    return banner + extra
+
+
+def _snapshot_revision_input(revision: str) -> str:
+    return f'<input type="hidden" name="snapshot_revision" value="{_esc(revision)}">'
 
 
 def _review_index_item(obj: dict[str, Any], snapshot_id: str, *, checkbox: bool = False) -> str:
@@ -795,6 +831,7 @@ def _render_review_index(
     snapshot_id: str,
     snapshot_objects: list[dict[str, Any]],
     review_path: str,
+    snapshot_revision: str = "",
 ) -> str:
     koppen, _old_inhoud = review_stacks(snapshot_objects, review_path=review_path)
     duty = slow_review_duty(snapshot_objects, review_path=review_path)
@@ -849,6 +886,7 @@ def _render_review_index(
                       <p class="lead">{copy["fast_lead"]}</p>
                       <form method="post" action="/review/headings/batch-confirm">
                         <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
+                        {_snapshot_revision_input(snapshot_revision)}
                         <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, checkbox=True) for obj in koppen)}</ol>
                         <button class="btn-primary" type="submit">{copy["fast_button"]}</button>
                       </form>
@@ -873,6 +911,7 @@ def _render_review_card(
     review_path: str,
     draft: dict[str, str],
     conflict_html: str,
+    snapshot_revision: str = "",
 ) -> str:
     heading = review_card_sentence(obj)
     obj_text = (obj.get("content") or {}).get("clean_text") or ""
@@ -918,6 +957,7 @@ def _render_review_card(
                   <form class="review-decision-form" method="post" action="/review" data-review-form>
                     <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
                     <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
+                    {_snapshot_revision_input(snapshot_revision)}
                     <input type="hidden" name="proposed_object_type" value="{_esc(confirmable)}">
                     <input type="hidden" name="found_under" value="{_esc(path_text)}">
                     <input type="hidden" name="decision" value="">
@@ -995,6 +1035,7 @@ def _render_review_room(
     chosen_object_id = object.strip()
     draft = _sanitize_review_draft(draft)
     conflict_html = _review_conflict_html(conflict)
+    snapshot_revision = ""
     envelopes = console.list_envelopes()
     chosen_row = next((row for row in envelopes if row["snapshot_id"] == chosen), None)
     picker = ""
@@ -1028,15 +1069,26 @@ def _render_review_room(
             "</div>"
         )
         snapshot_objects = console.snapshot_objects(chosen)
+        snapshot_revision = console.objects_revision(chosen)
         review_path = review_path_for_klasse(chosen_row["class"])
         if not chosen_object_id:
-            objects_html += _render_review_index(chosen, snapshot_objects, review_path)
+            objects_html += _render_review_index(
+                chosen, snapshot_objects, review_path, snapshot_revision
+            )
         else:
             obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
             if obj is None:
                 raise ConsoleError("unknown_object")
+            conflict_html = _review_conflict_html(conflict, current=obj, draft=draft)
             objects_html += _render_review_card(
-                console, chosen, obj, snapshot_objects, review_path, draft, conflict_html
+                console,
+                chosen,
+                obj,
+                snapshot_objects,
+                review_path,
+                draft,
+                conflict_html,
+                snapshot_revision,
             )
     empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
     return _page(
@@ -1529,6 +1581,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         parent_choice: str = Form(""),
         type_action: str = Form(""),
         proposed_object_type: str = Form(""),
+        snapshot_revision: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
         mapped = map_eindoordeel(eindoordeel, decision)
@@ -1561,6 +1614,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                 found_under=found_under.strip() or None,
                 parent_choice=parent_choice.strip() or None,
                 type_action=type_action.strip() or None,
+                expected_revision=snapshot_revision.strip() or None,
             )
         except ConsoleError as exc:
             if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT:
@@ -1615,14 +1669,30 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         request: Request,
         snapshot_id: str = Form(...),
         object_ids: list[str] = Form(default=[]),
+        snapshot_revision: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
         raw = [object_ids] if isinstance(object_ids, str) else list(object_ids or [])
-        state.batch_confirm_headings(
-            actor_id=account["account_id"],
-            snapshot_id=snapshot_id,
-            object_ids=raw,
-        )
+        try:
+            state.batch_confirm_headings(
+                actor_id=account["account_id"],
+                snapshot_id=snapshot_id,
+                object_ids=raw,
+                expected_revision=snapshot_revision.strip() or None,
+            )
+        except ConsoleError as exc:
+            if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT:
+                raise
+            return HTMLResponse(
+                _render_review_room(
+                    state,
+                    account,
+                    html.escape(snapshot_id, quote=True),
+                    counts=_counts(account),
+                    conflict=True,
+                ),
+                status_code=409,
+            )
         return RedirectResponse(_review_location(state, snapshot_id), status_code=303)
 
     @app.post("/review/relations")
@@ -1632,6 +1702,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         object_id: str = Form(...),
         relation: list[str] = Form(default=[]),
         parent_choice: str = Form(default=""),
+        snapshot_revision: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
         raw = [relation] if isinstance(relation, str) else list(relation or [])
@@ -1654,6 +1725,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             snapshot_id=snapshot_id,
             object_id=object_id,
             relations=rows,
+            expected_revision=snapshot_revision.strip() or None,
         )
         return RedirectResponse(_review_location(state, snapshot_id, object_id), status_code=303)
 
