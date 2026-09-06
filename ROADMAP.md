@@ -19,7 +19,7 @@ Wat nu de code stuurt:
 - Ingest: geüploade HTML-freeze; Live URL-HTML MUST bij ingest worden geweigerd; URL-ingest van een PDF MAG blijven; URL-ingest van HTML MUST NOT. HTML wordt niet geheel verboden. Protocol v2.11 supersedes v2.7 URL-for-official-files as to HTML.
 - Klasse `beslisboom` (`path` / `node` / `outcome`); Klasse-keuze selecteert het reviewpad; MUST NOT een aparte tweede kiezer «pad». Klasse wijzigen i.p.v. Promoveren (v2.26); selectieve invalidatie + published-candidate blijven later.
 - Console is onderzoeker-oppervlak, niet voor verpleegkundigen. Product API blijft G2-gesloten. Azure ZIP / nurse UI / PROTOCOL.md-rewrite blijven buiten deze golf.
-- Post-v2.31 ROADMAP-golven 1–4 staan in code (#113 store, #115 ingest, #118 SSRF/session, #119 metrics). Golf 5 is deze vereenvoudiging. MUST NOT een zesde implementatiegolf verzinnen.
+- Post-v2.31 ROADMAP-golven 1–5 staan in code (#113–#120). Die vereenvoudigingsgolf is in code. MUST NOT een zesde implementatiegolf verzinnen. Golven 1–5 dekken multiuser-betrouwbaarheid en onafhankelijke extractkwaliteit niet volledig; zie Eigenaarslock 2026-09-06 — Post-#120 audit acceptatiecorrectie.
 
 ### Historische supersessie-index
 
@@ -34,7 +34,7 @@ Geen herhaalde stapel. Iedere rij wijst naar de Eigenaarslock; die secties blijv
 | v2.23 | eerste DELETE-snede, daarna één ZIP van die SHA | ZIP van a566af56 vóór DELETE |
 | v2.24 | split het deploy-pakket, niet het productidee; volgende code is console- versus retrieval-requirements splitsen; deze split opent publish() of G2 niet | ZIP MAG numpy/sklearn vendoren |
 | v2.25–v2.31 | boom-klasse; Klasse wijzigen; Documentenhiërarchie-delete; Sterkte-poort; harde poort; exact-bind | zie de bijbehorende Eigenaarslock |
-| post-v2.31 ROADMAP | vijf golven (geen golf 6); golf 1–4 in code; Die vereenvoudigingsgolf is in code | «volgende code is nog exact-bind» |
+| post-v2.31 ROADMAP | vijf golven (geen golf 6); golven 1–5 in code (#113–#120); Die vereenvoudigingsgolf is in code; Post-#120 audit acceptatiecorrectie | «volgende code is nog exact-bind»; «golven 1–5 dekken multiuser-betrouwbaarheid / onafhankelijke extractkwaliteit volledig» |
 
 ## Niet-onderhandelbare doelen
 
@@ -100,7 +100,7 @@ SA-01 tot en met SA-04 concretiseren noodzakelijke live-assurance. SA-05 blokkee
 
 ## Eigenaarslock 2026-09-06 — Post-v2.31 betrouwbaarheid- en bewijsbacklog (ROADMAP)
 
-ROADMAP-lock. Geen Protocol v2.32. Geen PROTOCOL.md-rewrite. Geen `PROTOCOL_V2_*` nieuwe delta. Geen productcode. Geen Forge-implementatie in deze PR. Metis is documenteigenaar. Eigenaar (William Gomes) 2026-09-06 (Metis CoS) vroeg deze backlog **eerst op ROADMAP-niveau** te locken — niet als PROTOCOL-wet, niet als Forge GO. Dezelfde eigenaar lockte later op 2026-09-06 **verscherpte acceptatiecriteria op dezelfde vijf golven** — geen nieuwe golven, geen golf 6.
+ROADMAP-lock. Geen Protocol v2.32. Geen PROTOCOL.md-rewrite. Geen `PROTOCOL_V2_*` nieuwe delta. Geen productcode. Geen Forge-implementatie in deze PR. Metis is documenteigenaar. Eigenaar (William Gomes) 2026-09-06 (Metis CoS) vroeg deze backlog **eerst op ROADMAP-niveau** te locken — niet als PROTOCOL-wet, niet als Forge GO. Dezelfde eigenaar lockte later op 2026-09-06 **verscherpte acceptatiecriteria op dezelfde vijf golven** — geen nieuwe golven, geen golf 6. Nog later dezelfde dag (ná PR #120 / tip `ef8771a`): Post-#120 audit acceptatiecorrectie — heropent acceptatie van bestaande beloftes; geen Protocol v2.32; geen golf 6.
 
 Onafhankelijke statische audit van `main` tip `019978b` (zelfde lineage als de Dit klopt-merge / Protocol v2.31 / PR #110+#111). Oordeel: ernstig veiligheidsfundament aanwezig; **geen** brede betrouwbaarheids- of extractkwaliteitsclaim; begeleid intern gebruik MAG; niet klaar voor multi-onderzoeker dagelijks-vertrouwensclaims. REQUEST SIMPLIFICATION (gericht), geen volledige herschrijving. Product API / retrieval buiten die audit.
 
@@ -127,6 +127,38 @@ MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. M
 - Align met Metis skill `releasebewijs`; MAG `scripts/release_control_preflight.py` noemen. Dit is operationele discipline, geen zesde implementatiegolf.
 
 **Per-golf afsluiting** — Elke golf-afsluiting (CoS PASS / merge notes) MUST verwijzen naar concreet testbewijs (testnamen / CI run / tip SHA). Nuance: Secure-cookie en sessieverval waren direct zichtbaar in code; dataverlies/blokkering waren audit-risico’s uit inspectie, nog geen gereproduceerde incidenten — claim geen incident-proof zonder tests.
+
+Post-#120 audit (eigenaarslock hieronder) corrigeert acceptatie van die gelande golven: volgende code ná aparte Metis GO per remediatie, start store-consistentie tenzij de eigenaar anders zegt — geen golf 6.
+
+## Eigenaarslock 2026-09-06 — Post-#120 audit acceptatiecorrectie (ROADMAP)
+
+ROADMAP-lock. **Geen Protocol v2.32. Geen golf 6. Geen productcode in deze PR.** Geen PROTOCOL.md-rewrite. Geen `PROTOCOL_V2_*` nieuwe delta. Geen Forge-implementatie in deze PR. Geen live-GO. Metis is documenteigenaar. Eigenaar (William Gomes / Metis CoS) 2026-09-06 keurde goed: audit-remediaties **nu op ROADMAP locken**; nog geen Forge GO.
+
+Dit is een **acceptatiecorrectie / audit-remediatie** van bestaande betrouwbaarheidsbeloftes — geen zesde implementatiegolf, geen nieuwe PROTOCOL-wet.
+
+Onafhankelijke engineering-audit ná golf 5. Geauditeerde `main`: `ef8771a` (na PR #120). Vergelijkingsbasis: `019978b`. Oordeel: **CHANGES REQUIRED** voor de garanties hieronder. Code-oppervlak: gerichte vereenvoudiging MAG; geen grote herschrijving. Product API / retrieval buiten scope. G2/`publish()` BLOCKED blijft **intentioneel**. Geen live-GO.
+
+Golven 1–5 blijven geland in code (lineage #113–#120) maar claimen **niet** dat multiuser-betrouwbaarheid of onafhankelijke extractkwaliteit volledig gedekt zijn. Deze lock **heropent/corrigeert acceptatie** van bestaande beloftes.
+
+Landing-page UX-voorkeur (gecentreerde, spaarzame home) is **buiten scope** voor deze lock.
+
+Geordende remediaties (aparte Metis GO per item later; start met store-consistentie tenzij de eigenaar anders zegt):
+
+1. **Wave-1 stale / browserrevisie (HIGH)** — Expliciete object- of snapshotrevisie reist mee met het reviewformulier GET→POST en iedere mutatie; vergelijk onder het bestaande lock. Bind de revisie aan de edit, MUST NOT aan `threading.local` / worker-thread. Bij conflict: houd de conceptinvoer én toon de huidige verschillen. Acceptatietests: twee echte clients met overlappende formulieren (inclusief verschillende workers / hergebruikte threads). De bestaande same-POST inject-test is nuttig maar onvoldoende. Kleinste fix: EXTEND.
+
+2. **Failed-write process consistency — `promote_class` and peers (HIGH)** — Bereid mutaties voor op een kopie; publiceer in-process staat alleen ná succesvolle duurzame commit. Definieer herstelbare commitvolgorde / kleine transactie over objects/envelopes/bindings/ledger-bestanden. Tests: geïnjecteerde save-failures op grenzen + console-herstart bewijst dat disk wint. EXTEND/REUSE; geen verplichte DB-herschrijving.
+
+3. **Wave-3 SSRF connection bind (HIGH wanneer URL-ingest exposed is)** — Valideer, verbind daarna alleen met het gecontroleerde IP met correcte Host/TLS-hostnamevalidatie; herhaal per redirect — OF equivalent gecontroleerde egress. Test wisselende DNS-antwoorden zonder echte interne netwerkaanvallen. EXTEND/REUSE.
+
+4. **Wave-4 quality claim incomplete (HIGH voor claims)** — Huidig gold/holdout = development/regressie only. MUST NOT een onafhankelijke kwaliteitsclaim toestaan op fixture-labels / zelfverklaarde booleans. Lever apart geselecteerd goud op echte richtlijnen (bronidentiteit, annotatieregels, reviewers, gelockte scope); scheid train vs holdout op bron-/documentniveau; lock moment + versies; overlapchecks. Herstel metrics: eenheid/noemer; match op bron+passage met 1:1-toewijzing; expliciete duplicaten; contextmaat eerlijk benoemd of tegen geannoteerde verwachtingen; burden-metric MUST NOT als voortgang lezen wanneer die ongedefinieerd is. CONFIGURE/EXTEND.
+
+5. **Topology bound (scale)** — Documenteer de ondersteunde topologie: huidig één Gunicorn-worker / één instance / sequentiële writes. Voorkom per ongeluk multi-writer scale. Vóór meerdere writers: consistent mutate-pad voor accounts/envelopes/bindings (session reload/lock-patroon). CONFIGURE nu; EXTEND bij schalen.
+
+**Release-preflight risico** — markers/comments MUST NOT als live-releasebewijs worden behandeld; houd alleen metadata die naar concrete checks wijst.
+
+**Aparte releasecheck (blijft buiten de remediaties)** — ongewijzigd t.o.v. de post-v2.31 backlog: geteste commit SHA → gebouwd pakket/artifact → daadwerkelijk draaiende versie; herstelbaarheid van code én reviewgegevens. MUST NOT Azure ZIP autoriseren. MUST NOT G2/`publish()` openen. Dit MAG geen zesde implementatiegolf worden.
+
+MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. MUST NOT implementeren in deze PR. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
 
 ## Eigenaarslock 2026-09-06 — Dit klopt exacte kop-bind (Protocol v2.31)
 
