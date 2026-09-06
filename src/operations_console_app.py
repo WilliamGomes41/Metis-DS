@@ -45,6 +45,7 @@ from src.review_cockpit_v1 import (
 )
 from src.ingest_limits_v1 import (
     INGEST_PAYLOAD_TOO_LARGE,
+    URL_DESTINATION_NOT_ALLOWED,
     install_ingest_limits,
     read_upload_limited,
 )
@@ -158,6 +159,7 @@ ERROR_COPY = {
     "cross_model_reextract_required": "Cross-model vereist re-extract van dezelfde freeze naar een nieuwe objectgrafiek.",
     "source_identity_must_not_change": "De bron blijft ongewijzigd: SHA-256, titel, versie en herkomst wijzigen niet.",
     INGEST_PAYLOAD_TOO_LARGE: "Het bestand of de download is te groot. Lever een kleiner HTML- of PDF-bestand in.",
+    URL_DESTINATION_NOT_ALLOWED: "Deze URL wijst naar een interne bestemming en kan niet worden ingeleverd.",
     SNAPSHOT_OBJECT_WRITE_CONFLICT: (
         "Deze beoordeling is niet opgeslagen. Het document is tussentijds gewijzigd. "
         "Je invoer staat nog in het formulier; sla opnieuw op."
@@ -807,14 +809,14 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
     def login(username: str = Form(...), password: str = Form(...)) -> RedirectResponse:
         session = state.authenticate(username, password)
         response = RedirectResponse("/ingest", status_code=303)
-        response.set_cookie(COOKIE, session["token"], httponly=True, samesite="lax")
+        response.set_cookie(COOKIE, session["token"], httponly=True, samesite="lax", secure=True)
         return response
 
     @app.get("/logout")
     def logout(request: Request) -> RedirectResponse:
         state.logout(request.cookies.get(COOKIE))
         response = RedirectResponse("/login", status_code=303)
-        response.delete_cookie(COOKIE)
+        response.delete_cookie(COOKIE, httponly=True, samesite="lax", secure=True)
         return response
 
     @app.get("/ingest", response_class=HTMLResponse)

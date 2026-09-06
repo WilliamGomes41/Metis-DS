@@ -13,8 +13,6 @@ badges, Accounts room with closed roles.
 from __future__ import annotations
 
 import json
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
@@ -627,41 +625,23 @@ def test_a_withdraw_atomically_removes_from_projection_no_live_governance_recons
 
 def test_b_live_url_html_ingest_rejected(tmp_path: Path) -> None:
     payload = HTML_FIXTURE.read_bytes()
-
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
-
-        def log_message(self, *_args) -> None:
-            return
-
-    server = HTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        url = f"http://127.0.0.1:{server.server_port}/continentie.html"
-        console = _console(tmp_path)
-        accounts = _accounts(console)
-        with pytest.raises(ConsoleError, match="live_url_html_not_allowed"):
-            console.ingest(
-                actor_id=accounts["researcher"]["account_id"],
-                url=url,
-                ingest_kind="new",
-                title="URL HTML",
-                version="1.0",
-                date="2025-04-01",
-                live_url=url,
-                class_="richtlijn",
-                family="continentie",
-                named_reviewers=[accounts["reviewer"]["account_id"]],
-            )
-    finally:
-        server.shutdown()
-        server.server_close()
+    url = "https://example.test/continentie.html"
+    console = _console(tmp_path)
+    console.url_fetcher = lambda _url: (payload, "text/html; charset=utf-8", "continentie.html")
+    accounts = _accounts(console)
+    with pytest.raises(ConsoleError, match="live_url_html_not_allowed"):
+        console.ingest(
+            actor_id=accounts["researcher"]["account_id"],
+            url=url,
+            ingest_kind="new",
+            title="URL HTML",
+            version="1.0",
+            date="2025-04-01",
+            live_url=url,
+            class_="richtlijn",
+            family="continentie",
+            named_reviewers=[accounts["reviewer"]["account_id"]],
+        )
 
 
 def test_b_uploaded_html_freeze_accepted_exact_bytes(tmp_path: Path) -> None:
@@ -684,40 +664,22 @@ def test_b_uploaded_html_freeze_accepted_exact_bytes(tmp_path: Path) -> None:
 
 def test_b_pdf_url_accepted_only_with_immediate_exact_byte_hash(tmp_path: Path) -> None:
     payload = _tiny_pdf(tmp_path)
-
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802
-            self.send_response(200)
-            self.send_header("Content-Type", "application/pdf")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
-
-        def log_message(self, *_args) -> None:
-            return
-
-    server = HTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        url = f"http://127.0.0.1:{server.server_port}/guideline.pdf"
-        console = _console(tmp_path)
-        accounts = _accounts(console)
-        receipt = console.ingest(
-            actor_id=accounts["researcher"]["account_id"],
-            url=url,
-            ingest_kind="new",
-            title="PDF via URL",
-            version="1.0",
-            date="2025-04-01",
-            live_url=url,
-            class_="richtlijn",
-            family="continentie",
-            named_reviewers=[accounts["reviewer"]["account_id"]],
-        )
-    finally:
-        server.shutdown()
-        server.server_close()
+    url = "https://example.test/guideline.pdf"
+    console = _console(tmp_path)
+    console.url_fetcher = lambda _url: (payload, "application/pdf", "guideline.pdf")
+    accounts = _accounts(console)
+    receipt = console.ingest(
+        actor_id=accounts["researcher"]["account_id"],
+        url=url,
+        ingest_kind="new",
+        title="PDF via URL",
+        version="1.0",
+        date="2025-04-01",
+        live_url=url,
+        class_="richtlijn",
+        family="continentie",
+        named_reviewers=[accounts["reviewer"]["account_id"]],
+    )
 
     assert receipt["content_kind"] == "pdf"
     assert receipt["sha256"] == sha256_bytes(payload)

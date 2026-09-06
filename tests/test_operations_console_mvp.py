@@ -8,9 +8,7 @@ from __future__ import annotations
 import io
 import json
 import re
-import threading
 import zipfile
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
@@ -174,41 +172,23 @@ def test_html_and_pdf_ingest_accepted_word_and_story_html_rejected(tmp_path: Pat
 
 def test_url_ingest_of_html_is_rejected_as_live_url_html(tmp_path: Path) -> None:
     payload = HTML_FIXTURE.read_bytes()
-
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
-
-        def log_message(self, *_args) -> None:
-            return
-
-    server = HTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        url = f"http://127.0.0.1:{server.server_port}/continentie.html"
-        console = _console(tmp_path)
-        accounts = _accounts(console)
-        with pytest.raises(ConsoleError, match="live_url_html_not_allowed"):
-            console.ingest(
-                actor_id=accounts["researcher"]["account_id"],
-                url=url,
-                ingest_kind="new",
-                title="URL snapshot",
-                version="1.0",
-                date="2025-04-01",
-                live_url=url,
-                class_="richtlijn",
-                family="continentie",
-                named_reviewers=[accounts["reviewer"]["account_id"]],
-            )
-    finally:
-        server.shutdown()
-        server.server_close()
+    url = "https://example.test/continentie.html"
+    console = _console(tmp_path)
+    console.url_fetcher = lambda _url: (payload, "text/html; charset=utf-8", "continentie.html")
+    accounts = _accounts(console)
+    with pytest.raises(ConsoleError, match="live_url_html_not_allowed"):
+        console.ingest(
+            actor_id=accounts["researcher"]["account_id"],
+            url=url,
+            ingest_kind="new",
+            title="URL snapshot",
+            version="1.0",
+            date="2025-04-01",
+            live_url=url,
+            class_="richtlijn",
+            family="continentie",
+            named_reviewers=[accounts["reviewer"]["account_id"]],
+        )
 
 
 def test_family_set_at_ingest_move_does_not_rehash_or_require_rereview(tmp_path: Path) -> None:

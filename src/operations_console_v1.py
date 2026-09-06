@@ -15,14 +15,11 @@ import re
 import secrets
 import tempfile
 import threading
-import urllib.error
-import urllib.parse
-import urllib.request
 import uuid
 import zipfile
 from contextlib import contextmanager, suppress
 from copy import deepcopy
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
@@ -157,6 +154,8 @@ BOOM_MARKERS = (
     "window.playerconfig",
 )
 PBKDF2_ROUNDS = 80_000
+DEFAULT_SESSION_TTL_SECONDS = 12 * 60 * 60
+SESSION_SAVE_RETRIES = 2
 
 
 class ConsoleError(ValueError):
@@ -216,6 +215,36 @@ def safe_path_under(root: Path, *parts: str) -> Path:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def utc_after(seconds: int) -> str:
+    return (datetime.now(timezone.utc) + timedelta(seconds=seconds)).isoformat(timespec="seconds").replace(
+        "+00:00", "Z"
+    )
+
+
+def _parse_utc(value: str) -> datetime | None:
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def session_is_expired(session: dict[str, Any], *, now: datetime | None = None) -> bool:
+    """Missing or unreadable expires_at is expired. Expiry field alone is not enough — callers MUST reject."""
+    parsed = _parse_utc(str(session.get("expires_at") or ""))
+    if parsed is None:
+        return True
+    current = now or datetime.now(timezone.utc)
+    return current >= parsed
 
 
 def normalize_ingest_source_date(value: str | None) -> str:
@@ -483,18 +512,9 @@ def _file_revision(path: Path) -> str:
 
 
 def default_url_fetcher(url: str) -> tuple[bytes, str, str]:
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme not in {"http", "https"}:
-        raise ConsoleError("url_scheme_not_allowed")
-    request = urllib.request.Request(url, method="GET", headers={"User-Agent": "vvn-operations-console/1.0"})
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            data = response.read()
-            content_type = str(response.headers.get("Content-Type") or "")
-    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-        raise ConsoleError("url_snapshot_failed") from exc
-    filename = Path(parsed.path).name or "snapshot.bin"
-    return data, content_type, filename
+    from src.ingest_limits_v1 import fetch_url_limited
+
+    return fetch_url_limited(url)
 
 
 def _is_word_bytes(data: bytes, filename: str, content_type: str | None) -> bool:
@@ -610,6 +630,7 @@ class OperationsConsole:
         self._objects_lock_guard = threading.Lock()
         self._objects_thread_locks: dict[str, threading.RLock] = {}
         self._objects_tls = threading.local()
+        self._sessions_thread_lock = threading.RLock()
 
     def _load_map(self, path: Path) -> dict[str, dict[str, Any]]:
         if not path.exists():
@@ -621,6 +642,35 @@ class OperationsConsole:
 
     def _save_sessions(self) -> None:
         _atomic_write(self._sessions_path, self._sessions)
+
+    @contextmanager
+    def _sessions_write_lock(self) -> Iterator[None]:
+        lock_path = self._sessions_path.with_name(self._sessions_path.name + ".lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with self._sessions_thread_lock:
+            with open(lock_path, "a+b") as handle:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                try:
+                    yield
+                finally:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+    def _reload_sessions_locked(self) -> None:
+        self._sessions = self._load_map(self._sessions_path)
+
+    def _with_sessions(self, mutator: Callable[[dict[str, dict[str, Any]]], None]) -> None:
+        last_error: OSError | None = None
+        for _attempt in range(SESSION_SAVE_RETRIES):
+            try:
+                with self._sessions_write_lock():
+                    self._reload_sessions_locked()
+                    mutator(self._sessions)
+                    self._save_sessions()
+                return
+            except OSError as exc:
+                last_error = exc
+        if last_error is not None:
+            raise last_error
 
     def _save_envelopes(self) -> None:
         _atomic_write(self._envelopes_path, self._envelopes)
@@ -783,21 +833,34 @@ class OperationsConsole:
             "username": record["username"],
             "roles": list(record["roles"]),
             "created_at": utc_now(),
+            "expires_at": utc_after(DEFAULT_SESSION_TTL_SECONDS),
         }
-        self._sessions[token] = session
-        self._save_sessions()
+
+        def add(sessions: dict[str, dict[str, Any]]) -> None:
+            sessions[token] = session
+
+        self._with_sessions(add)
         return dict(session)
 
     def session_account(self, token: str | None) -> dict[str, Any]:
-        if not token or token not in self._sessions:
+        if not token:
             raise ConsoleError("not_authenticated")
-        account = self._account(self._sessions[token]["account_id"])
-        return self._public_account(account)
+        with self._sessions_write_lock():
+            self._reload_sessions_locked()
+            session = self._sessions.get(token)
+            if not session or session_is_expired(session):
+                raise ConsoleError("not_authenticated")
+            account = self._account(session["account_id"])
+            return self._public_account(account)
 
     def logout(self, token: str | None) -> None:
-        if token and token in self._sessions:
-            del self._sessions[token]
-            self._save_sessions()
+        if not token:
+            return
+
+        def remove(sessions: dict[str, dict[str, Any]]) -> None:
+            sessions.pop(token, None)
+
+        self._with_sessions(remove)
 
     def list_reviewer_accounts(self) -> list[dict[str, Any]]:
         return [self._public_account(row) for row in self._accounts.values() if "reviewer" in row["roles"]]

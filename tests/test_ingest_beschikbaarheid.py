@@ -17,7 +17,6 @@ import asyncio
 import importlib.util
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import httpx
@@ -114,25 +113,6 @@ async def _login(client: httpx.AsyncClient, username: str, password: str) -> Non
     assert response.status_code in {200, 303}
 
 
-def _serve_bytes(payload: bytes, content_type: str) -> tuple[HTTPServer, str]:
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802
-            self.send_response(200)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
-
-        def log_message(self, *_args) -> None:
-            return
-
-    server = HTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    url = f"http://127.0.0.1:{server.server_port}/payload.bin"
-    return server, url
-
-
 def test_ingest_limits_module_maps_to_beschikbaarheid() -> None:
     item = _load_preflight().classify_paths(["src/ingest_limits_v1.py"])["beschikbaarheid"]
     assert item["status"] == "required"
@@ -155,7 +135,7 @@ def test_ingest_work_does_not_block_event_loop(tmp_path: Path) -> None:
 
     async def _run() -> None:
         transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=transport, base_url="https://test") as client:
             await _login(client, "researcher.anne", "anne-secret")
             ingest_task = asyncio.create_task(
                 client.post(
@@ -189,15 +169,16 @@ def test_oversize_upload_and_download_fail_closed(tmp_path: Path, monkeypatch: p
     monkeypatch.setenv(ENV_INGEST_MAX_BYTES, "64")
     console = _console(tmp_path)
     accounts = _accounts(console)
-    app = create_console_app(console)
     oversize = b"<html><body>" + (b"x" * 200) + b"</body></html>"
     pdf_payload = _tiny_pdf(tmp_path)
     assert len(pdf_payload) > 64
-    server, url = _serve_bytes(pdf_payload, "application/pdf")
+    console.url_fetcher = lambda _url: (pdf_payload, "application/pdf", "payload.bin")
+    app = create_console_app(console)
+    url = "https://example.test/payload.bin"
 
     async def _run() -> None:
         transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=transport, base_url="https://test") as client:
             await _login(client, "researcher.anne", "anne-secret")
             upload = await client.post(
                 "/ingest",
@@ -219,11 +200,7 @@ def test_oversize_upload_and_download_fail_closed(tmp_path: Path, monkeypatch: p
         assert INGEST_PAYLOAD_TOO_LARGE in download.text
         assert "te groot" in download.text.lower()
 
-    try:
-        asyncio.run(_run())
-    finally:
-        server.shutdown()
-        server.server_close()
+    asyncio.run(_run())
     assert console.list_envelopes() == []
 
 
@@ -243,8 +220,8 @@ def test_two_users_overlap_ingest_and_other_request(tmp_path: Path) -> None:
 
     async def _run() -> None:
         transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as anne:
-            async with httpx.AsyncClient(transport=transport, base_url="http://test") as dirk:
+        async with httpx.AsyncClient(transport=transport, base_url="https://test") as anne:
+            async with httpx.AsyncClient(transport=transport, base_url="https://test") as dirk:
                 await _login(anne, "researcher.anne", "anne-secret")
                 await _login(dirk, "researcher.dirk", "dirk-secret")
                 ingest_task = asyncio.create_task(
