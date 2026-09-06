@@ -4,6 +4,9 @@ All notable technical changes to V&VN Data Services are recorded here.
 
 ## [Unreleased]
 
+### Changed
+- Gericht vereenvoudigen (ROADMAP wave 5): compact live norm vs historical supersession stacks in ROADMAP (`## Geldende norm (live)`, Historische supersessie-index); local simplification of high-complexity admission/console paths (`admit_candidate`, `_enrich_from_text`, `_render_review_room`, `_heading_chooser`) without a full rewrite or a scatter of tiny helpers. Fail-closed semantics unchanged (soft scores never open the gate; dJG / impliciet / invented spans / lone exception / locator stay blocked; review conflict 409 unchanged). Evidence: `tests/test_wave5_gericht_vereenvoudigen.py`. `publish()` remains G2-BLOCKED. Not wave 6, not PROTOCOL.md / PROTOCOL_V2_*, not Azure, not Product API, not HANDOFF.md.
+
 ### Added
 - Independent extract-quality measurement (ROADMAP wave 4): `extract_metrics_v1` precision counts false positives (teller/noemer = TP / TP+FP); `context_completeness` requires captured neighbor context and MUST NOT treat `context_scan_done` alone as complete; a quality claim requires independent/representative multi-source gold (missed knowledge + false admits) — Phase-4 fixture gold and any non-empty fixture MUST NOT open a claim. Language-variation admission cases measure false admits and misses on alternative formulations, negations, conditions, exceptions and references. Evidence: `tests/test_extract_metrics_independent_quality.py`, `tests/test_admission_language_variation.py`. `publish()` remains G2-BLOCKED. Not wave 5 simplify, not Azure, not PROTOCOL.
 
