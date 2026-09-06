@@ -238,8 +238,10 @@ def test_live_ui_forbids_hierarchy_and_familieboom_labels(tmp_path: Path) -> Non
     for path in ("/tree", "/ingest", "/review", "/"):
         html = client.get(path).text
         visible = _visible_text(html)
+        lowered = html.lower()
         for label in FORBIDDEN_LIVE_LABELS:
             assert label not in html, f"{label} must not appear as live UI on {path}"
+            assert label.lower() not in lowered
             assert label not in visible
             assert label not in _title(html)
         if path == "/tree":

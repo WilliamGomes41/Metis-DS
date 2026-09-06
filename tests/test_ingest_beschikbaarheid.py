@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import re
 import threading
 import time
 from pathlib import Path
@@ -242,7 +243,18 @@ def test_two_users_overlap_ingest_and_other_request(tmp_path: Path) -> None:
                 ingest_response = await ingest_task
 
         assert other.status_code == 200
-        assert "documentenhiërarchie" in other.text.lower()
+        headings = [
+            re.sub(r"<[^>]+>", "", block).strip()
+            for block in re.findall(r"<h1[^>]*>.*?</h1>", other.text, flags=re.I | re.S)
+        ]
+        assert headings and headings[0] == "Documenten"
+        nav = re.search(r'<nav class="rooms">(.*?)</nav>', other.text, flags=re.S)
+        assert nav, "/tree must render room nav during overlapping ingest"
+        tree_label = re.search(r'<a href="/tree"[^>]*>(.*?)</a>', nav.group(1), flags=re.S)
+        assert tree_label
+        assert re.sub(r"<[^>]+>", "", tree_label.group(1)).strip() == "Documenten"
+        assert "documentenhiërarchie" not in other.text.lower()
+        assert "documentenhierarchie" not in other.text.lower()
         assert elapsed < 0.25, f"second user waited {elapsed:.3f}s during overlapping ingest"
         assert ingest_response.status_code == 200
         assert "document ingeleverd" in ingest_response.text.lower()

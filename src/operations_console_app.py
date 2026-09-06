@@ -1373,7 +1373,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
               <div class="doc-card">
                 {_document_card_heading({**receipt, "status": receipt["state"]})}
               </div>
-              <p><a class="btn-secondary" href="/review">Naar review</a> <a class="btn-secondary" href="/tree">Naar documentenhierarchie</a></p>
+              <p><a class="btn-secondary" href="/review">Naar review</a> <a class="btn-secondary" href="/tree">Naar Documenten</a></p>
             </section>
             {_help(room="ingest")}
             """
