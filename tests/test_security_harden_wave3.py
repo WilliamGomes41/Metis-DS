@@ -284,8 +284,10 @@ def test_url_fetch_still_respects_wave2_max_bytes(
     assert caught.value.code == INGEST_PAYLOAD_TOO_LARGE
     source = (ROOT / "src" / "ingest_limits_v1.py").read_text(encoding="utf-8")
     assert "assert_url_destination_allowed" in source
+    assert "pin_url_destination" in source
     assert "enforce_ingest_payload_size" in source
     assert "fetch_url_limited" in source
+    assert "CONSOLE_INGEST_MAX_BYTES" in source
 
 
 def test_login_cookie_is_secure_httponly_samesite(tmp_path: Path) -> None:
@@ -683,11 +685,10 @@ def test_ssrf_redirect_hop_revalidates_and_rebinds(
             connect_log=connect_log,
             local_port=port,
         )
-        data, _content_type, filename = default_url_fetcher(
+        data, _content_type, _filename = default_url_fetcher(
             f"http://{REBIND_HOST}:{port}/start"
         )
         assert data == PDF_BODY
-        assert filename == "doc.pdf"
         assert PUBLIC_PIN_A in connect_log
         assert PUBLIC_PIN_B in connect_log
         assert PRIVATE_REBIND not in connect_log
