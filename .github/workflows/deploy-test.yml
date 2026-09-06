@@ -74,6 +74,8 @@ jobs:
           G2_STORAGE_ACCOUNT="${{ vars.AZURE_TEST_STORAGE_ACCOUNT || 'aidataservice' }}"
           G2_BLOB_CONTAINER="${{ vars.AZURE_TEST_BLOB_CONTAINER || 'canonical-sources-test' }}"
           CONSOLE_DATA_ROOT="/home/data/metis-console-test"
+          WEB_CONCURRENCY="1"
+          CONSOLE_INSTANCE_COUNT="1"
       - name: Deploy application code only
         run: >-
           az webapp deploy

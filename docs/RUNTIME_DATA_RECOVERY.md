@@ -53,7 +53,23 @@ De huidige store is één-instance filesystem JSON/JSONL onder
 `/home/data/metis-console`. Dat is voldoende voor één App Service-instance
 en sequentiële reviewer-writes.
 
-Een **managed database** wordt vereist vóór:
+## Supported topology (Post-#120 remediation 5)
+
+Supported console topology **now** (CONFIGURE):
+
+- one Gunicorn worker (`scripts/azure_console_startup.sh` pins `gunicorn -w 1`)
+- one instance (`CONSOLE_INSTANCE_COUNT=1` or unset)
+- sequential writes (`CONSOLE_WRITE_MODE=sequential` or unset)
+
+Runtime assert: `src/topology_bound_v1.py` / `assert_supported_topology()`.
+`WEB_CONCURRENCY` / `GUNICORN_WORKERS` / `GUNICORN_CMD_ARGS --workers` greater
+than 1, or `CONSOLE_INSTANCE_COUNT` greater than 1, fail closed
+(`multi_worker_out_of_bound` / `multi_instance_out_of_bound`). Accidental
+multi-writer scale is **out of bound** — not silently assumed.
+
+EXTEND for multiple writers (consistent mutate-path for
+accounts/envelopes/bindings; session reload/lock) is **not** implemented
+here. A **managed database** remains required before:
 
 - meerdere App Service-instances (geen gedeelde lokale schijf);
 - gelijktijdige multi-reviewer-writes (accounts, ledger, objecten, projectie).

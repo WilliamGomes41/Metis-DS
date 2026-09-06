@@ -103,7 +103,9 @@ def cmd_serve_console(a: argparse.Namespace) -> dict:
     import uvicorn
     from src.operations_console_app import create_console_app
     from src.operations_console_v1 import OperationsConsole
+    from src.topology_bound_v1 import assert_supported_topology
 
+    assert_supported_topology()
     console = OperationsConsole(
         root=ROOT,
         source_store=a.source_store,
