@@ -73,7 +73,7 @@ def test_roadmap_supersedes_sketch_b_as_locked_home() -> None:
     assert "Bron inleveren" in section
     assert "superseded" in live.lower()
     assert "#127" in live
-    assert "landing sketch B" in live.lower()
+    assert "landing sketch b" in live.lower()
     assert "Bron inleveren" in live
     assert "Die Forge-golf is nog NIET in code" in live
     assert "SUPERSEDES #127" in changelog or "SUPERSEDES #127 sketch B" in changelog
