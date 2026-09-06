@@ -553,7 +553,8 @@ def test_block_a_console_parent_list_is_body_structure_onderzoekers_taal(
     assert "Andere kop kiezen" in html
     assert 'data-heading-role="body"' in html
     assert "envelope" not in html.lower()
-    assert "Documentenhiërarchie" in html
+    assert "Documenten" in html
+    assert "Documentenhiërarchie" not in html
     toc_choice = re.search(
         r'data-parent-choice-list[\s\S]*data-heading-role="toc"',
         html,
@@ -869,7 +870,8 @@ def test_block_b_console_hides_sterkte_on_proposed_recommendation_until_confirm(
     visible = _visible_text(html)
     assert "Sterkte van de aanbeveling" not in visible
     assert "envelope" not in html.lower()
-    assert "Documentenhiërarchie" in html
+    assert "Documenten" in html
+    assert "Documentenhiërarchie" not in html
     console.review_object(
         actor_id=accounts["reviewer"]["account_id"],
         snapshot_id=receipt["snapshot_id"],

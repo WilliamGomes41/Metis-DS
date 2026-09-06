@@ -137,7 +137,8 @@ def test_review_document_index_does_not_open_passages(tmp_path: Path) -> None:
     for obj in objects:
         assert obj["object_id"] in html
     assert "envelope" not in html.lower()
-    assert "Documentenhiërarchie" in html
+    assert "Documenten" in html
+    assert "Documentenhiërarchie" not in html
     assert "Documentenhierarchie" not in html
     assert "draggable" not in html.lower()
     assert "graaf-editor" not in html.lower()

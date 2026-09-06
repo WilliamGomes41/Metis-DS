@@ -281,7 +281,8 @@ def test_slogan_sentence_absent_from_researcher_pages(tmp_path: Path) -> None:
         assert "wat een EPD MAG zeggen" not in html
         assert "wat een EPD MAG zeggen" not in visible
         assert "envelope" not in html.lower()
-        assert "Documentenhiërarchie" in html
+        assert "Documenten" in html
+        assert "Documentenhiërarchie" not in html
     review = client.get(f"/review?document={receipt['snapshot_id']}").text
     assert "Beoordeel Koppen als structuur en Inhoud als kennisobjecten." in review
 

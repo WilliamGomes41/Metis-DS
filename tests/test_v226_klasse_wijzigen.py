@@ -158,7 +158,8 @@ def test_console_action_renamed_klasse_wijzigen_not_promoveren(tmp_path: Path) -
     client, console, accounts = _html_client(tmp_path)
     _ingest_richtlijn(console, accounts)
     html = client.get("/tree").text
-    assert "Documentenhiërarchie" in html
+    assert "Documenten" in html
+    assert "Documentenhiërarchie" not in html
     assert re.search(r"<button\b[^>]*>\s*Klasse wijzigen\s*</button>", html)
     assert not re.search(r"<button\b[^>]*>\s*Promoveren\s*</button>", html, flags=re.I)
     assert "Klasse wijzigen" in html

@@ -591,7 +591,8 @@ def test_no_zwaar_licht_switch_no_auto_confirm_no_auto_promote(tmp_path: Path) -
     ):
         assert forbidden not in lower
     assert "envelope" not in lower
-    assert "Documentenhiërarchie" in html
+    assert "Documenten" in html
+    assert "Documentenhiërarchie" not in html
     source = APP_SOURCE.read_text(encoding="utf-8")
     assert "zwaar/licht" not in source
     assert "snel/langzaam" not in source
@@ -743,7 +744,8 @@ def test_v216_tiny_objects_v217_chrome_v218_no_duplicate_sentence_still_hold(
     assert SLOGAN not in html
     assert "wat een EPD MAG zeggen" not in html
     assert "envelope" not in html.lower()
-    assert "Documentenhiërarchie" in html
+    assert "Documenten" in html
+    assert "Documentenhiërarchie" not in html
     card = _client(console).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text

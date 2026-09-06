@@ -492,7 +492,8 @@ def test_continentie_fail_patterns_are_not_standalone_duty_objects(tmp_path: Pat
     titles = _index_link_titles(html)
     for pattern in FAIL_STANDALONE:
         assert pattern not in titles
-    assert "Documentenhiërarchie" in html
+    assert "Documenten" in html
+    assert "Documentenhiërarchie" not in html
     assert "envelope" not in html.lower()
     assert SLOGAN not in html
 

@@ -228,13 +228,14 @@ def _login_brand() -> str:
     """
 
 
-def _page(body: str) -> str:
+def _page(body: str, *, title: str | None = None) -> str:
+    page_title = title or "V&amp;VN Data Services — Interne operations console"
     return f"""<!doctype html>
 <html lang="nl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>V&amp;VN Data Services — Interne operations console</title>
+<title>{page_title}</title>
 <link rel="stylesheet" href="/brand/console.css">
 </head>
 <body>
@@ -373,7 +374,7 @@ def _nav(account: dict[str, Any] | None, current: str = "", counts: dict[str, in
     counts = counts or {}
     rooms = [
         ("ingest", "/ingest", "Inleveren", counts.get("ingest", 0)),
-        ("tree", "/tree", "Documentenhiërarchie", counts.get("tree", 0)),
+        ("tree", "/tree", "Documenten", counts.get("tree", 0)),
         ("review", "/review", "Review", counts.get("review", 0)),
         ("publish", "/publish", "Publiceren", counts.get("publish", 0)),
         ("accounts", "/accounts", "Accounts", 0),
@@ -546,7 +547,7 @@ def _unpublished_delete_control(
     console: OperationsConsole,
     next_path: str,
 ) -> str:
-    """Researcher Dutch delete control. Documentenhiërarchie only. Type-to-confirm title."""
+    """Researcher Dutch delete control. Documenten room (/tree) only. Type-to-confirm title."""
     if next_path != "/tree":
         return ""
     if not _can_delete_unpublished(account):
@@ -1169,7 +1170,20 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                 {_help()}
                 """
             )
-        return RedirectResponse("/ingest", status_code=303)
+        return _page(
+            f"""
+            {_nav(account, "", _counts(account))}
+            <section class="room home-chooser">
+              <a href="/ingest" class="btn-primary">Bron inleveren</a>
+              <nav class="home-secondary" aria-label="Andere kamers">
+                <a class="quiet" href="/tree">Documenten</a>
+                <a class="quiet" href="/review">Review</a>
+                <a class="quiet" href="/publish">Publiceren</a>
+                <a class="quiet" href="/accounts">Accounts</a>
+              </nav>
+            </section>
+            """
+        )
 
     @app.get("/login", response_class=HTMLResponse)
     def login_form() -> str:
@@ -1194,7 +1208,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
     @app.post("/login")
     def login(username: str = Form(...), password: str = Form(...)) -> RedirectResponse:
         session = state.authenticate(username, password)
-        response = RedirectResponse("/ingest", status_code=303)
+        response = RedirectResponse("/", status_code=303)
         response.set_cookie(COOKIE, session["token"], httponly=True, samesite="lax", secure=True)
         return response
 
@@ -1359,7 +1373,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
               <div class="doc-card">
                 {_document_card_heading({**receipt, "status": receipt["state"]})}
               </div>
-              <p><a class="btn-secondary" href="/review">Naar review</a> <a class="btn-secondary" href="/tree">Naar documentenhierarchie</a></p>
+              <p><a class="btn-secondary" href="/review">Naar review</a> <a class="btn-secondary" href="/tree">Naar Documenten</a></p>
             </section>
             {_help(room="ingest")}
             """
@@ -1432,12 +1446,13 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             f"""
             {_nav(account, "tree", _counts(account))}
             <section class="room">
-              <h1>Documentenhiërarchie</h1>
+              <h1>Documenten</h1>
               <p class="lead">Documenten per onderwerp en klasse. Verplaatsen of klasse wijzigen vanaf het document.</p>
               {"".join(blocks) or empty}
             </section>
             {_help(room="tree")}
-            """
+            """,
+            title="Documenten — V&amp;VN Data Services",
         )
 
     @app.post("/tree/move")

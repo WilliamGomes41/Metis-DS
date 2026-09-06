@@ -612,7 +612,8 @@ def test_v217_chrome_slogan_bronpassage_prose_still_holds(tmp_path: Path) -> Non
     assert SLOGAN not in html
     assert "wat een EPD MAG zeggen" not in html
     assert "envelope" not in html.lower()
-    assert "Documentenhiërarchie" in html
+    assert "Documenten" in html
+    assert "Documentenhiërarchie" not in html
     rec = next(obj for obj in objects if OVERWEEG in _text_of(obj))
     card = _client(console).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"

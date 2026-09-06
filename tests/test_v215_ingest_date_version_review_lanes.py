@@ -488,7 +488,8 @@ def test_review_lanes_from_type_without_speed_toggle(tmp_path: Path) -> None:
     ):
         assert forbidden not in lower
     assert "envelope" not in lower
-    assert "Documentenhiërarchie" in html
+    assert "Documenten" in html
+    assert "Documentenhiërarchie" not in html
 
 
 def test_fast_lane_batch_confirms_headings_as_structure(tmp_path: Path) -> None:
