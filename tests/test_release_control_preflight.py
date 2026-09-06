@@ -323,3 +323,9 @@ def test_preflight_script_stays_stdlib_only() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     assert "from src." not in text
     assert "import src" not in text
+
+
+def test_dot_github_paths_keep_leading_dot() -> None:
+    report = _load().classify_paths([".github/workflows/ci.yml"])
+    assert ".github/workflows/ci.yml" in report["releasebewijs"]["paths"]
+    assert "github/workflows/ci.yml" not in report["releasebewijs"]["paths"]

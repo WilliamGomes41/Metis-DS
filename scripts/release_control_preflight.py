@@ -157,7 +157,10 @@ TOKEN_SPLIT_RE = re.compile(r"[\s,;/]+")
 
 
 def _posix(path: str) -> str:
-    return path.replace("\\", "/").lstrip("./")
+    norm = path.replace("\\", "/")
+    while norm.startswith("./"):
+        norm = norm[2:]
+    return norm
 
 
 def _slug(category: str) -> str:
@@ -227,7 +230,12 @@ def collect_evidence(tests_root: Path | str) -> dict[str, dict[str, Any]]:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        rel = _posix(str(path))
+        try:
+            rel = _posix(str(path.relative_to(root)))
+            if root.name:
+                rel = f"{root.name}/{rel}"
+        except ValueError:
+            rel = path.name
         slugs_in_file = set(MARKER_LINE_RE.findall(text))
         for match in EVIDENCE_RE.finditer(text):
             category = match.group(1).strip()
