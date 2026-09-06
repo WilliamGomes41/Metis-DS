@@ -195,7 +195,8 @@ def test_no_separate_delete_room_or_kamer(tmp_path: Path) -> None:
     client = _client(console)
     tree = client.get("/tree").text
     visible = _visible_text(tree)
-    assert "Documentenhiërarchie" in tree
+    assert "Documenten" in tree
+    assert "Documentenhiërarchie" not in tree
     assert re.search(r">Verwijderen<", tree) is None
     assert "Delete" not in visible
     assert client.get("/delete").status_code in {404, 405}
@@ -216,7 +217,8 @@ def test_delete_control_present_on_documentenhierarchie_only(tmp_path: Path) -> 
     client = _client(console)
 
     tree = client.get("/tree").text
-    assert "Documentenhiërarchie" in tree
+    assert "Documenten" in tree
+    assert "Documentenhiërarchie" not in tree
     assert DELETE_LABEL in tree
     assert snap in tree
     forms = _delete_forms(tree)

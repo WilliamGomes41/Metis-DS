@@ -275,7 +275,8 @@ def test_beoordeel_is_the_single_door_openen_and_reviewen_are_gone(tmp_path: Pat
     assert "Reviewen" not in html
     assert html.lower().count("beoordeel") >= 1
     assert "envelope" not in html.lower()
-    assert "Documentenhiërarchie" in html
+    assert "Documenten" in html
+    assert "Documentenhiërarchie" not in html
     source = (ROOT / "src/operations_console_app.py").read_text(encoding="utf-8")
     assert ">Openen<" not in source
     assert ">Reviewen<" not in source
@@ -335,7 +336,8 @@ def test_koppen_and_inhoud_stacks_show_counts(tmp_path: Path) -> None:
     lower = html.lower()
     for forbidden in ("zwaar/licht", "snel/langzaam", "speed-toggle", "envelope"):
         assert forbidden not in lower
-    assert "Documentenhiërarchie" in html
+    assert "Documenten" in html
+    assert "Documentenhiërarchie" not in html
 
 
 # ---------------------------------------------------------------------------

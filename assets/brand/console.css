@@ -711,6 +711,32 @@ mark.broncontext-marked {
   box-shadow: 0 24px 60px rgba(20, 42, 66, 0.08);
 }
 
+.home-chooser {
+  max-width: 22rem;
+  margin: clamp(4rem, 16vh, 8rem) auto 0;
+  text-align: center;
+}
+
+.home-chooser .btn-primary {
+  display: inline-block;
+  text-decoration: none;
+  min-width: 12rem;
+}
+
+.home-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.85rem 1.35rem;
+  margin: 1.75rem 0 0;
+}
+
+.home-secondary a.quiet {
+  color: var(--muted);
+  font-weight: 400;
+  text-decoration: none;
+}
+
 .login-brand {
   margin: 0 0 2.75rem;
 }

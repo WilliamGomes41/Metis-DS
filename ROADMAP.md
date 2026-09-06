@@ -19,6 +19,7 @@ Wat nu de code stuurt:
 - Ingest: geüploade HTML-freeze; Live URL-HTML MUST bij ingest worden geweigerd; URL-ingest van een PDF MAG blijven; URL-ingest van HTML MUST NOT. HTML wordt niet geheel verboden. Protocol v2.11 supersedes v2.7 URL-for-official-files as to HTML.
 - Klasse `beslisboom` (`path` / `node` / `outcome`); Klasse-keuze selecteert het reviewpad; MUST NOT een aparte tweede kiezer «pad». Klasse wijzigen i.p.v. Promoveren (v2.26); selectieve invalidatie + published-candidate blijven later.
 - Console is onderzoeker-oppervlak, niet voor verpleegkundigen. Product API blijft G2-gesloten. Azure ZIP / nurse UI / PROTOCOL.md-rewrite blijven buiten deze golf.
+- Landing sketch B (gecentreerde spaarzame home, primair **Bron inleveren**) + `/tree` heading **Documenten** staan in code. Post-auth landt op die home, niet `/ingest`.
 - Post-v2.31 ROADMAP-golven 1–5 staan in code (#113–#120). Die vereenvoudigingsgolf is in code. MUST NOT een zesde implementatiegolf verzinnen. Golven 1–5 dekken multiuser-betrouwbaarheid en onafhankelijke extractkwaliteit niet volledig; zie Eigenaarslock 2026-09-06 — Post-#120 audit acceptatiecorrectie.
 
 ### Historische supersessie-index
@@ -110,6 +111,8 @@ De onderzoeker-facing consolekamerheading / nav-label / paginatitel voor `/tree`
 Protocol v2.27 unpublished-delete blijft precies één consoleplaats: diezelfde `/tree`-kamer (nu **Documenten**) + type-to-confirm exacte titel. MUST NOT Verwijder unpublished document (of gelijkwaardige verwijdercontrole) aanbieden vanaf Inleveren, Review, Publiceren, Accounts of enige andere kamer. MUST NOT een aparte Delete-kamer verzinnen. MUST NOT delete heropenen naar Review/Inleveren. SUPERSEDEERT alleen de UI-naam in v2.10/later «heading MUST be Documentenhierarchie»-lezingen. Historische delta-bestandsnamen (bijv. `PROTOCOL_V2_27_…DOCUMENTENHIERARCHIE…`) MAGEN hun pad houden.
 
 Landing-page sketch B (gecentreerde spaarzame home, primair **Bron inleveren**) is BUITEN deze protocol-PR. Volgende console-UX ná deze protocolmerge is Forge landing sketch B + console-rename naar **Documenten**, alleen ná **aparte Metis GO**. MUST NOT die Forge-code in deze protocol-PR implementeren. MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
+
+Die Forge-golf is in code: landing sketch B + console-rename naar **Documenten**. `/tree` blijft; v2.27 unpublished-delete blijft één plaats.
 
 ## Eigenaarslock 2026-09-06 — Post-v2.31 betrouwbaarheid- en bewijsbacklog (ROADMAP)
 

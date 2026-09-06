@@ -209,7 +209,8 @@ def test_delete_control_on_document_card_and_review_chooser(tmp_path: Path) -> N
     assert "Beoordeel" in chooser
 
     tree = client.get("/tree").text
-    assert "Documentenhiërarchie" in tree
+    assert "Documenten" in tree
+    assert "Documentenhiërarchie" not in tree
     assert DELETE_LABEL in tree
     assert snap in tree
     assert CONFIRM_COPY in tree
@@ -341,7 +342,8 @@ def test_after_delete_snapshot_gone_from_inleveren_review_tree(tmp_path: Path) -
     assert keep["snapshot_id"] in review_html
     assert keep["snapshot_id"] in tree_html
     assert "Blijft" in _visible_text(tree_html)
-    assert "Documentenhiërarchie" in tree_html
+    assert "Documenten" in tree_html
+    assert "Documentenhiërarchie" not in tree_html
 
 
 # ---------------------------------------------------------------------------
@@ -806,7 +808,8 @@ def test_v216_through_v219_review_extract_still_holds(tmp_path: Path) -> None:
     assert SLOGAN not in html
     assert "wat een EPD MAG zeggen" not in html
     assert "envelope" not in html.lower()
-    assert "Documentenhiërarchie" in html
+    assert "Documenten" in html
+    assert "Documentenhiërarchie" not in html
     assert "Bevestig geselecteerde koppen als structuur" in html
     assert f"Koppen ({len(koppen)})" in html
     if leftover:
