@@ -1,13 +1,26 @@
-"""Extract-quality metrics (ROADMAP wave 4).
+"""Extract-quality metrics (ROADMAP wave 4 / Post-#120 item 4).
 
-Precision counts false positives in the denominator. context_completeness
-requires captured neighbor context and MUST NOT treat context_scan_done
-alone as completeness. A quality claim requires independent/representative
-gold — Phase-4 fixture gold and any non-empty fixture MUST NOT open it.
+Unit: one extracted passage assigned 1:1 to one gold passage on
+``source_id`` + exact ``source_text`` (text-only when neither side has a
+source_id — regression fixtures). Precision denominator is TP+FP.
+Duplicate selected copies of an already-assigned (source, passage) are
+``duplicate_predictions`` and count as FP, not extra TP.
+
+``context_completeness`` is scored only against annotated
+``expected_context_*``. ``context_scan_done`` alone is never enough.
+Neighbor capture without annotations is ``neighbor_context_present``.
+``review_burden`` is None unless gold defines an expected ordinary-review
+count — it MUST NOT read as progress when undefined.
+
+A quality claim opens only when concrete independent-package checks pass
+(source identity, annotation rules, reviewers, locked scope, lock moment
++ versions, train/holdout split at document level, computed overlap).
+Status strings and self-declared booleans never open a claim. v231_wave4
+fixture gold remains usable for regressions and is fail-closed for claims.
 
 Read-mostly: this module does not write gold or metric files. Metric runs
 are idempotent. Old extract-gold schema stays readable; unsupported
-schema fail-closed.
+schema fail-closed. Truncated/corrupt gold JSON raises ExtractGoldError.
 """
 from __future__ import annotations
 
@@ -35,6 +48,7 @@ EXTRACT_QUALITY_METRICS = (
     "coverage_vs_gold",
     "review_burden",
 )
+ASSIGNMENT_UNIT = "source_id+passage"
 
 SUPPORTED_EXTRACT_GOLD_VERSIONS = frozenset({"0.1"})
 FIXTURE_GOLD_STATUSES = frozenset(
@@ -46,9 +60,21 @@ FIXTURE_GOLD_STATUSES = frozenset(
     }
 )
 INDEPENDENT_GOLD_STATUSES = frozenset({"independent_representative", "locked_holdout"})
+DEVELOPMENT_GOLD_SET_IDS = frozenset(
+    {
+        "v231-wave4-independent-extract-gold-v0.1",
+        "v231-wave4-extract-holdout-v0.1",
+        "v231-wave4-language-variation-gold-v0.1",
+        "v230-phase4-extract-gold-v0.1",
+    }
+)
+FORBIDDEN_REVIEWER_NAME_TOKENS = ("metis", "forge", "auditor")
+REQUIRED_SOURCE_IDENTITY_FIELDS = ("document_id", "source_id", "title", "publisher", "version")
 GOLD_POSITIVE_ROLES = frozenset({"missed_knowledge", "true_positive_expected"})
 GOLD_NEGATIVE_ROLES = frozenset({"false_admit", "true_negative"})
 GOLD_NEGATIVE_CLASSES = frozenset({"false_admit", "excluded"})
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class ExtractGoldError(ValueError):
@@ -62,6 +88,10 @@ class ExtractGoldError(ValueError):
 def _text_of(obj: dict[str, Any]) -> str:
     content = obj.get("content") if isinstance(obj.get("content"), dict) else {}
     return str(content.get("clean_text") or obj.get("candidate_text") or "").strip()
+
+
+def _norm_text(value: Any) -> str:
+    return " ".join(str(value or "").split())
 
 
 def _gold_passages(gold: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -129,31 +159,252 @@ def _source_count(gold: dict[str, Any]) -> int:
     return 0
 
 
-def gold_supports_independent_quality_claim(gold: dict[str, Any] | None) -> bool:
+def _is_development_regression_gold(gold: dict[str, Any] | None) -> bool:
+    if not isinstance(gold, dict):
+        return True
+    if gold.get("development_regression_only") is True:
+        return True
+    if str(gold.get("status") or "").strip() in FIXTURE_GOLD_STATUSES:
+        return True
+    gid = str(gold.get("golden_set_id") or "").strip()
+    if gid in DEVELOPMENT_GOLD_SET_IDS:
+        return True
+    if gid.startswith("v231-wave4-") or gid.startswith("v230-phase"):
+        return True
+    return False
+
+
+def _source_id_of(obj: dict[str, Any]) -> str:
+    source = obj.get("source") if isinstance(obj.get("source"), dict) else {}
+    return str(obj.get("source_id") or source.get("source_id") or "").strip()
+
+
+def _row_source_id(row: dict[str, Any]) -> str:
+    return str(row.get("source_id") or "").strip()
+
+
+def _row_matches_obj(row: dict[str, Any], obj: dict[str, Any]) -> bool:
+    row_text = str(row.get("source_text") or "").strip()
+    obj_text = _text_of(obj)
+    if not row_text or row_text != obj_text:
+        return False
+    row_src = _row_source_id(row)
+    obj_src = _source_id_of(obj)
+    if row_src and obj_src:
+        return row_src == obj_src
+    if row_src and not obj_src:
+        return False
+    return True
+
+
+def _collect_identity_values(gold: dict[str, Any] | None, *keys: str) -> set[str]:
+    values: set[str] = set()
+    if not isinstance(gold, dict):
+        return values
+    for source in gold.get("sources") or []:
+        if not isinstance(source, dict):
+            continue
+        for key in keys:
+            item = str(source.get(key) or "").strip()
+            if item:
+                values.add(item)
+    for row in _gold_passages(gold):
+        for key in keys:
+            item = str(row.get(key) or "").strip()
+            if item:
+                values.add(item)
+    return values
+
+
+def _passage_keys_and_texts(gold: dict[str, Any] | None) -> tuple[set[tuple[str, str]], set[str]]:
+    keys: set[tuple[str, str]] = set()
+    texts: set[str] = set()
+    for row in _gold_passages(gold):
+        text = str(row.get("source_text") or "").strip()
+        if not text:
+            continue
+        texts.add(text)
+        keys.add((_row_source_id(row), text))
+    return keys, texts
+
+
+def train_holdout_source_overlap(
+    train: dict[str, Any] | None,
+    holdout: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Computed overlap — never trust a self-declared passed boolean."""
+    train_docs = _collect_identity_values(train, "document_id")
+    holdout_docs = _collect_identity_values(holdout, "document_id")
+    train_sources = _collect_identity_values(train, "source_id")
+    holdout_sources = _collect_identity_values(holdout, "source_id")
+    train_keys, train_texts = _passage_keys_and_texts(train)
+    holdout_keys, holdout_texts = _passage_keys_and_texts(holdout)
+    shared_docs = sorted(train_docs & holdout_docs)
+    shared_sources = sorted(train_sources & holdout_sources)
+    shared_keys = sorted(train_keys & holdout_keys)
+    shared_texts = sorted(train_texts & holdout_texts)
+    return {
+        "shared_document_ids": shared_docs,
+        "shared_source_ids": shared_sources,
+        "shared_passage_keys": shared_keys,
+        "shared_passage_texts": shared_texts,
+        "has_overlap": bool(shared_docs or shared_sources or shared_keys or shared_texts),
+    }
+
+
+def _source_identity_complete(source: Any) -> bool:
+    if not isinstance(source, dict):
+        return False
+    if any(not str(source.get(field) or "").strip() for field in REQUIRED_SOURCE_IDENTITY_FIELDS):
+        return False
+    material = str(
+        source.get("material") or source.get("fixture") or source.get("material_path") or ""
+    ).strip()
+    return bool(material)
+
+
+def _reviewer_name(row: Any) -> str:
+    if isinstance(row, dict):
+        return str(row.get("name") or "").strip()
+    return str(row or "").strip()
+
+
+def _resolve_package(
+    gold: dict[str, Any] | None,
+    holdout: dict[str, Any] | None,
+    lock: dict[str, Any] | None,
+    repo_root: Path | None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    if not isinstance(gold, dict):
+        return holdout, lock
+    root = Path(repo_root) if repo_root is not None else _REPO_ROOT
+    package = gold.get("package") if isinstance(gold.get("package"), dict) else {}
+    if holdout is None:
+        holdout_path = str(package.get("holdout_path") or "").strip()
+        if holdout_path:
+            path = root / holdout_path
+            if path.is_file():
+                try:
+                    holdout = load_extract_gold(path)
+                except ExtractGoldError:
+                    holdout = None
+    if lock is None:
+        lock_path = str(package.get("lock_path") or "").strip()
+        if lock_path:
+            path = root / lock_path
+            if path.is_file():
+                try:
+                    loaded = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                    loaded = None
+                if isinstance(loaded, dict):
+                    lock = loaded
+    return holdout, lock
+
+
+def independent_quality_claim_checks(
+    gold: dict[str, Any] | None,
+    *,
+    holdout: dict[str, Any] | None = None,
+    lock: dict[str, Any] | None = None,
+    repo_root: Path | None = None,
+) -> dict[str, Any]:
+    """Concrete checks only. Status strings / booleans never open a claim."""
+    failures: list[str] = []
     if not gold_schema_supported(gold) or not isinstance(gold, dict):
-        return False
-    status = str(gold.get("status") or "").strip()
-    if status in FIXTURE_GOLD_STATUSES:
-        return False
-    passages = _gold_passages(gold)
-    if not passages:
-        return False
-    independence = gold.get("independence") if isinstance(gold.get("independence"), dict) else {}
-    rules = gold.get("rules") if isinstance(gold.get("rules"), dict) else {}
-    flagged = (
-        independence.get("independent") is True
-        and independence.get("representative") is True
-    ) or rules.get("independent_quality_claim") is True
-    if not flagged and status not in INDEPENDENT_GOLD_STATUSES:
-        return False
-    if _source_count(gold) < 2:
-        return False
-    return _has_missed_knowledge(passages) and _has_false_admit(passages)
+        return {"allowed": False, "failures": ["gold_schema_unsupported"]}
+    holdout, lock = _resolve_package(gold, holdout, lock, repo_root)
+    if _is_development_regression_gold(gold):
+        failures.append("fixture_gold_development_only")
+    if holdout is not None:
+        overlap = train_holdout_source_overlap(gold, holdout)
+        if overlap["has_overlap"]:
+            failures.append("train_holdout_overlap")
+    else:
+        failures.append("holdout_missing")
+        overlap = train_holdout_source_overlap(gold, {})
+    if not isinstance(lock, dict):
+        failures.extend(
+            [
+                "reviewers_missing",
+                "annotation_rules_missing",
+                "lock_moment_missing",
+                "locked_scope_missing",
+                "source_identity_incomplete",
+            ]
+        )
+    else:
+        reviewers = lock.get("reviewers") if isinstance(lock.get("reviewers"), list) else []
+        if not reviewers:
+            failures.append("reviewers_missing")
+        for row in reviewers:
+            name = _reviewer_name(row)
+            if not name:
+                failures.append("reviewers_missing")
+                continue
+            lowered = name.lower()
+            if any(token in lowered for token in FORBIDDEN_REVIEWER_NAME_TOKENS):
+                failures.append("reviewers_forbidden_seat")
+        rules = lock.get("annotation_rules") if isinstance(lock.get("annotation_rules"), dict) else {}
+        if not str(rules.get("unit") or "").strip():
+            failures.append("annotation_rules_missing")
+        if not str(lock.get("locked_at") or "").strip():
+            failures.append("lock_moment_missing")
+        scope = lock.get("scope") if isinstance(lock.get("scope"), dict) else {}
+        if scope.get("locked") is not True:
+            failures.append("locked_scope_missing")
+        lock_sources = lock.get("sources") if isinstance(lock.get("sources"), list) else []
+        if not lock_sources or not all(_source_identity_complete(item) for item in lock_sources):
+            failures.append("source_identity_incomplete")
+        if not str(lock.get("gold_schema_version") or lock.get("version") or "").strip():
+            failures.append("versions_missing")
+        train_sources = gold.get("sources") if isinstance(gold.get("sources"), list) else []
+        holdout_sources = holdout.get("sources") if isinstance(holdout, dict) and isinstance(holdout.get("sources"), list) else []
+        if not all(_source_identity_complete(item) for item in train_sources + holdout_sources if isinstance(item, dict)):
+            failures.append("source_identity_incomplete")
+    package_passages = _gold_passages(gold) + _gold_passages(holdout)
+    if not _has_missed_knowledge(package_passages) or not _has_false_admit(package_passages):
+        failures.append("package_roles_incomplete")
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    unique: list[str] = []
+    for code in failures:
+        if code not in seen:
+            seen.add(code)
+            unique.append(code)
+    allowed = not unique
+    return {
+        "allowed": allowed,
+        "failures": unique,
+        "overlap": overlap,
+        "development_regression_gold": _is_development_regression_gold(gold),
+    }
 
 
-def extract_quality_claim_allowed(objects: list[dict[str, Any]], gold: dict[str, Any] | None = None) -> bool:
+def gold_supports_independent_quality_claim(
+    gold: dict[str, Any] | None,
+    *,
+    holdout: dict[str, Any] | None = None,
+    lock: dict[str, Any] | None = None,
+    repo_root: Path | None = None,
+) -> bool:
+    return independent_quality_claim_checks(
+        gold, holdout=holdout, lock=lock, repo_root=repo_root
+    )["allowed"]
+
+
+def extract_quality_claim_allowed(
+    objects: list[dict[str, Any]],
+    gold: dict[str, Any] | None = None,
+    *,
+    holdout: dict[str, Any] | None = None,
+    lock: dict[str, Any] | None = None,
+    repo_root: Path | None = None,
+) -> bool:
     del objects
-    return gold_supports_independent_quality_claim(gold)
+    return gold_supports_independent_quality_claim(
+        gold, holdout=holdout, lock=lock, repo_root=repo_root
+    )
 
 
 def load_extract_gold(path: Path | str) -> dict[str, Any]:
@@ -214,15 +465,125 @@ def _type_of(obj: dict[str, Any]) -> str:
     ).strip()
 
 
+def _captured_context(obj: dict[str, Any]) -> tuple[str, str]:
+    admission = admission_of(obj)
+    scan = admission.get("context_scan") if isinstance(admission.get("context_scan"), dict) else {}
+    before = str(admission.get("context_before") or scan.get("previous_paragraph") or "").strip()
+    after = str(admission.get("context_after") or scan.get("next_paragraph") or "").strip()
+    return before, after
+
+
 def _context_complete(obj: dict[str, Any]) -> bool:
     """Captured neighbor context. ``context_scan_done`` alone is not enough."""
     admission = admission_of(obj)
     scan = admission.get("context_scan") if isinstance(admission.get("context_scan"), dict) else {}
     if scan.get("necessary_context_disposition") == "block":
         return False
-    before = str(admission.get("context_before") or scan.get("previous_paragraph") or "").strip()
-    after = str(admission.get("context_after") or scan.get("next_paragraph") or "").strip()
+    before, after = _captured_context(obj)
     return bool(before or after)
+
+
+def _has_context_annotation(row: dict[str, Any]) -> bool:
+    return "expected_context_before" in row or "expected_context_after" in row
+
+
+def _context_matches_expected(obj: dict[str, Any], row: dict[str, Any]) -> bool:
+    got_before, got_after = _captured_context(obj)
+    expected_before = row.get("expected_context_before")
+    expected_after = row.get("expected_context_after")
+    if expected_before is not None:
+        expected = _norm_text(expected_before)
+        captured = _norm_text(got_before)
+        if expected and expected not in captured:
+            return False
+        if not expected and captured:
+            return False
+    if expected_after is not None:
+        expected = _norm_text(expected_after)
+        captured = _norm_text(got_after)
+        if expected and expected not in captured:
+            return False
+        if not expected and captured:
+            return False
+    return bool(got_before or got_after)
+
+
+def _assign_rows_one_to_one(
+    objects: list[dict[str, Any]],
+    rows: list[dict[str, Any]],
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    used_objects: set[int] = set()
+    pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for row in rows:
+        for index, obj in enumerate(objects):
+            if index in used_objects:
+                continue
+            if _row_matches_obj(row, obj):
+                used_objects.add(index)
+                pairs.append((obj, row))
+                break
+    return pairs
+
+
+def _score_selected(
+    selected: list[dict[str, Any]],
+    gold_rows: list[dict[str, Any]],
+) -> tuple[int, int, int, int]:
+    used_positive: set[int] = set()
+    true_positives = 0
+    false_positives = 0
+    duplicates = 0
+    for obj in selected:
+        matched_positive = False
+        duplicate = False
+        matched_negative = False
+        for index, row in enumerate(gold_rows):
+            if not _row_matches_obj(row, obj):
+                continue
+            if _is_gold_positive(row):
+                if index in used_positive:
+                    duplicate = True
+                else:
+                    used_positive.add(index)
+                    matched_positive = True
+                break
+            if _is_gold_negative(row) or not _is_gold_positive(row):
+                matched_negative = True
+                break
+        if matched_positive:
+            true_positives += 1
+        else:
+            false_positives += 1
+            if duplicate:
+                duplicates += 1
+            del matched_negative
+    gold_positives = [row for row in gold_rows if _is_gold_positive(row)]
+    false_negatives = sum(
+        1
+        for index, row in enumerate(gold_rows)
+        if _is_gold_positive(row) and index not in used_positive
+    )
+    del gold_positives
+    return true_positives, false_positives, false_negatives, duplicates
+
+
+def _review_burden_value(gold: dict[str, Any] | None, ordinary_count: int) -> tuple[float | None, bool]:
+    if not isinstance(gold, dict):
+        return None, False
+    spec = gold.get("review_burden") if isinstance(gold.get("review_burden"), dict) else {}
+    expected = gold.get("expected_ordinary_review_count")
+    if expected is None:
+        expected = spec.get("expected_ordinary_review_count")
+    defined = gold.get("review_burden_defined") is True or spec.get("defined") is True or expected is not None
+    if not defined:
+        return None, False
+    try:
+        expected_n = float(expected)
+    except (TypeError, ValueError):
+        return None, True
+    if expected_n <= 0:
+        return None, True
+    return round(ordinary_count / expected_n, 3), True
 
 
 def _empty_metrics(*, reason: str) -> dict[str, Any]:
@@ -233,6 +594,10 @@ def _empty_metrics(*, reason: str) -> dict[str, Any]:
         "true_positives": 0,
         "false_positives": 0,
         "false_negatives": 0,
+        "duplicate_predictions": 0,
+        "assignment_unit": ASSIGNMENT_UNIT,
+        "neighbor_context_present": None,
+        "review_burden_defined": False,
         "coverage": {"objectify_every_sentence": False, "duty": "normative_application_critical", "sections": {}},
     }
 
@@ -243,6 +608,9 @@ def compute_extract_metrics(
     *,
     soft_scores: dict[str, Any] | None = None,
     guideline_count: int | None = None,
+    holdout: dict[str, Any] | None = None,
+    lock: dict[str, Any] | None = None,
+    repo_root: Path | None = None,
 ) -> dict[str, Any]:
     del soft_scores, guideline_count
     stamped = apply_passage_register(list(objects))
@@ -258,72 +626,53 @@ def compute_extract_metrics(
         return empty
 
     selected = [obj for obj in passages if passage_register_of(obj).get("status") == "selected_as_candidate"]
-    gold_positives = [row for row in gold_rows if _is_gold_positive(row)]
-    matched_positive: set[str] = set()
-    true_positives = 0
-    false_positives = 0
-    for obj in selected:
-        row = _match_gold_row(gold_rows, _text_of(obj))
-        if row is not None and _is_gold_positive(row):
-            true_positives += 1
-            matched_positive.add(str(row.get("id") or _text_of(obj)))
-        else:
-            false_positives += 1
-    false_negatives = 0
-    for row in gold_positives:
-        key = str(row.get("id") or row.get("source_text") or "")
-        if key in matched_positive:
-            continue
-        obj = _match_object(selected, str(row.get("source_text") or ""))
-        if obj is None:
-            false_negatives += 1
-
-    matched = 0
-    status_hits = 0
+    true_positives, false_positives, false_negatives, duplicates = _score_selected(selected, gold_rows)
+    pairs = _assign_rows_one_to_one(passages, gold_rows)
+    matched = len(pairs)
     type_total = 0
     type_hits = 0
-    for row in gold_rows:
-        obj = _match_object(passages, str(row.get("source_text") or ""))
-        if obj is None:
-            continue
-        matched += 1
-        live = str(passage_register_of(obj).get("status") or "")
-        expected = str(row.get("expected_register_status") or "")
-        allowed = [str(item) for item in (row.get("allowed_register_statuses") or []) if str(item)]
-        if _status_ok(live, expected, allowed or None):
-            status_hits += 1
+    annotated_total = 0
+    annotated_hits = 0
+    for obj, row in pairs:
         expected_type = str(row.get("expected_type") or "").strip()
         if expected_type:
             type_total += 1
             if _type_of(obj) == expected_type:
                 type_hits += 1
-
-    context_total = len(selected)
-    context_hits = sum(1 for obj in selected if _context_complete(obj))
+        if _has_context_annotation(row):
+            annotated_total += 1
+            if _context_matches_expected(obj, row):
+                annotated_hits += 1
+    neighbor_total = len(selected)
+    neighbor_hits = sum(1 for obj in selected if _context_complete(obj))
     ordinary = ordinary_review_queue(passages)
-    reviewed = sum(
-        1
-        for obj in passages
-        if ((obj.get("metadata") or {}).get("review_passage") or {}).get("suitability")
+    burden, burden_defined = _review_burden_value(gold if isinstance(gold, dict) else None, len(ordinary))
+    claim = gold_supports_independent_quality_claim(
+        gold, holdout=holdout, lock=lock, repo_root=repo_root
     )
-    duty = max(len(ordinary), 1)
-    claim = gold_supports_independent_quality_claim(gold)
     if claim:
         reason = ""
-    elif not gold_schema_supported(gold):
+    elif gold is not None and not gold_schema_supported(gold):
         reason = "gold_schema_unsupported"
     else:
         reason = "independent_representative_gold_required"
-    del status_hits  # status agreement is not precision
     predicted = true_positives + false_positives
     return {
         "quality_claim_allowed": claim,
         "reason": reason,
         "precision": round(true_positives / predicted, 3) if predicted else 0.0,
         "type_accuracy": round(type_hits / type_total, 3) if type_total else 0.0,
-        "context_completeness": round(context_hits / context_total, 3) if context_total else 0.0,
+        "context_completeness": (
+            round(annotated_hits / annotated_total, 3) if annotated_total else None
+        ),
         "coverage_vs_gold": round(matched / len(gold_rows), 3),
-        "review_burden": round(min(1.0, len(ordinary) / duty if reviewed else len(ordinary) / max(len(passages), 1)), 3),
+        "review_burden": burden,
+        "review_burden_defined": burden_defined,
+        "neighbor_context_present": (
+            round(neighbor_hits / neighbor_total, 3) if neighbor_total else 0.0
+        ),
+        "assignment_unit": ASSIGNMENT_UNIT,
+        "duplicate_predictions": duplicates,
         "coverage": coverage_by_section(passages),
         "matched_gold_passages": matched,
         "gold_passages": len(gold_rows),

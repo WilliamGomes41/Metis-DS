@@ -156,6 +156,8 @@ Remediatie 3 (Wave-3 SSRF connection bind): die Forge-golf is in code (connect p
 
 4. **Wave-4 quality claim incomplete (HIGH voor claims)** — Huidig gold/holdout = development/regressie only. MUST NOT een onafhankelijke kwaliteitsclaim toestaan op fixture-labels / zelfverklaarde booleans. Lever apart geselecteerd goud op echte richtlijnen (bronidentiteit, annotatieregels, reviewers, gelockte scope); scheid train vs holdout op bron-/documentniveau; lock moment + versies; overlapchecks. Herstel metrics: eenheid/noemer; match op bron+passage met 1:1-toewijzing; expliciete duplicaten; contextmaat eerlijk benoemd of tegen geannoteerde verwachtingen; burden-metric MUST NOT als voortgang lezen wanneer die ongedefinieerd is. CONFIGURE/EXTEND.
 
+Remediatie 4 (Wave-4 quality claim): die Forge-golf is in code (v231_wave4 fixture gold = development/regressie only; claim alleen na concrete package-checks op bronidentiteit, annotatieregels, reviewers, lock moment, document-gescheiden train/holdout en berekende overlap; metrics 1:1 bron+passage).
+
 5. **Topology bound (scale)** — Documenteer de ondersteunde topologie: huidig één Gunicorn-worker / één instance / sequentiële writes. Voorkom per ongeluk multi-writer scale. Vóór meerdere writers: consistent mutate-pad voor accounts/envelopes/bindings (session reload/lock-patroon). CONFIGURE nu; EXTEND bij schalen.
 
 **Release-preflight risico** — markers/comments MUST NOT als live-releasebewijs worden behandeld; houd alleen metadata die naar concrete checks wijst.

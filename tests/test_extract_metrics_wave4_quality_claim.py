@@ -493,9 +493,7 @@ def test_controlled_worsening_drops_precision_type_and_context() -> None:
     baseline = compute_extract_metrics(good, gold=gold)
     worse = compute_extract_metrics(
         [
-            *good,
-            _obj(FALSE_C, source_id="src-a", selected=True, before="", after="", object_type="recommendation"),
-            _obj(TRUE_A, source_id="src-a", selected=True, before="", after="", object_id="dup-worse"),
+            _obj(TRUE_A, source_id="src-a", selected=True, before="voor", after="na"),
             _obj(
                 TRUE_B,
                 source_id="src-a",
@@ -505,6 +503,8 @@ def test_controlled_worsening_drops_precision_type_and_context() -> None:
                 object_type="condition",
                 object_id="wrong-type",
             ),
+            _obj(FALSE_C, source_id="src-a", selected=True, before="", after="", object_type="recommendation"),
+            _obj(TRUE_A, source_id="src-a", selected=True, before="", after="", object_id="dup-worse"),
         ],
         gold=gold,
     )

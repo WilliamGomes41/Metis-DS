@@ -1,0 +1,78 @@
+{
+  "kind": "extract_quality_claim_package",
+  "version": "0.1",
+  "package_id": "v231-post120-independent-extract-v0.1",
+  "gold_schema_version": "0.1",
+  "lock_schema_version": "0.1",
+  "locked_at": "2026-09-06T16:00:00+00:00",
+  "scope": {
+    "locked": true,
+    "claim_type": "independent_extract_quality",
+    "description": "Independently selected extract-quality package on in-repo real richtlijn material. Train is Continentie (one document). Holdout is Osteoporose/fractuurpreventie page 15 (a different document). v231_wave4 fixture gold remains development/regression only. Not GD-03. Not clinical publication. Not G2/publish.",
+    "not_clinical_publication": true,
+    "not_gd03": true,
+    "must_not_tune_on_holdout": true
+  },
+  "annotation_rules": {
+    "unit": "one source passage (source_id + exact source_text) on one document",
+    "positive": "independently confirmable knowledge expected selected_as_candidate",
+    "negative": "false_admit or true_negative expected excluded_with_reason",
+    "match": "exact source_id + exact source_text; 1:1 assignment",
+    "duplicates": "extra selected copies of the same (source, passage) are duplicates, not extra TP",
+    "context": "score captured neighbor text against annotated expected_context_* when present; otherwise context_completeness is undefined",
+    "burden": "undefined unless gold declares expected_ordinary_review_count"
+  },
+  "reviewers": [
+    {
+      "name": "William Gomes",
+      "role": "documenteigenaar / extract-quality package selector",
+      "seat": "not_gd03",
+      "note": "Selects and locks in-repo freeze passages. Not a GD-03 clinical reviewer."
+    }
+  ],
+  "train": {
+    "gold_file": "data/golden/v231_post120_independent_extract_gold_v0.1.json",
+    "sha256": "1be4b733e75ebab698857a674cb54d59d4541c05cd6d880691a4518dfaa6d980",
+    "split": "train",
+    "document_ids": ["vvn-continentie-kwetsbare-ouderen-2025"],
+    "source_ids": ["vvn-continentie-kwetsbare-ouderen-2025-source-html"]
+  },
+  "holdout": {
+    "gold_file": "data/holdout/v231_post120_extract_holdout_v0.1.json",
+    "sha256": "9ee092b1e36e8ac918646c19ebae2eaad0643e565998536ffd804ffe873f1b0b",
+    "split": "holdout",
+    "document_ids": ["vvn-osteoporose-fractuurpreventie-2024"],
+    "source_ids": ["vvn-osteoporose-fractuurpreventie-2024-source-pdf"]
+  },
+  "sources": [
+    {
+      "document_id": "vvn-continentie-kwetsbare-ouderen-2025",
+      "source_id": "vvn-continentie-kwetsbare-ouderen-2025-source-html",
+      "title": "V&VN Richtlijn Continentie bij (kwetsbare) ouderen",
+      "publisher": "V&VN",
+      "version": "april 2025",
+      "material": "data/fixtures/continentie_v221_wave_a_regression.html",
+      "material_sha256": "3f10218f7b57d397c965da4074be3290a89efa345258dd203262d64010a288d4",
+      "split": "train",
+      "family": "continentie"
+    },
+    {
+      "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+      "source_id": "vvn-osteoporose-fractuurpreventie-2024-source-pdf",
+      "title": "V&VN Richtlijn Osteoporose en fractuurpreventie",
+      "publisher": "V&VN",
+      "version": "augustus 2024",
+      "material": "data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v21.jsonl",
+      "material_sha256": "17989a6ccdc3ad9b00bd396199136a5fd4d896d36859226df56d8378bb7ab004",
+      "split": "holdout",
+      "family": "fractuurpreventie"
+    }
+  ],
+  "overlap_check": {
+    "method": "computed train_holdout_source_overlap; self-declared passed is not evidence",
+    "shared_document_ids": [],
+    "shared_source_ids": [],
+    "shared_passage_keys": [],
+    "shared_passage_texts": []
+  }
+}
