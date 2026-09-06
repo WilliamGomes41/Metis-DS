@@ -472,14 +472,15 @@ def test_metrics_with_gold_record_the_required_hooks(tmp_path: Path) -> None:
     for name in (
         "precision",
         "type_accuracy",
-        "context_completeness",
         "coverage_vs_gold",
-        "review_burden",
     ):
         assert name in EXTRACT_QUALITY_METRICS
         assert name in metrics
         assert metrics[name] is not None
         assert 0.0 <= float(metrics[name]) <= 1.0
+    # Fixture gold has no annotated context expectations and no defined burden.
+    assert metrics["context_completeness"] is None
+    assert metrics["review_burden"] is None
     assert metrics["coverage_vs_gold"] > 0
     assert metrics["precision"] > 0
 
