@@ -5,13 +5,25 @@ waves after Protocol v2.31 / Forge exact-bind on main tip 019978b, plus
 the same-day sharpened acceptance on those five waves (no sixth wave).
 This PR is ROADMAP + CHANGELOG only. No PROTOCOL.md rewrite, no new
 PROTOCOL_V2_* delta, no src/ product code, no Forge implementation.
+
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
+
+pytestmark = [
+    pytest.mark.release_control_scope_belofte,
+    pytest.mark.release_control_slop,
+    pytest.mark.release_control_releasebewijs,
+]
 
 
 def _read(path: Path) -> str:
