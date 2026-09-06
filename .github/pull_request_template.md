@@ -37,8 +37,17 @@ If anything other than `None` applies:
 - [ ] Retrieval safety/abstention tests updated where applicable
 - [ ] High-risk clinical changes require review workflow
 
+## Metis eindrapportage (stub)
+
+- **belofte**:
+- **wijziging**:
+- **bewijs**:
+- **onzekerheid**:
+- **advies**:
+
 ## Verification
 
 - [ ] `python scripts/repository_preflight.py`
+- [ ] `python scripts/release_control_preflight.py`
 - [ ] `python -m compileall -q src`
 - [ ] `pytest -q`
