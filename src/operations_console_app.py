@@ -7,6 +7,7 @@ Chat is not a room.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import html
 from typing import Any
 from urllib.parse import quote
@@ -230,13 +231,19 @@ def _login_brand() -> str:
 
 def _page(body: str, *, title: str | None = None) -> str:
     page_title = title or "V&amp;VN Data Services — Interne operations console"
+    stylesheet = BRAND_DIR / "console.css"
+    stylesheet_url = "/brand/console.css"
+    if stylesheet.is_file():
+        # ZIP entries have fixed mtimes; version by content, not Last-Modified.
+        version = hashlib.sha256(stylesheet.read_bytes()).hexdigest()[:16]
+        stylesheet_url += f"?v={version}"
     return f"""<!doctype html>
 <html lang="nl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{page_title}</title>
-<link rel="stylesheet" href="/brand/console.css">
+<link rel="stylesheet" href="{stylesheet_url}">
 </head>
 <body>
 <div class="shell">
