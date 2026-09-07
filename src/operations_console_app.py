@@ -373,11 +373,11 @@ def _nav(account: dict[str, Any] | None, current: str = "", counts: dict[str, in
     )
     counts = counts or {}
     rooms = [
-        ("home", "/", "Home", 0),
+        ("home", "/", "Mijn werk", 0),
         ("ingest", "/ingest", "Inleveren", counts.get("ingest", 0)),
-        ("tree", "/tree", "Documenten", counts.get("tree", 0)),
         ("review", "/review", "Review", counts.get("review", 0)),
         ("publish", "/publish", "Publiceren", counts.get("publish", 0)),
+        ("tree", "/tree", "Documenten", counts.get("tree", 0)),
         ("accounts", "/accounts", "Accounts", 0),
     ]
     links = []
@@ -398,6 +398,27 @@ def _nav(account: dict[str, Any] | None, current: str = "", counts: dict[str, in
       <nav class="rooms">{"".join(links)}</nav>
       <div class="who">{who}</div>
     </header>
+    """
+
+
+def _home_tile(
+    *,
+    href: str,
+    icon: str,
+    title: str,
+    description: str,
+    badge: str,
+    priority: bool = False,
+) -> str:
+    priority_class = " home-tile-priority" if priority else ""
+    priority_label = '<span class="home-tile-now">Nu doen</span>' if priority else ""
+    return f"""
+    <a class="home-tile{priority_class}" href="{href}">
+      <span class="home-tile-icon" aria-hidden="true">{icon}</span>
+      <span class="home-tile-title">{title}</span>
+      <span class="home-tile-description">{description}</span>
+      <span class="home-tile-footer"><span class="home-tile-badge">{badge}</span>{priority_label}</span>
+    </a>
     """
 
 
@@ -1171,29 +1192,48 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                 """
             )
         counts = _counts(account)
-        waiting = counts.get("review", 0)
+        review_waiting = counts.get("review", 0)
+        documents = state.list_envelopes()
+        tiles = "".join(
+            (
+                _home_tile(
+                    href="/ingest",
+                    icon="⇧",
+                    title="Inleveren",
+                    description="Nieuwe bron toevoegen",
+                    badge=(f"{counts['ingest']} terug voor revisie" if counts["ingest"] else "Nieuwe bron"),
+                ),
+                _home_tile(
+                    href="/review",
+                    icon="✓",
+                    title="Review",
+                    description="Beoordeel aangeleverde bronnen",
+                    badge=(f"{review_waiting} wachten op jou" if review_waiting else "Geen open taken"),
+                    priority=bool(review_waiting),
+                ),
+                _home_tile(
+                    href="/publish",
+                    icon="⇧",
+                    title="Publiceren",
+                    description="Goedgekeurde stukken publiceren",
+                    badge=(f"{counts['publish']} gereed" if counts["publish"] else "Geen open taken"),
+                ),
+                _home_tile(
+                    href="/tree",
+                    icon="▰",
+                    title="Documenten",
+                    description="Zoeken, openen of beheren",
+                    badge=f"{len(documents)} documenten",
+                ),
+            )
+        )
         return _page(
             f"""
             {_nav(account, "home", counts)}
-            <section class="room duty-home">
-              <h1>Waar wil je verder?</h1>
-              <p class="lead">Kies wat je nu wilt doen.</p>
-              <div class="duty-grid">
-                <article class="duty-card">
-                  <h2>Openstaand reviewwerk <span class="badge">{waiting} wachten</span></h2>
-                  <p><a href="/review" class="btn-primary">Naar review</a></p>
-                </article>
-                <article class="duty-card">
-                  <h2>Bron inleveren</h2>
-                  <p class="muted">PDF of HTML-freeze toevoegen</p>
-                  <p><a href="/ingest" class="btn-primary">Naar inleveren</a></p>
-                </article>
-                <article class="duty-card">
-                  <h2>Documenten</h2>
-                  <p class="muted">Zoeken, openen of verwijderen</p>
-                  <p><a href="/tree" class="btn-primary">Naar documenten</a></p>
-                </article>
-              </div>
+            <section class="room home-room">
+              <h1>Mijn werk</h1>
+              <p class="lead">Kies de volgende stap in het proces.</p>
+              <div class="home-tiles">{tiles}</div>
             </section>
             """
         )

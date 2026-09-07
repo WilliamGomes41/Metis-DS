@@ -59,7 +59,7 @@ def test_roadmap_records_duty_first_home_owner_lock() -> None:
     assert "aparte Metis GO" in _lock_section()
     assert "duty-first" in changelog.lower() or "Duty-first" in changelog
     assert "Die Forge-golf is nog NIET in code" in changelog
-    assert "Die Forge-golf is in code" in changelog
+    assert "Metis workboard" in changelog
     assert "await aparte Metis GO" in changelog
     assert "duty-first home ROADMAP 2026-09-07" in roadmap
 
@@ -80,36 +80,32 @@ def test_roadmap_supersedes_sketch_b_as_locked_home() -> None:
     duty_live = next(
         line for line in live.splitlines() if "duty-first" in line.lower() or "sketch B" in line
     )
-    assert "Die Forge-golf is in code" in duty_live
-    assert "nog NIET in code" not in duty_live
-    assert "SUPERSEDES #127" in changelog or "SUPERSEDES #127 sketch B" in changelog
+    assert "vier grote klikbare tegels" in duty_live
+    assert "supersedes #127 sketch B" in changelog
     assert "sketch B" in changelog
 
 
 def test_roadmap_locks_duty_first_home_copy_and_cards() -> None:
     section = _lock_section()
     changelog = _read(ROOT / "CHANGELOG.md")
-    assert "Waar wil je verder?" in section
-    assert "Kies wat je nu wilt doen." in section
-    assert "Openstaand reviewwerk" in section
-    assert "N wachten" in section
-    assert "Naar review" in section
+    assert "Mijn werk" in section
+    assert "Kies de volgende stap in het proces." in section
+    assert "Inleveren → Review → Publiceren → Documenten" in section
+    assert "Vier grote, horizontale" in section
+    assert "N wachten op jou" in section
+    assert "Nu doen" in section
     assert "/review" in section
-    assert "PDF of HTML-freeze toevoegen" in section
-    assert "Naar inleveren" in section
+    assert "Nieuwe bron toevoegen" in section
     assert "/ingest" in section
-    assert "Zoeken, openen of verwijderen" in section
-    assert "Naar documenten" in section
+    assert "Goedgekeurde stukken publiceren" in section
+    assert "/publish" in section
+    assert "Zoeken, openen of beheren" in section
     assert "/tree" in section
-    assert "Home" in section
+    assert "Mijn werk" in section
     assert "MUST NOT" in section and "Inleveren" in section
-    assert "Waar wil je verder?" in changelog
-    assert "Kies wat je nu wilt doen." in changelog
-    assert "Openstaand reviewwerk" in changelog
-    assert "Naar review" in changelog
-    assert "Naar inleveren" in changelog
-    assert "Naar documenten" in changelog
-    assert "N wachten" in changelog
+    assert "Mijn werk" in changelog
+    assert "Inleveren → Review → Publiceren → Documenten" in changelog
+    assert "four large clickable tiles" in changelog
 
 
 def test_roadmap_locks_post_auth_home_and_documenten_unchanged() -> None:
@@ -139,9 +135,7 @@ def test_roadmap_states_out_of_scope_and_does_not_open_g2() -> None:
     assert "MUST NOT G2/`publish()` openen" in section
     assert "HANDOFF.md MUST NOT" in section
     assert "geen golf 6" in section.lower()
-    assert "Slack presence" in changelog
-    assert "MUST NOT open G2/`publish()`" in changelog or "NOT G2/`publish()`" in changelog
-    assert "HANDOFF" in changelog
+    assert "NOT G2/`publish()`" in changelog
     assert "NOT Protocol" in changelog or "NOT PROTOCOL" in changelog
 
 
@@ -151,8 +145,8 @@ def test_duty_first_does_not_rewrite_protocol_and_is_in_console() -> None:
     assert not (ROOT / "docs" / "PROTOCOL_V2_33_DUTY_FIRST_HOME_DELTA.md").exists()
     assert not (ROOT / "docs" / "PROTOCOL_V2_32_DUTY_FIRST_HOME_DELTA.md").exists()
     src = _read(ROOT / "src" / "operations_console_app.py")
-    assert "Waar wil je verder?" in src
-    assert "Kies wat je nu wilt doen." in src
-    assert "Openstaand reviewwerk" in src
-    assert "duty-card" in src
+    assert "Mijn werk" in src
+    assert "Kies de volgende stap in het proces." in src
+    assert "home-tile" in src
+    assert 'href="/publish"' in src
     assert not (ROOT / "HANDOFF.md").exists()

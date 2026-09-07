@@ -1,13 +1,10 @@
 """Duty-first logged-in home SUPERSEDES #127 sketch B.
 
-Logged-in `/` MUST follow the Metis Design mock: nav Home first and
-current on `/`; MUST NOT mark Inleveren current on home; heading
-«Waar wil je verder?» + lead «Kies wat je nu wilt doen.»; three duty
-cards (Review / Inleveren / Documenten) with waiting badge and
-room links. Post-auth still lands on `/`, not `/ingest`. `/tree`
-Documenten UNCHANGED (v2.32). Mobile nav MUST NOT clip Publiceren
-to «Pub». Sketch B sparse one-CTA / quiet-only secondaries MUST NOT
-remain the primary home.
+Logged-in `/` MUST use the horizontal Metis workboard: nav Mijn werk
+first and current on `/`, then Inleveren, Review, Publiceren and
+Documenten; four large clickable tiles in that same order. Review is
+visually prioritised only when work is waiting. Post-auth still lands
+on `/`, not `/ingest`. `/tree` Documenten stays unchanged (v2.32).
 
 PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here. publish()
 stays G2-BLOCKED. Item A Recent activity, Item B SHA-256 duplicate
@@ -27,6 +24,7 @@ from __future__ import annotations
 import re
 from html.parser import HTMLParser
 from pathlib import Path
+from secrets import token_urlsafe
 from urllib.parse import urlparse
 
 import pytest
@@ -57,6 +55,7 @@ SKETCH_B_PRIMARY_MARKERS = (
     'class="room home-chooser"',
     'class="home-secondary"',
 )
+TEST_PASSWORD = token_urlsafe(24)
 
 
 def _console(tmp_path: Path) -> OperationsConsole:
@@ -70,13 +69,13 @@ def _console(tmp_path: Path) -> OperationsConsole:
 def _accounts(console: OperationsConsole) -> dict[str, dict]:
     researcher = console.create_account(
         username="researcher.anne",
-        password="anne-secret",
+        password=TEST_PASSWORD,
         roles=("researcher", "reviewer"),
         display_name="Anne Onderzoeker",
     )
     reviewer = console.create_account(
         username="reviewer.bert",
-        password="bert-secret",
+        password=TEST_PASSWORD,
         roles=("reviewer",),
         display_name="Bert Reviewer",
     )
@@ -119,11 +118,7 @@ def _fresh_client(console: OperationsConsole) -> TestClient:
 
 def _client(console: OperationsConsole, username: str = "researcher.anne") -> TestClient:
     client = _fresh_client(console)
-    passwords = {
-        "reviewer.bert": "bert-secret",
-        "researcher.anne": "anne-secret",
-    }
-    client.post("/login", data={"username": username, "password": passwords[username]})
+    client.post("/login", data={"username": username, "password": TEST_PASSWORD})
     return client
 
 
@@ -160,7 +155,7 @@ def _h1s(html: str) -> list[str]:
 
 
 def _nav_html(html: str) -> str:
-    match = re.search(r'<nav class="rooms">(.*?)</nav>', html, flags=re.S)
+    match = re.search(r'<nav class="rooms"[^>]*>(.*?)</nav>', html, flags=re.S)
     assert match, "page must render room nav"
     return match.group(1)
 
@@ -197,22 +192,6 @@ def _location_path(response) -> str:
     return parsed.path or location
 
 
-def _primary_ctas(html: str) -> list[tuple[str, str]]:
-    body = html.split('<nav class="rooms">', 1)[-1] if '<nav class="rooms">' in html else html
-    if "</nav>" in body:
-        body = body.split("</nav>", 1)[-1]
-    found: list[tuple[str, str]] = []
-    for match in re.finditer(
-        r'<a([^>]*class="[^"]*btn-primary[^"]*"[^>]*)>(.*?)</a>',
-        body,
-        flags=re.S,
-    ):
-        href_m = re.search(r'href="([^"]*)"', match.group(1))
-        label = re.sub(r"<[^>]+>", "", match.group(2)).strip()
-        found.append((href_m.group(1) if href_m else "", label))
-    return found
-
-
 def _media_560(css: str) -> str:
     match = re.search(r"@media\s*\(max-width:\s*560px\)\s*\{", css)
     assert match, "console.css must keep a 560px mobile breakpoint"
@@ -240,9 +219,9 @@ def test_nav_home_is_first_room_and_current_on_home(tmp_path: Path) -> None:
     html = _client(console).get("/").text
     hrefs = _nav_hrefs(html)
     assert hrefs, "logged-in pages must render room nav"
-    assert hrefs[0] == "/", "Home must be the first nav room"
+    assert hrefs[:5] == ["/", "/ingest", "/review", "/publish", "/tree"]
     home_label, home_current = _nav_entry(html, "/")
-    assert home_label == "Home" or home_label.startswith("Home")
+    assert home_label == "Mijn werk"
     assert home_current == "page"
     ingest_html = _client(console).get("/ingest").text
     ingest_hrefs = _nav_hrefs(ingest_html)
@@ -272,61 +251,53 @@ def test_home_heading_and_lead(tmp_path: Path) -> None:
     html = _client(console).get("/").text
     headings = _h1s(html)
     assert headings, "logged-in home must render an h1"
-    assert headings[0] == "Waar wil je verder?"
-    assert "Kies wat je nu wilt doen." in html
+    assert headings[0] == "Mijn werk"
+    assert "Kies de volgende stap in het proces." in html
     visible = _visible_text(html)
-    assert "Waar wil je verder?" in visible
-    assert "Kies wat je nu wilt doen." in visible
+    assert "Mijn werk" in visible
+    assert "Kies de volgende stap in het proces." in visible
 
 
-def test_home_has_three_duty_cards_with_links(tmp_path: Path) -> None:
+def test_home_has_four_horizontal_process_tiles_with_links(tmp_path: Path) -> None:
     console = _console(tmp_path)
     _accounts(console)
     html = _client(console).get("/").text
     visible = _visible_text(html)
-    assert "Openstaand reviewwerk" in visible
-    assert "Bron inleveren" in visible
-    assert "PDF of HTML-freeze toevoegen" in visible
+    assert "Inleveren" in visible
+    assert "Nieuwe bron toevoegen" in visible
+    assert "Review" in visible
+    assert "Beoordeel aangeleverde bronnen" in visible
+    assert "Publiceren" in visible
+    assert "Goedgekeurde stukken publiceren" in visible
     assert "Documenten" in visible
-    assert "Zoeken, openen of verwijderen" in visible
-    assert html.count("duty-card") == 3
-    primaries = _primary_ctas(html)
-    labels = [label for _href, label in primaries]
-    hrefs = [href for href, _label in primaries]
-    assert "Naar review" in labels
-    assert "Naar inleveren" in labels
-    assert "Naar documenten" in labels
-    assert "/review" in hrefs
-    assert "/ingest" in hrefs
-    assert "/tree" in hrefs
-    assert re.search(
-        r'<a[^>]*href="/review"[^>]*>\s*Naar review',
-        html,
-    )
-    assert re.search(
-        r'<a[^>]*href="/ingest"[^>]*>\s*Naar inleveren',
-        html,
-    )
-    assert re.search(
-        r'<a[^>]*href="/tree"[^>]*>\s*Naar documenten',
-        html,
-    )
+    assert "Zoeken, openen of beheren" in visible
+    assert len(re.findall(r'<a class="home-tile(?: |")', html)) == 4
+    assert [match.group(1) for match in re.finditer(r'<a class="home-tile[^>]* href="([^"]+)"', html)] == [
+        "/ingest", "/review", "/publish", "/tree"
+    ]
     assert 'enctype="multipart/form-data"' not in html
 
 
-def test_home_review_card_shows_waiting_count_badge(tmp_path: Path) -> None:
+def test_home_review_tile_shows_waiting_count_and_priority(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
     empty_home = _client(console).get("/").text
-    assert re.search(r"0\s*wachten", empty_home)
+    assert "Geen open taken" in empty_home
+    assert "home-tile-priority" not in empty_home
     _ingest(console, accounts, title="Wachtende richtlijn")
     waiting = console.waiting_task_counts(accounts["researcher"]["account_id"])["review"]
     assert waiting >= 1
     home = _client(console).get("/").text
-    assert re.search(rf"{waiting}\s*wachten", home)
-    review_card = home[home.find("Openstaand reviewwerk") : home.find("Bron inleveren")]
-    assert "wacht" in review_card.lower()
-    assert str(waiting) in review_card
+    assert re.search(rf"{waiting}\s*wachten op jou", home)
+    review_tile = re.search(
+        r'<a class="home-tile home-tile-priority" href="/review">(.*?)</a>',
+        home,
+        flags=re.S,
+    )
+    assert review_tile
+    assert "Nu doen" in review_tile.group(1)
+    assert "wacht" in review_tile.group(1).lower()
+    assert str(waiting) in review_tile.group(1)
 
 
 def test_post_auth_redirect_lands_on_home_not_ingest(tmp_path: Path) -> None:
@@ -335,7 +306,7 @@ def test_post_auth_redirect_lands_on_home_not_ingest(tmp_path: Path) -> None:
     client = _fresh_client(console)
     login = client.post(
         "/login",
-        data={"username": "researcher.anne", "password": "anne-secret"},
+        data={"username": "researcher.anne", "password": TEST_PASSWORD},
         follow_redirects=False,
     )
     assert login.status_code in {302, 303}
@@ -344,7 +315,7 @@ def test_post_auth_redirect_lands_on_home_not_ingest(tmp_path: Path) -> None:
     home = client.get("/", follow_redirects=False)
     assert home.status_code == 200
     assert _location_path(home) != "/ingest"
-    assert _h1s(home.text)[0] == "Waar wil je verder?"
+    assert _h1s(home.text)[0] == "Mijn werk"
 
 
 def test_tree_documenten_unchanged_v232(tmp_path: Path) -> None:
@@ -359,7 +330,7 @@ def test_tree_documenten_unchanged_v232(tmp_path: Path) -> None:
     assert tree_label == "Documenten" or tree_label.startswith("Documenten")
     assert tree_current == "page"
     home_label, home_current = _nav_entry(tree, "/")
-    assert home_label.startswith("Home")
+    assert home_label == "Mijn werk"
     assert home_current != "page"
     for label in FORBIDDEN_LIVE_LABELS:
         assert label not in tree
@@ -393,24 +364,22 @@ def test_mobile_nav_does_not_clip_publiceren_to_pub(tmp_path: Path) -> None:
     assert "ellipsis" not in rooms_a
 
 
-def test_home_forbids_sketch_b_as_primary(tmp_path: Path) -> None:
+def test_home_uses_tiles_instead_of_the_previous_small_duty_cards(tmp_path: Path) -> None:
     console = _console(tmp_path)
     _accounts(console)
     html = _client(console).get("/").text
     for marker in SKETCH_B_PRIMARY_MARKERS:
         assert marker not in html
-    primaries = _primary_ctas(html)
-    assert len(primaries) == 3
-    primary_labels = {label for _href, label in primaries}
-    assert primary_labels == {"Naar review", "Naar inleveren", "Naar documenten"}
-    assert not any(label in {"Bron inleveren", "Document inleveren"} for label in primary_labels)
+    assert "duty-card" not in html
+    assert "duty-grid" not in html
+    assert len(re.findall(r'<a class="home-tile(?: |")', html)) == 4
     assert "home-secondary" not in html
     assert "home-chooser" not in html
     visible = _visible_text(html)
-    assert "Openstaand reviewwerk" in visible
-    assert "Naar review" in visible
-    assert "Naar inleveren" in visible
-    assert "Naar documenten" in visible
+    assert "Inleveren" in visible
+    assert "Review" in visible
+    assert "Publiceren" in visible
+    assert "Documenten" in visible
     quiet_secondaries = re.findall(
         r'<a[^>]*class="[^"]*quiet[^"]*"[^>]*href="/(tree|review|publish|accounts)"',
         html.split("</nav>", 1)[-1] if "</nav>" in html else html,
