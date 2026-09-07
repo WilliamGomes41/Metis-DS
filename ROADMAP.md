@@ -21,7 +21,7 @@ Wat nu de code stuurt:
 - Console is onderzoeker-oppervlak, niet voor verpleegkundigen. Product API blijft G2-gesloten. Azure ZIP / nurse UI / PROTOCOL.md-rewrite blijven buiten deze golf.
 - `#127` landing sketch B (gecentreerde spaarzame home, één primair **Bron inleveren** + stille secondaries) staat in code maar is **superseded** als gelockte home. Gelockte logged-in `/` is duty-first (Metis Design: nav **Home** eerste kamer en current op `/`; MUST NOT Inleveren current markeren op home; heading «Waar wil je verder?» + lead «Kies wat je nu wilt doen.»; drie kaarten Review / Inleveren / Documenten). Die Forge-golf is in code. `/tree` heading **Documenten** UNCHANGED (v2.32). Post-auth landt op `/`, niet `/ingest`. Zie Eigenaarslock 2026-09-07 — Duty-first home SUPERSEDEERT sketch B.
 - Post-v2.31 ROADMAP-golven 1–5 staan in code (#113–#120). Die vereenvoudigingsgolf is in code. MUST NOT een zesde implementatiegolf verzinnen. Golven 1–5 dekken multiuser-betrouwbaarheid en onafhankelijke extractkwaliteit niet volledig; zie Eigenaarslock 2026-09-06 — Post-#120 audit acceptatiecorrectie.
-- Controlled-MVP backlog (ROADMAP, nog niet in code): Review «Recent activity» (read-only); exact SHA-256 duplicate ingest guard; release identity + GitHub→Azure deploy authorization. Die Forge-golf is nog NIET in code — await aparte Metis GO. App Service B2 is compute, niet de GitHub→Azure-poort. Zie Eigenaarslock 2026-09-06 — Controlled-MVP Recent activity, SHA-256-dup-guard en release-identity.
+- Controlled-MVP Item A Review «Recent activity» (read-only rechterpaneel op Review, document-scoped, bestaande append-only / hash-chained ledger) is in code. Items B (exact SHA-256 duplicate ingest guard) en C (release identity + GitHub→Azure) blijven ROADMAP-only. Die Forge-golf is nog NIET in code voor B+C — await aparte Metis GO. App Service B2 is compute, niet de GitHub→Azure-poort. Zie Eigenaarslock 2026-09-06 — Controlled-MVP Recent activity, SHA-256-dup-guard en release-identity.
 
 ### Historische supersessie-index
 
@@ -38,7 +38,7 @@ Geen herhaalde stapel. Iedere rij wijst naar de Eigenaarslock; die secties blijv
 | v2.25–v2.31 | boom-klasse; Klasse wijzigen; Documentenhiërarchie-delete; Sterkte-poort; harde poort; exact-bind | zie de bijbehorende Eigenaarslock |
 | v2.32 | **Documenten** UI-kamernaam; kernel familie × klasse ONGEWIJZIGD; v2.27-delete blijft één `/tree`-plaats | v2.10/later «heading MUST be Documentenhierarchie» |
 | post-v2.31 ROADMAP | vijf golven (geen golf 6); golven 1–5 in code (#113–#120); Die vereenvoudigingsgolf is in code; Post-#120 audit acceptatiecorrectie | «volgende code is nog exact-bind»; «golven 1–5 dekken multiuser-betrouwbaarheid / onafhankelijke extractkwaliteit volledig» |
-| controlled-MVP ROADMAP 2026-09-06 | lock only (A Recent activity; B SHA-256-dup-guard; C release-identity/OIDC); Die Forge-golf is nog NIET in code | «SKU-upgrade lost GitHub→Azure»; «auto main→Azure aan»; Slack-presence in MVP; fuzzy duplicate |
+| controlled-MVP ROADMAP 2026-09-06 | Item A Recent activity in code (read-only Review-paneel); B SHA-256-dup-guard + C release-identity/OIDC lock only; Die Forge-golf is nog NIET in code voor B+C | «SKU-upgrade lost GitHub→Azure»; «auto main→Azure aan»; Slack-presence in MVP; fuzzy duplicate |
 | duty-first home ROADMAP 2026-09-07 | logged-in `/` duty-first drie kaarten; Home eerste kamer; post-auth `/`; `/tree` Documenten UNCHANGED; Die Forge-golf is in code | #127 sketch B spaarzame één-CTA-home als gelockte primary home; quiet-only secondaries; Slack presence |
 
 ## Niet-onderhandelbare doelen
@@ -216,6 +216,8 @@ Lock als ROADMAP-backlog (docs only; await aparte Metis GO / infra-werk — NOT 
 MUST NOT implementeren in deze PR. Volgende code / infra alleen ná **aparte Metis GO**. Item C MAG later als infra/OIDC-werk, niet als Forge-productcodegolf tenzij later scoped. Items A+B MAGEN ná aparte Metis Forge GO (tests-before-code) op de bestaande console.
 
 MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
+
+Die Forge-golf is in code voor Item A only (Review «Recent activity» read-only rechterpaneel; newest first; document-scoped; bestaande ledger + review-decision events; geen live-status / typing / page-open; geen nieuw write-pad). Items B+C blijven buiten deze PR. Tests-before-code. MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. `publish()` blijft G2-BLOCKED.
 
 ## Eigenaarslock 2026-09-06 — Documenten UI-kamernaam (Protocol v2.32)
 
