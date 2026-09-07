@@ -1,4 +1,10 @@
-"""CSS URLs must change with content, even when ZIP mtimes stay fixed."""
+"""CSS URLs must change with content, even when ZIP mtimes stay fixed.
+
+Release-control markers identify these regression checks, not live evidence:
+scope/belofte and releasebewijs cover content-versioned URLs; toegang checks
+the public page/stylesheet route; slop keeps the existing shared renderer and
+optional-assets behavior without another asset-serving mechanism.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -10,6 +16,14 @@ from fastapi.testclient import TestClient
 
 from src import operations_console_app as console_app
 from src.operations_console_v1 import OperationsConsole
+
+
+pytestmark = [
+    pytest.mark.release_control_scope_belofte,
+    pytest.mark.release_control_toegang,
+    pytest.mark.release_control_slop,
+    pytest.mark.release_control_releasebewijs,
+]
 
 
 def _stylesheet_url(page: str) -> str:
