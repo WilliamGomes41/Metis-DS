@@ -598,6 +598,49 @@ mark.broncontext-marked {
 .review-document-context b { color: var(--text); }
 .review-document-context a { margin-left: auto; }
 
+.review-with-activity {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.recent-activity {
+  position: sticky;
+  top: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--wit);
+}
+
+.recent-activity h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  color: var(--paars);
+}
+
+.recent-activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.recent-activity-summary {
+  margin: 0 0 4px;
+  color: var(--text);
+}
+
+.recent-activity-meta,
+.recent-activity-comment,
+.recent-activity-correction {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .review-object-heading { margin-bottom: 16px; }
 .review-object-heading h3 {
   margin: 0 0 8px;
@@ -684,6 +727,14 @@ mark.broncontext-marked {
 @media (max-width: 720px) {
   .review-card-two-column {
     grid-template-columns: 1fr;
+  }
+
+  .review-with-activity {
+    grid-template-columns: 1fr;
+  }
+
+  .recent-activity {
+    position: static;
   }
 
   .review-document-context a { margin-left: 0; }

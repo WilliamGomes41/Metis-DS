@@ -66,6 +66,8 @@ def test_roadmap_records_controlled_mvp_owner_lock() -> None:
 def test_roadmap_locks_item_a_recent_activity_readonly() -> None:
     section = _lock_section()
     changelog = _read(ROOT / "CHANGELOG.md")
+    roadmap = _read(ROOT / "ROADMAP.md")
+    live = roadmap[roadmap.index("Wat nu de code stuurt:") : roadmap.index("### Historische supersessie-index")]
     assert "Item A" in section
     assert "Recent activity" in section
     assert "read-only" in section
@@ -80,8 +82,13 @@ def test_roadmap_locks_item_a_recent_activity_readonly() -> None:
     assert "MUST NOT" in section and "presence" in section.lower()
     assert "Slack" in section
     assert "geen nieuw write-pad" in section.lower() or "no new write path" in section.lower()
+    assert "Die Forge-golf is in code" in section
+    assert "Item A" in section and "in code" in section
+    item_a_live = next(line for line in live.splitlines() if "Recent activity" in line)
+    assert "in code" in item_a_live
     assert "Recent activity" in changelog
     assert "presence" in changelog.lower()
+    assert "test_review_recent_activity.py" in changelog
 
 
 def test_roadmap_locks_item_b_exact_sha256_duplicate_guard() -> None:

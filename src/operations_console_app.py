@@ -66,6 +66,8 @@ from src.operations_console_v1 import (
     slow_review_duty,
 )
 from src.open_original_v1 import researcher_visible_prose
+from src.review_ledger import read_events
+from src.review_recent_activity_v1 import document_activity_rows
 from src.serving_relations_v1 import CLOSED_RELATION_TYPES, proposed_relations
 
 SERVICE_VERSION = CONSOLE_VERSION
@@ -1023,6 +1025,61 @@ def _render_review_card(
                 """
 
 
+def _render_recent_activity_panel(
+    console: OperationsConsole,
+    chosen_row: dict[str, Any] | None,
+) -> str:
+    if not chosen_row:
+        return ""
+    snapshot_id = str(chosen_row["snapshot_id"])
+    object_ids = {str(row["object_id"]) for row in console.snapshot_objects(snapshot_id)}
+    rows = document_activity_rows(
+        events=read_events(console.runtime / "review_ledger.jsonl"),
+        snapshot_id=snapshot_id,
+        object_ids=object_ids,
+        envelope=chosen_row,
+        accounts=console.list_reviewer_accounts(),
+    )
+    heading = "<h2>Recent activity</h2>"
+    if not rows:
+        body = '<p class="muted">Nog geen recente activiteit voor dit document.</p>'
+    else:
+        items = []
+        for row in rows:
+            extra = ""
+            comment = row.get("comment") or ""
+            correction = row.get("proposed_correction") or ""
+            if comment:
+                extra += f'<p class="recent-activity-comment">{_esc(comment)}</p>'
+            if correction:
+                extra += f'<p class="recent-activity-correction">{_esc(correction)}</p>'
+            items.append(
+                f"""<li class="recent-activity-item" data-event-type="{_esc(row.get("event_type"))}" data-object-id="{_esc(row.get("object_id"))}" data-actor="{_esc(row.get("actor"))}" data-source="{_esc(row.get("source"))}" data-occurred-at="{_esc(row.get("occurred_at"))}">
+                  <p class="recent-activity-summary">{_esc(row.get("summary"))}</p>
+                  <p class="recent-activity-meta">
+                    <time datetime="{_esc(row.get("occurred_at"))}">{_esc(row.get("occurred_at"))}</time>
+                    · <span class="recent-activity-event-type">{_esc(row.get("event_type"))}</span>
+                    · object {_esc(row.get("object_id"))} v{_esc(row.get("object_version"))}
+                    · <span class="recent-activity-actor">{_esc(row.get("actor"))}</span>
+                  </p>
+                  {extra}
+                </li>"""
+            )
+        body = f'<ol class="recent-activity-list">{"".join(items)}</ol>'
+    return f'<aside class="recent-activity" aria-label="Recent activity">{heading}{body}</aside>'
+
+
+def _review_workspace(chosen_row: dict[str, Any] | None, cards: list[str], main: str, activity: str) -> str:
+    if chosen_row:
+        return f"""
+              <div class="review-with-activity">
+                <div class="review-main">{main}</div>
+                {activity}
+              </div>
+            """
+    return f"{''.join(cards)}{main}"
+
+
 def _render_review_room(
     console: OperationsConsole,
     account: dict[str, Any],
@@ -1092,6 +1149,8 @@ def _render_review_room(
                 snapshot_revision,
             )
     empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
+    activity = _render_recent_activity_panel(console, chosen_row)
+    workspace = _review_workspace(chosen_row, cards, objects_html or empty, activity)
     return _page(
         f"""
             {_nav(account, "review", counts)}
@@ -1100,8 +1159,7 @@ def _render_review_room(
               <p class="lead">Beoordeel Koppen als structuur en Inhoud als kennisobjecten.</p>
               {conflict_html if not chosen_object_id else ""}
               {picker}
-              {"".join(cards) if not chosen else ""}
-              {objects_html or empty}
+              {workspace}
             </section>
             {_help(room="review")}
             """

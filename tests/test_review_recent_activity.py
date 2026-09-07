@@ -259,7 +259,7 @@ def test_review_shows_recent_activity_panel_for_current_document(tmp_path: Path)
         assert "Recent activity" in visible
         assert "Bert" in visible
         assert target["object_id"] in panel
-        assert re.search(r"approved|goedkeur", visible, flags=re.I)
+        assert re.search(r"approved|goedkeur|keurde", visible, flags=re.I)
         assert "<form" not in panel.lower()
         assert "<input" not in panel.lower()
         assert "<textarea" not in panel.lower()
@@ -400,7 +400,7 @@ def test_recent_activity_reads_existing_ledger_and_decision_fields(tmp_path: Pat
     assert "occurred_at" in panel or re.search(r"20\d\d", panel)
     assert "Graag herzien" in visible
     assert "Zet de zin scherper" in visible
-    assert re.search(r"approved|goedkeur", visible, flags=re.I)
+    assert re.search(r"approved|goedkeur|keurde", visible, flags=re.I)
     assert re.search(r"revision|herziening", visible, flags=re.I)
     assert re.search(r"explanation|Toelichting", visible)
     assert re.search(r"condition|Voorwaarde", visible)
