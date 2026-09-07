@@ -711,30 +711,39 @@ mark.broncontext-marked {
   box-shadow: 0 24px 60px rgba(20, 42, 66, 0.08);
 }
 
-.home-chooser {
-  max-width: 22rem;
-  margin: clamp(4rem, 16vh, 8rem) auto 0;
-  text-align: center;
+.duty-home {
+  max-width: 56rem;
+  margin: clamp(1.5rem, 6vh, 3.5rem) auto 0;
 }
 
-.home-chooser .btn-primary {
-  display: inline-block;
-  text-decoration: none;
-  min-width: 12rem;
+.duty-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
 }
 
-.home-secondary {
+.duty-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px;
+  background: var(--wit);
+}
+
+.duty-card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.85rem 1.35rem;
-  margin: 1.75rem 0 0;
+  align-items: center;
+  gap: 8px;
 }
 
-.home-secondary a.quiet {
-  color: var(--muted);
-  font-weight: 400;
-  text-decoration: none;
+.duty-card .muted {
+  margin: 0 0 0.75rem;
+}
+
+.duty-card .btn-primary {
+  margin-top: 8px;
 }
 
 .login-brand {
@@ -812,8 +821,8 @@ mark.broncontext-marked {
   }
 
   .rooms {
-    overflow-x: auto;
-    flex-wrap: nowrap;
+    overflow-x: visible;
+    flex-wrap: wrap;
     padding-bottom: 3px;
   }
 

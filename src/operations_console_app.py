@@ -373,6 +373,7 @@ def _nav(account: dict[str, Any] | None, current: str = "", counts: dict[str, in
     )
     counts = counts or {}
     rooms = [
+        ("home", "/", "Home", 0),
         ("ingest", "/ingest", "Inleveren", counts.get("ingest", 0)),
         ("tree", "/tree", "Documenten", counts.get("tree", 0)),
         ("review", "/review", "Review", counts.get("review", 0)),
@@ -1169,17 +1170,30 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                 {_help()}
                 """
             )
+        counts = _counts(account)
+        waiting = counts.get("review", 0)
         return _page(
             f"""
-            {_nav(account, "", _counts(account))}
-            <section class="room home-chooser">
-              <a href="/ingest" class="btn-primary">Bron inleveren</a>
-              <nav class="home-secondary" aria-label="Andere kamers">
-                <a class="quiet" href="/tree">Documenten</a>
-                <a class="quiet" href="/review">Review</a>
-                <a class="quiet" href="/publish">Publiceren</a>
-                <a class="quiet" href="/accounts">Accounts</a>
-              </nav>
+            {_nav(account, "home", counts)}
+            <section class="room duty-home">
+              <h1>Waar wil je verder?</h1>
+              <p class="lead">Kies wat je nu wilt doen.</p>
+              <div class="duty-grid">
+                <article class="duty-card">
+                  <h2>Openstaand reviewwerk <span class="badge">{waiting} wachten</span></h2>
+                  <p><a href="/review" class="btn-primary">Naar review</a></p>
+                </article>
+                <article class="duty-card">
+                  <h2>Bron inleveren</h2>
+                  <p class="muted">PDF of HTML-freeze toevoegen</p>
+                  <p><a href="/ingest" class="btn-primary">Naar inleveren</a></p>
+                </article>
+                <article class="duty-card">
+                  <h2>Documenten</h2>
+                  <p class="muted">Zoeken, openen of verwijderen</p>
+                  <p><a href="/tree" class="btn-primary">Naar documenten</a></p>
+                </article>
+              </div>
             </section>
             """
         )

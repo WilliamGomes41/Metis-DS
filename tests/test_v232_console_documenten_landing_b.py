@@ -1,10 +1,12 @@
-"""Protocol v2.32 Forge: Documenten UI rename + landing sketch B.
+"""Protocol v2.32 Forge: Documenten UI rename (UNCHANGED).
 
 Live `/tree` heading / nav / page title MUST be Documenten. Forbidden live
 labels Documentenhiërarchie / Documentenhierarchie / Familieboom MUST NOT
 render. v2.27 unpublished-delete stays on that same `/tree` room only +
-type-to-confirm. Logged-in `/` is a centered sparse home (sketch B);
-post-auth redirect lands on that home, not `/ingest`.
+type-to-confirm. Logged-in `/` sketch B (centered sparse one-CTA home) is
+SUPERSEDED as the primary home — duty-first home is locked separately
+(`tests/test_console_duty_first_home.py`). Post-auth redirect still lands
+on `/`, not `/ingest`.
 PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here. publish() stays
 G2-BLOCKED. Kernel family × class UNCHANGED.
 
@@ -200,17 +202,6 @@ def _has_delete_control(html: str) -> bool:
     )
 
 
-def _primary_ctas(html: str) -> list[str]:
-    body = html.split('<nav class="rooms">', 1)[-1] if '<nav class="rooms">' in html else html
-    if "</nav>" in body:
-        body = body.split("</nav>", 1)[-1]
-    return re.findall(
-        r'<a[^>]*class="[^"]*btn-primary[^"]*"[^>]*>(.*?)</a>',
-        body,
-        flags=re.S,
-    )
-
-
 # ---------------------------------------------------------------------------
 # 1. Live /tree heading, nav label, page title = Documenten
 # ---------------------------------------------------------------------------
@@ -303,13 +294,11 @@ def test_app_source_still_wires_delete_only_on_tree() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. Landing sketch B + post-auth home redirect
+# 3. Post-auth still lands on `/` (sketch B as primary home is SUPERSEDED)
 # ---------------------------------------------------------------------------
 
 
-def test_logged_in_home_is_sketch_b_sparse_chooser_not_ingest_redirect(
-    tmp_path: Path,
-) -> None:
+def test_logged_in_home_is_not_ingest_redirect(tmp_path: Path) -> None:
     console = _console(tmp_path)
     _accounts(console)
     client = _client(console)
@@ -317,23 +306,10 @@ def test_logged_in_home_is_sketch_b_sparse_chooser_not_ingest_redirect(
     assert response.status_code == 200
     assert _location_path(response) != "/ingest"
     html = response.text
-    assert 'class="home-chooser"' in html or 'class="room home-chooser"' in html
-    primaries = _primary_ctas(html)
-    assert len(primaries) == 1
-    primary = re.sub(r"<[^>]+>", "", primaries[0]).strip()
-    assert primary in {"Bron inleveren", "Document inleveren"}
-    assert re.search(r'<a[^>]*href="/ingest"[^>]*class="[^"]*btn-primary', html)
-    visible = _visible_text(html)
-    assert "Documenten" in visible
-    assert "Review" in visible
-    assert html.count("doc-card") == 0
-    assert "duty-card" not in html
-    assert html.count("btn-primary") == 1
     assert 'enctype="multipart/form-data"' not in html
-    assert re.search(r'<a[^>]*href="/tree"[^>]*>\s*Documenten', html)
-    assert re.search(r'<a[^>]*href="/review"[^>]*>\s*Review', html)
     for label in FORBIDDEN_LIVE_LABELS:
         assert label not in html
+    assert "Documenten" in _visible_text(html)
 
 
 def test_post_auth_redirect_lands_on_home_not_ingest(tmp_path: Path) -> None:
@@ -350,5 +326,4 @@ def test_post_auth_redirect_lands_on_home_not_ingest(tmp_path: Path) -> None:
     assert _location_path(login) != "/ingest"
     home = client.get("/", follow_redirects=False)
     assert home.status_code == 200
-    assert "Bron inleveren" in home.text or "Document inleveren" in home.text
     assert _location_path(home) != "/ingest"

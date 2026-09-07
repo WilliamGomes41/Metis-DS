@@ -428,8 +428,9 @@ def test_extract_does_not_emit_kennisplatform_chrome_as_objects_or_koppen(
     assert "Verantwoording" in koppen_texts
     html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
     titles = _visible_text(html)
+    review_body = html.split("</nav>", 1)[-1] if "</nav>" in html else html
     for label in CHROME_LABELS:
-        assert f">{label}<" not in html
+        assert f">{label}<" not in review_body
     assert "Inleiding" in titles
     assert is_kennisplatform_chrome_text("Tools") is True
     assert is_kennisplatform_chrome_text("Home") is True
