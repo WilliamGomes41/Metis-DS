@@ -26,6 +26,7 @@ from src.review_cockpit_v1 import confirmable_proposed_type
 
 
 NORMAL_RISK_BATCH_TYPES = frozenset({"definition", "explanation"})
+NORMAL_RISK_BATCH_MAX = 20
 
 
 def _section_key(obj: dict[str, Any]) -> tuple[str, ...]:
@@ -98,52 +99,56 @@ def normal_risk_batch_queue(
 
 
 def render_normal_risk_batch_panel(console: "ProportionateReviewConsole", snapshot_id: str) -> str:
-    """Render reachable normal-risk review work, grouped by one source section."""
+    """Render reachable normal-risk review work in bounded coherent batches."""
     envelope = console._envelope(snapshot_id)
     review_path = review_path_for_klasse(envelope["class"])
     queue = normal_risk_batch_queue(console.snapshot_objects(snapshot_id), review_path=review_path)
     if not queue:
         return ""
-    groups: dict[tuple[str, ...], list[dict[str, Any]]] = defaultdict(list)
+    groups: dict[tuple[tuple[str, ...], str], list[dict[str, Any]]] = defaultdict(list)
     for obj in queue:
-        groups[_section_key(obj)].append(obj)
+        proposed = confirmable_proposed_type(obj)
+        groups[(_section_key(obj), proposed)].append(obj)
     revision = escape(console.objects_revision(snapshot_id), quote=True)
     safe_snapshot = escape(snapshot_id, quote=True)
     panels: list[str] = [
         '<section class="review-normal-risk" aria-labelledby="normal-risk-title">',
         '<h2 id="normal-risk-title">Reguliere inhoud beoordelen</h2>',
-        '<p>Definities en toelichtingen met normaal risico kunnen per sectie samen worden bevestigd. '
-        'Elk kennisobject krijgt afzonderlijk een reviewrecord.</p>',
+        f'<p>Definities en toelichtingen met normaal risico kunnen in batches van maximaal {NORMAL_RISK_BATCH_MAX} '
+        'binnen één sectie en één type worden bevestigd. Elk kennisobject krijgt afzonderlijk een reviewrecord.</p>',
     ]
-    for index, (section, objects) in enumerate(groups.items(), start=1):
+    batch_index = 0
+    for (section, proposed), objects in groups.items():
         if not section:
             # Batch approval requires source-coherent section context. An item
             # without a section remains individually reviewable, not batchable.
             continue
         label = escape(" › ".join(section))
-        panels.append(
-            f'<form method="post" action="/review/normal-risk/batch-confirm" class="normal-risk-batch">'
-            f'<input type="hidden" name="snapshot_id" value="{safe_snapshot}">'
-            f'<input type="hidden" name="snapshot_revision" value="{revision}">'
-            f'<fieldset><legend>{label}</legend>'
-        )
-        for obj in objects:
-            object_id = escape(str(obj.get("object_id") or ""), quote=True)
-            proposed = confirmable_proposed_type(obj)
-            type_label = "Definitie" if proposed == "definition" else "Toelichting"
-            text = escape(_object_text(obj))
+        type_label = "Definitie" if proposed == "definition" else "Toelichting"
+        for start in range(0, len(objects), NORMAL_RISK_BATCH_MAX):
+            batch = objects[start : start + NORMAL_RISK_BATCH_MAX]
+            batch_index += 1
             panels.append(
-                '<label class="normal-risk-item">'
-                f'<input type="checkbox" name="object_ids" value="{object_id}"> '
-                f'<strong>{type_label}</strong> — {text}'
-                '</label>'
+                f'<form method="post" action="/review/normal-risk/batch-confirm" class="normal-risk-batch">'
+                f'<input type="hidden" name="snapshot_id" value="{safe_snapshot}">'
+                f'<input type="hidden" name="snapshot_revision" value="{revision}">'
+                f'<fieldset><legend>{label} — {type_label} ({len(batch)})</legend>'
             )
-        panels.append(
-            f'</fieldset><button type="submit">Geselecteerde inhoud bevestigen</button>'
-            f'<span class="sr-only">Batch {index}</span></form>'
-        )
+            for obj in batch:
+                object_id = escape(str(obj.get("object_id") or ""), quote=True)
+                text = escape(_object_text(obj))
+                panels.append(
+                    '<label class="normal-risk-item">'
+                    f'<input type="checkbox" name="object_ids" value="{object_id}"> '
+                    f'<strong>{type_label}</strong> — {text}'
+                    '</label>'
+                )
+            panels.append(
+                '</fieldset><button type="submit">Geselecteerde inhoud bevestigen</button>'
+                f'<span class="sr-only">Batch {batch_index}</span></form>'
+            )
     panels.append("</section>")
-    if len(panels) == 4:
+    if batch_index == 0:
         return ""
     return "".join(panels)
 
@@ -173,10 +178,11 @@ class ProportionateReviewConsole(OperationsConsole):
         object_ids: Iterable[str],
         expected_revision: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Approve one coherent normal-risk batch with per-object review records.
+        """Approve one bounded coherent normal-risk batch per object.
 
         The whole selection is preflighted before the first mutation. A batch
-        cannot sweep in high-risk, blocked, ambiguous, action-bearing or
+        contains at most ``NORMAL_RISK_BATCH_MAX`` objects and cannot sweep in
+        mixed types, high-risk, blocked, ambiguous, action-bearing or
         mixed-section content. Each included object then travels through
         ``review_object``.
         """
@@ -187,6 +193,8 @@ class ProportionateReviewConsole(OperationsConsole):
         ids = list(dict.fromkeys(str(object_id).strip() for object_id in object_ids if str(object_id).strip()))
         if not ids:
             raise ConsoleError("normal_risk_batch_required")
+        if len(ids) > NORMAL_RISK_BATCH_MAX:
+            raise ConsoleError("normal_risk_batch_too_large")
         review_path = review_path_for_klasse(envelope["class"])
         current = {row["object_id"]: row for row in self.snapshot_objects(snapshot_id)}
         selected: list[dict[str, Any]] = []
@@ -200,6 +208,9 @@ class ProportionateReviewConsole(OperationsConsole):
         sections = {_section_key(obj) for obj in selected}
         if len(selected) > 1 and (len(sections) != 1 or not next(iter(sections), ())):
             raise ConsoleError("normal_risk_batch_mixed_section")
+        types = {confirmable_proposed_type(obj) for obj in selected}
+        if len(types) != 1:
+            raise ConsoleError("normal_risk_batch_mixed_type")
         # Fail before any write if one source passage cannot be opened.
         for target in selected:
             self._require_open_original(snapshot_id, str(target["object_id"]))
