@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+
 import hashlib
 import json
 from pathlib import Path
