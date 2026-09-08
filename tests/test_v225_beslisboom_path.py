@@ -715,15 +715,19 @@ def test_answerability_does_not_support_boom_when_richtlijn_exists() -> None:
     assert published_object_type(boom) == "unclassified"
 
 
-def test_path_confinement_rejects_dotdot_and_slashes_on_boom_ingest(tmp_path: Path) -> None:
+def test_path_confinement_rejects_dotdot_and_uses_basename_on_boom_ingest(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
     with pytest.raises(ConsoleError, match="invalid_store_path"):
         _ingest_boom(console, accounts, filename="../escape.json", title="Escape")
     with pytest.raises(ConsoleError, match="invalid_store_path"):
-        _ingest_boom(console, accounts, filename="sub/dir/boom.json", title="Slash")
-    with pytest.raises(ConsoleError, match="invalid_store_path"):
         _ingest_boom(console, accounts, filename="..\\escape.json", title="WinEscape")
+    _ingest_boom(console, accounts, filename="sub/dir/boom.json", title="Slash")
+    envelope, = console.list_envelopes()
+    stored = Path(envelope["binary_path"])
+    assert stored.name == "boom.json"
+    stored.resolve().relative_to(console.source_store.resolve())
+    assert stored.read_bytes() == _boom_freeze_bytes()
 
 
 def test_handoff_not_recreated_and_no_nurse_tree_player() -> None:
