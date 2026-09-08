@@ -260,7 +260,7 @@ def test_ingest_stamps_every_passage_and_does_not_silently_drop(tmp_path: Path) 
     assert all(passage_register_of(obj).get("status") != "dropped_silently" for obj in passages)
 
 
-def test_allowed_candidate_is_selected_and_blocked_djg_is_excluded_with_reason(tmp_path: Path) -> None:
+def test_allowed_candidate_is_selected_and_blocked_djg_remains_open_with_reason(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
@@ -270,7 +270,7 @@ def test_allowed_candidate_is_selected_and_blocked_djg_is_excluded_with_reason(t
     assert _admission(adviseert).get("gate_result") == GATE_ALLOWED
     assert passage_register_of(adviseert).get("status") == "selected_as_candidate"
     assert _admission(djg).get("gate_result") == GATE_BLOCKED
-    assert passage_register_of(djg).get("status") == "excluded_with_reason"
+    assert passage_register_of(djg).get("status") == "not_yet_assessed"
     reasons = passage_register_of(djg).get("reason_codes") or _admission(djg).get("reason_codes") or []
     assert "recommendation_evidence_missing" in reasons
     ordinary = ordinary_review_queue(_passages(objects))
@@ -416,7 +416,7 @@ def test_coverage_is_reported_per_section_without_objectifying_every_sentence(tm
     assert aanbevelingen is not None
     counts = aanbevelingen.get("counts") or aanbevelingen
     assert int(counts.get("selected_as_candidate") or 0) >= 1
-    assert int(counts.get("excluded_with_reason") or 0) >= 1
+    assert int(counts.get("not_yet_assessed") or 0) >= 1
     total = sum(int(counts.get(status) or 0) for status in PASSAGE_REGISTER_STATUSES)
     assert total >= 1
 
