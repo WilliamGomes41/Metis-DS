@@ -58,8 +58,6 @@ from src.operations_console_v1 import (
     OperationsConsole,
     REPO_ROOT,
     SNAPSHOT_OBJECT_WRITE_CONFLICT,
-    remaining_not_duty,
-    remaining_unclassified,
     review_card_sentence,
     review_row_status,
     review_row_title,
@@ -69,6 +67,7 @@ from src.operations_console_v1 import (
 from src.open_original_v1 import researcher_visible_prose
 from src.proportionate_review_v1 import (
     ProportionateReviewConsole,
+    regular_individual_review_queue,
     render_normal_risk_batch_panel,
 )
 from src.serving_relations_v1 import CLOSED_RELATION_TYPES, proposed_relations
@@ -559,11 +558,11 @@ def _coverage_panel(objects: list[dict[str, Any]]) -> str:
             f"<li><b>{_esc(row['section'])}</b> — {detail}</li>"
         )
     return f"""
-      <aside class="review-coverage" aria-label="Dekking per kop">
-        <h2>Dekking per kop</h2>
-        <p class="lead">Iedere inhoudelijke passage krijgt een bestemming: kennisobject, context, onderbouwing of gemotiveerde uitsluiting. Ieder bruikbaar kennisobject wordt menselijk beoordeeld.</p>
+      <details class="review-coverage" aria-label="Controleoverzicht per kop">
+        <summary>Controleoverzicht per kop <span class="info-tip" tabindex="0" aria-label="Dit overzicht laat zien wat al is afgehandeld en wat nog aandacht vraagt.">ⓘ<span class="info-tip-text">Dit overzicht laat zien wat al is afgehandeld en wat nog aandacht vraagt.</span></span></summary>
+        <p class="lead">Dit overzicht is bedoeld om de voortgang te controleren. Je hoeft hier geen extra stap uit te voeren.</p>
         <ul>{"".join(items)}</ul>
-      </aside>
+      </details>
     """
 
 
@@ -771,11 +770,6 @@ _REVIEW_DRAFT_DEFAULTS = {
     "documentpositie_action": "dit_klopt",
     "type_action": "dit_klopt",
 }
-_BLOCKED_SHOWN_TYPES = frozenset(
-    {"recommendation", "condition", "exception", "definition", "explanation"}
-)
-
-
 def _sanitize_review_draft(draft: dict[str, str] | None) -> dict[str, str]:
     escaped = {
         key: html.escape(str(value or ""), quote=True)
@@ -838,14 +832,25 @@ def _snapshot_revision_input(revision: str) -> str:
     return f'<input type="hidden" name="snapshot_revision" value="{_esc(revision)}">'
 
 
-def _review_index_item(obj: dict[str, Any], snapshot_id: str, *, checkbox: bool = False) -> str:
+def _review_index_item(
+    obj: dict[str, Any],
+    snapshot_id: str,
+    *,
+    checkbox: bool = False,
+    reason: str = "",
+) -> str:
     title = review_row_title(obj)
     status = review_row_status(obj)
     link = (
         f'<a class="review-row-title" href="/review?document={_esc(snapshot_id)}&object={_esc(obj["object_id"])}">'
         f"{_esc(title)}</a>"
     )
-    status_html = f'<span class="review-row-status">{_esc(status)}</span>'
+    reason_html = (
+        f'<span class="info-tip" tabindex="0" aria-label="Waarom staat deze passage hier? { _esc(reason) }">ⓘ'
+        f'<span class="info-tip-text">{_esc(reason)}</span></span>'
+        if reason else ""
+    )
+    status_html = f'<span class="review-row-status">{_esc(status)}</span>{reason_html}'
     if checkbox:
         return (
             '<li class="review-row">'
@@ -856,21 +861,26 @@ def _review_index_item(obj: dict[str, Any], snapshot_id: str, *, checkbox: bool 
     return f'<li class="review-row">{link}{status_html}</li>'
 
 
-def _review_lane_copy(review_path: str, koppen: list[dict[str, Any]], duty: list[dict[str, Any]]) -> dict[str, str]:
+def _individual_review_reason(obj: dict[str, Any], *, priority: bool = False) -> str:
+    if priority:
+        return "Deze passage vraagt een eigen oordeel, omdat zij advies, een voorwaarde, een uitzondering of mogelijk risico bevat."
+    uncertainty = obj.get("uncertainty") if isinstance(obj.get("uncertainty"), dict) else {}
+    if uncertainty.get("has_uncertainty"):
+        return "Deze passage vraagt een eigen beoordeling, omdat de betekenis of context nog niet zeker genoeg is."
+    return "Deze passage kan niet veilig samen met andere passages worden bevestigd. Beoordeel haar daarom afzonderlijk."
+
+
+def _review_lane_copy(review_path: str, koppen: list[dict[str, Any]]) -> dict[str, str]:
     if review_path == "boom":
         return {
-            "fast_title": f"Paden ({len(koppen)})",
-            "fast_lead": "Bevestig paden als structuur, nooit als advies.",
+            "fast_title": f"Paden controleren ({len(koppen)})",
+            "fast_lead": "Paden helpen bij het plaatsen van onderdelen. Zij veranderen de inhoud niet.",
             "fast_button": "Bevestig geselecteerde paden als structuur",
-            "slow_title": f"Knopen en uitkomsten ({len(duty)})",
-            "slow_lead": "Beoordeel knopen die advies poorten en uitkomsten. Dat is de handplicht.",
         }
     return {
-        "fast_title": f"Koppen ({len(koppen)})",
-        "fast_lead": "Bevestig koppen als structuur, nooit als advies.",
+        "fast_title": f"Koppen controleren ({len(koppen)})",
+        "fast_lead": "Koppen helpen passages op de juiste plek te plaatsen. Zij veranderen de inhoud niet.",
         "fast_button": "Bevestig geselecteerde koppen als structuur",
-        "slow_title": f"Inhoud ({len(duty)})",
-        "slow_lead": "Beoordeel voorgestelde aanbevelingen plus voorwaarden, uitzonderingen en ieder high-risk object. Dat is de handplicht.",
     }
 
 
@@ -879,62 +889,39 @@ def _render_review_index(
     snapshot_objects: list[dict[str, Any]],
     review_path: str,
     snapshot_revision: str = "",
+    normal_content_html: str = "",
 ) -> str:
     koppen, _old_inhoud = review_stacks(snapshot_objects, review_path=review_path)
     duty = slow_review_duty(snapshot_objects, review_path=review_path)
-    leftover = remaining_unclassified(snapshot_objects)
-    leftover_ids = {row.get("object_id") for row in leftover}
-    leftover_other = [
-        obj
-        for obj in remaining_not_duty(snapshot_objects)
-        if obj.get("object_id") not in leftover_ids
-    ]
+    regular_individual = regular_individual_review_queue(
+        snapshot_objects, review_path=review_path
+    ) if review_path != "boom" else []
+    individual = [*duty, *regular_individual]
     blocked = blocked_audit_lane(snapshot_objects) if review_path != "boom" else []
-    leftover_html = ""
-    if leftover:
-        leftover_html = f"""
-                      <aside class="review-leftover-unclassified">
-                        <p>Resterend unclassified: {len(leftover)}. Niet als één-voor-één plicht. Unclassified wordt niet geserveerd.</p>
-                      </aside>
-                    """
-    other_html = ""
-    if leftover_other:
-        other_html = (
-            f'<p class="review-leftover-other">Overige objecten in de store: '
-            f"{len(leftover_other)}. Niet de onderzoekerplicht voor handelingsadvies.</p>"
-        )
     blocked_html = ""
     if blocked:
-        shown = [
-            obj
-            for obj in blocked
-            if (obj.get("proposed_object_type") or obj.get("confirmed_object_type") or obj.get("object_type"))
-            in _BLOCKED_SHOWN_TYPES
-        ]
-        hidden = [obj for obj in blocked if obj not in shown]
-        shown_list = (
-            f'<ol class="object-index">{"".join(_review_index_item(obj, snapshot_id) for obj in shown)}</ol>'
-            if shown
-            else ""
-        )
-        hidden_html = (
-            '<details class="review-blocked-other">'
-            f'<summary>Overige geblokkeerde passages ({len(hidden)})</summary>'
-            f'<ol class="object-index">{"".join(_review_index_item(obj, snapshot_id) for obj in hidden)}</ol>'
-            '</details>'
-            if hidden else ""
-        )
         blocked_html = f"""
-                      <aside class="review-blocked-audit" aria-label="Geblokkeerde kandidaten">
-                        <p>Geblokkeerde kandidaten (poort): {len(blocked)}. Niet de gewone beoordelingsplicht.</p>
-                        {shown_list}
-                        {hidden_html}
-                      </aside>
+          <section class="review-blocked-audit" aria-label="Passages met extra context nodig">
+            <h2>Passages met extra context nodig ({len(blocked)}) <span class="info-tip" tabindex="0" aria-label="Metis kan nog niet betrouwbaar bepalen of deze passage zelfstandig bruikbaar is.">ⓘ<span class="info-tip-text">Metis kan nog niet betrouwbaar bepalen of deze passage zelfstandig bruikbaar is. Bekijk de bron en kies wat ermee moet gebeuren.</span></span></h2>
+            <p class="lead">Open deze passages één voor één. De bron helpt je bepalen of de passage context nodig heeft, moet worden samengevoegd of niet als zelfstandig kennisstuk gebruikt wordt.</p>
+            <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, reason="Meer context of een inhoudelijke keuze is nodig voordat deze passage kan worden gebruikt.") for obj in blocked)}</ol>
+          </section>
                     """
-    copy = _review_lane_copy(review_path, koppen, duty)
+    copy = _review_lane_copy(review_path, koppen)
     return f"""
-                    <section class="review-lane-fast">
-                      <h2>{copy["fast_title"]}</h2>
+                    <section class="review-workflow-intro" aria-label="Uitleg reviewroute">
+                      <h2>Beoordeel dit document stap voor stap</h2>
+                      <p>Je hoeft de technische indeling niet te kennen. Begin met passages die een eigen oordeel vragen. Bevestig daarna eenvoudige uitleg per groep.</p>
+                    </section>
+                    <section class="review-lane-slow">
+                      <h2>Afzonderlijk beoordelen — Inhoud ({len(individual)}) <span class="info-tip" tabindex="0" aria-label="Deze passages kunnen niet veilig in één groep worden bevestigd.">ⓘ<span class="info-tip-text">Deze passages kunnen niet veilig in één groep worden bevestigd. Open iedere passage en vergelijk haar met de oorspronkelijke bron.</span></span></h2>
+                      <p class="lead">Begin hier. Deze passages vragen om jouw eigen inhoudelijke oordeel.</p>
+                      <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, reason=_individual_review_reason(obj, priority=obj in duty)) for obj in individual)}</ol>
+                    </section>
+                    {normal_content_html}
+                    {blocked_html}
+                    <details class="review-lane-fast">
+                      <summary>{copy["fast_title"]} <span class="info-tip" tabindex="0" aria-label="{_esc(copy['fast_lead'].replace('ⓘ ', ''))}">ⓘ<span class="info-tip-text">{_esc(copy['fast_lead'].replace('ⓘ ', ''))}</span></span></summary>
                       <p class="lead">{copy["fast_lead"]}</p>
                       <form method="post" action="/review/headings/batch-confirm">
                         <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
@@ -942,15 +929,7 @@ def _render_review_index(
                         <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, checkbox=True) for obj in koppen)}</ol>
                         <button class="btn-primary" type="submit">{copy["fast_button"]}</button>
                       </form>
-                    </section>
-                    <section class="review-lane-slow">
-                      <h2>{copy["slow_title"]}</h2>
-                      <p class="lead">{copy["slow_lead"]}</p>
-                      <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id) for obj in duty)}</ol>
-                      {leftover_html}
-                      {other_html}
-                    </section>
-                    {blocked_html}
+                    </details>
                     {_coverage_panel(snapshot_objects)}
                 """
 
@@ -999,12 +978,11 @@ def _render_review_card(
     path_text = found_under_path(obj)
     proposed_label = _object_type_label(proposed or confirmable)
     return f"""
-                <p><a class="btn-secondary" href="/review?document={_esc(snapshot_id)}">Terug naar Inhoud</a></p>
+                <p><a class="btn-secondary" href="/review?document={_esc(snapshot_id)}">Terug naar werkvoorraad</a></p>
                 <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
                   <div class="review-cockpit-copy">
-                    <p>Je beoordeelt één geselecteerde passage.</p>
-                    <p>De volledige richtlijn blijft ongewijzigd.</p>
-                    <p>Metis maakt geschikte passages apart bruikbaar.</p>
+                    <p>Beoordeel deze passage aan de hand van de oorspronkelijke bron.</p>
+                    <p>Metis doet een voorstel; jij bepaalt wat met de passage gebeurt.</p>
                   </div>
                   <form class="review-decision-form" method="post" action="/review" data-review-form>
                     <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
@@ -1016,7 +994,7 @@ def _render_review_card(
                     {four_eyes_html}
                     {conflict_html}
                     <section class="review-card-object review-step" data-review-step="a" aria-label="Geselecteerde passage">
-                      <p class="eyebrow">Geselecteerde passage</p>
+                      <p class="eyebrow">Te beoordelen passage</p>
                       <h3>{_esc(heading)}</h3>
                       <p class="why-selected">{_esc(why_selected(obj))}</p>
                       <p class="meta"><span>status <b>{_esc(review_row_status(obj))}</b></span></p>
@@ -1024,23 +1002,24 @@ def _render_review_card(
                     </section>
                     {_broncontext_html(obj, snapshot_id, obj["object_id"], passage_ok)}
                     <section class="review-step" data-review-step="c">
-                      <h4>Geschiktheid</h4>
-                      <label class="check"><input type="radio" name="suitability" value="ja"{_checked(draft.get("suitability", ""), "ja")}> Ja</label>
-                      <label class="check"><input type="radio" name="suitability" value="mist_context"{_checked(draft.get("suitability", ""), "mist_context")}> mist context</label>
-                      <label class="check"><input type="radio" name="suitability" value="samenvoegen"{_checked(draft.get("suitability", ""), "samenvoegen")}> samenvoegen</label>
-                      <label class="check"><input type="radio" name="suitability" value="alleen_onderbouwing"{_checked(draft.get("suitability", ""), "alleen_onderbouwing")}> alleen onderbouwing</label>
-                      <label class="check"><input type="radio" name="suitability" value="geen_kenniseenheid"{_checked(draft.get("suitability", ""), "geen_kenniseenheid")}> geen kenniseenheid</label>
+                      <h4>Is deze passage op zichzelf bruikbaar?</h4>
+                      <p class="field-help">Een zelfstandige passage is begrijpelijk zonder dat iemand de rest van het document hoeft te lezen.</p>
+                      <label class="check"><input type="radio" name="suitability" value="ja"{_checked(draft.get("suitability", ""), "ja")}> Ja, als zelfstandig stukje kennis</label>
+                      <label class="check"><input type="radio" name="suitability" value="mist_context"{_checked(draft.get("suitability", ""), "mist_context")}> Nee, ik mis uitleg eromheen</label>
+                      <label class="check"><input type="radio" name="suitability" value="samenvoegen"{_checked(draft.get("suitability", ""), "samenvoegen")}> Nee, deze hoort samen met een andere passage</label>
+                      <label class="check"><input type="radio" name="suitability" value="alleen_onderbouwing"{_checked(draft.get("suitability", ""), "alleen_onderbouwing")}> Alleen als onderbouwing van een andere passage</label>
+                      <label class="check"><input type="radio" name="suitability" value="geen_kenniseenheid"{_checked(draft.get("suitability", ""), "geen_kenniseenheid")}> Geen zelfstandig stukje kennis</label>
                     </section>
                     <section class="review-step" data-review-step="d">
-                      <h4>Documentpositie</h4>
+                      <h4>Staat de passage onder de juiste kop?</h4>
                       <p>Gevonden onder: <b>{_esc(path_text or "het document")}</b></p>
                       <label class="check"><input type="radio" name="documentpositie_action" value="dit_klopt"{_checked(draft.get("documentpositie_action", ""), "dit_klopt")}> Dit klopt</label>
                       <label class="check"><input type="radio" name="documentpositie_action" value="andere_kop"{_checked(draft.get("documentpositie_action", ""), "andere_kop")}> Andere kop kiezen</label>
                       {_heading_chooser(obj, snapshot_objects, snapshot_id)}
                     </section>
                     <section class="review-step" data-review-step="e">
-                      <h4>Type</h4>
-                      <p>Metis stelt voor: <b>{_esc(proposed_label)}</b></p>
+                      <h4>Wat voor informatie is dit?</h4>
+                      <p>Metis stelt voor: <b>{_esc(proposed_label)}</b>. Jij kunt dit aanpassen.</p>
                       <label class="check"><input type="radio" name="type_action" value="dit_klopt"{_checked(draft.get("type_action", ""), "dit_klopt")}> Dit klopt</label>
                       <label class="check"><input type="radio" name="type_action" value="type_wijzigen"{_checked(draft.get("type_action", ""), "type_wijzigen")}> Type wijzigen</label>
                       <div data-type-chooser hidden>
@@ -1050,7 +1029,7 @@ def _render_review_card(
                     </section>
                     {_stamp_block(obj, hidden=not recommendation_strength_ui_applies(obj))}
                     <section class="review-step" data-review-step="f">
-                      <h4>Eindoordeel</h4>
+                      <h4>Wat is je besluit?</h4>
                       <fieldset id="decision-{_esc(obj["object_id"])}">
                       <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren"{disabled}{_checked(draft.get("eindoordeel", ""), "goedkeuren")}> Goedkeuren</label>
                       <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren_na_correctie"{_checked(draft.get("eindoordeel", ""), "goedkeuren_na_correctie")}> Goedkeuren na correctie</label>
@@ -1110,7 +1089,7 @@ def _render_review_room(
                 f"""
                     <article class="doc-card">
                       {_document_card_heading({**row, "status": row["state"]})}
-                      <p class="lead">Beoordeel Koppen als structuur en Inhoud als kennisobjecten.</p>
+                      <p class="lead">Beoordeel passages stap voor stap, met de oorspronkelijke bron als uitgangspunt.</p>
                       <p><a class="btn-primary" href="/review?document={_esc(row["snapshot_id"])}">Beoordeel</a></p>
                     </article>
                     """
@@ -1124,15 +1103,21 @@ def _render_review_room(
         snapshot_objects, snapshot_revision = console.snapshot_objects_and_revision(chosen)
         review_path = review_path_for_klasse(chosen_row["class"])
         if not chosen_object_id:
-            objects_html += _render_review_index(
-                chosen, snapshot_objects, review_path, snapshot_revision
-            )
+            normal_content_html = ""
             if isinstance(console, ProportionateReviewConsole):
-                objects_html += render_normal_risk_batch_panel(
+                normal_content_html = render_normal_risk_batch_panel(
                     console, chosen,
                     snapshot=(snapshot_objects, snapshot_revision),
                     selected_ids=batch_selection or (),
+                    include_individual=False,
                 )
+            objects_html += _render_review_index(
+                chosen,
+                snapshot_objects,
+                review_path,
+                snapshot_revision,
+                normal_content_html=normal_content_html,
+            )
         else:
             obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
             if obj is None:
@@ -1154,7 +1139,7 @@ def _render_review_room(
             {_nav(account, "review", counts)}
             <section class="room">
               <h1>Review</h1>
-              <p class="lead">Beoordeel Koppen als structuur en Inhoud als kennisobjecten.</p>
+              <p class="lead">Beoordeel passages stap voor stap, met de oorspronkelijke bron als uitgangspunt.</p>
               {conflict_html if not chosen_object_id else ""}
               {picker}
               {"".join(cards) if not chosen else ""}

@@ -393,9 +393,8 @@ def test_researchers_are_not_required_to_open_thousands_of_inhoud_cards(
     leftover_snips = [_text_of(obj)[:40] for obj in leftover]
     for snip in leftover_snips:
         assert not any(snip in title for title in duty_titles)
-    assert f"Resterend unclassified: {len(leftover)}" in visible
-    assert "niet als één-voor-één plicht" in visible.casefold()
-    assert "unclassified wordt niet geserveerd" in visible.casefold()
+    assert "Passages met extra context nodig" in visible
+    assert "unclassified" not in visible.casefold()
     assert "Beoordeel elk kennisobject afzonderlijk." not in html
     for obj in leftover:
         assert obj in console.snapshot_objects(receipt["snapshot_id"])
@@ -445,7 +444,7 @@ def test_koppen_remain_batch_confirmable_as_structure_never_advice(
     fast = _section(html, "review-lane-fast")
     assert "/review/headings/batch-confirm" in fast
     assert "Bevestig geselecteerde koppen als structuur" in fast
-    assert "nooit als advies" in fast.casefold() or "nooit als advies" in html.casefold()
+    assert "veranderen de inhoud niet" in fast.casefold() or "veranderen de inhoud niet" in html.casefold()
     confirmed = console.batch_confirm_headings(
         actor_id=accounts["reviewer"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
@@ -549,12 +548,10 @@ def test_console_inhoud_lists_only_slow_duty_cards(tmp_path: Path) -> None:
         assert card.count('class="review-decision-form"') == 1
         assert "batch-confirm" not in card
     visible = _visible_text(html)
-    assert "voorgestelde aanbevelingen" in visible.casefold()
-    assert "voorwaarden" in visible.casefold()
-    assert "uitzonderingen" in visible.casefold()
-    assert "high-risk" in visible.casefold()
+    assert "Begin hier" in visible
+    assert "eigen inhoudelijke oordeel" in visible
     assert leftover
-    assert f"Resterend unclassified: {len(leftover)}" in visible
+    assert "Passages met extra context nodig" in visible
 
 
 # ---------------------------------------------------------------------------
@@ -854,7 +851,8 @@ def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path) -> None:
     assert any(obj["object_id"] == planted["object_id"] for obj in leftover)
     html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
     visible = _visible_text(html)
-    assert f"Resterend unclassified: {len(leftover)}" in visible
+    assert "Controleoverzicht per kop" in visible
+    assert "unclassified" not in visible.casefold()
     slow = _section(html, "review-lane-slow")
     assert planted["object_id"] not in slow
     card = _client(console).get(

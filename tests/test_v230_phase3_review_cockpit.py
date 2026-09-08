@@ -39,9 +39,8 @@ CURRENT_HEADING = "2 Aanbevelingen"
 ANCESTOR_HEADING = "Richtlijn Fractuurpreventie"
 
 REVIEWER_COPY = (
-    "Je beoordeelt één geselecteerde passage.",
-    "De volledige richtlijn blijft ongewijzigd.",
-    "Metis maakt geschikte passages apart bruikbaar.",
+    "Beoordeel deze passage aan de hand van de oorspronkelijke bron.",
+    "Metis doet een voorstel; jij bepaalt wat met de passage gebeurt.",
 )
 PROTOCOL_JARGON = (
     "Relatie bevestigen",
@@ -56,11 +55,11 @@ PROTOCOL_JARGON = (
     "ouder/kind",
 )
 SUITABILITY_LABELS = (
-    "Ja",
-    "mist context",
-    "samenvoegen",
-    "alleen onderbouwing",
-    "geen kenniseenheid",
+    "Ja, als zelfstandig stukje kennis",
+    "Nee, ik mis uitleg eromheen",
+    "Nee, deze hoort samen met een andere passage",
+    "Alleen als onderbouwing van een andere passage",
+    "Geen zelfstandig stukje kennis",
 )
 EINDOORDEEL_LABELS = (
     "Goedkeuren",
