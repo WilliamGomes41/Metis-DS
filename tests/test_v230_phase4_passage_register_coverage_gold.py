@@ -518,7 +518,7 @@ def test_primary_review_card_has_no_register_or_metrics_jargon(tmp_path: Path) -
     for token in PROTOCOL_REGISTER_JARGON:
         assert token not in card
     assert "Ja" in card
-    assert "mist context" in card
+    assert "Nee, ik mis uitleg eromheen" in card
     assert "Review opslaan en volgende" in card
 
 
@@ -533,8 +533,8 @@ def test_researcher_ops_surface_may_show_coverage_without_touching_the_card(tmp_
         f"/review?document={receipt['snapshot_id']}&object={adviseert['object_id']}"
     ).text
     card = _card(card_html, adviseert["object_id"])
-    assert "Dekking per kop" in index
-    assert "Dekking per kop" not in card
+    assert "Controleoverzicht per kop" in index
+    assert "Controleoverzicht per kop" not in card
     assert "selected_as_candidate" not in card
 
 
@@ -585,7 +585,7 @@ def test_phase3_cockpit_and_sterkte_still_present(tmp_path: Path) -> None:
     assert "Dit klopt" in card
     assert "Andere kop kiezen" in card
     assert "Open volledige richtlijn" in card or "broncontext" in card.lower()
-    assert "geen kenniseenheid" in card
+    assert "Geen zelfstandig stukje kennis" in card
     assert is_slow_review_duty(adviseert) is True
 
 
