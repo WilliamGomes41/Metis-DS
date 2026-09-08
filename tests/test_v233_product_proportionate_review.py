@@ -9,15 +9,11 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
-from fastapi.testclient import TestClient
 
 from src.passage_register_v1 import apply_passage_register, passage_register_of
 from src.proportionate_review_v1 import (
     NORMAL_RISK_BATCH_MAX,
     ProportionateReviewConsole,
-    install_proportionate_review_routes,
     normal_risk_batch_eligible,
     normal_risk_batch_queue,
     regular_review_queue,
@@ -161,6 +157,12 @@ class _BatchHarness(ProportionateReviewConsole):
         assert snapshot_id == "snap-1"
         return self.revision
 
+    def snapshot_objects_and_revision(self, snapshot_id: str) -> tuple[list[dict], str]:
+        return self.snapshot_objects(snapshot_id), self.revision
+
+    def _objects_expected_revs(self) -> dict[str, str]:
+        return {"snap-1": self.revision}
+
 
 def test_one_batch_interaction_delegates_to_individual_object_reviews() -> None:
     console = _BatchHarness([
@@ -253,20 +255,40 @@ def test_rendered_batch_panel_splits_large_groups_by_type_and_maximum() -> None:
     assert 'value="u1"' not in html
 
 
-def test_review_index_middleware_makes_batch_work_reachable() -> None:
+@pytest.mark.parametrize("human_type", ["recommendation", "condition", "exception"])
+@pytest.mark.parametrize("field", ["confirmed_object_type", "object_type"])
+def test_batch_never_overwrites_authoritative_action_type(human_type: str, field: str) -> None:
+    row = _obj("d1", "definition")
+    row[field] = human_type
+    console = _BatchHarness([row])
+    with pytest.raises(ConsoleError, match="normal_risk_batch_ineligible"):
+        console.batch_review_normal_risk(actor_id="reviewer-1", snapshot_id="snap-1", object_ids=["d1"])
+    assert console.calls == []
+
+
+def test_sectionless_single_object_is_not_batchable() -> None:
+    console = _BatchHarness([_obj("d1", "definition", section=())])
+    with pytest.raises(ConsoleError, match="normal_risk_batch_ineligible"):
+        console.batch_review_normal_risk(actor_id="reviewer-1", snapshot_id="snap-1", object_ids=["d1"])
+    assert console.calls == []
+
+
+def test_nonbatch_content_and_batch_members_have_individual_routes() -> None:
+    rows = [_obj("d1", "definition"), _obj("u1", "definition", uncertain=True),
+            _obj("s1", "definition", section=())]
+    panel = render_normal_risk_batch_panel(_BatchHarness(rows), "snap-1")
+    for row in rows:
+        assert f'&amp;object={row["object_id"]}"' in panel
+    assert 'value="u1"' not in panel
+    assert 'value="s1"' not in panel
+
+
+def test_stale_batch_fails_before_any_review_or_source_open() -> None:
     console = _BatchHarness([_obj("d1", "definition")])
-    app = FastAPI()
-
-    @app.get("/review", response_class=HTMLResponse)
-    async def review_index() -> HTMLResponse:
-        return HTMLResponse("<html><body><main><h1>Beoordelen</h1></main></body></html>")
-
-    install_proportionate_review_routes(app, console)
-    response = TestClient(app).get("/review?document=snap-1")
-    assert response.status_code == 200
-    assert "Reguliere inhoud beoordelen" in response.text
-    assert "/review/normal-risk/batch-confirm" in response.text
-    assert 'name="object_ids"' in response.text
+    with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
+        console.batch_review_normal_risk(actor_id="reviewer-1", snapshot_id="snap-1", object_ids=["d1"], expected_revision="old")
+    assert console.calls == []
+    assert console.opened == []
 
 
 def test_source_contains_no_new_store_or_review_tier() -> None:
