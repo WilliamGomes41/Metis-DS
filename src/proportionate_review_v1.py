@@ -110,26 +110,41 @@ def normal_risk_batch_queue(
     return [obj for obj in objects if normal_risk_batch_eligible(obj, review_path=review_path)]
 
 
+def regular_individual_review_queue(
+    objects: Iterable[dict[str, Any]],
+    *,
+    review_path: str,
+) -> list[dict[str, Any]]:
+    """Allowed passages that need their own review instead of a batch."""
+    rows = list(objects)
+    batch_ids = {
+        str(obj.get("object_id") or "")
+        for obj in normal_risk_batch_queue(rows, review_path=review_path)
+    }
+    return [
+        obj
+        for obj in rows
+        if obj.get("object_type") != "document"
+        and review_lane(obj, review_path=review_path) != "fast"
+        and not is_slow_review_duty(obj, review_path=review_path)
+        and admission_of(obj).get("gate_result") == GATE_ALLOWED
+        and str(obj.get("object_id") or "") not in batch_ids
+    ] if review_path != "boom" else []
+
+
 def render_normal_risk_batch_panel(
     console: "ProportionateReviewConsole", snapshot_id: str,
     *, snapshot: tuple[list[dict[str, Any]], str] | None = None,
     selected_ids: Iterable[str] = (),
+    include_individual: bool = True,
 ) -> str:
     """Render reachable normal-risk review work in bounded coherent batches."""
     envelope = console._envelope(snapshot_id)
     review_path = review_path_for_klasse(envelope["class"])
     objects, revision = snapshot if snapshot is not None else console.snapshot_objects_and_revision(snapshot_id)
-    queue = normal_risk_batch_queue(objects, review_path=review_path)
-    batch_ids = {obj["object_id"] for obj in queue}
-    individual = [
-        obj for obj in objects
-        if obj.get("object_type") != "document"
-        and review_lane(obj, review_path=review_path) != "fast"
-        and not is_slow_review_duty(obj, review_path=review_path)
-        and admission_of(obj).get("gate_result") != GATE_BLOCKED
-        and obj.get("object_id") not in batch_ids
-    ] if review_path != "boom" else []
-    if not queue and not individual:
+    all_objects = objects
+    queue = normal_risk_batch_queue(all_objects, review_path=review_path)
+    if not queue:
         return ""
     groups: dict[tuple[tuple[str, ...], str], list[dict[str, Any]]] = defaultdict(list)
     for obj in queue:
@@ -140,24 +155,27 @@ def render_normal_risk_batch_panel(
     selected = set(selected_ids)
     panels: list[str] = [
         '<section class="review-normal-risk" aria-labelledby="normal-risk-title">',
-        '<h2 id="normal-risk-title">Reguliere inhoud beoordelen</h2>',
-        f'<p>Definities en toelichtingen met normaal risico kunnen in batches van maximaal {NORMAL_RISK_BATCH_MAX} '
-        'binnen één sectie en één type worden bevestigd. Lees de inhoud en controleer waar nodig de bron. '
-        'Selecteer de batch en haal passages die een aparte beoordeling nodig hebben uit de selectie.</p>',
+        '<h2 id="normal-risk-title">Samen beoordelen</h2>',
+        '<p><span class="info-tip" tabindex="0" aria-label="Deze passages staan in dezelfde sectie en zijn van hetzelfde soort.">ⓘ'
+        '<span class="info-tip-text">Deze passages staan in dezelfde sectie en zijn van hetzelfde soort.</span></span> '
+        'Deze passages staan in dezelfde sectie en zijn van hetzelfde soort. '
+        'Lees ze als groep en bevestig alleen de passages waarover je zeker bent. '
+        f'Een groep bevat maximaal {NORMAL_RISK_BATCH_MAX} passages; batches van maximaal {NORMAL_RISK_BATCH_MAX} '
+        'houden de controle overzichtelijk.</p>',
     ]
     batch_index = 0
-    for (section, proposed), objects in groups.items():
+    for (section, proposed), group_objects in groups.items():
         label = escape(" › ".join(section))
         type_label = "Definitie" if proposed == "definition" else "Toelichting"
-        for start in range(0, len(objects), NORMAL_RISK_BATCH_MAX):
-            batch = objects[start : start + NORMAL_RISK_BATCH_MAX]
+        for start in range(0, len(group_objects), NORMAL_RISK_BATCH_MAX):
+            batch = group_objects[start : start + NORMAL_RISK_BATCH_MAX]
             batch_index += 1
             panels.append(
                 f'<form method="post" action="/review/normal-risk/batch-confirm" class="normal-risk-batch">'
                 f'<input type="hidden" name="snapshot_id" value="{safe_snapshot}">'
                 f'<input type="hidden" name="snapshot_revision" value="{revision}">'
                 f'<fieldset><legend>{label} — {type_label} ({len(batch)})</legend>'
-                '<button type="button" data-select-review-batch>Hele batch selecteren</button>'
+                '<button type="button" data-select-review-batch>Alles in deze groep selecteren</button>'
             )
             for obj in batch:
                 object_id = escape(str(obj.get("object_id") or ""), quote=True)
@@ -174,23 +192,25 @@ def render_normal_risk_batch_panel(
                     '</div>'
                 )
             panels.append(
-                '</fieldset><button type="submit">Geselecteerde inhoud bevestigen</button>'
+                '</fieldset><button type="submit">Bevestig geselecteerde passages</button>'
                 f'<span class="sr-only">Batch {batch_index}</span></form>'
             )
-    if individual:
-        panels.append(
-            '<details class="review-normal-risk-individual">'
-            f'<summary>Overige inhoud afzonderlijk bekijken ({len(individual)})</summary>'
-            '<p>Bekijk hier inhoud die niet gezamenlijk kan worden bevestigd, '
-            'bijvoorbeeld bij onzekerheid of ontbrekende sectiecontext, en eerdere beoordelingen.</p><ul>'
-        )
-        for obj in individual:
-            object_id = escape(str(obj.get("object_id") or ""), quote=True)
+    if include_individual:
+        individual = regular_individual_review_queue(all_objects, review_path=review_path)
+        if individual:
             panels.append(
-                f'<li><a href="/review?document={safe_snapshot}&amp;object={object_id}">'
-                f'{escape(_object_text(obj))}</a></li>'
+                '<details class="review-normal-risk-individual">'
+                f'<summary>Overige inhoud afzonderlijk bekijken ({len(individual)})</summary>'
+                '<p>Deze passages kunnen niet veilig samen worden bevestigd. '
+                'Open iedere passage om de bron en het voorstel te beoordelen.</p><ul>'
             )
-        panels.append('</ul></details>')
+            for obj in individual:
+                object_id = escape(str(obj.get("object_id") or ""), quote=True)
+                panels.append(
+                    f'<li><a href="/review?document={safe_snapshot}&amp;object={object_id}">'
+                    f'{escape(_object_text(obj))}</a></li>'
+                )
+            panels.append('</ul></details>')
     panels.append("</section>")
     return "".join(panels)
 

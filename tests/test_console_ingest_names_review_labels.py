@@ -172,7 +172,7 @@ def test_other_blocked_candidates_are_readable_and_remain_accessible():
     rendered = _render_review_index("snap-test", objects, "richtlijn")
     visible = VisibleRows()
     visible.feed(rendered)
-    assert "Overige geblokkeerde passages (2)" in rendered
+    assert "Passages met extra context nodig (2)" in rendered
     assert len(visible.rows) == 2
     for obj, (_, label) in zip(objects, visible.rows):
         assert label == obj["content"]["clean_text"]

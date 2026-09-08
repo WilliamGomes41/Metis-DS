@@ -318,7 +318,6 @@ def test_koppen_and_inhoud_stacks_show_counts(tmp_path: Path) -> None:
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     koppen, inhoud = review_stacks(objects)
     duty = slow_review_duty(objects)
-    leftover = remaining_unclassified(objects)
     assert koppen
     assert inhoud
     assert all(review_lane(obj) == "fast" for obj in koppen)
@@ -331,8 +330,8 @@ def test_koppen_and_inhoud_stacks_show_counts(tmp_path: Path) -> None:
     assert "review-lane-fast" in html
     assert "review-lane-slow" in html
     assert "/review/headings/batch-confirm" in html
-    if leftover:
-        assert f"Resterend unclassified: {len(leftover)}" in html
+    assert "Beoordeel dit document stap voor stap" in html
+    assert "unclassified" not in html.casefold()
     lower = html.lower()
     for forbidden in ("zwaar/licht", "snel/langzaam", "speed-toggle", "envelope"):
         assert forbidden not in lower
@@ -609,7 +608,7 @@ def test_ui_must_not_hide_stored_fragments_without_extract(tmp_path: Path) -> No
     )
     assert any(obj["object_id"] == planted["object_id"] for obj in leftover)
     html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
-    assert f"Resterend unclassified: {len(leftover)}" in html
+    assert "Passages met extra context nodig" in html
     card = _client(console).get(
         f"/review?document={receipt['snapshot_id']}&object={planted['object_id']}"
     ).text

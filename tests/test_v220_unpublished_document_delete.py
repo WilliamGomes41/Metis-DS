@@ -811,9 +811,10 @@ def test_v216_through_v219_review_extract_still_holds(tmp_path: Path) -> None:
     assert "Documenten" in html
     assert "Documentenhiërarchie" not in html
     assert "Bevestig geselecteerde koppen als structuur" in html
-    assert f"Koppen ({len(koppen)})" in html
+    assert f"Koppen controleren ({len(koppen)})" in html
     if leftover:
-        assert f"Resterend unclassified: {len(leftover)}" in _visible_text(html)
+        assert "Controleoverzicht per kop" in _visible_text(html)
+        assert "unclassified" not in _visible_text(html).casefold()
     duty_ids = {obj["object_id"] for obj in duty}
     leftover_ids = {obj["object_id"] for obj in leftover}
     assert duty_ids.isdisjoint(leftover_ids)
