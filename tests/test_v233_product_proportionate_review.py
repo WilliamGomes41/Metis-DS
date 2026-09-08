@@ -9,13 +9,18 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+from fastapi.testclient import TestClient
 
 from src.passage_register_v1 import apply_passage_register, passage_register_of
 from src.proportionate_review_v1 import (
     ProportionateReviewConsole,
+    install_proportionate_review_routes,
     normal_risk_batch_eligible,
     normal_risk_batch_queue,
     regular_review_queue,
+    render_normal_risk_batch_panel,
 )
 from src.operations_console_v1 import ConsoleError
 
@@ -27,6 +32,7 @@ def _obj(
     gate: str = "allowed",
     high: bool = False,
     second: bool = False,
+    uncertain: bool = False,
     section: tuple[str, ...] = ("1 Achtergrond",),
 ) -> dict:
     return {
@@ -47,6 +53,10 @@ def _obj(
         "risk": {
             "level": "high" if high else "standard",
             "requires_second_review": second,
+        },
+        "uncertainty": {
+            "has_uncertainty": uncertain,
+            "items": ["onduidelijk"] if uncertain else [],
         },
         "governance": {
             "validation_status": "needs_review",
@@ -94,16 +104,18 @@ def test_regular_review_queue_is_broader_than_priority_duty_but_still_fail_close
     assert ids == {"definition", "explanation", "recommendation"}
 
 
-def test_normal_risk_batch_excludes_action_high_risk_second_review_and_blocked() -> None:
+def test_normal_risk_batch_excludes_action_high_risk_second_review_blocked_and_uncertain() -> None:
     eligible = _obj("definition", "definition")
     explanation = _obj("explanation", "explanation")
     recommendation = _obj("recommendation", "recommendation")
     high = _obj("high", "definition", high=True)
     second = _obj("second", "definition", second=True)
     blocked = _obj("blocked", "definition", gate="blocked")
-    rows = [eligible, explanation, recommendation, high, second, blocked]
+    uncertain = _obj("uncertain", "definition", uncertain=True)
+    rows = [eligible, explanation, recommendation, high, second, blocked, uncertain]
     assert normal_risk_batch_eligible(eligible, review_path="richtlijn") is True
     assert normal_risk_batch_eligible(explanation, review_path="richtlijn") is True
+    assert normal_risk_batch_eligible(uncertain, review_path="richtlijn") is False
     assert [row["object_id"] for row in normal_risk_batch_queue(rows, review_path="richtlijn")] == [
         "definition",
         "explanation",
@@ -196,6 +208,38 @@ def test_batch_cannot_cross_sections() -> None:
             object_ids=["d1", "e1"],
         )
     assert console.calls == []
+
+
+def test_rendered_batch_panel_exposes_only_eligible_normal_risk_items() -> None:
+    console = _BatchHarness([
+        _obj("d1", "definition"),
+        _obj("e1", "explanation"),
+        _obj("r1", "recommendation"),
+        _obj("u1", "definition", uncertain=True),
+    ])
+    html = render_normal_risk_batch_panel(console, "snap-1")
+    assert 'action="/review/normal-risk/batch-confirm"' in html
+    assert 'value="d1"' in html
+    assert 'value="e1"' in html
+    assert 'value="r1"' not in html
+    assert 'value="u1"' not in html
+    assert "Reguliere inhoud beoordelen" in html
+
+
+def test_review_index_middleware_makes_batch_work_reachable() -> None:
+    console = _BatchHarness([_obj("d1", "definition")])
+    app = FastAPI()
+
+    @app.get("/review", response_class=HTMLResponse)
+    async def review_index() -> HTMLResponse:
+        return HTMLResponse("<html><body><main><h1>Beoordelen</h1></main></body></html>")
+
+    install_proportionate_review_routes(app, console)
+    response = TestClient(app).get("/review?document=snap-1")
+    assert response.status_code == 200
+    assert "Reguliere inhoud beoordelen" in response.text
+    assert "/review/normal-risk/batch-confirm" in response.text
+    assert 'name="object_ids"' in response.text
 
 
 def test_source_contains_no_new_store_or_review_tier() -> None:
