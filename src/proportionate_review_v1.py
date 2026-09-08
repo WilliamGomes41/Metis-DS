@@ -6,6 +6,8 @@ still receives its own exact-hash review, ledger event and publish tuple.
 """
 from __future__ import annotations
 
+from collections import defaultdict
+from html import escape
 from typing import Any, Iterable
 
 from fastapi import FastAPI, Form, Request
@@ -30,6 +32,11 @@ def _section_key(obj: dict[str, Any]) -> tuple[str, ...]:
     admission = admission_of(obj)
     path = admission.get("section_path") or (obj.get("structure") or {}).get("section_path") or []
     return tuple(str(part).strip() for part in path if str(part).strip())
+
+
+def _object_text(obj: dict[str, Any]) -> str:
+    content = obj.get("content") if isinstance(obj.get("content"), dict) else {}
+    return str(content.get("clean_text") or obj.get("candidate_text") or "").strip()
 
 
 def regular_review_queue(
@@ -68,6 +75,9 @@ def normal_risk_batch_eligible(obj: dict[str, Any], *, review_path: str) -> bool
         return False
     if confirmable_proposed_type(obj) not in NORMAL_RISK_BATCH_TYPES:
         return False
+    uncertainty = obj.get("uncertainty") if isinstance(obj.get("uncertainty"), dict) else {}
+    if bool(uncertainty.get("has_uncertainty")):
+        return False
     risk = obj.get("risk") if isinstance(obj.get("risk"), dict) else {}
     if risk.get("level") == "high" or bool(risk.get("requires_second_review")):
         return False
@@ -85,6 +95,57 @@ def normal_risk_batch_queue(
     review_path: str,
 ) -> list[dict[str, Any]]:
     return [obj for obj in objects if normal_risk_batch_eligible(obj, review_path=review_path)]
+
+
+def render_normal_risk_batch_panel(console: "ProportionateReviewConsole", snapshot_id: str) -> str:
+    """Render reachable normal-risk review work, grouped by one source section."""
+    envelope = console._envelope(snapshot_id)
+    review_path = review_path_for_klasse(envelope["class"])
+    queue = normal_risk_batch_queue(console.snapshot_objects(snapshot_id), review_path=review_path)
+    if not queue:
+        return ""
+    groups: dict[tuple[str, ...], list[dict[str, Any]]] = defaultdict(list)
+    for obj in queue:
+        groups[_section_key(obj)].append(obj)
+    revision = escape(console.objects_revision(snapshot_id), quote=True)
+    safe_snapshot = escape(snapshot_id, quote=True)
+    panels: list[str] = [
+        '<section class="review-normal-risk" aria-labelledby="normal-risk-title">',
+        '<h2 id="normal-risk-title">Reguliere inhoud beoordelen</h2>',
+        '<p>Definities en toelichtingen met normaal risico kunnen per sectie samen worden bevestigd. '
+        'Elk kennisobject krijgt afzonderlijk een reviewrecord.</p>',
+    ]
+    for index, (section, objects) in enumerate(groups.items(), start=1):
+        if not section:
+            # Batch approval requires source-coherent section context. An item
+            # without a section remains individually reviewable, not batchable.
+            continue
+        label = escape(" › ".join(section))
+        panels.append(
+            f'<form method="post" action="/review/normal-risk/batch-confirm" class="normal-risk-batch">'
+            f'<input type="hidden" name="snapshot_id" value="{safe_snapshot}">'
+            f'<input type="hidden" name="snapshot_revision" value="{revision}">'
+            f'<fieldset><legend>{label}</legend>'
+        )
+        for obj in objects:
+            object_id = escape(str(obj.get("object_id") or ""), quote=True)
+            proposed = confirmable_proposed_type(obj)
+            type_label = "Definitie" if proposed == "definition" else "Toelichting"
+            text = escape(_object_text(obj))
+            panels.append(
+                '<label class="normal-risk-item">'
+                f'<input type="checkbox" name="object_ids" value="{object_id}"> '
+                f'<strong>{type_label}</strong> — {text}'
+                '</label>'
+            )
+        panels.append(
+            f'</fieldset><button type="submit">Geselecteerde inhoud bevestigen</button>'
+            f'<span class="sr-only">Batch {index}</span></form>'
+        )
+    panels.append("</section>")
+    if len(panels) == 4:
+        return ""
+    return "".join(panels)
 
 
 class ProportionateReviewConsole(OperationsConsole):
@@ -115,8 +176,9 @@ class ProportionateReviewConsole(OperationsConsole):
         """Approve one coherent normal-risk batch with per-object review records.
 
         The whole selection is preflighted before the first mutation. A batch
-        cannot sweep in high-risk, blocked, action-bearing or mixed-section
-        content. Each included object then travels through ``review_object``.
+        cannot sweep in high-risk, blocked, ambiguous, action-bearing or
+        mixed-section content. Each included object then travels through
+        ``review_object``.
         """
         reviewer = self._require_role(actor_id, "reviewer")
         envelope = self._envelope(snapshot_id)
@@ -167,7 +229,7 @@ class ProportionateReviewConsole(OperationsConsole):
 
 
 def install_proportionate_review_routes(app: FastAPI, console: ProportionateReviewConsole) -> None:
-    """Expose the normal-risk batch action without replacing the existing app."""
+    """Expose and render the bounded normal-risk batch workflow."""
 
     async def batch_confirm(
         request: Request,
@@ -193,3 +255,37 @@ def install_proportionate_review_routes(app: FastAPI, console: ProportionateRevi
         response_class=RedirectResponse,
         name="review_normal_risk_batch_confirm",
     )
+
+    @app.middleware("http")
+    async def render_normal_risk_queue(request: Request, call_next):
+        response = await call_next(request)
+        if (
+            request.method != "GET"
+            or request.url.path != "/review"
+            or request.query_params.get("object")
+            or response.status_code != 200
+            or "text/html" not in response.headers.get("content-type", "")
+        ):
+            return response
+        snapshot_id = (request.query_params.get("document") or "").strip()
+        if not snapshot_id:
+            return response
+        try:
+            panel = render_normal_risk_batch_panel(console, snapshot_id)
+        except ConsoleError:
+            return response
+        if not panel:
+            return response
+        body = b"".join([chunk async for chunk in response.body_iterator])
+        text = body.decode("utf-8")
+        marker = "</main>" if "</main>" in text else "</body>"
+        if marker not in text:
+            return response
+        modified = text.replace(marker, panel + marker, 1).encode("utf-8")
+
+        async def _body():
+            yield modified
+
+        response.body_iterator = _body()
+        response.headers["content-length"] = str(len(modified))
+        return response
