@@ -71,6 +71,11 @@ from src.serving_relations_v1 import CLOSED_RELATION_TYPES, proposed_relations
 
 SERVICE_VERSION = CONSOLE_VERSION
 COOKIE = "console_session"
+FILENAME_HINT = (
+    "Bestandsnaam: letters, cijfers, punt, streepje of underscore. "
+    "Spaties en accenten worden automatisch aangepast. "
+    "De titel hieronder mag wél spaties bevatten."
+)
 BRAND_DIR = REPO_ROOT / "assets" / "brand"
 RESEARCHER_ROOMS = frozenset({"ingest", "tree", "review"})
 HELP_ONCE = (
@@ -105,6 +110,7 @@ BLOCKER_LABELS = {
     "four_eyes_required": "High-risk objecten vereisen four-eyes: een tweede benoemde reviewer op hetzelfde objecttupel.",
 }
 ERROR_COPY = {
+    "invalid_store_path": "De bestandsnaam kan niet veilig worden verwerkt. Hernoem het bestand, bijvoorbeeld naar eenzaamheid.pdf, en kies het opnieuw.",
     "not_authenticated": "Je bent niet aangemeld.",
     "invalid_credentials": "Gebruikersnaam of wachtwoord is onjuist.",
     "uploader_cannot_be_sole_required_reviewer": "De uploader mag reviewer zijn, maar niet de enige.",
@@ -895,13 +901,18 @@ def _render_review_index(
             in _BLOCKED_SHOWN_TYPES
         ]
         hidden = [obj for obj in blocked if obj not in shown]
-        hidden_ids = " ".join(_esc(obj["object_id"]) for obj in hidden)
         shown_list = (
             f'<ol class="object-index">{"".join(_review_index_item(obj, snapshot_id) for obj in shown)}</ol>'
             if shown
             else ""
         )
-        hidden_html = f'<p class="review-blocked-store-ids">{hidden_ids}</p>' if hidden_ids else ""
+        hidden_html = (
+            '<details class="review-blocked-other">'
+            f'<summary>Overige geblokkeerde passages ({len(hidden)})</summary>'
+            f'<ol class="object-index">{"".join(_review_index_item(obj, snapshot_id) for obj in hidden)}</ol>'
+            '</details>'
+            if hidden else ""
+        )
         blocked_html = f"""
                       <aside class="review-blocked-audit" aria-label="Geblokkeerde kandidaten">
                         <p>Geblokkeerde kandidaten (poort): {len(blocked)}. Niet de gewone beoordelingsplicht.</p>
@@ -1169,14 +1180,24 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
     async def console_errors(_request: Request, exc: ConsoleError) -> HTMLResponse:
         status = 401 if exc.code in {"not_authenticated", "invalid_credentials"} else 403 if "role_required" in exc.code else 400
         message = ERROR_COPY.get(exc.code, "Deze actie is niet toegestaan.")
+        account = _current(_request)
+        filename_error = exc.code == "invalid_store_path" and _request.url.path == "/ingest"
+        hint = f'<p class="field-help">{_esc(FILENAME_HINT)}</p>' if filename_error else ""
+        back = (
+            '<p><a href="/ingest">Terug naar Inleveren</a></p>'
+            if filename_error and account
+            else '<p><a href="/">Naar Mijn werk</a></p>' if account
+            else '<p><a href="/login">Naar aanmelden</a></p>'
+        )
         body = _page(
             f"""
-            {_nav(None)}
+            {_nav(account)}
             <section class="room">
               <h1>Actie niet uitgevoerd</h1>
               <div class="banner err">{_esc(message)}</div>
+              {hint}
               <p class="muted">{_esc(exc.code)}</p>
-              <p><a href="/login">Naar aanmelden</a></p>
+              {back}
             </section>
             {_help()}
             """
@@ -1299,7 +1320,8 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                   <div class="section">
                     <h3>Bron</h3>
                     <label for="file">Bestand (HTML, PDF of boom-freeze)</label>
-                    <input id="file" type="file" name="file">
+                    <input id="file" type="file" name="file" aria-describedby="filename-help">
+                    <p id="filename-help" class="field-help">{_esc(FILENAME_HINT)}</p>
                     <label for="url">Of PDF-URL (exacte bytes worden direct vastgelegd)</label>
                     <input id="url" name="url" placeholder="https://...">
                   </div>

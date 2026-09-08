@@ -724,10 +724,8 @@ def test_publish_remains_g2_blocked(tmp_path: Path) -> None:
         "../escape.html",
         "..\\escape.html",
         "foo/../../etc/passwd",
-        "foo/bar.html",
         "..",
         ".",
-        "/tmp/escape.html",
         "continentie/../escape.html",
     ],
 )

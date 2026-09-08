@@ -862,10 +862,8 @@ def test_fixture_html_still_extracts_when_present() -> None:
         "../escape.html",
         "..\\escape.html",
         "foo/../../etc/passwd",
-        "foo/bar.html",
         "..",
         ".",
-        "/tmp/escape.html",
         "continentie/../escape.html",
     ],
 )

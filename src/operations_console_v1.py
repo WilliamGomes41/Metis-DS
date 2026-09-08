@@ -15,6 +15,7 @@ import re
 import secrets
 import tempfile
 import threading
+import unicodedata
 import uuid
 import zipfile
 from contextlib import contextmanager, suppress
@@ -192,6 +193,17 @@ def safe_path_token(value: str, *, pattern: re.Pattern[str] | None = None, code:
 def safe_store_filename(value: str) -> str:
     """Freeze upload name must be a single basename. ``Path.name`` is not enough (``..``)."""
     return safe_path_token(value, pattern=SAFE_PATH_TOKEN_RE, code="invalid_store_path")
+
+
+def normalize_upload_filename(value: str | None) -> str:
+    """Normalize browser names; keep stored names and path joins strictly validated."""
+    raw = value or ""
+    if ".." in raw:
+        raise ConsoleError("invalid_store_path")
+    basename = raw.replace("\\", "/").rsplit("/", 1)[-1]
+    ascii_name = unicodedata.normalize("NFKD", basename).encode("ascii", "ignore").decode("ascii")
+    normalized = re.sub(r"[^A-Za-z0-9._-]+", "-", ascii_name.strip())
+    return safe_store_filename(normalized)
 
 
 def safe_snapshot_id(snapshot_id: str) -> str:
@@ -1412,10 +1424,7 @@ class OperationsConsole:
             content_type = content_type or fetched_type
         if data is None:
             raise ConsoleError("official_file_or_url_required")
-        filename = filename or "source.bin"
-        if ".." in filename or "/" in filename or "\\" in filename:
-            raise ConsoleError("invalid_store_path")
-        filename = safe_store_filename(filename)
+        filename = normalize_upload_filename(filename)
         if review_path == "boom":
             freeze_errors = boom_freeze_errors(
                 data=data,
