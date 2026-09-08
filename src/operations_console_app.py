@@ -67,6 +67,10 @@ from src.operations_console_v1 import (
     slow_review_duty,
 )
 from src.open_original_v1 import researcher_visible_prose
+from src.proportionate_review_v1 import (
+    ProportionateReviewConsole,
+    render_normal_risk_batch_panel,
+)
 from src.serving_relations_v1 import CLOSED_RELATION_TYPES, proposed_relations
 
 SERVICE_VERSION = CONSOLE_VERSION
@@ -258,6 +262,13 @@ def _page(body: str, *, title: str | None = None) -> str:
 </div>
 </div>
 <script>
+document.querySelectorAll('[data-select-review-batch]').forEach((button) => {{
+  button.addEventListener('click', () => {{
+    button.closest('form').querySelectorAll('[name="object_ids"]').forEach((input) => {{
+      input.checked = true;
+    }});
+  }});
+}});
 document.querySelectorAll('[data-review-form]').forEach((form) => {{
   const decision = form.querySelector('[name="decision"]');
   const eindoordeel = form.querySelectorAll('[name="eindoordeel"]');
@@ -550,7 +561,7 @@ def _coverage_panel(objects: list[dict[str, Any]]) -> str:
     return f"""
       <aside class="review-coverage" aria-label="Dekking per kop">
         <h2>Dekking per kop</h2>
-        <p class="lead">Alleen normatieve en toepassingskritische kennis hoeft een kenniseenheid te worden. Niet iedere zin.</p>
+        <p class="lead">Iedere inhoudelijke passage krijgt een bestemming: kennisobject, context, onderbouwing of gemotiveerde uitsluiting. Ieder bruikbaar kennisobject wordt menselijk beoordeeld.</p>
         <ul>{"".join(items)}</ul>
       </aside>
     """
@@ -1071,6 +1082,7 @@ def _render_review_room(
     counts: dict[str, int] | None = None,
     draft: dict[str, str] | None = None,
     conflict: bool = False,
+    batch_selection: list[str] | None = None,
 ) -> str:
     chosen = document.strip()
     chosen_object_id = object.strip()
@@ -1115,6 +1127,12 @@ def _render_review_room(
             objects_html += _render_review_index(
                 chosen, snapshot_objects, review_path, snapshot_revision
             )
+            if isinstance(console, ProportionateReviewConsole):
+                objects_html += render_normal_risk_batch_panel(
+                    console, chosen,
+                    snapshot=(snapshot_objects, snapshot_revision),
+                    selected_ids=batch_selection or (),
+                )
         else:
             obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
             if obj is None:
