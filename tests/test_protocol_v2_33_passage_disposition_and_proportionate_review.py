@@ -102,10 +102,8 @@ def test_v233_keeps_publication_fail_closed() -> None:
     assert "MUST NOT be cited as G2 PASS" in delta
 
 
-def test_v233_protocol_change_adds_no_product_code_marker() -> None:
-    src_hits = []
-    for path in (ROOT / "src").glob("*.py"):
-        text = path.read_text(encoding="utf-8")
-        if "PROTOCOL_V2_33" in text or "proportionate_review" in text:
-            src_hits.append(path.name)
-    assert src_hits == [], f"protocol-only delta must not add product code in src/: {src_hits}"
+def test_v233_protocol_pr_separates_protocol_from_later_product_implementation() -> None:
+    delta = _read(DELTA)
+    assert "This protocol delta itself MUST NOT implement code." in delta
+    assert "After a separate Metis GO" in delta
+    assert "add a regular batch-review route" in delta

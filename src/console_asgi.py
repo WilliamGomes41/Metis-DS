@@ -15,6 +15,10 @@ from pathlib import Path
 from src.g2_source_store import AzureBlobSourceStore
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
+from src.proportionate_review_v1 import (
+    ProportionateReviewConsole,
+    install_proportionate_review_routes,
+)
 from src.topology_bound_v1 import assert_supported_topology
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,14 +75,16 @@ def build_app() -> object:
         if source_store_kind != "azure":
             raise RuntimeError("unsupported_immutable_source_store")
         immutable_store = AzureBlobSourceStore()
-    console = OperationsConsole(
+    console = ProportionateReviewConsole(
         root=ROOT,
         source_store=_env_path("CONSOLE_SOURCE_STORE", data_root / "sources" / "private"),
         runtime=_env_path("CONSOLE_RUNTIME", data_root / "output" / "runtime" / "operations-console"),
         immutable_source_store=immutable_store,
     )
     bootstrap_accounts(console)
-    return create_console_app(console)
+    app = create_console_app(console)
+    install_proportionate_review_routes(app, console)
+    return app
 
 
 def __getattr__(name: str) -> object:

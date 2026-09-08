@@ -1,8 +1,10 @@
-"""Protocol v2.30 Phase 4 passage register.
+"""Passage register for complete source coverage (Protocol v2.30 + v2.33).
 
-Closed statuses only. MUST NOT silently drop passages. MUST NOT become a
-Phase-1 admission prerequisite. Phase 3 suitability maps onto register
-outcomes. Operators MUST NOT invent serving types.
+Closed statuses only. MUST NOT silently drop passages. Admission decides
+candidate quality, not substantive relevance: a blocked machine candidate
+remains open work until a human gives the passage an explicit disposition.
+Phase 3 suitability maps onto register outcomes. Operators MUST NOT invent
+serving types.
 """
 from __future__ import annotations
 
@@ -117,7 +119,10 @@ def _initial_status(obj: dict[str, Any], *, context_headings: set[str]) -> tuple
     gate = admission.get("gate_result")
     reasons = [str(code) for code in (admission.get("reason_codes") or []) if str(code).strip()]
     if gate == GATE_BLOCKED:
-        return "excluded_with_reason", reasons
+        # v2.33: a machine admission failure is diagnostic evidence, not a
+        # substantive human exclusion. Keep the passage in the coverage
+        # backlog and preserve the reason codes for correction/disposition.
+        return "not_yet_assessed", reasons
     if is_boom_object(obj):
         return "selected_as_candidate", []
     if is_inhoudelijk_candidate(obj) and gate == GATE_ALLOWED:
@@ -135,7 +140,13 @@ def _initial_status(obj: dict[str, Any], *, context_headings: set[str]) -> tuple
 
 
 def apply_passage_register(objects: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Stamp a closed register status on every non-document passage."""
+    """Stamp a closed register status on every non-document passage.
+
+    Existing human review dispositions are authoritative. Extract-generated
+    statuses are recomputed, which safely migrates pre-v2.33 admission-blocked
+    passages back to ``not_yet_assessed`` without reinterpreting a human
+    ``geen_kenniseenheid`` exclusion.
+    """
     for obj in objects:
         if obj.get("object_type") == "document":
             continue
