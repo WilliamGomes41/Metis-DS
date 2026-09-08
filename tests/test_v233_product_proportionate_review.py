@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from src.passage_register_v1 import apply_passage_register, passage_register_of
 from src.proportionate_review_v1 import (
+    NORMAL_RISK_BATCH_MAX,
     ProportionateReviewConsole,
     install_proportionate_review_routes,
     normal_risk_batch_eligible,
@@ -164,21 +165,21 @@ class _BatchHarness(ProportionateReviewConsole):
 def test_one_batch_interaction_delegates_to_individual_object_reviews() -> None:
     console = _BatchHarness([
         _obj("d1", "definition"),
-        _obj("e1", "explanation"),
+        _obj("d2", "definition"),
     ])
     updated = console.batch_review_normal_risk(
         actor_id="reviewer-1",
         snapshot_id="snap-1",
-        object_ids=["d1", "e1"],
+        object_ids=["d1", "d2"],
         expected_revision="rev-1",
     )
-    assert console.opened == ["d1", "e1"]
-    assert [call["object_id"] for call in console.calls] == ["d1", "e1"]
+    assert console.opened == ["d1", "d2"]
+    assert [call["object_id"] for call in console.calls] == ["d1", "d2"]
     assert [call["decision"] for call in console.calls] == ["approve", "approve"]
-    assert [call["confirmed_object_type"] for call in console.calls] == ["definition", "explanation"]
+    assert [call["confirmed_object_type"] for call in console.calls] == ["definition", "definition"]
     assert all(call["suitability"] == "ja" for call in console.calls)
     assert [call["expected_revision"] for call in console.calls] == ["rev-1", "rev-2"]
-    assert {row["object_id"] for row in updated} == {"d1", "e1"}
+    assert {row["object_id"] for row in updated} == {"d1", "d2"}
 
 
 def test_batch_preflights_all_objects_before_writing() -> None:
@@ -199,31 +200,57 @@ def test_batch_preflights_all_objects_before_writing() -> None:
 def test_batch_cannot_cross_sections() -> None:
     console = _BatchHarness([
         _obj("d1", "definition", section=("1 Achtergrond",)),
-        _obj("e1", "explanation", section=("2 Uitwerking",)),
+        _obj("d2", "definition", section=("2 Uitwerking",)),
     ])
     with pytest.raises(ConsoleError, match="normal_risk_batch_mixed_section"):
+        console.batch_review_normal_risk(
+            actor_id="reviewer-1",
+            snapshot_id="snap-1",
+            object_ids=["d1", "d2"],
+        )
+    assert console.calls == []
+
+
+def test_batch_cannot_mix_definition_and_explanation() -> None:
+    console = _BatchHarness([
+        _obj("d1", "definition"),
+        _obj("e1", "explanation"),
+    ])
+    with pytest.raises(ConsoleError, match="normal_risk_batch_mixed_type"):
         console.batch_review_normal_risk(
             actor_id="reviewer-1",
             snapshot_id="snap-1",
             object_ids=["d1", "e1"],
         )
     assert console.calls == []
+    assert console.opened == []
 
 
-def test_rendered_batch_panel_exposes_only_eligible_normal_risk_items() -> None:
-    console = _BatchHarness([
-        _obj("d1", "definition"),
-        _obj("e1", "explanation"),
-        _obj("r1", "recommendation"),
-        _obj("u1", "definition", uncertain=True),
-    ])
+def test_batch_has_hard_maximum_of_twenty_objects() -> None:
+    rows = [_obj(f"d{index}", "definition") for index in range(NORMAL_RISK_BATCH_MAX + 1)]
+    console = _BatchHarness(rows)
+    with pytest.raises(ConsoleError, match="normal_risk_batch_too_large"):
+        console.batch_review_normal_risk(
+            actor_id="reviewer-1",
+            snapshot_id="snap-1",
+            object_ids=[row["object_id"] for row in rows],
+        )
+    assert console.calls == []
+    assert console.opened == []
+
+
+def test_rendered_batch_panel_splits_large_groups_by_type_and_maximum() -> None:
+    rows = [_obj(f"d{index}", "definition") for index in range(NORMAL_RISK_BATCH_MAX + 1)]
+    rows += [_obj("e1", "explanation"), _obj("r1", "recommendation"), _obj("u1", "definition", uncertain=True)]
+    console = _BatchHarness(rows)
     html = render_normal_risk_batch_panel(console, "snap-1")
-    assert 'action="/review/normal-risk/batch-confirm"' in html
-    assert 'value="d1"' in html
-    assert 'value="e1"' in html
+    assert html.count('action="/review/normal-risk/batch-confirm"') == 3
+    assert f"batches van maximaal {NORMAL_RISK_BATCH_MAX}" in html
+    assert f"Definitie ({NORMAL_RISK_BATCH_MAX})" in html
+    assert "Definitie (1)" in html
+    assert "Toelichting (1)" in html
     assert 'value="r1"' not in html
     assert 'value="u1"' not in html
-    assert "Reguliere inhoud beoordelen" in html
 
 
 def test_review_index_middleware_makes_batch_work_reachable() -> None:
