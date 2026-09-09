@@ -1,8 +1,19 @@
+"""Brongebonden herstel zonder automatische inhoudelijke goedkeuring.
+
+# release-control-evidence: opslag concurrent stale
+# release-control-evidence: beschikbaarheid
+# release-control-evidence: toegang
+# release-control-evidence: kwaliteit
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+"""
 from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.admission_gate_v1 import GATE_BLOCKED, admission_of, apply_admission_gate
@@ -10,6 +21,17 @@ from src.context_scan_v1 import propose_expand_merge
 from src.integrity_kernel import stamp_canonical_hashes
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
+
+
+pytestmark = [
+    pytest.mark.release_control_opslag,
+    pytest.mark.release_control_beschikbaarheid,
+    pytest.mark.release_control_toegang,
+    pytest.mark.release_control_kwaliteit,
+    pytest.mark.release_control_scope_belofte,
+    pytest.mark.release_control_slop,
+    pytest.mark.release_control_releasebewijs,
+]
 
 
 FIRST = (
@@ -137,6 +159,26 @@ def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: P
     assert CONTINUATION in page.text
     assert "Passage aanvullen met brontekst" in page.text
     assert "voegt alleen de letterlijk aangetroffen vervolgregel toe" in page.text
+
+    stale_revision = console.objects_revision(snapshot_id)
+    rows = console._load_objects(snapshot_id)
+    continuation = next(row for row in rows if row["object_id"].endswith("-continuation"))
+    continuation["structure"]["sequence"] += 1
+    stamp_canonical_hashes(continuation)
+    console._save_objects(snapshot_id, rows)
+    stale = client.post(
+        "/review/context/accept",
+        data={
+            "snapshot_id": snapshot_id,
+            "object_id": object_id,
+            "snapshot_revision": stale_revision,
+        },
+        follow_redirects=False,
+    )
+    assert stale.status_code == 400
+    assert "snapshot_object_write_conflict" in stale.text
+    unchanged = next(row for row in console.snapshot_objects(snapshot_id) if row["object_id"] == object_id)
+    assert unchanged["object_version"] == target["object_version"]
 
     response = client.post(
         "/review/context/accept",
