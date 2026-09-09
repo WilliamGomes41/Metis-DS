@@ -876,14 +876,18 @@ def _review_index_item(
     return f'<li class="review-row">{link}{status_html}</li>'
 
 
-def _review_section_groups(objects: list[dict[str, Any]], snapshot_id: str) -> str:
+def _review_section_groups(objects: list[dict[str, Any]], snapshot_id: str, *, priority_ids: set[str] | None = None) -> str:
     """Presentation only: preserve exact source paths and existing object links."""
-    groups: dict[str, list[dict[str, Any]]] = {}
+    priority_ids = priority_ids or set()
+    groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
     for obj in objects:
-        groups.setdefault(found_under_path(obj), []).append(obj)
+        raw_path = admission_of(obj).get("section_path") or (obj.get("structure") or {}).get("section_path") or []
+        key = tuple(str(part).strip() for part in raw_path if str(part).strip())
+        groups.setdefault(key, []).append(obj)
     panels = []
-    for path, rows in groups.items():
-        title = path.rsplit(" › ", 1)[-1] if path else "Brononderdeel nog te controleren"
+    for key, rows in groups.items():
+        path = " › ".join(key)
+        title = key[-1] if key else "Brononderdeel nog te controleren"
         panels.append(
             '<details class="review-section" open>'
             f'<summary>{_esc(title)} <span class="review-section-count">{len(rows)} passages</span></summary>'
@@ -892,7 +896,7 @@ def _review_section_groups(objects: list[dict[str, Any]], snapshot_id: str) -> s
             'Controleer de plaatsing bij het beoordelen.</p>'
             f'<p>{_esc(path or "Geen bronpad beschikbaar")}</p></details>'
             '<ol class="object-index">'
-            + "".join(_review_index_item(obj, snapshot_id, reason=_individual_review_reason(obj)) for obj in rows)
+            + "".join(_review_index_item(obj, snapshot_id, reason=_individual_review_reason(obj, priority=str(obj.get("object_id")) in priority_ids)) for obj in rows)
             + '</ol></details>'
         )
     return "".join(panels)
@@ -953,7 +957,7 @@ def _render_review_index(
                     <section class="review-lane-slow">
                       <h2>Afzonderlijk beoordelen — Inhoud ({len(individual)}) <span class="info-tip" tabindex="0" aria-label="Deze passages kunnen niet veilig in één groep worden bevestigd.">ⓘ<span class="info-tip-text">Deze passages kunnen niet veilig in één groep worden bevestigd. Open iedere passage en vergelijk haar met de oorspronkelijke bron.</span></span></h2>
                       <p class="lead">Begin hier. Deze passages vragen om jouw eigen inhoudelijke oordeel.</p>
-                      {_review_section_groups(individual, snapshot_id)}
+                      {_review_section_groups(individual, snapshot_id, priority_ids={str(obj.get("object_id")) for obj in duty})}
                     </section>
                     {normal_content_html}
                     {blocked_html}
