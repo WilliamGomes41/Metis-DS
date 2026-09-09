@@ -11,7 +11,7 @@ import re
 from typing import Any, Iterable
 
 from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES, review_path_for_klasse
-from src.object_taxonomy_v1 import locator_of
+from src.object_taxonomy_v1 import has_terminal_sentence_boundary, locator_of
 
 
 GATE_ALLOWED = "allowed"
@@ -526,6 +526,7 @@ def admit_candidate(
         codes.append("incomplete_sentence")
         if _word_count(text) < 3:
             codes.append("no_independent_claim")
+    codes += ["incomplete_sentence"] * int(not has_terminal_sentence_boundary(text))
     codes += ["incomplete_sentence"] * int(_has_sentence_continuation(row))
     if not str(row.get("source_locator_start") or "").strip() or not str(row.get("source_locator_end") or "").strip():
         codes.append("locator_invalid")
