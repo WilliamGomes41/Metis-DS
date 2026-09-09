@@ -16,11 +16,19 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.admission_gate_v1 import GATE_BLOCKED, admission_of, apply_admission_gate
+from src.admission_gate_v1 import (
+    GATE_ALLOWED,
+    GATE_BLOCKED,
+    admission_of,
+    admit_candidate,
+    apply_admission_gate,
+    build_candidate_record,
+)
 from src.context_scan_v1 import propose_expand_merge
 from src.integrity_kernel import stamp_canonical_hashes
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
+from src.object_taxonomy_v1 import has_terminal_sentence_boundary, is_truncated_sentence
 
 
 pytestmark = [
@@ -127,6 +135,48 @@ def test_proposal_uses_only_literal_adjacent_sentence() -> None:
     )["performed"] is False
 
 
+def test_open_sentence_is_always_blocked_when_no_safe_continuation_exists() -> None:
+    open_text = "De werkgroep adviseert de gevalideerde schaal te gebruiken"
+    fields = dict(
+        candidate_id="cand-open-sentence",
+        document_id="doc-complete-sentence",
+        document_version="1.0",
+        source_hash="a" * 64,
+        section_path=["Aanbevelingen"],
+        source_locator_start="lines:1-1",
+        source_locator_end="lines:1-1",
+        source_text_exact=open_text,
+        candidate_text=open_text,
+        subject_span="De werkgroep",
+        predicate_span="adviseert",
+        proposed_type="recommendation",
+        type_evidence_spans=["adviseert"],
+        context_before="",
+        context_after="Deze tekst begint aantoonbaar als een nieuwe zin.",
+        actor_of_scope="De werkgroep",
+        recommended_action="te gebruiken",
+        action_object_or_goal="de gevalideerde schaal",
+        recommendation_evidence_span=open_text,
+    )
+    blocked = admit_candidate(build_candidate_record(**fields))
+    assert blocked["gate_result"] == GATE_BLOCKED
+    assert "incomplete_sentence" in blocked["reason_codes"]
+    assert blocked["expand_merge"]["performed"] is False
+
+    complete_text = f"{open_text}."
+    fields.update(source_text_exact=complete_text, candidate_text=complete_text)
+    allowed = admit_candidate(build_candidate_record(**fields))
+    assert allowed["gate_result"] == GATE_ALLOWED
+    assert "incomplete_sentence" not in allowed["reason_codes"]
+
+
+def test_sentence_boundary_rule_covers_the_reported_break() -> None:
+    assert has_terminal_sentence_boundary(FIRST) is False
+    assert is_truncated_sentence(FIRST) is True
+    assert has_terminal_sentence_boundary(MERGED) is True
+    assert is_truncated_sentence(MERGED) is False
+
+
 def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: Path) -> None:
     console, researcher, reviewer = _console(tmp_path)
     source = f"<html><body><h1>Eenzaamheid</h1><p>{FIRST}</p><p>{CONTINUATION}</p></body></html>"
@@ -145,6 +195,10 @@ def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: P
         named_reviewers=[reviewer["account_id"]],
     )
     snapshot_id = receipt["snapshot_id"]
+    initial = console.snapshot_objects(snapshot_id)
+    initial_texts = [str((row.get("content") or {}).get("clean_text") or "") for row in initial]
+    assert any("Jong Gierveld 6-item versie voor wijkverpleegkundigen" in text for text in initial_texts)
+    assert not any(text.endswith("Jong Gierveld 6-item") for text in initial_texts)
     object_id = _split_existing_object(console, snapshot_id)
     target = next(row for row in console.snapshot_objects(snapshot_id) if row["object_id"] == object_id)
     assert admission_of(target)["gate_result"] == GATE_BLOCKED

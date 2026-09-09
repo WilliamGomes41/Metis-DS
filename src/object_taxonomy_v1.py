@@ -83,11 +83,6 @@ _TIMESTAMP_RE = re.compile(
     r"(?:gemaakt op\s+)?\d{1,2}-\d{1,2}-\d{4}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?",
     re.I,
 )
-_TRAILING_HANGER_RE = re.compile(
-    r"(?:van|te|de|het|een|en|of|zijn|haar|hun|dit|deze|die|tot|voor|met|op|aan|"
-    r"bij|naar|om|als|dan|dat|specifiek|specifieke)$",
-    re.I,
-)
 # Evidence starters (Protocol v2.18): Eventueel / Bijvoorbeeld / Zoals — not a closed list.
 _TRAILING_CLAUSE_STARTER_RE = re.compile(
     r"^(?:"
@@ -144,6 +139,12 @@ def is_lone_trailing_word(text: str) -> bool:
     return len(words) == 1
 
 
+def has_terminal_sentence_boundary(text: str) -> bool:
+    """True when prose ends as a complete sentence, including a closing quote."""
+    blob = re.sub(r"\s+", " ", text or "").strip()
+    return bool(re.search(r"[.!?](?:[\"'”’»\)\]])?$", blob))
+
+
 def is_truncated_sentence(text: str) -> bool:
     blob = re.sub(r"\s+", " ", text or "").strip()
     if not blob or is_strength_stamp(blob) or looks_like_structural_heading(blob):
@@ -154,10 +155,7 @@ def is_truncated_sentence(text: str) -> bool:
         return True
     if blob[0].islower():
         return True
-    if re.search(r"[.!?]$", blob):
-        return False
-    last = blob.split()[-1].rstrip(",;:")
-    return bool(_TRAILING_HANGER_RE.fullmatch(last))
+    return not has_terminal_sentence_boundary(blob)
 
 
 def is_continuation_fragment(text: str) -> bool:
