@@ -54,3 +54,13 @@ def test_root_protocol_and_roadmap_point_to_v234() -> None:
     assert "aangevuld met Protocol v2.34.0 plus Protocol v2.33.0" in protocol
     assert "PROTOCOL_V2_34_G2_PUBLICATION_ACTIVATION_DELTA.md" in protocol
     assert "Dit SUPERSEDEERT alleen oudere onvoorwaardelijke `publish()`-BLOCKED statusregels" in roadmap
+
+
+def test_roadmap_records_the_verified_live_release() -> None:
+    roadmap = (ROOT / "ROADMAP.md").read_text(encoding="utf-8")
+    assert "### Live releasebewijs (2026-09-09)" in roadmap
+    assert "654e643cde5ad47d1a6f3e1fc624625de3af4c48" in roadmap
+    assert "Productie-App Service en immutable Blob-opslag operationeel" in roadmap
+    assert "Eén snapshot gepubliceerd na actuele Blob-readback/SHA-256" in roadmap
+    assert "release-manifest en projectie aangemaakt" in roadmap
+    assert "geen brede G8-goedkeuring" in roadmap
