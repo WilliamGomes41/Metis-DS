@@ -458,7 +458,7 @@ def test_four_thousand_identical_unclassified_titles_is_a_fail(tmp_path: Path) -
     # Protocol v2.19: leftover unclassified is not equal one-by-one duty cards.
     assert passage_titles == []
     visible = html
-    assert "Passages met extra context nodig (12)" in re.sub(r"\s+", " ", visible)
+    assert "Technisch herstel nodig (12)" in re.sub(r"\s+", " ", visible)
     assert "unclassified" not in visible.casefold()
 
 

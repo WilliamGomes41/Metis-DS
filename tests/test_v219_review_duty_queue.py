@@ -393,7 +393,7 @@ def test_researchers_are_not_required_to_open_thousands_of_inhoud_cards(
     leftover_snips = [_text_of(obj)[:40] for obj in leftover]
     for snip in leftover_snips:
         assert not any(snip in title for title in duty_titles)
-    assert "Passages met extra context nodig" in visible
+    assert "Technisch herstel nodig" in visible
     assert "unclassified" not in visible.casefold()
     assert "Beoordeel elk kennisobject afzonderlijk." not in html
     for obj in leftover:
@@ -551,7 +551,7 @@ def test_console_inhoud_lists_only_slow_duty_cards(tmp_path: Path) -> None:
     assert "Begin hier" in visible
     assert "eigen inhoudelijke oordeel" in visible
     assert leftover
-    assert "Passages met extra context nodig" in visible
+    assert "Technisch herstel nodig" in visible
 
 
 # ---------------------------------------------------------------------------
