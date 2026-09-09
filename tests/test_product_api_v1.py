@@ -6,6 +6,8 @@ from src.product_api_v1 import ProductPaths, create_product_app
 from src.product_security_v1 import SlidingWindowRateLimiter, TenantPolicy, TenantRegistry, hash_api_key
 from src.usage_ledger_v1 import UsageLedger
 
+# release-control-evidence: toegang
+
 ROOT = Path(__file__).resolve().parents[1]
 KEY = "fixture-client-secret-key"
 DOC = "vvn-osteoporose-fractuurpreventie-2024"
@@ -80,6 +82,7 @@ def test_fixture_retrieve_contract_and_source(tmp_path):
     assert first["source"]["title"]
     assert "version" in first["source"]
     assert "hybrid_rrf" in first["scores"]
+    assert "chunk_readiness" in first
 
 
 def test_no_answer_abstains(tmp_path):
