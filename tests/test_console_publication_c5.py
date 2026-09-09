@@ -1,3 +1,16 @@
+"""C5 publication activation and route regression evidence.
+
+Publication reloads its state under the shared store lock before cutover, so
+concurrent changes cannot bypass the gate and stale preflight state is never
+used.  The rollback test proves that a failed transaction leaves neither a
+partial projection nor a release manifest behind.
+
+# release-control-evidence: opslag concurrent stale
+# release-control-evidence: toegang
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+"""
 from __future__ import annotations
 
 import json
@@ -15,6 +28,14 @@ from src.operations_console_v1 import OperationsConsole
 ROOT = Path(__file__).resolve().parents[1]
 HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
 TEST_PASSWORD = __name__
+
+pytestmark = [
+    pytest.mark.release_control_opslag,
+    pytest.mark.release_control_toegang,
+    pytest.mark.release_control_scope_belofte,
+    pytest.mark.release_control_slop,
+    pytest.mark.release_control_releasebewijs,
+]
 
 
 class MemoryImmutableStore:
