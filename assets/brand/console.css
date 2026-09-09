@@ -649,8 +649,84 @@ textarea:focus-visible {
   text-underline-offset: 0.18em;
 }
 
-.review-control-link {
-  margin: 20px 0 0;
+.review-control-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px 28px;
+  margin-top: 20px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #f8fbfc;
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.review-control-card:hover {
+  border-color: var(--paars);
+  box-shadow: 0 6px 18px rgba(93, 50, 151, 0.1);
+}
+
+.review-control-card:focus-visible {
+  outline: 3px solid var(--paars);
+  outline-offset: 3px;
+}
+
+.review-control-card-body,
+.review-control-card-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.review-control-card-label {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.review-control-card-title {
+  color: var(--paars);
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.review-control-card-copy {
+  margin-top: 6px;
+  line-height: 1.45;
+}
+
+.review-control-card-meta {
+  gap: 12px;
+  min-width: 15rem;
+}
+
+.review-control-card-status {
+  font-weight: 700;
+}
+
+.review-control-card-alert {
+  border-color: #e0a25a;
+  background: #fff8ee;
+}
+
+.review-control-card-alert .review-control-card-status {
+  color: #914500;
+}
+
+.review-control-card-action {
+  padding: 9px 13px;
+  border: 2px solid var(--paars);
+  border-radius: 8px;
+  background: var(--wit);
+  color: var(--paars);
+  font-weight: 700;
 }
 
 .review-task-workspace {
@@ -1032,6 +1108,14 @@ mark.broncontext-marked {
 
   .review-task-card {
     min-height: 0;
+  }
+
+  .review-control-card {
+    grid-template-columns: 1fr;
+  }
+
+  .review-control-card-meta {
+    min-width: 0;
   }
 
   .review-card-two-column {

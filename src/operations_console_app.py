@@ -972,6 +972,7 @@ def _review_task_dashboard(
     individual: list[dict[str, Any]],
     normal_passages: int,
     normal_batches: int,
+    blocked_count: int,
 ) -> str:
     heading_pending = sum(not _review_is_final(obj) for obj in koppen)
     heading_done = len(koppen) - heading_pending
@@ -1028,6 +1029,18 @@ def _review_task_dashboard(
         )
         for task, title, description, status, _pending in tasks
     )
+    control_state = "alert" if blocked_count else "clear"
+    if blocked_count == 1:
+        control_status = "1 passage vereist technisch herstel"
+    elif blocked_count:
+        control_status = f"{blocked_count} passages vereisen technisch herstel"
+    else:
+        control_status = "Geen technische blokkades"
+    control_copy = (
+        "Metis kon deze passages niet veilig verwerken. Controleer het herstel en bekijk daarnaast de dekking per hoofdstuk."
+        if blocked_count
+        else "Bekijk de dekking per hoofdstuk en controleer of alle brononderdelen zijn verwerkt."
+    )
     return f'''
       <section class="review-task-dashboard" aria-labelledby="review-task-title">
         {next_step}
@@ -1036,7 +1049,17 @@ def _review_task_dashboard(
           <p>Kies een taak om het bijbehorende werk af te ronden.</p>
         </div>
         <div class="review-task-grid">{cards}</div>
-        <p class="review-control-link"><a href="/review?document={_esc(snapshot_id)}&amp;task=control">Bekijk dekking en technische controle</a></p>
+        <a class="review-control-card review-control-card-{control_state}" href="/review?document={_esc(snapshot_id)}&amp;task=control">
+          <span class="review-control-card-body">
+            <span class="review-control-card-label">Controle en uitzonderingen</span>
+            <span class="review-control-card-title">Dekking en technische controle</span>
+            <span class="review-control-card-copy">{_esc(control_copy)}</span>
+          </span>
+          <span class="review-control-card-meta">
+            <span class="review-control-card-status">{_esc(control_status)}</span>
+            <span class="review-control-card-action">Open technische controle <span aria-hidden="true">→</span></span>
+          </span>
+        </a>
       </section>
     '''
 
@@ -1119,6 +1142,7 @@ def _render_review_index(
         individual=individual,
         normal_passages=normal_passages,
         normal_batches=normal_batches,
+        blocked_count=len(blocked),
     )
 
 
