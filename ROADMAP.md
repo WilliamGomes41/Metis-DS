@@ -8,11 +8,11 @@ Deze repository is uitsluitend V&VN Data Services. Status, fasen of UI van ander
 
 ## Geldende norm (live)
 
-`PROTOCOL.md` is wet. De geldende baseline is Protocol v2.32.0 (plus de eerdere C3/C5-delta's die nog van kracht zijn, waaronder Protocol v2.6.0 en Protocol v2.7.0). Deze sectie is de leesbare live stuurlaag. Historische «volgende implementatie»-stapels sturen geen code meer; zie de index hieronder en de Eigenaarslock-secties voor de locktekst. Audit-oordeel op `019978b`: fundament aanwezig; geen brede betrouwbaarheids- of extractkwaliteitsclaim; begeleid intern gebruik.
+`PROTOCOL.md` is wet. De geldende baseline is Protocol v2.34.0 plus v2.33.0 en de eerdere delta's die nog van kracht zijn, waaronder Protocol v2.6.0 en Protocol v2.7.0. Deze sectie is de leesbare live stuurlaag. Historische «volgende implementatie»-stapels sturen geen code meer; zie de index hieronder en de Eigenaarslock-secties voor de locktekst. Audit-oordeel op `019978b`: fundament aanwezig; geen brede betrouwbaarheids- of extractkwaliteitsclaim; begeleid intern gebruik.
 
 Wat nu de code stuurt:
 
-- Fail-closed bronintegriteit. `publish()` blijft G2-BLOCKED — intentioneel, geen bug. MUST NOT G2/`publish()` openen. HANDOFF.md MUST NOT opnieuw worden aangemaakt.
+- Fail-closed bronintegriteit en voorwaardelijke publicatie (v2.34): G2 PASS bestaat alleen per snapshot na actuele Blob-readback en gelijke SHA-256, geldige objectgebonden review/four-eyes, schema/projectiecontrole, publisherrol en expliciete bevestiging. Iedere fout blijft BLOCKED en een mislukte cutover rolt terug. Dit SUPERSEDEERT alleen oudere onvoorwaardelijke `publish()`-BLOCKED statusregels.
 - Harde toelatingspoort (v2.30): letterlijke lokaliseerbare bronvelden; zachte scores MUST NOT de poort openen; geblokkeerde kandidaten blijven buiten de gewone reviewwachtrij; dJG-regressie blijft.
 - Review: één deur Beoordeel; Koppen/Inhoud; **Gevonden onder** / **Dit klopt** / **Andere kop kiezen**; exacte kop-bind (v2.31); Sterkte alleen op stored/confirmed type (v2.28); bronpassage met echte context (**Open volledige richtlijn**).
 - Unpublished delete alleen vanaf **Documenten** + type-to-confirm (v2.27 SUPERSEDEERT documentkaart / Review-chooser; v2.32 SUPERSEDEERT alleen de UI-naam Documentenhiërarchie → **Documenten**).

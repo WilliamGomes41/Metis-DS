@@ -5,6 +5,7 @@ All notable technical changes to V&VN Data Services are recorded here.
 ## [Unreleased]
 
 ### Added
+- Protocol v2.34 C5 activation and implementation: publication is conditionally available only after verified Azure Blob readback/SHA-256, exact current object-review bindings, independence/four-eyes, schema and projection checks, publisher role and explicit confirmation. Successful cutover writes a release manifest, atomically replaces the derived projection, persists published release identity and appends `release_published`; failures restore projection/envelope/ledger and remove incomplete manifests. The Publiceren room now shows blocked, ready or published state and clears the badge after success. Evidence: `tests/test_console_publication_c5.py`.
 - Duty-first logged-in home now uses the Metis workboard: nav **Mijn werk**, then **Inleveren → Review → Publiceren → Documenten**; four large clickable tiles in the same order. Review has a waiting-count badge and **Nu doen** only when work waits. Post-auth remains `/`, not `/ingest`; `/tree` **Documenten** remains unchanged (v2.32). This supersedes #127 sketch B and the earlier three-small-card duty-first arrangement. NOT Protocol rewrite; NOT PROTOCOL_V2_*; NOT G2/`publish()`; NOT Azure ZIP. Evidence: `tests/test_console_duty_first_home.py`. `publish()` remains G2-BLOCKED.
 
 ### Changed

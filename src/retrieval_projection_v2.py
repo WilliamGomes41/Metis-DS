@@ -153,7 +153,12 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
     records: list[dict[str, Any]] = []
     for env in valid:
         obj = env["knowledge_object"]
-        served_type = published_object_type(obj)
+        # Canonical console objects have their own unrelated ``metadata``
+        # container. The human confirmation is a top-level canonical field;
+        # pass that field explicitly so generic metadata cannot shadow it.
+        served_type = published_object_type(
+            {"confirmed_object_type": obj.get("confirmed_object_type")}
+        )
         if served_type in HISTORICAL_NON_SERVING_TYPES or served_type in NON_SEARCHABLE_TYPES:
             continue
         if served_type not in SEARCHABLE_TYPES:

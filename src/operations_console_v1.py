@@ -82,6 +82,8 @@ from src.publish_authorization_v1 import invalidate_for_object, still_matches, t
 from src.review_ledger import append_event
 from src.review_workflow_v3 import apply_reviews
 from src.revision_workflow import bump_patch, create_revision
+from src.retrieval_projection_v2 import build_projection
+from src.published_projection_v1 import atomic_replace_projection
 from src.semantic_transform_generic_v1 import transform as transform_generic
 from src.serving_relations_v1 import (
     binding_relations,
@@ -99,6 +101,8 @@ PUBLISHED_ENVELOPE_STATES = frozenset({"published", "superseded", "withdrawn"})
 UNPUBLISHED_DELETE_EVENT = "unpublished_snapshot_deleted"
 CLASS_CHANGE_HISTORY_DIRNAME = "class_change_history"
 PUBLISHED_PROJECTION_FILENAME = "published_projection.jsonl"
+PUBLICATION_PROTOCOL_VERSION = "2.34.0"
+RELEASE_MANIFEST_DIRNAME = "release_manifests"
 ALLOWED_DELETE_NEXT = frozenset({"/ingest", "/review", "/tree"})
 ALLOWED_ROLES = frozenset({"researcher", "reviewer", "publisher"})
 ALLOWED_CLASSES = CLOSED_KLASSEN
@@ -749,6 +753,12 @@ class OperationsConsole:
             payload = getattr(self, "_prepared_bindings", None)
             _atomic_write(self._bindings_path, self._bindings if payload is None else payload)
 
+    def _reload_store_locked(self) -> None:
+        """Refresh shared publication inputs while the store lock is held."""
+        self._envelopes = self._load_map(self._envelopes_path)
+        loaded = self._load_map(self._bindings_path)
+        self._bindings = {key: list(value) for key, value in loaded.items()}
+
     def _objects_path(self, snapshot_id: str) -> Path:
         if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
             raise ConsoleError("unknown_snapshot")
@@ -1130,7 +1140,11 @@ class OperationsConsole:
                     review += 1
             if envelope.get("clinical_rereview_required") and roles & {"researcher", "reviewer", "publisher"}:
                 tree += 1
-            if "publisher" in roles and envelope.get("state") == CAPTURED:
+            if (
+                "publisher" in roles
+                and envelope.get("state") == CAPTURED
+                and not self.snapshot_is_published(envelope["snapshot_id"])
+            ):
                 publish += 1
         if "reviewer" in roles:
             review = len(
@@ -2654,7 +2668,30 @@ class OperationsConsole:
     def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         self._require_role(actor_id, "publisher")
         envelope = self._envelope(snapshot_id)
-        bindings = [row for row in self.object_review_bindings(snapshot_id) if row.get("valid") and row.get("decision") == "approve"]
+        if self.snapshot_is_published(snapshot_id):
+            return {
+                "snapshot_id": snapshot_id,
+                "publish_allowed": False,
+                "state": "published",
+                "blockers": ["already_published"],
+                "g2": "PASS",
+                "publishable_object_ids": [],
+                "publishable_object_count": 0,
+            }
+        objects = self.snapshot_objects(snapshot_id)
+        bindings = [
+            row
+            for row in self.object_review_bindings(snapshot_id)
+            if row.get("valid") and row.get("decision") == "approve"
+        ]
+        approved_ids = {str(row.get("object_id") or "") for row in bindings}
+        publishable = [
+            obj
+            for obj in objects
+            if obj.get("object_type") != "document"
+            and str(obj.get("object_id") or "") in approved_ids
+            and (obj.get("governance") or {}).get("validation_status") == "approved"
+        ]
         others = [
             row
             for row in bindings
@@ -2669,7 +2706,7 @@ class OperationsConsole:
         four_eyes_needed = False
         four_eyes_ok = True
         contracts = []
-        for obj in self.snapshot_objects(snapshot_id):
+        for obj in publishable:
             if obj.get("object_type") == "document":
                 continue
             contract = publish_authorization_contract(
@@ -2680,15 +2717,42 @@ class OperationsConsole:
                 envelope_review_passes=envelope.get("review_passes"),
             )
             contracts.append(contract)
+            blockers.extend(
+                code
+                for code in contract["blockers"]
+                if code != "blocked_pending_immutable_locator"
+            )
             if requires_four_eyes(obj):
                 four_eyes_needed = True
                 if not contract["four_eyes_satisfied"]:
                     four_eyes_ok = False
         if four_eyes_needed and not four_eyes_ok:
             blockers.append("four_eyes_required")
-        if not is_g2_locator(envelope.get("immutable_storage_locator")):
+        locator = envelope.get("immutable_storage_locator")
+        if not is_g2_locator(locator):
             blockers.append("blocked_pending_immutable_locator")
+        elif self.immutable_source_store is None:
+            blockers.append("g2_source_store_unavailable")
+        else:
+            try:
+                source_bytes = self.immutable_source_store.load_verified(str(locator))
+                if sha256_bytes(source_bytes) != str(envelope.get("sha256") or ""):
+                    blockers.append("g2_source_checksum_mismatch")
+            except (G2SourceStoreError, ValueError):
+                blockers.append("g2_source_verification_failed")
+        if any(schema_errors(obj, self.schema_path) for obj in publishable):
+            blockers.append("prepublication_schema_invalid")
         unique = list(dict.fromkeys(blockers))
+        g2_pass = not any(
+            code
+            in {
+                "blocked_pending_immutable_locator",
+                "g2_source_store_unavailable",
+                "g2_source_checksum_mismatch",
+                "g2_source_verification_failed",
+            }
+            for code in unique
+        )
         return {
             "snapshot_id": snapshot_id,
             "independence_satisfied": independence,
@@ -2696,23 +2760,161 @@ class OperationsConsole:
             "four_eyes_required": four_eyes_needed,
             "four_eyes_satisfied": four_eyes_ok if four_eyes_needed else True,
             "envelope_review_passes_authorizes": False,
-            "publish_allowed": False,
+            "publish_allowed": not unique and bool(publishable),
             "state": envelope["state"],
             "blockers": unique,
-            "g2": "BLOCKED",
+            "g2": "PASS" if g2_pass else "BLOCKED",
             "object_contracts": contracts,
+            "publishable_object_ids": [obj["object_id"] for obj in publishable],
+            "publishable_object_count": len(publishable),
         }
 
     def publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
+        with self._store_write_lock():
+            self._reload_store_locked()
+            return self._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id)
+
+    def _publish_locked(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         considered = self.consider_publish(actor_id=actor_id, snapshot_id=snapshot_id)
         envelope = self._envelope(snapshot_id)
-        return {
-            "status": "BLOCKED",
-            "state": envelope["state"],
+        if not considered.get("publish_allowed"):
+            return {
+                "status": "BLOCKED",
+                "state": envelope["state"],
+                "snapshot_id": snapshot_id,
+                "blockers": considered.get("blockers") or ["object_tuple_required"],
+                "g2": considered.get("g2", "BLOCKED"),
+                "cutover": False,
+            }
+
+        account = self._require_role(actor_id, "publisher")
+        publish_ids = set(considered["publishable_object_ids"])
+        objects = [
+            obj
+            for obj in self.snapshot_objects(snapshot_id)
+            if obj.get("object_id") in publish_ids
+        ]
+        published_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        release_id = f"release-{uuid.uuid4().hex}"
+        release_version = f"{envelope['version']}-{release_id[-8:]}"
+        publication = {
+            "release_id": release_id,
+            "release_version": release_version,
+            "published_at": published_at,
+        }
+        projected, blocked = build_projection(
+            [{"knowledge_object": deepcopy(obj), "publication": publication} for obj in objects]
+        )
+        if blocked:
+            return {
+                "status": "BLOCKED",
+                "state": envelope["state"],
+                "snapshot_id": snapshot_id,
+                "blockers": ["prepublication_projection_failed"],
+                "projection_errors": blocked,
+                "g2": "PASS",
+                "cutover": False,
+            }
+        for row in projected:
+            row.setdefault("metadata", {})["snapshot_id"] = snapshot_id
+
+        projection_path = self._published_projection_path()
+        previous_projection = projection_path.read_bytes() if projection_path.exists() else None
+        existing_projection = []
+        if previous_projection:
+            existing_projection = [
+                json.loads(line)
+                for line in previous_projection.decode("utf-8").splitlines()
+                if line.strip()
+            ]
+        published_object_ids = {
+            str((row.get("metadata") or {}).get("object_id") or "") for row in projected
+        }
+        next_projection = [
+            row
+            for row in existing_projection
+            if str((row.get("metadata") or {}).get("object_id") or "")
+            not in published_object_ids
+        ] + projected
+        manifest = {
+            "release_id": release_id,
+            "release_version": release_version,
+            "release_owner": account["username"],
+            "published_at": published_at,
+            "protocol_version": PUBLICATION_PROTOCOL_VERSION,
             "snapshot_id": snapshot_id,
-            "blockers": considered["blockers"] or ["blocked_pending_immutable_locator"],
-            "g2": "BLOCKED",
-            "cutover": False,
+            "source_sha256": envelope["sha256"],
+            "immutable_storage_locator": envelope["immutable_storage_locator"],
+            "objects": [
+                {
+                    "object_id": obj["object_id"],
+                    "object_version": obj["object_version"],
+                    "canonical_object_hash": (obj.get("provenance") or {}).get("canonical_object_hash"),
+                    "content_hash": (obj.get("provenance") or {}).get("content_hash"),
+                    "confirmed_object_type": obj.get("confirmed_object_type"),
+                }
+                for obj in objects
+            ],
+        }
+        manifest_path = self.runtime / RELEASE_MANIFEST_DIRNAME / f"{release_id}.json"
+        ledger_size = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
+        previous_envelopes = self._envelopes_path.read_bytes() if self._envelopes_path.exists() else None
+        try:
+            _atomic_write(manifest_path, manifest)
+            atomic_replace_projection(projection_path, next_projection)
+            published_envelope = deepcopy(envelope)
+            published_envelope.update(
+                {
+                    "state": "published",
+                    "published": True,
+                    "release_id": release_id,
+                    "release_version": release_version,
+                    "published_at": published_at,
+                    "published_by": account["username"],
+                }
+            )
+            self._envelopes[snapshot_id] = published_envelope
+            _atomic_write(self._envelopes_path, self._envelopes)
+            append_event(
+                self._ledger_path,
+                event_type="release_published",
+                object_id=snapshot_id,
+                object_version=str(envelope["version"]),
+                actor=account["username"],
+                details={
+                    "release_id": release_id,
+                    "release_version": release_version,
+                    "published_object_ids": sorted(publish_ids),
+                    "source_sha256": envelope["sha256"],
+                },
+            )
+        except Exception:
+            if previous_projection is None:
+                with suppress(OSError):
+                    projection_path.unlink()
+            else:
+                _atomic_replace_bytes(projection_path, previous_projection)
+            if previous_envelopes is None:
+                with suppress(OSError):
+                    self._envelopes_path.unlink()
+            else:
+                _atomic_replace_bytes(self._envelopes_path, previous_envelopes)
+            self._envelopes = self._load_map(self._envelopes_path)
+            with suppress(OSError):
+                manifest_path.unlink()
+            if self._ledger_path.exists() and self._ledger_path.stat().st_size > ledger_size:
+                with self._ledger_path.open("r+b") as handle:
+                    handle.truncate(ledger_size)
+            raise
+        return {
+            "status": "PASS",
+            "state": "published",
+            "snapshot_id": snapshot_id,
+            "release_id": release_id,
+            "release_version": release_version,
+            "published_items": len(objects),
+            "g2": "PASS",
+            "cutover": True,
         }
 
     def live_snapshot(self, *, family: str, class_: str) -> dict[str, Any] | None:
