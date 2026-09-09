@@ -1,4 +1,8 @@
 """Task-oriented review navigation without new governance state."""
+# release-control-evidence: scope/belofte
+# release-control-evidence: toegang
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 from src.operations_console_app import _render_review_index
 
 
@@ -61,7 +65,25 @@ def test_control_information_is_secondary_to_review_tasks():
     dashboard = _render_review_index("snap-1", objects, "richtlijn")
     control = _render_review_index("snap-1", objects, "richtlijn", task="control")
 
-    assert "Bekijk dekking en technische controle" in dashboard
+    assert "Controle en uitzonderingen" in dashboard
+    assert "Dekking en technische controle" in dashboard
+    assert "Geen technische blokkades" in dashboard
+    assert "Open technische controle" in dashboard
+    assert "review-control-card-clear" in dashboard
+    assert 'href="/review?document=snap-1&amp;task=control"' in dashboard
     assert "Controleoverzicht per kop" not in dashboard
     assert "Dekking en technische controle" in control
     assert "Controleoverzicht per kop" in control
+
+
+def test_control_card_highlights_blocked_passages_as_work():
+    blocked = _obj("b1", "definition")
+    blocked["metadata"] = {
+        "admission": {"gate_result": "blocked", "section_path": ["Inhoud"]}
+    }
+
+    dashboard = _render_review_index("snap-1", [blocked], "richtlijn")
+
+    assert "1 passage vereist technisch herstel" in dashboard
+    assert "Metis kon deze passages niet veilig verwerken" in dashboard
+    assert "review-control-card-alert" in dashboard
