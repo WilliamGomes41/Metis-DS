@@ -818,6 +818,36 @@ mark.broncontext-marked {
 .source-continuation-proposal p { margin: 8px 0; }
 
 .review-step,
+.review-section, .normal-risk-batch {
+  background: var(--wit);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+  margin: 16px 0;
+  min-width: 0;
+}
+.review-section > summary, .review-blocked-audit > summary {
+  cursor: pointer;
+  color: var(--paars);
+  font-weight: 700;
+  padding: 8px 0;
+}
+.review-section-count { font-size: 0.85em; font-weight: 400; margin-left: 12px; }
+.review-source-path { margin: 10px 0; overflow-wrap: anywhere; }
+.review-source-path > summary { cursor: pointer; color: var(--paars); }
+.normal-risk-batch fieldset { border: 0; padding: 0; min-width: 0; }
+.normal-risk-batch legend { font-weight: 700; color: var(--paars); overflow-wrap: anywhere; }
+.normal-risk-row { padding: 14px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.normal-risk-row a { display: inline-block; margin: 8px 16px 0 0; }
+.review-section .review-row { flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.review-section .review-row-title { flex: 0 1 auto; white-space: normal; overflow-wrap: anywhere; }
+.review-section .review-row-status { background: var(--water-light); border-radius: 6px; padding: 3px 8px; }
+.btn-primary:not(:disabled), .btn-secondary:not(:disabled) { cursor: pointer; }
+.btn-primary:not(:disabled):hover, .btn-secondary:not(:disabled):hover { box-shadow: 0 0 0 2px var(--paars); }
+.review-section summary:focus-visible, .review-blocked-audit summary:focus-visible,
+.review-source-path summary:focus-visible { outline: 3px solid var(--paars); outline-offset: 3px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
 .relations {
   border: 1px solid var(--line);
   border-radius: 12px;
