@@ -147,7 +147,7 @@ ERROR_COPY = {
     "unsupported_locator": "Deze locator kan niet worden geopend.",
     "invalid_review_decision": "Kies een eindoordeel: goedkeuren, goedkeuren na correctie, afwijzen of later beoordelen.",
     "suitability_required": "Kies of de passage geschikt is.",
-    "review_comment_required": "Geef een toelichting bij een revisieverzoek of afwijzing.",
+    "review_comment_required": "Geef een toelichting bij goedkeuren na correctie of afwijzen.",
     "source_date_required": "Vul de publicatiedatum uit het colofon in.",
     "invalid_source_date": "Gebruik een geldige kalenderdatum.",
     "source_version_required": "Vul de versie van de freeze in.",
@@ -329,7 +329,7 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
       else if (value === 'later_beoordelen') decision.value = 'later';
     }}
     const mapped = decision ? decision.value : value;
-    const needsComment = mapped === 'reject' || value === 'afwijzen';
+    const needsComment = mapped === 'reject' || mapped === 'revise' || value === 'afwijzen' || value === 'goedkeuren_na_correctie';
     const needsCorrection = mapped === 'revise' || value === 'goedkeuren_na_correctie';
     const needsType = mapped === 'approve' || value === 'goedkeuren';
     if (commentField) commentField.hidden = !needsComment;
@@ -901,17 +901,17 @@ def _render_review_index(
     blocked_html = ""
     if blocked:
         blocked_html = f"""
-          <section class="review-blocked-audit" aria-label="Passages met extra context nodig">
-            <h2>Passages met extra context nodig ({len(blocked)}) <span class="info-tip" tabindex="0" aria-label="Metis kan nog niet betrouwbaar bepalen of deze passage zelfstandig bruikbaar is.">ⓘ<span class="info-tip-text">Metis kan nog niet betrouwbaar bepalen of deze passage zelfstandig bruikbaar is. Bekijk de bron en kies wat ermee moet gebeuren.</span></span></h2>
-            <p class="lead">Open deze passages één voor één. De bron helpt je bepalen of de passage context nodig heeft, moet worden samengevoegd of niet als zelfstandig kennisstuk gebruikt wordt.</p>
-            <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, reason="Meer context of een inhoudelijke keuze is nodig voordat deze passage kan worden gebruikt.") for obj in blocked)}</ol>
+          <section class="review-blocked-audit" aria-label="Technisch herstel nodig">
+            <h2>Technisch herstel nodig ({len(blocked)}) <span class="info-tip" tabindex="0" aria-label="Deze passages zijn nog niet klaar voor inhoudelijke review.">ⓘ<span class="info-tip-text">Metis heeft een technisch probleem gevonden, bijvoorbeeld een afgebroken zin, ontbrekende context of bronverwijzing. Waar dat veilig kan, stelt Metis letterlijk bronherstel voor.</span></span></h2>
+            <p class="lead">Dit is geen inhoudelijke reviewtaak. Laat Metis eerst veilige broncontext aanvullen. Als automatisch herstel niet verantwoord is, blijft de passage geblokkeerd voor technisch herstel.</p>
+            <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, reason="Technische controle heeft deze passage geblokkeerd; inhoudelijk goedkeuren is pas mogelijk na herstel.") for obj in blocked)}</ol>
           </section>
                     """
     copy = _review_lane_copy(review_path, koppen)
     return f"""
                     <section class="review-workflow-intro" aria-label="Uitleg reviewroute">
                       <h2>Beoordeel dit document stap voor stap</h2>
-                      <p>Je hoeft de technische indeling niet te kennen. Begin met passages die een eigen oordeel vragen. Bevestig daarna eenvoudige uitleg per groep.</p>
+                      <p>Metis controleert eerst de techniek. Jij beoordeelt alleen passages die compleet, brongebonden en klaar voor een inhoudelijk oordeel zijn.</p>
                     </section>
                     <section class="review-lane-slow">
                       <h2>Afzonderlijk beoordelen — Inhoud ({len(individual)}) <span class="info-tip" tabindex="0" aria-label="Deze passages kunnen niet veilig in één groep worden bevestigd.">ⓘ<span class="info-tip-text">Deze passages kunnen niet veilig in één groep worden bevestigd. Open iedere passage en vergelijk haar met de oorspronkelijke bron.</span></span></h2>
@@ -994,8 +994,8 @@ def _render_review_card(
                 <p><a class="btn-secondary" href="/review?document={_esc(snapshot_id)}">Terug naar werkvoorraad</a></p>
                 <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
                   <div class="review-cockpit-copy">
-                    <p>Beoordeel deze passage aan de hand van de oorspronkelijke bron.</p>
-                    <p>Metis doet een voorstel; jij bepaalt wat met de passage gebeurt.</p>
+                    <p>Metis heeft de technische controles uitgevoerd. Beoordeel deze passage aan de hand van de oorspronkelijke bron.</p>
+                    <p>Metis doet een voorstel; jij bepaalt wat met de passage gebeurt. De voorgestelde kop en het informatietype zijn al ingevuld; pas ze alleen aan als ze inhoudelijk niet kloppen.</p>
                   </div>
                   <form class="review-decision-form" method="post" action="/review" data-review-form>
                     <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
@@ -1044,14 +1044,14 @@ def _render_review_card(
                     <section class="review-step" data-review-step="f">
                       <h4>Wat is je besluit?</h4>
                       <fieldset id="decision-{_esc(obj["object_id"])}">
-                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren"{disabled}{_checked(draft.get("eindoordeel", ""), "goedkeuren")}> Goedkeuren</label>
-                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren_na_correctie"{_checked(draft.get("eindoordeel", ""), "goedkeuren_na_correctie")}> Goedkeuren na correctie</label>
-                      <label class="check"><input type="radio" name="eindoordeel" value="afwijzen"{_checked(draft.get("eindoordeel", ""), "afwijzen")}> Afwijzen</label>
-                      <label class="check"><input type="radio" name="eindoordeel" value="later_beoordelen"{_checked(draft.get("eindoordeel", ""), "later_beoordelen")}> Later beoordelen</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren"{disabled}{_checked(draft.get("eindoordeel", ""), "goedkeuren")}> Goedkeuren — inhoud en indeling kloppen</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren_na_correctie"{_checked(draft.get("eindoordeel", ""), "goedkeuren_na_correctie")}> Goedkeuren na correctie — beschrijf wat moet veranderen</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="afwijzen"{_checked(draft.get("eindoordeel", ""), "afwijzen")}> Afwijzen — niet gebruiken als kennisobject</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="later_beoordelen"{_checked(draft.get("eindoordeel", ""), "later_beoordelen")}> Later beoordelen — nog geen besluit</label>
                       </fieldset>
                       <p class="field-help" data-decision-hint>Kies een eindoordeel.</p>
                       <div class="decision-comment" data-comment-field hidden>
-                        <label for="comment-{_esc(obj["object_id"])}">Toelichting</label>
+                        <label for="comment-{_esc(obj["object_id"])}">Toelichting (verplicht)</label>
                         <textarea id="comment-{_esc(obj["object_id"])}" name="comment">{html.escape(draft.get("comment", ""), quote=True)}</textarea>
                       </div>
                       <div class="decision-correction" data-correction-field hidden>
@@ -1703,10 +1703,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         elif mapped not in {"approve", "revise", "reject"}:
             raise ConsoleError("invalid_review_decision")
         if mapped in {"revise", "reject"} and not comment.strip():
-            if eindoordeel == "goedkeuren_na_correctie":
-                comment = "Goedkeuren na correctie"
-            else:
-                raise ConsoleError("review_comment_required")
+            raise ConsoleError("review_comment_required")
         if (suitability or "").strip() not in SUITABILITY_VALUES:
             raise ConsoleError("suitability_required")
         if type_action == "dit_klopt" and not confirmed_object_type.strip():

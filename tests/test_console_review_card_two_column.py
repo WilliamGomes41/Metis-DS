@@ -1,5 +1,13 @@
 """Review cockpit card (Protocol v2.30 Phase 3 / Block B).
 
+# release-control-evidence: opslag concurrent stale
+# release-control-evidence: beschikbaarheid
+# release-control-evidence: toegang
+# release-control-evidence: kwaliteit
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+
 A–F stack: selected passage, real broncontext, suitability, documentpositie,
 type proposal, eindoordeel. One save. Type/approve stay blocked when the
 passage cannot open. Relatie bevestigen is not on the primary surface.
@@ -14,7 +22,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.open_original_v1 import researcher_visible_prose
-from src.operations_console_app import _esc, create_console_app
+from src.operations_console_app import _esc, _render_review_index, create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 
 
@@ -247,6 +255,47 @@ def test_review_post_requires_explicit_decision_and_comment_when_needed(tmp_path
     )
     assert no_comment.status_code == 400
     assert "Geef een toelichting" in no_comment.text
+
+    no_revision_comment = client.post(
+        "/review",
+        data={
+            **base,
+            "eindoordeel": "goedkeuren_na_correctie",
+            "comment": "",
+            "suitability": "ja",
+        },
+    )
+    assert no_revision_comment.status_code == 400
+    assert "Geef een toelichting" in no_revision_comment.text
+    with pytest.raises(ConsoleError, match="review_comment_required"):
+        console.review_object(
+            actor_id=accounts["reviewer"]["account_id"],
+            snapshot_id=receipt["snapshot_id"],
+            object_id=target["object_id"],
+            decision="revise",
+            comment="",
+        )
+
+
+def test_blocked_passages_are_presented_as_technical_work_not_content_review() -> None:
+    blocked = {
+        "object_id": "obj-incomplete",
+        "object_type": "unclassified",
+        "content": {"clean_text": "Deze bronzin is afgebroken"},
+        "governance": {"validation_status": "needs_review"},
+        "metadata": {
+            "admission": {
+                "gate_result": "blocked",
+                "reason_codes": ["incomplete_sentence"],
+            }
+        },
+    }
+
+    html = _render_review_index("snap-1", [blocked], "richtlijn")
+
+    assert "Technisch herstel nodig (1)" in html
+    assert "Dit is geen inhoudelijke reviewtaak" in html
+    assert "inhoudelijk goedkeuren is pas mogelijk na herstel" in html
 
 
 def test_review_card_css_two_column_and_stacks_on_narrow() -> None:

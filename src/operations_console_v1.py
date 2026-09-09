@@ -2206,6 +2206,8 @@ class OperationsConsole:
         mapped = map_eindoordeel(eindoordeel or "", decision)
         if mapped:
             decision = mapped
+        if decision in {"revise", "reject"} and not str(comment or "").strip():
+            raise ConsoleError("review_comment_required")
         current = self.snapshot_objects(snapshot_id, for_update=True)
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
