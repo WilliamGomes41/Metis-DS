@@ -174,8 +174,9 @@ def render_normal_risk_batch_panel(
                 f'<form method="post" action="/review/normal-risk/batch-confirm" class="normal-risk-batch">'
                 f'<input type="hidden" name="snapshot_id" value="{safe_snapshot}">'
                 f'<input type="hidden" name="snapshot_revision" value="{revision}">'
-                f'<fieldset><legend>{label} — {type_label} ({len(batch)})</legend>'
-                '<button type="button" data-select-review-batch>Alles in deze groep selecteren</button>'
+                f'<fieldset><legend>{escape(section[-1])} — {type_label} ({len(batch)})</legend>'
+                f'<details class="review-source-path"><summary>Volledig bronpad</summary><p>{label}</p></details>'
+                '<button class="btn-secondary" type="button" data-select-review-batch>Alles in deze groep selecteren</button>'
             )
             for obj in batch:
                 object_id = escape(str(obj.get("object_id") or ""), quote=True)
@@ -192,7 +193,7 @@ def render_normal_risk_batch_panel(
                     '</div>'
                 )
             panels.append(
-                '</fieldset><button type="submit">Bevestig geselecteerde passages</button>'
+                '</fieldset><button class="btn-primary" type="submit">Bevestig geselecteerde passages</button>'
                 f'<span class="sr-only">Batch {batch_index}</span></form>'
             )
     if include_individual:
