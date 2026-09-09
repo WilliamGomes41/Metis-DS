@@ -92,6 +92,7 @@ STATUS_LABELS = {
     "needs_review": "wacht op beoordeling",
     "approved": "goedgekeurd",
     "rejected": "afgewezen",
+    "published": "gepubliceerd",
 }
 OBJECT_TYPE_LABELS = {
     "unclassified": "Nog niet geclassificeerd",
@@ -109,8 +110,14 @@ OBJECT_TYPE_LABELS = {
 BLOCKER_LABELS = {
     "second_named_reviewer_required": "Nog een andere benoemde reviewer moet goedkeuren.",
     "blocked_pending_immutable_locator": "Duurzame opslag ontbreekt; publicatie blijft geblokkeerd.",
-    "object_tuple_required": "Publicatie vereist review gebonden aan object, versie, hash, bevestigd type, reviewer en besluit.",
+    "object_tuple_required": "Publicatie is geblokkeerd totdat review is gebonden aan object, versie, hash, bevestigd type, reviewer en besluit.",
     "four_eyes_required": "High-risk objecten vereisen four-eyes: een tweede benoemde reviewer op hetzelfde objecttupel.",
+    "already_published": "Dit document is al gepubliceerd.",
+    "g2_source_store_unavailable": "De beveiligde bronopslag is niet bereikbaar; publicatie blijft geblokkeerd.",
+    "g2_source_checksum_mismatch": "De opgeslagen bron wijkt af van de gecontroleerde bronhash; publicatie blijft geblokkeerd.",
+    "g2_source_verification_failed": "De opgeslagen bron kon niet betrouwbaar worden geverifieerd; publicatie blijft geblokkeerd.",
+    "prepublication_schema_invalid": "Een goedgekeurd kennisobject voldoet niet aan het publicatieschema.",
+    "prepublication_projection_failed": "De publicatieprojectie kon niet veilig worden opgebouwd.",
 }
 ERROR_COPY = {
     "invalid_store_path": "De bestandsnaam kan niet veilig worden verwerkt. Hernoem het bestand, bijvoorbeeld naar eenzaamheid.pdf, en kies het opnieuw.",
@@ -161,6 +168,14 @@ ERROR_COPY = {
     "delete_confirmation_required": "Bevestig eerst dat je dit unpublished document wilt verwijderen.",
     "delete_title_confirmation_required": "Typ de exacte documenttitel om te bevestigen.",
     "published_projection_must_not_be_deleted": "Een gepubliceerde projectie wordt niet verwijderd.",
+    "publish_confirmation_required": "Bevestig eerst dat je de gereviewde kennisobjecten wilt publiceren.",
+    "already_published": "Dit document is al gepubliceerd.",
+    "g2_source_store_unavailable": "De beveiligde bronopslag is niet bereikbaar; publicatie blijft geblokkeerd.",
+    "g2_source_checksum_mismatch": "De opgeslagen bron wijkt af van de gecontroleerde bronhash; publicatie blijft geblokkeerd.",
+    "g2_source_verification_failed": "De opgeslagen bron kon niet betrouwbaar worden geverifieerd; publicatie blijft geblokkeerd.",
+    "prepublication_schema_invalid": "Een goedgekeurd kennisobject voldoet niet aan het publicatieschema.",
+    "prepublication_projection_failed": "De publicatieprojectie kon niet veilig worden opgebouwd.",
+    "object_tuple_required": "Publicatie is geblokkeerd totdat de objectgebonden review compleet is.",
     "unpublished_delete_role_required": "Verwijderen van unpublished documenten vereist researcher of reviewer.",
     "hide_selected_objects_forbidden": "Geselecteerde objecten in een freeze die in Review blijft, worden niet verborgen.",
     "cross_model_direct_change_blocked": "Directe klassewijziging tussen niet-boom en beslisboom is geblokkeerd. Re-extract van dezelfde freeze is vereist.",
@@ -1870,25 +1885,61 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                 considered = {"blockers": [exc.code], "publish_allowed": False}
             blockers = considered.get("blockers") or []
             blocker_text = " ".join(BLOCKER_LABELS.get(code, code) for code in blockers) or "Geen extra blockers in deze kamer."
+            if considered.get("state") == "published" or state.snapshot_is_published(envelope["snapshot_id"]):
+                action = '<div class="banner ok">Gepubliceerd. Dit document staat in de publicatieprojectie.</div>'
+            elif considered.get("publish_allowed"):
+                count = int(considered.get("publishable_object_count") or 0)
+                noun = "kennisobject" if count == 1 else "kennisobjecten"
+                reviewed = "gereviewd" if count == 1 else "gereviewde"
+                action = f'''
+                  <div class="banner ok">Klaar voor publicatie: {count} {reviewed} {noun}. De bron en controles zijn geverifieerd.</div>
+                  <form method="post" action="/publish" class="stack">
+                    <input type="hidden" name="snapshot_id" value="{_esc(envelope['snapshot_id'])}">
+                    <label class="check"><input type="checkbox" name="publish_confirmed" value="yes" required>
+                      Ik bevestig publicatie van deze gereviewde kennisobjecten.</label>
+                    <button type="submit">Publiceer document</button>
+                  </form>
+                '''
+            else:
+                action = f'<div class="banner warn">{_esc(blocker_text)}</div>'
             rows.append(
                 f"""
                 <article class="doc-card">
                   {_document_card_heading({**envelope, "status": envelope["state"]})}
-                  <div class="banner warn">{_esc(blocker_text)}</div>
+                  {action}
                 </article>
                 """
             )
+        success = ""
+        if request.query_params.get("published") == "yes":
+            success = '<div class="banner ok">Publicatie voltooid en zichtbaar gemaakt in de publicatieprojectie.</div>'
         return _page(
             f"""
             {_nav(account, "publish", _counts(account))}
             <section class="room">
               <h1>Publiceren</h1>
-              <p class="lead">Apart besluit over een gereviewd document. Zonder duurzame opslag blijft publicatie geblokkeerd.</p>
+              <p class="lead">Neem hier het afzonderlijke publicatiebesluit. Alleen gereviewde kennisobjecten met een geverifieerde bron worden gepubliceerd; anders blijft publicatie geblokkeerd.</p>
+              {success}
               <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen documenten.</p>'}</div>
             </section>
             {_help()}
             """
         )
+
+    @app.post("/publish")
+    def publish_post(
+        request: Request,
+        snapshot_id: str = Form(...),
+        publish_confirmed: str = Form(""),
+    ) -> RedirectResponse:
+        account = _require(request)
+        if publish_confirmed != "yes":
+            raise ConsoleError("publish_confirmation_required")
+        result = state.publish(actor_id=account["account_id"], snapshot_id=snapshot_id)
+        if result.get("status") != "PASS":
+            blockers = result.get("blockers") or ["object_tuple_required"]
+            raise ConsoleError(str(blockers[0]))
+        return RedirectResponse("/publish?published=yes", status_code=303)
 
     @app.get("/accounts", response_class=HTMLResponse)
     def accounts_get(request: Request) -> str:
