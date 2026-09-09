@@ -13,6 +13,8 @@ Safety properties:
 - unresolved uncertainty is rejected;
 - retrieval records preserve object/version/content hashes and release metadata;
 - clinically relevant parent/condition context is copied into the derived view;
+- chunk readiness follows meaning boundaries and reviewed relations, never a
+  minimum word or token count;
 - projection hashes are deterministic and can be regenerated at any time.
 """
 from __future__ import annotations
@@ -52,6 +54,17 @@ NON_SEARCHABLE_TYPES = {
     "table",
     "background",
     "patient_information",
+}
+
+CONTEXT_LABELS = {
+    "applies_if": "Voorwaarde",
+    "except_if": "Uitzondering",
+    "defines": "Definitie",
+    "explains": "Toelichting",
+    "supported_by": "Onderbouwing",
+    "supersedes": "Vervangt",
+    "parent": "Bovenliggende context",
+    "child": "Onderdeel",
 }
 
 
@@ -132,6 +145,34 @@ def _context_summary(obj: dict[str, Any]) -> str:
     return (obj.get("content") or {}).get("clean_text", "").strip()
 
 
+def _source_locator(obj: dict[str, Any]) -> dict[str, Any] | None:
+    return next(
+        (
+            frag.get("source_locator")
+            for frag in (obj.get("provenance") or {}).get("source_fragments") or []
+            if (frag.get("source_locator") or {}).get("locator_value")
+        ),
+        None,
+    )
+
+
+def _context_roles(obj: dict[str, Any]) -> list[tuple[str, str]]:
+    """Return deterministic semantic context links as (object_id, role).
+
+    An explicit, human-confirmed relation takes precedence over the structural
+    parent role when both point to the same object.
+    """
+    roles: dict[str, str] = {}
+    parent_id = str(obj.get("parent_object_id") or "").strip()
+    if parent_id:
+        roles[parent_id] = "parent"
+    for relation in binding_relations(obj):
+        target = str(relation.get("target_object_id") or "").strip()
+        if target:
+            roles[target] = relation["relation_type"]
+    return list(roles.items())
+
+
 def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Return (retrieval_records, blocked_records)."""
     blocked: list[dict[str, Any]] = []
@@ -168,19 +209,45 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
         structure = obj.get("structure") or {}
         source = obj.get("source") or {}
 
-        context_ids: list[str] = []
-        if obj.get("parent_object_id") and obj["parent_object_id"] in object_index:
-            context_ids.append(obj["parent_object_id"])
+        source_locator = _source_locator(obj)
+        chunk_errors: list[str] = []
+        if not str(content.get("clean_text") or "").strip():
+            chunk_errors.append("semantic_content_missing")
+        if not (source_locator or source.get("source_page") is not None or source.get("source_url")):
+            chunk_errors.append("source_anchor_missing")
+        if chunk_errors:
+            blocked.append({
+                "object_id": obj.get("object_id"),
+                "object_version": obj.get("object_version"),
+                "errors": chunk_errors,
+            })
+            continue
+
         bound = binding_relations(obj)
+        context_roles = _context_roles(obj)
+        missing_context_ids = sorted(oid for oid, _ in context_roles if oid not in object_index)
+        if missing_context_ids:
+            blocked.append({
+                "object_id": obj.get("object_id"),
+                "object_version": obj.get("object_version"),
+                "errors": [f"context_target_not_published:{oid}" for oid in missing_context_ids],
+            })
+            continue
+
+        context_ids = [oid for oid, _ in context_roles]
         applies_ids = [oid for oid in applies_if_targets(obj) if oid in object_index]
         except_ids = [oid for oid in except_if_targets(obj) if oid in object_index]
-        for rel in bound:
-            target = rel.get("target_object_id")
-            if target in object_index and target not in context_ids:
-                context_ids.append(target)
-
-        context_objects = [object_index[i] for i in context_ids]
-        context_texts = [_context_summary(c) for c in context_objects if _context_summary(c)]
+        context_entries = [
+            {
+                "object_id": oid,
+                "relation_type": role,
+                "object_type": published_object_type(
+                    {"confirmed_object_type": object_index[oid].get("confirmed_object_type")}
+                ),
+                "text": _context_summary(object_index[oid]),
+            }
+            for oid, role in context_roles
+        ]
 
         text_parts: list[str] = []
         if source.get("title"):
@@ -192,13 +259,22 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             text_parts.append(f"Kop: {structure['heading']}")
         if content.get("context_text"):
             text_parts.append(f"Context: {content['context_text']}")
-        if context_texts:
-            text_parts.append("Gekoppelde context: " + " | ".join(context_texts))
+        for entry in context_entries:
+            if entry["text"]:
+                label = CONTEXT_LABELS.get(entry["relation_type"], "Gekoppelde context")
+                text_parts.append(f"{label}: {entry['text']}")
         if content.get("clean_text"):
             text_parts.append(content["clean_text"].strip())
         text_parts.extend(_logic_text(obj.get("logic")))
         retrieval_text = "\n".join(p for p in text_parts if p).strip()
 
+        chunk_readiness = {
+            "status": "ready",
+            "basis": "semantic_not_length",
+            "anchor_object_id": obj["object_id"],
+            "context_object_ids": context_ids,
+            "source_anchored": True,
+        }
         metadata = {
             "object_id": obj["object_id"],
             "object_version": obj["object_version"],
@@ -217,20 +293,15 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             "care_setting": content.get("care_setting", []),
             "parent_object_id": obj.get("parent_object_id"),
             "context_object_ids": context_ids,
+            "context_relations": context_entries,
             "applies_if_object_ids": applies_ids,
             "except_if_object_ids": except_ids,
             "confirmed_relations": bound,
             "risk_level": (obj.get("risk") or {}).get("risk_level"),
             "confirmed_object_type": served_type,
             "proposed_object_type": obj.get("proposed_object_type"),
-            "source_locator": next(
-                (
-                    frag.get("source_locator")
-                    for frag in (obj.get("provenance") or {}).get("source_fragments") or []
-                    if (frag.get("source_locator") or {}).get("locator_value")
-                ),
-                None,
-            ),
+            "source_locator": source_locator,
+            "chunk_readiness": chunk_readiness,
         }
         # Preserve structured clinical logic separately from free-text retrieval text.
         # This is a derived read-only projection of the canonical object and allows
@@ -264,6 +335,10 @@ def main() -> int:
         "status": "PASS" if not blocked else "BLOCKED",
         "input_published_envelopes": len(envelopes),
         "retrieval_records": len(records),
+        "chunk_ready_records": sum(
+            1 for row in records if (row.get("metadata") or {}).get("chunk_readiness", {}).get("status") == "ready"
+        ),
+        "chunk_readiness_basis": "semantic_not_length",
         "blocked_records": len(blocked),
         "blocked": blocked,
         "embedding_status": "disabled",

@@ -291,6 +291,7 @@ class ProductState:
                 },
                 "content_hash": md.get("content_hash"),
                 "projection_hash": record.get("projection_hash"),
+                "chunk_readiness": md.get("chunk_readiness"),
                 "advice_weight": bool(item.get("advice_weight")),
                 "labels": item.get("labels") or (["V", "VN"] if raw.get("answerability") == "supported" else []),
             })
@@ -360,6 +361,7 @@ class ProductState:
             "release": {"release_id": md.get("release_id"), "release_version": md.get("release_version"), "published_at": md.get("published_at")},
             "content_hash": md.get("content_hash"),
             "projection_hash": record.get("projection_hash"),
+            "chunk_readiness": md.get("chunk_readiness"),
         }
 
     def documents(self, tenant: TenantPolicy) -> list[dict[str, Any]]:
