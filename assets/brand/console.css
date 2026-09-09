@@ -806,6 +806,17 @@ mark.broncontext-marked {
   padding: 2px 0 2px 14px;
 }
 
+.source-continuation-proposal {
+  background: var(--water-soft, #eef9fa);
+  border: 1px solid var(--water);
+  border-radius: 10px;
+  margin: 12px 0 18px;
+  padding: 14px;
+}
+
+.source-continuation-proposal h4 { color: var(--paars); margin: 0 0 10px; }
+.source-continuation-proposal p { margin: 8px 0; }
+
 .review-step,
 .relations {
   border: 1px solid var(--line);

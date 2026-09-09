@@ -68,7 +68,7 @@ from src.four_eyes_v1 import (
     requires_four_eyes,
 )
 from src.g2_source_store import G2SourceStoreError, ImmutableSourceStore, is_g2_locator
-from src.integrity_kernel import compute_canonical_object_hash, sha256_bytes, stamp_canonical_hashes
+from src.integrity_kernel import compute_canonical_object_hash, schema_errors, sha256_bytes, stamp_canonical_hashes
 from src.klasse_wijzigen_v1 import (
     DOCUMENT_CLASS_CHANGED_EVENT,
     is_cross_model_class_change,
@@ -77,7 +77,7 @@ from src.klasse_wijzigen_v1 import (
 from src.object_taxonomy_v1 import (
     is_closed_recommendation_strength,
 )
-from src.open_original_v1 import OpenOriginalError, open_source_passage
+from src.open_original_v1 import OpenOriginalError, open_source_passage, researcher_visible_prose
 from src.publish_authorization_v1 import invalidate_for_object, still_matches, tuple_record
 from src.review_ledger import append_event
 from src.review_workflow_v3 import apply_reviews
@@ -2509,6 +2509,7 @@ class OperationsConsole:
         snapshot_id: str,
         object_id: str,
         patch: dict[str, Any],
+        additional_source_fragments: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         account = self._account(actor_id)
         if "researcher" not in account["roles"] and "reviewer" not in account["roles"]:
@@ -2524,6 +2525,20 @@ class OperationsConsole:
             schema_path=self.schema_path,
             ledger=self._ledger_path,
         )
+        if additional_source_fragments:
+            provenance = revised.setdefault("provenance", {})
+            refs = list(provenance.get("source_fragments") or [])
+            known = {str(ref.get("raw_object_id") or "") for ref in refs}
+            for ref in additional_source_fragments:
+                raw_id = str(ref.get("raw_object_id") or "")
+                if raw_id and raw_id not in known:
+                    refs.append(deepcopy(ref))
+                    known.add(raw_id)
+            provenance["source_fragments"] = refs
+            stamp_canonical_hashes(revised)
+            errors = schema_errors(revised, self.schema_path)
+            if errors:
+                raise ConsoleError("revision_schema_invalid", " | ".join(errors))
         if revised.get("object_type") not in {"document", "heading"}:
             revised["object_type"] = "unclassified"
         revised.pop("confirmed_object_type", None)
@@ -2557,6 +2572,78 @@ class OperationsConsole:
             bindings=new_bindings,
         )
         return deepcopy(revised)
+
+    def accept_source_continuation(
+        self,
+        *,
+        actor_id: str,
+        snapshot_id: str,
+        object_id: str,
+        expected_revision: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a reviewable revision from one literal adjacent continuation."""
+        reviewer = self._require_role(actor_id, "reviewer")
+        envelope = self._envelope(snapshot_id)
+        if actor_id not in envelope["named_reviewers"]:
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        current = self.snapshot_objects(snapshot_id, for_update=True)
+        index = next((i for i, row in enumerate(current) if row.get("object_id") == object_id), -1)
+        if index < 0:
+            raise ConsoleError("unknown_object")
+        target = current[index]
+        proposal = admission_of(target).get("expand_merge") or {}
+        parts = list(proposal.get("parts") or [])
+        if (
+            proposal.get("kind") != "sentence_continuation"
+            or not proposal.get("source_bound")
+            or len(parts) != 2
+        ):
+            raise ConsoleError("source_continuation_not_available")
+        neighbor = None
+        for row in current[index + 1 :]:
+            if row.get("object_type") == "document" or row.get("object_type") == "heading" or row.get("proposed_object_type") == "heading":
+                continue
+            neighbor = row
+            break
+        neighbor_text = re.sub(r"\s+", " ", str((neighbor or {}).get("content", {}).get("clean_text") or "")).strip()
+        if neighbor is None or not neighbor_text.startswith(parts[1]):
+            raise ConsoleError("source_continuation_changed")
+        merged_text = re.sub(r"\s+", " ", str(proposal.get("merged_text") or "")).strip()
+        target_text = re.sub(r"\s+", " ", str((target.get("content") or {}).get("clean_text") or "")).strip()
+        if parts[0] != target_text or merged_text != f"{parts[0]} {parts[1]}":
+            raise ConsoleError("source_continuation_changed")
+        target_source = researcher_visible_prose(
+            str(self.open_source_passage(snapshot_id=snapshot_id, object_id=object_id).get("passage") or "")
+        )
+        neighbor_source = researcher_visible_prose(
+            str(self.open_source_passage(snapshot_id=snapshot_id, object_id=str(neighbor["object_id"])).get("passage") or "")
+        )
+        if parts[0] not in target_source or parts[1] not in neighbor_source:
+            raise ConsoleError("source_continuation_not_literal")
+
+        self.review_object(
+            actor_id=actor_id,
+            snapshot_id=snapshot_id,
+            object_id=object_id,
+            decision="revise",
+            comment="Afgebroken zin aangevuld met direct aansluitende brontekst.",
+            suitability="samenvoegen",
+            eindoordeel="goedkeuren_na_correctie",
+            expected_revision=expected_revision,
+        )
+        return self.correct_object(
+            actor_id=reviewer["account_id"],
+            snapshot_id=snapshot_id,
+            object_id=object_id,
+            patch={
+                "reason": "Afgebroken zin aangevuld met direct aansluitende brontekst.",
+                "operations": [
+                    {"op": "set", "path": "content.clean_text", "value": merged_text},
+                    {"op": "set", "path": "content.raw_text", "value": merged_text},
+                ],
+            },
+            additional_source_fragments=list((neighbor.get("provenance") or {}).get("source_fragments") or []),
+        )
 
     def silently_edit_object(self, snapshot_id: str, object_id: str, _patch: dict[str, Any]) -> None:
         self._envelope(snapshot_id)

@@ -111,6 +111,13 @@ def _window_text(parts: list[str]) -> str:
     return " ".join(part for part in parts if part)
 
 
+def _leading_complete_sentence(text: str) -> str:
+    """Return only the literal first complete sentence from an adjacent block."""
+    blob = _clean(text)
+    match = re.match(r"^(.+?[.!?])(?:\s|$)", blob)
+    return match.group(1).strip() if match else ""
+
+
 def propose_expand_merge(
     *,
     candidate_paragraph: str,
@@ -120,6 +127,22 @@ def propose_expand_merge(
     candidate = _clean(candidate_paragraph)
     previous = _clean(previous_paragraph)
     nxt = _clean(next_paragraph)
+    continuation = _leading_complete_sentence(nxt)
+    if (
+        candidate
+        and continuation
+        and not re.search(r"[.!?][\"')\]]?$", candidate)
+        and continuation[0].islower()
+    ):
+        merged = f"{candidate} {continuation}".strip()
+        return {
+            "performed": True,
+            "merged_text": merged,
+            "parts": [candidate, continuation],
+            "kind": "sentence_continuation",
+            "source_bound": True,
+            "direction": "next",
+        }
     if candidate and nxt and _ADVICE_CUE_RE.search(candidate) and _EXCEPTION_CUE_RE.search(nxt):
         merged = f"{candidate} {nxt}".strip()
         return {

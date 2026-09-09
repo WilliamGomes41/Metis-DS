@@ -953,7 +953,20 @@ def _render_review_card(
         object_text_html = f'<div class="object-text"><p>{_esc(obj_text)}</p></div>'
     expand_merge = admission_of(obj).get("expand_merge") or {}
     merged_text = str(expand_merge.get("merged_text") or "").strip()
-    if expand_merge.get("performed") and merged_text:
+    if expand_merge.get("kind") == "sentence_continuation" and merged_text:
+        parts = list(expand_merge.get("parts") or [])
+        missing = str(parts[1] if len(parts) > 1 else "").strip()
+        explanation = "De bron heeft deze zin over twee aansluitende tekstblokken verdeeld. Metis voegt alleen de letterlijk aangetroffen vervolgregel toe."
+        object_text_html += f'''
+          <aside class="source-continuation-proposal" aria-label="Voorstel om afgebroken zin te herstellen">
+            <h4>Metis heeft waarschijnlijk een afgebroken zin gevonden <span class="info-tip" tabindex="0" aria-label="{_esc(explanation)}">ⓘ<span class="info-tip-text">{_esc(explanation)}</span></span></h4>
+            <p><b>Ontbrekende brontekst:</b> {_esc(missing)}</p>
+            <p><b>Herstelde passage:</b> {_esc(merged_text)}</p>
+            <p class="field-help">Na aanvullen ontstaat een nieuwe versie. Die versie is nog niet goedgekeurd en moet opnieuw worden beoordeeld.</p>
+            <button class="btn-secondary" type="submit" formaction="/review/context/accept" formmethod="post">Passage aanvullen met brontekst</button>
+          </aside>
+        '''
+    elif expand_merge.get("performed") and merged_text:
         object_text_html += f'<div class="object-expand-merge"><p>{_esc(merged_text)}</p></div>'
     proposed = proposed_type_of(obj)
     confirmable = confirmable_proposed_type(obj)
@@ -1761,6 +1774,25 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         nxt = state.next_review_object_id(snapshot_id, object_id)
         return RedirectResponse(
             _review_location(state, snapshot_id, nxt or None),
+            status_code=303,
+        )
+
+    @app.post("/review/context/accept")
+    def review_context_accept(
+        request: Request,
+        snapshot_id: str = Form(...),
+        object_id: str = Form(...),
+        snapshot_revision: str = Form(""),
+    ) -> RedirectResponse:
+        account = _require(request)
+        state.accept_source_continuation(
+            actor_id=account["account_id"],
+            snapshot_id=snapshot_id,
+            object_id=object_id,
+            expected_revision=snapshot_revision.strip() or None,
+        )
+        return RedirectResponse(
+            f"/review?document={_esc(snapshot_id)}&object={_esc(object_id)}",
             status_code=303,
         )
 

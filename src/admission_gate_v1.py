@@ -463,6 +463,15 @@ def _unique_reason_codes(codes: list[str], *, scan_done: bool) -> list[str]:
     return unique
 
 
+def _has_sentence_continuation(row: dict[str, Any]) -> bool:
+    merge = row.get("expand_merge")
+    return bool(
+        isinstance(merge, dict)
+        and merge.get("performed")
+        and merge.get("kind") == "sentence_continuation"
+    )
+
+
 def admit_candidate(
     candidate: dict[str, Any],
     *,
@@ -517,6 +526,7 @@ def admit_candidate(
         codes.append("incomplete_sentence")
         if _word_count(text) < 3:
             codes.append("no_independent_claim")
+    codes += ["incomplete_sentence"] * int(_has_sentence_continuation(row))
     if not str(row.get("source_locator_start") or "").strip() or not str(row.get("source_locator_end") or "").strip():
         codes.append("locator_invalid")
     evidence = [span for span in (row.get("type_evidence_spans") or []) if str(span or "").strip()]
