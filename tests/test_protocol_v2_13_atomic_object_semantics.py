@@ -236,7 +236,8 @@ def test_v213_roadmap_locks_seven_clusters_and_maps_ten_epics() -> None:
     assert "Kwaliteitsevaluatie" in roadmap
     assert "Security, IAM, secrets, omgevingsscheiding" in roadmap
     assert "Epic 10 (Immutable storage / G2)" in roadmap
-    assert "blijft de publicatieblocker" in roadmap
+    assert "Sinds v2.34 is G2 voorwaardelijk per snapshot" in roadmap
+    assert "blijft fail-closed bij ontbrekende of afwijkende bronbytes" in roadmap
     assert "False support is een Fase-3-meetlat, geen stille extra gate in Protocol v2.13" in roadmap
     assert "MUST NOT vannacht tot protocol worden gemaakt" in roadmap
 
