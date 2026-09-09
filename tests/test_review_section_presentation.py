@@ -31,3 +31,17 @@ def test_section_title_is_escaped_and_missing_path_remains_visible():
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
     assert "Brononderdeel nog te controleren" in html
+
+
+def test_repeated_heading_and_literal_separator_do_not_merge_paths():
+    objects = [
+        {"object_id": str(i), "structure": {"section_path": path}}
+        for i, path in enumerate([
+            ["Policy", "Scope", "Policy"], ["Policy", "Scope"],
+            ["Policy › Scope"],
+        ])
+    ]
+    html = _review_section_groups(objects, "snapshot", priority_ids={"0"})
+    assert html.count('class="review-section"') == 3
+    assert "omdat zij advies, een voorwaarde, een uitzondering of mogelijk risico bevat" in html
+    assert "kan niet veilig samen met andere passages" in html
