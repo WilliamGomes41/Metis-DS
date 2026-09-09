@@ -876,6 +876,28 @@ def _review_index_item(
     return f'<li class="review-row">{link}{status_html}</li>'
 
 
+def _review_section_groups(objects: list[dict[str, Any]], snapshot_id: str) -> str:
+    """Presentation only: preserve exact source paths and existing object links."""
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for obj in objects:
+        groups.setdefault(found_under_path(obj), []).append(obj)
+    panels = []
+    for path, rows in groups.items():
+        title = path.rsplit(" › ", 1)[-1] if path else "Brononderdeel nog te controleren"
+        panels.append(
+            '<details class="review-section" open>'
+            f'<summary>{_esc(title)} <span class="review-section-count">{len(rows)} passages</span></summary>'
+            '<details class="review-source-path"><summary>Waarom deze groep?</summary>'
+            '<p>Deze passages hebben hetzelfde opgeslagen bronpad. Dit is geen inhoudelijke goedkeuring. '
+            'Controleer de plaatsing bij het beoordelen.</p>'
+            f'<p>{_esc(path or "Geen bronpad beschikbaar")}</p></details>'
+            '<ol class="object-index">'
+            + "".join(_review_index_item(obj, snapshot_id, reason=_individual_review_reason(obj)) for obj in rows)
+            + '</ol></details>'
+        )
+    return "".join(panels)
+
+
 def _individual_review_reason(obj: dict[str, Any], *, priority: bool = False) -> str:
     if priority:
         return "Deze passage vraagt een eigen oordeel, omdat zij advies, een voorwaarde, een uitzondering of mogelijk risico bevat."
@@ -916,11 +938,11 @@ def _render_review_index(
     blocked_html = ""
     if blocked:
         blocked_html = f"""
-          <section class="review-blocked-audit" aria-label="Technisch herstel nodig">
-            <h2>Technisch herstel nodig ({len(blocked)}) <span class="info-tip" tabindex="0" aria-label="Deze passages zijn nog niet klaar voor inhoudelijke review.">ⓘ<span class="info-tip-text">Metis heeft een technisch probleem gevonden, bijvoorbeeld een afgebroken zin, ontbrekende context of bronverwijzing. Waar dat veilig kan, stelt Metis letterlijk bronherstel voor.</span></span></h2>
+          <details class="review-blocked-audit" aria-label="Technisch herstel nodig">
+            <summary>Technisch herstel nodig ({len(blocked)}) — bekijk passages</summary>
             <p class="lead">Dit is geen inhoudelijke reviewtaak. Laat Metis eerst veilige broncontext aanvullen. Als automatisch herstel niet verantwoord is, blijft de passage geblokkeerd voor technisch herstel.</p>
             <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, reason="Technische controle heeft deze passage geblokkeerd; inhoudelijk goedkeuren is pas mogelijk na herstel.") for obj in blocked)}</ol>
-          </section>
+          </details>
                     """
     copy = _review_lane_copy(review_path, koppen)
     return f"""
@@ -931,7 +953,7 @@ def _render_review_index(
                     <section class="review-lane-slow">
                       <h2>Afzonderlijk beoordelen — Inhoud ({len(individual)}) <span class="info-tip" tabindex="0" aria-label="Deze passages kunnen niet veilig in één groep worden bevestigd.">ⓘ<span class="info-tip-text">Deze passages kunnen niet veilig in één groep worden bevestigd. Open iedere passage en vergelijk haar met de oorspronkelijke bron.</span></span></h2>
                       <p class="lead">Begin hier. Deze passages vragen om jouw eigen inhoudelijke oordeel.</p>
-                      <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, reason=_individual_review_reason(obj, priority=obj in duty)) for obj in individual)}</ol>
+                      {_review_section_groups(individual, snapshot_id)}
                     </section>
                     {normal_content_html}
                     {blocked_html}
