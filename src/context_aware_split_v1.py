@@ -38,6 +38,10 @@ from src.object_taxonomy_v1 import (
     normalize_visible_prose,
     stamp_value,
 )
+from src.source_reconstruction_v1 import (
+    reconstruct_source_fragments,
+    source_fragment_ids_for_text,
+)
 
 
 MINIMUM_MEANING_WORDS = 3
@@ -247,12 +251,15 @@ def split_context_aware_units(
             return True
         target["text"] = _merge_text(target["text"], unit)
         target["clean_text"] = target["text"]
-        extra_id = fragment.get("fragment_id")
-        if extra_id and extra_id not in target["source_fragment_ids"]:
-            target["source_fragment_ids"].append(extra_id)
+        extra_ids = fragment.get("source_fragment_ids") or [fragment.get("fragment_id")]
+        for extra_id in extra_ids:
+            if extra_id and extra_id not in target["source_fragment_ids"]:
+                target["source_fragment_ids"].append(extra_id)
         return True
 
-    for fragment in fragments:
+    # Mechanical source repair is deliberately completed before meaning-unit
+    # splitting.  The splitter never has to guess missing source text.
+    for fragment in reconstruct_source_fragments(fragments):
         text = (fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
         if not text:
             continue
@@ -276,7 +283,18 @@ def split_context_aware_units(
         ):
             continue
         units = split_meaning_units(text, is_heading=is_heading)
+        unit_search_start = 0
         for index, unit in enumerate(units, 1):
+            unit_start = text.find(unit, unit_search_start)
+            if unit_start < 0:
+                unit_start = 0
+            unit_end = unit_start + len(unit)
+            unit_search_start = unit_end
+            unit_source_fragment_ids = source_fragment_ids_for_text(
+                fragment,
+                start=unit_start,
+                end=unit_end,
+            )
             seen = {
                 normalize_visible_prose(item.get("clean_text") or item.get("text") or "")
                 for item in meaning_units
@@ -330,7 +348,11 @@ def split_context_aware_units(
                 "object_type": unit_type,
                 "text": unit,
                 "clean_text": unit,
-                "source_fragment_ids": [fragment["fragment_id"]],
+                "source_fragment_ids": list(
+                    dict.fromkeys(
+                        unit_source_fragment_ids or [fragment["fragment_id"]]
+                    )
+                ),
                 "section_path": [
                     part
                     for part in (fragment.get("section_path") or [])
