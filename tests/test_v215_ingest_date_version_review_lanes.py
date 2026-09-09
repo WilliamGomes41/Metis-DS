@@ -421,7 +421,11 @@ def test_review_list_title_is_source_snippet_not_unclassified(tmp_path: Path) ->
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    client = _client(console)
+    html = "".join(
+        client.get(f"/review?document={receipt['snapshot_id']}&task={task}").text
+        for task in ("headings", "individual", "together", "control")
+    )
     titles = _index_link_titles(html)
     assert titles
     for title in titles:
@@ -450,7 +454,9 @@ def test_four_thousand_identical_unclassified_titles_is_a_fail(tmp_path: Path) -
     console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=html_src, filename="many.html", title="Veel passages")
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    html = _client(console).get(
+        f"/review?document={receipt['snapshot_id']}&task=control"
+    ).text
     titles = _index_link_titles(html)
     assert "unclassified" not in {title.lower() for title in titles}
     duty_titles = _index_link_titles(html.split('class="review-blocked-audit"', 1)[0])
@@ -471,12 +477,16 @@ def test_review_lanes_from_type_without_speed_toggle(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=_toc_html(), filename="toc.html", title="TOC richtlijn")
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
-    lower = html.lower()
-    assert "review-lane-fast" in html
-    assert "review-lane-slow" in html
-    assert "/review/headings/batch-confirm" in html
-    assert "bevestig geselecteerde koppen als structuur" in lower
+    client = _client(console)
+    dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
+    headings = client.get(f"/review?document={receipt['snapshot_id']}&task=headings").text
+    individual = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
+    lower = (dashboard + headings + individual).lower()
+    assert "review-task-dashboard" in dashboard
+    assert "review-lane-fast" in headings
+    assert "review-lane-slow" in individual
+    assert "/review/headings/batch-confirm" in headings
+    assert "bevestig geselecteerde koppen als structuur" in headings.lower()
     for forbidden in (
         "zwaar/licht",
         "snel/langzaam",
@@ -488,8 +498,8 @@ def test_review_lanes_from_type_without_speed_toggle(tmp_path: Path) -> None:
     ):
         assert forbidden not in lower
     assert "envelope" not in lower
-    assert "Documenten" in html
-    assert "Documentenhiërarchie" not in html
+    assert "Documenten" in dashboard
+    assert "Documentenhiërarchie" not in dashboard
 
 
 def test_fast_lane_batch_confirms_headings_as_structure(tmp_path: Path) -> None:
@@ -584,7 +594,9 @@ def test_human_can_reclassify_heading_that_is_advice_to_slow(tmp_path: Path) -> 
     assert refreshed["confirmed_object_type"] == "recommendation"
     assert refreshed.get("proposed_object_type") == "heading"
     assert review_lane(refreshed) == "slow"
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    html = _client(console).get(
+        f"/review?document={receipt['snapshot_id']}&task=individual"
+    ).text
     assert heading["object_id"] in html
     assert "review-lane-slow" in html
     fast = re.search(r'class="review-lane-fast".*?</section>', html, flags=re.S)

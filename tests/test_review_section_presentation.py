@@ -18,7 +18,7 @@ def test_sections_keep_same_named_headings_in_separate_source_paths():
     assert html.count('class="review-section"') == 2
     assert "2 passages" in html
     for i in range(3):
-        assert html.count(f'object={i}"') == 1
+        assert html.count(f'object={i}&amp;task=individual"') == 1
     assert "geen inhoudelijke goedkeuring" in html
     assert "<form" not in html
 

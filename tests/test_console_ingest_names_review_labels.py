@@ -150,7 +150,7 @@ def test_pdf_review_index_uses_human_labels_and_working_object_links(upload):
     console, client, payload, form, _ = upload
     assert client.post("/ingest", data=form, files={"file": ("Eenzaamheid bij ouderen.pdf", payload, "application/pdf")}).status_code == 200
     envelope, = console.list_envelopes()
-    response = client.get("/review", params={"document": envelope["snapshot_id"]})
+    response = client.get("/review", params={"document": envelope["snapshot_id"], "task": "control"})
     assert response.status_code == 200
     visible = VisibleRows()
     visible.feed(response.text)
@@ -169,7 +169,7 @@ def test_other_blocked_candidates_are_readable_and_remain_accessible():
         {"object_id": f"console-eenzaamheid-p001-f{index:03d}-u01", "object_type": "unclassified", "proposed_object_type": "unclassified", "content": {"clean_text": text}, "metadata": {"admission": {"gate_result": GATE_BLOCKED}}}
         for index, text in enumerate(["Een passage over sociale contacten.", "Een passage over het netwerk van de oudere."], 1)
     ]
-    rendered = _render_review_index("snap-test", objects, "richtlijn")
+    rendered = _render_review_index("snap-test", objects, "richtlijn", task="control")
     visible = VisibleRows()
     visible.feed(rendered)
     assert "Technisch herstel nodig (2)" in rendered

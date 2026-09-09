@@ -67,6 +67,7 @@ from src.operations_console_v1 import (
 from src.open_original_v1 import researcher_visible_prose
 from src.proportionate_review_v1 import (
     ProportionateReviewConsole,
+    normal_risk_batch_counts,
     regular_individual_review_queue,
     render_normal_risk_batch_panel,
 )
@@ -81,6 +82,7 @@ FILENAME_HINT = (
 )
 BRAND_DIR = REPO_ROOT / "assets" / "brand"
 RESEARCHER_ROOMS = frozenset({"ingest", "tree", "review"})
+REVIEW_TASKS = frozenset({"individual", "together", "headings", "control"})
 HELP_ONCE = (
     "Interne operations console voor richtlijnonderzoekers en reviewers. "
     "Dit is niet de Product API. Niet ontworpen voor verpleegkundigen. "
@@ -538,12 +540,19 @@ def _relation_checkboxes(obj: dict[str, Any], objects: list[dict[str, Any]]) -> 
     )
 
 
-def _review_location(console: OperationsConsole, snapshot_id: str, object_id: str | None = None) -> str:
+def _review_location(
+    console: OperationsConsole,
+    snapshot_id: str,
+    object_id: str | None = None,
+    *,
+    task: str = "",
+) -> str:
     """Redirect only to a stored snapshot (and optional object), never raw form bytes."""
     envelope = console._envelope(snapshot_id)
     snap = quote(str(envelope["snapshot_id"]), safe="")
+    task_query = f"&task={quote(task, safe='')}" if task in REVIEW_TASKS else ""
     if not object_id:
-        return f"/review?document={snap}"
+        return f"/review?document={snap}{task_query}"
     known = next(
         (
             row["object_id"]
@@ -554,7 +563,7 @@ def _review_location(console: OperationsConsole, snapshot_id: str, object_id: st
     )
     if known is None:
         raise ConsoleError("unknown_object")
-    return f"/review?document={snap}&object={quote(str(known), safe='')}"
+    return f"/review?document={snap}&object={quote(str(known), safe='')}{task_query}"
 
 
 def _coverage_panel(objects: list[dict[str, Any]]) -> str:
@@ -741,7 +750,14 @@ def _heading_chooser(
     """
 
 
-def _broncontext_html(obj: dict[str, Any], snapshot_id: str, object_id: str, passage_ok: bool) -> str:
+def _broncontext_html(
+    obj: dict[str, Any],
+    snapshot_id: str,
+    object_id: str,
+    passage_ok: bool,
+    *,
+    task: str = "",
+) -> str:
     parts = broncontext_parts(obj)
     lines = []
     for ancestor in parts["ancestor_headings"]:
@@ -768,7 +784,7 @@ def _broncontext_html(obj: dict[str, Any], snapshot_id: str, object_id: str, pas
                     <h4>Broncontext</h4>
                     <div class="broncontext-freeze">{"".join(lines)}</div>
                     {missing}
-                    <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(snapshot_id)}&object={_esc(object_id)}">Open volledige richtlijn</a></p>
+                    <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}{f'&amp;task={_esc(task)}' if task in REVIEW_TASKS else ''}">Open volledige richtlijn</a></p>
                   </section>
     """
 
@@ -853,11 +869,13 @@ def _review_index_item(
     *,
     checkbox: bool = False,
     reason: str = "",
+    task: str = "",
 ) -> str:
     title = review_row_title(obj)
     status = review_row_status(obj)
+    task_query = f"&amp;task={_esc(task)}" if task in REVIEW_TASKS else ""
     link = (
-        f'<a class="review-row-title" href="/review?document={_esc(snapshot_id)}&object={_esc(obj["object_id"])}">'
+        f'<a class="review-row-title" href="/review?document={_esc(snapshot_id)}&amp;object={_esc(obj["object_id"])}{task_query}">'
         f"{_esc(title)}</a>"
     )
     reason_html = (
@@ -885,18 +903,18 @@ def _review_section_groups(objects: list[dict[str, Any]], snapshot_id: str, *, p
         key = tuple(str(part).strip() for part in raw_path if str(part).strip())
         groups.setdefault(key, []).append(obj)
     panels = []
-    for key, rows in groups.items():
+    for index, (key, rows) in enumerate(groups.items()):
         path = " › ".join(key)
         title = key[-1] if key else "Brononderdeel nog te controleren"
         panels.append(
-            '<details class="review-section" open>'
+            f'<details class="review-section"{" open" if index == 0 else ""}>'
             f'<summary>{_esc(title)} <span class="review-section-count">{len(rows)} passages</span></summary>'
             '<details class="review-source-path"><summary>Waarom deze groep?</summary>'
             '<p>Deze passages hebben hetzelfde opgeslagen bronpad. Dit is geen inhoudelijke goedkeuring. '
             'Controleer de plaatsing bij het beoordelen.</p>'
             f'<p>{_esc(path or "Geen bronpad beschikbaar")}</p></details>'
             '<ol class="object-index">'
-            + "".join(_review_index_item(obj, snapshot_id, reason=_individual_review_reason(obj, priority=str(obj.get("object_id")) in priority_ids)) for obj in rows)
+            + "".join(_review_index_item(obj, snapshot_id, reason=_individual_review_reason(obj, priority=str(obj.get("object_id")) in priority_ids), task="individual") for obj in rows)
             + '</ol></details>'
         )
     return "".join(panels)
@@ -925,12 +943,122 @@ def _review_lane_copy(review_path: str, koppen: list[dict[str, Any]]) -> dict[st
     }
 
 
+def _review_is_final(obj: dict[str, Any]) -> bool:
+    return (obj.get("governance") or {}).get("validation_status") in {"approved", "rejected", "superseded"}
+
+
+def _review_task_card(
+    snapshot_id: str,
+    *,
+    task: str,
+    title: str,
+    description: str,
+    status: str,
+) -> str:
+    return f'''
+      <a class="review-task-card" href="/review?document={_esc(snapshot_id)}&amp;task={_esc(task)}">
+        <span class="review-task-card-title">{_esc(title)}</span>
+        <span class="review-task-card-copy">{_esc(description)}</span>
+        <span class="review-task-card-status">{_esc(status)}</span>
+        <span class="review-task-card-action">Open taak <span aria-hidden="true">→</span></span>
+      </a>
+    '''
+
+
+def _review_task_dashboard(
+    snapshot_id: str,
+    *,
+    koppen: list[dict[str, Any]],
+    individual: list[dict[str, Any]],
+    normal_passages: int,
+    normal_batches: int,
+) -> str:
+    heading_pending = sum(not _review_is_final(obj) for obj in koppen)
+    heading_done = len(koppen) - heading_pending
+    individual_pending = sum(not _review_is_final(obj) for obj in individual)
+    individual_done = len(individual) - individual_pending
+    tasks = [
+        (
+            "headings",
+            "Koppen controleren",
+            "Controleer de indeling van het document",
+            f"{heading_pending} te controleren · {heading_done} afgerond",
+            heading_pending,
+        ),
+        (
+            "individual",
+            "Belangrijke passages beoordelen",
+            "Beoordeel advies, voorwaarden, uitzonderingen en passages die extra aandacht vragen",
+            f"{individual_pending} te beoordelen · {individual_done} afgerond",
+            individual_pending,
+        ),
+        (
+            "together",
+            "Vergelijkbare passages samen beoordelen",
+            "Beoordeel passages uit hetzelfde brononderdeel in overzichtelijke groepen",
+            f"{normal_batches} groepen · {normal_passages} passages",
+            normal_passages,
+        ),
+    ]
+    recommended = next((row for row in tasks if row[4]), None)
+    if recommended:
+        next_step = f'''
+          <section class="review-next-step" aria-labelledby="review-next-title">
+            <p class="eyebrow">Volgende stap</p>
+            <h2 id="review-next-title">{_esc(recommended[1])}</h2>
+            <p>{_esc(recommended[2])}.</p>
+            <a class="btn-primary" href="/review?document={_esc(snapshot_id)}&amp;task={_esc(recommended[0])}">Ga verder</a>
+          </section>
+        '''
+    else:
+        next_step = '''
+          <section class="review-next-step review-next-step-complete" aria-labelledby="review-next-title">
+            <p class="eyebrow">Reviewtaken</p>
+            <h2 id="review-next-title">Alle reviewtaken zijn afgerond</h2>
+            <p>De publicatiekamer laat zien of er nog publicatievoorwaarden openstaan.</p>
+          </section>
+        '''
+    cards = "".join(
+        _review_task_card(
+            snapshot_id,
+            task=task,
+            title=title,
+            description=description,
+            status=status,
+        )
+        for task, title, description, status, _pending in tasks
+    )
+    return f'''
+      <section class="review-task-dashboard" aria-labelledby="review-task-title">
+        {next_step}
+        <div class="review-task-heading">
+          <h2 id="review-task-title">Alle taken</h2>
+          <p>Kies een taak om het bijbehorende werk af te ronden.</p>
+        </div>
+        <div class="review-task-grid">{cards}</div>
+        <p class="review-control-link"><a href="/review?document={_esc(snapshot_id)}&amp;task=control">Bekijk dekking en technische controle</a></p>
+      </section>
+    '''
+
+
+def _review_task_header(snapshot_id: str, title: str, description: str) -> str:
+    return f'''
+      <header class="review-task-workspace">
+        <a class="review-task-back" href="/review?document={_esc(snapshot_id)}">← Terug naar taken</a>
+        <h2>{_esc(title)}</h2>
+        <p>{_esc(description)}</p>
+      </header>
+    '''
+
+
 def _render_review_index(
     snapshot_id: str,
     snapshot_objects: list[dict[str, Any]],
     review_path: str,
     snapshot_revision: str = "",
     normal_content_html: str = "",
+    task: str = "",
+    normal_review_enabled: bool = True,
 ) -> str:
     koppen, _old_inhoud = review_stacks(snapshot_objects, review_path=review_path)
     duty = slow_review_duty(snapshot_objects, review_path=review_path)
@@ -939,40 +1067,59 @@ def _render_review_index(
     ) if review_path != "boom" else []
     individual = [*duty, *regular_individual]
     blocked = blocked_audit_lane(snapshot_objects) if review_path != "boom" else []
+    normal_passages, normal_batches = (0, 0)
+    if normal_review_enabled:
+        normal_passages, normal_batches = normal_risk_batch_counts(
+            snapshot_objects,
+            review_path=review_path,
+        )
     blocked_html = ""
     if blocked:
         blocked_html = f"""
           <details class="review-blocked-audit" aria-label="Technisch herstel nodig">
             <summary>Technisch herstel nodig ({len(blocked)}) — bekijk passages</summary>
             <p class="lead">Dit is geen inhoudelijke reviewtaak. Laat Metis eerst veilige broncontext aanvullen. Als automatisch herstel niet verantwoord is, blijft de passage geblokkeerd voor technisch herstel.</p>
-            <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, reason="Technische controle heeft deze passage geblokkeerd; inhoudelijk goedkeuren is pas mogelijk na herstel.") for obj in blocked)}</ol>
+            <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, reason="Technische controle heeft deze passage geblokkeerd; inhoudelijk goedkeuren is pas mogelijk na herstel.", task="control") for obj in blocked)}</ol>
           </details>
                     """
     copy = _review_lane_copy(review_path, koppen)
-    return f"""
-                    <section class="review-workflow-intro" aria-label="Uitleg reviewroute">
-                      <h2>Beoordeel dit document stap voor stap</h2>
-                      <p>Metis controleert eerst de techniek. Jij beoordeelt alleen passages die compleet, brongebonden en klaar voor een inhoudelijk oordeel zijn.</p>
-                    </section>
-                    <section class="review-lane-slow">
-                      <h2>Afzonderlijk beoordelen — Inhoud ({len(individual)}) <span class="info-tip" tabindex="0" aria-label="Deze passages kunnen niet veilig in één groep worden bevestigd.">ⓘ<span class="info-tip-text">Deze passages kunnen niet veilig in één groep worden bevestigd. Open iedere passage en vergelijk haar met de oorspronkelijke bron.</span></span></h2>
-                      <p class="lead">Begin hier. Deze passages vragen om jouw eigen inhoudelijke oordeel.</p>
-                      {_review_section_groups(individual, snapshot_id, priority_ids={str(obj.get("object_id")) for obj in duty})}
-                    </section>
-                    {normal_content_html}
-                    {blocked_html}
-                    <details class="review-lane-fast">
-                      <summary>{copy["fast_title"]} <span class="info-tip" tabindex="0" aria-label="{_esc(copy['fast_lead'].replace('ⓘ ', ''))}">ⓘ<span class="info-tip-text">{_esc(copy['fast_lead'].replace('ⓘ ', ''))}</span></span></summary>
-                      <p class="lead">{copy["fast_lead"]}</p>
-                      <form method="post" action="/review/headings/batch-confirm">
-                        <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
-                        {_snapshot_revision_input(snapshot_revision)}
-                        <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, checkbox=True) for obj in koppen)}</ol>
-                        <button class="btn-primary" type="submit">{copy["fast_button"]}</button>
-                      </form>
-                    </details>
-                    {_coverage_panel(snapshot_objects)}
-                """
+    if task == "individual":
+        return f'''
+          {_review_task_header(snapshot_id, "Belangrijke passages beoordelen", "Open iedere passage en vergelijk haar met de oorspronkelijke bron")}
+          <section class="review-lane-slow">
+            {_review_section_groups(individual, snapshot_id, priority_ids={str(obj.get("object_id")) for obj in duty}) if individual else '<p class="review-task-empty">Deze taak is afgerond.</p>'}
+          </section>
+        '''
+    if task == "together":
+        return f'''
+          {_review_task_header(snapshot_id, "Vergelijkbare passages samen beoordelen", "Bevestig alleen passages waarover je op basis van de bron zeker bent")}
+          {normal_content_html or '<p class="review-task-empty">Deze taak is afgerond.</p>'}
+        '''
+    if task == "headings":
+        return f'''
+          {_review_task_header(snapshot_id, copy["fast_title"], copy["fast_lead"])}
+          <section class="review-lane-fast">
+            <form method="post" action="/review/headings/batch-confirm">
+              <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
+              {_snapshot_revision_input(snapshot_revision)}
+              <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, checkbox=True, task="headings") for obj in koppen)}</ol>
+              <button class="btn-primary" type="submit">{copy["fast_button"]}</button>
+            </form>
+          </section>
+        '''
+    if task == "control":
+        return f'''
+          {_review_task_header(snapshot_id, "Dekking en technische controle", "Controleer hier de volledigheid en technische blokkades; dit is geen extra inhoudelijke reviewtaak")}
+          {blocked_html}
+          {_coverage_panel(snapshot_objects)}
+        '''
+    return _review_task_dashboard(
+        snapshot_id,
+        koppen=koppen,
+        individual=individual,
+        normal_passages=normal_passages,
+        normal_batches=normal_batches,
+    )
 
 
 def _render_review_card(
@@ -984,6 +1131,7 @@ def _render_review_card(
     draft: dict[str, str],
     conflict_html: str,
     snapshot_revision: str = "",
+    task: str = "",
 ) -> str:
     heading = review_card_sentence(obj)
     obj_text = (obj.get("content") or {}).get("clean_text") or ""
@@ -1032,7 +1180,7 @@ def _render_review_card(
     path_text = found_under_path(obj)
     proposed_label = _object_type_label(proposed or confirmable)
     return f"""
-                <p><a class="btn-secondary" href="/review?document={_esc(snapshot_id)}">Terug naar werkvoorraad</a></p>
+                <p><a class="btn-secondary" href="{_review_location(console, snapshot_id, task=task)}">← Terug naar taken</a></p>
                 <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
                   <div class="review-cockpit-copy">
                     <p>Metis heeft de technische controles uitgevoerd. Beoordeel deze passage aan de hand van de oorspronkelijke bron.</p>
@@ -1041,6 +1189,7 @@ def _render_review_card(
                   <form class="review-decision-form" method="post" action="/review" data-review-form>
                     <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
                     <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
+                    <input type="hidden" name="return_task" value="{_esc(task if task in REVIEW_TASKS else '')}">
                     {_snapshot_revision_input(snapshot_revision)}
                     <input type="hidden" name="proposed_object_type" value="{_esc(confirmable)}">
                     <input type="hidden" name="found_under" value="{_esc(path_text)}">
@@ -1054,7 +1203,7 @@ def _render_review_card(
                       <p class="meta"><span>status <b>{_esc(review_row_status(obj))}</b></span></p>
                       {object_text_html}
                     </section>
-                    {_broncontext_html(obj, snapshot_id, obj["object_id"], passage_ok)}
+                    {_broncontext_html(obj, snapshot_id, obj["object_id"], passage_ok, task=task)}
                     <section class="review-step" data-review-step="c">
                       <h4>Is deze passage op zichzelf bruikbaar?</h4>
                       <p class="field-help">Een zelfstandige passage is begrijpelijk zonder dat iemand de rest van het document hoeft te lezen.</p>
@@ -1112,6 +1261,7 @@ def _render_review_room(
     document: str = "",
     object: str = "",
     *,
+    task: str = "",
     counts: dict[str, int] | None = None,
     draft: dict[str, str] | None = None,
     conflict: bool = False,
@@ -1119,6 +1269,7 @@ def _render_review_room(
 ) -> str:
     chosen = document.strip()
     chosen_object_id = object.strip()
+    chosen_task = task.strip() if task.strip() in REVIEW_TASKS else ""
     draft = _sanitize_review_draft(draft)
     conflict_html = _review_conflict_html(conflict)
     snapshot_revision = ""
@@ -1158,7 +1309,7 @@ def _render_review_room(
         review_path = review_path_for_klasse(chosen_row["class"])
         if not chosen_object_id:
             normal_content_html = ""
-            if isinstance(console, ProportionateReviewConsole):
+            if isinstance(console, ProportionateReviewConsole) and chosen_task == "together":
                 normal_content_html = render_normal_risk_batch_panel(
                     console, chosen,
                     snapshot=(snapshot_objects, snapshot_revision),
@@ -1171,6 +1322,8 @@ def _render_review_room(
                 review_path,
                 snapshot_revision,
                 normal_content_html=normal_content_html,
+                task=chosen_task,
+                normal_review_enabled=isinstance(console, ProportionateReviewConsole),
             )
         else:
             obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
@@ -1186,6 +1339,7 @@ def _render_review_room(
                 draft,
                 conflict_html,
                 snapshot_revision,
+                chosen_task,
             )
     empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
     return _page(
@@ -1685,21 +1839,23 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         return RedirectResponse(target, status_code=303)
 
     @app.get("/review", response_class=HTMLResponse)
-    def review_get(request: Request, document: str = "", object: str = "") -> str:
+    def review_get(request: Request, document: str = "", object: str = "", task: str = "") -> str:
         account = _require(request)
         return _render_review_room(
             state,
             account,
             html.escape(document, quote=True),
             html.escape(object, quote=True),
+            task=html.escape(task, quote=True),
             counts=_counts(account),
         )
 
     @app.get("/review/bronpassage", response_class=HTMLResponse)
-    def review_bronpassage(request: Request, document: str = "", object: str = "") -> str:
+    def review_bronpassage(request: Request, document: str = "", object: str = "", task: str = "") -> str:
         account = _require(request)
         chosen = document.strip()
         object_id = object.strip()
+        safe_task = task.strip() if task.strip() in REVIEW_TASKS else ""
         if not chosen or not object_id:
             raise ConsoleError("unknown_object")
         opened = state.open_source_passage(snapshot_id=chosen, object_id=object_id)
@@ -1712,7 +1868,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
               <article class="object">
                 <p class="bronpassage-prose">{_esc(researcher_visible_prose(opened.get("passage") or ""))}</p>
               </article>
-              <p><a class="btn-secondary" href="/review?document={_esc(chosen)}&object={_esc(object_id)}">Terug naar review</a></p>
+              <p><a class="btn-secondary" href="/review?document={_esc(chosen)}&amp;object={_esc(object_id)}{f'&amp;task={_esc(safe_task)}' if safe_task else ''}">Terug naar review</a></p>
             </section>
             {_help(room="review")}
             """
@@ -1736,6 +1892,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         type_action: str = Form(""),
         proposed_object_type: str = Form(""),
         snapshot_revision: str = Form(""),
+        return_task: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
         mapped = map_eindoordeel(eindoordeel, decision)
@@ -1780,6 +1937,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     account,
                     html.escape(snapshot_id, quote=True),
                     html.escape(object_id, quote=True),
+                    task=html.escape(return_task, quote=True),
                     counts=_counts(account),
                     draft={
                         "suitability": html.escape(suitability, quote=True),
@@ -1809,9 +1967,28 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     "operations": [{"op": "set", "path": "content.clean_text", "value": proposed_correction.strip()}],
                 },
             )
-        nxt = state.next_review_object_id(snapshot_id, object_id)
+        safe_task = return_task if return_task in REVIEW_TASKS else ""
+        if safe_task == "individual":
+            current = state.snapshot_objects(snapshot_id)
+            path = review_path_for_klasse(state._envelope(snapshot_id)["class"])
+            queue = [
+                *slow_review_duty(current, review_path=path),
+                *regular_individual_review_queue(current, review_path=path),
+            ]
+            nxt = next(
+                (
+                    str(row["object_id"])
+                    for row in queue
+                    if str(row.get("object_id")) != object_id and not _review_is_final(row)
+                ),
+                "",
+            )
+        elif safe_task:
+            nxt = ""
+        else:
+            nxt = state.next_review_object_id(snapshot_id, object_id)
         return RedirectResponse(
-            _review_location(state, snapshot_id, nxt or None),
+            _review_location(state, snapshot_id, nxt or None, task=safe_task),
             status_code=303,
         )
 
@@ -1821,6 +1998,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         snapshot_id: str = Form(...),
         object_id: str = Form(...),
         snapshot_revision: str = Form(""),
+        return_task: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
         state.accept_source_continuation(
@@ -1829,10 +2007,8 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
             object_id=object_id,
             expected_revision=snapshot_revision.strip() or None,
         )
-        return RedirectResponse(
-            f"/review?document={_esc(snapshot_id)}&object={_esc(object_id)}",
-            status_code=303,
-        )
+        safe_task = return_task if return_task in REVIEW_TASKS else ""
+        return RedirectResponse(_review_location(state, snapshot_id, object_id, task=safe_task), status_code=303)
 
     @app.post("/review/headings/batch-confirm")
     def review_headings_batch_confirm(
@@ -1858,12 +2034,13 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                     state,
                     account,
                     html.escape(snapshot_id, quote=True),
+                    task="headings",
                     counts=_counts(account),
                     conflict=True,
                 ),
                 status_code=409,
             )
-        return RedirectResponse(_review_location(state, snapshot_id), status_code=303)
+        return RedirectResponse(_review_location(state, snapshot_id, task="headings"), status_code=303)
 
     @app.post("/review/relations")
     def review_relations_post(

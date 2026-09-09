@@ -426,7 +426,9 @@ def test_extract_does_not_emit_kennisplatform_chrome_as_objects_or_koppen(
         assert label not in koppen_texts
     assert "Inleiding" in koppen_texts
     assert "Verantwoording" in koppen_texts
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    html = _client(console).get(
+        f"/review?document={receipt['snapshot_id']}&task=headings"
+    ).text
     titles = _visible_text(html)
     review_body = html.split("</nav>", 1)[-1] if "</nav>" in html else html
     for label in CHROME_LABELS:
@@ -459,7 +461,9 @@ def test_one_word_chrome_tools_card_must_not_exist(tmp_path: Path) -> None:
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     tools = [obj for obj in objects if _text_of(obj).casefold() == "tools"]
     assert tools == []
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    html = _client(console).get(
+        f"/review?document={receipt['snapshot_id']}&task=control"
+    ).text
     assert ">Tools<" not in html
     assert "kennisplatform.venvn.nl/tools" not in html
 
@@ -681,7 +685,9 @@ def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path) -> None:
         _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     )
     assert any(obj["object_id"] == planted["object_id"] for obj in leftover)
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    html = _client(console).get(
+        f"/review?document={receipt['snapshot_id']}&task=control"
+    ).text
     assert "Controleoverzicht per kop" in html
     assert "unclassified" not in html.casefold()
     card = _client(console).get(

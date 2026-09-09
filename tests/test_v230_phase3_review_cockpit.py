@@ -674,11 +674,16 @@ def test_ordinary_queue_and_index_remain_allowed_only(tmp_path: Path) -> None:
     assert all(_admission(obj).get("gate_result") == GATE_ALLOWED for obj in ordinary)
     assert not any(obj in ordinary for obj in blocked_audit_lane(objects))
     client = _client(console)
-    index = client.get(f"/review?document={receipt['snapshot_id']}").text
+    index = client.get(
+        f"/review?document={receipt['snapshot_id']}&task=individual"
+    ).text
+    control = client.get(
+        f"/review?document={receipt['snapshot_id']}&task=control"
+    ).text
     slow = index.split('class="review-lane-slow"', 1)[-1].split("review-blocked-audit", 1)[0]
     assert DJG not in slow
     assert "adviseert de verpleegkundige" in slow
-    assert "review-blocked-audit" in index
+    assert "review-blocked-audit" in control
 
 
 def test_boom_path_is_unchanged_and_publish_stays_blocked(tmp_path: Path) -> None:

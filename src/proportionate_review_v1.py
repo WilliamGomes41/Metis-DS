@@ -110,6 +110,20 @@ def normal_risk_batch_queue(
     return [obj for obj in objects if normal_risk_batch_eligible(obj, review_path=review_path)]
 
 
+def normal_risk_batch_counts(
+    objects: Iterable[dict[str, Any]],
+    *,
+    review_path: str,
+) -> tuple[int, int]:
+    """Return pending passage and bounded batch counts for task navigation."""
+    groups: dict[tuple[tuple[str, ...], str], int] = defaultdict(int)
+    for obj in normal_risk_batch_queue(objects, review_path=review_path):
+        groups[(_section_key(obj), _batch_type(obj))] += 1
+    passages = sum(groups.values())
+    batches = sum((count + NORMAL_RISK_BATCH_MAX - 1) // NORMAL_RISK_BATCH_MAX for count in groups.values())
+    return passages, batches
+
+
 def regular_individual_review_queue(
     objects: Iterable[dict[str, Any]],
     *,
@@ -188,7 +202,7 @@ def render_normal_risk_batch_panel(
                     f'<input type="checkbox" name="object_ids" value="{object_id}"{checked}> '
                     f'<strong>{type_label}</strong> — {text}'
                     '</label>'
-                    f' <a href="/review?document={safe_snapshot}&amp;object={object_id}">Afzonderlijk beoordelen</a>'
+                    f' <a href="/review?document={safe_snapshot}&amp;object={object_id}&amp;task=together">Afzonderlijk beoordelen</a>'
                     f' <a href="/review/bronpassage?document={safe_snapshot}&amp;object={object_id}">Bronpassage</a>'
                     '</div>'
                 )
@@ -335,10 +349,17 @@ def install_proportionate_review_routes(app: FastAPI, console: ProportionateRevi
             from src.operations_console_app import _render_review_room
 
             return HTMLResponse(
-                _render_review_room(console, account, snapshot_id, conflict=True, batch_selection=raw),
+                _render_review_room(
+                    console,
+                    account,
+                    snapshot_id,
+                    task="together",
+                    conflict=True,
+                    batch_selection=raw,
+                ),
                 status_code=409,
             )
-        return RedirectResponse(f"/review?document={snapshot_id}", status_code=303)
+        return RedirectResponse(f"/review?document={snapshot_id}&task=together", status_code=303)
 
     app.add_api_route(
         "/review/normal-risk/batch-confirm",

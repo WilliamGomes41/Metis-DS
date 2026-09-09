@@ -804,7 +804,12 @@ def test_v216_through_v219_review_extract_still_holds(tmp_path: Path) -> None:
     assert all(obj.get("proposed_object_type") == "heading" or obj.get("object_type") == "heading" for obj in koppen)
     assert leftover
     rec = next(obj for obj in objects if OVERWEEG in _text_of(obj))
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    client = _client(console)
+    dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
+    headings = client.get(f"/review?document={receipt['snapshot_id']}&task=headings").text
+    individual = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
+    control = client.get(f"/review?document={receipt['snapshot_id']}&task=control").text
+    html = dashboard + headings + individual + control
     assert SLOGAN not in html
     assert "wat een EPD MAG zeggen" not in html
     assert "envelope" not in html.lower()
