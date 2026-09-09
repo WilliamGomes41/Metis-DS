@@ -344,11 +344,16 @@ def test_blocked_candidates_stay_out_of_ordinary_review_lane(tmp_path: Path) -> 
     )
     client = TestClient(create_console_app(console))
     client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
-    review = client.get(f"/review?document={receipt['snapshot_id']}").text
-    slow = review.split('class="review-lane-slow"', 1)[-1].split("review-blocked-audit", 1)[0]
+    review = client.get(
+        f"/review?document={receipt['snapshot_id']}&task=individual"
+    ).text
+    control = client.get(
+        f"/review?document={receipt['snapshot_id']}&task=control"
+    ).text
+    slow = review.split('class="review-lane-slow"', 1)[-1]
     assert DJG not in slow
-    assert "review-blocked-audit" in review
-    assert DJG in review.split("review-blocked-audit", 1)[-1]
+    assert "review-blocked-audit" in control
+    assert DJG in control.split("review-blocked-audit", 1)[-1]
 
 
 # ---------------------------------------------------------------------------

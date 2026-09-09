@@ -642,12 +642,17 @@ def test_ingest_fixture_gates_named_regressions_and_keeps_adviseert(tmp_path: Pa
 
     client = TestClient(create_console_app(console))
     client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
-    review = client.get(f"/review?document={receipt['snapshot_id']}").text
+    review = client.get(
+        f"/review?document={receipt['snapshot_id']}&task=individual"
+    ).text
+    control = client.get(
+        f"/review?document={receipt['snapshot_id']}&task=control"
+    ).text
     slow = review.split('class="review-lane-slow"', 1)[-1].split("review-blocked-audit", 1)[0]
     assert DJG not in slow
     assert "adviseert de verpleegkundige" in review
-    assert "review-blocked-audit" in review
-    assert DJG in review.split("review-blocked-audit", 1)[-1]
+    assert "review-blocked-audit" in control
+    assert DJG in control.split("review-blocked-audit", 1)[-1]
 
 
 def test_boom_ingest_does_not_apply_richtlijn_contracts(tmp_path: Path) -> None:

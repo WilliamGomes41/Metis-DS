@@ -381,12 +381,15 @@ def test_researchers_are_not_required_to_open_thousands_of_inhoud_cards(
     assert len(leftover) >= leftover_n
     assert len(duty) < leftover_n
     assert len(duty) >= 3
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
-    visible = _visible_text(html)
-    assert re.search(rf"Koppen[^<]*\({len(koppen)}\)", html)
-    assert re.search(rf"Inhoud[^<]*\({len(duty)}\)", html)
-    assert f"Inhoud ({len(old_inhoud)})" not in html
-    assert f"Inhoud ({len(leftover)})" not in html
+    client = _client(console)
+    dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
+    html = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
+    control = client.get(f"/review?document={receipt['snapshot_id']}&task=control").text
+    visible = _visible_text(dashboard + html + control)
+    assert f"{len(koppen)} te controleren" in dashboard
+    assert f"{len(duty)} te beoordelen" in dashboard
+    assert f"Inhoud ({len(old_inhoud)})" not in dashboard
+    assert f"Inhoud ({len(leftover)})" not in dashboard
     slow = _section(html, "review-lane-slow")
     duty_titles = _index_link_titles(slow)
     assert len(duty_titles) == len(duty)
@@ -440,7 +443,9 @@ def test_koppen_remain_batch_confirmable_as_structure_never_advice(
     koppen, _ = review_stacks(objects)
     assert koppen
     assert all(review_lane(obj) == "fast" for obj in koppen)
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    html = _client(console).get(
+        f"/review?document={receipt['snapshot_id']}&task=headings"
+    ).text
     fast = _section(html, "review-lane-fast")
     assert "/review/headings/batch-confirm" in fast
     assert "Bevestig geselecteerde koppen als structuur" in fast
@@ -533,7 +538,8 @@ def test_console_inhoud_lists_only_slow_duty_cards(tmp_path: Path) -> None:
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     duty = slow_review_duty(objects)
     leftover = remaining_unclassified(objects)
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    client = _client(console)
+    html = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
     slow = _section(html, "review-lane-slow")
     titles = _index_link_titles(slow)
     assert len(titles) == len(duty)
@@ -548,10 +554,11 @@ def test_console_inhoud_lists_only_slow_duty_cards(tmp_path: Path) -> None:
         assert card.count('class="review-decision-form"') == 1
         assert "batch-confirm" not in card
     visible = _visible_text(html)
-    assert "Begin hier" in visible
-    assert "eigen inhoudelijke oordeel" in visible
+    assert "Belangrijke passages beoordelen" in visible
+    assert "oorspronkelijke bron" in visible
     assert leftover
-    assert "Technisch herstel nodig" in visible
+    control = client.get(f"/review?document={receipt['snapshot_id']}&task=control").text
+    assert "Technisch herstel nodig" in _visible_text(control)
 
 
 # ---------------------------------------------------------------------------
@@ -573,7 +580,9 @@ def test_no_zwaar_licht_switch_no_auto_confirm_no_auto_promote(tmp_path: Path) -
     assert all(not obj.get("confirmed_object_type") for obj in leftover)
     ordinary = next(obj for obj in leftover if "Gewone toelichtende tekst" in _text_of(obj))
     assert ordinary.get("proposed_object_type") not in {"recommendation", "heading"}
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    html = _client(console).get(
+        f"/review?document={receipt['snapshot_id']}&task=control"
+    ).text
     lower = html.lower()
     for forbidden in (
         "zwaar/licht",
@@ -849,7 +858,9 @@ def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path) -> None:
         _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     )
     assert any(obj["object_id"] == planted["object_id"] for obj in leftover)
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    html = _client(console).get(
+        f"/review?document={receipt['snapshot_id']}&task=control"
+    ).text
     visible = _visible_text(html)
     assert "Controleoverzicht per kop" in visible
     assert "unclassified" not in visible.casefold()

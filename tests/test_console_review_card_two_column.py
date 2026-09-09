@@ -140,10 +140,9 @@ def test_review_document_index_does_not_open_passages(tmp_path: Path) -> None:
     assert objects
     assert TWO_COLUMN_CLASS not in html
     assert PASSAGE_COL not in html
-    assert "object-index" in html
+    assert "review-task-dashboard" in html
     assert "Onderbouwing uit het brondocument" not in html
-    for obj in objects:
-        assert obj["object_id"] in html
+    assert not any(obj["object_id"] in html for obj in objects)
     assert "envelope" not in html.lower()
     assert "Documenten" in html
     assert "Documentenhiërarchie" not in html
@@ -291,7 +290,7 @@ def test_blocked_passages_are_presented_as_technical_work_not_content_review() -
         },
     }
 
-    html = _render_review_index("snap-1", [blocked], "richtlijn")
+    html = _render_review_index("snap-1", [blocked], "richtlijn", task="control")
 
     assert "Technisch herstel nodig (1)" in html
     assert "Dit is geen inhoudelijke reviewtaak" in html

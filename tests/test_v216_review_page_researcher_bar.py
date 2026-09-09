@@ -322,21 +322,24 @@ def test_koppen_and_inhoud_stacks_show_counts(tmp_path: Path) -> None:
     assert inhoud
     assert all(review_lane(obj) == "fast" for obj in koppen)
     assert all(review_lane(obj) == "slow" for obj in inhoud)
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
-    assert re.search(rf"Koppen[^<]*\({len(koppen)}\)", html)
-    assert re.search(rf"Inhoud[^<]*\({len(duty)}\)", html)
-    assert "Koppen" in html
-    assert "Inhoud" in html
-    assert "review-lane-fast" in html
-    assert "review-lane-slow" in html
-    assert "/review/headings/batch-confirm" in html
-    assert "Beoordeel dit document stap voor stap" in html
-    assert "unclassified" not in html.casefold()
-    lower = html.lower()
+    client = _client(console)
+    dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
+    headings = client.get(f"/review?document={receipt['snapshot_id']}&task=headings").text
+    individual = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
+    assert f"{len(koppen)} te controleren" in dashboard
+    assert f"{len(duty)} te beoordelen" in dashboard
+    assert "Koppen controleren" in dashboard
+    assert "Belangrijke passages beoordelen" in dashboard
+    assert "review-lane-fast" in headings
+    assert "review-lane-slow" in individual
+    assert "/review/headings/batch-confirm" in headings
+    assert "review-task-dashboard" in dashboard
+    assert "unclassified" not in (dashboard + headings + individual).casefold()
+    lower = (dashboard + headings + individual).lower()
     for forbidden in ("zwaar/licht", "snel/langzaam", "speed-toggle", "envelope"):
         assert forbidden not in lower
-    assert "Documenten" in html
-    assert "Documentenhiërarchie" not in html
+    assert "Documenten" in dashboard
+    assert "Documentenhiërarchie" not in dashboard
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +352,11 @@ def test_compact_rows_are_source_text_plus_status_not_three_column(tmp_path: Pat
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    client = _client(console)
+    html = "".join(
+        client.get(f"/review?document={receipt['snapshot_id']}&task={task}").text
+        for task in ("headings", "individual", "together", "control")
+    )
     css = CSS.read_text(encoding="utf-8")
     titles = _index_link_titles(html)
     assert titles
@@ -428,7 +435,9 @@ def test_stamps_bind_to_recommendation_not_objects_or_koppen(tmp_path: Path) -> 
     advice_heading = next(obj for obj in objects if "Overweeg verwijzing" in _text_of(obj))
     assert advice_heading["object_type"] == "heading"
     assert advice_heading.get("proposed_recommendation_strength") in {None, ""}
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    html = _client(console).get(
+        f"/review?document={receipt['snapshot_id']}&task=individual"
+    ).text
     assert "DOEN" not in _index_link_titles(html) or all(
         title not in {"DOEN", "OVERWEEG", "NIET DOEN"} for title in _index_link_titles(html)
     )
@@ -568,7 +577,11 @@ def test_unpublished_continentie_new_extract_keeps_source_hash(tmp_path: Path) -
     objects = _non_document(console.snapshot_objects(again["snapshot_id"]))
     assert objects
     assert all(not is_tiny_confirmable_text(_text_of(obj)) for obj in objects)
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    client = _client(console)
+    html = "".join(
+        client.get(f"/review?document={receipt['snapshot_id']}&task={task}").text
+        for task in ("headings", "individual", "together", "control")
+    )
     for obj in objects:
         assert _text_of(obj)[:40] in html or obj["object_id"] in html
 
@@ -607,7 +620,9 @@ def test_ui_must_not_hide_stored_fragments_without_extract(tmp_path: Path) -> No
         _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     )
     assert any(obj["object_id"] == planted["object_id"] for obj in leftover)
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    html = _client(console).get(
+        f"/review?document={receipt['snapshot_id']}&task=control"
+    ).text
     assert "Technisch herstel nodig" in html
     card = _client(console).get(
         f"/review?document={receipt['snapshot_id']}&object={planted['object_id']}"

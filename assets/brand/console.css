@@ -554,6 +554,124 @@ textarea:focus-visible {
   margin: 16px 0 0;
 }
 
+.review-task-dashboard {
+  margin-top: 20px;
+}
+
+.review-next-step {
+  max-width: 52rem;
+  border: 2px solid var(--water);
+  border-radius: 16px;
+  padding: 22px 24px;
+  background: var(--water-light);
+}
+
+.review-next-step h2,
+.review-task-heading h2,
+.review-task-workspace h2 {
+  margin-bottom: 6px;
+}
+
+.review-next-step p:not(.eyebrow),
+.review-task-heading p,
+.review-task-workspace p {
+  margin: 0 0 14px;
+}
+
+.review-next-step .btn-primary {
+  display: inline-block;
+  margin-top: 4px;
+}
+
+.review-next-step-complete {
+  border-color: var(--line);
+  background: var(--wit);
+}
+
+.review-task-heading {
+  margin: 28px 0 12px;
+}
+
+.review-task-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.review-task-card {
+  display: flex;
+  min-height: 15rem;
+  flex-direction: column;
+  padding: 22px;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  background: var(--wit);
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.review-task-card:hover {
+  border-color: var(--paars);
+  box-shadow: 0 8px 22px rgba(93, 50, 151, 0.12);
+  transform: translateY(-2px);
+}
+
+.review-task-card:focus-visible {
+  outline: 3px solid var(--paars);
+  outline-offset: 3px;
+}
+
+.review-task-card-title {
+  color: var(--paars);
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.review-task-card-copy {
+  margin: 12px 0;
+  line-height: 1.45;
+}
+
+.review-task-card-status {
+  margin-top: auto;
+  padding-top: 14px;
+  font-weight: 700;
+}
+
+.review-task-card-action {
+  margin-top: 14px;
+  color: var(--paars);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.review-control-link {
+  margin: 20px 0 0;
+}
+
+.review-task-workspace {
+  margin: 20px 0 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.review-task-back {
+  display: inline-block;
+  margin-bottom: 14px;
+  font-weight: 650;
+}
+
+.review-task-empty {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--water-light);
+}
+
 .review-workflow-intro,
 .review-lane-fast,
 .review-normal-risk {
@@ -908,6 +1026,14 @@ mark.broncontext-marked {
 }
 
 @media (max-width: 720px) {
+  .review-task-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .review-task-card {
+    min-height: 0;
+  }
+
   .review-card-two-column {
     grid-template-columns: 1fr;
   }

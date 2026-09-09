@@ -83,12 +83,12 @@ def review_system(tmp_path):
 
 def test_real_page_links_to_cards_sources_and_writes_exact_object_bindings(review_system):
     console, client, sid, actor, ids = review_system
-    page = Page(client.get("/review", params={"document": sid}).text)
+    page = Page(client.get("/review", params={"document": sid, "task": "together"}).text)
     form = page.batches[0]
     assert set(form["ids"]) == set(ids)
     assert not form["checked"]  # Presentation alone never selects/approves content.
     for oid in ids:
-        card = f"/review?document={sid}&object={oid}"
+        card = f"/review?document={sid}&object={oid}&task=together"
         source = f"/review/bronpassage?document={sid}&object={oid}"
         assert card in page.links and source in page.links
         assert client.get(card).status_code == 200
@@ -132,7 +132,7 @@ def test_real_get_pins_text_and_revision_together_and_preserves_conflict_selecti
         return snapshot
 
     monkeypatch.setattr(console, "snapshot_objects_and_revision", concurrent_edit)
-    response = client.get("/review", params={"document": sid})
+    response = client.get("/review", params={"document": sid, "task": "together"})
     assert old_text in response.text and new_text not in response.text
     form = Page(response.text).batches[0]
     assert form["fields"]["snapshot_revision"] != console.objects_revision(sid)
@@ -191,7 +191,7 @@ def test_two_thousand_objects_need_one_selection_and_confirmation_per_twenty(rev
         obj["object_id"] = f"load-{index}"
         rows.append(obj)
     monkeypatch.setattr(console, "snapshot_objects_and_revision", lambda _sid: (rows, "load-revision"))
-    page = Page(client.get("/review", params={"document": sid}).text)
+    page = Page(client.get("/review", params={"document": sid, "task": "together"}).text)
     assert len(page.batches) == 100
     assert all(form["select_all"] and len(form["ids"]) == 20 for form in page.batches)
     assert all(not form["checked"] for form in page.batches)
@@ -208,9 +208,9 @@ def test_real_uncertain_content_keeps_an_individual_review_route(review_system):
     console.correct_object(actor_id=actor, snapshot_id=sid, object_id=ids[0], patch={
         "reason": "Onduidelijk", "operations": [{"op": "set", "path": "uncertainty.has_uncertainty", "value": True}],
     })
-    page = Page(client.get("/review", params={"document": sid}).text)
+    page = Page(client.get("/review", params={"document": sid, "task": "individual"}).text)
     assert ids[0] not in {oid for form in page.batches for oid in form["ids"]}
-    card = f"/review?document={sid}&object={ids[0]}"
+    card = f"/review?document={sid}&object={ids[0]}&task=individual"
     assert card in page.links
     response = client.get(card)
     assert response.status_code == 200
