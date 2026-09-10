@@ -367,7 +367,7 @@ def install_audit_routes(app: FastAPI, console: OperationsConsole) -> None:
         body = f"""
           <h1>Audit</h1>
           <p class="lead">Controleer hoe Metis werkt en leg bewijs vast. Audits veranderen geen canonieke kennis en publiceren niets.</p>
-          <p><a class="btn-primary" href="/audit/new">Nieuwe audit</a></p>
+          <p><a class="btn-primary" href="/audit/new">Nieuwe audit</a> <a class="btn-secondary" href="/audit/llm-settings">LLM-instellingen</a></p>
           <h2>Audits</h2>
           <div class="doc-list">{_audit_rows(registry)}</div>
           <h2>Auditvormen</h2>
