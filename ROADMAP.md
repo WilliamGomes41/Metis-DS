@@ -74,22 +74,33 @@ Retro-besluit 2026-09-10: **SIMPLIFY BEFORE EXTENDING**. Dataset-freeze en A/B-u
 
 ## R3.4 Eerste experiment: passagevorming
 
-**Status:** ONTWERP GEBLOKKEERD — owner-approved 2026-09-10; uitvoering volgt na R3.3 experimentbasis.
+**Status:** ARCHITECTUUR LOCKED — owner-approved 2026-09-10; dataset-freeze-implementatie gestart in PR #153.
 
 Onderzoeksvraag: kan brongebonden semantische passagevorming betere kennisobjectvoorstellen maken dan de huidige deterministische passagevorming zonder brontrouw of publicatieveiligheid te verliezen?
 
 Baseline: huidige productiepassagevorming.  
-Kandidaat: brongebonden semantische voorstellen.  
+Kandidaat: brongebonden semantische bronselectie binnen Audit.  
 Beide routes lopen na kandidaatvorming door dezelfde deterministische verificatie van harde invarianten.
+
+Architectuurlock AI en Kernel:
+- AI is uitsluitend een experimenteel instrument binnen de Audit-kamer;
+- de Kernel blijft AI-vrij: geen modelcall, modeloutput of modelprovider krijgt een direct schrijfpad naar canonieke kennis, reviewstatus, publicatielogica of productie-state;
+- het LLM mag uitsluitend exacte bronspans selecteren of combineren en context/type/relaties voorstellen;
+- het LLM mag geen canonieke brontekst schrijven, herschrijven of parafraseren als bronwaarheid;
+- Metis reconstrueert een kandidaat zelf uit de aangewezen spans van de frozen bron, zodat kandidaattekst herleidbaar blijft tot bronbytes, bronhash en locator;
+- de reviewer ziet altijd de relevante originele bron, baseline, kandidaat en bijbehorende bronspans;
+- modeloutput, experimentresultaten en conclusies blijven Audit-bewijs en stromen niet automatisch door naar de Kernel.
 
 Vaste workflow:
 1. **Opzetten** — onderzoeksvraag, baseline, kandidaat, beoordelingscriteria en stopregel vastleggen;
-2. **Dataset vastzetten** — een kleine representatieve frozen set maken met gewone én moeilijke passages, bronidentiteit en baseline-commit; na freeze niet stilzwijgend wijzigen;
-3. **Beide routes uitvoeren** — baseline en kandidaat produceren alleen experimentoutputs; de kandidaatroute mag bronspans selecteren/combineren en context/type/relaties voorstellen, maar geen canonieke tekst verzinnen, parafraseren als bronwaarheid, buiten de frozen bron lezen of publiceren;
+2. **Dataset vastzetten** — een kleine representatieve frozen set maken met gewone én moeilijke passages, `item_id`, `snapshot_id`, `source_hash`, `source_locator`, exacte `source_text` en `baseline_commit`; na freeze niet stilzwijgend wijzigen of vervangen;
+3. **Beide routes uitvoeren** — baseline en kandidaat produceren alleen experimentoutputs; de kandidaatroute mag uitsluitend werken binnen de frozen bron en publiceert niets;
 4. **Blind beoordelen** — reviewer ziet bron + Variant A + Variant B zonder route-identiteit en kiest A, B, gelijkwaardig of beide onvoldoende;
 5. **Foutcategorieën vastleggen** — minimaal onvolledig, context gemist, voorwaarde/uitzondering gemist, verkeerde merge/split, onverifieerbare toevoeging en correctie nodig;
 6. **Resultaten vergelijken** — toon onderliggende tellingen en reviewtijd, gate-yield/coverage en correctielast; geen samengestelde kwaliteitsscore als primaire uitkomst;
-7. **Besluit** — pas na review route-identiteit onthullen en `KEEP`, `ITERATE` of `PROCEED` vastleggen met motivering.
+7. **Besluit** — pas na review route-identiteit onthullen en `KEEP`, `ITERATE` of `PROCEED` vastleggen met motivering;
+8. **Change proposal** — alleen na `PROCEED` mag Metis een afzonderlijk, concreet wijzigingsvoorstel opstellen met aanleiding, exacte scope, beoogde wijziging en expliciete buiten-scope;
+9. **APPLY** — alleen een expliciete menselijke `APPLY` op dat concrete change proposal autoriseert implementatie van precies die wijziging; `APPLY` autoriseert geen merge, deploy of publicatie.
 
 Meet minimaal:
 - reviewer voorkeur A/B/gelijkwaardig/beide onvoldoende;
@@ -103,13 +114,19 @@ Meet minimaal:
 
 Veiligheidscriterium: nul tolerantie voor onverifieerbare toevoegingen die als brongebonden kennis zouden kunnen doorstromen.
 
-`PROCEED` betekent uitsluitend dat er voldoende bewijs is voor een aparte, begrensde productie-integratieproef. Het is geen publicatiebesluit en geen automatische vervanging van de bestaande route.
+Beslisbetekenis:
+- `KEEP`: huidige productieaanpak behouden;
+- `ITERATE`: kandidaat aanpassen binnen Audit en opnieuw experimenteren;
+- `PROCEED`: voldoende bewijs om een afzonderlijk change proposal te maken, niet om productie te wijzigen;
+- `APPLY`: expliciete menselijke autorisatie om uitsluitend het goedgekeurde change proposal als softwarewijziging uit te voeren.
 
-Tot een `PROCEED`-besluit blijft de bestaande productiepassagevorming leidend.
+Na `APPLY` mag Metis de geautoriseerde code-, configuratie- of promptwijziging implementeren, tests uitvoeren en een PR voorbereiden. Merge, deploy en publicatie blijven afzonderlijke menselijke/releasebesluiten. Ook na `APPLY` krijgt AI-output geen rechtstreeks schrijfpad naar de Kernel.
+
+Tot een afzonderlijk geautoriseerde en gereleasete productiewijziging blijft de bestaande productiepassagevorming leidend.
 
 ## R3.5 Semantiek en invarianten gericht scheiden
 
-Alleen na voldoende bewijs uit R3.4:
+Alleen na voldoende bewijs uit R3.4 én een expliciete `APPLY` op een concreet change proposal:
 - identificeer lexicale regels die semantische interpretatie proberen te doen;
 - behoud bron-, review-, status- en publicatie-invarianten deterministisch;
 - verwijder of vereenvoudig semantische uitzonderingslogica alleen met regressiebewijs.
@@ -146,7 +163,10 @@ AI, Grok Bot en Metis tellen niet als vereiste menselijke C3–C6-reviewer, moge
 - Geen frontend-rewrite.
 - Geen microservicesplitsing zonder afzonderlijk bewijs dat de huidige grens het probleem veroorzaakt.
 - Geen generiek auditframework voordat meerdere echte auditvormen aantoonbaar dezelfde state en persistence delen.
-- Geen experimentele modelroute met directe canonieke publicatierechten.
+- Geen AI/modelroute buiten Audit zolang geen afzonderlijk architectuurbesluit dat expliciet wijzigt.
+- Geen modeloutput met directe schrijf-, review-, publicatie- of canonieke rechten in de Kernel.
+- Geen `PROCEED` als impliciete implementatieautorisatie; alleen een expliciet, proposal-gebonden `APPLY` autoriseert implementatie.
+- Geen `APPLY` als impliciete merge-, deploy- of publicatieautorisatie.
 - Geen algemene G2-`PASS`: publicatie blijft conditioneel per snapshot volgens `PROTOCOL.md`.
 - Geen Product API-activatie als neveneffect van G2-publicatie.
 
@@ -161,7 +181,9 @@ AI, Grok Bot en Metis tellen niet als vereiste menselijke C3–C6-reviewer, moge
 | Documentkwaliteit als tweede architectuurproef | LOCKED NA RETRO — 2026-09-10 |
 | Audit als normale nav-kamer + brede paarse meta-tegel onder workflow | LOCKED UX — 2026-09-10 |
 | Generiek auditframework vooraf bouwen | AFGEWEZEN — eerst expliciete auditvormen en hergebruik |
-| Passagevormingsexperiment | LOCKED ONTWERP — frozen dataset, blind A/B, gedeelde harde gates, KEEP/ITERATE/PROCEED |
-| Hybride passagevorming invoeren | NIET BESLOTEN — afhankelijk van experiment |
+| Passagevormingsexperiment | LOCKED — frozen dataset, blind A/B, gedeelde harde gates, KEEP/ITERATE/PROCEED |
+| AI uitsluitend als experimenteel instrument binnen Audit | LOCKED — geen direct pad naar Kernel of productie-state |
+| PROCEED → change proposal → expliciet APPLY | LOCKED — APPLY autoriseert alleen concrete implementatie, niet merge/deploy/publicatie |
+| Hybride passagevorming invoeren | NIET BESLOTEN — afhankelijk van experiment + change proposal + APPLY |
 | Bestaande passagevorming vervangen | NIET BESLOTEN |
 | OIDC standaard deployment herstellen | OPEN |
