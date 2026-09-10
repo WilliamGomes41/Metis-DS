@@ -27,7 +27,7 @@ Protocol-v2-delta's, oude roadmaps, approval-manifests en de pre-v3 governance b
 - Afgeronde of gesupersedeerde besluitgeschiedenis gaat naar `docs/history/`, changelog of auditrapport; niet naar de actuele roadmap.
 - Er wordt geen nieuwe keten van Protocol-v3-delta's opgebouwd.
 - Een tijdelijke deployment- of incidentworkaround wordt niet automatisch architectuurwet.
-- Een experiment mag geen canonieke publicatie uitvoeren; overgang naar productie vereist een expliciet evidence-backed `KEEP`, `ITERATE` of `PROCEED`-besluit.
+- Een experiment mag geen canonieke publicatie uitvoeren. `KEEP`, `ITERATE` en `PROCEED` zijn geen implementatie-autorisatie. De Audit-eindstatus is `READY FOR IMPLEMENTATION`; ontwikkeling, GitHub, merge, deploy en publicatie blijven buiten Metis. Er is geen APPLY-executor.
 
 ## Auditgrens
 

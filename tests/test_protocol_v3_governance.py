@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL = ROOT / "PROTOCOL.md"
 ROADMAP = ROOT / "ROADMAP.md"
+GOVERNANCE = ROOT / "docs" / "GOVERNANCE.md"
 V2_PROTOCOL_SNAPSHOT = ROOT / "docs" / "history" / "protocol-v2" / "PROTOCOL_ROOT_FINAL_2026-09-10.md"
 V2_ROADMAP_SNAPSHOT = ROOT / "docs" / "history" / "protocol-v2" / "ROADMAP_PRE_V3_2026-09-10.md"
 V2_GOVERNANCE_SNAPSHOT = ROOT / "docs" / "history" / "protocol-v2" / "GOVERNANCE_PRE_V3_2026-09-10.md"
@@ -57,11 +58,11 @@ def test_roadmap_records_v3_closeout_and_current_next_work() -> None:
     assert "## R3.2 Governance-tests migreren\n\n**Status:** GEREED" in roadmap
     assert "Besluit: `ACTIVATE V3` — uitgevoerd via PR #149." in roadmap
     assert "## R3.3 Audit-kamer + experimentbasis\n\n**Status:** IN UITVOERING" in roadmap
-    assert "## R3.4 Eerste experiment: passagevorming\n\n**Status:** ARCHITECTUUR LOCKED" in roadmap
+    assert "## R3.4 Eerste experiment: passagevorming\n\n**Status:** ARCHITECTUUR HERZIEN EN LOCKED" in roadmap
     assert "| Protocol v3 activeren | GEREED — PR #149 gemerged; Protocol v3.0.0 actief; CI groen |" in roadmap
 
 
-def test_audit_room_passage_experiment_and_apply_boundary_are_locked() -> None:
+def test_audit_room_passage_experiment_and_evidence_boundary_are_locked() -> None:
     roadmap = ROADMAP.read_text(encoding="utf-8")
     for required in (
         "de Audit-kamer is generiek; onderliggende audits blijven expliciet en lokaal",
@@ -75,20 +76,47 @@ def test_audit_room_passage_experiment_and_apply_boundary_are_locked() -> None:
         "Metis reconstrueert een kandidaat zelf uit de aangewezen spans van de frozen bron",
         "**Blind beoordelen**",
         "A, B, gelijkwaardig of beide onvoldoende",
-        "gate-yield/coverage",
+        "**Menselijke correctie vastleggen**",
+        "**Verbetercollectie vullen**",
+        "**READY FOR IMPLEMENTATION**",
+        "Metis programmeert zichzelf niet",
+        "GitHub blijft de bron van waarheid voor software",
+        "een individueel voorbeeld leidt niet tot een softwarewijziging of PR",
+        "bruikbare yield/coverage",
         "nul tolerantie voor onverifieerbare toevoegingen",
-        "`KEEP`, `ITERATE` of `PROCEED`",
-        "**Change proposal**",
-        "**APPLY**",
-        "`APPLY` autoriseert geen merge, deploy of publicatie",
     ):
         assert required in roadmap
     assert "Geen generiek auditframework voordat meerdere echte auditvormen aantoonbaar dezelfde state en persistence delen." in roadmap
     assert "Geen AI/modelroute buiten Audit zolang geen afzonderlijk architectuurbesluit dat expliciet wijzigt." in roadmap
-    assert "Geen `PROCEED` als impliciete implementatieautorisatie" in roadmap
+    assert "Geen individuele fout of correctie die automatisch een softwarewijziging, branch of PR veroorzaakt." in roadmap
+    assert "Geen `READY FOR IMPLEMENTATION` als impliciete autorisatie voor codewijziging, GitHub-write, merge, deploy of publicatie." in roadmap
+    assert "Geen downstream-capability als werkend beschrijven zolang geen echte technische executor bestaat." in roadmap
     assert "| Audit-kamer als brede inspectiekamer | LOCKED — 2026-09-10 |" in roadmap
-    assert "| Passagevormingsexperiment | LOCKED — frozen dataset, blind A/B, gedeelde harde gates, KEEP/ITERATE/PROCEED |" in roadmap
-    assert "| PROCEED → change proposal → expliciet APPLY | LOCKED" in roadmap
+    assert "| Passagevormingsexperiment | LOCKED — frozen dataset, blind A/B, menselijke correctie en verbetercollectie |" in roadmap
+    assert "| Audit → READY FOR IMPLEMENTATION | LOCKED — hier eindigt Metis; ontwikkeling gebeurt buiten Metis |" in roadmap
+    assert "| Metis programmeert zichzelf / automatische APPLY → GitHub | AFGEWEZEN" in roadmap
+
+
+def test_protocol_and_governance_end_audit_at_evidence_boundary() -> None:
+    protocol = PROTOCOL.read_text(encoding="utf-8")
+    governance = GOVERNANCE.read_text(encoding="utf-8")
+    for required in (
+        "`READY FOR IMPLEMENTATION`",
+        "ontwikkeling gebeurt buiten Metis",
+        "Er is geen APPLY-executor.",
+        "`PROCEED` is geen Metis-productievervangingsbesluit",
+    ):
+        assert required in protocol
+    assert "evidence-backed besluit `PROCEED`" not in protocol
+    assert "expliciet evidence-backed besluit: `KEEP`, `ITERATE` of `PROCEED`" not in protocol
+    for required in (
+        "`KEEP`, `ITERATE` en `PROCEED` zijn geen implementatie-autorisatie",
+        "`READY FOR IMPLEMENTATION`",
+        "buiten Metis",
+        "Er is geen APPLY-executor.",
+    ):
+        assert required in governance
+    assert "evidence-backed `KEEP`, `ITERATE` of `PROCEED`-besluit" not in governance
 
 
 def test_v2_root_state_is_preserved_as_history() -> None:
