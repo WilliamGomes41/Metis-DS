@@ -14,10 +14,23 @@ def install_audit_llm_settings_routes(app: FastAPI, console: OperationsConsole) 
     store = AuditLLMSecretStore(console.runtime)
 
     def account_for(request: Request) -> dict[str, Any]:
-        account = console.session_account(request.cookies.get("console_session"))
-        if "researcher" not in set(account.get("roles") or []):
-            raise ConsoleError("researcher_role_required")
-        return account
+        return console.session_account(request.cookies.get("console_session"))
+
+    def researcher_account(request: Request) -> dict[str, Any] | None:
+        account = account_for(request)
+        return account if "researcher" in set(account.get("roles") or []) else None
+
+    def forbidden(account: dict[str, Any]) -> HTMLResponse:
+        from src.audit_room_v1 import _chrome
+
+        return HTMLResponse(
+            _chrome(
+                console,
+                account,
+                '<h1>Geen toegang</h1><p>LLM-instellingen vereisen de rol researcher.</p><p><a href="/audit">Terug naar Audit</a></p>',
+            ),
+            status_code=403,
+        )
 
     def render(account: dict[str, Any], *, notice: str = "", error: str = "") -> HTMLResponse:
         from src.audit_room_v1 import _chrome, _esc
@@ -62,12 +75,16 @@ def install_audit_llm_settings_routes(app: FastAPI, console: OperationsConsole) 
         return HTMLResponse(_chrome(console, account, body))
 
     def settings(request: Request, saved: str = "", removed: str = "") -> HTMLResponse:
-        account = account_for(request)
+        account = researcher_account(request)
+        if account is None:
+            return forbidden(account_for(request))
         notice = "API-key opgeslagen." if saved else ("API-key verwijderd." if removed else "")
         return render(account, notice=notice)
 
     def save(request: Request, api_key: str = Form(...)) -> HTMLResponse:
-        account = account_for(request)
+        account = researcher_account(request)
+        if account is None:
+            return forbidden(account_for(request))
         try:
             store.set_api_key(api_key)
         except ConsoleError as exc:
@@ -81,7 +98,9 @@ def install_audit_llm_settings_routes(app: FastAPI, console: OperationsConsole) 
         return RedirectResponse("/audit/llm-settings?saved=1", status_code=303)
 
     def remove(request: Request) -> HTMLResponse:
-        account_for(request)
+        account = researcher_account(request)
+        if account is None:
+            return forbidden(account_for(request))
         store.clear_api_key()
         return RedirectResponse("/audit/llm-settings?removed=1", status_code=303)
 
