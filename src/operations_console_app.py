@@ -418,6 +418,7 @@ def _nav(account: dict[str, Any] | None, current: str = "", counts: dict[str, in
         ("review", "/review", "Review", counts.get("review", 0)),
         ("publish", "/publish", "Publiceren", counts.get("publish", 0)),
         ("tree", "/tree", "Documenten", counts.get("tree", 0)),
+        ("audit", "/audit", "Audit", 0),
         ("accounts", "/accounts", "Accounts", 0),
     ]
     links = []
@@ -1490,6 +1491,21 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                 ),
             )
         )
+        audit_tile = """
+          <section aria-labelledby="home-audit-title" style="margin-top:2.5rem;">
+            <p class="eyebrow">Onderzoeken &amp; controleren</p>
+            <a class="review-control-card" href="/audit" style="border:2px solid var(--paars);background:var(--wit);">
+              <span class="review-control-card-body">
+                <span id="home-audit-title" class="review-control-card-title">Audit</span>
+                <span class="review-control-card-copy">Controleer Metis en onderzoek verbeteringen buiten de publicatiestroom.</span>
+              </span>
+              <span class="review-control-card-meta">
+                <span class="review-control-card-status">Inspectie &amp; onderzoek</span>
+                <span class="review-control-card-action">Open Audit <span aria-hidden="true">→</span></span>
+              </span>
+            </a>
+          </section>
+        """
         return _page(
             f"""
             {_nav(account, "home", counts)}
@@ -1497,6 +1513,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
               <h1>Mijn werk</h1>
               <p class="lead">Kies de volgende stap in het proces.</p>
               <div class="home-tiles">{tiles}</div>
+              {audit_tile}
             </section>
             """
         )
@@ -1649,7 +1666,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         live_url: str = Form(""),
         class_: str = Form(...),
         family: str = Form(...),
-        url: str = Form(""),
+        url: str = Form("") ,
         replaces_document: str = Form(""),
         named_reviewers: list[str] = Form(default=[]),
         file: UploadFile | None = File(None),
