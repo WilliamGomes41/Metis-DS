@@ -38,24 +38,32 @@ Gereed wanneer:
 
 ## R3.3 Audit-kamer + experimentbasis
 
-**Status:** VOLGEND — owner-approved ontwerp-lock 2026-09-10.
+**Status:** IN UITVOERING — owner-approved ontwerp-lock en retro-lock 2026-09-10; implementatie via PR #153.
 
 Doel: `Audit` wordt de centrale interne inspectiekamer voor meerdere vormen van controle en onderzoek, zonder vooraf een generiek auditframework te bouwen.
 
 Ontwerp-lock:
 - de Audit-kamer is generiek; onderliggende audits blijven expliciet en lokaal totdat echte herhaling een gedeelde abstractie rechtvaardigt;
+- gebruikers kunnen zelf een audit aanmaken door een beschikbaar audittype te kiezen;
+- audittypen worden als kleine gesloten configuratie aangeboden; nieuwe typen krijgen hun eigen uitvoering en hoeven geen universele workflow te delen;
+- de gedeelde persistence kent alleen een minimale type-onafhankelijke envelope: audit-id, type, titel, maker, timestamps en een type-specifieke payload;
+- experiment-specifieke baseline, kandidaat, dataset, review en besluit horen niet in de gedeelde storelogica;
 - bestaande controles worden hergebruikt vóór nieuwe auditlogica wordt gemaakt;
-- eerste ingangen zijn **Documentkwaliteit**, **Publicatiecontrole** en **Experimenten**;
-- read-only controles hoeven geen universele audit-lifecycle of nieuw permanent `audit_record` te krijgen;
+- eerste echte auditvormen zijn **Experiment** en een minimale read-only **Documentkwaliteit**-audit; **Publicatiecontrole** en **Techniek & release** blijven nog uitgeschakeld;
+- Documentkwaliteit dient tevens als architectuurproef: toevoegen van een tweede auditvorm mag de gedeelde storevorm niet veranderen;
+- read-only controles hoeven geen universele audit-lifecycle te krijgen;
 - bestaande object-/reviewevents blijven in de huidige append-only audit/review-ledger;
 - er komt geen nieuwe accountrol `auditor` voor deze MVP;
 - audit wijzigt geen canonieke kennis, publiceert niets en opent geen Product API;
 - geen console-rewrite, nieuw frontendframework, microservicesplitsing of generieke `AuditEngine`.
 
 Eerste implementatievolgorde:
-1. Audit-kamer en read-only hergebruik van bestaande documentkwaliteit/publicatiecontroles;
-2. begrensde experiment-persistence en blind A/B-review;
-3. passagevormingsexperiment uit R3.4.
+1. Audit-kamer, zelf audit aanmaken, minimale type-onafhankelijke persistence en read-only Documentkwaliteit als tweede echte auditvorm;
+2. Audit zichtbaar maken in de normale console-navigatie;
+3. begrensde experiment-persistence voor dataset-freeze en blind A/B-review;
+4. passagevormingsexperiment uit R3.4.
+
+Retro-besluit 2026-09-10: **SIMPLIFY BEFORE EXTENDING**. Dataset-freeze en A/B-uitvoering worden niet toegevoegd voordat de gedeelde AuditStore aantoonbaar type-onafhankelijk blijft en een tweede auditvorm zonder wijziging van de storevorm werkt.
 
 ## R3.4 Eerste experiment: passagevorming
 
@@ -141,6 +149,9 @@ AI, Grok Bot en Metis tellen niet als vereiste menselijke C3–C6-reviewer, moge
 |---|---|
 | Protocol v3 activeren | GEREED — PR #149 gemerged; Protocol v3.0.0 actief; CI groen |
 | Audit-kamer als brede inspectiekamer | LOCKED — 2026-09-10 |
+| Gebruiker maakt zelf audit aan via audittype | LOCKED — 2026-09-10 |
+| AuditStore blijft type-onafhankelijk; type-uitvoering lokaal | LOCKED NA RETRO — 2026-09-10 |
+| Documentkwaliteit als tweede architectuurproef | LOCKED NA RETRO — 2026-09-10 |
 | Generiek auditframework vooraf bouwen | AFGEWEZEN — eerst expliciete auditvormen en hergebruik |
 | Passagevormingsexperiment | LOCKED ONTWERP — frozen dataset, blind A/B, gedeelde harde gates, KEEP/ITERATE/PROCEED |
 | Hybride passagevorming invoeren | NIET BESLOTEN — afhankelijk van experiment |
