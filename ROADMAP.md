@@ -91,6 +91,15 @@ Architectuurlock AI en Kernel:
 - de reviewer ziet altijd de relevante originele bron, baseline, kandidaat en bijbehorende bronspans;
 - modeloutput, experimentresultaten en conclusies blijven Audit-bewijs en stromen niet automatisch door naar de Kernel.
 
+LLM-secretlock:
+- de gebruiker kan de LLM API-key uitsluitend via **Audit → LLM-instellingen** invoeren, vervangen of verwijderen;
+- de API-key is write-only: na opslaan toont de console alleen `Geconfigureerd` of `Niet geconfigureerd` en nooit de sleutel zelf;
+- de plaintext API-key komt niet in Audit-records, frozen datasets, Kernel-state, roadmap/configbestanden of Git;
+- de opgeslagen API-key wordt versleuteld met een afzonderlijke deployment-masterkey uit `METIS_AUDIT_SECRET_KEY`; zonder geldige masterkey is invoer in de console fail-closed niet beschikbaar;
+- alleen de Audit-runtime mag de ontsleutelde key opvragen voor een toekomstige modelcall; de Kernel importeert deze secretstore niet;
+- dit is geen algemene environment-variable- of secret-editor: andere deploymentsettings blijven buiten de console;
+- vervangen en verwijderen van de LLM-key geven geen `PROCEED`, `APPLY`, merge-, deploy- of publicatierechten.
+
 Vaste workflow:
 1. **Opzetten** — onderzoeksvraag, baseline, kandidaat, beoordelingscriteria en stopregel vastleggen;
 2. **Dataset vastzetten** — een kleine representatieve frozen set maken met gewone én moeilijke passages, `item_id`, `snapshot_id`, `source_hash`, `source_locator`, exacte `source_text` en `baseline_commit`; na freeze niet stilzwijgend wijzigen of vervangen;
@@ -165,6 +174,8 @@ AI, Grok Bot en Metis tellen niet als vereiste menselijke C3–C6-reviewer, moge
 - Geen generiek auditframework voordat meerdere echte auditvormen aantoonbaar dezelfde state en persistence delen.
 - Geen AI/modelroute buiten Audit zolang geen afzonderlijk architectuurbesluit dat expliciet wijzigt.
 - Geen modeloutput met directe schrijf-, review-, publicatie- of canonieke rechten in de Kernel.
+- Geen algemene environment-variable- of secret-editor in de console voor de Audit-LLM-koppeling.
+- Geen plaintext LLM API-key in Git, gewone config, auditrecords, frozen datasets of Kernel-state.
 - Geen `PROCEED` als impliciete implementatieautorisatie; alleen een expliciet, proposal-gebonden `APPLY` autoriseert implementatie.
 - Geen `APPLY` als impliciete merge-, deploy- of publicatieautorisatie.
 - Geen algemene G2-`PASS`: publicatie blijft conditioneel per snapshot volgens `PROTOCOL.md`.
@@ -183,6 +194,7 @@ AI, Grok Bot en Metis tellen niet als vereiste menselijke C3–C6-reviewer, moge
 | Generiek auditframework vooraf bouwen | AFGEWEZEN — eerst expliciete auditvormen en hergebruik |
 | Passagevormingsexperiment | LOCKED — frozen dataset, blind A/B, gedeelde harde gates, KEEP/ITERATE/PROCEED |
 | AI uitsluitend als experimenteel instrument binnen Audit | LOCKED — geen direct pad naar Kernel of productie-state |
+| LLM API-key via Audit-console | LOCKED — write-only, versleuteld at rest, geen algemene secret-editor |
 | PROCEED → change proposal → expliciet APPLY | LOCKED — APPLY autoriseert alleen concrete implementatie, niet merge/deploy/publicatie |
 | Hybride passagevorming invoeren | NIET BESLOTEN — afhankelijk van experiment + change proposal + APPLY |
 | Bestaande passagevorming vervangen | NIET BESLOTEN |
