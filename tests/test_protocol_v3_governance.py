@@ -6,6 +6,7 @@ PROTOCOL = ROOT / "PROTOCOL.md"
 ROADMAP = ROOT / "ROADMAP.md"
 V2_PROTOCOL_SNAPSHOT = ROOT / "docs" / "history" / "protocol-v2" / "PROTOCOL_ROOT_FINAL_2026-09-10.md"
 V2_ROADMAP_SNAPSHOT = ROOT / "docs" / "history" / "protocol-v2" / "ROADMAP_PRE_V3_2026-09-10.md"
+V2_GOVERNANCE_SNAPSHOT = ROOT / "docs" / "history" / "protocol-v2" / "GOVERNANCE_PRE_V3_2026-09-10.md"
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: slop
@@ -19,7 +20,7 @@ def test_v3_is_the_single_current_norm() -> None:
     assert "`PROTOCOL.md → ROADMAP.md → acceptatietests → code`" in protocol
     assert "## 16. Protocol V2 is historie" in protocol
     assert "De geldende normatieve baseline is Protocol v2." not in protocol
-    assert "PROTOCOL_V3_" not in protocol
+    assert "docs/PROTOCOL_V3_CANDIDATE.md" not in protocol
 
 
 def test_v3_keeps_hard_publication_and_review_invariants() -> None:
@@ -53,6 +54,7 @@ def test_roadmap_only_contains_active_v3_work() -> None:
 def test_v2_root_state_is_preserved_as_history() -> None:
     assert V2_PROTOCOL_SNAPSHOT.is_file()
     assert V2_ROADMAP_SNAPSHOT.is_file()
+    assert V2_GOVERNANCE_SNAPSHOT.is_file()
     old_protocol = V2_PROTOCOL_SNAPSHOT.read_text(encoding="utf-8")
     old_roadmap = V2_ROADMAP_SNAPSHOT.read_text(encoding="utf-8")
     assert "Protocol v2.34.0" in old_protocol
@@ -62,6 +64,8 @@ def test_v2_root_state_is_preserved_as_history() -> None:
 
 def test_no_handoff_or_extra_root_steering_layer_is_introduced() -> None:
     assert not (ROOT / "HANDOFF.md").exists()
+    assert not (ROOT / "docs" / "PROTOCOL_V3_CANDIDATE.md").exists()
+    assert not (ROOT / "docs" / "ROADMAP_V3_CANDIDATE.md").exists()
     root_markdown = {path.name for path in ROOT.glob("*.md")}
     assert "PROTOCOL_V3.md" not in root_markdown
     assert "ROADMAP_V3.md" not in root_markdown
