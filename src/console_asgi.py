@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from src.audit_room_v1 import install_audit_routes
 from src.g2_source_store import AzureBlobSourceStore
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
@@ -84,6 +85,7 @@ def build_app() -> object:
     bootstrap_accounts(console)
     app = create_console_app(console)
     install_proportionate_review_routes(app, console)
+    install_audit_routes(app, console)
     return app
 
 
