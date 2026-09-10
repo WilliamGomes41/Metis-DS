@@ -52,7 +52,7 @@ def test_researcher_can_set_replace_and_remove_write_only_key(tmp_path, monkeypa
     assert "Niet geconfigureerd" in page.text
     assert 'type="password"' in page.text
 
-    first = "sk-test-first-secret-value"
+    first = "dummy-first-credential-value"
     response = client.post("/audit/llm-settings", data={"api_key": first}, follow_redirects=False)
     assert response.status_code == 303
     assert store.read_api_key() == first
@@ -65,7 +65,7 @@ def test_researcher_can_set_replace_and_remove_write_only_key(tmp_path, monkeypa
     assert "Geconfigureerd" in configured.text
     assert first not in configured.text
 
-    second = "sk-test-replacement-secret-value"
+    second = "dummy-replacement-credential-value"
     response = client.post("/audit/llm-settings", data={"api_key": second}, follow_redirects=False)
     assert response.status_code == 303
     assert store.read_api_key() == second
@@ -85,7 +85,7 @@ def test_llm_key_management_does_not_touch_audit_or_kernel_state(tmp_path, monke
     before_envelopes = console.list_envelopes()
     before_audits = AuditRegistry(console.runtime).list_audits()
 
-    response = client.post("/audit/llm-settings", data={"api_key": "sk-audit-only"}, follow_redirects=False)
+    response = client.post("/audit/llm-settings", data={"api_key": "dummy-audit-only-credential"}, follow_redirects=False)
     assert response.status_code == 303
     assert console.list_envelopes() == before_envelopes == []
     assert AuditRegistry(console.runtime).list_audits() == before_audits == []
@@ -95,7 +95,7 @@ def test_llm_key_management_does_not_touch_audit_or_kernel_state(tmp_path, monke
 def test_non_researcher_cannot_open_or_change_llm_settings(tmp_path, monkeypatch):
     console, client, _account = _system(tmp_path, monkeypatch, roles=("reviewer",))
     assert client.get("/audit/llm-settings").status_code == 403
-    assert client.post("/audit/llm-settings", data={"api_key": "sk-denied"}).status_code == 403
+    assert client.post("/audit/llm-settings", data={"api_key": "dummy-denied-credential"}).status_code == 403
     assert not (console.runtime / "audit_secrets" / "llm_api_key.json").exists()
 
 
