@@ -8,6 +8,7 @@ from src.integrity_kernel import sha256_file
 
 ROOT = Path(__file__).resolve().parents[1]
 GOVERNANCE = ROOT / "docs" / "GOVERNANCE.md"
+HISTORICAL_GOVERNANCE = ROOT / "docs" / "history" / "protocol-v2" / "GOVERNANCE_PRE_V3_2026-09-10.md"
 ARTEFACT = ROOT / "data" / "assurance" / "gd_03_c3_c6_reviewer_matrix.json"
 
 EXPECTED_MATRIX = {
@@ -60,7 +61,10 @@ def test_gd03_assurance_matches_governance_bytes_and_is_established() -> None:
     assert manifest["protocol_path"] == "docs/PROTOCOL_V2_2.md"
     assert manifest["evidence_path"] == "docs/GOVERNANCE.md"
     assert manifest["evidence_url"] == "docs/GOVERNANCE.md"
-    assert manifest["governance_sha256"] == sha256_file(GOVERNANCE)
+    # GD-03 is Protocol-v2 audit evidence. Its recorded hash must continue to
+    # verify the exact governance bytes that existed when the decision was
+    # established, not the live Protocol-v3 governance register.
+    assert manifest["governance_sha256"] == sha256_file(HISTORICAL_GOVERNANCE)
     assert manifest["conformance_effect"] == "does_not_override_gate_status"
     assert manifest["named_reviewers_status"] == "later_staffing_step_does_not_keep_decision_open"
     assert manifest["reviewer_matrix"] == EXPECTED_MATRIX

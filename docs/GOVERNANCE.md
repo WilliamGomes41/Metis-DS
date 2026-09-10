@@ -9,6 +9,10 @@ Dit bestand is het compacte operationele governance-register. Het is geen tweede
 
 De sturingsvolgorde is:
 
+`PROTOCOL.md → ROADMAP.md → acceptatietests → code`
+
+Daarbij geldt:
+
 1. `PROTOCOL.md` — actuele product-, veiligheids- en governance-invarianten;
 2. `ROADMAP.md` — actieve veranderopgaven en beslispoorten;
 3. acceptatie- en regressietests — uitvoerbaar bewijs;
