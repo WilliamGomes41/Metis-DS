@@ -38,7 +38,7 @@ Gereed wanneer:
 
 ## R3.3 Audit-kamer + experimentbasis
 
-**Status:** IN UITVOERING — owner-approved ontwerp-lock, retro-lock en UX-lock 2026-09-10; implementatie via PR #153.
+**Status:** IN UITVOERING — owner-approved ontwerp-lock, retro-lock en UX-lock 2026-09-10; basis geïmplementeerd via PR #153.
 
 Doel: `Audit` wordt de centrale interne inspectiekamer voor meerdere vormen van controle en onderzoek, zonder vooraf een generiek auditframework te bouwen.
 
@@ -72,9 +72,14 @@ Eerste implementatievolgorde:
 
 Retro-besluit 2026-09-10: **SIMPLIFY BEFORE EXTENDING**. Dataset-freeze en A/B-uitvoering worden niet toegevoegd voordat de gedeelde AuditStore aantoonbaar type-onafhankelijk blijft en een tweede auditvorm zonder wijziging van de storevorm werkt.
 
+Capability-closure-regel:
+- voor iedere nieuwe materiële capability moet vooraf expliciet zijn wat de input is, welke output ontstaat, wie of wat de volgende stap uitvoert en waar de verantwoordelijkheid van Metis eindigt;
+- een downstream-stap die geen bestaande technische executor heeft, mag niet als werkende Metis-capability worden beschreven;
+- Audit-output mag op zichzelf een eindproduct zijn: bewijs hoeft niet automatisch tot code, GitHub of deployment te leiden.
+
 ## R3.4 Eerste experiment: passagevorming
 
-**Status:** ARCHITECTUUR LOCKED — owner-approved 2026-09-10; dataset-freeze-implementatie gestart in PR #153.
+**Status:** ARCHITECTUUR HERZIEN EN LOCKED — owner-approved 2026-09-10; Audit stopt bij bewijs en verbeterbundel, softwareontwikkeling blijft buiten Metis.
 
 Onderzoeksvraag: kan brongebonden semantische passagevorming betere kennisobjectvoorstellen maken dan de huidige deterministische passagevorming zonder brontrouw of publicatieveiligheid te verliezen?
 
@@ -98,7 +103,7 @@ LLM-secretlock:
 - de opgeslagen API-key wordt versleuteld met een afzonderlijke deployment-masterkey uit `METIS_AUDIT_SECRET_KEY`; zonder geldige masterkey is invoer in de console fail-closed niet beschikbaar;
 - alleen de Audit-runtime mag de ontsleutelde key opvragen voor een toekomstige modelcall; de Kernel importeert deze secretstore niet;
 - dit is geen algemene environment-variable- of secret-editor: andere deploymentsettings blijven buiten de console;
-- vervangen en verwijderen van de LLM-key geven geen `PROCEED`, `APPLY`, merge-, deploy- of publicatierechten.
+- vervangen en verwijderen van de LLM-key geven geen implementatie-, merge-, deploy- of publicatierechten.
 
 Vaste workflow:
 1. **Opzetten** — onderzoeksvraag, baseline, kandidaat, beoordelingscriteria en stopregel vastleggen;
@@ -106,10 +111,25 @@ Vaste workflow:
 3. **Beide routes uitvoeren** — baseline en kandidaat produceren alleen experimentoutputs; de kandidaatroute mag uitsluitend werken binnen de frozen bron en publiceert niets;
 4. **Blind beoordelen** — reviewer ziet bron + Variant A + Variant B zonder route-identiteit en kiest A, B, gelijkwaardig of beide onvoldoende;
 5. **Foutcategorieën vastleggen** — minimaal onvolledig, context gemist, voorwaarde/uitzondering gemist, verkeerde merge/split, onverifieerbare toevoeging en correctie nodig;
-6. **Resultaten vergelijken** — toon onderliggende tellingen en reviewtijd, gate-yield/coverage en correctielast; geen samengestelde kwaliteitsscore als primaire uitkomst;
-7. **Besluit** — pas na review route-identiteit onthullen en `KEEP`, `ITERATE` of `PROCEED` vastleggen met motivering;
-8. **Change proposal** — alleen na `PROCEED` mag Metis een afzonderlijk, concreet wijzigingsvoorstel opstellen met aanleiding, exacte scope, beoogde wijziging en expliciete buiten-scope;
-9. **APPLY** — alleen een expliciete menselijke `APPLY` op dat concrete change proposal autoriseert implementatie van precies die wijziging; `APPLY` autoriseert geen merge, deploy of publicatie.
+6. **Menselijke correctie vastleggen** — een reviewer kan een uitkomst als correct of incorrect markeren en, bij incorrect, de gewenste brongebonden uitkomst vastleggen;
+7. **Verbetercollectie vullen** — bevestigde foutgevallen én bestaande goede voorbeelden worden append-only verzameld als regressiebewijs; een individueel voorbeeld leidt niet tot een softwarewijziging of PR;
+8. **Patroon bundelen** — meerdere voorbeelden van hetzelfde onderliggende probleem kunnen als één verbeterbundel worden samengebracht met probleemomschrijving, foutgevallen, goede regressiegevallen, gewenste uitkomsten en onderzochte Metis-versie;
+9. **READY FOR IMPLEMENTATION** — alleen een voldoende onderbouwde verbeterbundel kan deze status krijgen. Daarmee eindigt de verantwoordelijkheid van Metis; softwareontwerp, programmeren, tests, branch, PR, merge en deployment gebeuren buiten Metis.
+
+Verbetercollectie-lock:
+- de collectie is Audit-evidence, geen tweede bron van waarheid en geen generieke learning engine;
+- bewaar minimaal bronidentiteit, bronhash/locator, huidige uitkomst, gewenste uitkomst, correct/incorrect, foutcategorie, reviewer en onderzochte Metis-versie;
+- bewaar ook goede voorbeelden zodat toekomstige wijzigingen aantoonbaar geen bestaande correcte gevallen breken;
+- groepeer op onderliggend foutpatroon; geen vaste PR-drempel per aantal voorbeelden;
+- één voorbeeld mag nooit automatisch één change proposal, codewijziging of PR veroorzaken.
+
+Verantwoordelijkheidsgrens:
+- Metis detecteert, vergelijkt, laat beoordelen, bewaart bewijs en bundelt verbeterbehoeften;
+- Metis programmeert zichzelf niet;
+- Metis krijgt voor deze flow geen GitHub-write-integratie, ingebouwde coding-agent of algemene APPLY-executor;
+- een menselijke architect/developer kan een `READY FOR IMPLEMENTATION`-bundel buiten Metis samen met een coding-agent of andere ontwikkeltools omzetten in code en regressietests;
+- na een externe implementatie mag Audit dezelfde evidence opnieuw gebruiken om te toetsen of het probleem is opgelost en regressies zijn ontstaan;
+- een PR- of commitreferentie mag achteraf als Audit-metadata worden vastgelegd, maar GitHub blijft de bron van waarheid voor software.
 
 Meet minimaal:
 - reviewer voorkeur A/B/gelijkwaardig/beide onvoldoende;
@@ -119,26 +139,27 @@ Meet minimaal:
 - benodigde handmatige correcties;
 - reviewtijd;
 - gate-rejecties en bruikbare yield/coverage;
-- onverifieerbare toevoegingen.
+- onverifieerbare toevoegingen;
+- aantal bevestigde foutgevallen en goede regressiegevallen per foutpatroon.
 
 Veiligheidscriterium: nul tolerantie voor onverifieerbare toevoegingen die als brongebonden kennis zouden kunnen doorstromen.
 
 Beslisbetekenis:
 - `KEEP`: huidige productieaanpak behouden;
 - `ITERATE`: kandidaat aanpassen binnen Audit en opnieuw experimenteren;
-- `PROCEED`: voldoende bewijs om een afzonderlijk change proposal te maken, niet om productie te wijzigen;
-- `APPLY`: expliciete menselijke autorisatie om uitsluitend het goedgekeurde change proposal als softwarewijziging uit te voeren.
+- `EVIDENCE`: een menselijke beoordeling is sterk genoeg om als fout- of regressievoorbeeld in de verbetercollectie op te nemen;
+- `READY FOR IMPLEMENTATION`: een gebundeld probleem is voldoende onderbouwd om buiten Metis als ontwikkelopdracht te gebruiken; deze status autoriseert geen codewijziging, GitHub-actie, merge, deploy of publicatie.
 
-Na `APPLY` mag Metis de geautoriseerde code-, configuratie- of promptwijziging implementeren, tests uitvoeren en een PR voorbereiden. Merge, deploy en publicatie blijven afzonderlijke menselijke/releasebesluiten. Ook na `APPLY` krijgt AI-output geen rechtstreeks schrijfpad naar de Kernel.
-
-Tot een afzonderlijk geautoriseerde en gereleasete productiewijziging blijft de bestaande productiepassagevorming leidend.
+Tot een afzonderlijk extern ontwikkelde, geautoriseerde en gereleasete productiewijziging blijft de bestaande productiepassagevorming leidend.
 
 ## R3.5 Semantiek en invarianten gericht scheiden
 
-Alleen na voldoende bewijs uit R3.4 én een expliciete `APPLY` op een concreet change proposal:
+Alleen wanneer een `READY FOR IMPLEMENTATION`-verbeterbundel buiten Metis als expliciete ontwikkelopdracht wordt opgepakt:
 - identificeer lexicale regels die semantische interpretatie proberen te doen;
 - behoud bron-, review-, status- en publicatie-invarianten deterministisch;
-- verwijder of vereenvoudig semantische uitzonderingslogica alleen met regressiebewijs.
+- verwijder of vereenvoudig semantische uitzonderingslogica alleen met regressiebewijs uit de verbetercollectie.
+
+Softwareontwerp, codewijziging en PR vallen buiten Audit en zijn geen Metis-runtimeverantwoordelijkheid.
 
 Geen brede rewrite.
 
@@ -150,7 +171,7 @@ Alleen wanneer verdere consolewijzigingen dit aantoonbaar nodig maken: isoleer s
 
 Herstel de bedoelde CI/CD-route en bewijs een gecontroleerde deployment vanaf een identificeerbare commit. Cloud Shell ZIP blijft daarna uitsluitend noodprocedure, niet de normale workflow.
 
-Dit spoor verandert geen kennis-, review- of publicatielogica.
+Dit spoor verandert geen kennis-, review- of publicatielogica en is onafhankelijk van Audit-verbeterbundels.
 
 ## Open governancebesluiten
 
@@ -176,8 +197,10 @@ AI, Grok Bot en Metis tellen niet als vereiste menselijke C3–C6-reviewer, moge
 - Geen modeloutput met directe schrijf-, review-, publicatie- of canonieke rechten in de Kernel.
 - Geen algemene environment-variable- of secret-editor in de console voor de Audit-LLM-koppeling.
 - Geen plaintext LLM API-key in Git, gewone config, auditrecords, frozen datasets of Kernel-state.
-- Geen `PROCEED` als impliciete implementatieautorisatie; alleen een expliciet, proposal-gebonden `APPLY` autoriseert implementatie.
-- Geen `APPLY` als impliciete merge-, deploy- of publicatieautorisatie.
+- Geen individuele fout of correctie die automatisch een softwarewijziging, branch of PR veroorzaakt.
+- Geen `READY FOR IMPLEMENTATION` als impliciete autorisatie voor codewijziging, GitHub-write, merge, deploy of publicatie.
+- Geen GitHub-write-integratie, coding-agent of algemene software-executor in Audit zonder een nieuw expliciet architectuurbesluit met capability-closure.
+- Geen downstream-capability als werkend beschrijven zolang geen echte technische executor bestaat.
 - Geen algemene G2-`PASS`: publicatie blijft conditioneel per snapshot volgens `PROTOCOL.md`.
 - Geen Product API-activatie als neveneffect van G2-publicatie.
 
@@ -192,10 +215,12 @@ AI, Grok Bot en Metis tellen niet als vereiste menselijke C3–C6-reviewer, moge
 | Documentkwaliteit als tweede architectuurproef | LOCKED NA RETRO — 2026-09-10 |
 | Audit als normale nav-kamer + brede paarse meta-tegel onder workflow | LOCKED UX — 2026-09-10 |
 | Generiek auditframework vooraf bouwen | AFGEWEZEN — eerst expliciete auditvormen en hergebruik |
-| Passagevormingsexperiment | LOCKED — frozen dataset, blind A/B, gedeelde harde gates, KEEP/ITERATE/PROCEED |
+| Passagevormingsexperiment | LOCKED — frozen dataset, blind A/B, menselijke correctie en verbetercollectie |
 | AI uitsluitend als experimenteel instrument binnen Audit | LOCKED — geen direct pad naar Kernel of productie-state |
 | LLM API-key via Audit-console | LOCKED — write-only, versleuteld at rest, geen algemene secret-editor |
-| PROCEED → change proposal → expliciet APPLY | LOCKED — APPLY autoriseert alleen concrete implementatie, niet merge/deploy/publicatie |
-| Hybride passagevorming invoeren | NIET BESLOTEN — afhankelijk van experiment + change proposal + APPLY |
+| Audit-verbetercollectie | LOCKED — append-only bewijs van fouten én goede regressiegevallen; geen tweede bron van waarheid |
+| Audit → READY FOR IMPLEMENTATION | LOCKED — hier eindigt Metis; ontwikkeling gebeurt buiten Metis |
+| Metis programmeert zichzelf / automatische APPLY → GitHub | AFGEWEZEN — geen coding- of GitHub-writeverantwoordelijkheid in Audit |
+| Hybride passagevorming invoeren | NIET BESLOTEN — afhankelijk van bewijs en afzonderlijke externe implementatiebeslissing |
 | Bestaande passagevorming vervangen | NIET BESLOTEN |
 | OIDC standaard deployment herstellen | OPEN |
