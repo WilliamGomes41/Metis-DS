@@ -1,10 +1,10 @@
 """Shared pytest configuration.
 
 Historical Protocol-v2 contract tests remain executable audit evidence after the
-Protocol-v3 cutover.  Those tests were written when ``PROTOCOL.md``,
+Protocol-v3 cutover. Those tests were written when ``PROTOCOL.md``,
 ``ROADMAP.md`` and ``docs/GOVERNANCE.md`` also acted as an accumulating history
-log.  During historical tests only, reads of those three paths are therefore
-resolved to the frozen pre-v3 snapshots.  Current/V3 tests always read the live
+log. During historical tests only, reads of those three paths are therefore
+resolved to the frozen pre-v3 snapshots. Current/V3 tests always read the live
 root documents.
 
 # release-control-evidence: scope/belofte
@@ -32,17 +32,14 @@ _LIVE_TO_HISTORY = {
     (ROOT / "docs" / "GOVERNANCE.md").resolve(): _V2_GOVERNANCE,
 }
 
-# Entire files whose purpose is to pin a historical Protocol-v2/roadmap state.
 _HISTORICAL_FILE_PREFIXES = (
     "tests/test_protocol_v2_",
     "tests/test_roadmap_",
 )
 
-# Mixed product-test files with a small number of explicitly historical
-# document assertions.  Product-behaviour tests in the same files keep reading
-# current code and are otherwise untouched.
 _HISTORICAL_EXACT_NODES = {
     "tests/test_g2_azure_preflight.py::test_roadmap_and_changelog_record_readiness_not_pass",
+    "tests/test_gd_03_assurance.py::test_gd03_assurance_matches_governance_bytes_and_is_established",
     "tests/test_gd_03_assurance.py::test_gd03_human_record_and_governance_keep_other_decisions_open",
     "tests/test_topology_bound.py::test_roadmap_records_remediation_5_landing_note",
     "tests/test_topology_bound.py::test_remediation_5_does_not_open_multi_writer_extend_or_protocol",

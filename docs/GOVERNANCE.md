@@ -3,7 +3,7 @@
 **Status:** actief onder Protocol v3.0.0  
 **Datum:** 2026-09-10
 
-Dit bestand is het compacte operationele governance-register. Het is geen tweede protocol en geen geschiedenislog.
+Dit bestand is het compacte operationele governance-register. Het is geen tweede protocol, geen geschiedenislog en geen vijfde stuurlaag.
 
 ## Huidige autoriteit
 
