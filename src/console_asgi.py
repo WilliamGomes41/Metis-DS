@@ -86,8 +86,8 @@ def build_app() -> object:
     bootstrap_accounts(console)
     app = create_console_app(console)
     install_proportionate_review_routes(app, console)
-    install_audit_routes(app, console)
     install_audit_llm_settings_routes(app, console)
+    install_audit_routes(app, console)
     return app
 
 
