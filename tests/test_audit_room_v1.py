@@ -80,6 +80,22 @@ def test_audit_room_exposes_two_real_types_without_generic_workflow_engine(tmp_p
     assert '/audit/new?type=publication' not in new.text
 
 
+def test_audit_is_shared_nav_room_and_separate_home_meta_tile(tmp_path):
+    _console, client, _researcher, _receipt = _system(tmp_path)
+
+    home = client.get("/")
+    assert home.status_code == 200
+    assert '<a href="/audit">Audit</a>' in home.text
+    assert home.text.count('class="home-tile') == 4
+    assert "Onderzoeken &amp; controleren" in home.text
+    assert 'class="review-control-card" href="/audit"' in home.text
+    assert "Open Audit" in home.text
+
+    audit = client.get("/audit")
+    assert audit.status_code == 200
+    assert '<a href="/audit" aria-current="page">Audit</a>' in audit.text
+
+
 def test_generic_registry_persists_opaque_type_payload(tmp_path):
     console, _client, researcher, _receipt = _system(tmp_path)
     registry = AuditRegistry(console.runtime)
