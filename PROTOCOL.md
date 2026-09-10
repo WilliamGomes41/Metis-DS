@@ -84,7 +84,7 @@ Een nieuw taalgeval leidt niet automatisch tot een nieuwe lexicale uitzonderings
 
 Deterministische controles blijven de autoriteit voor harde veiligheids- en publicatievoorwaarden.
 
-Zolang geen evidence-backed besluit `PROCEED` is genomen voor een vervangende passagevormingsroute, blijft de bestaande productiepassagevorming leidend. Een experimenteel semantisch model mag voorstellen doen, maar niet zelfstandig canonieke kennis schrijven of publiceren.
+De bestaande productiepassagevorming blijft leidend tot een afzonderlijk extern ontwikkelde, geautoriseerde en gereleasete vervanging. Een experimenteel semantisch model mag voorstellen doen, maar niet zelfstandig canonieke kennis schrijven of publiceren. `PROCEED` is geen Metis-productievervangingsbesluit. Audit-eindstatus is `READY FOR IMPLEMENTATION`; ontwikkeling gebeurt buiten Metis. Er is geen APPLY-executor.
 
 ## 6. Review
 
@@ -173,7 +173,7 @@ Een experiment vergelijkt baseline en kandidaatroute op dezelfde vastgezette bro
 - vooraf vastgelegde metrics en besluitcriteria;
 - geen directe schrijfrechten naar canonieke publicatie.
 
-Een kandidaatroute vervangt productielogica pas na een expliciet evidence-backed besluit: `KEEP`, `ITERATE` of `PROCEED`.
+Een kandidaatroute vervangt productielogica niet via `PROCEED` of een APPLY-executor. De terminale Metis-status voor een voldoende onderbouwde verbeterbundel is `READY FOR IMPLEMENTATION`. Die status autoriseert geen codewijziging, GitHub-write, merge, deploy of publicatie; softwareontwikkeling gebeurt buiten Metis. `KEEP` en `ITERATE` blijven experimentbesluiten binnen Audit en zijn geen implementatie-autorisatie.
 
 Voor onverifieerbare toevoegingen die als brongebonden kennis zouden kunnen doorstromen geldt nul tolerantie.
 

@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL = ROOT / "PROTOCOL.md"
 ROADMAP = ROOT / "ROADMAP.md"
+GOVERNANCE = ROOT / "docs" / "GOVERNANCE.md"
 V2_PROTOCOL_SNAPSHOT = ROOT / "docs" / "history" / "protocol-v2" / "PROTOCOL_ROOT_FINAL_2026-09-10.md"
 V2_ROADMAP_SNAPSHOT = ROOT / "docs" / "history" / "protocol-v2" / "ROADMAP_PRE_V3_2026-09-10.md"
 V2_GOVERNANCE_SNAPSHOT = ROOT / "docs" / "history" / "protocol-v2" / "GOVERNANCE_PRE_V3_2026-09-10.md"
@@ -81,7 +82,7 @@ def test_audit_room_passage_experiment_and_evidence_boundary_are_locked() -> Non
         "Metis programmeert zichzelf niet",
         "GitHub blijft de bron van waarheid voor software",
         "een individueel voorbeeld leidt niet tot een softwarewijziging of PR",
-        "gate-yield/coverage",
+        "bruikbare yield/coverage",
         "nul tolerantie voor onverifieerbare toevoegingen",
     ):
         assert required in roadmap
@@ -94,6 +95,28 @@ def test_audit_room_passage_experiment_and_evidence_boundary_are_locked() -> Non
     assert "| Passagevormingsexperiment | LOCKED — frozen dataset, blind A/B, menselijke correctie en verbetercollectie |" in roadmap
     assert "| Audit → READY FOR IMPLEMENTATION | LOCKED — hier eindigt Metis; ontwikkeling gebeurt buiten Metis |" in roadmap
     assert "| Metis programmeert zichzelf / automatische APPLY → GitHub | AFGEWEZEN" in roadmap
+
+
+def test_protocol_and_governance_end_audit_at_evidence_boundary() -> None:
+    protocol = PROTOCOL.read_text(encoding="utf-8")
+    governance = GOVERNANCE.read_text(encoding="utf-8")
+    for required in (
+        "`READY FOR IMPLEMENTATION`",
+        "ontwikkeling gebeurt buiten Metis",
+        "Er is geen APPLY-executor.",
+        "`PROCEED` is geen Metis-productievervangingsbesluit",
+    ):
+        assert required in protocol
+    assert "evidence-backed besluit `PROCEED`" not in protocol
+    assert "expliciet evidence-backed besluit: `KEEP`, `ITERATE` of `PROCEED`" not in protocol
+    for required in (
+        "`KEEP`, `ITERATE` en `PROCEED` zijn geen implementatie-autorisatie",
+        "`READY FOR IMPLEMENTATION`",
+        "buiten Metis",
+        "Er is geen APPLY-executor.",
+    ):
+        assert required in governance
+    assert "evidence-backed `KEEP`, `ITERATE` of `PROCEED`-besluit" not in governance
 
 
 def test_v2_root_state_is_preserved_as_history() -> None:
