@@ -6,6 +6,8 @@
 
 ## R3.1 Governance-migratie afronden
 
+**Status:** GEREED — Protocol v3.0.0 is geactiveerd via PR #149; de definitieve CI was groen.
+
 Doel: Protocol v3 als enige actuele norm laten functioneren zonder verlies van V2-auditbewijs.
 
 Gereed wanneer:
@@ -15,9 +17,11 @@ Gereed wanneer:
 - governance-tests huidige invarianten bewijzen in plaats van historische V2-tekst in actuele stuurdocumenten af te dwingen;
 - CI groen is.
 
-Besluit: `ACTIVATE V3` wanneer alle voorwaarden zijn gehaald; anders `REVISE V3`.
+Besluit: `ACTIVATE V3` — uitgevoerd via PR #149.
 
 ## R3.2 Governance-tests migreren
+
+**Status:** GEREED — actuele V3-tests en historische V2-auditchecks zijn gescheiden; volledige CI was groen voor merge.
 
 Doel: documenttests terugbrengen tot actuele V3-invarianten en afzonderlijke historische auditchecks.
 
@@ -33,6 +37,8 @@ Gereed wanneer:
 - volledige CI groen is.
 
 ## R3.3 Audit > Experiments
+
+**Status:** VOLGEND.
 
 Bouw binnen `Audit` een beperkte experimenteerfunctie die:
 - een document en vaste dataset vastzet;
@@ -111,8 +117,8 @@ AI, Grok Bot en Metis tellen niet als vereiste menselijke C3–C6-reviewer, moge
 
 | Besluit | Status |
 |---|---|
-| Protocol v3 activeren | IN UITVOERING — rootnorm omgezet; testmigratie + groene CI nog vereist |
-| Audit > Experiments bouwen | OPEN — na/naast afronding governance-migratie |
+| Protocol v3 activeren | GEREED — PR #149 gemerged; Protocol v3.0.0 actief; CI groen |
+| Audit > Experiments bouwen | VOLGEND |
 | Hybride passagevorming invoeren | NIET BESLOTEN — afhankelijk van experiment |
 | Bestaande passagevorming vervangen | NIET BESLOTEN |
 | OIDC standaard deployment herstellen | OPEN |
