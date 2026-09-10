@@ -38,43 +38,78 @@ Gereed wanneer:
 
 ## R3.3 Audit-kamer + experimentbasis
 
-**Status:** VOLGEND — owner-approved ontwerp-lock 2026-09-10.
+**Status:** IN UITVOERING — owner-approved ontwerp-lock, retro-lock en UX-lock 2026-09-10; implementatie via PR #153.
 
 Doel: `Audit` wordt de centrale interne inspectiekamer voor meerdere vormen van controle en onderzoek, zonder vooraf een generiek auditframework te bouwen.
 
 Ontwerp-lock:
 - de Audit-kamer is generiek; onderliggende audits blijven expliciet en lokaal totdat echte herhaling een gedeelde abstractie rechtvaardigt;
+- gebruikers kunnen zelf een audit aanmaken door een beschikbaar audittype te kiezen;
+- audittypen worden als kleine gesloten configuratie aangeboden; nieuwe typen krijgen hun eigen uitvoering en hoeven geen universele workflow te delen;
+- de gedeelde persistence kent alleen een minimale type-onafhankelijke envelope: audit-id, type, titel, maker, timestamps en een type-specifieke payload;
+- experiment-specifieke baseline, kandidaat, dataset, review en besluit horen niet in de gedeelde storelogica;
 - bestaande controles worden hergebruikt vóór nieuwe auditlogica wordt gemaakt;
-- eerste ingangen zijn **Documentkwaliteit**, **Publicatiecontrole** en **Experimenten**;
-- read-only controles hoeven geen universele audit-lifecycle of nieuw permanent `audit_record` te krijgen;
+- eerste echte auditvormen zijn **Experiment** en een minimale read-only **Documentkwaliteit**-audit; **Publicatiecontrole** en **Techniek & release** blijven nog uitgeschakeld;
+- Documentkwaliteit dient tevens als architectuurproef: toevoegen van een tweede auditvorm mag de gedeelde storevorm niet veranderen;
+- read-only controles hoeven geen universele audit-lifecycle te krijgen;
 - bestaande object-/reviewevents blijven in de huidige append-only audit/review-ledger;
 - er komt geen nieuwe accountrol `auditor` voor deze MVP;
 - audit wijzigt geen canonieke kennis, publiceert niets en opent geen Product API;
 - geen console-rewrite, nieuw frontendframework, microservicesplitsing of generieke `AuditEngine`.
 
+UX-lock:
+- `Audit` staat als normale kamer in de bestaande gedeelde topnavigatie, tussen **Documenten** en **Accounts**;
+- op **Mijn werk** blijven **Inleveren → Review → Publiceren → Documenten** de vier gelijkwaardige primaire workflowtegels;
+- Audit wordt daar als afzonderlijke brede meta-tegel onder de workflow getoond onder **Onderzoeken & controleren**;
+- de Audit-tegel gebruikt de bestaande V&VN-paarse signatuur op wit en introduceert geen nieuwe merkkleur of apart tegelcomponent;
+- Audit wordt niet visueel gepresenteerd als vijfde stap in de publicatiestroom.
+
 Eerste implementatievolgorde:
-1. Audit-kamer en read-only hergebruik van bestaande documentkwaliteit/publicatiecontroles;
-2. begrensde experiment-persistence en blind A/B-review;
-3. passagevormingsexperiment uit R3.4.
+1. Audit-kamer, zelf audit aanmaken, minimale type-onafhankelijke persistence en read-only Documentkwaliteit als tweede echte auditvorm;
+2. Audit zichtbaar maken in de normale console-navigatie en als afzonderlijke meta-tegel op Mijn werk;
+3. begrensde experiment-persistence voor dataset-freeze en blind A/B-review;
+4. passagevormingsexperiment uit R3.4.
+
+Retro-besluit 2026-09-10: **SIMPLIFY BEFORE EXTENDING**. Dataset-freeze en A/B-uitvoering worden niet toegevoegd voordat de gedeelde AuditStore aantoonbaar type-onafhankelijk blijft en een tweede auditvorm zonder wijziging van de storevorm werkt.
 
 ## R3.4 Eerste experiment: passagevorming
 
-**Status:** ONTWERP GEBLOKKEERD — owner-approved 2026-09-10; uitvoering volgt na R3.3 experimentbasis.
+**Status:** ARCHITECTUUR LOCKED — owner-approved 2026-09-10; dataset-freeze-implementatie gestart in PR #153.
 
 Onderzoeksvraag: kan brongebonden semantische passagevorming betere kennisobjectvoorstellen maken dan de huidige deterministische passagevorming zonder brontrouw of publicatieveiligheid te verliezen?
 
 Baseline: huidige productiepassagevorming.  
-Kandidaat: brongebonden semantische voorstellen.  
+Kandidaat: brongebonden semantische bronselectie binnen Audit.  
 Beide routes lopen na kandidaatvorming door dezelfde deterministische verificatie van harde invarianten.
+
+Architectuurlock AI en Kernel:
+- AI is uitsluitend een experimenteel instrument binnen de Audit-kamer;
+- de Kernel blijft AI-vrij: geen modelcall, modeloutput of modelprovider krijgt een direct schrijfpad naar canonieke kennis, reviewstatus, publicatielogica of productie-state;
+- het LLM mag uitsluitend exacte bronspans selecteren of combineren en context/type/relaties voorstellen;
+- het LLM mag geen canonieke brontekst schrijven, herschrijven of parafraseren als bronwaarheid;
+- Metis reconstrueert een kandidaat zelf uit de aangewezen spans van de frozen bron, zodat kandidaattekst herleidbaar blijft tot bronbytes, bronhash en locator;
+- de reviewer ziet altijd de relevante originele bron, baseline, kandidaat en bijbehorende bronspans;
+- modeloutput, experimentresultaten en conclusies blijven Audit-bewijs en stromen niet automatisch door naar de Kernel.
+
+LLM-secretlock:
+- de gebruiker kan de LLM API-key uitsluitend via **Audit → LLM-instellingen** invoeren, vervangen of verwijderen;
+- de API-key is write-only: na opslaan toont de console alleen `Geconfigureerd` of `Niet geconfigureerd` en nooit de sleutel zelf;
+- de plaintext API-key komt niet in Audit-records, frozen datasets, Kernel-state, roadmap/configbestanden of Git;
+- de opgeslagen API-key wordt versleuteld met een afzonderlijke deployment-masterkey uit `METIS_AUDIT_SECRET_KEY`; zonder geldige masterkey is invoer in de console fail-closed niet beschikbaar;
+- alleen de Audit-runtime mag de ontsleutelde key opvragen voor een toekomstige modelcall; de Kernel importeert deze secretstore niet;
+- dit is geen algemene environment-variable- of secret-editor: andere deploymentsettings blijven buiten de console;
+- vervangen en verwijderen van de LLM-key geven geen `PROCEED`, `APPLY`, merge-, deploy- of publicatierechten.
 
 Vaste workflow:
 1. **Opzetten** — onderzoeksvraag, baseline, kandidaat, beoordelingscriteria en stopregel vastleggen;
-2. **Dataset vastzetten** — een kleine representatieve frozen set maken met gewone én moeilijke passages, bronidentiteit en baseline-commit; na freeze niet stilzwijgend wijzigen;
-3. **Beide routes uitvoeren** — baseline en kandidaat produceren alleen experimentoutputs; de kandidaatroute mag bronspans selecteren/combineren en context/type/relaties voorstellen, maar geen canonieke tekst verzinnen, parafraseren als bronwaarheid, buiten de frozen bron lezen of publiceren;
+2. **Dataset vastzetten** — een kleine representatieve frozen set maken met gewone én moeilijke passages, `item_id`, `snapshot_id`, `source_hash`, `source_locator`, exacte `source_text` en `baseline_commit`; na freeze niet stilzwijgend wijzigen of vervangen;
+3. **Beide routes uitvoeren** — baseline en kandidaat produceren alleen experimentoutputs; de kandidaatroute mag uitsluitend werken binnen de frozen bron en publiceert niets;
 4. **Blind beoordelen** — reviewer ziet bron + Variant A + Variant B zonder route-identiteit en kiest A, B, gelijkwaardig of beide onvoldoende;
 5. **Foutcategorieën vastleggen** — minimaal onvolledig, context gemist, voorwaarde/uitzondering gemist, verkeerde merge/split, onverifieerbare toevoeging en correctie nodig;
 6. **Resultaten vergelijken** — toon onderliggende tellingen en reviewtijd, gate-yield/coverage en correctielast; geen samengestelde kwaliteitsscore als primaire uitkomst;
-7. **Besluit** — pas na review route-identiteit onthullen en `KEEP`, `ITERATE` of `PROCEED` vastleggen met motivering.
+7. **Besluit** — pas na review route-identiteit onthullen en `KEEP`, `ITERATE` of `PROCEED` vastleggen met motivering;
+8. **Change proposal** — alleen na `PROCEED` mag Metis een afzonderlijk, concreet wijzigingsvoorstel opstellen met aanleiding, exacte scope, beoogde wijziging en expliciete buiten-scope;
+9. **APPLY** — alleen een expliciete menselijke `APPLY` op dat concrete change proposal autoriseert implementatie van precies die wijziging; `APPLY` autoriseert geen merge, deploy of publicatie.
 
 Meet minimaal:
 - reviewer voorkeur A/B/gelijkwaardig/beide onvoldoende;
@@ -88,13 +123,19 @@ Meet minimaal:
 
 Veiligheidscriterium: nul tolerantie voor onverifieerbare toevoegingen die als brongebonden kennis zouden kunnen doorstromen.
 
-`PROCEED` betekent uitsluitend dat er voldoende bewijs is voor een aparte, begrensde productie-integratieproef. Het is geen publicatiebesluit en geen automatische vervanging van de bestaande route.
+Beslisbetekenis:
+- `KEEP`: huidige productieaanpak behouden;
+- `ITERATE`: kandidaat aanpassen binnen Audit en opnieuw experimenteren;
+- `PROCEED`: voldoende bewijs om een afzonderlijk change proposal te maken, niet om productie te wijzigen;
+- `APPLY`: expliciete menselijke autorisatie om uitsluitend het goedgekeurde change proposal als softwarewijziging uit te voeren.
 
-Tot een `PROCEED`-besluit blijft de bestaande productiepassagevorming leidend.
+Na `APPLY` mag Metis de geautoriseerde code-, configuratie- of promptwijziging implementeren, tests uitvoeren en een PR voorbereiden. Merge, deploy en publicatie blijven afzonderlijke menselijke/releasebesluiten. Ook na `APPLY` krijgt AI-output geen rechtstreeks schrijfpad naar de Kernel.
+
+Tot een afzonderlijk geautoriseerde en gereleasete productiewijziging blijft de bestaande productiepassagevorming leidend.
 
 ## R3.5 Semantiek en invarianten gericht scheiden
 
-Alleen na voldoende bewijs uit R3.4:
+Alleen na voldoende bewijs uit R3.4 én een expliciete `APPLY` op een concreet change proposal:
 - identificeer lexicale regels die semantische interpretatie proberen te doen;
 - behoud bron-, review-, status- en publicatie-invarianten deterministisch;
 - verwijder of vereenvoudig semantische uitzonderingslogica alleen met regressiebewijs.
@@ -131,7 +172,12 @@ AI, Grok Bot en Metis tellen niet als vereiste menselijke C3–C6-reviewer, moge
 - Geen frontend-rewrite.
 - Geen microservicesplitsing zonder afzonderlijk bewijs dat de huidige grens het probleem veroorzaakt.
 - Geen generiek auditframework voordat meerdere echte auditvormen aantoonbaar dezelfde state en persistence delen.
-- Geen experimentele modelroute met directe canonieke publicatierechten.
+- Geen AI/modelroute buiten Audit zolang geen afzonderlijk architectuurbesluit dat expliciet wijzigt.
+- Geen modeloutput met directe schrijf-, review-, publicatie- of canonieke rechten in de Kernel.
+- Geen algemene environment-variable- of secret-editor in de console voor de Audit-LLM-koppeling.
+- Geen plaintext LLM API-key in Git, gewone config, auditrecords, frozen datasets of Kernel-state.
+- Geen `PROCEED` als impliciete implementatieautorisatie; alleen een expliciet, proposal-gebonden `APPLY` autoriseert implementatie.
+- Geen `APPLY` als impliciete merge-, deploy- of publicatieautorisatie.
 - Geen algemene G2-`PASS`: publicatie blijft conditioneel per snapshot volgens `PROTOCOL.md`.
 - Geen Product API-activatie als neveneffect van G2-publicatie.
 
@@ -141,8 +187,15 @@ AI, Grok Bot en Metis tellen niet als vereiste menselijke C3–C6-reviewer, moge
 |---|---|
 | Protocol v3 activeren | GEREED — PR #149 gemerged; Protocol v3.0.0 actief; CI groen |
 | Audit-kamer als brede inspectiekamer | LOCKED — 2026-09-10 |
+| Gebruiker maakt zelf audit aan via audittype | LOCKED — 2026-09-10 |
+| AuditStore blijft type-onafhankelijk; type-uitvoering lokaal | LOCKED NA RETRO — 2026-09-10 |
+| Documentkwaliteit als tweede architectuurproef | LOCKED NA RETRO — 2026-09-10 |
+| Audit als normale nav-kamer + brede paarse meta-tegel onder workflow | LOCKED UX — 2026-09-10 |
 | Generiek auditframework vooraf bouwen | AFGEWEZEN — eerst expliciete auditvormen en hergebruik |
-| Passagevormingsexperiment | LOCKED ONTWERP — frozen dataset, blind A/B, gedeelde harde gates, KEEP/ITERATE/PROCEED |
-| Hybride passagevorming invoeren | NIET BESLOTEN — afhankelijk van experiment |
+| Passagevormingsexperiment | LOCKED — frozen dataset, blind A/B, gedeelde harde gates, KEEP/ITERATE/PROCEED |
+| AI uitsluitend als experimenteel instrument binnen Audit | LOCKED — geen direct pad naar Kernel of productie-state |
+| LLM API-key via Audit-console | LOCKED — write-only, versleuteld at rest, geen algemene secret-editor |
+| PROCEED → change proposal → expliciet APPLY | LOCKED — APPLY autoriseert alleen concrete implementatie, niet merge/deploy/publicatie |
+| Hybride passagevorming invoeren | NIET BESLOTEN — afhankelijk van experiment + change proposal + APPLY |
 | Bestaande passagevorming vervangen | NIET BESLOTEN |
 | OIDC standaard deployment herstellen | OPEN |

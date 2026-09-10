@@ -51,36 +51,44 @@ def test_roadmap_only_contains_active_v3_work() -> None:
     assert "Geen keten van Protocol-v3-delta's" in roadmap
 
 
-def test_roadmap_records_v3_closeout_and_next_work() -> None:
+def test_roadmap_records_v3_closeout_and_current_next_work() -> None:
     roadmap = ROADMAP.read_text(encoding="utf-8")
     assert "## R3.1 Governance-migratie afronden\n\n**Status:** GEREED" in roadmap
     assert "## R3.2 Governance-tests migreren\n\n**Status:** GEREED" in roadmap
     assert "Besluit: `ACTIVATE V3` — uitgevoerd via PR #149." in roadmap
-    assert "## R3.3 Audit-kamer + experimentbasis\n\n**Status:** VOLGEND — owner-approved ontwerp-lock 2026-09-10." in roadmap
+    assert "## R3.3 Audit-kamer + experimentbasis\n\n**Status:** IN UITVOERING" in roadmap
+    assert "## R3.4 Eerste experiment: passagevorming\n\n**Status:** ARCHITECTUUR LOCKED" in roadmap
     assert "| Protocol v3 activeren | GEREED — PR #149 gemerged; Protocol v3.0.0 actief; CI groen |" in roadmap
 
 
-def test_audit_room_and_passage_experiment_design_are_locked() -> None:
+def test_audit_room_passage_experiment_and_apply_boundary_are_locked() -> None:
     roadmap = ROADMAP.read_text(encoding="utf-8")
     for required in (
         "de Audit-kamer is generiek; onderliggende audits blijven expliciet en lokaal",
-        "**Documentkwaliteit**, **Publicatiecontrole** en **Experimenten**",
-        "geen universele audit-lifecycle of nieuw permanent `audit_record`",
+        "**Experiment** en een minimale read-only **Documentkwaliteit**-audit",
         "geen nieuwe accountrol `auditor`",
         "geen console-rewrite, nieuw frontendframework, microservicesplitsing of generieke `AuditEngine`",
-        "**Status:** ONTWERP GEBLOKKEERD — owner-approved 2026-09-10",
         "Beide routes lopen na kandidaatvorming door dezelfde deterministische verificatie van harde invarianten.",
+        "AI is uitsluitend een experimenteel instrument binnen de Audit-kamer",
+        "de Kernel blijft AI-vrij",
+        "het LLM mag uitsluitend exacte bronspans selecteren of combineren",
+        "Metis reconstrueert een kandidaat zelf uit de aangewezen spans van de frozen bron",
         "**Blind beoordelen**",
         "A, B, gelijkwaardig of beide onvoldoende",
-        "gate-rejecties en bruikbare yield/coverage",
+        "gate-yield/coverage",
         "nul tolerantie voor onverifieerbare toevoegingen",
         "`KEEP`, `ITERATE` of `PROCEED`",
+        "**Change proposal**",
+        "**APPLY**",
+        "`APPLY` autoriseert geen merge, deploy of publicatie",
     ):
         assert required in roadmap
     assert "Geen generiek auditframework voordat meerdere echte auditvormen aantoonbaar dezelfde state en persistence delen." in roadmap
+    assert "Geen AI/modelroute buiten Audit zolang geen afzonderlijk architectuurbesluit dat expliciet wijzigt." in roadmap
+    assert "Geen `PROCEED` als impliciete implementatieautorisatie" in roadmap
     assert "| Audit-kamer als brede inspectiekamer | LOCKED — 2026-09-10 |" in roadmap
-    assert "| Generiek auditframework vooraf bouwen | AFGEWEZEN — eerst expliciete auditvormen en hergebruik |" in roadmap
-    assert "| Passagevormingsexperiment | LOCKED ONTWERP — frozen dataset, blind A/B, gedeelde harde gates, KEEP/ITERATE/PROCEED |" in roadmap
+    assert "| Passagevormingsexperiment | LOCKED — frozen dataset, blind A/B, gedeelde harde gates, KEEP/ITERATE/PROCEED |" in roadmap
+    assert "| PROCEED → change proposal → expliciet APPLY | LOCKED" in roadmap
 
 
 def test_v2_root_state_is_preserved_as_history() -> None:
