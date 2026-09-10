@@ -1,82 +1,40 @@
-# V&VN Data Services — Operationeel governance-record
+# Metis governance
 
-**Status:** ondergeschikt aan `PROTOCOL.md`  
-**Geldend protocol:** v2.28.0 (v2.2.0 + v2.3-delta + v2.4-delta + v2.5-delta + v2.6-delta + v2.7-delta + v2.8-delta + v2.9-delta + v2.10-delta + v2.11-delta + v2.12-delta + v2.13-delta + v2.15-delta + v2.16-delta + v2.17-delta + v2.18-delta + v2.19-delta + v2.20-delta + v2.21-delta + v2.22-delta + v2.23-delta + v2.24-delta + v2.25-delta + v2.26-delta + v2.27-delta + v2.28-delta)  
-**Bijgewerkt:** 2026-09-05  
-**Eigenaar:** projecteigenaar V&VN Data Services
+**Status:** actief onder Protocol v3.0.0  
+**Datum:** 2026-09-10
 
-## Plaats in de hiërarchie
+Dit bestand is het compacte operationele governance-register. Het is geen tweede protocol, geen geschiedenislog en geen vijfde stuurlaag.
 
-Dit bestand is **geen vijfde stuurlaag**. De verplichte volgorde blijft:
+## Huidige autoriteit
+
+De sturingsvolgorde is:
 
 `PROTOCOL.md → ROADMAP.md → acceptatietests → code`
 
-Dit record maakt Protocol v2.2 §16 operationeel zichtbaar. Het voegt geen productregel, architectuurgrens, safety-invariant, verantwoordelijkheid of toegestane/verboden route toe. Bij conflict geldt `PROTOCOL.md` en de strengste fail-closed eis.
+Daarbij geldt:
 
-De statuskolom in `docs/PROTOCOL_V2_2.md` §16 is de stand **bij protocolgoedkeuring**. Latere eigenaarsbesluiten worden hier vastgelegd en wijzigen het protocolbestand niet. Dat is geen nieuwe protocolversie.
+1. `PROTOCOL.md` — actuele product-, veiligheids- en governance-invarianten;
+2. `ROADMAP.md` — actieve veranderopgaven en beslispoorten;
+3. acceptatie- en regressietests — uitvoerbaar bewijs;
+4. code, configuratie en infrastructuur — implementatie.
 
-Machineleesbaar bewijs voor het enige tot nu toe vastgestelde besluit: [`data/assurance/gd_03_c3_c6_reviewer_matrix.json`](../data/assurance/gd_03_c3_c6_reviewer_matrix.json).
+Protocol-v2-delta's, oude roadmaps, approval-manifests en de pre-v3 governance blijven auditbewijs. Zij zijn niet aanvullend normatief onder V3. De volledige pre-v3 governance staat in `docs/history/protocol-v2/GOVERNANCE_PRE_V3_2026-09-10.md`.
 
-## Besluitenregister (Protocol v2.2 §16)
+## Besluitdiscipline
 
-| ID | Besluit | Eigenaar | Vereiste specialistische inbreng | Deadline-gate | Status |
-|---|---|---|---|---|---|
-| GD-01 | Minimumomvang van de onafhankelijke holdout en vereiste high-risk-samenstelling | Projecteigenaar | Clinical governance en evaluation lead | Voordat Holdout B wordt gemaakt of aan het geëvalueerde team wordt getoond | OPEN |
-| GD-02 | Statistische rapportagemethode en betrouwbaarheidsniveau voor FAR | Projecteigenaar | Evaluation/statistics reviewer | Voordat Holdout B-acceptatiecriteria worden bevroren | OPEN |
-| GD-03 | Vereist aantal reviewers voor C3–C6-pull requests | Projecteigenaar | Technische en klinische governance | Voordat de volgende C3-, C4-, C5- of C6-wijziging wordt gemerged | ESTABLISHED |
-| GD-04 | Maximale emergency-withdrawal-tijd en retrospectief break-glass-reviewinterval | Projecteigenaar | Clinical safety en operations | Voordat Azure DEV voor externe pilotgebruikers wordt geopend | OPEN |
-| GD-05 | Ondersteunde API-depreciatieperiode | Projecteigenaar | Product/API-eigenaar | Voordat de eerste externe API-consument wordt onboarded | OPEN |
-| GD-06 | Bewaartermijnen voor acquisitierecords, auditlogs, gebruikslogs en vertrouwelijk reviewbewijs | Projecteigenaar | Privacy, security en records management | Voordat Azure DEV extern pilotverkeer verwerkt | OPEN |
-| GD-07 | Benoemde operationele eigenaar voor productiereleases en emergency withdrawal | Projecteigenaar | V&VN-service-eigenaarschap | Voordat een externe pilotrelease wordt geautoriseerd | OPEN |
-| GD-08 | Verplicht inhoudelijk eigenaarschap en actualiteitsverantwoordelijkheid per bron en kennisfamilie | Projecteigenaar | Richtlijnorganisatie, records management en service-eigenaarschap | Voordat de eerste externe pilotrelease wordt geautoriseerd | OPEN |
-| GD-09 | Voorwaarden waaronder reviewbewijs bij een nieuwe bronversie behouden mag blijven | Projecteigenaar | Clinical governance, richtlijnonderzoek en technical/evaluation | Voordat delta-review reviewtaken automatisch mag beperken | OPEN |
-| GD-10 | Conflictstatussen, bronvoorrang, escalatie en fail-closed serving bij botsende bronnen | Projecteigenaar | Clinical governance, richtlijnmethodologie en product/API | Voordat meerdere bronnen dezelfde vraag in een extern pilotcorpus mogen beantwoorden | OPEN |
-| GD-11 | Omvang, frequentie en blokkerende uitkomsten van end-to-end integriteitsreconciliatie | Projecteigenaar | Security/operations, technical en clinical safety | Voordat Azure DEV voor externe pilotgebruikers wordt geopend | OPEN |
-| GD-12 | Minimale eisen voor trainingsdatasetmanifest, model-lineage, updates en withdrawal | Projecteigenaar | Licensing, legal/privacy, AI safety en technical | Voordat Metis-kennis voor modeltraining wordt geëxporteerd of gelicentieerd | OPEN |
+- Een blijvende product- of veiligheidsinvariant wordt rechtstreeks in `PROTOCOL.md` verwerkt en waar mogelijk door een gedragstest bewezen.
+- Een nog open wijziging, experiment of beslispoort staat in `ROADMAP.md`.
+- Afgeronde of gesupersedeerde besluitgeschiedenis gaat naar `docs/history/`, changelog of auditrapport; niet naar de actuele roadmap.
+- Er wordt geen nieuwe keten van Protocol-v3-delta's opgebouwd.
+- Een tijdelijke deployment- of incidentworkaround wordt niet automatisch architectuurwet.
+- Een experiment mag geen canonieke publicatie uitvoeren; overgang naar productie vereist een expliciet evidence-backed `KEEP`, `ITERATE` of `PROCEED`-besluit.
 
-OPEN-besluiten mogen niet als established of `PASS` worden behandeld. Een gemiste deadline-gate blijft `BLOCKED`. GD-08 tot en met GD-12 zijn roadmapwerk: zolang zij OPEN zijn voegen zij geen nieuw productgedrag toe en mogen zij niet als geïmplementeerd worden gepresenteerd.
+## Auditgrens
 
-## GD-03 — reviewervereisten C3–C6 (ESTABLISHED)
+Historische approval-manifests en protocolbestanden blijven ongewijzigd op hun bestaande paden wanneer hun hashes of paden onderdeel zijn van de bewijsketen. Dat behoudt reproduceerbaarheid zonder ze opnieuw tot actuele stuurlaag te maken.
 
-- **Besluit:** Required reviewer count for C3–C6 pull requests, as written.
-- **Status:** ESTABLISHED
-- **Besluitdatum:** 2026-08-27
-- **Eigenaar:** projecteigenaar V&VN Data Services
-- **Protocolbasis:** Protocol v2.2 §16; geen nieuwe protocolversie
-- **Specialistische inbreng:** technische en klinische governance, vastgelegd als de matrix hieronder
-- **Evidence:** dit bestand en `data/assurance/gd_03_c3_c6_reviewer_matrix.json`
-- **Niet onderdeel van dit besluit:** naamgeving van individuele reviewers. Dat is een latere bezettingsstap en houdt GD-03 niet OPEN.
+Historische V2-regressietests mogen de bevroren pre-v3 rootdocumenten toetsen. V3-regressietests toetsen uitsluitend de actuele rootnorm en actuele roadmap.
 
-### Reviewermatrix
+## Actuele open besluiten
 
-| Klasse | Minimum | Verplichte rollen |
-|---|---:|---|
-| C3 Canonical/review | 2 | clinical + technical |
-| C4 Retrieval/answerability | 2 | evaluation + technical |
-| C5 Publication/security | 2 | security/operations + technical |
-| C6 Generation | 3 | clinical + technical + safety/evaluation |
-
-### Verplichte voorwaarden
-
-- Reviewers MUST onafhankelijk zijn van de auteur.
-- Reviewers beoordelen dezelfde exacte commit of snapshot.
-- AI, Grok Bot en Metis MUST NOT meetellen als vereiste C3–C6-reviewer, MUST NOT goedkeuren en MUST NOT publiceren.
-
-PR #4 en PR #5 zijn C5-wijzigingen en vereisen nog retrospectieve onafhankelijke technical- en security/operations-review volgens deze matrix. Protocol v2.9.0 blijft een geldend C3-onderdeel (taakgerichte console-UX en V&VN digitale stylesheet). Protocol v2.10.0 blijft een geldend C5-onderdeel (identiteit/toegang spanning console-kamers/nav: Documentenhierarchie, wachttaak-badges, Accounts-kamer). Protocol v2.11.0 is een eigenaarsgoedgekeurde C3-protocoldelta (bron/review/publish / retrieve-safety: geüploade HTML-freeze, weigering van live URL-HTML, verplichte source locators, fail-closed Product API zonder locator) en heropent GD-03 niet. Protocol v2.12.0 is een eigenaarsgoedgekeurde C3-protocoldelta (retrieve-safety / answerability spanning review/publish-autorisatiebinding: objecttype, reviewtupel, atomaire projectie) en heropent GD-03 niet. Protocol v2.13.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning C5 four-eyes-autorisatie (retrieve-safety / answerability / knowledge model: atomaire objecten, per-type classificatie, gesloten relaties, high-risk four-eyes) en heropent GD-03 niet. Protocol v2.15.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning ingest-provenance-validatie (bron-datum/versie op ingest pagina 1; heading-voorstel als reviewbaan-voorwaarde; reviewlijst-snippet; type-gebaseerde reviewbanen) en heropent GD-03 niet. Protocol v2.16.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning review-surface / retrieve-safety (een rommelige reviewpagina beïnvloedt beoordeling) en heropent GD-03 niet. Protocol v2.17.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning review-surface / retrieve-safety (slogan-copy, via-negativa-help, raw-HTML-bronpassage en site-chrome als objecten beïnvloeden beoordeling) en heropent GD-03 niet. Protocol v2.18.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning review-surface / retrieve-safety (dubbele kaartzin, truncated-sentence split en identieke freeze-proza als extra objecten beïnvloeden beoordeling) en heropent GD-03 niet. Protocol v2.19.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning review-surface / retrieve-safety (duizenden unclassified/Inhoud-kaarten als onderzoeker-verplichte één-voor-één-plicht is vermoeidheid, geen assurance) en heropent GD-03 niet. Protocol v2.20.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning review-surface / retrieve-safety (PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only; unpublished captured snapshots MAGEN van de operations console worden verwijderd door een geautoriseerde operator) en heropent GD-03 niet. Protocol v2.21.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning review-surface / retrieve-safety (kennisobject-grenzen; G2-status MUST live evidence zijn, geen stale static JSON; geïsoleerde test/release; herstelbaarheid) en heropent GD-03 niet. Protocol v2.22.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning review-surface / retrieve-safety (volgende-implementatievolgorde na golf A: C daarna D daarna ZIP daarna B; geïsoleerde test/release; herstelbaarheid; ZIP opent publicatie niet) en heropent GD-03 niet. Protocol v2.23.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning review-surface / retrieve-safety (Auditor REQUEST SIMPLIFICATION na A+C+D op main; eerste DELETE-snede, daarna één ZIP van die SHA; MUST NOT a566af56 ZIP-pen als dat een tweede ZIP forceert) en heropent GD-03 niet. Protocol v2.24.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning review-surface / retrieve-safety (split het deploy-pakket, niet het productidee; dunne console-ZIP; MUST NOT numpy/sklearn/scipy in vvn-metis-console vendoren; één gedeelde kernel; Product API later, niet deze golf; split opent publish/G2 niet) en heropent GD-03 niet. Protocol v2.25.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning review-surface / retrieve-safety (MVP-beslisboom-documentklasse met gesloten boomtypes `path` / `node` / `outcome`; gesloten Klasse-set MUST `beslisboom` bevatten; Klasse-keuze selecteert het reviewpad; SUPERSEDEERT iedere lezing dat Inleveren een apart pad-control nodig heeft naast Klasse; boom-freeze+locator; boom MUST NOT een bevestigde `richtlijn`-aanbeveling van dezelfde familie outranken; console blijft geen verpleegkundige boomspeler; geen Forge-code; geen G2 PASS; `publish()` blijft G2-BLOCKED) en heropent GD-03 niet. Protocol v2.26.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning review-surface / retrieve-safety (Klasse wijzigen / controlled reclassification; een documentklasse-wijziging MUST alleen invalideren wat die klassewijziging inhoudelijk raakt; huidige `promote_class`-total-wipe SUPERSEDED voor de doelarchitectuur; tijdelijke veilige volle herreview MAG in de eerste implementatiegolf; bron freeze-bytes / SHA-256 / titel / versie / provenance MUST NOT wijzigen; same-model vs cross-model; published never rewritten; hernoem Promoveren → Klasse wijzigen; geen Forge-code; geen G2 PASS; `publish()` blijft G2-BLOCKED) en heropent GD-03 niet. Protocol v2.27.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning review-surface / retrieve-safety (unpublished-documentverwijdering MUST vanaf precies één consoleplaats: Documentenhiërarchie; type-to-confirm exacte documenttitel; SUPERSEDEERT de v2.20-lezing dat delete MUST op de documentkaart / Review-chooser als alternatieve oppervlakken; geen Forge-code; geen G2 PASS; `publish()` blijft G2-BLOCKED) en heropent GD-03 niet. Protocol v2.28.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning review-surface / retrieve-safety (ouderkeuze-/kopnavigatie MUST een gededupliceerde, hiërarchisch geordende documentlichaam-structuur gebruiken, niet naive global numeric sort van TOC+body; Sterkte zichtbaar/actief ALLEEN op stored/confirmed `recommendation` of actionable boom-`outcome`, niet op een machine-proposed type; SUPERSEDEERT de v2.16/v2.17-lezing dat stamp-UI MAY verschijnen op alleen `proposed_object_type` zonder menselijke typebevestiging; geen Forge-code; geen G2 PASS; `publish()` blijft G2-BLOCKED) en heropent GD-03 niet. Protocol v2.30.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning extract/review-surface / retrieve-safety (een kennisobject MAG alleen worden voorgesteld wanneer alle verplichte velden van het voorgestelde type zijn gevuld met letterlijke lokaliseerbare brontekst; ontbrekend verplicht veld → `gate_result=blocked`; zachte scores MUST NOT de harde poort openen; There MUST be NO tradeoff — UI polish MUST NOT excuse bad candidates; current knowledge-object quality is ~5/10 (fail, not a shippable bar); soft scores / volume / “ship then fix” MUST NOT open the hard gate; blocked candidates MUST NOT enter the ordinary review queue; primaire reviewer-UI MUST alleen gewone taal en MUST NOT starten vanaf een verplichte Relatie bevestigen / altijd-zichtbare TOC+volle ouderlijst; Open volledige richtlijn / broncontext MUST echte omliggende broncontext tonen met de exacte span gemarkeerd; SUPERSEDEERT subjectieve toelating, het dumpen van iedere assertieve zin in de gewone reviewwachtrij, primaire Relatie bevestigen als verplichte keten, altijd-zichtbare TOC+volle ouderlijsten, open-origineel als same-card-enlarge, en type-UI zonder voorstel+bewijs; geen Forge-code; geen G2 PASS; `publish()` blijft G2-BLOCKED) en heropent GD-03 niet. Protocol v2.31.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning review-surface / documentpositie bind safety (**Dit klopt** auto-bind van het getoonde **Gevonden onder**-pad MUST exacte zichtbare koptitel prefereren na normalisatie; MUST NOT substring / containment / first-hit-win; nul of dubbelzinnige exacte matches MUST fail-closed naar **Andere kop kiezen**; SUPERSEDEERT iedere lezing dat Dit klopt MAG binden via gedeeltelijke titelcontainment; geen Forge-code; geen G2 PASS; `publish()` blijft G2-BLOCKED) en heropent GD-03 niet. Protocol v2.32.0 is een eigenaarsgoedgekeurde C3-protocoldelta spanning review-surface / UI vocabulary (de onderzoeker-facing consolekamerheading / nav-label / paginatitel voor `/tree` MUST **Documenten** zijn; MUST NOT Documentenhiërarchie, Documentenhierarchie of Familieboom als live heading of primair nav-label; kernel blijft familie × klasse; v2.27 unpublished-delete blijft één plaats — dezelfde kamer, nu Documenten — plus type-to-confirm exacte titel; SUPERSEDEERT alleen de UI-naam in v2.10/later «heading MUST be Documentenhierarchie»-lezingen; geen Forge-code; geen G2 PASS; `publish()` blijft G2-BLOCKED) en heropent GD-03 niet. Dit is geen C5-heropening van four-eyes of publish. Benoemde reviewers blijven onbezet. Metis, de Implementation engineer en de Auditor MUST NOT als GD-03-reviewers meetellen.
-
-## Rolgrenzen (reeds in het protocol; hier alleen zichtbaar gemaakt)
-
-Protocol v2.2 §2: AI MAY mappings of metadata voorstellen; AI MUST NOT canonical knowledge goedkeuren of publiceren.
-
-Operationele toedeling binnen die norm:
-
-- **Grok Bot** implementeert code pas na `protocol → roadmap → tests`. Grok Bot is geen vereiste C3–C6-reviewer, keurt niet goed en publiceert niet.
-- **Metis** is de V&VN DS-assistent voor protocol, governance en organisatie. Metis is geen vereiste C3–C6-reviewer, keurt niet goed en publiceert niet.
-
-Deze toedeling wijzigt geen protocolverantwoordelijkheid.
-
-## Wat dit record niet doet
-
-- Geen Azure-provisioning, geen productgedrag, geen nieuwe agent.
-- Geen sluiting van GD-01, GD-02, GD-04, GD-05, GD-06 of GD-07.
-- Geen override van gate-status (`PASS` / `BLOCKED` / `FAIL` / `NOT_EVALUATED`).
+De actuele lijst staat uitsluitend in `ROADMAP.md`. Dit bestand dupliceert die backlog niet.

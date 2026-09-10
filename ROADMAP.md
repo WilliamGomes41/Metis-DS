@@ -1,736 +1,118 @@
-# V&VN Data Services — Technische roadmap
-
-## Functie
-
-Deze roadmap bepaalt de uitvoeringsvolgorde van de geldende norm uit `PROTOCOL.md`. De roadmap mag het protocol niet afzwakken of stilzwijgend uitbreiden. De gemergede code, tests en commitgeschiedenis op `main` zijn de bron voor actuele voortgang; deze roadmap bevat uitsluitend de geplande volgorde en stopvoorwaarden.
-
-Deze repository is uitsluitend V&VN Data Services. Status, fasen of UI van andere producten horen niet in dit document.
-
-## Geldende norm (live)
-
-`PROTOCOL.md` is wet. De geldende baseline is Protocol v2.34.0 plus v2.33.0 en de eerdere delta's die nog van kracht zijn, waaronder Protocol v2.6.0 en Protocol v2.7.0. Deze sectie is de leesbare live stuurlaag. Historische «volgende implementatie»-stapels sturen geen code meer; zie de index hieronder en de Eigenaarslock-secties voor de locktekst. Audit-oordeel op `019978b`: fundament aanwezig; geen brede betrouwbaarheids- of extractkwaliteitsclaim; begeleid intern gebruik.
-
-Wat nu de code stuurt:
-
-- Fail-closed bronintegriteit en voorwaardelijke publicatie (v2.34): G2 PASS bestaat alleen per snapshot na actuele Blob-readback en gelijke SHA-256, geldige objectgebonden review/four-eyes, schema/projectiecontrole, publisherrol en expliciete bevestiging. Iedere fout blijft BLOCKED en een mislukte cutover rolt terug. Dit SUPERSEDEERT alleen oudere onvoorwaardelijke `publish()`-BLOCKED statusregels.
-- Harde toelatingspoort (v2.30): letterlijke lokaliseerbare bronvelden; zachte scores MUST NOT de poort openen; geblokkeerde kandidaten blijven buiten de gewone reviewwachtrij; dJG-regressie blijft.
-- Review: één deur Beoordeel; Koppen/Inhoud; **Gevonden onder** / **Dit klopt** / **Andere kop kiezen**; exacte kop-bind (v2.31); Sterkte alleen op stored/confirmed type (v2.28); bronpassage met echte context (**Open volledige richtlijn**).
-- Unpublished delete alleen vanaf **Documenten** + type-to-confirm (v2.27 SUPERSEDEERT documentkaart / Review-chooser; v2.32 SUPERSEDEERT alleen de UI-naam Documentenhiërarchie → **Documenten**).
-- Ingest: geüploade HTML-freeze; Live URL-HTML MUST bij ingest worden geweigerd; URL-ingest van een PDF MAG blijven; URL-ingest van HTML MUST NOT. HTML wordt niet geheel verboden. Protocol v2.11 supersedes v2.7 URL-for-official-files as to HTML.
-- Klasse `beslisboom` (`path` / `node` / `outcome`); Klasse-keuze selecteert het reviewpad; MUST NOT een aparte tweede kiezer «pad». Klasse wijzigen i.p.v. Promoveren (v2.26); selectieve invalidatie + published-candidate blijven later.
-- Console is onderzoeker-oppervlak, niet voor verpleegkundigen. Product API blijft G2-gesloten. Azure ZIP / nurse UI / PROTOCOL.md-rewrite blijven buiten deze golf.
-- `#127` landing sketch B (gecentreerde spaarzame home, één primair **Bron inleveren** + stille secondaries) en de eerste duty-first variant met drie kleine kaarten zijn **superseded**. Gelockte logged-in `/` is het Metis-werkbord: nav **Mijn werk**, daarna **Inleveren → Review → Publiceren → Documenten**; vier grote klikbare tegels in diezelfde volgorde. Review krijgt alleen nadruk bij wachtend werk. `/tree` heading **Documenten** UNCHANGED (v2.32). Post-auth landt op `/`, niet `/ingest`.
-- Post-v2.31 ROADMAP-golven 1–5 staan in code (#113–#120). Die vereenvoudigingsgolf is in code. MUST NOT een zesde implementatiegolf verzinnen. Golven 1–5 dekken multiuser-betrouwbaarheid en onafhankelijke extractkwaliteit niet volledig; zie Eigenaarslock 2026-09-06 — Post-#120 audit acceptatiecorrectie.
-- Controlled-MVP backlog (ROADMAP, nog niet in code): Review «Recent activity» (read-only); exact SHA-256 duplicate ingest guard; release identity + GitHub→Azure deploy authorization. Die Forge-golf is nog NIET in code — await aparte Metis GO. App Service B2 is compute, niet de GitHub→Azure-poort. Zie Eigenaarslock 2026-09-06 — Controlled-MVP Recent activity, SHA-256-dup-guard en release-identity.
+# Metis — Roadmap v3
 
-### Historische supersessie-index
-
-Geen herhaalde stapel. Iedere rij wijst naar de Eigenaarslock; die secties blijven de locktekst. «Volgende implementatie»-zinnen in oude statusparagrafen zijn historisch.
-
-| Lock | Wat live bleef | Welke lezing is superseded |
-|---|---|---|
-| v2.11 | HTML-freeze + locator; fail-closed `supported` | v2.7 URL-for-official-files as to HTML |
-| v2.15–v2.20 | ingest-datumkalender, heading-voorstel, bronpassage-snippet, batch-bevestiging, één deur, Koppen-batch, unpublished-delete | oudere «volgende implementatie»-zinnen; v2.27 begrenst delete-oppervlak |
-| v2.21 | Volgorde A daarna B daarna C daarna D; PR #82 is OPEN; golf A only; GEEN vijfde golf | — |
-| v2.22 | begrensde supersessie van Protocol v2.21 §3-volgorde; golf C daarna golf D; ZIP daarna B | v2.21 A-daarna-B als volgende code |
-| v2.23 | eerste DELETE-snede, daarna één ZIP van die SHA | ZIP van a566af56 vóór DELETE |
-| v2.24 | split het deploy-pakket, niet het productidee; volgende code is console- versus retrieval-requirements splitsen; deze split opent publish() of G2 niet | ZIP MAG numpy/sklearn vendoren |
-| v2.25–v2.31 | boom-klasse; Klasse wijzigen; Documentenhiërarchie-delete; Sterkte-poort; harde poort; exact-bind | zie de bijbehorende Eigenaarslock |
-| v2.32 | **Documenten** UI-kamernaam; kernel familie × klasse ONGEWIJZIGD; v2.27-delete blijft één `/tree`-plaats | v2.10/later «heading MUST be Documentenhierarchie» |
-| post-v2.31 ROADMAP | vijf golven (geen golf 6); golven 1–5 in code (#113–#120); Die vereenvoudigingsgolf is in code; Post-#120 audit acceptatiecorrectie | «volgende code is nog exact-bind»; «golven 1–5 dekken multiuser-betrouwbaarheid / onafhankelijke extractkwaliteit volledig» |
-| controlled-MVP ROADMAP 2026-09-06 | lock only (A Recent activity; B SHA-256-dup-guard; C release-identity/OIDC); Die Forge-golf is nog NIET in code | «SKU-upgrade lost GitHub→Azure»; «auto main→Azure aan»; Slack-presence in MVP; fuzzy duplicate |
-| duty-first home ROADMAP 2026-09-07 | logged-in `/` duty-first drie kaarten; Home eerste kamer; post-auth `/`; `/tree` Documenten UNCHANGED; Die Forge-golf is in code | #127 sketch B spaarzame één-CTA-home als gelockte primary home; quiet-only secondaries; Slack presence |
-
-## Niet-onderhandelbare doelen
-
-- Fail-closed bronintegriteit en publicatie.
-- Retrieval en answerability blijven gescheiden.
-- Onafhankelijke no-answer-acceptatie richt zich op `FAR = 0%`.
-- Holdout A wordt niet gebruikt voor tuning of een nieuwe onafhankelijkheidsclaim.
-- Alleen actieve, gepubliceerde, entitled en herleidbare kennis mag een ondersteund resultaat vormen.
-- Eén integrity-kernel is de hash-autoriteit voor review-snapshot, store-import en publicatiegate.
-- Het DS-MVP blijft beperkt tot U1 bronverwijzing en U2 kennisrespons.
-- Technische toegang is nooit automatisch een licentie, V&VN-goedkeuring of toestemming voor modeltraining.
-- Een interne operations console MAG in deze repository als menselijk oppervlak over de knowledge kernel (Protocol v2.6, goedgekeurde scope; console-MVP ingest+review in code; Protocol v2.9-UX-rewrite in code; Protocol v2.10 eist een boomkamer, wachttaak-badges en een Accounts-kamer; Protocol v2.32 lockt de live heading op **Documenten**, niet Documentenhierarchie / Familieboom). De vier lagen blijven bron/evidence → canonieke kennis → governance → product (Protocol v2.12). Een zorgapp-frontend, chatbot, EPD/ECD-UI of publieke website MAG dat niet. Chat hoort niet in de console.
-- Primaire DS-gebruikers zijn richtlijnonderzoekers (console) en B2B-abonnees (EPD, instelling, hun bot). Verpleegkundigen zijn geen primaire DS-gebruikers; ontwerp de console niet voor verpleegkundigen (Protocol v2.8).
-- First-wave officiële bestanden blijven HTML-pagina en PDF. Protocol v2.25 SUPERSEDEERT de v2.7-lezing dat kennisplatform `story.html`-boomplayers geheel buiten het MVP / first console blijven als kennisklasse: de beslisboom-klasse hoort in het MVP voor onderzoeker-ingest+review (`path` / `node` / `outcome`). Het Storyline-playerpakket (`story.html`) is niet het Product API-oppervlak en MUST NOT de verpleegkundige console zijn; live URL-HTML `story.html` alleen blijft onvoldoende zonder freeze van reviewbare node/outcome-inhoud. Officiële first-wave HTML MUST een geüploade freeze-file zijn (exacte bytes). Live URL-HTML MUST bij ingest worden geweigerd. PDF-upload blijft in. URL-ingest van een PDF MAG blijven. URL-ingest van HTML MUST NOT. HTML wordt niet geheel verboden (Protocol v2.11). Beslisboom-ingest MUST byte-freeze + locators + SHA-256 (Protocol v2.25).
-- Bronhiërarchie heeft twee assen: klasse/gewicht op ieder object (`richtlijn` > `handreiking` > `artikel` > `transcript`/`podcast`) en familie/topic als haak, geen nieuw bestand. Zwaarder MAG niet door lichter worden gevuld. Een podcast MUST NOT een richtlijn in de API vervangen, ook niet in dezelfde familie (Protocol v2.8). Protocol v2.25 voegt `beslisboom` toe als lichtere/afgeleide klasse dan `richtlijn` van dezelfde familie (`richtlijn` > `beslisboom`); boom-outcomes MUST NOT stilzwijgend een ontbrekende/unpublished richtlijn-aanbeveling vervangen; Inleveren MUST Klasse kiezen uit de gesloten set die `beslisboom` MUST bevatten naast `richtlijn` / `handreiking` / `artikel` / `transcript` / `podcast`; Klasse-keuze selecteert het reviewpad; MUST NOT een aparte tweede kiezer «pad»; Operators MUST NOT andere Klasse-waarden verzinnen.
-- De Product API is object-level retrieve-and-abstain; DS genereert geen proza; geen LLM in het MVP; `supported` draagt V- en VN-labels; tenant = wie de API MAG aanroepen. De Product API MUST NOT `supported` teruggeven als de source locator van het object ontbreekt of leeg is; fail-closed; abstain (cataloguszin, geen LLM) (Protocol v2.11).
-- RAG op kennisplatform-HTML is niet het product. DS is de eigen live gecureerde schakel, geen scrape. Het standaardproduct is een live retrieve-and-abstain-abonnement. Training MAG alleen als tweede licentie mét live publicatiestatuscheck. Care-impact-onderzoek en federated learning horen niet bij DS.
-- Eén kennisobject MUST één bevestigbare betekeniseenheid zijn. Context leeft in gereviewde relaties, niet in een blob. De canonieke store is de enige bron van waarheid; retrieval-index, embeddings en projecties zijn afgeleid en wegwerpbaar, nooit omgekeerd (Protocol v2.13).
-- Ingest-brondatum MUST een kalenderdatumkiezer zijn (Europe/Amsterdam `DD-MM-YYYY` op scherm; ISO `YYYY-MM-DD` in store). Ingest-bronversie MUST dotted-integer zijn. Extractie MUST `heading` voorstellen voor echte bronkoppen, behalve DOEN/OVERWEEG/NIET DOEN (Protocol v2.16) en kennisplatform-chrome (Protocol v2.17). De reviewlijst MUST een compacte freeze-bronzin tonen, MUST NOT de typenaam als rijtitel. Snelle baan MUST batch-bevestiging van voorgestelde headings; vierduizend unclassified-kaarten op één richtlijn is een fail (Protocol v2.15). De Review-pagina MUST onderzoekers overtuigen; één deur Beoordeel; twee stacks Koppen/Inhoud met counts; DOEN/OVERWEEG/NIET DOEN zijn stempels op recommendation; Extractie MUST NOT tiny objects emitteren; unpublished Continentie MAG opnieuw worden geëxtraheerd (Protocol v2.16). UI-copy MUST onderzoekerstaal zijn, geen slogans, geen «wat een EPD MAG zeggen»; de gehele zin «Dit wordt wat een EPD MAG zeggen.» MAG weg; via-negativa MUST NOT op onderzoekerspagina's; Onderwerp/familie MUST leeg zijn op een verse ingest; bronpassage MUST dezelfde leesbare zin tonen zonder HTML-tags, op ieder object / de hele freeze; Extractie MUST NOT kennisplatform-chrome als Koppen/objecten emitteren, ook niet als één-woord Tools; stempel-UI MUST NOT behalve op recommendation; relatiecheckbox en label MUST naast elkaar (Protocol v2.17). De open reviewkaart MUST de freeze-zin één keer tonen (MUST NOT als h3/titel én body); Extractie MUST NOT een grammaticale voortzetting / naloopzin tot een nieuw object splitsen; Extractie MUST NOT identieke clean_text als extra objecten emitteren omdat de freeze-HTML ze herhaalt (Protocol v2.18). Onderzoekers MUST NOT verplicht worden 2008 Inhoud-kaarten één voor één te openen; Koppen blijven batch-bevestigbaar als structuur; de onderzoeker-verplichte trage review is voorgestelde recommendation plus condition/exception/high-risk; resterende unclassified MUST NOT als gelijke duizenden-kaarten-plicht worden gepresenteerd; 2008 Inhoud blijft een fail van dit reviewoppervlak (Protocol v2.19). PROTOCOL.md is de wet voor iedere richtlijn, niet Continentie-only; Continentie in v2.16–v2.19 blijft live bewijs van fails, niet de productidentiteit; unpublished captured snapshots MAGEN van de operations console worden verwijderd door een geautoriseerde console-operator; MUST een echte verwijdercontrole op de documentkaart / Review-chooser (Verwijder unpublished document) met bevestiging; four-eyes is niet vereist voor delete van unpublished capture; MUST NOT SSH/wipe van `/home/data` als productpad (Protocol v2.20). Historische «volgende implementatie»-stapels (v2.21–v2.31 en de post-v2.31 ROADMAP-golven) staan in de Historische supersessie-index; de Eigenaarslock-secties blijven de locktekst.
+**Status:** actief  
+**Datum:** 2026-09-10  
+**Functie:** alleen actieve veranderopgaven, experimenten, beslispoorten en stopvoorwaarden. Uitgevoerde geschiedenis hoort in changelog, audit of `docs/history/`.
 
-## Vastgestelde architectuurclusters
+## R3.1 Governance-migratie afronden
 
-Eigenaarslock 2026-08-28. Deze zeven clusters zijn vastgestelde architectuur (volgorde = sequentie). Zij zijn geen tien nieuwe protocolbestanden, geen tien nieuwe fasen, en geen dump van Fase 5 in Protocol v2.13. De tien architectuurepics zijn de kaart op bestaande Fase 2 / 2b / 3 / 4 / 5 / 6; de zeven clusters zijn de lock en de sequentie. Eén plaats van waarheid.
+Doel: Protocol v3 als enige actuele norm laten functioneren zonder verlies van V2-auditbewijs.
 
-| # | Cluster (sequentie) | Epic(s) | Fase | Lock | Regel |
-|---|---|---|---|---|---|
-| 1 | Semantisch kennismodel (Protocol v2.13, deze PR) | 1 Semantisch kennismodel; 3 Objectreview/governance (four-eyes); 6 Retrieval/answerability (relaties) | Fase 2b + deze protocol-PR | LOCKED nu | Atomaire objecten, per-type classificatieregels, gesloten relaties (`applies_if`, `except_if`, `defines`, `explains`, `supported_by`, `supersedes`, `parent`/`child`), high-risk vier-ogen. `extraction_rules_v0.1` wijkt voor typeset, chunkgrootte en fusion. Implementation engineer-golf op de bestaande kernel is in code. DAARNA G2. Publicatie blijft BLOCKED zonder G2-locator. |
-| 2 | Open-origineel | 2 Provenance & bronregister (locator-gebruik); deel van 3 objectreview | Fase 2b, dezelfde kernel-golf als v2.13 | LOCKED als dezelfde kernel-implementatiegolf, geen nieuw protocol | Locators zijn al Protocol v2.11. Vanaf ieder kennisobject MUST de reviewer de exacte bronpassage kunnen openen. Typebevestiging zonder die flow is niet aanvaardbaar. Geen nieuw locatorschema. Open-origineel (freeze-bytes + v2.11-locator + typegate), de tweecoloms reviewkaart, en de v2.15–v2.31 console/admission-golven staan in code. Die vereenvoudigingsgolf is in code. Historische «is in code»-stapels: zie Historische supersessie-index. MUST NOT G2/`publish()` openen. MUST NOT HANDOFF.md heraanmaken. MUST NOT extractkwaliteit claimen uit groene CI of Phase-4 fixture-goud. |
-| 3 | Levenscyclus + geldigheid in tijd | 4 Kennislevenscyclus & withdrawal | later protocol v2.14; serving-bounds wachten op een gedateerde bron | LOCKED als het volgende protocol (v2.14), niet deze PR | Eén kleine C3-delta: lifecycle-namen captured → classified → reviewed → approved → published → superseded → withdrawn → archived, plus `valid_from` / `valid_until` als serving-bounds. Lock v2.14 alleen wanneer de eerste officiële bron een datum heeft die serving MUST begrenzen. Tot die tijd MUST NOT Protocol v2.14 worden geschreven. G2 blokkeert publish nog; dit wacht op een echte gedateerde bron, niet op meer UX-delta's. |
-| 4 | Release, atomaire publicatie, rollback, schema-migratie | 5 Release, atomaire publicatie & rollback | Fase 4 | LOCKED als Fase 4 | Wraps de gepubliceerde projectie die Protocol v2.12 al eist (release-id, projectie-hash, rollback, schemaversie). MUST NOT verder worden geprotocoliseerd in v2.13. |
-| 5 | Tabellen/figuren | beleid onder epic 1 (gesloten typeset) | later dunne lock na de eerste tabelzware officiële bron | LOCKED beleid | Tot de eerste tabelzware officiële bron: tabellen/figuren unclassified laten; MUST NOT auto-typen; MUST NOT de gesloten typeset uitbreiden. Daarna één dunne lock (canonieke representatie + review). Niet deze PR. |
-| 6 | Kwaliteitsevaluatie | 7 Kwaliteitsevaluatie & holdouts | Fase 3 | LOCKED als Fase 3 | Aparte extract- / semantiek- / retrievaltests, false support, negatieve vraagsets, Holdout B. `FAR = 0%` staat al. False support is een Fase-3-meetlat, geen stille extra gate in v2.13. Holdout B MUST NOT worden getuned vanuit console-analytics. |
-| 7 | Security, IAM, secrets, omgevingsscheiding, audit, monitoring, DR, withdrawal-SLA, retention, kosten | 8 Security, IAM & omgevingsscheiding; 9 Audit, monitoring & disaster recovery | Fase 5 / bestaande G8-productiegereedheid | LOCKED als Fase 5 / G8 | MUST NOT vannacht tot protocol worden gemaakt. Geen dump van Fase 5 in v2.13. |
+Gereed wanneer:
+- `PROTOCOL.md` Protocol v3 is;
+- historische V2-rootstanden bevroren zijn onder `docs/history/protocol-v2/`;
+- approval-manifests controleerbaar blijven;
+- governance-tests huidige invarianten bewijzen in plaats van historische V2-tekst in actuele stuurdocumenten af te dwingen;
+- CI groen is.
 
-Epic 10 (Immutable storage / G2) is Fase 2, nu BLOCKED, en blijft de publicatieblocker. Die epic is geen achtste cluster: cluster 1 zegt DAARNA G2; publicatie blijft BLOCKED zonder G2-locator. Duurzame immutable opslag wordt niet overgeslagen. Infra 2026-09-01 (geen G2 PASS): de Azure Blob-adapter bestaat in `src/g2_source_store.py`; `azure-identity==1.25.3` en `azure-storage-blob==12.30.1` zijn runtime-dependencies. Container `canonical-sources` is leeg. G2 blijft BLOCKED. `publish()` blijft fail-closed. G0 Azure DEV blijft BLOCKED.
+Besluit: `ACTIVATE V3` wanneer alle voorwaarden zijn gehaald; anders `REVISE V3`.
 
-Tien epics → cluster/fase (kaart, geen tweede locklijst):
+## R3.2 Governance-tests migreren
 
-1. Semantisch kennismodel — cluster 1; Fase 2b; LOCKED nu (v2.13 + kernelfollow-up).
-2. Provenance & bronregister — cluster 2 (locator-gebruik) + v2.11 + Fase 2 / G2.
-3. Object-level review & governance — cluster 1 (v2.12-tupel + four-eyes) + cluster 2 (open-origineel).
-4. Kennislevenscyclus & withdrawal — cluster 3; v2.2 §11; LOCKED als v2.14, niet deze PR; afronden in Fase 4.
-5. Release, atomaire publicatie & rollback — cluster 4; v2.12-projectie + Fase 4/5.
-6. Retrieval/answerability-safety — cluster 1; v2.12 vraag×type + v2.13-relaties.
-7. Kwaliteitsevaluatie & holdouts — cluster 6; Fase 3; FAR=0% staat; false support later onder Fase 3, geen stille protocolgate.
-8. Security, IAM & omgevingsscheiding — cluster 7; Fase 5.
-9. Audit, monitoring & disaster recovery — cluster 7; Fase 5.
-10. Immutable storage / G2 — Fase 2, BLOCKED; blijft de publicatieblocker.
+Doel: documenttests terugbrengen tot actuele V3-invarianten en afzonderlijke historische auditchecks.
 
-## Open schaalbaarheids- en assurancewerkstromen
+Niet doen:
+- productgedrag wijzigen om documenttests groen te krijgen;
+- historische approval-manifests herschrijven;
+- oude V2-artefacten verwijderen wanneer hun bytes of paden deel zijn van auditbewijs.
 
-Deze werkstromen maken expliciet wat nog nodig is om Metis betrouwbaar op te schalen naar veel bronnen en naar gebruik door AI-toepassingen. Zij zijn **gepland maar nog geen vastgesteld protocol of geïmplementeerd gedrag**. Iedere werkstroom vereist eerst het bijbehorende governancebesluit in `docs/GOVERNANCE.md`, daarna zo nodig een protocolwijziging, acceptatietests en pas daarna code. De bestaande gelande golven (v2.19–v2.31 en post-v2.31 ROADMAP-golven 1–4) staan in code; zie ## Geldende norm (live) en de Historische supersessie-index. Protocol v2.14 is niet de volgende stap.
+Gereed wanneer:
+- actuele tests geen V2-deltatekst meer vereisen in root `PROTOCOL.md` of `ROADMAP.md`;
+- historische tests alleen historische bestanden en manifests controleren;
+- release-control preflight de migratie accepteert;
+- volledige CI groen is.
 
-| ID | Werkstroom | Beoogde fase | Minimaal te besluiten en later te realiseren | Gate |
-|---|---|---|---|---|
-| SA-01 | Bron- en kennisfamilie-eigenaarschap | Fase 2 | Inhoudelijke eigenaar en actualiteitsverantwoordelijke per officiële bron en kennisfamilie; reviewtermijn, escalatieroute en betekenis van ontbrekend eigenaarschap. | Besluiten vóór eerste externe pilotrelease. |
-| SA-02 | Delta-review en hergebruik van reviewbewijs | Fase 2b, na eerste echte-bronpilot | Objectniveau-diff tussen bronversies; nieuw, gewijzigd, verwijderd, verplaatst en ongewijzigd onderscheiden; regels voor behoud of verval van reviewbewijs; risicogestuurde reviewwachtrij. | Eerst valideren op vijf echte richtlijnen; geen automatische reviewovername zonder protocol en tests. |
-| SA-03 | Semantisch conflictregister | Fase 2 / 4 | Conflictstatussen, voorrangs- en escalatieregels, reviewerflow en fail-closed API-gedrag wanneer geldige bronnen of versies elkaar tegenspreken. | Besluiten vóór meerdere bronnen dezelfde vraag in een extern pilotcorpus kunnen beantwoorden. |
-| SA-04 | End-to-end integriteitsreconciliatie | Fase 5 / G8 | Deterministische vergelijking van bronbytes, bronregister, canonieke store, reviewledger, gepubliceerde projectie, retrieval-index en API-output; blokkering en herstel bij afwijkingen. | Verplicht vóór externe pilottoegang. |
-| SA-05 | Reproduceerbare trainingsdataset en model-lineage | Na retrieve-and-abstain-MVP | Datasetmanifest en -versie, objecthashes, bron- en licentiescope, uitsluiting van conflict/verlopen/withdrawn, registratie dataset → training → model en update-/withdrawalverplichting met live statuscheck. | Geen trainingslicentie of datasetexport voordat deze track afzonderlijk is vastgesteld en getest. |
+## R3.3 Audit > Experiments
 
-SA-01 tot en met SA-04 concretiseren noodzakelijke live-assurance. SA-05 blokkeert de retrieve-and-abstain-pilot niet, maar blokkeert ieder gebruik van Metis als trainingsdataset.
+Bouw binnen `Audit` een beperkte experimenteerfunctie die:
+- een document en vaste dataset vastzet;
+- baseline en kandidaatroute parallel uitvoert;
+- varianten blind of aantoonbaar vergelijkbaar laat reviewen;
+- metrics, correcties en reviewtijd vastlegt;
+- een expliciet `KEEP`, `ITERATE` of `PROCEED`-besluit registreert;
+- nooit rechtstreeks naar canonieke publicatie schrijft.
 
-## Eigenaarslock 2026-09-07 — Duty-first home SUPERSEDEERT sketch B (ROADMAP)
+Geen console-rewrite. Geen nieuw frontendframework. Geen microservicesplitsing voor dit doel.
 
-ROADMAP-lock. **Geen Protocol v2.33. Geen PROTOCOL.md-rewrite. Geen `PROTOCOL_V2_*` nieuwe delta. Geen productcode. Geen Forge-implementatie in deze PR.** Geen live-GO. Geen Azure-mutatie in deze PR. Geen golf 6. Metis is documenteigenaar. Eigenaar (William Gomes / Metis CoS) 2026-09-07 lockte dat de gelockte logged-in home **duty-first** is en dat PR **#127** sketch B (spaarzame home) **superseded** is. Die Forge-golf is nog NIET in code — await aparte Metis GO (tenzij William later GO zegt). MUST NOT console-productcode in deze PR implementeren.
+## R3.4 Eerste experiment: passagevorming
 
-Dit is **geen** zesde post-v2.31 implementatiegolf, **geen** nieuwe PROTOCOL-wet, **geen** G2/`publish()`-opening.
+Onderzoeksvraag: kan brongebonden semantische passagevorming betere kennisobjectvoorstellen maken dan de huidige deterministische passagevorming zonder brontrouw of publicatieveiligheid te verliezen?
 
-`publish()` blijft G2-BLOCKED; dat is **intentioneel, geen bug**. Deze ROADMAP claimt geen G2 PASS. Continentie-bewijszinnen in v2.16–v2.19 MUST blijven. PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only. HANDOFF.md MUST NOT opnieuw worden aangemaakt. Vier lagen ONGEWIJZIGD. v2.25-boompad ONGEWIJZIGD. v2.26 Klasse wijzigen-architectuur ONGEWIJZIGD. v2.27 unpublished-delete blijft één plaats + type-to-confirm ONGEWIJZIGD. v2.28 Sterkte-on-confirmed-type ONGEWIJZIGD. v2.29 tijdelijke productie-only deploy ONGEWIJZIGD. v2.30 Block B gewone taal ONGEWIJZIGD. Fase 1–4 toelating/register ONGEWIJZIGD. v2.31 **Dit klopt** exacte kop-bind ONGEWIJZIGD. v2.32 **Documenten** UI-kamernaam UNCHANGED. Console blijft geen verpleegkundige boomspeler. Metis / Forge / Auditor MUST NOT als GD-03-reviewers meetellen.
+Baseline: huidige productiepassagevorming.  
+Kandidaat: brongebonden semantische voorstellen.  
+Deterministische verificatie van harde invarianten blijft verplicht.
 
-### SUPERSEDES sketch B landing
+Meet minimaal:
+- onvolledige kennisobjecten;
+- ontbrekende context, voorwaarden of uitzonderingen;
+- benodigde handmatige correcties;
+- reviewtijd;
+- onverifieerbare toevoegingen.
 
-PR **#127** shipte landing sketch B: gecentreerde spaarzame home; één primair **Bron inleveren** + stille/quiet secondary links; post-auth → `/`. Eigenaar 2026-09-07 lockt dat dit **superseded** is als het gelockte home-patroon. Sketch B blijft in code tot een aparte Forge-golf; het is niet langer de lock.
+Veiligheidscriterium: nul tolerantie voor onverifieerbare toevoegingen die als brongebonden kennis zouden kunnen doorstromen.
 
-### Gelockte home (duty-first)
+Besluit: `KEEP`, `ITERATE` of `PROCEED`.
 
-Logged-in `/` MUST het duty-first Metis-werkbord zijn:
+Tot een `PROCEED`-besluit blijft de bestaande productiepassagevorming leidend.
 
-- Nav toont **Mijn werk** als eerste item, gevolgd door **Inleveren → Review → Publiceren → Documenten**. Mijn werk is current op `/`; MUST NOT **Inleveren** als current markeren op home.
-- Heading: «Mijn werk» + lead «Kies de volgende stap in het proces.»
-- Vier grote, horizontale en volledig klikbare tegels, in exact dezelfde volgorde als de procesnavigatie:
-  1. **Inleveren** — «Nieuwe bron toevoegen» → `/ingest`
-  2. **Review** — «Beoordeel aangeleverde bronnen» → `/review`; alleen bij open werk badge «N wachten op jou» plus «Nu doen»
-  3. **Publiceren** — «Goedgekeurde stukken publiceren» → `/publish`
-  4. **Documenten** — «Zoeken, openen of beheren» → `/tree`
-- Post-auth redirect landt nog steeds op `/` (home), niet `/ingest`.
-- `/tree` kamernaam **Documenten** UNCHANGED (v2.32).
+## R3.5 Semantiek en invarianten gericht scheiden
 
-### OUT OF SCOPE (deze lock én deze PR)
+Alleen na voldoende bewijs uit R3.4:
+- identificeer lexicale regels die semantische interpretatie proberen te doen;
+- behoud bron-, review-, status- en publicatie-invarianten deterministisch;
+- verwijder of vereenvoudig semantische uitzonderingslogica alleen met regressiebewijs.
 
-- Sketch B spaarzame één-knops-home als primary home-patroon
-- Quiet-only secondaries als het primary home-patroon
-- Slack presence / Slack-style live presence / typing / page-open heartbeat
-- PROTOCOL.md-rewrite / `PROTOCOL_V2_*` delta
-- G2/`publish()`
-- HANDOFF.md heraanmaken
-- Azure ZIP als deze PR
-- Nurse UI
-- Productcode / Forge-implementatie in deze PR
+Geen brede rewrite.
 
-### Acceptatie (deze ROADMAP-PR)
+## R3.6 Review-statusovergangen isoleren
 
-- Deze Eigenaarslock-sectie lockt duty-first home, SUPERSEDES #127 sketch B, acceptatiecriteria en OUT OF SCOPE.
-- Die Forge-golf is nog NIET in code — await aparte Metis GO.
-- CHANGELOG Unreleased docs-note.
-- Pointertests locken deze tekst.
-- MUST NOT `src/` productcode.
+Alleen wanneer verdere consolewijzigingen dit aantoonbaar nodig maken: isoleer statusovergangen uit grote consolefuncties tot een kleine expliciete grens. Geen algemene console-refactor.
 
-MUST NOT implementeren in deze PR. Volgende console-UX alleen ná **aparte Metis GO**. MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
+## R3.7 GitHub Actions → Azure OIDC herstellen
 
-Die Forge-golf is in code (duty-first Metis-werkbord: nav **Mijn werk**, daarna **Inleveren → Review → Publiceren → Documenten**; vier grote tegels in die volgorde; Review alleen prominent bij wachtend werk; post-auth `/`; `/tree` **Documenten** UNCHANGED). Tests-before-code. MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. `publish()` blijft G2-BLOCKED.
+Herstel de bedoelde CI/CD-route en bewijs een gecontroleerde deployment vanaf een identificeerbare commit. Cloud Shell ZIP blijft daarna uitsluitend noodprocedure, niet de normale workflow.
 
-## Eigenaarslock 2026-09-06 — Controlled-MVP Recent activity, SHA-256-dup-guard en release-identity (ROADMAP)
+Dit spoor verandert geen kennis-, review- of publicatielogica.
 
-ROADMAP-lock. **Geen Protocol v2.33. Geen PROTOCOL.md-rewrite. Geen `PROTOCOL_V2_*` nieuwe delta. Geen productcode. Geen Forge-implementatie in deze PR.** Geen live-GO. Geen Azure-mutatie in deze PR. Geen golf 6. Metis is documenteigenaar. Eigenaar (William Gomes / Metis CoS) 2026-09-06 lockte **drie kleine controlled-MVP backlog-items** op ROADMAP only. Die Forge-golf is nog NIET in code — await aparte Metis GO. MUST NOT console/ingest-productcode in deze PR implementeren.
+## Open governancebesluiten
 
-Dit is **geen** zesde post-v2.31 implementatiegolf, **geen** nieuwe PROTOCOL-wet, **geen** G2/`publish()`-opening.
+De operationele beslisstatus blijft in `docs/GOVERNANCE.md`. Open beslissingen blijven `BLOCKED` waar hun deadline-gate dat vereist.
 
-`publish()` blijft G2-BLOCKED; dat is **intentioneel, geen bug**. Deze ROADMAP claimt geen G2 PASS. Continentie-bewijszinnen in v2.16–v2.19 MUST blijven. PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only. HANDOFF.md MUST NOT opnieuw worden aangemaakt. Vier lagen ONGEWIJZIGD. v2.25-boompad ONGEWIJZIGD. v2.26 Klasse wijzigen-architectuur ONGEWIJZIGD. v2.27 unpublished-delete blijft één plaats + type-to-confirm ONGEWIJZIGD. v2.28 Sterkte-on-confirmed-type ONGEWIJZIGD. v2.29 tijdelijke productie-only deploy ONGEWIJZIGD. v2.30 Block B gewone taal ONGEWIJZIGD. Fase 1–4 toelating/register ONGEWIJZIGD. v2.31 **Dit klopt** exacte kop-bind ONGEWIJZIGD. v2.32 **Documenten** UI-kamernaam ONGEWIJZIGD. Console blijft geen verpleegkundige boomspeler. Metis / Forge / Auditor MUST NOT als GD-03-reviewers meetellen. Single-writer topology (één Gunicorn-worker / één instance / sequentiële writes) blijft.
+De gevestigde GD-03 reviewermatrix blijft van kracht:
+- C3 Canonical/review: 2 onafhankelijke reviewers, clinical + technical;
+- C4 Retrieval/answerability: 2, evaluation + technical;
+- C5 Publication/security: 2, security/operations + technical;
+- C6 Generation: 3, clinical + technical + safety/evaluation.
 
-Oordeel al afgesproken: **Controlled MVP pilot GO-with-constraints**; brede productierollout nog niet. Deze lock ontgrendelt eerlijke deploy/rollback en twee smalle console-MVP-items — geen feature-werk in deze PR.
+AI, Grok Bot en Metis tellen niet als vereiste menselijke C3–C6-reviewer, mogen niet goedkeuren en mogen niet publiceren.
 
-### Item A — Review «Recent activity» (read-only)
+## Stopregels
 
-Rechterpaneel op het Review-scherm van het document dat beoordeeld wordt.
-
-- Newest first; alleen document-scoped (niet globaal).
-- Read-only view over het **bestaande** append-only / hash-chained review ledger (`event_type`, `object_id`, `object_version`, actor, timestamp / `occurred_at`, details) plus bestaande review-decision events (reviewer, decision, comment, proposed correction).
-- Voorbeeldrijen: Bert approved object N; Anne changed type explanation→condition; Dirk requested revision; Anne uploaded document.
-- MUST NOT Slack-style live presence / typing / page-open heartbeat bouwen. Presence is OUT OF SCOPE (later alleen als de pilot erom vraagt).
-- Geen nieuw write-pad; geen DB; single-writer topology niet verzwakken.
-
-### Item B — Exact SHA-256 duplicate ingest guard
-
-- Bij upload, ná SHA-256 van de exacte bytes: als de digest al bestaat → **BLOCK** het aanmaken van een nieuwe snapshot (default block, geen loutere waarschuwing).
-- Toon de bestaande documentidentiteit (title, version, uploader, status) + primaire actie **Open existing document**.
-- Rationale: huidige ingest gebruikt `snapshot_id = snap-{digest[:16]}-{uuid}` zodat identieke bytes twee snapshots kunnen maken; immutable source-byte identity impliceert geen legitieme tweede onafhankelijke kopie van identieke bytes.
-- Alleen exact binary duplicate. Fuzzy / text-similarity duplicate detection is OUT OF SCOPE voor de pilot.
-- Geen DB; geen architectuurwijziging; single-writer blijft.
-
-### Item C — Release identity + GitHub→Azure deploy authorization (controlled MVP)
-
-Owner note 2026-09-06: App Service **B2 is compute**, niet de poort voor GitHub→Azure. Auto main→Azure blijft intentioneel UIT (`workflow_dispatch` only) tot identity is gefixt. MUST NOT App Service SKU-upgrade (B2 → hoger) als pipeline-fix.
-
-Lock als ROADMAP-backlog (docs only; await aparte Metis GO / infra-werk — NOT a Forge product-code wave unless later scoped):
-
-1. Fix GitHub Actions `deploy-production` OIDC/login failure («No subscriptions found») — federated identity + subscription rights voor `metis-deploy-production` / production environment. NOT «upgrade App Service SKU».
-2. Maak live release identity fail-closed: de exacte tested commit SHA die op `vvn-metis-console` draait MUST kenbaar zijn (health of equivalent), distinct from `main` tip.
-3. Rollback drill constraints: bewaar prior known-good ZIP/artifact; `--clean true` MUST NOT `/home/data` raken; pre-deploy export van `/home/data/metis-console` vóór risicovolle deploys; restore-oefening blijft verplicht vóór brede rollout.
-4. OUT OF SCOPE voor deze lock: enabling auto-deploy on every main push; B2→hoger SKU als pipeline-fix; G2/`publish()`; HANDOFF.md heraanmaken.
-
-### Acceptatie (deze ROADMAP-PR)
-
-- Deze Eigenaarslock-sectie lockt Items A+B+C, acceptatiecriteria en OUT OF SCOPE.
-- Die Forge-golf is nog NIET in code — await aparte Metis GO.
-- CHANGELOG Unreleased docs-note.
-- Pointertests locken deze tekst.
-- MUST NOT `src/` productcode.
-
-### OUT OF SCOPE (deze lock én deze PR)
-
-- Slack-achtige live presence / typing / page-open heartbeat
-- Fuzzy / text-similarity duplicate detection
-- Auto-deploy op iedere main-push / auto main→Azure aanzetten
-- App Service SKU-upgrade (B2 → hoger) als pipeline-fix
-- G2/`publish()`
-- HANDOFF.md heraanmaken
-- PROTOCOL.md-rewrite / `PROTOCOL_V2_*` delta
-- Azure ZIP als deze PR
-- Nurse UI
-- Nieuwe DB / architectuurwijziging / weakening single-writer topology
-- Nieuw write-pad voor activity
-
-MUST NOT implementeren in deze PR. Volgende code / infra alleen ná **aparte Metis GO**. Item C MAG later als infra/OIDC-werk, niet als Forge-productcodegolf tenzij later scoped. Items A+B MAGEN ná aparte Metis Forge GO (tests-before-code) op de bestaande console.
-
-MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
-
-## Eigenaarslock 2026-09-06 — Documenten UI-kamernaam (Protocol v2.32)
-
-Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. Eigenaar (William Gomes) 2026-09-06 (Metis CoS) lockte de live consolekamerheading op **Documenten**.
-
-G2 blijft BLOCKED. `publish()` blijft G2-BLOCKED. Deze protocol claimt geen G2 PASS. Continentie-bewijszinnen in v2.16–v2.19 MUST blijven. PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only. HANDOFF.md MUST NOT opnieuw worden aangemaakt. Vier lagen ONGEWIJZIGD. v2.25-boompad ONGEWIJZIGD. v2.26 Klasse wijzigen-architectuur ONGEWIJZIGD. v2.27 unpublished-delete blijft één plaats + type-to-confirm ONGEWIJZIGD behalve de UI-naam. v2.28 Sterkte-on-confirmed-type ONGEWIJZIGD. v2.28 structurele geldigheid / body-only chooser / TOC-uitsluiting ONGEWIJZIGD. v2.29 tijdelijke productie-only deploy ONGEWIJZIGD. v2.30 Block B gewone taal (Gevonden onder / Dit klopt / Andere kop) ONGEWIJZIGD. Fase 1–4 toelating/register ONGEWIJZIGD. v2.31 **Dit klopt** exacte kop-bind ONGEWIJZIGD. Console blijft geen verpleegkundige boomspeler. Metis / Forge / Auditor MUST NOT als GD-03-reviewers meetellen.
-
-De onderzoeker-facing consolekamerheading / nav-label / paginatitel voor `/tree` MUST **Documenten** zijn (gewone Nederlandse kamernaam). MUST NOT **Documentenhiërarchie**, **Documentenhierarchie** of **Familieboom** als live kamerheading of primair nav-label. Kernel blijft familie × klasse ONGEWIJZIGD. Dit is alleen UI-woordenschat — zelfde patroon als Protocol v2.26 Promoveren → Klasse wijzigen. MUST NOT een nieuw bestand, een nieuw objecttype of een derde hiërarchie-as verzinnen.
-
-Protocol v2.27 unpublished-delete blijft precies één consoleplaats: diezelfde `/tree`-kamer (nu **Documenten**) + type-to-confirm exacte titel. MUST NOT Verwijder unpublished document (of gelijkwaardige verwijdercontrole) aanbieden vanaf Inleveren, Review, Publiceren, Accounts of enige andere kamer. MUST NOT een aparte Delete-kamer verzinnen. MUST NOT delete heropenen naar Review/Inleveren. SUPERSEDEERT alleen de UI-naam in v2.10/later «heading MUST be Documentenhierarchie»-lezingen. Historische delta-bestandsnamen (bijv. `PROTOCOL_V2_27_…DOCUMENTENHIERARCHIE…`) MAGEN hun pad houden.
-
-Landing-page sketch B (gecentreerde spaarzame home, primair **Bron inleveren**) is BUITEN deze protocol-PR. Volgende console-UX ná deze protocolmerge is Forge landing sketch B + console-rename naar **Documenten**, alleen ná **aparte Metis GO**. MUST NOT die Forge-code in deze protocol-PR implementeren. MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
-
-Die Forge-golf is in code: landing sketch B + console-rename naar **Documenten**. `/tree` blijft; v2.27 unpublished-delete blijft één plaats. Eigenaarslock 2026-09-07 (duty-first home) SUPERSEDEERT de lezing dat sketch B de gelockte logged-in home blijft; `/tree` **Documenten** blijft.
-
-## Eigenaarslock 2026-09-06 — Post-v2.31 betrouwbaarheid- en bewijsbacklog (ROADMAP)
-
-ROADMAP-lock. Geen Protocol v2.32. Geen PROTOCOL.md-rewrite. Geen `PROTOCOL_V2_*` nieuwe delta. Geen productcode. Geen Forge-implementatie in deze PR. Metis is documenteigenaar. Eigenaar (William Gomes) 2026-09-06 (Metis CoS) vroeg deze backlog **eerst op ROADMAP-niveau** te locken — niet als PROTOCOL-wet, niet als Forge GO. Dezelfde eigenaar lockte later op 2026-09-06 **verscherpte acceptatiecriteria op dezelfde vijf golven** — geen nieuwe golven, geen golf 6. Nog later dezelfde dag (ná PR #120 / tip `ef8771a`): Post-#120 audit acceptatiecorrectie — heropent acceptatie van bestaande beloftes; geen Protocol v2.32; geen golf 6.
-
-Onafhankelijke statische audit van `main` tip `019978b` (zelfde lineage als de Dit klopt-merge / Protocol v2.31 / PR #110+#111). Oordeel: ernstig veiligheidsfundament aanwezig; **geen** brede betrouwbaarheids- of extractkwaliteitsclaim; begeleid intern gebruik MAG; niet klaar voor multi-onderzoeker dagelijks-vertrouwensclaims. REQUEST SIMPLIFICATION (gericht), geen volledige herschrijving. Product API / retrieval buiten die audit.
-
-`publish()` blijft G2-BLOCKED; dat is **intentioneel, geen bug**. Deze ROADMAP claimt geen G2 PASS. Continentie-bewijszinnen in v2.16–v2.19 MUST blijven. PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only. HANDOFF.md MUST NOT opnieuw worden aangemaakt. Vier lagen ONGEWIJZIGD. v2.25-boompad ONGEWIJZIGD. v2.26 Klasse wijzigen-architectuur ONGEWIJZIGD. v2.27 unpublished-delete Documentenhiërarchie + type-to-confirm ONGEWIJZIGD. v2.28 Sterkte-on-confirmed-type ONGEWIJZIGD. v2.28 structurele geldigheid / body-only chooser / TOC-uitsluiting ONGEWIJZIGD. v2.29 tijdelijke productie-only deploy ONGEWIJZIGD. v2.30 Block B gewone taal (Gevonden onder / Dit klopt / Andere kop) ONGEWIJZIGD. Fase 1–4 toelating/register ONGEWIJZIGD. v2.31 **Dit klopt** exacte kop-bind ONGEWIJZIGD (die Forge-golf is in code). Console blijft geen verpleegkundige boomspeler. Metis / Forge / Auditor MUST NOT als GD-03-reviewers meetellen. Auditor blijft aparte judge-seat; Forge MUST NOT self-certify publish/GD-evidence.
-
-Deze golven zijn **ROADMAP-backlog**, geen nieuwe PROTOCOL-wet in deze PR. MUST NOT G2/`publish()` openen. MUST NOT HANDOFF.md heraanmaken. MUST NOT extractkwaliteit claimen uit groene CI of Phase-4 fixture-goud. Acceptatie verscherpt 2026-09-06 op dezelfde vijf golven (geen golf 6; aparte releasecheck buiten de vijf golven; per-golf testbewijs). Fase-4 hooks ≠ dit bewijs. Volgende code alleen ná **aparte Metis GO per golf** (start met golf 1 tenzij de eigenaar anders zegt). MUST NOT implementeren in deze PR.
-
-Geordende volgende implementatiegolven ná Protocol v2.31 / Forge exact-bind (#110/#111 op main):
-
-1. **Reviewopslag betrouwbaarheid** — atomic read-modify-write; concurrency/revisie; geen verloren reviews / torn JSONL; beoordeel transactional store vs meer file locks. Die Forge-golf is in code (#113). **Resterende acceptatie** (smalle follow-up MAG ná Metis GO; geen nieuwe golf): afgewezen stale write MUST begrijpelijk zijn voor de reviewer — geen succesmelding; eigen invoer terugvinden of opnieuw toepassen. Fail-closed op store alleen is onvoldoende als de UI stil werk laat verdwijnen.
-2. **Ingest beschikbaarheid** — blocking work van de async event loop af; upload/download size limits; smoke met ≥2 gelijktijdige gebruikers. Die Forge-golf is in code (#115).
-3. **Security harden** — URL-ingest: geen SSRF naar interne bestemmingen; redirect validation; max download size; session expiry; login cookie `Secure` (bestaande PBKDF2/salt/compare_digest houden). Multi-user sessiebeheer: gelijktijdig inloggen/uitloggen MUST NOT sessiegegevens verliezen; verlopen sessies MUST ongeldig blijven na herstart. Alleen een expiry-veld toevoegen is onvoldoende. Aansluiting op golf 1 (concurrency/store) waar sessie-persist raakt.
-4. **Onafhankelijke kwaliteitsmeting (was PR2)** — eerst metricdefinities in `extract_metrics_v1` herstellen (precision MUST false positives correct tellen; context_completeness MUST NOT `context_scan_done` alleen als completeness behandelen; kwaliteitsclaim MUST onafhankelijk/representatief goud eisen, niet iedere niet-lege fixture). Daarna multi-source gold + holdout op echte richtlijnen inclusief gemiste kennis en ten onrechte toegelaten kandidaten. Toelatingspoort / regex-/regelgebaseerde extractie MUST toetsen op echte taalvariatie: alternatieve formuleringen, ontkenningen, voorwaarden, uitzonderingen, verwijzingen. Meet zowel onterecht toegelaten als gemiste kennis. Phase-4 hooks ≠ dit bewijs.
-5. **Gericht vereenvoudigen** — compacteer huidige norm vs historische supersession-stapels in ROADMAP/protocol-sturing; lokale vereenvoudiging van hoge-complexiteit console/admission-paden — geen strooiing van tiny helpers; geen volledige herschrijving. Die vereenvoudigingsgolf is in code.
-
-MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED. Vijf golven only. MUST NOT een zesde implementatiegolf verzinnen.
-
-**Aparte releasecheck (buiten de vijf golven)** — dit zijn **geen nieuwe golven** maar verscherpte criteria. Herleidbare release en herstel:
-
-- Vastleggen: geteste commit SHA, daarvan gebouwde pakket/artifact, daadwerkelijk draaiende versie.
-- Na deploy/install: controleer een echte gebruikershandeling (niet alleen login).
-- Vooraf bepalen hoe code én reviewgegevens (snapshot JSONL / review store) herstelbaar blijven.
-- MUST NOT Azure ZIP autoriseren. MUST NOT G2/`publish()` openen.
-- Align met Metis skill `releasebewijs`; MAG `scripts/release_control_preflight.py` noemen. Dit is operationele discipline, geen zesde implementatiegolf.
-
-**Per-golf afsluiting** — Elke golf-afsluiting (CoS PASS / merge notes) MUST verwijzen naar concreet testbewijs (testnamen / CI run / tip SHA). Nuance: Secure-cookie en sessieverval waren direct zichtbaar in code; dataverlies/blokkering waren audit-risico’s uit inspectie, nog geen gereproduceerde incidenten — claim geen incident-proof zonder tests.
-
-Post-#120 audit (eigenaarslock hieronder) corrigeert acceptatie van die gelande golven: volgende code ná aparte Metis GO per remediatie, start store-consistentie tenzij de eigenaar anders zegt — geen golf 6.
-
-## Eigenaarslock 2026-09-06 — Post-#120 audit acceptatiecorrectie (ROADMAP)
-
-ROADMAP-lock. **Geen Protocol v2.32. Geen golf 6. Geen productcode in deze PR.** Geen PROTOCOL.md-rewrite. Geen `PROTOCOL_V2_*` nieuwe delta. Geen Forge-implementatie in deze PR. Geen live-GO. Metis is documenteigenaar. Eigenaar (William Gomes / Metis CoS) 2026-09-06 keurde goed: audit-remediaties **nu op ROADMAP locken**; nog geen Forge GO.
-
-Dit is een **acceptatiecorrectie / audit-remediatie** van bestaande betrouwbaarheidsbeloftes — geen zesde implementatiegolf, geen nieuwe PROTOCOL-wet.
-
-Onafhankelijke engineering-audit ná golf 5. Geauditeerde `main`: `ef8771a` (na PR #120). Vergelijkingsbasis: `019978b`. Oordeel: **CHANGES REQUIRED** voor de garanties hieronder. Code-oppervlak: gerichte vereenvoudiging MAG; geen grote herschrijving. Product API / retrieval buiten scope. G2/`publish()` BLOCKED blijft **intentioneel**. Geen live-GO.
-
-Golven 1–5 blijven geland in code (lineage #113–#120) maar claimen **niet** dat multiuser-betrouwbaarheid of onafhankelijke extractkwaliteit volledig gedekt zijn. Deze lock **heropent/corrigeert acceptatie** van bestaande beloftes.
-
-Landing-page UX-voorkeur (gecentreerde, spaarzame home) is **buiten scope** voor deze lock.
-
-Geordende remediaties (aparte Metis GO per item later; start met store-consistentie tenzij de eigenaar anders zegt):
-
-1. **Wave-1 stale / browserrevisie (HIGH)** — Expliciete object- of snapshotrevisie reist mee met het reviewformulier GET→POST en iedere mutatie; vergelijk onder het bestaande lock. Bind de revisie aan de edit, MUST NOT aan `threading.local` / worker-thread. Bij conflict: houd de conceptinvoer én toon de huidige verschillen. Acceptatietests: twee echte clients met overlappende formulieren (inclusief verschillende workers / hergebruikte threads). De bestaande same-POST inject-test is nuttig maar onvoldoende. Kleinste fix: EXTEND.
-
-2. **Failed-write process consistency — `promote_class` and peers (HIGH)** — Bereid mutaties voor op een kopie; publiceer in-process staat alleen ná succesvolle duurzame commit. Definieer herstelbare commitvolgorde / kleine transactie over objects/envelopes/bindings/ledger-bestanden. Tests: geïnjecteerde save-failures op grenzen + console-herstart bewijst dat disk wint. EXTEND/REUSE; geen verplichte DB-herschrijving.
-
-Remediaties 1–2 (store-consistentie): die Forge-golf is in code (form-bound snapshotrevisie; copy-then-commit voor `promote_class` en peers).
-
-Pilot review-write serialization: die Forge-golf is in code (volle store-transacties serialiseren; conflict/stale path laat de winner op disk; form+revisie co-read; ingest-extract houdt geen exclusieve review-store lock). Extends #122/#125; geen nieuwe architectuur of DB.
-
-3. **Wave-3 SSRF connection bind (HIGH wanneer URL-ingest exposed is)** — Valideer, verbind daarna alleen met het gecontroleerde IP met correcte Host/TLS-hostnamevalidatie; herhaal per redirect — OF equivalent gecontroleerde egress. Test wisselende DNS-antwoorden zonder echte interne netwerkaanvallen. EXTEND/REUSE.
-
-Remediatie 3 (Wave-3 SSRF connection bind): die Forge-golf is in code (connect pinned to validated IP; Host/TLS-hostname voor de oorspronkelijke naam; re-validate/re-bind per redirect).
-
-4. **Wave-4 quality claim incomplete (HIGH voor claims)** — Huidig gold/holdout = development/regressie only. MUST NOT een onafhankelijke kwaliteitsclaim toestaan op fixture-labels / zelfverklaarde booleans. Lever apart geselecteerd goud op echte richtlijnen (bronidentiteit, annotatieregels, reviewers, gelockte scope); scheid train vs holdout op bron-/documentniveau; lock moment + versies; overlapchecks. Herstel metrics: eenheid/noemer; match op bron+passage met 1:1-toewijzing; expliciete duplicaten; contextmaat eerlijk benoemd of tegen geannoteerde verwachtingen; burden-metric MUST NOT als voortgang lezen wanneer die ongedefinieerd is. CONFIGURE/EXTEND.
-
-Remediatie 4 (Wave-4 quality claim): die Forge-golf is in code (v231_wave4 fixture gold = development/regressie only; claim alleen na concrete package-checks op bronidentiteit, annotatieregels, reviewers, lock moment, document-gescheiden train/holdout en berekende overlap; metrics 1:1 bron+passage).
-
-5. **Topology bound (scale)** — Documenteer de ondersteunde topologie: huidig één Gunicorn-worker / één instance / sequentiële writes. Voorkom per ongeluk multi-writer scale. Vóór meerdere writers: consistent mutate-pad voor accounts/envelopes/bindings (session reload/lock-patroon). CONFIGURE nu; EXTEND bij schalen.
-
-Remediatie 5 (topology bound): die Forge-golf is in code (één Gunicorn-worker / één instance / sequentiële writes; fail-closed op multi-worker / multi-instance via `src/topology_bound_v1.py`).
-
-**Release-preflight risico** — markers/comments MUST NOT als live-releasebewijs worden behandeld; houd alleen metadata die naar concrete checks wijst.
-
-**Aparte releasecheck (blijft buiten de remediaties)** — ongewijzigd t.o.v. de post-v2.31 backlog: geteste commit SHA → gebouwd pakket/artifact → daadwerkelijk draaiende versie; herstelbaarheid van code én reviewgegevens. MUST NOT Azure ZIP autoriseren. MUST NOT G2/`publish()` openen. Dit MAG geen zesde implementatiegolf worden.
-
-MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. MUST NOT implementeren in deze PR. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
-
-## Eigenaarslock 2026-09-06 — Dit klopt exacte kop-bind (Protocol v2.31)
-
-Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. Eigenaar (William Gomes) 2026-09-06 (Metis CoS) lockte dat **Dit klopt** MUST NOT de verkeerde kop binden via gedeeltelijke tekstmatch.
-
-G2 blijft BLOCKED. `publish()` blijft G2-BLOCKED. Deze protocol claimt geen G2 PASS. Continentie-bewijszinnen in v2.16–v2.19 MUST blijven. PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only. HANDOFF.md MUST NOT opnieuw worden aangemaakt. Vier lagen ONGEWIJZIGD. v2.25-boompad ONGEWIJZIGD. v2.26 Klasse wijzigen-architectuur ONGEWIJZIGD. v2.27 unpublished-delete Documentenhiërarchie + type-to-confirm ONGEWIJZIGD. v2.28 Sterkte-on-confirmed-type ONGEWIJZIGD. v2.28 structurele geldigheid / body-only chooser / TOC-uitsluiting ONGEWIJZIGD. v2.29 tijdelijke productie-only deploy ONGEWIJZIGD. v2.30 Block B gewone taal (Gevonden onder / Dit klopt / Andere kop) ONGEWIJZIGD. Fase 1–4 toelating/register ONGEWIJZIGD. Console blijft geen verpleegkundige boomspeler. Metis / Forge / Auditor MUST NOT als GD-03-reviewers meetellen.
-
-Wanneer de reviewer documentpositie bevestigt met **Dit klopt** (auto-bind van het getoonde **Gevonden onder**-pad naar een kop-ouder) MUST binding de **exacte** zichtbare koptitel prefereren na normalisatie (trim; interne whitespace samenvouwen). Outline-prefix zoals `5.2` MAG alleen worden weggelaten wanneer beide kanten dezelfde regel gebruiken. MUST NOT substring/`in`-matching. MUST NOT partiële / substring / containment-matches (`last in text`, `text in last`, startswith-as-bind, fuzzy). MUST NOT first-hit win onder substring-kandidaten. Nul exacte matches MUST NOT stilzwijgend een ouder binden — ouder ongebonden / **Andere kop kiezen** (fail closed). MUST NOT een ouder verzinnen. Twee of meer exacte matches MUST NOT raden — dezelfde fail-closed tenzij één kandidaat uniek is via outline-nummer uit het pad AND body-heading-rol (Protocol v2.28 body-only chooser). Wanneer precies één exacte match bestaat: bind die kop. Als meerdere exacte titels maar één unieke outline-match uit het laatste padsegment: die body-kop MAG binden. SUPERSEDEERT iedere lezing dat Dit klopt MAG binden via gedeeltelijke titelcontainment.
-
-Acceptatie/regressies: `Preventie` vs `Preventie van vallen` — Dit klopt MUST NOT de prefix binden wanneer de exacte langere titel bestaat; MUST NOT de langere titel binden wanneer het laatste padsegment alleen de korte titel exacteert en een korte kop bestaat. Gedeelde stammen (`Screening` / `Screening en diagnostiek`): substring MUST NOT beslissen.
-
-Die Forge-golf is in code (exact-bind op `resolve_found_under_parent`; tests-before-code). MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. Eigenaarslock 2026-09-06 (post-v2.31 betrouwbaarheid- en bewijsbacklog) supersedes de lezing dat de volgende *code* ná die al gelande exact-bind-golf nog die Forge-golf is: volgende code ná aparte Metis GO per golf is die ROADMAP-backlog (start golf 1 tenzij de eigenaar anders zegt). Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
-
-## Reviewopslag betrouwbaarheid (audit wave 1)
-
-Die Forge-golf is in code (`_save_objects`: unique temp + `os.replace`; per-snapshot lock; optimistic revision check fails closed with `snapshot_object_write_conflict`). Gelande tip: `main` `4d569f3` (PR #113; feat `a37cbc5`). Geen torn/empty snapshot-JSONL bij interrupt; geen stille last-write-wins tussen twee reviewers op dezelfde snapshot. **Resterende acceptatie (geen nieuwe golf):** afgewezen stale write MUST begrijpelijk zijn voor de reviewer — geen succesmelding; eigen invoer terugvinden of opnieuw toepassen. Fail-closed op store alleen is onvoldoende als de UI stil werk laat verdwijnen; die reviewer-UX is nog niet in UI bewezen. ROADMAP #112 backlog MAG apart landen. MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. `publish()` blijft G2-BLOCKED.
-
-## Ingest beschikbaarheid (audit wave 2)
-
-Die Forge-golf is in code (console `POST /ingest`: `asyncio.to_thread` so extract/ingest does not block the async event loop; fail-closed upload/download size limit `DEFAULT_INGEST_MAX_BYTES` / `CONSOLE_INGEST_MAX_BYTES`, reject `ingest_payload_too_large`). Gelande tip: `main` `9436e99` (PR #115; feat `8eef79e`). Smoke: overlapping ingest + other request for ≥2 users. MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. `publish()` blijft G2-BLOCKED. Wave 3 SSRF/session/Secure en wave 4 metrics/gold staan in code; wave 5 simplify is deze golf.
-
-## Eigenaarslock 2026-09-05 — Objectcontract, harde toelatingspoort, reason codes en reviewer passage-flow (Protocol v2.30)
-
-Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. Eigenaar (William Gomes) 2026-09-05 (Metis CoS GO) lockte één protocolcut met twee onafhankelijk toetsbare acceptatieblokken (Block A harde toelatingspoort / objectcontract / reason codes; Block B reviewer passage-flow / documentpositie / echte open-source broncontext).
-
-G2 blijft BLOCKED. `publish()` blijft G2-BLOCKED. Deze protocol claimt geen G2 PASS. Continentie-bewijszinnen in v2.16–v2.19 MUST blijven. PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only. HANDOFF.md MUST NOT opnieuw worden aangemaakt. Vier lagen ONGEWIJZIGD. v2.25-boompad ONGEWIJZIGD. v2.26 Klasse wijzigen-architectuur ONGEWIJZIGD. v2.27 unpublished-delete Documentenhiërarchie + type-to-confirm ONGEWIJZIGD. v2.28 Sterkte-on-confirmed-type ONGEWIJZIGD. v2.29 tijdelijke productie-only deploy ONGEWIJZIGD. Console blijft geen verpleegkundige boomspeler. Metis / Forge / Auditor MUST NOT als GD-03-reviewers meetellen.
-
-Block A — harde toelatingspoort / objectcontract / reason codes. Een kennisobject MAG alleen worden voorgesteld wanneer alle verplichte velden van het voorgestelde type zijn gevuld met letterlijke lokaliseerbare brontekst. Ontbrekend verplicht veld → `gate_result=blocked`. Zachte scores (`relevant`/`complete`/`understandable`) MAGEN alleen rangschikken; MUST NOT de harde poort openen. There MUST be NO tradeoff. UI polish MUST NOT excuse bad candidates. Soft scores / volume / “ship then fix” MUST NOT open the hard gate. Blocked candidates MUST NOT enter the ordinary review queue. Current knowledge-object quality is ~5/10 — a fail, not a shippable bar (owner reconfirmed GO 2026-09-05). Het model MUST NOT gaten vullen met «impliciet»-proza. Toelating MUST: volledige draagzin AND `subject_span` AND `predicate_span` AND geldige locator AND complete type_contract AND type_evidence AND geen onopgeloste kernverwijzing AND geen onvolledige vergelijking AND contextscan gedaan AND gevonden constraints verwerkt. Typecontracten: Aanbeveling (`actor_of_scope` + `recommended_action` + `action_object_or_goal` + `recommendation_evidence_span`), Definitie, Voorwaarde, Uitzondering, Feitelijke constatering, Toelichting (MUST supported object linken; niet zelfstandig publiceerbaar als default). Harde `reason_codes` MUST minstens `incomplete_sentence`, `subject_missing`, `predicate_missing`, `unresolved_reference`, `comparison_target_missing`, `abbreviation_unresolved`, `table_of_contents_entry`, `editorial_transition_only`, `recommendation_evidence_missing`, `condition_target_missing`, `exception_target_missing`, `supported_object_missing`, `no_independent_claim`, `duplicates`, `source_fidelity_failure` bevatten. Contextscan: kandidaatparagraaf + vorige/volgende + huidige+voorouderkoppen; noodzakelijke context → opnemen OF linken OF blokkeren. Atomiciteit is één zelfstandig bevestigbare betekenis inclusief verplichte voorwaarden/uitzonderingen — NOT altijd één woord/één zin. Passage-registerstatussen `selected_as_candidate` | `used_as_context` | `linked_as_support` | `excluded_with_reason` | `not_yet_assessed`; MUST NOT passages stilzwijgend laten vallen; geen plicht iedere zin te objectiveren. Verplichte dJG-regressie «De dJG wordt in Nederland vaker gebruikt.» MUST NOT als Aanbeveling de gewone wachtrij in; `reason_codes` MUST `recommendation_evidence_missing`, `comparison_target_missing`, `abbreviation_unresolved` (wanneer onopgelost) bevatten. Ook one-word, unresolved ref, incomplete comparison, false recommendation, volledige «adviseert»-aanbeveling, lone exception, recommendation+exception.
-
-Block B — reviewer passage-flow / documentpositie / echte open-source broncontext. Documentpositie SUPERSEDEERT primaire UI die altijd TOC-lijst + volle ouderlijst + aparte Relatie bevestigen toont. Interne parent-ids MAGEN blijven. Primaire UI MUST alleen gewone taal (**Gevonden onder** / **Dit klopt** / **Andere kop kiezen**). Volle hiërarchie ALLEEN na **Andere kop**; alleen body-koppen; TOC uitgesloten; zoeken; navigeren vs selecteren gescheiden. Zichtregel: hoeft de reviewer niet te handelen → niet tonen; als getoond → één duidelijke actie in gewone taal. Geen ouder/kind/parent/confirmed relation op het primaire oppervlak. **Open volledige richtlijn** / broncontext MUST omliggende pagina-/paragraafcontext tonen met de exacte span gemarkeerd — MUST NOT slechts dezelfde afgekapte kaartzin vergroten. Review-UI-volgorde + ÉÉN save: (A) geselecteerde passage + waarom (B) broncontext (C) geschiktheid Ja / mist context / samenvoegen / alleen onderbouwing / geen kenniseenheid (D) documentpositie (E) type: Metis-voorstel + Dit klopt / Type wijzigen — MUST NOT starten vanaf alleen «nog niet bevestigd» (F) eindoordeel Goedkeuren / Goedkeuren na correctie / Afwijzen / Later beoordelen; knop **Review opslaan en volgende**. v2.28 Sterkte-on-confirmed-type blijft.
-
-Metrics (precision, type accuracy, context completeness, coverage vs gold, review burden) MUST door het protocol worden geëist; implementatie MAG latere fases zijn. Goudstandaard vereist vóór extractkwaliteit te claimen.
-
-ROADMAP noemt vier Forge-fases na aparte Metis-GO’s. Volgende code ná deze protocol's eigen Metis-GO MUST Forge op de bestaande console zijn voor precies:
-
-1. Fase 1: velden + contracten (richtlijn inhoudelijke kandidaten) + harde poort + reason codes + dJG-regressie + minimale `context_before`/`context_after` uit de aangrenzende zin/paragraaf; MUST NOT iedere kandidaat met `context_scan_not_done` blokkeren; boom `path`/`node`/`outcome` blijft Protocol v2.25 tot een aparte boom-gate GO; passage-register is GEEN fase-1-toelatingsvoorwaarde;
-2. Fase 2 (eigen GO): context / refs / abbrev / comparisons / expand-merge (diep venster; full context scan) — in code;
-3. Fase 3 (eigen GO): review-UI + open-bron echte context + ingeklapte documentpositie;
-4. Fase 4 (eigen GO): passage-register + coverage + gold + metrics (passage-register MUST NOT een fase-1-toelatingsvoorwaarde zijn).
-
-Die Forge-fase 1 is in code (velden + richtlijn-contracten + harde poort + reason codes + dJG-regressie + minimale aangrenzende context; boom blijft v2.25; MUST NOT iedere kandidaat met `context_scan_not_done` blokkeren). Die Forge-fase 2 is in code (diep contextvenster; refs/abbrev/comparisons/expand-merge; full `context_scan_done`; `context_scan_not_done` MAG blokkeren wanneer de diepe scan verplicht was en niet is uitgevoerd; MUST NOT Phase-1-geldige complete kandidaten met opgenomen diepe scan legen). Die Forge-fase 3 is in code (review-cockpit A–F + echte broncontext + ingeklapte documentpositie + één save **Review opslaan en volgende**; Phase 1+2-poort blijft). Die Forge-fase 4 is in code (passage-register + dekking per kop + extract-goud + fail-closed metrics; passage-register is GEEN fase-1-toelatingsvoorwaarde; primaire reviewkaart blijft gewone taal).
-
-MUST NOT Forge-fases in deze protocol-PR implementeren. MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
-
-## Eigenaarslock 2026-09-05 — Structurele kop-/ouderlijstnavigatie + bevestigde Sterkte-poort (Protocol v2.28)
-
-Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. Eigenaar (William Gomes) 2026-09-05 lockte één protocolcut met twee onafhankelijk toetsbare acceptatieblokken (Block A navigatie/structuur; Block B Sterkte-poort).
-
-G2 blijft BLOCKED. `publish()` blijft G2-BLOCKED. Deze protocol claimt geen G2 PASS. Continentie-bewijszinnen in v2.16–v2.19 MUST blijven. PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only. HANDOFF.md MUST NOT opnieuw worden aangemaakt. Vier lagen ONGEWIJZIGD. v2.25-boompad ONGEWIJZIGD. v2.26 Klasse wijzigen-architectuur ONGEWIJZIGD. v2.27 unpublished-delete Documentenhiërarchie + type-to-confirm ONGEWIJZIGD. Console blijft geen verpleegkundige boomspeler. Metis / Forge / Auditor MUST NOT als GD-03-reviewers meetellen.
-
-Block A — structurele kop-/ouderlijstnavigatie. Huidige extractvolgorde is nuttig voor provenance maar ongeschikt als onderzoeker-navigatie. MUST NOT naive global numeric sort van alle koppen (TOC + body merge-risico). MUST inhoudsopgave-items apart herkennen en markeren van body-koppen. Ouderkeuze-/kopnavigatielijst MUST primair koppen uit het documentlichaam (document body) gebruiken. MUST hiërarchie afleiden uit outline-nummers waar betrouwbaar (`5` → `5.4` → `5.4.1` → `5.4.2`). Bijna-duplicaten MAGEN alleen van de keuzelijst verdwijnen; alle bronankers MUST in freeze/audittrail blijven. Bron-/extractvolgorde blijft fallback voor koppen zonder betrouwbaar outline-nummer. MAG paginanummer of source locator tonen om gelijkgenoemde koppen te onderscheiden. Een ouder MUST structureel geldig zijn. Kop `5.4.1` MUST NOT kop `2` als ouder krijgen enkel omdat die in de buurt is geëxtraheerd. Ongeldige oudervoorstellen MUST NOT binden / MUST NOT als defaultstructuur worden aangeboden. Productregel: de ouderlijst toont een gededupliceerde, hiërarchisch geordende documentstructuur uit de hoofdtekst. Bronvolgorde blijft voor provenance en als fallback.
-
-Block B — Sterkte-poort (alleen bevestigd type). Strenger dan huidige main (`recommendation_strength_ui_applies` op proposed type). Een machinevoorstel `recommendation` MUST NOT Sterkte activeren/tonen. Sterkte zichtbaar en actief ALLEEN wanneer opgeslagen/bevestigd (stored/confirmed) type Aanbeveling (`recommendation`) OF een actionable boom-`outcome` is. Bij typewijziging in de browser MUST Sterkte vóór submit verschijnen/verdwijnen (live UI / live-UI). Als het type van recommendation/actionable outcome afwijkt verdwijnt Sterkte onmiddellijk; een eerder gekozen sterkte MUST NOT actief op dat object worden opgeslagen; oude waarde MAG alleen in audithistorie blijven. Machine MAG nog een sterktewaarde voorstellen, maar die MUST verborgen/inactief blijven tot de gebruiker het relevante type bevestigt. Dit SUPERSEDEERT iedere v2.16/v2.17-lezing dat stamp-UI MAY verschijnen op alleen `proposed_object_type` zonder menselijke typebevestiging. v2.16/v2.17-stempel-op-recommendation-wet blijft; de poort wordt confirmed/stored type.
-
-De v2.27-lock dat de volgende code de unpublished-delete Documentenhiërarchie + type-to-confirm-golf is, blijft voor die golf: die v2.27-deletegolf MAG al onderweg zijn onder aparte Metis-GO (in flight). Waar deze delta en Protocol v2.27 botsen over welke implementatie de volgende is: v2.27-deletegolf MAG al onderweg zijn; deze delta's volgende Forge-golf is Blocks A+B na eigen GO. ROADMAP noemt beide. Volgende code ná deze protocol's eigen Metis-GO MUST Forge op de bestaande console zijn voor precies:
-
-1. Block A: inhoudsopgave apart markeren; ouderlijst primair uit documentlichaam; outline-hiërarchie; keuzelijst-dedup only; bronvolgorde fallback; structureel geldige ouder only;
-2. Block B: Sterkte alleen op stored/confirmed Aanbeveling of actionable boom-`outcome`; live UI vóór submit; type weg = actieve sterkte weg;
-3. Tests (tests-before-code), twee onafhankelijke acceptatieblokken.
-
-MUST NOT v2.27-delete in deze protocol-PR implementeren. MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI of HANDOFF.md heraanmaken. MUST NOT G2 PASS claimen. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED. Die Forge-golf is in code (Blocks A+B; aparte acceptatietests). A pass is not B pass. v2.27-deletegolf is in code. ROADMAP noemt beide.
-
-## Eigenaarslock 2026-09-05 — Unpublished-delete Documentenhiërarchie + type-to-confirm (Protocol v2.27)
-
-Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. Eigenaar (William Gomes) 2026-09-05 lockte unpublished-documentverwijdering op precies één consoleplaats.
-
-G2 blijft BLOCKED. `publish()` blijft G2-BLOCKED. Deze protocol claimt geen G2 PASS. Continentie-bewijszinnen in v2.16–v2.19 MUST blijven. PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only. HANDOFF.md MUST NOT opnieuw worden aangemaakt. Vier lagen ONGEWIJZIGD. v2.25-boompad ONGEWIJZIGD. v2.26 Klasse wijzigen-architectuur ONGEWIJZIGD. Console blijft geen verpleegkundige boomspeler. Metis / Forge / Auditor MUST NOT als GD-03-reviewers meetellen.
-
-Unpublished-documentverwijdering MUST beschikbaar zijn vanaf precies één consoleplaats: **Documentenhiërarchie**. MUST NOT Verwijder unpublished document (of gelijkwaardige verwijdercontrole) aanbieden vanaf Inleveren, Review, Publiceren, Accounts of enige andere kamer. MUST NOT een aparte Delete-kamer/kamer verzinnen (eigenaar voegt later andere kamers toe; delete blijft op Documentenhiërarchie). Vóór delete uitvoert MUST de operator de exacte documenttitel typen in een bevestigingsveld (type-to-confirm). De console MUST de titel duidelijk tonen zodat de operator die kan kopiëren/lezen — veiligheidsmaatregel tegen per ongeluk/snel verwijderen, geen puzzel. Zonder exacte titelmatch MUST delete NOT lopen.
-
-Ongewijzigd uit Protocol v2.20: alleen unpublished captured snapshots MAGEN worden verwijderd door een geautoriseerde console-operator; MUST bevestigen vóór uitvoering (nu inclusief type-to-confirm titel); MUST een audit-ledgerrij schrijven; MUST NOT een gepubliceerde projectie verwijderen; MUST NOT SSH/wipe van `/home/data` als productpad; four-eyes is niet vereist voor unpublished-capture-delete.
-
-Dit SUPERSEDEERT iedere v2.20-lezing dat delete MUST op de documentkaart / Review-chooser als alternatieve oppervlakken verschijnen. Vervangen door: Documentenhiërarchie only + type-to-confirm exacte titel.
-
-De v2.26-lock dat de volgende code de Klasse-wijzigen-eerstegolf is, is superseded alleen voor wat NA die al gelande Forge-golf (PR #97) de volgende *code*-implementatie is. Die Forge-golf is in code (Documentenhiërarchie only + type-to-confirm) voor precies:
-
-1. Verwijdercontroles weghalen van ieder oppervlak behalve Documentenhiërarchie;
-2. Type-to-confirm-veld dat exacte documenttitel eist (titel getoond);
-3. Bestaande unpublished-only / audit-ledger / geen gepubliceerde delete / bevestiging houden;
-4. Tests (tests-before-code).
-
-MUST NOT G2/`publish()` openen, Azure ZIP, nurse UI, selectieve klassewijziging of HANDOFF.md heraanmaken. Selectieve invalidatie + published-candidate blijven latere wet onder v2.26, ná deze delete-golf. Protocol v2.28 records that this v2.27 delete wave may already be in flight under separate Metis GO; Protocol v2.28's next Forge wave is Blocks A+B after its own GO. ROADMAP noemt beide. MUST NOT G2 PASS claimen. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
-
-## Eigenaarslock 2026-09-05 — Klasse wijzigen / controlled reclassification (Protocol v2.26)
-
-Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. Eigenaar (William Gomes) 2026-09-05 lockte combined architecture + first code wave: **Klasse wijzigen** / controlled reclassification.
-
-G2 blijft BLOCKED. `publish()` blijft G2-BLOCKED. Deze protocol claimt geen G2 PASS. Continentie-bewijszinnen in v2.16–v2.19 MUST blijven. PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only. HANDOFF.md MUST NOT opnieuw worden aangemaakt. Vier lagen ONGEWIJZIGD. v2.25-boompad ONGEWIJZIGD. Console blijft geen verpleegkundige boomspeler. Metis / Forge / Auditor MUST NOT als GD-03-reviewers meetellen.
-
-De lezing dat de huidige `promote_class`-reset — een stille total wipe van alle reviewstaat — het enige wettige verhaal is, is superseded. Een documentklasse-wijziging MUST alleen invalideren wat die klassewijziging inhoudelijk raakt. Doelarchitectuur = selectieve invalidatie. Tijdelijke veilige **volle** herreview MAG in de eerste implementatiegolf. Klassewijziging MUST NOT freeze-bytes, SHA-256, titel, versie of provenance van de bron wijzigen. Klasse is hoe Metis het document interpreteert, niet wat de bron is.
-
-richtlijn-path Klassen (`richtlijn` | `handreiking` | `artikel` | `transcript` | `podcast`) delen hetzelfde reviewmodel / objecttypeset. beslisboom-path Klasse is `beslisboom` (`path` / `node` / `outcome`; Protocol v2.25). Cross-model = iedere overgang waarbij from-Klasse en to-Klasse verschillende reviewpaden selecteren (boom vs niet-boom). Same-model: objects, locators, fragment bounds, content hashes, class-independent relations blijven; heropen alleen class-dependent bevestigingen. Cross-model MUST NOT directe klassewijziging / objecten over modellen herlabelen; MUST directe wijziging blokkeren en re-extract van dezelfde freeze EISEN; prior objectset MUST als audithistorie blijven. MUST NOT `validated_by` / `validation_date` / `review_snapshot_hash` alleen conceptueel wissen; liever invalideren met reden (`document_class_changed`). Published never rewritten: MUST NOT een live gepubliceerde release terug naar unpublished muteren; MUST een nieuwe draft-kandidaatversie maken.
-
-De v2.25-lock dat de volgende code het beslisboom-pad is, is superseded alleen voor wat NA die al gelande Forge-golf (PR #95) de volgende *code*-implementatie is. De Klasse-wijzigen-eerstegolf is in code op de bestaande kernel/console. Selectieve invalidatie + published-candidate zijn volgende ná de smalle golf. Die eerste golf was:
-
-1. Hernoem **Promoveren** → **Klasse wijzigen**;
-2. Enforce matrix: cross-model (esp. to/from beslisboom) → blokkeer directe wijziging + eis re-extract op dezelfde freeze;
-3. Same-model → voor nu bestaande veilige **volle** herreview (tijdelijk; selectieve invalidatie is latere code onder hetzelfde protocol);
-4. Toon consequentie vóór bevestigen;
-5. Registreer klassewijziging als audit-event;
-6. Bron/SHA ongewijzigd.
-
-Die zes punten van de eerste golf zijn in code. MUST NOT selectieve invalidatie, published-candidate-fork of volledig `previous_review`-schema in die eerste codegolf tenzij apart GO. PROTOCOL stelt die als wet voor latere golven. ROADMAP markeert selectieve invalidatie + published-candidate als volgende ná de smalle golf. Protocol v2.27 SUPERSEDEERT de lezing dat de volgende *code* ná die al gelande golf nog die smalle Klasse-wijzigen-golf is: die Forge-golf is in code (Documentenhiërarchie only + type-to-confirm). Selectieve invalidatie + published-candidate blijven latere wet onder v2.26, ná die delete-golf. MUST NOT G2/`publish()` openen. Tot die Forge-GO geen Cloud Shell ZIP verplicht voor deze delta alleen. MUST NOT G2 PASS claimen. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
-
-## Eigenaarslock 2026-09-04 — MVP-beslisboom-klasse, path / node / outcome (Protocol v2.25)
-
-Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. Eigenaar (William Gomes) 2026-09-04 vergeleek vier kennisplatform Storyline-booms (Valrisico boom 4, Fractuurpreventie boom 2, Mantelzorg boom 3, Eenzaamheid boom 1) en lockte één stabiele familie: MVP **beslisboom**-documentklasse met eigen objectmodel pad / node / uitkomst (`path`, `node`, `outcome`). Photo-lock Inleveren Klasse-UI dezelfde dag: `beslisboom` MUST in dezelfde gesloten Klasse-lijst als `richtlijn` / `handreiking` / `artikel` / `transcript` / `podcast`; Klasse-keuze selecteert het reviewpad; MUST NOT een aparte tweede kiezer «pad».
-
-G2 blijft BLOCKED. `publish()` blijft G2-BLOCKED. Deze protocol claimt geen G2 PASS. Continentie-bewijszinnen in v2.16–v2.19 MUST blijven. PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only. HANDOFF.md MUST NOT opnieuw worden aangemaakt.
-
-De v2.7-lezing dat kennisplatform `story.html`-boomplayers geheel buiten het MVP / first console blijven **als kennisklasse**, en iedere lezing dat de enige MVP-documentklassen richtlijn-HTML/PDF zonder boompad zijn, is superseded. De beslisboom-klasse hoort in het MVP voor onderzoeker-ingest+review. Het Storyline-playerpakket is niet het Product API-oppervlak en MUST NOT de verpleegkundige console zijn. v2.8 «console MUST NOT een nurse decision tree zijn» blijft waar voor console-UX; onderzoekers MAGEN beslisboom-objecten reviewen.
-
-De v2.24-lock dat de volgende code de requirements-split is, is superseded alleen voor wat NA die al gelande split de volgende *code*-implementatie is. De volgende code MUST de Implementation engineer (Forge) op de bestaande kernel/console zijn voor precies het beslisboom-pad (Klasse includes beslisboom; Klasse choice selects review path):
-
-1. Inleveren MUST Klasse kiezen uit de gesloten set die `beslisboom` MUST bevatten naast `richtlijn` / `handreiking` / `artikel` / `transcript` / `podcast`; Klasse-keuze selecteert het reviewpad; MUST NOT een aparte tweede kiezer «pad»; SUPERSEDEERT iedere lezing dat Inleveren een apart pad-control nodig heeft naast Klasse; Operators MUST NOT andere Klasse-waarden verzinnen; Klasse = `beslisboom` MUST het boom-reviewpad (`path`/`node`/`outcome`) selecteren; Klasse = `richtlijn` | `handreiking` | `artikel` | `transcript` | `podcast` MUST het bestaande niet-boom (richtlijn-stijl) reviewpad/stacks selecteren; MUST NOT boomtypes op die klassen verzinnen; familie × klasse blijft; documenten MAGEN per familie van klasse verschillen;
-2. gesloten boomtypes `path` / `node` / `outcome`; Operators MUST NOT andere verzinnen; scorelist-item MAG als `node` + metadata; richtlijnpad houdt v2.12-set;
-3. `outcome` MUST via `applies_if` binden; MUST NOT condition in outcome fuseren als enige representatie; cross-richtlijn-refs SHOULD `supported_by`/`explains`;
-4. review: `path` als structuur (batch OK); `node` traag als die advies poort; `outcome` als advies met DOEN/OVERWEEG/NIET DOEN wanneer actionable; «geen actie nodig» maps naar `niet_doen` of expliciete no-action die MUST NOT als positief advies; multi-bullet split of reject; lege/placeholder-outcomes (`UitkomstX_Y_titel`) MUST NOT passeren; high-risk four-eyes; bronpassage + open-origineel;
-5. hashed freeze van canonieke boomkennis (node+outcome-tekst minimaal); byte-freeze + locators + SHA-256; MUST NOT live REST als enige bron van waarheid; live `story.html` alleen onvoldoende;
-6. `beslisboom` is lichtere/afgeleide klasse dan `richtlijn`; boom-outcomes MUST NOT stilzwijgend een ontbrekende/unpublished richtlijn-aanbeveling vervangen.
-
-MUST NOT ingest-UI, extract, Storyline-parser of API-scraper in deze protocol-PR implementeren. MUST NOT Product API boom-serving in de eerste Forge-golf activeren tenzij apart GO. MUST NOT G2/`publish()` openen. Tot die Forge-GO geen Cloud Shell ZIP verplicht voor deze delta alleen. MUST NOT G2 PASS claimen. MUST NOT fragmenten verbergen. MUST NOT SSH-wipe van `/home/data`. MUST NOT v2.16–v2.24-bestanden herschrijven behalve index-/conflictpointers. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
-
-## Eigenaarslock 2026-09-03 — Split het deploy-pakket, niet het productidee (Protocol v2.24)
-
-Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. Eigenaar (William Gomes) 2026-09-03: split het deploy-pakket, niet het productidee. Twee deuren bestaan al (operations console versus Product API). Vannacht stierf B1 omdat één `requirements.txt` numpy/sklearn/scipy in `vvn-metis-console` vendort. Addendum dezelfde lock: de tijdelijke deploy-split MUST NOT twee systemen worden.
-
-**Runtime-scheiding mag veranderen; protocol- en publicatiegrenzen niet.**
-
-G2 blijft BLOCKED. `publish()` blijft G2-BLOCKED. Deze protocol claimt geen G2 PASS. Continentie-bewijszinnen in v2.16–v2.19 MUST blijven. PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only. HANDOFF.md MUST NOT opnieuw worden aangemaakt. PR #82 blijft gesloten/ongemerged. Eerste DELETE-snede blijft gedaan/wet op `main` `50ec689` (PR #89).
-
-De v2.23-lock dat de volgende code één deletion-PR daarna één ZIP van die SHA is, is superseded alleen voor wat NA die al gelande DELETE-snede de volgende *code*-implementatie is, en voor of die ZIP numpy/sklearn/scipy MAG vendoren: MUST NOT. De volgende code-implementatie MUST de Implementation engineer op de bestaande kernel/repo zijn voor console- versus retrieval-requirements splitsen, bewijs dat de `console_asgi` import-graph geen sklearn/numpy heeft, één dunne console-ZIP. MUST NOT requirements-split in deze protocol-PR implementeren. Die requirements-split staat nu in code (`requirements-console.txt` versus `requirements-retrieval.txt`; packer pakt console-requirements). Cloud Shell van die ZIP is een latere live-stap, niet vannacht. Twee Cloud Shell ZIPs van verschillende SHAs blijven geweigerd. Een latere dunne ZIP van de v2.24-implementatie-SHA is de ene live ZIP. Golf B nog na een gezonde console-ZIP + ingest. Deze split opent publish() of G2 niet.
-
-1. live Review-console (`vvn-metis-console`, `console_asgi` / `operations_console_*`) Azure deploy-pakket MUST NOT numpy, sklearn, scipy of scikit-learn vendoren; Console-ZIP MAG FastAPI, gunicorn, uvicorn, python-multipart, PyMuPDF, jsonschema, azure-identity, azure-storage-blob (G2-client blijft fail-closed); Oryx `output.tar.zst` van een vet vendor-tree op B1 is geweigerd; 136MB tar-extract is geweigerd;
-2. `console_asgi` MUST NOT `embedding_provider` / vector retrieval / hybrid retrieval importeren bij process start;
-3. Product API / TF-IDF / LocalCharTfidfEmbeddingProvider blijft in de repo; MUST NOT in deze golf live; Geen nieuwe App Service in deze PR; Product API MUST NOT in dezelfde App Service-worker als de Review-console;
-4. tijdelijke deploy-split MUST NOT twee systemen worden; PROTOCOL, objectformaten, freeze-regels en publish-logica zijn één gedeelde kernel; Console MUST NOT review-/object-/freeze-/publish-regels anders interpreteren dan de Product API; Geen tweede wet in de API;
-5. Gedeelde kernelmodules MUST NOT numpy, sklearn, scipy of scikit-learn importeren; een console-import van gedeelde code MUST NOT die binnenhalen; Pakketgrenzen zijn wet;
-6. Gedeeld over deuren: PROTOCOL, freeze-bytes (SHA-256) en later G2-gepubliceerde objecten; MUST NOT unpublished review-store of console-loginaccounts als API-entitlement delen; console-accounts zijn geen API-tenants; wanneer Product API live gaat MUST de datagrens technisch afdwingbaar zijn (gescheiden toegang, credentials en opslagrechten); unpublished review-store en onderzoeker-console-accounts MUST NOT bereikbaar zijn met Product API-credentials; «We doen dat niet» is niet genoeg; MUST NOT de API App Service in deze PR bouwen;
-7. dunne B1-console MUST NOT subscriber-/retrievalfuncties aangroeien als «nog één klein ding»; Functionele grens: reviewwerk (ingest, boom, Beoordeel, unpublished delete, four-eyes) in de console-runtime; retrieval- en subscriberfuncties buiten die runtime;
-8. Consoleclassificatie blijft gesloten taxonomie + context-bewuste splitter (regels), niet sklearn;
-9. service_app.py EN product_api_v1.py blijven; twee producten, geen leftovers; MUST NOT CLI review-queue stilzwijgend verwijderen; Console is de onderzoeker-plichtwachtrij.
-
-MUST NOT G2 PASS claimen. MUST NOT fragmenten verbergen. MUST NOT SSH-wipe van `/home/data`. MUST NOT v2.16–v2.23-bestanden herschrijven behalve index-/conflictpointers. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
-
-## Eigenaarslock 2026-09-03 — Eerste DELETE-snede, daarna één ZIP van die SHA (Protocol v2.23)
-
-Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. Eigenaar (William Gomes) vroeg Auditor om een code-oppervlaktereview op `main` HEAD `a566af56c8c88e76cb4de7fa51642b408705da02` en het resultaat aan Metis (PROTOCOL/ROADMAP-eigenaar) te overhandigen. Auditor-oordeel REQUEST SIMPLIFICATION. Geen GD-03, geen publicatie. G2 blijft BLOCKED. `publish()` blijft G2-BLOCKED. Deze protocol claimt geen G2 PASS. Continentie-bewijszinnen in v2.16–v2.19 MUST blijven. PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only. HANDOFF.md MUST NOT opnieuw worden aangemaakt.
-
-Owner lock 2026-09-03 SUPERSEDEERT de eerdere v2.23-lezing dat Cloud Shell ZIP van `a566af56` VÓÓR de eerste DELETE-snede MAG. Eerste DELETE-snede, daarna één ZIP van die SHA. MUST NOT a566af56 ZIP-pen als dat een tweede ZIP forceert. Twee Cloud Shell ZIPs zijn geweigerd. De volgende live-stap is eerste DELETE-snede (de negen zero-caller src-modules + integrity-sprint fixture-retarget) op main VÓÓR iedere Cloud Shell ZIP; daarna ÉÉN Cloud Shell ZIP van die resulterende SHA (A+C+D al op main, plus v2.20-verwijdercontrole, plus de eerste DELETE-snede); daarna ingest van een freeze; daarna golf B (G2-bewijs). PR #82 blijft gesloten/ongemerged. Golven A, C en D staan al in code op `a566af56`. v2.20-verwijdercontrole staat al op main. Deze protocol-PR is niet die ZIP. MUST NOT Azure ZIP als deze PR. MUST NOT Cloud Shell van deze protocol-PR.
-
-De v2.22-lock dat de volgende implementatie golf C daarna golf D is, is superseded alleen voor wat NA huidige `main` `a566af56` de volgende *code*-implementatie is: C en D staan al in code. Het live-pad is eerste DELETE-snede, daarna één ZIP van die SHA, daarna ingest, daarna B. De volgende code-implementatie MUST de Implementation engineer op de bestaande kernel/repo zijn voor één deletion-PR VÓÓR iedere Cloud Shell ZIP, bestaande pytest only, MUST NOT splitter of console in die PR raken, geen G2 PASS, geen Blob-grant:
-
-1. eerste DELETE-snede, zero-caller src/-modules only: extract_pdf.py; semantic_transform.py; validation_workflow.py; build_second_review_queue.py; pre_step5_gate.py; import_expert_validation.py; reconcile_legacy_review.py; evaluate_safe_retrieval.py; build_retrieval_document.py;
-2. MUST NOT in de eerste pass verwijderen: src/semantic_transform_v2.py, src/prepublication_gate_v2.py, src/validation_workflow_v2.py, src/apply_second_review.py (subprocess-lock tests/test_protocol_v2.py tot die v2.0-lock een expliciete follow-up is); MUST NOT src/canonical_store.py verwijderen; service_app.py EN product_api_v1.py blijven (inspectie versus Product API; twee producten, geen leftovers);
-3. keeps: operations_console_v1.py versus operations_console_app.py split; geen template-engine; golf A splitter + reject_candidate; integrity_kernel, g2_source_store, object_taxonomy_v1, four_eyes_v1, serving_relations_v1, eligibility_policy; Product API gescheiden van de console; test_protocol_v2_* en test_v2* blijven beide; console kernel/HTML/ASGI-stack; nieuwe eligibility-regels gaan alleen in eligibility_policy; MUST NOT high-CC fail-closed functies splitsen;
-4. dezelfde of volgende wijziging: scripts/run_integrity_sprint.sh MAG naar committed fixtures wijzen in plaats van `python -m src.semantic_transform_v21`; MUST NOT v2/v21/generic mergen in die PR;
-5. dual live path (plan, MUST NOT stilzwijgend verwijderen): CLI review-queue (build_review_queue_v3) versus console review_stacks / slow_review_duty; Console is de onderzoeker-plichtwachtrij;
-6. Implementation MUST opnieuw bewijzen dat er geen live callers zijn vóór iedere delete; als een benoemd bestand nog een live caller heeft, laten staan en rapporteren; niet force-delete.
-
-MUST NOT deletion-PR in deze protocol-PR implementeren. MUST NOT G2 PASS claimen. MUST NOT fragmenten verbergen. MUST NOT SSH-wipe van `/home/data`. MUST NOT v2.16–v2.22-bestanden herschrijven behalve index-/conflictpointers. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED. Live ingest gebruikt extract_pdf_v2, extract_html_v1, semantic_transform_generic_v1, prepublication_gate_v3.
-
-## Eigenaarslock 2026-09-03 — Volgende-implementatievolgorde C daarna D daarna ZIP daarna B (Protocol v2.22)
-
-Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. Eigenaar (William Gomes) 2026-09-03: na golf A eerst C en D; daarna ingest van een document; daarna één Cloud Shell ZIP van de PR #82-lijn. Hij vroeg of dat problemen heeft. Metis lockte deze veilige lezing: begrensde supersessie van Protocol v2.21 §3-volgorde A daarna B daarna C daarna D, alleen voor volgende-implementatievolgorde. Golven zelf ongewijzigd. Historische v2.21-golfdefinities blijven wet. Golf A staat al in code op `main` `512ffa5026d06ff804434ddf4d07a08a36c02305`. v2.20 unpublished-delete blijft op main, GEEN vijfde golf. PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only. Continentie-bewijszinnen in v2.16–v2.19 MUST blijven. G2-readiness (PR #69) pinte al azure-identity/azure-storage-blob en een report-only preflight; G2 blijft BLOCKED; `publish()` blijft G2-BLOCKED; RBAC Storage Blob Data Contributor op aidataservice/canonical-sources voor vvn-metis-console is extern. PR #82 is OPEN en MUST NOT worden geactiveerd tot de vier fouten zijn hersteld ÉN Azure test-App Service `vvn-metis-console-test` bestaat. Deze protocol claimt geen G2 PASS.
-
-De v2.21-lock dat de volgende implementatie na golf A golf B is (volgorde A daarna B daarna C daarna D), is superseded voor volgende-implementatievolgorde only. De volgende implementatie na merge van dit protocol MUST de Implementation engineer op de bestaande kernel/repo zijn voor golf C (PR #82 afmaken, niet activeren) ÉN golf D (backup/restore + deploy-persistentietest), zelfde kernel/repo, geen G2 PASS, geen Blob-grant:
-
-1. golf C: PR #82-fouten afmaken (packaging via bash of executable; ZIP MUST volledig deploybaar zijn inclusief dependencies — git-archive-only is niet genoeg; per-omgeving opslag via app-settings, geen secrets in Git; gescheiden test- versus production-deployidentiteiten). MUST NOT deploy-test/deploy-production activeren tot Azure test-App Service `vvn-metis-console-test` bestaat. Merge naar `main` MUST NOT automatisch deployen naar een ontbrekende test-app;
-2. golf D: inventaris `/home/data/metis-console`; export/restore; bewijs dat `--clean true` wwwroot wist en MUST NOT runtime-data verwijderen;
-3. daarna stoppen voor William Cloud Shell ZIP van die gecontroleerde SHA (A+C+D), geen live-URL-ingest. Ingest van een nieuwe freeze MUST NA die ZIP, niet ervoor (live draait nog pre-golf-A extract tot ZIP);
-4. golf B (G2-bewijs/smoke) NA die ZIP. G2 blijft BLOCKED; `publish()` blijft G2-BLOCKED. ZIP opent publicatie niet.
-
-MUST NOT C/D in deze protocol-PR implementeren. MUST NOT Azure test-app starten in deze protocol-PR. MUST NOT G2 PASS claimen. MUST NOT fragmenten verbergen. MUST NOT SSH-wipe van `/home/data`. MUST NOT v2.16–v2.21-bestanden herschrijven behalve index-/conflictpointers. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
-
-Die golf C- en golf D-punten zijn in code. Golf C (PR #82-fouten hersteld; packaging via bash/executable; ZIP met dependencies; per-omgeving opslag via app-settings; gescheiden deploy-identiteiten; `deploy-test`/`deploy-production` blijven inactief / fail-closed tot `vvn-metis-console-test` bestaat; geen `on.push` naar test/productie; merge naar `main` deployt niet automatisch naar een ontbrekende test-app; MUST NOT PR #82 mergen) en golf D (inventaris `/home/data/metis-console`; export/restore; integriteit; `--clean true` wist wwwroot en MUST NOT runtime-data verwijderen; migratiegrens gedocumenteerd) zijn geïmplementeerd. Deze code-PR maakt de test-App Service niet. DAARNA stoppen voor William Cloud Shell ZIP van die gecontroleerde SHA (A+C+D). Golf B is NIET deze PR. `publish()` blijft G2-BLOCKED. Protocol v2.23 (eigenaarslock 2026-09-03) records Auditor REQUEST SIMPLIFICATION op `main` `a566af56c8c88e76cb4de7fa51642b408705da02`; eerste DELETE-snede, daarna één ZIP van die SHA; MUST NOT a566af56 ZIP-pen als dat een tweede ZIP forceert; Twee Cloud Shell ZIPs zijn geweigerd; volgende implementatie VÓÓR die ZIP is één deletion-PR.
-
-## Eigenaarslock 2026-09-02 — Controlled-use golven A→B→C→D (Protocol v2.21)
-
-Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. Eigenaar (William Gomes) pauzeerde Cloud Shell en lockte een vier-golvenprogramma voor gecontroleerd gebruik met echte richtlijnbronnen. Prioriteit: bronintegriteit, heldere kennisobjecten, veilige omgevingsscheiding, herstelbaarheid. Volgorde A daarna B daarna C daarna D. Cloud Shell / production ZIP blijven uit tot golf A op een gecontroleerde SHA staat. Deze delta MAPT bestaande wet, herschrijft die niet. v2.16–v2.18 verbieden al tiny objects, stempel-als-kop/object, naloopzinnen, chrome-objecten en identieke clean_text. v2.19 is duty-queue. v2.20 unpublished-delete staat al op `main` `ba3c85cec8e100e289e25e6a33fbf9440676c26e` en is GEEN vijfde golf. PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only. Continentie-bewijszinnen in v2.16–v2.19 MUST blijven. G2-readiness (PR #69) pinte al azure-identity/azure-storage-blob en een report-only preflight; G2 blijft BLOCKED; `publish()` blijft G2-BLOCKED; RBAC Storage Blob Data Contributor op aidataservice/canonical-sources voor vvn-metis-console is extern. PR #82 is OPEN en MUST NOT worden geactiveerd tot de vier fouten zijn hersteld ÉN een Azure test-app bestaat. Deze protocol claimt geen G2 PASS.
-
-De v2.20-lock dat de volgende implementatie Azure ZIP van v2.20 is, is superseded. De volgende implementatie na merge van dit protocol MUST de Implementation engineer op de bestaande kernel/extract zijn voor precies golf A only:
-
-1. context-bewuste splitter + toetsbare reject-functie;
-2. een inhoudelijk kennisobject MUST één complete, zelfstandig leesbare betekeniseenheid zijn; MUST bronpassage+locator naar de freeze hebben; MUST NOT alleen een nummer, label, kopwoord, nav, stempel of zinsfragment zijn; MUST NOT identieke clean_text uit dezelfde freeze dupliceren;
-3. echte bronkoppen MAGEN als heading bestaan, alleen structuur, nooit advies, geen recommendation-stempel, batch-bevestigbaar als structuur;
-4. DOEN/OVERWEEG/NIET DOEN zijn geen objecten en geen Koppen; zij zijn een eigenschap van een volledige recommendation samen met de advieszin;
-5. splitter MUST naloop-/afhankelijke zinnen aan de vorige betekenisvolle zin hechten; MUST een stempel aan de onmiddellijk volgende advieszin hechten; MUST chrome/nav/lijstnummers/losse labels/leeg/te-kort FILTEREN VÓÓR objectaanmaak; MUST dubbele clean_text in dezelfde snapshot voorkomen; MUST freeze-bytes en locators exact houden (alleen afgeleide extract);
-6. reject-functie MUST weigeren: geen zelfstandige betekenis; onder een gedocumenteerde minimum-betekenisdrempel; alleen stempel/nummer/nav; grammaticale voortzetting van de vorige; identiek aan een eerder object uit dezelfde freeze; uitzonderingen MUST expliciet en getest zijn; korte echte definities en officiële koppen MUST NOT worden weggelaten;
-7. MUST NOT «Inleiding» als chrome behandelen; Home/Tools/Richtlijnen/Meedenken zijn chrome; Inleiding als echte sectietitel MAG heading blijven;
-8. regressiefixtures van echte Continentie-failpatronen (stempels+advieszin, «Eventueel met hulp van de mantelzorger.», lijstnummers, Home/Tools, dubbele samenvatting/module, korte geldige definities, echte koppen op verschillende niveaus, HTML-herhaalde modules, PDF versus HTML); acceptatie: geen van die failpatronen landen als standalone inhoudelijke objecten in de review-plichtwachtrij;
-9. geen infrastructuur in golf A.
-
-Die negen punten van golf A zijn in code. Golf A only is geïmplementeerd op de bestaande kernel/extract (context-bewuste splitter + toetsbare reject-functie + Continentie-regressiefixtures). DAARNA golf B (G2-statusbewijs: MUST NOT stale static JSON; read-only preflight; G2 PASS alleen na geslaagde gecontroleerde test; publicatiegate MUST NOT openen omdat een app-setting aanwezig is). DAARNA golf C (PR #82 afmaken; niet activeren tot test-App Service bestaat; vier #82-fouten; gescheiden deploy-identiteiten). DAARNA golf D (backup/herstelbaarheid; inventaris `/home/data/metis-console`; geen grote databasemigratie; migratiegrens documenteren). Niet Azure ZIP van v2.20 tot A op een gecontroleerde SHA staat, tenzij de eigenaar Cloud Shell heropent. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED. Protocol v2.22 (eigenaarslock 2026-09-03) supersedes die A-B-C-D volgende-implementatievolgorde only; golven zelf ongewijzigd.
-
-## Eigenaarslock 2026-09-02 — Unpublished-documentverwijdering (Protocol v2.20)
-
-Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. De v2.19-golf is in code op `main` `9987a976d719` (PR #79). Eigenaar (William Gomes) vroeg waarom Continentie expliciet in PROTOCOL.md staat; zet een delete-knop erin; hij MAG alles opruimen (unpublished Continentie van de consolelijst halen zodat hij een andere richtlijn kan proberen). PROTOCOL.md is de wet van V&VN Data Services voor iedere richtlijn, niet Continentie-only. Continentie in v2.16–v2.19 blijft live bewijs van fails (stempels als Koppen, 2008 Inhoud-kaarten), niet de productidentiteit; die historische bewijszinnen MUST blijven en MUST NOT worden gestript; de volgende freeze MUST NOT Continentie hoeven zijn. Dit is eigenaarsgeautoriseerde opruiming van unpublished capture, geen publicatie, geen G2.
-
-De v2.19-lock dat de volgende console-implementatie alleen wachtrij/plicht is, is superseded: die golf is al in code op `main`. De v2.20-console-implementatie op de bestaande kernel/console is:
-
-1. MUST een echte verwijdercontrole op de documentkaart / Review-chooser voor unpublished snapshots alleen; label in onderzoekerstaal (bijv. **Verwijder unpublished document**); MUST bevestigen vóór uitvoering (destructief);
-2. na delete MUST de snapshot NOT verschijnen op Inleveren/Review/Documentenhierarchie-lijsten; opgeslagen objecten+envelope voor die snapshot_id zijn weg; freeze-bytes van die unpublished bron MAGEN mee worden verwijderd; MUST NOT andere snapshots of `/home/data` globaal raken;
-3. MUST een audit-ledgerrij toevoegen (wie, wanneer, snapshot_id, bron-SHA-256, titel); Capture blijft geen publicatie;
-4. MUST NOT een gepubliceerde projectie of iets dat is gepubliceerd verwijderen; `publish()` blijft G2-BLOCKED; er is geen gepubliceerde Continentie; MUST NOT geselecteerde objecten verbergen in een freeze die in Review blijft (v2.16 hide-fragments-without-extract blijft); alleen het hele unpublished snapshot;
-5. MUST NOT SSH/wipe van `/home/data` als productpad; de console-actie is het pad; four-eyes is niet vereist om unpublished capture te verwijderen; de uploader MAG unpublished die zij captureden verwijderen; een tweede benoemde reviewer is niet vereist voor delete (delete is geen type-bevestiging);
-6. daarna MAG William live unpublished Continentie verwijderen en een andere HTML-freeze inleveren; de volgende freeze MUST NOT Continentie hoeven zijn.
-
-Die zes punten zijn in code. Protocol v2.27 SUPERSEDEERT de lezing dat delete MUST op de documentkaart / Review-chooser als alternatieve oppervlakken; vervangen door Documentenhiërarchie only + type-to-confirm exacte titel. Protocol v2.21 (eigenaarslock 2026-09-02, controlled-use golven) supersedes de lezing dat de volgende implementatie Azure ZIP van v2.20 is. Cloud Shell / production ZIP blijven uit tot golf A op een gecontroleerde SHA staat. Volgende implementatie is golf A only. DAARNA blijft G2/Azure de publicatieblocker. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED. Beoordeel-timeout/performance is een apart issue en hoort niet in deze delta.
-
-## Eigenaarslock 2026-09-02 — Onderzoeker-reviewplicht en wachtrijpresentatie (Protocol v2.19)
-
-Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. De v2.18-golf is in code op `main` `4ebfdbb88cdb`. Eigenaars-click-through van die live v2.18-console (snapshot `snap-ac59cf24f946088e-e402c4d3`, dezelfde Continentie-freeze SHA-256 `ac59cf24f946088ef4e9529dffa43b59e2087ca1ab943b2f24cadf67451b5a2a`) toont Koppen 78 / Inhoud 2008. Eigenaar zei dat het er beter uitziet, vroeg daarna of onderzoekers die 2008 objecten met de hand moeten doen, daarna «zet dat in protocol.» Chrome Tools/Home is weg (v2.17 gehouden). Slogan is weg (v2.17 gehouden). Een-keer-kaartzin / geen naloopzin-split / geen identieke clean_text blijven van kracht (v2.18 gehouden). Resterende fail: 2008 Inhoud-kaarten als één-voor-één onderzoekerplicht.
-
-De v2.18-lock dat de volgende console-implementatie alleen extract+kaart is, is superseded: die golf is al in code op `main`. De v2.19-console-implementatie op de bestaande kernel/console is:
-
-1. Koppen-batch blijft (batch-bevestigen als structuur, nooit als advies);
-2. trage baan is voorgestelde `recommendation` plus `condition` / `exception` / ieder high-risk object (four-eyes ongewijzigd); dat is de onderzoeker-verplichte handplicht;
-3. duizenden resterende `unclassified` MUST NOT de gepresenteerde plicht zijn; unclassified wordt nooit geserveerd, dus 2000 klikken daarop voegen geen assurance toe;
-4. MUST NOT types auto-bevestigen; MUST NOT gewone tekst automatisch tot `recommendation` promoveren; MUST NOT een onderzoekercontrole «zwaar/licht» of «snel/langzaam»;
-5. unpublished Continentie MAG opnieuw worden geëxtraheerd op dezelfde freeze SHA-256 zodat de pagina deze bar kan halen; unpublished objectidentiteiten MAGEN worden vervangen; MUST NOT opgeslagen fragmenten verbergen zonder die extract.
-
-Die vijf punten zijn in code. Protocol v2.20 (eigenaarslock 2026-09-02, unpublished-documentverwijdering) supersedes de lezing dat de volgende console-implementatie nog die v2.19-golf is. DAARNA blijft G2/Azure de publicatieblocker. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
-
-## Eigenaarslock 2026-09-02 — Reviewkaart één keer + extract-dedup (Protocol v2.18)
-
-Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. De v2.17-golf is in code op `main` `3e811bf0fc9f`. Eigenaars-click-through van die live v2.17-console (snapshot `snap-ac59cf24f946088e-6538b559`, dezelfde Continentie-freeze SHA-256 `ac59cf24f946088ef4e9529dffa43b59e2087ca1ab943b2f24cadf67451b5a2a`) toont resterende fails: de open kaart herhaalt «Eventueel met hulp van de mantelzorger.» als titel én body; extract splitst die naloopzin van de Overweeg-aanbeveling; dat paar komt drie keer voor in één freeze (indices ~92/93, 769/770, 2510/2511) omdat de kennisplatform-HTML samenvatting/module herhaalt; 22 naloopzin-objecten beginnend Eventueel/Bijvoorbeeld/Zoals. Chrome Tools/Home is weg (v2.17 gehouden). Slogan is weg (v2.17 gehouden). Eigenaar: «De dubbeling is niet opgelost.» Deze fail is duplicatie + truncated-sentence-split.
-
-De v2.17-lock dat de volgende console-implementatie alleen het onderzoekersoppervlak is, is superseded: die golf is al in code op `main`. De v2.18-console-implementatie op de bestaande kernel/console is:
-
-1. de open reviewkaart MUST de freeze-zin één keer tonen (MUST NOT dupliceren als zowel h3/titel als body; compacte rij/kaart: één bronzin plus korte status; de v2.16-compacte-rij-bar geldt voor de open kaart, niet alleen de lijst);
-2. extract MUST NOT een grammaticale voortzetting van de vorige zin tot een nieuw object splitsen; naloopzinnen (bijv. «Eventueel met hulp van de mantelzorger.», «Bijvoorbeeld …») MUST in hetzelfde kennisobject blijven;
-3. extract MUST NOT een tweede kennisobject emitteren waarvan de zichtbare freeze-proza (`clean_text`) identiek is aan een object dat al uit deze freeze is geëmitteerd; herhaalde HTML (samenvatting versus module) is geen extra kennis; onderscheiden echte koppen in verschillende secties MAGEN blijven («1.1 Inleiding» vs «2. Inleiding» zijn geen identieke strings);
-4. re-extract unpublished Continentie op dezelfde freeze SHA-256 zodat de pagina deze bar kan halen; unpublished objectidentiteiten MAGEN worden vervangen; MUST NOT opgeslagen fragmenten verbergen zonder die extract.
-
-Die vier punten zijn in code. De click-through van die golf op `main` `4ebfdbb88cdb` is gedaan (Koppen 78 / Inhoud 2008; eigenaar: ziet er beter uit; «moeten onderzoekers die 2008 objecten met de hand doen?»; «zet dat in protocol.»). Protocol v2.19 (eigenaarslock 2026-09-02, reviewplicht en wachtrijpresentatie) supersedes de lezing dat de volgende console-implementatie nog die v2.18-golf is. Protocol v2.20 (eigenaarslock 2026-09-02, unpublished-documentverwijdering) supersedes de v2.19 «volgende implementatie»-zin. DAARNA blijft G2/Azure de publicatieblocker. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
-
-## Eigenaarslock 2026-09-02 — Reviewpagina-onderzoekersoppervlak (Protocol v2.17)
-
-Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. De v2.16-golf (één deur Beoordeel, Koppen/Inhoud, compacte rijen, stempels, geen tiny objects, unpublished Continentie-extract) is in code op `main` `2b760b293b9a`. Eigenaars-click-through van die main na ingest van de echte Continentie-freeze (SHA-256 `ac59cf24f946088ef4e9529dffa43b59e2087ca1ab943b2f24cadf67451b5a2a`) toont resterende fails: EPD-MAG-slogan, HELP_ONCE-via-negativa, vooringevuld Onderwerp, raw-HTML-bronpassage, kennisplatform-chrome als Koppen/objecten, 2641 unclassified. Drie eigenaarsfoto's 2026-09-02 na opening van PR #74: (1) één-woord **Tools**-kaart unclassified met raw-HTML-nav en **Sterkte van de aanbeveling** op dat nav-woord; (2) relatievinkje links en **Inleiding** rechts, groot gat; (3) doelgroep-bronpassage nog tagsoup (`</h3><div class="brxe-faadvp…`). Eigenaar: «Je krijgt soms nogsteeds 1 woord»; vinkje en Inleiding liggen nog ver uit elkaar; «Is dat hoe het definitief eruit gaat zien?» opgenomen antwoord NEE; «Ik zie inleiding, doel, doelgroep en aanleiding vaker voorkomen; ik ga ervanuit dat dit voor meerdere delen geldt.» — bevestigd: de wet geldt voor de hele freeze / ieder object / iedere sectie.
-
-De v2.16-lock dat de volgende console-implementatie alleen deur/stacks/rijen/stempels/tiny-objects is, is superseded: die golf is al in code op `main`. De v2.17-console-implementatie op de bestaande kernel/console is:
-
-1. onderzoeker-copy zonder slogans (leadcopy zegt wat te doen: Beoordeel Koppen als structuur, Inhoud als kennisobjecten; MUST NOT «wat een EPD MAG zeggen»; de gehele zin «Dit wordt wat een EPD MAG zeggen.» MAG weg; MUST NOT één abonnee-klasse claimen);
-2. leeg Onderwerp / familie op een verse nieuwe ingest (geen vooringevulde `continentie`; klasse blijft buiten deze delta);
-3. bronpassage-rechterkolom als leesbaar proza afgeleid van de v2.11-locator op **ieder object** / de hele freeze (MUST NOT raw HTML-tagsoup; freeze-bytes blijven exact; opgenomen antwoord op «Is dat hoe het definitief eruit gaat zien?» is NEE);
-4. extract MUST NOT kennisplatform-chrome als kennisobjecten of Koppen emitteren, ook niet als één-woord Tools/Home/Richtlijnen/Meedenken;
-5. stempel-UI (**Sterkte van de aanbeveling**) MUST NOT verschijnen behalve op type `recommendation`; een nav-woord MUST NOT een aanbevelingssterkte-controle krijgen;
-6. relatiecheckbox en label MUST naast elkaar (MUST NOT over de viewport spreiden);
-7. re-extract unpublished Continentie op dezelfde freeze SHA-256 zodat de pagina deze bar kan halen op de hele freeze; unpublished objectidentiteiten MAGEN worden vervangen; MUST NOT opgeslagen fragmenten verbergen zonder die extract.
-
-Die zeven punten zijn in code. De click-through van die golf op `main` `3e811bf0fc9f` is gedaan; Protocol v2.18 (eigenaarslock 2026-09-02, reviewkaart één keer + extract-dedup) supersedes de lezing dat de volgende console-implementatie nog die v2.17-golf is. Protocol v2.19 (eigenaarslock 2026-09-02, reviewplicht en wachtrijpresentatie) supersedes de v2.18 «volgende implementatie»-zin. Protocol v2.20 (eigenaarslock 2026-09-02, unpublished-documentverwijdering) supersedes de v2.19 «volgende implementatie»-zin. DAARNA blijft G2/Azure de publicatieblocker. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
-
-## Eigenaarslock 2026-09-02 — Reviewpagina-onderzoekerbar (Protocol v2.16)
-
-Protocol-lock. Geen Protocol v2.14. Geen productcode in de protocol-PR. Metis implementeert niet. De v2.16-golf (één deur Beoordeel, Koppen/Inhoud, compacte rijen, stempels, geen tiny objects, unpublished Continentie-extract) is nu in code op de bestaande kernel/console.
-
-De v2.15-lock dat de volgende console-implementatie ingest-datum/versie/heading-banen is, is superseded: die golf is al in code op `main`. De v2.16-console-implementatie op de bestaande kernel/console is:
-
-1. één deur **Beoordeel** (MUST NOT twee deuren Openen plus Reviewen die beide naar objectlijsten leiden);
-2. twee benoemde stacks met counts (**Koppen** / **Inhoud**);
-3. compacte één-regel rijen met freeze-bronzin (of echte koptekst) plus korte status;
-4. DOEN/OVERWEEG/NIET DOEN als stempels op `recommendation`, met onderzoeker-hulzin; extract MUST NOT heading voorstellen voor die woorden;
-5. extract MUST NOT number-only / stamp-only / truncated-sentence objecten emitteren; nieuwe extract van unpublished Continentie-freeze zodat de pagina de bar kan halen.
-
-Die vijf punten zijn in code. De click-through van die golf op `main` `2b760b293b9a` is gedaan; Protocol v2.17 (eigenaarslock 2026-09-02, onderzoekersoppervlak) supersedes de lezing dat de volgende console-implementatie nog die v2.16-golf is. Protocol v2.18 (eigenaarslock 2026-09-02, reviewkaart één keer + extract-dedup) supersedes de v2.17 «volgende implementatie»-zin. Protocol v2.19 (eigenaarslock 2026-09-02, reviewplicht en wachtrijpresentatie) supersedes de v2.18 «volgende implementatie»-zin. Protocol v2.20 (eigenaarslock 2026-09-02, unpublished-documentverwijdering) supersedes de v2.19 «volgende implementatie»-zin. DAARNA blijft G2/Azure de publicatieblocker. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
-
-## Eigenaarslock 2026-09-01 — Ingest-datum/versie + type-gebaseerde reviewbanen (Protocol v2.15)
-
-Protocol-lock. Geen Protocol v2.14. Geen productcode in deze protocol-PR. Metis implementeert niet.
-
-De 2026-08-29-lock dat de volgende console-implementatie alleen de tweecoloms reviewkaart is, is superseded: die kaart is al in code. De v2.15-console-implementatie (ingest-datumkalender + ISO-opslag + verplicht; ingest-versie dotted-integer + verplicht; extract MUST `heading` voorstellen voor echte bronkoppen; reviewlijst MUST bronpassage-snippet tonen; typebanen met batch-bevestiging) is sindsdien in code op `main`; de «volgende implementatie»-zin is superseded door Protocol v2.16 / eigenaarslock 2026-09-02, en die v2.16-golf is sindsdien superseded door Protocol v2.17 / eigenaarslock 2026-09-02, en die v2.17-golf is sindsdien superseded door Protocol v2.18 / eigenaarslock 2026-09-02, en die v2.18-golf is sindsdien superseded door Protocol v2.19 / eigenaarslock 2026-09-02, en die v2.19-golf is sindsdien superseded door Protocol v2.20 / eigenaarslock 2026-09-02.
-
-De v2.15-golf op de bestaande kernel/console was:
-
-1. ingest-datumkalender + ISO-opslag + verplicht (Europe/Amsterdam `DD-MM-YYYY` op scherm; ISO `YYYY-MM-DD` in store; colofon/publicatiedatum; niet vandaag; niet ingest-kliktijdstip; leeg geweigerd);
-2. ingest-versie dotted-integer-validatie + verplicht (`^[0-9]+(\.[0-9]+)*$`; geen `v`-prefix, letters, jaartal-als-versie);
-3. extract MUST `heading` voorstellen voor echte bronkoppen / TOC / structurele kruimels (reviewbaan-voorwaarde; MUST NOT v2.13-splitregels herschrijven; MUST NOT bestaande Continentie-bytes opnieuw extraheren — die Continentie-zin is superseded door Protocol v2.16 voor unpublished Continentie);
-4. reviewlijst MUST een bronpassage-snippet als rijtitel tonen; MUST NOT de typenaam (`unclassified`) als titel gebruiken;
-5. reviewwachtrijen/UI gerouteerd op type (snel `heading` versus traag content), geen snelheidsschakelaar; snelle baan MUST batch-bevestiging van voorgestelde headings als structuur; trage baan blijft één object. Vierduizend unclassified-kaarten op één richtlijn is een fail van dit reviewoppervlak.
-
-Protocol v2.16 (eigenaarslock 2026-09-02) supersedes de lezing dat de volgende console-implementatie nog die v2.15-golf is. Protocol v2.17 (eigenaarslock 2026-09-02) supersedes de v2.16 «volgende implementatie»-zin. Protocol v2.18 (eigenaarslock 2026-09-02) supersedes de v2.17 «volgende implementatie»-zin. Protocol v2.19 (eigenaarslock 2026-09-02) supersedes de v2.18 «volgende implementatie»-zin. Protocol v2.20 (eigenaarslock 2026-09-02) supersedes de v2.19 «volgende implementatie»-zin. DAARNA blijft G2/Azure de publicatieblocker. Protocol v2.14 is LOCKED als later protocol en is niet de volgende stap. `publish()` blijft G2-BLOCKED.
-
-## Eigenaarslock 2026-08-29 — Reviewkaart bronpassage (twee kolommen)
-
-Docs-only lock. Geen nieuw protocol. Geen Protocol v2.14. Geen productcode in die PR. Metis implementeert niet. De tweecoloms kaart is sindsdien in code; de «volgende implementatie»-zin is superseded door Protocol v2.15 / eigenaarslock 2026-09-01, en die v2.15-golf is sindsdien superseded door Protocol v2.16 / eigenaarslock 2026-09-02, en die v2.16-golf is sindsdien superseded door Protocol v2.17 / eigenaarslock 2026-09-02, en die v2.17-golf is sindsdien superseded door Protocol v2.18 / eigenaarslock 2026-09-02, en die v2.18-golf is sindsdien superseded door Protocol v2.19 / eigenaarslock 2026-09-02, en die v2.19-golf is sindsdien superseded door Protocol v2.20 / eigenaarslock 2026-09-02.
-
-De reviewer-bronpassage MUST twee kolommen zijn op de reviewkaart: links het kennisobject (type, relatietickboxes, besluit); rechts de exacte freeze-passage voor dat object (Protocol v2.11-locators). Smalle schermen stapelen. Geen nieuw locatorschema. Typebevestiging blijft geblokkeerd als de passage niet open kan.
-
-Relaties blijven voorgestelde checkboxes + bevestigen. MUST NOT een graaf-editor, drag-and-drop of pijlen-tekenen-UI bouwen. Een read-only schets van al bevestigde links MAG later wanneer een echt Continentie-document te veel objecten voor één kaart heeft; dat is niet de volgende code van deze lock.
-
-Die gesplitste reviewkaart is nu in code. Protocol v2.15 (eigenaarslock 2026-09-01) supersedes de lezing dat de volgende console-implementatie nog alleen die kaart is. Protocol v2.16 (eigenaarslock 2026-09-02) supersedes de v2.15 «volgende implementatie»-zin. Protocol v2.17 (eigenaarslock 2026-09-02) supersedes de v2.16 «volgende implementatie»-zin. Protocol v2.18 (eigenaarslock 2026-09-02) supersedes de v2.17 «volgende implementatie»-zin. Protocol v2.19 (eigenaarslock 2026-09-02) supersedes de v2.18 «volgende implementatie»-zin. Protocol v2.20 (eigenaarslock 2026-09-02) supersedes de v2.19 «volgende implementatie»-zin. DAARNA wacht G2 nog op Azure. `publish()` blijft G2-BLOCKED.
-
-## Fasen naar MVP
-
-### Fase 1 — Repository en governance-baseline
-
-Status: G1-technische protection ON; gezaghebbende remote is public onder Protocol v2.5.0; resterende nazorg: named GD-03-reviewers en retrospectieve C5/C3-review. Azure/G8 niet gestart. Protocol v2.32.0 is live plus Protocol v2.31.0 plus Protocol v2.30.0 plus Protocol v2.29.0 plus Protocol v2.28.0 plus Protocol v2.27.0 plus Protocol v2.26.0 plus Protocol v2.25.0 plus Protocol v2.24.0 plus Protocol v2.23.0 plus Protocol v2.22.0 plus Protocol v2.21.0 plus Protocol v2.20.0 plus Protocol v2.19.0 plus Protocol v2.18.0 plus Protocol v2.17.0 plus Protocol v2.16.0 plus Protocol v2.15.0 plus Protocol v2.13.0 plus Protocol v2.12.0 plus Protocol v2.11.0. Live regels: zie ## Geldende norm (live). Historische supersessie-stapels zijn gedegradeerd naar de Historische supersessie-index; Eigenaarslock-secties blijven de locktekst. DAARNA William click-through. DAARNA Azure ZIP vanaf een V&VN-vertrouwd apparaat nadat William de live console accepteert. DAARNA G2/Azure. Protocol v2.14 is niet de volgende stap. G2 blijft de publicatieblocker.
-
-- Gezaghebbende remote `WilliamGomes41/VENVN-DS` is public tijdens de gedeclareerde MVP-periode (Protocol v2.5.0). Publiek is niet de latere productiestandaard; na de MVP MUST een nieuw plan private hosting of een organisatieplan herstellen.
-- CI, repository-preflight en architectuur-invarianttests.
-- Protocol v2.32.0 vastgesteld en live plus Protocol v2.31.0 plus Protocol v2.30.0 plus Protocol v2.29.0 plus Protocol v2.28.0 plus Protocol v2.27.0 plus Protocol v2.26.0 plus Protocol v2.25.0 plus Protocol v2.24.0 plus Protocol v2.23.0 plus Protocol v2.22.0 plus Protocol v2.21.0 plus Protocol v2.20.0 plus Protocol v2.19.0 plus Protocol v2.18.0 plus Protocol v2.17.0 plus Protocol v2.16.0 plus Protocol v2.15.0 plus Protocol v2.13.0 plus Protocol v2.12.0 plus Protocol v2.11.0 (v2.2 + v2.3-delta + v2.4-delta + v2.5-delta + v2.6-delta + v2.7-delta + v2.8-delta + v2.9-delta + v2.10-delta + v2.11-delta + v2.12-delta + v2.13-delta + v2.15-delta + v2.16-delta + v2.17-delta + v2.18-delta + v2.19-delta + v2.20-delta + v2.21-delta + v2.22-delta + v2.23-delta + v2.24-delta + v2.25-delta + v2.26-delta + v2.27-delta + v2.28-delta + v2.29-delta + v2.30-delta + v2.31-delta + v2.32-delta), inclusief G0, product-/distributiegrenzen, de MVP-uitzondering voor een publieke remote, de interne operations console als goedgekeurde scope, first-wave bron / retrieve-and-abstain / distributieregels, primaire gebruikers, klasse×familie-hiërarchie, de console-bouwvolgorde, de taakgerichte onderzoeker-UX plus V&VN digitale stylesheet, Documentenhierarchie (historische UI-naam; live heading **Documenten** onder v2.32), wachttaak-badges, de Accounts-kamer (gesloten rollenset), geüploade HTML-freeze, weigering van live URL-HTML, verplichte source locators, fail-closed Product API zonder locator, extractie als structuur/provenance only, gesloten object-typeset met unclassified-default, answerability als vraagtype × objecttype, publish-binding aan het objecttupel, serving vanuit een atomaire gepubliceerde projectie, atomaire objecten, per-type classificatieregels, gesloten relaties, high-risk four-eyes, open-origineel als reviewwet, ingest-brondatum als kalender+ISO, ingest-bronversie als dotted-integer, type-gebaseerde reviewbanen, de reviewpagina-onderzoekerbar (één deur Beoordeel, Koppen/Inhoud, compacte rijen, stempels, geen tiny objects), het reviewpagina-onderzoekersoppervlak (geen slogans, leeg Onderwerp, bronpassage-proza op ieder object, geen kennisplatform-chrome ook niet als één-woord Tools, stempel-UI alleen op recommendation, compacte relatiecheckboxes), de reviewkaart-één-keer / extract-dedup-wet (open kaart toont de freeze-zin één keer; extract splitst geen grammaticale voortzetting / naloopzin; extract emitteert geen identieke clean_text twee keer uit één freeze), de onderzoeker-reviewplicht / wachtrijpresentatie (onderzoekers MUST NOT 2008 Inhoud-kaarten één voor één openen; Koppen-batch blijft; trage plicht is voorgestelde recommendation plus condition/exception/high-risk; resterende unclassified MUST NOT de gepresenteerde plicht zijn), en unpublished-documentverwijdering (PROTOCOL.md is de wet voor iedere richtlijn, niet Continentie-only; unpublished captured snapshots MAGEN van de operations console worden verwijderd door een geautoriseerde console-operator; MUST een echte verwijdercontrole op de documentkaart / Review-chooser; MUST bevestigen; MUST audit-ledgerrij; MUST NOT gepubliceerde projectie verwijderen; MUST NOT SSH/wipe van `/home/data` als productpad), behalve de in v2.27 begrensde lezing dat delete MUST op de documentkaart / Review-chooser als alternatieve oppervlakken (vervangen door één `/tree`-kamer only + type-to-confirm exacte titel; live heading **Documenten** onder v2.32), en de MVP-beslisboom-klasse (gesloten Klasse-set MUST `beslisboom` bevatten; Klasse-keuze selecteert het reviewpad; gesloten types `path` / `node` / `outcome`; boom-in-MVP SUPERSEDEERT v2.7 boom-uit-first-wave als kennisklasse; Storyline-playerpakket is niet Product API; `beslisboom` is lichtere/afgeleide klasse dan `richtlijn`; die Forge-golf is in code (Klasse includes beslisboom; Klasse choice selects review path)), en Klasse wijzigen / controlled reclassification (documentklasse-wijziging MUST alleen invalideren wat die klassewijziging inhoudelijk raakt; MUST NOT stille total wipe als enige verhaal; bron/SHA ongewijzigd; same-model vs cross-model; published never rewritten; hernoem Promoveren → Klasse wijzigen; die Forge-golf is in code (Klasse wijzigen first wave); selectieve invalidatie + published-candidate zijn volgende ná de smalle golf). Protocol v2.18.0 blijft een geldend onderdeel van die baseline. Protocol v2.17.0 blijft een geldend onderdeel van die baseline. Protocol v2.16.0 blijft een geldend onderdeel van die baseline. Protocol v2.15.0 blijft een geldend onderdeel van die baseline. Protocol v2.13.0 blijft een geldend onderdeel van die baseline. Protocol v2.12.0 blijft een geldend onderdeel van die baseline. Protocol v2.11.0 blijft een geldend onderdeel van die baseline. Protocol v2.10.0 blijft een geldend onderdeel van die baseline. Protocol v2.9.0 blijft een geldend onderdeel van die baseline. Protocol v2.8.0 blijft een geldend onderdeel van die baseline.
-- Ontwikkelhiërarchie geborgd; actuele voortgang wordt uit `main`, tests en commitgeschiedenis gelezen.
-- Stackbaseline en machineleesbaar infrastructuurmanifest aanwezig.
-- G0 Local Development: `PASS`; G0 Azure DEV: `BLOCKED` totdat open keuzes zijn opgelost. Geen Azure starten in deze fase.
-- Integrity kernel als enige canonical-hash voor store én publication gate (herstel 2026-08-26).
-- GD-03 reviewervereisten ESTABLISHED (2026-08-27); evidence in `docs/GOVERNANCE.md`. Named reviewers blijven een latere bezettingsstap en zijn niet bezet.
-- Historische STEP-/audit-/repair-rapporten verplaatst naar `docs/history/` (2026-08-27); de root is het operationele oppervlak, geen vijfde stuurlaag.
-- Retrospectieve onafhankelijke review van de C5-wijzigingen in PR #4, PR #5, PR #16, Protocol v2.6 / PR #18, Protocol v2.7 / PR #19, Protocol v2.8 / PR #21, de console-implementatie / PR #23, de console-UX-rewrite / PR #25 en Protocol v2.10, plus C3-review van Protocol v2.9, Protocol v2.11, Protocol v2.12, Protocol v2.13 (C3 spanning C5 four-eyes), Protocol v2.15 (C3 spanning ingest-provenance-validatie) Protocol v2.16 (C3 spanning review-surface / retrieve-safety), Protocol v2.17 (C3 spanning review-surface / retrieve-safety), Protocol v2.18 (C3 spanning review-surface / retrieve-safety) , Protocol v2.19 (C3 spanning review-surface / retrieve-safety) en Protocol v2.20 (C3 spanning review-surface / retrieve-safety), blijft verschuldigd.
-- G1 technische protection is ON. GitHub-ruleset **G1 main** (id `21686159`, 2026-08-27T22:10:53Z): geen verwijderen van `main`, geen force-push / non-fast-forward, required CI `test (3.12)` en `test (3.13)` (strict), pull request verplicht vóór merge, 0 vereiste goedkeurende reviews (solo owner). Protected branch, required CI en PR-workflow bestaan. De Implementation engineer-golf op de bestaande kernel (Protocol v2.12 objecttaxonomie default unclassified + voorstel/bevestiging; answerability × type; review gebonden aan exacte objectversie + hash; atomaire gepubliceerde projectie; plus v2.11-ingestlock in code en het v2.10-console-vervolg) is gemerged. De v2.13-kernelfollow-up (atomaire split + gesloten relaties + typebevestiging + high-risk four-eyes + open-origineel) is in code. De tweecoloms reviewkaart is in code. De v2.15-golf (ingest-datumkalender, ingest-versie, heading-voorstel, reviewlijst-snippet, typebanen) is in code. Eigenaarslock 2026-09-02 / Protocol v2.16: de v2.16-golf is in code (één deur Beoordeel, twee stacks Koppen/Inhoud met counts, compacte brontekst-rijen, stempels op recommendation, extract MUST NOT heading voorstellen voor DOEN/OVERWEEG/NIET DOEN, extract MUST NOT tiny objects emitteren, en een nieuwe extract van unpublished Continentie). Eigenaarslock 2026-09-02 / Protocol v2.17: de v2.17-golf is in code (onderzoeker-copy zonder slogans, leeg Onderwerp, bronpassage-proza op ieder object, geen kennisplatform-chrome inclusief één-woord Tools, stempel-UI alleen op recommendation, compacte relatiecheckboxes, re-extract unpublished Continentie). Eigenaarslock 2026-09-02 / Protocol v2.18: de extract+kaart-golf is in code (open kaart toont de freeze-zin één keer; extract splitst geen grammaticale voortzetting / naloopzin; extract emitteert geen identieke clean_text twee keer uit één freeze; re-extract unpublished Continentie). Eigenaarslock 2026-09-02 / Protocol v2.19: de wachtrij/plicht-golf is in code (Koppen-batch blijft; trage baan is voorgestelde recommendation + condition/exception/high-risk; duizenden resterende unclassified MUST NOT de gepresenteerde plicht zijn). Eigenaarslock 2026-09-02 / Protocol v2.20: de unpublished-delete-golf is in code (echte verwijdercontrole op de documentkaart / Review-chooser; Verwijder unpublished document; bevestigen vóór uitvoering; audit-ledger; daarna MAG William live unpublished Continentie verwijderen en een andere HTML-freeze inleveren; de volgende freeze MUST NOT Continentie hoeven zijn). DAARNA William click-through. DAARNA Azure ZIP vanaf een V&VN-vertrouwd apparaat nadat William de live console accepteert. DAARNA G2/Azure. Protocol v2.14 is niet de volgende stap. Geen mockup, geen Azure in deze delta, geen Vercel/Neon. Publicatie blijft BLOCKED zonder immutable locator (G2).
-
-Stopvoorwaarde: C3–C6-merges vereisen de vastgestelde GD-03-matrix en onafhankelijke menselijke reviewers op dezelfde commit/snapshot; named reviewers zijn nog niet bezet. Bugfixes van bestaande protocolregels blijven toegestaan. Protocol v2.5 (PR #16), Protocol v2.6 (PR #18), Protocol v2.7 (PR #19), Protocol v2.8 (PR #21) en Protocol v2.10 zijn eigenaarsgoedgekeurde C5-delta's; Protocol v2.9, Protocol v2.11 en Protocol v2.12 zijn eigenaarsgoedgekeurde C3-delta's; Protocol v2.12 is C3 spanning C5 (review/publish-autorisatiebinding); Protocol v2.13 is eigenaarsgoedgekeurde C3 spanning C5 (high-risk four-eyes-autorisatie) en heropent GD-03 niet; Protocol v2.15 is eigenaarsgoedgekeurde C3 spanning ingest-provenance-validatie en heropent GD-03 niet; Protocol v2.16 is eigenaarsgoedgekeurde C3 spanning review-surface / retrieve-safety en heropent GD-03 niet; Protocol v2.17 is eigenaarsgoedgekeurde C3 spanning review-surface / retrieve-safety en heropent GD-03 niet; Protocol v2.18 is eigenaarsgoedgekeurde C3 spanning review-surface / retrieve-safety en heropent GD-03 niet; Protocol v2.19 is eigenaarsgoedgekeurde C3 spanning review-surface / retrieve-safety en heropent GD-03 niet; Protocol v2.20 is eigenaarsgoedgekeurde C3 spanning review-surface / retrieve-safety en heropent GD-03 niet; retrospectieve technical-, security/operations- en (voor v2.9, v2.11, v2.12, v2.13, v2.15, v2.16, v2.17, v2.18 en v2.19) clinical-review van PR #4, PR #5, PR #16, v2.6, v2.7, v2.8, PR #23, v2.9, v2.10, v2.11, v2.12, v2.13, v2.15, v2.16, v2.17, v2.18, v2.19 en v2.20 blijft verschuldigd. GD-03 blijft ESTABLISHED.
-
-### Fase 2 — Canonieke bron 2
-
-Status: technische acquisitie en extractie ontwikkeld; duurzame immutable opslag blijft verplicht. Het onderzoekerspad is de console, geen parallel engineer-only pad. Publicatie blijft BLOCKED zonder immutable locator (G2). Blob-adapter bestaat; SDK is runtime-dependency; `canonical-sources` is leeg; G2 blijft BLOCKED; `publish()` blijft fail-closed; G0 Azure DEV blijft BLOCKED. Dit is geen G2 PASS.
-
-- Exacte officiële bronrepresentatie duurzaam en immutable opslaan.
-- First-wave officiële bestanden blijven de HTML-pagina en de PDF. Protocol v2.25 SUPERSEDEERT de v2.7-lezing dat kennisplatform `story.html`-boomplayers geheel buiten de first wave blijven als kennisklasse: beslisboom hoort in het MVP voor onderzoeker-ingest+review. Het Storyline-playerpakket (`story.html`) is niet het Product API-oppervlak en MUST NOT de verpleegkundige console zijn; live URL-HTML `story.html` alleen blijft onvoldoende zonder freeze. De officiële file is de kennisplatform-freeze, geen levend Word-document. Officiële first-wave HTML MUST een geüploade freeze-file zijn (exacte bytes). Live URL-HTML MUST bij ingest worden geweigerd (het kennisplatform is een app-shell; line locators zouden aan de verkeerde bytes binden). PDF-upload blijft in. URL-ingest van een PDF MAG blijven (bytes zijn de PDF). URL-ingest van HTML MUST NOT. File-upload HTML/PDF en onmiddellijke byte-freeze van een geüpload bestand blijven verplicht (Protocol v2.11 supersedes v2.7 URL-for-official-files as to HTML). Extractie MUST alleen structuur en provenance bepalen, niet de betekenis; unclassified is de default tot bevestiging (Protocol v2.12). Extractie MUST op betekenisgrenzen splitsen, niet op tokenbudget; fusion van condition in recommendation is het verboden defaultpatroon (Protocol v2.13). Publicatie blijft BLOCKED zonder immutable locator (G2); duurzame immutable opslag wordt niet overgeslagen.
-- Continentie bron 2 komt VIA de console binnen (Protocol v2.8). De lokale store `sources/private/` is de G0-local stand-in tot G0 Azure DEV; dat is expliciet geen productie.
-- Source manifest voltooien en integriteit opnieuw verifiëren.
-- Deterministische extractie en object-diff genereren.
-- Klinische review uitvoeren op de exacte snapshot en afgeleide objecten.
-- Alleen na alle gates goedkeuren en publiceren.
-- SA-01 voorbereiden: per echte bron en kennisfamilie vastleggen wie inhoudelijk eigenaar en actualiteitsverantwoordelijke moet zijn; publicatiegedrag bij ontbrekend eigenaarschap blijft OPEN tot GD-08 is vastgesteld.
-- SA-03 met echte bronnen onderzoeken: botsingen registreren als evaluatiebewijs; geen stilzwijgende bronprioriteit of nieuw serving-gedrag vóór GD-10 en een toepasselijke protocolwijziging.
-
-Stopvoorwaarde: ontbrekende bytes, checksum, immutable locator, provenance of review houdt publicatie `BLOCKED`. Dit slaat duurzame immutable opslag niet over.
-
-### Fase 2b — Interne operations console (Protocol v2.6 / v2.8 / v2.9 / v2.10 / v2.11 / v2.12 / v2.13 / v2.15 / v2.16 / v2.17 / v2.18 / v2.19 / v2.20 / v2.21 / v2.22 / v2.23 / v2.24 / v2.25 / v2.26 / v2.27 / v2.28 / v2.29 / v2.30 / v2.31 / v2.32)
-
-Status: console-MVP ingest+review geïmplementeerd; console-UX-rewrite (Protocol v2.9 / PR #25) is nu in code op de bestaande kernel (taakgerichte onderzoeker-UX, V&VN digitale stylesheet, officieel beeldmerk). Protocol v2.6 keurt de scope goed; Protocol v2.10 eist een boomkamer, wachttaak-badges en een Accounts-kamer — dat console-vervolg is in code (inclusief PR #31 historische UI-spelling Documentenhiërarchie). Protocol v2.32 SUPERSEDEERT de live heading: MUST **Documenten**; MUST NOT Documentenhiërarchie / Documentenhierarchie / Familieboom als live heading. Protocol v2.11–v2.32 kernel/console-wet is in code behalve deze UI-naam (freeze/locator, typeset, atomaire objecten, reviewbanen, boom-klasse, Klasse wijzigen, `/tree`-delete, Sterkte-poort, harde toelatingspoort, exacte kop-bind; Documenten-rename wacht op aparte Forge-GO). Die vereenvoudigingsgolf is in code. Geen mockup. Publicatie blijft BLOCKED zonder immutable locator (G2). Duurzame opslag wordt niet overgeslagen. Live regels: zie ## Geldende norm (live). Historische statusstapels: Historische supersessie-index.
-
-- Bouw geen mockup. Wacht niet op Azure, Vercel, Neon of een afgeronde «DS» voordat onderzoekers een taakgerichte console hebben.
-- Echte console-MVP, gekoppeld aan de bestaande kernel (extract, objects, gates, lokaal `sources/private/` als G0-local store): ingest HTML/PDF, family-tree, reviewers selecteren, review return-loop.
-- Protocol v2.9: die kernel-MVP MUST een taakgerichte onderzoeker-UX en V&VN digitale stylesheet krijgen. Gestapelde ongelabelde HTML-formulieren van gelijk gewicht MUST NOT de blijvende onderzoeker-UX zijn. Envelope is geen UI-term. Snapshot-id is geen onderzoeker-invoerveld. Verplaatsen en promoveren MUST echte klikbare acties zijn. Protocol v2.26 hernoemt de onderzoeker-actie **Promoveren** → **Klasse wijzigen**. Login MUST gebruikersnaam én wachtwoord vragen. Die rewrite is nu in code (PR #25), inclusief officieel beeldmerk.
-- Protocol v2.10: de boomheading eiste Documentenhierarchie (niet Familieboom; kernel blijft familie × klasse). Protocol v2.32 SUPERSEDEERT die live heading: MUST **Documenten**; MUST NOT Documentenhiërarchie, Documentenhierarchie of Familieboom als live heading of primair nav-label. Iedere topnav-heading MUST een zichtbare wachttaak-badge tonen bij echt kernelwerk voor de huidige gebruiker; de badge MUST afwezig of zero-hidden zijn als er niets wacht; counts MUST geen decoratie zijn; de Publish-badge MUST NOT impliceren dat publicatie G2 passeerde. Accounts is identiteitsbeheer, geen chat en geen vijfde klinische kamer; een publisher MUST gebruikers kunnen aanmaken en rollen toewijzen/wijzigen; de rollenset blijft GESLOTEN (researcher, reviewer, publisher); eerste bootstrap via CLI `console-account` blijft geldig.
-- Protocol v2.12: Extractie MUST alleen structuur en provenance bepalen. De gesloten object-typeset is heading, definition, explanation, condition, exception, recommendation; unclassified is de default, geen zesde advies-type. Answerability MUST vraagtype × objecttype joinen; alleen recommendation MAG handelingsadvies zijn; andere typen MUST NOT advies-gewicht krijgen. Cutover/publish MUST NOT envelope `review_passes` alleen vertrouwen; binding is `object_id` + `object_version` + `canonical_object_hash` + `confirmed_object_type` + reviewer + decision. Serving MUST een gevalideerde gepubliceerde projectie atomair gebruiken. Die kernelwet is in code. Azure/G2 blijven buiten deze delta.
-- Protocol v2.13: één kennisobject MUST één bevestigbare betekeniseenheid zijn. Extractie MUST op betekenisgrenzen splitsen. Gesloten relaties (`applies_if`, `except_if`, `defines`, `explains`, `supported_by`, `supersedes`, `parent`/`child`) MUST op de exacte objectversie worden bevestigd. High-risk four-eyes MUST op het v2.12-tupel wanneer `exception`, high `risk_level`, of een high-risk veld aanwezig is. Vanaf ieder kennisobject MUST de reviewer de exacte bronpassage kunnen openen (v2.11-locators; geen nieuw schema). Waar v2.13 en v2.12 §10 botsen over welke implementatie de volgende is, geldt v2.13. Implementation engineer op de bestaande kernel: atomaire split, gesloten relaties, typebevestiging, high-risk four-eyes en open-origineel zijn in code. De tweecoloms reviewkaart is in code. Relaties blijven voorgestelde checkboxes + bevestigen; MUST NOT een graaf-editor.
-- Protocol v2.15: ingest-datum MUST een kalenderdatumkiezer zijn (Europe/Amsterdam `DD-MM-YYYY` op scherm; ISO `YYYY-MM-DD` in store; colofon/publicatiedatum; niet vandaag; niet ingest-kliktijdstip; leeg geweigerd). Ingest-versie MUST dotted-integer zijn en verplicht. Extractie MUST `heading` voorstellen voor echte bronkoppen zodat die niet allemaal als `unclassified` landen; al het overige start `unclassified` (traag). De reviewlijst MUST een bronpassage-snippet tonen en MUST NOT de typenaam als rijtitel gebruiken. Snelle baan MUST batch-bevestiging van voorgestelde headings als structuur; trage baan blijft één object. Vierduizend unclassified-kaarten op één richtlijn is een fail van dit reviewoppervlak. MUST NOT pagina/alinea-types verzinnen. MUST NOT bestaande gehashte Continentie-objecten stilzwijgend hersplitsen; v2.13-splitregels worden niet herschreven. Waar v2.15 en de 2026-08-29-lock botsen over welke implementatie de volgende is, geldt v2.15. Die v2.15-golf (ingest-datum, ingest-versie, heading-voorstel, reviewlijst-snippet en typebanen) is in code. Protocol v2.16 supersedes de «volgende implementatie»-zin. Publicatie blijft BLOCKED zonder G2-locator.
-- Protocol v2.16: de Review-pagina MUST onderzoekers overtuigen. MUST NOT twee deuren Openen plus Reviewen. Eén documentkaart, één primaire knop Beoordeel. Twee benoemde stacks met counts: Koppen (echte TOC/sectietitels; batch-bevestigen als structuur) en Inhoud (contenttypen plus unclassified tot getypt; één-objectkaart). Compacte rijen: één regel freeze-bronzin plus korte status; MUST NOT status/checkbox/tekst over de viewport spreiden; MUST NOT typenaam of kernel-id als titel. DOEN/OVERWEEG/NIET DOEN zijn stempels op recommendation (`doen` | `overweeg` | `niet_doen`); MUST NOT GRADE-jargon; MUST NOT nieuw objecttype; Extractie MUST NOT heading voorstellen voor die woorden. Extractie MUST NOT tiny objects emitteren. Continentie is unpublished: een nieuwe extract van dezelfde freeze-bytes is VERPLICHT; source-hash blijft; unpublished objectidentiteiten MAGEN worden vervangen; MUST NOT in de UI liegen zonder nieuwe extract. Serving/G2 ongewijzigd. Waar v2.16 en v2.15 botsen over heading-voorstel voor stempels, tiny objects, unpublished Continentie-re-extract, één deur, compacte rijen of welke implementatie de volgende is, geldt v2.16. Implementation engineer op de bestaande kernel/console: één deur Beoordeel, twee stacks Koppen/Inhoud, compacte rijen, stempels, geen tiny objects, nieuwe unpublished Continentie-extract — die golf is in code. Protocol v2.17 supersedes de «volgende implementatie»-zin. Publicatie blijft BLOCKED zonder G2-locator.
-- Protocol v2.17: UI-copy MUST onderzoekerstaal zijn, geen slogans, geen «wat een EPD MAG zeggen», geen claim van één abonnee-klasse; de gehele zin «Dit wordt wat een EPD MAG zeggen.» MAG weg. Leadcopy zegt wat te doen (Beoordeel Koppen als structuur, Inhoud als kennisobjecten). Via-negativa MUST NOT op onderzoekerspagina's, ook niet als ingeklapte help «Over deze console». Onderwerp/familie MUST leeg zijn op een verse nieuwe ingest. Bronpassage MUST dezelfde leesbare zin tonen als het kennisobject, zonder HTML-tags, CSS-klassenamen of kennisplatform-markup, op ieder object / de hele freeze (opgenomen antwoord op «Is dat hoe het definitief eruit gaat zien?» is NEE); v2.11-freezebytes en locators blijven exact. Extractie MUST NOT kennisplatform-chrome als kennisobjecten of Koppen emitteren, ook niet als één-woord Tools/Home/Richtlijnen/Meedenken. Stempel-UI (**Sterkte van de aanbeveling**) MUST NOT verschijnen behalve op type `recommendation`. Relatiecheckbox en label MUST naast elkaar; MUST NOT over de viewport spreiden. Deze regels gelden voor de hele freeze / ieder object / iedere sectie; Inleiding, Doel, Doelgroep en Aanleiding zijn voorbeelden, geen gesloten lijst. 2641 unclassified op één richtlijn blijft een fail. Unpublished Continentie MAG opnieuw worden geëxtraheerd; source-hash blijft; unpublished objectidentiteiten MAGEN worden vervangen; MUST NOT fragmenten verbergen zonder nieuwe extract. Serving/G2 ongewijzigd. Waar v2.17 en v2.16 botsen over slogan-copy, via-negativa-help, vooringevuld Onderwerp, raw-HTML-bronpassage, site-chrome-objecten, stempel-UI-op-niet-recommendation, uitgerekte-relatiecheckboxes of welke implementatie de volgende is, geldt v2.17. Implementation engineer op de bestaande kernel/console: copy, leeg Onderwerp, bronpassage-proza op ieder object, geen chrome-objecten inclusief één-woord Tools, stempel-UI alleen op recommendation, compacte relatiecheckboxes, re-extract unpublished Continentie — die golf is in code. Protocol v2.18 supersedes de «volgende implementatie»-zin. Publicatie blijft BLOCKED zonder G2-locator.
-- Protocol v2.18: de open reviewkaart MUST de freeze-zin één keer tonen; MUST NOT dupliceren als zowel h3/titel als body; compacte rij/kaart: één bronzin plus korte status; de v2.16-compacte-rij-bar geldt voor de open kaart, niet alleen de lijst. Extractie MUST NOT een grammaticale voortzetting van de vorige zin tot een nieuw object splitsen; naloopzinnen (bijv. «Eventueel met hulp van de mantelzorger.», «Bijvoorbeeld …») MUST in hetzelfde kennisobject blijven als de zin die zij afmaken; dit herhaalt en verscherpt het v2.16 truncated-sentence / tiny-object-verbod (de v2.17 Continentie-re-extract faalde het nog). Extractie MUST NOT een tweede kennisobject emitteren waarvan de zichtbare freeze-proza (clean_text) identiek is aan een object dat al uit deze freeze is geëmitteerd; herhaalde HTML (samenvatting versus module) is geen extra kennis; onderscheiden echte koppen in verschillende secties MAGEN blijven («1.1 Inleiding» vs «2. Inleiding» zijn geen identieke strings). MUST NOT opgeslagen fragmenten verbergen zonder nieuwe extract; unpublished Continentie MAG opnieuw worden geëxtraheerd; source SHA-256 blijft; unpublished identiteiten MAGEN worden vervangen. Chrome Tools/Home is weg (v2.17 gehouden). Slogan is weg (v2.17 gehouden). Deze fail is duplicatie + truncated-sentence-split. Serving/G2/four-eyes/v2.14/Azure ongewijzigd. Waar v2.18 en v2.17 botsen over dubbele kaartzin, truncated-sentence-split, identieke clean_text of welke implementatie de volgende is, geldt v2.18. Implementation engineer op de bestaande kernel/console: extract+kaart-golf — die golf is in code. Protocol v2.19 supersedes de «volgende implementatie»-zin. Publicatie blijft BLOCKED zonder G2-locator.
-- Protocol v2.19: onderzoekers MUST NOT verplicht worden 2008 Inhoud-kaarten één voor één te openen; dat is dezelfde fail als 4000 unclassified: vermoeidheid, geen assurance; live bewijs: Inhoud (2008) / Koppen 78 op Continentie na de v2.18-extract (`main` `4ebfdbb88cdb`, snapshot `snap-ac59cf24f946088e-e402c4d3`); eigenaar zei dat het er beter uitziet, vroeg daarna of onderzoekers die 2008 objecten met de hand moeten doen, daarna «zet dat in protocol.». Koppen MAGEN en MUSTEN batch-bevestigbaar blijven als structuur, nooit als advies. De onderzoeker-verplichte trage review is voorgestelde `recommendation` plus `condition` / `exception` / ieder high-risk object (four-eyes ongewijzigd). Resterende `unclassified` MUST NOT als gelijke één-voor-één-plicht van duizenden kaarten worden gepresenteerd. Serving blijft fail-closed: alleen bevestigde `recommendation` MAG `supported` / handelingsadvies; de machine MUST NOT beslissen dat iets licht genoeg is om te serveren; MUST NOT een onderzoekercontrole «zwaar/licht» of «snel/langzaam». Machineclassificatie blijft een voorstel; MUST NOT types auto-bevestigen; MUST NOT gewone tekst automatisch tot recommendation promoveren. Definition/explanation zijn NIET de MVP-onderzoeker-2000-kaarten-plicht voor handelingsadvies. Extract SHOULD nog grover worden maar de bar is reviewPLICHT en wachtrijpresentatie, geen nieuw objecttype. 2008 unclassified/Inhoud-kaarten op één richtlijn blijft een fail. Unpublished Continentie MAG opnieuw worden geëxtraheerd; source SHA-256 blijft; unpublished identiteiten MAGEN worden vervangen; MUST NOT fragmenten verbergen zonder nieuwe extract. Serving/G2/four-eyes/v2.14/Azure ongewijzigd. Waar v2.19 en v2.18 botsen over trage-baan-unclassified-één-object-plicht, 2008-Inhoud-werklast of welke implementatie de volgende is, geldt v2.19. Implementation engineer op de bestaande kernel/console: wachtrij/plicht-golf is in code (Koppen-batch blijft; trage baan is voorgestelde recommendation + condition/exception/high-risk; duizenden resterende unclassified MUST NOT de gepresenteerde plicht zijn). Protocol v2.20 supersedes de «volgende implementatie»-zin. Publicatie blijft BLOCKED zonder G2-locator.
-- Protocol v2.20: PROTOCOL.md is de wet van V&VN Data Services voor iedere richtlijn, niet Continentie-only; Continentie in v2.16–v2.19 blijft live bewijs van fails (stempels als Koppen, 2008 Inhoud-kaarten), niet de productidentiteit; die historische bewijszinnen MUST blijven; de volgende freeze MUST NOT Continentie hoeven zijn. Unpublished captured snapshots MAGEN van de operations console worden verwijderd door een geautoriseerde console-operator (zelfde klasse als ingest: benoemd researcher/reviewer-account, geen geheim engineer-pad). MUST een echte verwijdercontrole op de documentkaart / Review-chooser voor unpublished snapshots alleen; label in onderzoekerstaal (bijv. Verwijder unpublished document); MUST bevestigen vóór uitvoering (destructief). Na delete MUST de snapshot NOT verschijnen op Inleveren/Review/Documentenhierarchie-lijsten; opgeslagen objecten+envelope voor die snapshot_id zijn weg; freeze-bytes MAGEN mee; MUST NOT andere snapshots of `/home/data` globaal raken; MUST een audit-ledgerrij (wie, wanneer, snapshot_id, bron-SHA-256, titel). Capture blijft geen publicatie. MUST NOT een gepubliceerde projectie verwijderen; `publish()` blijft G2-BLOCKED; er is geen gepubliceerde Continentie. MUST NOT fragmenten verbergen in een freeze die in Review blijft. MUST NOT SSH/wipe van `/home/data` als productpad; de console-actie is het pad. Four-eyes is niet vereist om unpublished capture te verwijderen; de uploader MAG unpublished die zij captureden verwijderen; een tweede benoemde reviewer is niet vereist voor delete (delete is geen type-bevestiging). Serving/G2/four-eyes/v2.14/Azure ongewijzigd. Waar v2.20 en v2.19 botsen over Continentie-as-productidentiteit, unpublished-snapshot-delete of welke implementatie de volgende is, geldt v2.20. Implementation engineer op de bestaande kernel/console: unpublished-delete-golf is in code — echte verwijdercontrole, bevestiging, audit-ledger; daarna MAG William live unpublished Continentie verwijderen en een andere HTML-freeze inleveren. Protocol v2.21 supersedes de «volgende implementatie»-zin. Publicatie blijft BLOCKED zonder G2-locator.
-- Protocol v2.21: eigenaar pauzeerde Cloud Shell en lockte een vier-golvenprogramma A→B→C→D; prioriteit is bronintegriteit, heldere kennisobjecten, veilige omgevingsscheiding, herstelbaarheid; Cloud Shell / production ZIP blijven uit tot golf A op een gecontroleerde SHA staat; deze delta MAPT bestaande wet, herschrijft die niet; v2.20 unpublished-delete is GEEN vijfde golf; Continentie-bewijszinnen in v2.16–v2.19 MUST blijven; G2 blijft BLOCKED; `publish()` blijft G2-BLOCKED; PR #82 is OPEN en MUST NOT worden geactiveerd tot de vier fouten zijn hersteld ÉN een Azure test-app bestaat; deze protocol claimt geen G2 PASS. Golf A (volgende implementatie only, nu in code): context-bewuste splitter + toetsbare reject-functie; inhoudelijk kennisobject MUST één complete, zelfstandig leesbare betekeniseenheid zijn met bronpassage+locator; MUST NOT alleen nummer/label/kopwoord/nav/stempel/zinsfragment; MUST NOT identieke clean_text uit dezelfde freeze; Inleiding is geen chrome; Home/Tools/Richtlijnen/Meedenken zijn chrome; Continentie-regressiefixtures; geen infra in golf A. Implementation engineer op de bestaande kernel/extract: golf A is in code. Golf B: G2-status MUST NOT van een stale static JSON-veld afhangen; publicatiegate MUST NOT openen omdat een app-setting aanwezig is. Golf C: PR #82 afmaken; niet activeren tot test-App Service bestaat; vier #82-fouten; gescheiden deploy-identiteiten. Golf D: backup/herstelbaarheid van `/home/data/metis-console`; geen grote databasemigratie. Serving/G2/four-eyes/v2.14/Azure ongewijzigd. Waar v2.21 en v2.20 botsen over welke implementatie de volgende is, geldt v2.21. DAARNA B, DAARNA C, DAARNA D. Niet Azure ZIP van v2.20 tot A op een gecontroleerde SHA staat, tenzij de eigenaar Cloud Shell heropent. Protocol v2.14 is niet de volgende stap. Publicatie blijft BLOCKED zonder G2-locator. Protocol v2.22 supersedes de «volgende implementatie»-zin (A daarna B daarna C daarna D) only.
-- Protocol v2.22: begrensde supersessie van Protocol v2.21 §3-volgorde A daarna B daarna C daarna D, alleen voor volgende-implementatievolgorde; golven zelf ongewijzigd; historische v2.21-golfdefinities blijven wet; golf A staat al in code op `main` `512ffa5026d06ff804434ddf4d07a08a36c02305`; volgende implementatie MUST golf C daarna golf D; MUST NOT deploy-test/deploy-production activeren tot Azure test-App Service `vvn-metis-console-test` bestaat; merge naar `main` MUST NOT automatisch deployen naar een ontbrekende test-app; ZIP MUST volledig deploybaar zijn inclusief dependencies; git-archive-only is niet genoeg; `--clean true` wist wwwroot en MUST NOT runtime-data verwijderen; DAARNA één Cloud Shell / production ZIP van die gecontroleerde SHA (A+C+D); geen live-URL-ingest; ingest van een nieuwe freeze MUST NA die ZIP, niet ervoor; live draait nog pre-golf-A extract tot ZIP; golf B (G2-bewijs/smoke) NA die ZIP; G2 blijft BLOCKED; `publish()` blijft G2-BLOCKED; ZIP opent publicatie niet; claimt geen G2 PASS; MUST NOT SSH-wipe van `/home/data`; MUST NOT C/D in deze PR implementeren; v2.20 unpublished-delete blijft op main, GEEN vijfde golf. Waar v2.22 en v2.21 botsen over welke implementatie de volgende is, geldt v2.22. Implementation engineer op de bestaande kernel/repo: golf C (PR #82 afmaken, niet activeren) ÉN golf D, daarna stoppen voor William Cloud Shell ZIP van die SHA, daarna ingest; geen G2 PASS, geen Blob-grant. Golf C en golf D zijn in code. Protocol v2.14 is niet de volgende stap. Publicatie blijft BLOCKED zonder G2-locator. Protocol v2.23 supersedes de lezing dat Cloud Shell ZIP van a566af56 VÓÓR de eerste DELETE-snede MAG.
-- Protocol v2.23: eigenaar vroeg Auditor om een code-oppervlaktereview op `main` HEAD `a566af56c8c88e76cb4de7fa51642b408705da02`; Auditor-oordeel REQUEST SIMPLIFICATION; geen GD-03, geen publicatie; G2 blijft BLOCKED; eigenaarslock 2026-09-03: eerste DELETE-snede, daarna één ZIP van die SHA; MUST NOT a566af56 ZIP-pen als dat een tweede ZIP forceert; Twee Cloud Shell ZIPs zijn geweigerd; volgende live-stap is eerste DELETE-snede op main VÓÓR iedere Cloud Shell ZIP, daarna ÉÉN Cloud Shell ZIP van die resulterende SHA (A+C+D al op main, plus v2.20-verwijdercontrole, plus de eerste DELETE-snede), daarna ingest, daarna golf B; PR #82 blijft gesloten/ongemerged; eerste DELETE-snede, zero-caller src/-modules only: extract_pdf.py, semantic_transform.py, validation_workflow.py, build_second_review_queue.py, pre_step5_gate.py, import_expert_validation.py, reconcile_legacy_review.py, evaluate_safe_retrieval.py, build_retrieval_document.py; MUST NOT src/semantic_transform_v2.py / prepublication_gate_v2.py / validation_workflow_v2.py / apply_second_review.py verwijderen; MUST NOT src/canonical_store.py verwijderen; service_app.py EN product_api_v1.py blijven; twee producten, geen leftovers; live ingest gebruikt extract_pdf_v2, extract_html_v1, semantic_transform_generic_v1, prepublication_gate_v3; operations_console_v1.py versus operations_console_app.py split blijft; geen template-engine; golf A splitter + reject_candidate blijven; test_protocol_v2_* en test_v2* blijven beide; eligibility_policy; scripts/run_integrity_sprint.sh MAG naar committed fixtures wijzen; MUST NOT v2/v21/generic mergen; CLI review-queue versus console review_stacks / slow_review_duty is dual live path; Console is de onderzoeker-plichtwachtrij; plan, MUST NOT stilzwijgend verwijderen; volgende implementatie VÓÓR die ZIP is één deletion-PR; bestaande pytest only; MUST NOT splitter of console in die PR raken; Implementation MUST opnieuw bewijzen dat er geen live callers zijn vóór iedere delete; HANDOFF.md MUST NOT opnieuw worden aangemaakt. Waar v2.23 en v2.22 botsen over of Cloud Shell ZIP van a566af56 VÓÓR de eerste DELETE-snede MAG, geldt v2.23. Protocol v2.14 is niet de volgende stap. Publicatie blijft BLOCKED zonder G2-locator.
-- SA-02 volgt pas na de evaluatie met vijf echte richtlijnen: de console moet uiteindelijk wijzigingen, onzekerheden en high-risk passages centraal kunnen aanbieden en aantoonbaar ongewijzigde inhoud kunnen onderscheiden. Reviewbewijs wordt niet automatisch overgenomen voordat GD-09, protocol en acceptatietests dit toestaan.
-- Protocol v2.32: de onderzoeker-facing kamerheading / nav-label / paginatitel voor `/tree` MUST **Documenten** zijn. MUST NOT Documentenhiërarchie, Documentenhierarchie of Familieboom als live heading. Kernel blijft familie × klasse. v2.27-delete blijft op diezelfde kamer + type-to-confirm. Landing-page sketch B + console-rename zijn volgende Forge ná aparte Metis GO, niet deze protocol-PR. Publicatie blijft BLOCKED zonder G2-locator.
-- Protocol v2.11: officiële first-wave HTML MUST een geüploade freeze-file zijn. Live URL-HTML MUST bij ingest worden geweigerd. De Product API MUST NOT `supported` teruggeven zonder source locator. v2.11-kernelwerk blijft verplichte wet. Het v2.10-console-vervolg is al in code en wordt niet heropend.
-- Continentie bron 2 is de eerste envelope en komt VIA die console binnen, niet via een parallel engineer-only pad als onderzoekerservaring.
-- Frontend: intuïtieve console voor richtlijnonderzoekers en reviewers, niet voor verpleegkundigen. Backend: immutable bronstore + canonieke kennisobjecten. Product API bestaat al en blijft een aparte machinedeur; niet eerst herbouwen.
-- Console-boom = familie × klasse. Ieder bestand houdt zijn eigen hash. Familie is een haak, geen nieuw bestand. MVP: de ingest-onderzoeker zet de familie. Een branch morgen toevoegen tekent de boom niet opnieuw. Klasse promoveren MUST review; familiemove MUST NOT klinische herreview. Protocol v2.26 hernoemt de console-actie **Promoveren** → **Klasse wijzigen** en SUPERSEDEERT de `promote_class`-total-wipe als enige verhaal; Klasse wijzigen MUST review; selectieve invalidatie is de doelarchitectuur; tijdelijke volle herreview MAG in de eerste golf.
-- Vier kamers, geen vier knoppen voor één persoon: Ingest (mailbox), Review (verplichte return-loop), Publish (apart geautoriseerd besluit), Analytics (laatst, na verkeer). Accounts is geen vijfde klinische kamer en geen chat; het is identiteitsbeheer (publisher als MVP-admin).
-- Console-MVP: ingest + review-loop. Publish is een kleine derde kamer nadat de review-loop werkt. Analytics niet eerst bouwen.
-- Identiteit verplicht in de console: researcher, reviewer, publisher; geen gedeelde login voor review/publish. Uploader MAG reviewer zijn, MUST NOT de enige vereiste reviewer op die snapshot zijn. Publicatie blijft BLOCKED tot minstens één andere benoemde reviewer dezelfde snapshot heeft goedgekeurd — afdwingen in accounts, niet als sociale regel.
-- Chat is geen kamer in deze console. Zorgapp-frontend, chatbot, EPD/ECD-UI en publieke website blijven verboden in deze repository.
-- Console-ingest vereist een immutable store: lokale `sources/private/` is de G0 Local-substituut tot G0 Azure DEV PASSes (expliciet geen productie); Azure Blob wanneer G0 Azure DEV PASSes.
-- Identiteitsprovider blijft `TBD` en onderworpen aan G0; dit sluit G8 niet en provisioneert geen Azure AD.
-
-Stopvoorwaarde: geen mockup; geen stacked datamodel-dump als blijvende onderzoeker-UX; geen Familieboom als blijvende heading; geen decoratieve badges; geen open rollenset; geen analytics-first; geen chat in de console; geen shared login; uploader niet de enige vereiste reviewer; geen bronbinaries in Git; geen graaf-editor; geen drag-and-drop-relaties; geen nieuw locatorschema; geen Azure starten; geen Vercel/Neon; publicatie blijft BLOCKED zonder immutable locator.
-
-### Fase 3 — Evaluatie en onafhankelijke acceptatie
-
-Status: nog uit te voeren. Cluster 6 (kwaliteitsevaluatie) is LOCKED als deze fase: aparte extract- / semantiek- / retrievaltests, false support, negatieve vraagsets, Holdout B. `FAR = 0%` staat al. False support is een Fase-3-meetlat, geen stille extra gate in Protocol v2.13. Eigenaarslock 2026-09-06: golf 4 (Onafhankelijke kwaliteitsmeting, was PR2) is de ROADMAP-backlog voor extractkwaliteit ná aparte Metis GO; eerst metricdefinities in `extract_metrics_v1` herstellen; Phase-4 hooks ≠ dit bewijs; groene CI of Phase-4 fixture-goud MUST NOT een kwaliteitsclaim dragen.
-
-- Development set vastleggen zonder holdoutcontaminatie.
-- Holdout B onafhankelijk ontwerpen, vergrendelen en hashen.
-- Answerable en moeilijke no-answer-cases opnemen, inclusief relationele, numerieke, populatie- en versieconflicten.
-- Onafhankelijke acceptatie uitvoeren zonder tuning op holdout B.
-- Release alleen bij alle protocolgates en `FAR = 0%` binnen de afgesproken scope.
-- Console-analytics MUST NOT worden gebruikt om Holdout B te tunen.
-
-Stopvoorwaarde: geen onafhankelijkheidsclaim op basis van Holdout A of de development/golden set.
-
-### Fase 4 — MVP-servicelaag
-
-Status: deels aanwezig (Product API + interne inspection); afronden na Fase 2–3. Interne operations console is Fase 2b, niet deze servicelaag. De Product API bestaat al; niet eerst herbouwen.
-
-- Product API uitsluitend voeden met `supported` evidence op objectniveau. Answerability MUST vraagtype × objecttype joinen (Protocol v2.12); niet alleen recommendations. Relaties begrenzen advies; zij MUST NOT advies-gewicht geven aan condition/exception/explanation/definition/heading (Protocol v2.13). Een gepubliceerde recommendation MUST samen met gepubliceerde `applies_if`/`except_if`-targets worden geserveerd wanneer die in de gepubliceerde projectie bestaan. Serving MUST een gevalideerde gepubliceerde projectie atomair gebruiken; de API MUST NOT live governance per query reconstrueren; een verouderde projectie na withdraw is een protocolfout. De Product API MUST NOT `supported` teruggeven als de source locator van het object ontbreekt of leeg is; fail-closed; abstain (cataloguszin, geen LLM) (Protocol v2.11). Cluster 4 (release, atomaire publicatie, rollback, schema-migratie) is LOCKED als Fase 4 en wraps de v2.12-projectie (release-id, projectie-hash, rollback, schemaversie); MUST NOT verder in v2.13 worden geprotocoliseerd. Deze protocol-PR implementeert serving/relaties/`publish()` niet.
-- Ongepubliceerde branch-objecten MUST abstainen, ook als de trunk gepubliceerd is.
-- `supported` MUST V- en VN-labels dragen. Alle gepubliceerde V- en VN-objecten serveren.
-- Klasse/gewicht zit op ieder object: zwaarder MAG niet door lichter worden gevuld. Een podcast MUST NOT een richtlijn in de API vervangen, ook niet in dezelfde familie. Lagere klasse MAG `supported` zijn alleen mét klaslabel, en MUST NOT een gat vullen dat een ontbrekende hogere klasse op dezelfde vraag achterlaat als die hogere klasse in het gepubliceerde corpus bestaat.
-- Inspection en Product API gebruiken dezelfde answerability-gate.
-- Abstention is een gesloten zinnencatalogus in de console (reviewed als een kleine richtlijn); reason codes zichtbaar maken.
-- DS MUST NOT proza genereren. Geen LLM in het MVP. RAG op kennisplatform-HTML is niet het product.
-- End-to-end validatie van query tot bronverwijzing.
-- Stabiele object-ID's, bronversie, status en canonical links leveren.
-- API/schema versieerbaar maken en contracttests voor provenance en withdrawal toevoegen.
-- Logging en audittrail zonder vertrouwelijke bron- of reviewdata te lekken.
-- Geen zorgapp-frontend, chatbot, EPD/ECD-UI of publieke website in deze repository. Inspection is intern en read-only. De interne operations console is een apart goedgekeurd oppervlak (Fase 2b); kernel-MVP ingest+review is gebouwd; Protocol v2.9-UX-rewrite is in code (PR #25); v2.10-consolevervolg (Documentenhierarchie, badges, Accounts) is in deze implementatiegolf in code; v2.11-kernelwerk (URL-HTML weigeren, fail-closed locator) blijft verplichte wet en is in deze golf geïmplementeerd.
-
-Stopvoorwaarde: geen generation/LLM in deze service; similarity is nooit answerability; U3–U5 zijn buiten MVP; chat is geen Product API-kamer en geen consoleruimte; geen ziekenhuisprotocollen, adoptielijsten of patiëntgegevens opslaan.
-
-### Fase 5 — Azure DEV en operationele gereedheid
-
-Status: `BLOCKED` onder G0 Azure DEV totdat toegang, eigenaarschap, kosten en platformbesluiten beschikbaar zijn. Cluster 7 (security, IAM, secrets, omgevingsscheiding, audit, monitoring, DR, withdrawal-SLA, retention, kosten) is LOCKED als Fase 5 / bestaande G8-productiegereedheid. MUST NOT vannacht tot protocol worden gemaakt. Geen dump van Fase 5 in v2.13.
-
-- Infrastructuurmanifest per gekozen Azure-component afronden: provider/product, regio, data boundary, identity/secrets, eigenaar en kosten.
-- Azure DEV inrichten met immutable bronopslag en gescheiden runtime-opslag.
-- Console-identiteit en console-hosting blijven `TBD`; geen vendor geselecteerd; geen Vercel/Neon/LLM vereist.
-- Wacht niet op Azure voordat onderzoekers een echte console hebben; de lokale store is de stand-in tot G0 Azure DEV.
-- Deployment reproduceerbaar koppelen aan commit, protocolversie en build-ID.
-- Security-, rollback-, withdrawal- en incidenttest uitvoeren.
-- SA-04 uitvoeren: een deterministische integriteitsrunner reconcilieert bronbytes → bronregister → canonieke store → reviewledger → actieve projectie → retrieval-index → API. Een onverklaarde afwijking is `FAIL` of `BLOCKED`, nooit alleen een waarschuwing.
-- MVP-go/no-go assurance-record afronden.
-
-Stopvoorwaarde: geen Azure-provisioning zolang G0 Azure DEV `BLOCKED` is.
-
-### Fase 6 — Externe integratiepilot
-
-Status: gepland na PASS van toepasselijke bron-, acceptance- en operationele gates.
-
-- Eerste betalende abonnee is een Nederlands EPD/ECD (live retrieve-and-abstain-abonnement).
-- Ziekenhuis- of universiteits-LLM-bots MAGEN op dezelfde wijze abonneren; DS bouwt die bots niet.
-- Eén richtlijn of expliciet begrensde bronset.
-- Eén U1- of U2-toepassing.
-- Eén zorgorganisatie, één leverancier/ontwikkelpartner en één gebruikersgroep.
-- Consumentenregistratie en gebruiksovereenkomst vastleggen.
-- Attribution, updates, supersession, withdrawal en incidentmelding end-to-end testen.
-- Vooraf veiligheids-, gebruiks- en stopcriteria vaststellen.
-- Geen externe pilotrelease zonder vastgesteld bron-/familie-eigenaarschap (SA-01), passend conflictgedrag voor de gekozen bronset (SA-03) en geslaagde end-to-end integriteitsreconciliatie (SA-04).
-
-Stopvoorwaarde: geen externe toegang zonder juridische, privacy/security- en verantwoordelijkheidstoets; geen U3–U5 zonder nieuwe protocolbeslissing en toepasselijke C3–C6-review.
-
-## Scopebeheer
-
-Nieuwe functionaliteit komt alleen in de roadmap nadat is vastgesteld dat deze door het huidige protocol wordt gedekt. Buiten scope voor de eerste MVP zijn uitbreidingen die de onafhankelijke acceptatie, bronintegriteit of fail-closed publicatie omzeilen of vertragen, een zorgapp-frontend, chatbot, EPD/ECD-UI of publieke website, beslisregels, patiëntspecifiek advies, algemene modeltraining, care-impact-onderzoek en federated learning. Training MAG alleen als tweede licentie mét live publicatiestatuscheck (Protocol v2.7). De interne operations console is onder Protocol v2.6 in scope als intern oppervlak. Protocol v2.8 zette de volgende implementatie op een echte console-MVP (geen mockup) op de bestaande kernel; Continentie bron 2 komt VIA de console binnen. Historische «volgende implementatie»-supersessies (v2.9–v2.31 en de post-v2.31 ROADMAP-golven) staan in de Historische supersessie-index; Eigenaarslock-secties blijven de locktekst. Protocol v2.14 is LOCKED als later protocol, niet deze PR, en wordt pas geschreven wanneer de eerste officiële bron een datum heeft die serving MUST begrenzen. MUST NOT Protocol v2.14 worden geschreven tot die tijd. Duurzame immutable opslag wordt niet overgeslagen: lokale store is de G0-stand-in tot G0 Azure DEV; publicatie blijft BLOCKED zonder immutable locator (G2).
-
-SA-05 is de enige toegestane route naar trainingsdistributie. Train-ready objecten of technische API-toegang vormen geen datasetrelease. Een latere trainingsdataset vereist een afzonderlijke licentie, reproduceerbaar manifest, model-lineage en live status-/withdrawalverbinding.
+- Geen nieuwe Protocol-v2-delta's.
+- Geen keten van Protocol-v3-delta's.
+- Geen nieuwe lexicale taalregel zonder classificatie als semantische interpretatie of harde invariant.
+- Geen frontend-rewrite.
+- Geen microservicesplitsing zonder afzonderlijk bewijs dat de huidige grens het probleem veroorzaakt.
+- Geen experimentele modelroute met directe canonieke publicatierechten.
+- Geen algemene G2-`PASS`: publicatie blijft conditioneel per snapshot volgens `PROTOCOL.md`.
+- Geen Product API-activatie als neveneffect van G2-publicatie.
+
+## Besluitlog
+
+| Besluit | Status |
+|---|---|
+| Protocol v3 activeren | IN UITVOERING — rootnorm omgezet; testmigratie + groene CI nog vereist |
+| Audit > Experiments bouwen | OPEN — na/naast afronding governance-migratie |
+| Hybride passagevorming invoeren | NIET BESLOTEN — afhankelijk van experiment |
+| Bestaande passagevorming vervangen | NIET BESLOTEN |
+| OIDC standaard deployment herstellen | OPEN |
