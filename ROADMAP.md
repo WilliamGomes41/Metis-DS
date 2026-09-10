@@ -38,7 +38,7 @@ Gereed wanneer:
 
 ## R3.3 Audit-kamer + experimentbasis
 
-**Status:** IN UITVOERING — owner-approved ontwerp-lock en retro-lock 2026-09-10; implementatie via PR #153.
+**Status:** IN UITVOERING — owner-approved ontwerp-lock, retro-lock en UX-lock 2026-09-10; implementatie via PR #153.
 
 Doel: `Audit` wordt de centrale interne inspectiekamer voor meerdere vormen van controle en onderzoek, zonder vooraf een generiek auditframework te bouwen.
 
@@ -57,9 +57,16 @@ Ontwerp-lock:
 - audit wijzigt geen canonieke kennis, publiceert niets en opent geen Product API;
 - geen console-rewrite, nieuw frontendframework, microservicesplitsing of generieke `AuditEngine`.
 
+UX-lock:
+- `Audit` staat als normale kamer in de bestaande gedeelde topnavigatie, tussen **Documenten** en **Accounts**;
+- op **Mijn werk** blijven **Inleveren → Review → Publiceren → Documenten** de vier gelijkwaardige primaire workflowtegels;
+- Audit wordt daar als afzonderlijke brede meta-tegel onder de workflow getoond onder **Onderzoeken & controleren**;
+- de Audit-tegel gebruikt de bestaande V&VN-paarse signatuur op wit en introduceert geen nieuwe merkkleur of apart tegelcomponent;
+- Audit wordt niet visueel gepresenteerd als vijfde stap in de publicatiestroom.
+
 Eerste implementatievolgorde:
 1. Audit-kamer, zelf audit aanmaken, minimale type-onafhankelijke persistence en read-only Documentkwaliteit als tweede echte auditvorm;
-2. Audit zichtbaar maken in de normale console-navigatie;
+2. Audit zichtbaar maken in de normale console-navigatie en als afzonderlijke meta-tegel op Mijn werk;
 3. begrensde experiment-persistence voor dataset-freeze en blind A/B-review;
 4. passagevormingsexperiment uit R3.4.
 
@@ -152,6 +159,7 @@ AI, Grok Bot en Metis tellen niet als vereiste menselijke C3–C6-reviewer, moge
 | Gebruiker maakt zelf audit aan via audittype | LOCKED — 2026-09-10 |
 | AuditStore blijft type-onafhankelijk; type-uitvoering lokaal | LOCKED NA RETRO — 2026-09-10 |
 | Documentkwaliteit als tweede architectuurproef | LOCKED NA RETRO — 2026-09-10 |
+| Audit als normale nav-kamer + brede paarse meta-tegel onder workflow | LOCKED UX — 2026-09-10 |
 | Generiek auditframework vooraf bouwen | AFGEWEZEN — eerst expliciete auditvormen en hergebruik |
 | Passagevormingsexperiment | LOCKED ONTWERP — frozen dataset, blind A/B, gedeelde harde gates, KEEP/ITERATE/PROCEED |
 | Hybride passagevorming invoeren | NIET BESLOTEN — afhankelijk van experiment |
