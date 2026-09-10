@@ -13,74 +13,43 @@ def test_governance_documents_exist() -> None:
         "PROTOCOL.md",
         "ROADMAP.md",
         "docs/DEVELOPMENT_WORKFLOW.md",
-        "docs/PROTOCOL_V2_2.md",
         "docs/GOVERNANCE.md",
+        "docs/history/protocol-v2/PROTOCOL_ROOT_FINAL_2026-09-10.md",
+        "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md",
         "data/assurance/gd_03_c3_c6_reviewer_matrix.json",
     )
     missing = [path for path in required if not (ROOT / path).is_file()]
     assert not missing, f"missing governance documents: {missing}"
 
 
-def test_protocol_has_one_versioned_norm_and_required_hierarchy() -> None:
+def test_protocol_has_one_current_v3_norm_and_required_hierarchy() -> None:
     protocol = _read("PROTOCOL.md")
-    assert protocol.count("De geldende normatieve baseline is Protocol v2.32.0") == 1
-    assert "plus Protocol v2.20.0" in protocol
-    assert "plus Protocol v2.18.0" in protocol
-    assert "plus Protocol v2.17.0" in protocol
-    assert "plus Protocol v2.16.0" in protocol
-    assert "plus Protocol v2.15.0" in protocol
-    assert "plus Protocol v2.13.0" in protocol
-    assert "plus Protocol v2.12.0" in protocol
-    assert "plus Protocol v2.11.0" in protocol
-    assert "De geldende normatieve baseline is Protocol v2.20.0" not in protocol
-    assert "De geldende normatieve baseline is Protocol v2.18.0" not in protocol
-    assert "De geldende normatieve baseline is Protocol v2.17.0" not in protocol
-    assert "De geldende normatieve baseline is Protocol v2.16.0" not in protocol
-    assert "De geldende normatieve baseline is Protocol v2.15.0" not in protocol
-    assert "De geldende normatieve baseline is Protocol v2.13.0" not in protocol
-    assert "De geldende normatieve baseline is Protocol v2.12.0" not in protocol
-    assert "De geldende normatieve baseline is Protocol v2.11.0" not in protocol
-    assert protocol.count("docs/PROTOCOL_V2_2.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_3_TECHNICAL_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_4_PRODUCT_DISTRIBUTION_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_5_MVP_PUBLIC_REMOTE_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_6_INTERNAL_OPERATIONS_CONSOLE_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_7_SOURCE_API_DISTRIBUTION_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_8_USERS_HIERARCHY_CONSOLE_ORDER_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_9_CONSOLE_UX_BRAND_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_10_CONSOLE_NAV_ACCOUNTS_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_11_HTML_FREEZE_LOCATOR_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_12_OBJECT_TYPE_REVIEW_PROJECTION_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_13_ATOMIC_OBJECT_SEMANTICS_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_15_INGEST_DATE_VERSION_REVIEW_LANES_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_16_REVIEW_PAGE_RESEARCHER_BAR_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_17_REVIEW_PAGE_RESEARCHER_SURFACE_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_18_REVIEW_CARD_EXTRACT_DEDUP_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_19_REVIEW_DUTY_QUEUE_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_20_UNPUBLISHED_DOCUMENT_DELETE_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_21_CONTROLLED_USE_WAVES_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_22_WAVE_ORDER_C_D_BEFORE_B_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_23_CODE_SURFACE_SIMPLIFICATION_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_24_CONSOLE_RETRIEVAL_DEPLOY_SPLIT_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_25_BESLISBOOM_CLASS_PATH_NODE_OUTCOME_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_26_KLASSE_WIJZIGEN_CONTROLLED_RECLASSIFICATION_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_27_UNPUBLISHED_DELETE_DOCUMENTENHIERARCHIE_TYPE_CONFIRM_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_28_STRUCTURAL_HEADING_NAV_AND_CONFIRMED_STRENGTH_GATE_DELTA.md") == 1
-    assert protocol.count("docs/PROTOCOL_V2_32_DOCUMENTEN_UI_ROOM_NAME_DELTA.md") == 1
-    assert "De geldende normatieve baseline is Protocol v2.31.0" not in protocol
-    assert "De geldende normatieve baseline is Protocol v2.27.0" not in protocol
-    assert "De geldende normatieve baseline is Protocol v2.26.0" not in protocol
-    assert "De geldende normatieve baseline is Protocol v2.25.0" not in protocol
-    assert "De geldende normatieve baseline is Protocol v2.24.0" not in protocol
+    assert protocol.count("# V&VN Data Services — Protocol v3") == 1
+    assert protocol.count("**Versie:** 3.0.0") == 1
     assert "PROTOCOL.md → ROADMAP.md → acceptatietests → code" in protocol
-    assert "probleem of failure → protocoltoets" in protocol
+    assert "De geldende normatieve baseline is Protocol v2." not in protocol
+    assert "## 16. Protocol V2 is historie" in protocol
+    assert "Om te bepalen wat Metis nu moet doen, hoeft de V2-deltaketen niet meer te worden gelezen." in protocol
 
 
-def test_roadmap_has_operational_controls() -> None:
+def test_v2_chain_is_preserved_in_history_not_current_protocol() -> None:
+    protocol = _read("PROTOCOL.md")
+    historical_protocol = _read("docs/history/protocol-v2/PROTOCOL_ROOT_FINAL_2026-09-10.md")
+
+    assert "docs/PROTOCOL_V2_34" not in protocol
+    assert "Protocol v2.34.0" in historical_protocol
+    assert "Protocol v2.33.0" in historical_protocol
+    assert "docs/PROTOCOL_V2_2.md" in historical_protocol
+
+
+def test_roadmap_has_only_active_v3_controls() -> None:
     roadmap = _read("ROADMAP.md")
 
-    for required in ("Stopvoorwaarde", "Holdout A", "FAR = 0%", "Azure DEV"):
+    assert roadmap.startswith("# Metis — Roadmap v3")
+    for required in ("R3.1", "R3.2", "R3.3", "R3.4", "R3.7", "## Stopregels"):
         assert required in roadmap
+    assert "Historische supersessie-index" not in roadmap
+    assert "Eigenaarslock 2026-" not in roadmap
 
 
 def test_operational_governance_record_is_subordinate_not_a_fifth_layer() -> None:
