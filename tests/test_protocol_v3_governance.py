@@ -56,9 +56,31 @@ def test_roadmap_records_v3_closeout_and_next_work() -> None:
     assert "## R3.1 Governance-migratie afronden\n\n**Status:** GEREED" in roadmap
     assert "## R3.2 Governance-tests migreren\n\n**Status:** GEREED" in roadmap
     assert "Besluit: `ACTIVATE V3` — uitgevoerd via PR #149." in roadmap
-    assert "## R3.3 Audit > Experiments\n\n**Status:** VOLGEND." in roadmap
+    assert "## R3.3 Audit-kamer + experimentbasis\n\n**Status:** VOLGEND — owner-approved ontwerp-lock 2026-09-10." in roadmap
     assert "| Protocol v3 activeren | GEREED — PR #149 gemerged; Protocol v3.0.0 actief; CI groen |" in roadmap
-    assert "| Audit > Experiments bouwen | VOLGEND |" in roadmap
+
+
+def test_audit_room_and_passage_experiment_design_are_locked() -> None:
+    roadmap = ROADMAP.read_text(encoding="utf-8")
+    for required in (
+        "de Audit-kamer is generiek; onderliggende audits blijven expliciet en lokaal",
+        "**Documentkwaliteit**, **Publicatiecontrole** en **Experimenten**",
+        "geen universele audit-lifecycle of nieuw permanent `audit_record`",
+        "geen nieuwe accountrol `auditor`",
+        "geen console-rewrite, nieuw frontendframework, microservicesplitsing of generieke `AuditEngine`",
+        "**Status:** ONTWERP GEBLOKKEERD — owner-approved 2026-09-10",
+        "Beide routes lopen na kandidaatvorming door dezelfde deterministische verificatie van harde invarianten.",
+        "**Blind beoordelen**",
+        "A, B, gelijkwaardig of beide onvoldoende",
+        "gate-rejecties en bruikbare yield/coverage",
+        "nul tolerantie voor onverifieerbare toevoegingen",
+        "`KEEP`, `ITERATE` of `PROCEED`",
+    ):
+        assert required in roadmap
+    assert "Geen generiek auditframework voordat meerdere echte auditvormen aantoonbaar dezelfde state en persistence delen." in roadmap
+    assert "| Audit-kamer als brede inspectiekamer | LOCKED — 2026-09-10 |" in roadmap
+    assert "| Generiek auditframework vooraf bouwen | AFGEWEZEN — eerst expliciete auditvormen en hergebruik |" in roadmap
+    assert "| Passagevormingsexperiment | LOCKED ONTWERP — frozen dataset, blind A/B, gedeelde harde gates, KEEP/ITERATE/PROCEED |" in roadmap
 
 
 def test_v2_root_state_is_preserved_as_history() -> None:
