@@ -51,6 +51,16 @@ def test_roadmap_only_contains_active_v3_work() -> None:
     assert "Geen keten van Protocol-v3-delta's" in roadmap
 
 
+def test_roadmap_records_v3_closeout_and_next_work() -> None:
+    roadmap = ROADMAP.read_text(encoding="utf-8")
+    assert "## R3.1 Governance-migratie afronden\n\n**Status:** GEREED" in roadmap
+    assert "## R3.2 Governance-tests migreren\n\n**Status:** GEREED" in roadmap
+    assert "Besluit: `ACTIVATE V3` — uitgevoerd via PR #149." in roadmap
+    assert "## R3.3 Audit > Experiments\n\n**Status:** VOLGEND." in roadmap
+    assert "| Protocol v3 activeren | GEREED — PR #149 gemerged; Protocol v3.0.0 actief; CI groen |" in roadmap
+    assert "| Audit > Experiments bouwen | VOLGEND |" in roadmap
+
+
 def test_v2_root_state_is_preserved_as_history() -> None:
     assert V2_PROTOCOL_SNAPSHOT.is_file()
     assert V2_ROADMAP_SNAPSHOT.is_file()
