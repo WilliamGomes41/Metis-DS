@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 KEY = "postgres-authority-test-key"
 SOURCE = b"authoritative source bytes"
 SOURCE_SHA = sha256_bytes(SOURCE)
-LOCATOR = f"g2://canonical-sources/{SOURCE_SHA}/source.pdf"
+LOCATOR = f"azure://aidataservice/canonical-sources/{SOURCE_SHA}/source.pdf"
 
 pytestmark = [pytest.mark.release_control_opslag, pytest.mark.release_control_scope_belofte, pytest.mark.release_control_releasebewijs]
 
