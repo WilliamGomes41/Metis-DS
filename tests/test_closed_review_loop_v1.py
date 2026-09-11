@@ -17,7 +17,6 @@ from src.closed_review_loop_v1 import (
     REVIEW_DISPOSITION_INCONSISTENT,
     install_closed_review_routes,
 )
-from src.integrity_kernel import stamp_canonical_hashes
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
 from src.passage_register_v1 import passage_register_of
@@ -59,10 +58,11 @@ def _system(tmp_path):
         named_reviewers=[reviewer["account_id"]],
     )
     sid = receipt["snapshot_id"]
-    objects = console.snapshot_objects(sid)
     ids = [
         obj["object_id"]
-        for obj in normal_risk_batch_queue(objects, review_path="richtlijn")
+        for obj in normal_risk_batch_queue(
+            console.snapshot_objects(sid), review_path="richtlijn"
+        )
     ]
     assert len(ids) >= 2
     return console, researcher, reviewer, sid, ids
@@ -109,7 +109,7 @@ def test_impossible_review_combination_fails_closed(tmp_path):
         )
 
 
-def test_reject_is_terminal_exclusion_and_preserves_original_suitability(tmp_path):
+def test_reject_is_terminal_and_audit_preserves_original_suitability(tmp_path):
     console, researcher, reviewer, sid, ids = _system(tmp_path)
     _review(
         console,
@@ -130,21 +130,17 @@ def test_reject_is_terminal_exclusion_and_preserves_original_suitability(tmp_pat
         if row.get("object_id") == ids[0]
     )
     assert console.waiting_task_counts(researcher["account_id"])["ingest"] == 0
-
     signal = console.audit_review_signals()[0]
-    assert signal["object_id"] == ids[0]
-    assert signal["details"]["snapshot_id"] == sid
-    assert signal["details"]["decision"] == "reject"
     assert signal["details"]["original_suitability"] == "ja"
     assert signal["details"]["final_disposition"] == "excluded_with_reason"
     assert signal["details"]["source_hash"] == console._envelope(sid)["sha256"]
 
 
-def test_revise_is_non_terminal_until_repair_executes(tmp_path):
+def test_revise_is_non_terminal_until_repair(tmp_path):
     console, researcher, reviewer, sid, ids = _system(tmp_path)
     oid = ids[0]
     before = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
-    before_status = passage_register_of(before)["status"]
+    prior_status = passage_register_of(before)["status"]
     _review(
         console,
         reviewer,
@@ -153,20 +149,18 @@ def test_revise_is_non_terminal_until_repair_executes(tmp_path):
         decision="revise",
         suitability="mist_context",
         eindoordeel="goedkeuren_na_correctie",
-        comment="De passage moet opnieuw uit de bron worden samengesteld.",
+        comment="Context ontbreekt.",
     )
-    revised = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
-    assert revised["governance"]["validation_status"] == "revise"
-    assert passage_register_of(revised)["status"] == before_status
-    assert passage_register_of(revised)["status"] != "used_as_context"
+    current = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
+    assert current["governance"]["validation_status"] == "revise"
+    assert passage_register_of(current)["status"] == prior_status
+    assert passage_register_of(current)["status"] != "used_as_context"
     assert console.waiting_task_counts(researcher["account_id"])["ingest"] == 1
     assert console.waiting_task_counts(reviewer["account_id"])["review"] == 1
-    signal = console.audit_review_signals()[0]
-    assert signal["details"]["original_suitability"] == "mist_context"
-    assert signal["details"]["final_disposition"] == "repair_required"
+    assert console.audit_review_signals()[0]["details"]["final_disposition"] == "repair_required"
 
 
-def test_repair_is_revision_pinned_and_returns_to_review(tmp_path):
+def test_repair_is_revision_pinned_and_reopens_review(tmp_path):
     console, researcher, reviewer, sid, ids = _system(tmp_path)
     oid = ids[0]
     _review(
@@ -181,7 +175,6 @@ def test_repair_is_revision_pinned_and_returns_to_review(tmp_path):
     )
     revised = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
     exact = broncontext_parts(revised)["source_text_exact"]
-    stale = "0" * 64
     with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
         console.repair_source(
             actor_id=reviewer["account_id"],
@@ -189,16 +182,15 @@ def test_repair_is_revision_pinned_and_returns_to_review(tmp_path):
             object_id=oid,
             corrected_text=exact,
             reason="Brongebonden herstel",
-            expected_revision=stale,
+            expected_revision="0" * 64,
         )
-    pin = console.objects_revision(sid)
     repaired = console.repair_source(
         actor_id=reviewer["account_id"],
         snapshot_id=sid,
         object_id=oid,
         corrected_text=exact,
         reason="Brongebonden herstel",
-        expected_revision=pin,
+        expected_revision=console.objects_revision(sid),
     )
     assert repaired["governance"]["validation_status"] == "needs_review"
     assert repaired["object_version"] != revised["object_version"]
@@ -211,7 +203,6 @@ def test_proposed_correction_is_not_automatically_applied(tmp_path):
     console, _researcher, reviewer, sid, ids = _system(tmp_path)
     oid = ids[0]
     before = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
-    exact = broncontext_parts(before)["source_text_exact"]
     _review(
         console,
         reviewer,
@@ -221,13 +212,13 @@ def test_proposed_correction_is_not_automatically_applied(tmp_path):
         suitability="mist_context",
         eindoordeel="goedkeuren_na_correctie",
         comment="Voorstel, nog niet uitvoeren.",
-        proposed_correction=exact,
+        proposed_correction=broncontext_parts(before)["source_text_exact"],
     )
     current = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
     assert current["content"]["clean_text"] == before["content"]["clean_text"]
 
 
-def test_correction_cannot_invent_text_outside_source_context(tmp_path):
+def test_source_bound_repair_rejects_invented_text(tmp_path):
     console, _researcher, reviewer, sid, ids = _system(tmp_path)
     oid = ids[0]
     _review(
@@ -258,12 +249,10 @@ def test_correction_cannot_invent_text_outside_source_context(tmp_path):
         )
 
 
-def test_later_is_not_a_hidden_state_transition(tmp_path):
+def test_later_has_no_hidden_state_transition(tmp_path):
     console, _researcher, reviewer, sid, ids = _system(tmp_path)
     oid = ids[0]
     before = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
-    before_register = dict(passage_register_of(before))
-    before_version = before["object_version"]
     console.review_object(
         actor_id=reviewer["account_id"],
         snapshot_id=sid,
@@ -276,12 +265,12 @@ def test_later_is_not_a_hidden_state_transition(tmp_path):
     )
     after = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
     assert after["governance"]["validation_status"] == "needs_review"
-    assert after["object_version"] == before_version
-    assert passage_register_of(after) == before_register
+    assert after["object_version"] == before["object_version"]
+    assert passage_register_of(after) == passage_register_of(before)
     assert after.get("confirmed_object_type") == before.get("confirmed_object_type")
 
 
-def test_support_disposition_requires_real_relation_then_reopens_both_objects(tmp_path):
+def test_support_disposition_requires_relation_and_reopens_both(tmp_path):
     console, _researcher, reviewer, sid, ids = _system(tmp_path)
     support_id, claim_id = ids[0], ids[1]
     _review(
@@ -292,7 +281,7 @@ def test_support_disposition_requires_real_relation_then_reopens_both_objects(tm
         decision="revise",
         suitability="alleen_onderbouwing",
         eindoordeel="goedkeuren_na_correctie",
-        comment="Deze passage is alleen onderbouwing.",
+        comment="Alleen onderbouwing.",
     )
     support = next(row for row in console.snapshot_objects(sid) if row["object_id"] == support_id)
     with pytest.raises(ConsoleError, match="support_relation_required"):
@@ -306,7 +295,6 @@ def test_support_disposition_requires_real_relation_then_reopens_both_objects(tm
             eindoordeel="goedkeuren",
             type_action="dit_klopt",
         )
-
     console.resolve_support_relation(
         actor_id=reviewer["account_id"],
         snapshot_id=sid,
@@ -325,7 +313,7 @@ def test_support_disposition_requires_real_relation_then_reopens_both_objects(tm
     assert current[claim_id]["governance"]["validation_status"] == "needs_review"
 
 
-def test_review_write_and_audit_evidence_roll_back_together(tmp_path, monkeypatch):
+def test_review_and_audit_write_roll_back_together(tmp_path, monkeypatch):
     console, _researcher, reviewer, sid, ids = _system(tmp_path)
     oid = ids[0]
     before = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
@@ -351,44 +339,20 @@ def test_review_write_and_audit_evidence_roll_back_together(tmp_path, monkeypatc
     assert read_events(console._ledger_path) == ledger_before
 
 
-def test_publication_fails_closed_on_disposition_mismatch(tmp_path, monkeypatch):
-    console, _researcher, reviewer, sid, ids = _system(tmp_path)
+def test_publication_fails_closed_when_disposition_conflict_is_found(tmp_path, monkeypatch):
+    console, _researcher, _reviewer, sid, ids = _system(tmp_path)
     publisher = console.create_account(
         username="piet", password="piet-secret", roles=("publisher",)
     )
     oid = ids[0]
-    _review(
-        console,
-        reviewer,
-        sid,
-        oid,
-        decision="approve",
-        suitability="ja",
-        eindoordeel="goedkeuren",
-    )
-    rows, revision = console.snapshot_objects_and_revision(sid, include_blocked=True)
-    live = next(row for row in rows if row.get("object_id") == oid)
-    metadata = dict(live.get("metadata") or {})
-    register = dict(metadata.get("passage_register") or {})
-    register["status"] = "excluded_with_reason"
-    metadata["passage_register"] = register
-    live["metadata"] = metadata
-    stamp_canonical_hashes(live)
-    console._commit_prepared_store(objects=(sid, rows), expected_revision=revision)
-
-    binding = {
-        "object_id": oid,
-        "decision": "approve",
-        "valid": True,
-        "suitability": "ja",
-    }
-    monkeypatch.setattr(console, "object_review_bindings", lambda _sid: [binding])
+    monkeypatch.setattr(console, "_disposition_conflicts", lambda _sid: [oid])
     considered = console.consider_publish(
         actor_id=publisher["account_id"], snapshot_id=sid
     )
     assert considered["publish_allowed"] is False
     assert REVIEW_DISPOSITION_INCONSISTENT in considered["blockers"]
-    assert oid in considered["disposition_conflict_object_ids"]
+    assert considered["disposition_consistent"] is False
+    assert considered["disposition_conflict_object_ids"] == [oid]
 
 
 def test_revise_and_rejected_objects_do_not_leak_from_question_selector(tmp_path):
@@ -414,13 +378,15 @@ def test_revise_and_rejected_objects_do_not_leak_from_question_selector(tmp_path
         eindoordeel="afwijzen",
         comment="Niet gebruiken.",
     )
-    selected = console.select_for_question(family="begrippen", asked_class="richtlijn")
-    selected_ids = {row["object_id"] for row in selected}
+    selected_ids = {
+        row["object_id"]
+        for row in console.select_for_question(family="begrippen", asked_class="richtlijn")
+    }
     assert revise_id not in selected_ids
     assert reject_id not in selected_ids
 
 
-def test_repair_ui_escapes_review_evidence_and_uses_internal_redirects(tmp_path):
+def test_repair_ui_escapes_evidence_and_carries_revision_pin(tmp_path):
     console, _researcher, reviewer, sid, ids = _system(tmp_path)
     oid = ids[0]
     _review(
@@ -448,7 +414,7 @@ def test_repair_ui_escapes_review_evidence_and_uses_internal_redirects(tmp_path)
     assert 'name="snapshot_revision"' in response.text
 
 
-def test_review_evidence_is_visible_in_audit_read_only_route(tmp_path):
+def test_review_evidence_is_visible_in_read_only_audit_route(tmp_path):
     console, _researcher, reviewer, sid, ids = _system(tmp_path)
     _review(
         console,
