@@ -1,7 +1,7 @@
 """Closed Review resolution loop on top of the existing console kernel.
 
-This module deliberately reuses the existing review, revision, relation and
-ledger mechanisms. It does not introduce a second workflow store.
+Reuses the existing review, revision, relation and ledger stores. No parallel
+workflow store or service is introduced.
 """
 from __future__ import annotations
 
@@ -26,7 +26,6 @@ from src.publish_authorization_v1 import invalidate_for_object
 from src.review_cockpit_v1 import broncontext_parts, map_eindoordeel
 from src.review_ledger import append_event, read_events
 from src.serving_relations_v1 import binding_relations
-
 
 REVIEW_AUDIT_EVIDENCE_EVENT = "review_audit_evidence"
 REVIEW_DISPOSITION_INCONSISTENT = "review_disposition_inconsistent"
@@ -73,7 +72,7 @@ def _review_url(snapshot_id: str, object_id: str = "") -> str:
 
 
 class ClosedLoopReviewConsole(ProportionateReviewConsole):
-    """Active console with closed review outcomes and Audit evidence routing."""
+    """Console policy that makes every final Review outcome explicit."""
 
     def waiting_task_counts(self, account_id: str) -> dict[str, int]:
         counts = super().waiting_task_counts(account_id)
@@ -105,13 +104,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
 
     @contextmanager
     def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
-        """Rollback objects, bindings, envelopes and ledger as one local transaction.
-
-        The generic review/revision helpers historically append ledger rows before
-        their durable object commit. The closed-loop console therefore wraps the
-        existing path with the already-supported store lock and rollback helpers.
-        No second store or service is introduced.
-        """
+        """Rollback object/binding/envelope writes together with ledger evidence."""
         with self._store_write_lock():
             path = self._objects_path(snapshot_id)
             prior_objects = path.read_bytes() if path.exists() else None
@@ -133,22 +126,18 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                 raise
 
     def _has_inbound_support(self, snapshot_id: str, support_object_id: str) -> bool:
-        for obj in self.snapshot_objects(snapshot_id):
-            if obj.get("object_id") == support_object_id:
-                continue
-            if any(
+        return any(
+            obj.get("object_id") != support_object_id
+            and any(
                 rel.get("relation_type") == "supported_by"
                 and rel.get("target_object_id") == support_object_id
                 for rel in binding_relations(obj)
-            ):
-                return True
-        return False
+            )
+            for obj in self.snapshot_objects(snapshot_id)
+        )
 
     def _latest_review_signal(
-        self,
-        object_id: str,
-        *,
-        decision: str = "",
+        self, object_id: str, *, decision: str = ""
     ) -> dict[str, Any] | None:
         for event in reversed(read_events(self._ledger_path)):
             if event.get("event_type") != REVIEW_AUDIT_EVIDENCE_EVENT:
@@ -184,9 +173,13 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             details={
                 "snapshot_id": snapshot_id,
                 "source_hash": str(envelope.get("sha256") or ""),
-                "source_locator": _source_locator(target, str(envelope.get("locator") or "")),
+                "source_locator": _source_locator(
+                    target, str(envelope.get("locator") or "")
+                ),
                 "review_snapshot_hash": compute_canonical_object_hash(target),
-                "current_passage": str((target.get("content") or {}).get("clean_text") or ""),
+                "current_passage": str(
+                    (target.get("content") or {}).get("clean_text") or ""
+                ),
                 "decision": decision,
                 "suitability": original_suitability,
                 "original_suitability": original_suitability,
@@ -205,18 +198,27 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
         original_suitability: str,
         original_eindoordeel: str,
     ) -> dict[str, Any]:
-        """Store the human input without turning revise into a terminal disposition."""
+        """Keep reviewer input as evidence without turning revise terminal."""
         revision = self.objects_revision(snapshot_id)
         rows = deepcopy(self._load_objects(snapshot_id, remember=False))
-        current = self.snapshot_objects(snapshot_id)
-        live = next((row for row in current if row.get("object_id") == object_id), None)
+        live = next(
+            (
+                row
+                for row in self.snapshot_objects(snapshot_id)
+                if row.get("object_id") == object_id
+            ),
+            None,
+        )
         if live is None:
             raise ConsoleError("unknown_object")
         version = str(live.get("object_version") or "")
         updated: dict[str, Any] | None = None
         for index in range(len(rows) - 1, -1, -1):
             row = rows[index]
-            if row.get("object_id") != object_id or str(row.get("object_version") or "") != version:
+            if (
+                row.get("object_id") != object_id
+                or str(row.get("object_version") or "") != version
+            ):
                 continue
             row = deepcopy(row)
             metadata = dict(row.get("metadata") or {})
@@ -232,8 +234,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
         if updated is None:
             raise ConsoleError("unknown_object")
         self._commit_prepared_store(
-            objects=(snapshot_id, rows),
-            expected_revision=revision,
+            objects=(snapshot_id, rows), expected_revision=revision
         )
         return deepcopy(updated)
 
@@ -269,9 +270,12 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             allowed = ALLOWED_FINAL_BY_SUITABILITY.get(original_suitability)
             if allowed is None or decision not in allowed:
                 raise ConsoleError("review_disposition_conflict")
-            if decision == "approve" and original_suitability == "alleen_onderbouwing":
-                if not self._has_inbound_support(snapshot_id, object_id):
-                    raise ConsoleError("support_relation_required")
+            if (
+                decision == "approve"
+                and original_suitability == "alleen_onderbouwing"
+                and not self._has_inbound_support(snapshot_id, object_id)
+            ):
+                raise ConsoleError("support_relation_required")
 
         delegated = dict(kwargs)
         if decision == "revise" and original_suitability:
@@ -286,23 +290,22 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
 
         with self._atomic_snapshot_mutation(snapshot_id):
             before = next(
-                (row for row in self.snapshot_objects(snapshot_id) if row.get("object_id") == object_id),
+                (
+                    row
+                    for row in self.snapshot_objects(snapshot_id)
+                    if row.get("object_id") == object_id
+                ),
                 None,
             )
             if before is None:
                 raise ConsoleError("unknown_object")
             prior_status = str(passage_register_of(before).get("status") or "")
             super().review_object(**delegated)
-            current = self._restore_original_review_input(
+            self._restore_original_review_input(
                 snapshot_id=snapshot_id,
                 object_id=object_id,
                 original_suitability=original_suitability,
                 original_eindoordeel=original_eindoordeel,
-            )
-            final_disposition = (
-                "excluded_with_reason"
-                if decision == "reject"
-                else "repair_required"
             )
             self._append_audit_evidence(
                 actor_id=actor_id,
@@ -310,13 +313,29 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                 target=before,
                 decision=decision,
                 original_suitability=original_suitability,
-                final_disposition=final_disposition,
+                final_disposition=(
+                    "excluded_with_reason" if decision == "reject" else "repair_required"
+                ),
                 prior_passage_status=prior_status,
                 comment=str(kwargs.get("comment") or "").strip(),
-                proposed_correction=str(kwargs.get("proposed_correction") or "").strip(),
+                proposed_correction=str(
+                    kwargs.get("proposed_correction") or ""
+                ).strip(),
             )
-            _ = current
             return deepcopy(self.snapshot_objects(snapshot_id))
+
+    def _current_object(self, snapshot_id: str, object_id: str) -> dict[str, Any]:
+        current = next(
+            (
+                row
+                for row in self.snapshot_objects(snapshot_id)
+                if row.get("object_id") == object_id
+            ),
+            None,
+        )
+        if current is None:
+            raise ConsoleError("unknown_object")
+        return current
 
     def _validate_source_bound_patch(
         self,
@@ -325,80 +344,75 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
         object_id: str,
         patch: dict[str, Any],
     ) -> tuple[dict[str, Any], list[str]]:
-        current = next(
-            (row for row in self.snapshot_objects(snapshot_id) if row.get("object_id") == object_id),
-            None,
-        )
-        if current is None:
-            raise ConsoleError("unknown_object")
-        clean_text_candidates: list[str] = []
+        current = self._current_object(snapshot_id, object_id)
+        candidates: list[str] = []
         for op in patch.get("operations") or []:
             if op.get("op") != "set" or op.get("path") != "content.clean_text":
                 continue
             candidate = _norm(str(op.get("value") or ""))
-            context = _source_context(current)
-            if not candidate or candidate not in context:
+            if not candidate or candidate not in _source_context(current):
                 raise ConsoleError("correction_not_source_bound")
-            clean_text_candidates.append(candidate)
-        return current, clean_text_candidates
+            candidates.append(candidate)
+        return current, candidates
 
     def correct_object(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        """Keep proposed reviewer text a proposal until the explicit repair route runs."""
+        """Neutralize the legacy auto-apply call; explicit repair bypasses this."""
         if args:
             return super().correct_object(*args, **kwargs)
         snapshot_id = str(kwargs.get("snapshot_id") or "")
         object_id = str(kwargs.get("object_id") or "")
         patch = kwargs.get("patch") or {}
-        current, candidates = self._validate_source_bound_patch(
-            snapshot_id=snapshot_id,
-            object_id=object_id,
-            patch=patch,
+        current = self._current_object(snapshot_id, object_id)
+        operations = list(patch.get("operations") or [])
+        signal = self._latest_review_signal(object_id, decision="revise")
+        proposed = _norm(
+            str(((signal or {}).get("details") or {}).get("proposed_correction") or "")
         )
-        if candidates and (current.get("governance") or {}).get("validation_status") == "revise":
-            signal = self._latest_review_signal(object_id, decision="revise")
-            proposed = _norm(str(((signal or {}).get("details") or {}).get("proposed_correction") or ""))
-            operations = list(patch.get("operations") or [])
-            if proposed and len(operations) == 1 and candidates == [proposed]:
-                return deepcopy(current)
+        if (
+            proposed
+            and (current.get("governance") or {}).get("validation_status") == "revise"
+            and len(operations) == 1
+            and operations[0].get("op") == "set"
+            and operations[0].get("path") == "content.clean_text"
+            and _norm(str(operations[0].get("value") or "")) == proposed
+        ):
+            return deepcopy(current)
+        self._validate_source_bound_patch(
+            snapshot_id=snapshot_id, object_id=object_id, patch=patch
+        )
         return super().correct_object(**kwargs)
 
     def _require_repair_access(
-        self,
-        *,
-        actor_id: str,
-        snapshot_id: str,
+        self, *, actor_id: str, snapshot_id: str
     ) -> dict[str, Any]:
         account = self._account(actor_id)
         roles = set(account.get("roles") or [])
         envelope = self._envelope(snapshot_id)
         allowed = (
-            "researcher" in roles and envelope.get("uploader_account_id") == actor_id
+            "researcher" in roles
+            and envelope.get("uploader_account_id") == actor_id
         ) or (
-            "reviewer" in roles and actor_id in (envelope.get("named_reviewers") or [])
+            "reviewer" in roles
+            and actor_id in (envelope.get("named_reviewers") or [])
         )
         if not allowed:
             raise ConsoleError("correction_role_required")
         return account
 
     def _clear_pending_review_metadata(
-        self,
-        *,
-        snapshot_id: str,
-        object_id: str,
+        self, *, snapshot_id: str, object_id: str
     ) -> dict[str, Any]:
         revision = self.objects_revision(snapshot_id)
         rows = deepcopy(self._load_objects(snapshot_id, remember=False))
-        live = next(
-            (row for row in self.snapshot_objects(snapshot_id) if row.get("object_id") == object_id),
-            None,
-        )
-        if live is None:
-            raise ConsoleError("unknown_object")
+        live = self._current_object(snapshot_id, object_id)
         version = str(live.get("object_version") or "")
         updated: dict[str, Any] | None = None
         for index in range(len(rows) - 1, -1, -1):
             row = rows[index]
-            if row.get("object_id") != object_id or str(row.get("object_version") or "") != version:
+            if (
+                row.get("object_id") != object_id
+                or str(row.get("object_version") or "") != version
+            ):
                 continue
             row = deepcopy(row)
             metadata = dict(row.get("metadata") or {})
@@ -411,8 +425,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
         if updated is None:
             raise ConsoleError("unknown_object")
         self._commit_prepared_store(
-            objects=(snapshot_id, rows),
-            expected_revision=revision,
+            objects=(snapshot_id, rows), expected_revision=revision
         )
         return deepcopy(updated)
 
@@ -439,9 +452,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             if self.objects_revision(snapshot_id) != expected_revision:
                 raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
             current, _ = self._validate_source_bound_patch(
-                snapshot_id=snapshot_id,
-                object_id=object_id,
-                patch=patch,
+                snapshot_id=snapshot_id, object_id=object_id, patch=patch
             )
             if (current.get("governance") or {}).get("validation_status") != "revise":
                 raise ConsoleError("repair_object_not_in_revise")
@@ -452,11 +463,13 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                 patch=patch,
             )
             revised = self._clear_pending_review_metadata(
-                snapshot_id=snapshot_id,
-                object_id=object_id,
+                snapshot_id=snapshot_id, object_id=object_id
             )
             signal = self._latest_review_signal(object_id, decision="revise")
-            original = str(((signal or {}).get("details") or {}).get("original_suitability") or "")
+            original = str(
+                ((signal or {}).get("details") or {}).get("original_suitability")
+                or ""
+            )
             self._append_audit_evidence(
                 actor_id=actor_id,
                 snapshot_id=snapshot_id,
@@ -474,7 +487,11 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             return
         current, revision = self.snapshot_objects_and_revision(snapshot_id)
         live = {row["object_id"]: row for row in current}
-        versions = {oid: str(live[oid]["object_version"]) for oid in object_ids if oid in live}
+        versions = {
+            oid: str(live[oid]["object_version"])
+            for oid in object_ids
+            if oid in live
+        }
         rows = deepcopy(self._load_objects(snapshot_id, remember=False))
         for row in rows:
             oid = str(row.get("object_id") or "")
@@ -488,13 +505,19 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             governance["publication_status"] = "unpublished"
             second = governance.get("second_review")
             if isinstance(second, dict) and second.get("required"):
-                second["status"] = "pending"
-                second["reviewer"] = None
-                second["review_date"] = None
-                second["snapshot_hash"] = None
+                second.update(
+                    {
+                        "status": "pending",
+                        "reviewer": None,
+                        "review_date": None,
+                        "snapshot_hash": None,
+                    }
+                )
         bindings = deepcopy(self._bindings)
         for oid in object_ids:
-            bindings[snapshot_id] = invalidate_for_object(bindings.get(snapshot_id, []), oid)
+            bindings[snapshot_id] = invalidate_for_object(
+                bindings.get(snapshot_id, []), oid
+            )
         self._commit_prepared_store(
             objects=(snapshot_id, rows),
             bindings=bindings,
@@ -502,25 +525,22 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
         )
 
     def _mark_support_disposition(
-        self,
-        *,
-        snapshot_id: str,
-        support_object_id: str,
+        self, *, snapshot_id: str, support_object_id: str
     ) -> None:
         revision = self.objects_revision(snapshot_id)
         rows = deepcopy(self._load_objects(snapshot_id, remember=False))
-        live = next(
-            (row for row in self.snapshot_objects(snapshot_id) if row.get("object_id") == support_object_id),
-            None,
-        )
-        if live is None:
-            raise ConsoleError("unknown_object")
+        live = self._current_object(snapshot_id, support_object_id)
         version = str(live.get("object_version") or "")
         for index in range(len(rows) - 1, -1, -1):
             row = rows[index]
-            if row.get("object_id") != support_object_id or str(row.get("object_version") or "") != version:
+            if (
+                row.get("object_id") != support_object_id
+                or str(row.get("object_version") or "") != version
+            ):
                 continue
-            row = apply_register_from_review(deepcopy(row), suitability="alleen_onderbouwing")
+            row = apply_register_from_review(
+                deepcopy(row), suitability="alleen_onderbouwing"
+            )
             metadata = dict(row.get("metadata") or {})
             metadata.pop("review_passage", None)
             row["metadata"] = metadata
@@ -528,8 +548,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             rows[index] = row
             break
         self._commit_prepared_store(
-            objects=(snapshot_id, rows),
-            expected_revision=revision,
+            objects=(snapshot_id, rows), expected_revision=revision
         )
 
     def resolve_support_relation(
@@ -542,6 +561,9 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
         expected_revision: str = "",
     ) -> None:
         self._require_role(actor_id, "reviewer")
+        envelope = self._envelope(snapshot_id)
+        if actor_id not in (envelope.get("named_reviewers") or []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
         if not expected_revision:
             raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
         with self._atomic_snapshot_mutation(snapshot_id):
@@ -555,7 +577,10 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             if (support.get("governance") or {}).get("validation_status") != "revise":
                 raise ConsoleError("support_object_not_in_revise")
             pending = self._latest_review_signal(support_object_id, decision="revise")
-            original = str(((pending or {}).get("details") or {}).get("original_suitability") or "")
+            original = str(
+                ((pending or {}).get("details") or {}).get("original_suitability")
+                or ""
+            )
             if original != "alleen_onderbouwing":
                 raise ConsoleError("support_disposition_required")
             relations = list(binding_relations(claim))
@@ -580,13 +605,9 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                 )
             self._reopen_for_review(snapshot_id, {support_object_id, claim_object_id})
             self._mark_support_disposition(
-                snapshot_id=snapshot_id,
-                support_object_id=support_object_id,
+                snapshot_id=snapshot_id, support_object_id=support_object_id
             )
-            current_support = next(
-                row for row in self.snapshot_objects(snapshot_id)
-                if row.get("object_id") == support_object_id
-            )
+            current_support = self._current_object(snapshot_id, support_object_id)
             self._append_audit_evidence(
                 actor_id=actor_id,
                 snapshot_id=snapshot_id,
@@ -607,37 +628,35 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             suitability = str(binding.get("suitability") or "").strip()
             if not suitability:
                 continue
-            obj = objects.get(str(binding.get("object_id") or ""))
+            object_id = str(binding.get("object_id") or "")
+            obj = objects.get(object_id)
             if obj is None:
-                conflicts.append(str(binding.get("object_id") or ""))
+                conflicts.append(object_id)
                 continue
             try:
                 expected = register_status_from_suitability(suitability)
             except ValueError:
-                conflicts.append(str(binding.get("object_id") or ""))
+                conflicts.append(object_id)
                 continue
-            actual = str(passage_register_of(obj).get("status") or "")
-            if actual != expected:
-                conflicts.append(str(binding.get("object_id") or ""))
+            if str(passage_register_of(obj).get("status") or "") != expected:
+                conflicts.append(object_id)
         return list(dict.fromkeys(conflicts))
 
     def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         considered = super().consider_publish(actor_id=actor_id, snapshot_id=snapshot_id)
         conflicts = self._disposition_conflicts(snapshot_id)
-        if not conflicts:
-            considered["disposition_consistent"] = True
-            return considered
-        blockers = list(considered.get("blockers") or [])
-        if REVIEW_DISPOSITION_INCONSISTENT not in blockers:
-            blockers.append(REVIEW_DISPOSITION_INCONSISTENT)
-        considered["blockers"] = blockers
-        considered["publish_allowed"] = False
-        considered["disposition_consistent"] = False
-        considered["disposition_conflict_object_ids"] = conflicts
+        considered["disposition_consistent"] = not conflicts
+        if conflicts:
+            blockers = list(considered.get("blockers") or [])
+            if REVIEW_DISPOSITION_INCONSISTENT not in blockers:
+                blockers.append(REVIEW_DISPOSITION_INCONSISTENT)
+            considered["blockers"] = blockers
+            considered["publish_allowed"] = False
+            considered["disposition_conflict_object_ids"] = conflicts
         return considered
 
     def select_for_question(self, *, family: str, asked_class: str) -> list[dict[str, Any]]:
-        """Prove the console selector cannot leak revise/reject/pending objects."""
+        """Do not expose pending, revise or rejected objects to question selection."""
         selected = super().select_for_question(family=family, asked_class=asked_class)
         out: list[dict[str, Any]] = []
         for item in selected:
@@ -651,10 +670,12 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             )
             if obj is None:
                 continue
-            governance = obj.get("governance") or {}
-            if governance.get("validation_status") != "approved":
+            if (obj.get("governance") or {}).get("validation_status") != "approved":
                 continue
-            if passage_register_of(obj).get("status") in {"excluded_with_reason", "not_yet_assessed"}:
+            if passage_register_of(obj).get("status") in {
+                "excluded_with_reason",
+                "not_yet_assessed",
+            }:
                 continue
             out.append(item)
         return out
@@ -668,7 +689,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
 
 
 def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole) -> None:
-    """Expose revision-pinned repair work and read-only Review evidence in Audit."""
+    """Revision-pinned repair routes plus read-only Review evidence in Audit."""
 
     def account_for(request: Request) -> dict[str, Any]:
         return console.session_account(request.cookies.get("console_session"))
@@ -678,7 +699,8 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
 
         account = account_for(request)
         return _page(
-            f"{_nav(account, current, console.waiting_task_counts(account['account_id']))}<section class='room'>{body}</section>{_help()}",
+            f"{_nav(account, current, console.waiting_task_counts(account['account_id']))}"
+            f"<section class='room'>{body}</section>{_help()}",
             title="Review herstel — V&amp;VN Data Services",
         )
 
@@ -694,9 +716,11 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
             if document and sid != document:
                 continue
             allowed = (
-                "researcher" in roles and envelope.get("uploader_account_id") == account["account_id"]
+                "researcher" in roles
+                and envelope.get("uploader_account_id") == account["account_id"]
             ) or (
-                "reviewer" in roles and account["account_id"] in (envelope.get("named_reviewers") or [])
+                "reviewer" in roles
+                and account["account_id"] in (envelope.get("named_reviewers") or [])
             )
             if not allowed:
                 continue
@@ -710,21 +734,31 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
                 text = str((obj.get("content") or {}).get("clean_text") or "")
                 signal = console._latest_review_signal(oid, decision="revise")
                 details = (signal or {}).get("details") or {}
-                suitability = str(details.get("original_suitability") or details.get("suitability") or "")
+                suitability = str(
+                    details.get("original_suitability")
+                    or details.get("suitability")
+                    or ""
+                )
                 proposed = str(details.get("proposed_correction") or "")
                 comment = str(details.get("comment") or "")
-                action = ""
                 if suitability == "alleen_onderbouwing":
                     options = []
                     for claim in current:
                         claim_id = str(claim.get("object_id") or "")
-                        if not claim_id or claim_id == oid or claim.get("object_type") == "document":
+                        if (
+                            not claim_id
+                            or claim_id == oid
+                            or claim.get("object_type") == "document"
+                            or (claim.get("governance") or {}).get("validation_status")
+                            == "rejected"
+                        ):
                             continue
-                        if (claim.get("governance") or {}).get("validation_status") == "rejected":
-                            continue
-                        claim_text = str((claim.get("content") or {}).get("clean_text") or claim_id)
+                        claim_text = str(
+                            (claim.get("content") or {}).get("clean_text") or claim_id
+                        )
                         options.append(
-                            f'<option value="{_esc(claim_id)}">{_esc(claim_text[:180])}</option>'
+                            f'<option value="{_esc(claim_id)}">'
+                            f'{_esc(claim_text[:180])}</option>'
                         )
                     action = (
                         '<form method="post" action="/review/repair/support">'
@@ -735,7 +769,9 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
                         f'<select name="claim_object_id" required>{"".join(options)}</select></label>'
                         '<button class="btn-primary" type="submit">Onderbouwing koppelen</button>'
                         '</form>'
-                    ) if options else '<p class="muted">Geen geschikt kennisobject beschikbaar om aan te koppelen.</p>'
+                    ) if options else (
+                        '<p class="muted">Geen geschikt kennisobject beschikbaar om aan te koppelen.</p>'
+                    )
                 else:
                     action = (
                         '<form method="post" action="/review/repair/source">'
@@ -760,7 +796,8 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
         return chrome(
             request,
             "<h1>Review — herstel nodig</h1>"
-            "<p class='lead'>Voorgestelde correcties worden hier pas expliciet uitgevoerd. Elk formulier is gebonden aan de getoonde snapshot-revisie.</p>"
+            "<p class='lead'>Voorgestelde correcties worden hier pas expliciet uitgevoerd. "
+            "Elk formulier is gebonden aan de getoonde snapshot-revisie.</p>"
             + ("".join(cards) or "<p class='muted'>Geen herstelwerk.</p>")
             + "<p><a href='/audit/review-signals'>Bekijk signalen in Audit</a></p>",
             "review",
@@ -784,7 +821,7 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
             reason=reason,
             expected_revision=snapshot_revision.strip(),
         )
-        return RedirectResponse(_review_url(snapshot_id, object_id), status_code=303)
+        return RedirectResponse("/review/repair", status_code=303)
 
     @app.post("/review/repair/support")
     def repair_support_route(
@@ -802,7 +839,7 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
             claim_object_id=claim_object_id,
             expected_revision=snapshot_revision.strip(),
         )
-        return RedirectResponse(_review_url(snapshot_id, support_object_id), status_code=303)
+        return RedirectResponse("/review/repair", status_code=303)
 
     @app.get("/audit/review-signals", response_class=HTMLResponse)
     def audit_review_signals(request: Request) -> str:
@@ -815,15 +852,20 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
             rows.append(
                 "<article class='doc-card'>"
                 f"<p class='doc-title'>{_esc(details.get('current_passage') or event.get('object_id'))}</p>"
-                f"<p>{_esc(details.get('decision'))} · {_esc(details.get('original_suitability') or details.get('suitability'))} → {_esc(details.get('final_disposition'))}</p>"
+                f"<p>{_esc(details.get('decision'))} · "
+                f"{_esc(details.get('original_suitability') or details.get('suitability'))} → "
+                f"{_esc(details.get('final_disposition'))}</p>"
                 f"<p>{_esc(details.get('comment') or '')}</p>"
-                f"<p class='meta'>snapshot {_esc(details.get('snapshot_id'))} · object {_esc(event.get('object_id'))} · versie {_esc(event.get('object_version'))}</p>"
+                f"<p class='meta'>snapshot {_esc(details.get('snapshot_id'))} · "
+                f"object {_esc(event.get('object_id'))} · versie {_esc(event.get('object_version'))}</p>"
                 "</article>"
             )
         return chrome(
             request,
-            "<p><a href='/audit'>← Terug naar Audit</a></p><h1>Signalen uit Review</h1>"
-            "<p class='lead'>Append-only evidence van review en herstel. Audit wijzigt geen kennisobjecten.</p>"
+            "<p><a href='/audit'>← Terug naar Audit</a></p>"
+            "<h1>Signalen uit Review</h1>"
+            "<p class='lead'>Append-only evidence van review en herstel. "
+            "Audit wijzigt geen kennisobjecten.</p>"
             "<p><a class='btn-secondary' href='/review/repair'>Open herstelwerk in Review</a></p>"
             + ("".join(rows) or "<p class='muted'>Nog geen signalen.</p>"),
             "audit",
