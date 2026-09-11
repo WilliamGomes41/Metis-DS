@@ -12,6 +12,8 @@ from src.publication_chain_recovery_v1 import (
     PostgresPublicationBackupAdapter,
     backup_publication_chain,
     live_publication_chain_integrity,
+)
+from src.publication_chain_recovery_guard_v1 import (
     restore_publication_chain,
     verify_publication_chain_backup,
 )
