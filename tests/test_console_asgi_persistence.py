@@ -29,8 +29,10 @@ def test_azure_build_defaults_to_persistent_data_outside_wwwroot(
     assert not (tmp_path / "site" / "wwwroot" / "output" / "runtime").exists()
 
 
-def test_azure_startup_script_sets_persistent_default() -> None:
+def test_azure_startup_script_requires_production_authorities() -> None:
     script = (Path(__file__).resolve().parents[1] / "scripts" / "azure_console_startup.sh").read_text(
         encoding="utf-8"
     )
     assert 'CONSOLE_DATA_ROOT="${CONSOLE_DATA_ROOT:-/home/data/metis-console}"' in script
+    assert '"${METIS_CANONICAL_STORE:-}" != "postgres"' in script
+    assert '"${CONSOLE_IMMUTABLE_SOURCE_STORE:-}" != "azure"' in script
