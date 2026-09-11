@@ -260,8 +260,9 @@ def test_local_copy_failure_does_not_undo_durable_release_and_retry_reconciles(
         real_replace(path, rows)
 
     monkeypatch.setattr(module, "atomic_replace_projection", fail_once)
-    with pytest.raises(Exception, match="durable_publication_local_copy_failed"):
+    with pytest.raises(Exception) as caught:
         console.publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=snapshot_id)
+    assert getattr(caught.value, "code", None) == "durable_publication_local_copy_failed"
 
     assert len(durable.releases) == 1
     assert console._envelope(snapshot_id)["state"] == "captured_not_published"
