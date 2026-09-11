@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS source_snapshots (
     snapshot_id TEXT PRIMARY KEY,
     source_checksum TEXT NOT NULL,
     source_locator TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL
+    recorded_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS canonical_object_sources (
