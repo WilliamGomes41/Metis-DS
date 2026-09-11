@@ -9,8 +9,6 @@
 """
 from __future__ import annotations
 
-from copy import deepcopy
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -353,7 +351,7 @@ def test_review_write_and_audit_evidence_roll_back_together(tmp_path, monkeypatc
     assert read_events(console._ledger_path) == ledger_before
 
 
-def test_publication_fails_closed_on_disposition_mismatch(tmp_path):
+def test_publication_fails_closed_on_disposition_mismatch(tmp_path, monkeypatch):
     console, _researcher, reviewer, sid, ids = _system(tmp_path)
     publisher = console.create_account(
         username="piet", password="piet-secret", roles=("publisher",)
@@ -376,17 +374,15 @@ def test_publication_fails_closed_on_disposition_mismatch(tmp_path):
     metadata["passage_register"] = register
     live["metadata"] = metadata
     stamp_canonical_hashes(live)
-    new_hash = live["provenance"]["canonical_object_hash"]
-    bindings = deepcopy(console._bindings)
-    for binding in bindings.get(sid, []):
-        if binding.get("object_id") == oid and binding.get("decision") == "approve":
-            binding["canonical_object_hash"] = new_hash
-    console._commit_prepared_store(
-        objects=(sid, rows),
-        bindings=bindings,
-        expected_revision=revision,
-    )
+    console._commit_prepared_store(objects=(sid, rows), expected_revision=revision)
 
+    binding = {
+        "object_id": oid,
+        "decision": "approve",
+        "valid": True,
+        "suitability": "ja",
+    }
+    monkeypatch.setattr(console, "object_review_bindings", lambda _sid: [binding])
     considered = console.consider_publish(
         actor_id=publisher["account_id"], snapshot_id=sid
     )
