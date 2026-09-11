@@ -11,9 +11,10 @@ def test_azure_build_defaults_to_persistent_data_outside_wwwroot(
 ) -> None:
     azure_data = tmp_path / "home" / "data" / "metis-console"
     monkeypatch.setattr(console_asgi, "AZURE_DATA_ROOT", azure_data)
-    # This test proves only the /home/data placement. The separate canonical-store
-    # requirement test proves that a real Azure runtime fails closed without DB.
+    # This test proves only the /home/data placement. Separate requirement tests
+    # prove that real Azure runtime fails closed without PostgreSQL and Blob.
     monkeypatch.setattr(console_asgi, "_canonical_store", lambda: None)
+    monkeypatch.setattr(console_asgi, "_immutable_source_store", lambda: None)
     monkeypatch.setenv("WEBSITE_SITE_NAME", "vvn-metis-console")
     monkeypatch.delenv("CONSOLE_DATA_ROOT", raising=False)
     monkeypatch.delenv("CONSOLE_SOURCE_STORE", raising=False)
