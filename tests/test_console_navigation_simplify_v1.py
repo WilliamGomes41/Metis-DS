@@ -1,3 +1,10 @@
+"""Regression coverage for removing duplicate non-Audit navigation doors.
+
+# release-control-evidence: scope/belofte
+# release-control-evidence: toegang
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+"""
 from __future__ import annotations
 
 from src.console_navigation_simplify_v1 import simplify_console_html
