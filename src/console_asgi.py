@@ -4,8 +4,8 @@ Internal researcher surface only. Not a public website. Bootstrap passwords and
 database credentials come from the deployment environment, never from Git.
 
 Supported console topology remains one Gunicorn worker / one instance with
-serialized writes. Published knowledge can additionally be committed to the
-durable PostgreSQL canonical authority.
+serialized writes. Azure runtime requires the durable PostgreSQL canonical
+authority; local development may continue without it.
 """
 from __future__ import annotations
 
@@ -44,7 +44,10 @@ def _default_data_root() -> Path:
 
 def _canonical_store() -> PostgresCanonicalPublicationStore | None:
     kind = os.environ.get("METIS_CANONICAL_STORE", "").strip().lower()
+    running_in_azure = bool(os.environ.get("WEBSITE_SITE_NAME", "").strip())
     if not kind:
+        if running_in_azure:
+            raise RuntimeError("canonical_store_required_in_azure")
         return None
     if kind != "postgres":
         raise RuntimeError("unsupported_canonical_store")
