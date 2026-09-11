@@ -1,6 +1,6 @@
 """Regression evidence for the durable published-knowledge authority.
 
-# release-control-evidence: opslag durable canonical authority rollback
+# release-control-evidence: opslag durable canonical authority concurrent stale rollback
 # release-control-evidence: toegang
 # release-control-evidence: scope/belofte
 # release-control-evidence: slop
@@ -14,7 +14,11 @@ from typing import Any
 
 import pytest
 
-from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError
+from src.canonical_publication_postgres_v1 import (
+    CanonicalPublicationStoreError,
+    expected_release_item_set,
+    registry_update_required,
+)
 from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
 
@@ -163,3 +167,66 @@ def test_startup_reconciliation_is_idempotent(tmp_path: Path) -> None:
     again = restarted.reconcile_durable_publications()
     assert again == {"checked": 1, "reconciled": 1}
     assert len(replacement.releases) == 1
+
+
+def test_reconciliation_refuses_tampered_manifest(tmp_path: Path) -> None:
+    durable = MemoryCanonicalStore()
+    console, accounts, receipt = _ready_console(tmp_path, durable)
+    result = console.publish(
+        actor_id=accounts["publisher"]["account_id"], snapshot_id=receipt["snapshot_id"]
+    )
+    manifest_path = console.runtime / "release_manifests" / f'{result["release_id"]}.json'
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["source_sha256"] = "0" * 64
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    restarted = DurablePublicationConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / "runtime",
+        immutable_source_store=console.immutable_source_store,
+        canonical_publication_store=MemoryCanonicalStore(),  # type: ignore[arg-type]
+    )
+    with pytest.raises(Exception, match="published_release_manifest_invalid"):
+        restarted.reconcile_durable_publications()
+
+
+def test_registry_replay_never_moves_newer_pointer_backwards() -> None:
+    current = {
+        "release_id": "release-new",
+        "published_at": "2026-09-11T12:00:00+00:00",
+    }
+    assert registry_update_required(
+        current,
+        release_id="release-old",
+        published_at="2026-09-10T12:00:00+00:00",
+    ) is False
+    assert registry_update_required(
+        current,
+        release_id="release-newer",
+        published_at="2026-09-12T12:00:00+00:00",
+    ) is True
+    assert registry_update_required(
+        current,
+        release_id="release-new",
+        published_at="2026-09-11T12:00:00+00:00",
+    ) is False
+
+
+def test_release_item_identity_includes_exact_version_and_hash() -> None:
+    rows = [
+        {
+            "object_id": "ko-1",
+            "object_version": "1.2",
+            "provenance": {"content_hash": "a" * 64},
+        },
+        {
+            "object_id": "ko-2",
+            "object_version": "3.0",
+            "provenance": {"content_hash": "b" * 64},
+        },
+    ]
+    assert expected_release_item_set(rows) == {
+        ("ko-1", "1.2", "a" * 64),
+        ("ko-2", "3.0", "b" * 64),
+    }
