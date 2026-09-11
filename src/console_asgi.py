@@ -14,7 +14,11 @@ from pathlib import Path
 
 from src.audit_llm_settings_v1 import install_audit_llm_settings_routes
 from src.audit_room_v1 import install_audit_routes
-from src.closed_review_loop_v1 import ClosedLoopReviewConsole, install_closed_review_routes
+from src.closed_review_loop_v1 import install_closed_review_routes
+from src.deterministic_review_repair_v1 import (
+    DeterministicRepairReviewConsole,
+    install_deterministic_review_repair_routes,
+)
 from src.g2_source_store import AzureBlobSourceStore
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
@@ -75,7 +79,7 @@ def build_app() -> object:
         if source_store_kind != "azure":
             raise RuntimeError("unsupported_immutable_source_store")
         immutable_store = AzureBlobSourceStore()
-    console = ClosedLoopReviewConsole(
+    console = DeterministicRepairReviewConsole(
         root=ROOT,
         source_store=_env_path("CONSOLE_SOURCE_STORE", data_root / "sources" / "private"),
         runtime=_env_path("CONSOLE_RUNTIME", data_root / "output" / "runtime" / "operations-console"),
@@ -85,6 +89,7 @@ def build_app() -> object:
     app = create_console_app(console)
     install_proportionate_review_routes(app, console)
     install_audit_llm_settings_routes(app, console)
+    install_deterministic_review_repair_routes(app, console)
     # Register exact closed-loop routes before the generic /audit/{audit_id} route.
     install_closed_review_routes(app, console)
     install_audit_routes(app, console)
