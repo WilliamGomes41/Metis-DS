@@ -13,6 +13,19 @@ if [ -d "${ROOT}/.python_packages" ]; then
   export PYTHONPATH="${ROOT}/.python_packages:${PYTHONPATH}"
 fi
 export CONSOLE_DATA_ROOT="${CONSOLE_DATA_ROOT:-/home/data/metis-console}"
+
+# Production authority is explicit and fail-closed. /home/data is work state;
+# PostgreSQL owns published object/release metadata and Azure Blob owns the exact
+# immutable source bytes. App startup must never silently degrade either one.
+if [ "${METIS_CANONICAL_STORE:-}" != "postgres" ]; then
+  echo "canonical_store_required_in_azure: METIS_CANONICAL_STORE must be postgres" >&2
+  exit 1
+fi
+if [ "${CONSOLE_IMMUTABLE_SOURCE_STORE:-}" != "azure" ]; then
+  echo "azure_blob_source_store_required_in_azure: CONSOLE_IMMUTABLE_SOURCE_STORE must be azure" >&2
+  exit 1
+fi
+
 if [ -n "${WEB_CONCURRENCY:-}" ] && [ "${WEB_CONCURRENCY}" != "1" ]; then
   echo "topology_bound: WEB_CONCURRENCY=${WEB_CONCURRENCY} is out of bound (supported: 1 worker)" >&2
   exit 1
