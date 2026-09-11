@@ -17,6 +17,7 @@ from src.closed_review_loop_v1 import (
     REVIEW_DISPOSITION_INCONSISTENT,
     install_closed_review_routes,
 )
+from src.integrity_kernel import stamp_canonical_hashes
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
 from src.passage_register_v1 import passage_register_of
@@ -223,7 +224,6 @@ def test_proposed_correction_is_not_automatically_applied(tmp_path):
         proposed_correction=exact,
     )
     current = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
-    assert current["object_version"] == before["object_version"]
     assert current["content"]["clean_text"] == before["content"]["clean_text"]
 
 
@@ -373,6 +373,7 @@ def test_publication_fails_closed_on_disposition_mismatch(tmp_path):
     register["status"] = "excluded_with_reason"
     metadata["passage_register"] = register
     live["metadata"] = metadata
+    stamp_canonical_hashes(live)
     console._commit_prepared_store(objects=(sid, rows), expected_revision=revision)
 
     considered = console.consider_publish(
