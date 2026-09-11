@@ -72,6 +72,25 @@ def _timestamp(value: Any) -> datetime:
         raise CanonicalPublicationStoreError("canonical_publication_timestamp_invalid") from exc
 
 
+def _timestamp_text(value: Any) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value or "")
+
+
+def _json_mapping(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise CanonicalPublicationStoreError("canonical_postgres_json_invalid") from exc
+        if isinstance(parsed, dict):
+            return parsed
+    raise CanonicalPublicationStoreError("canonical_postgres_json_invalid")
+
+
 def registry_update_required(current: Mapping[str, Any] | None, *, release_id: str, published_at: str) -> bool:
     """Never move an active publication pointer backwards during replay."""
     if not current:
@@ -370,3 +389,127 @@ class PostgresCanonicalPublicationStore:
             raise
         except Exception as exc:
             raise CanonicalPublicationStoreError("canonical_postgres_write_failed") from exc
+
+    def active_publication_rows(self) -> list[dict[str, Any]]:
+        """Read the complete active publication set used to derive API projection."""
+        try:
+            with self._connect() as con:
+                rows = con.execute(
+                    """
+                    SELECT c.canonical_json,
+                           c.content_hash,
+                           r.release_id,
+                           rel.release_version,
+                           rel.release_owner,
+                           r.published_at,
+                           s.snapshot_id
+                    FROM publication_registry r
+                    JOIN canonical_object_versions c
+                      ON c.object_id=r.object_id AND c.object_version=r.object_version
+                    JOIN publication_releases rel
+                      ON rel.release_id=r.release_id
+                    JOIN canonical_object_sources s
+                      ON s.object_id=c.object_id AND s.object_version=c.object_version
+                    WHERE r.state='active' AND rel.status='published'
+                    ORDER BY c.object_id
+                    """
+                ).fetchall()
+        except CanonicalPublicationStoreError:
+            raise
+        except Exception as exc:
+            raise CanonicalPublicationStoreError("canonical_postgres_read_failed") from exc
+
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            obj = _json_mapping(row["canonical_json"])
+            actual = compute_canonical_object_hash(obj)
+            if actual != str(row["content_hash"]):
+                raise CanonicalPublicationStoreError("canonical_authority_hash_mismatch")
+            out.append(
+                {
+                    "knowledge_object": obj,
+                    "publication": {
+                        "release_id": str(row["release_id"]),
+                        "release_version": str(row["release_version"]),
+                        "published_at": _timestamp_text(row["published_at"]),
+                    },
+                    "snapshot_id": str(row["snapshot_id"]),
+                    "release_owner": str(row["release_owner"]),
+                }
+            )
+        return out
+
+    def release_for_snapshot(self, snapshot_id: str) -> dict[str, Any] | None:
+        """Return the durable release record for one console source snapshot."""
+        if not snapshot_id:
+            raise CanonicalPublicationStoreError("canonical_snapshot_id_required")
+        try:
+            with self._connect() as con:
+                release = con.execute(
+                    """
+                    SELECT rel.release_id,
+                           rel.release_version,
+                           rel.release_owner,
+                           rel.published_at,
+                           ev.details
+                    FROM audit_events ev
+                    JOIN publication_releases rel ON rel.release_id=ev.entity_id
+                    WHERE ev.entity_type='release'
+                      AND ev.event_type='release_published'
+                      AND ev.details->>'snapshot_id'=%s
+                      AND rel.status='published'
+                    ORDER BY rel.published_at DESC
+                    LIMIT 1
+                    """,
+                    (snapshot_id,),
+                ).fetchone()
+                if not release:
+                    return None
+                items = con.execute(
+                    """
+                    SELECT i.object_id,
+                           i.object_version,
+                           i.content_hash,
+                           c.canonical_json
+                    FROM publication_release_items i
+                    JOIN canonical_object_versions c
+                      ON c.object_id=i.object_id AND c.object_version=i.object_version
+                    WHERE i.release_id=%s
+                    ORDER BY i.object_id, i.object_version
+                    """,
+                    (release["release_id"],),
+                ).fetchall()
+        except CanonicalPublicationStoreError:
+            raise
+        except Exception as exc:
+            raise CanonicalPublicationStoreError("canonical_postgres_read_failed") from exc
+
+        details = _json_mapping(release["details"])
+        objects: list[dict[str, Any]] = []
+        for row in items:
+            obj = _json_mapping(row["canonical_json"])
+            actual = compute_canonical_object_hash(obj)
+            if actual != str(row["content_hash"]):
+                raise CanonicalPublicationStoreError("canonical_authority_hash_mismatch")
+            provenance = obj.get("provenance") or {}
+            objects.append(
+                {
+                    "object_id": str(row["object_id"]),
+                    "object_version": str(row["object_version"]),
+                    "canonical_object_hash": str(provenance.get("canonical_object_hash") or actual),
+                    "content_hash": str(row["content_hash"]),
+                    "confirmed_object_type": obj.get("confirmed_object_type"),
+                }
+            )
+        if not objects:
+            raise CanonicalPublicationStoreError("canonical_release_items_missing")
+        return {
+            "release_id": str(release["release_id"]),
+            "release_version": str(release["release_version"]),
+            "release_owner": str(release["release_owner"]),
+            "published_at": _timestamp_text(release["published_at"]),
+            "snapshot_id": str(details.get("snapshot_id") or ""),
+            "source_sha256": str(details.get("source_sha256") or ""),
+            "source_locator": str(details.get("source_locator") or ""),
+            "objects": objects,
+        }
