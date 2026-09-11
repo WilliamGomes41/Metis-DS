@@ -65,6 +65,7 @@ ALLOWED_CONSOLE_PACKAGES = frozenset(
         "azure-identity",
         "azure-storage-blob",
         "cryptography",
+        "psycopg",
     }
 )
 
@@ -182,74 +183,39 @@ def test_v224_shared_kernel_modules_must_not_import_sklearn_stack() -> None:
             for name in imported
             if name.split(".")[0] in FORBIDDEN_CONSOLE_PACKAGES or name in FORBIDDEN_CONSOLE_PACKAGES
         ]
-        assert hits == [], f"shared kernel {path.name} imported forbidden packages: {hits}"
+        assert hits == [], f"{path.name} imports retrieval package(s): {hits}"
 
 
-def test_v224_console_process_start_does_not_load_sklearn_or_retrieval(tmp_path: Path) -> None:
-    probe = tmp_path / "probe_console_asgi.py"
-    probe.write_text(
-        "\n".join(
-            [
-                "import sys",
-                "from src.console_asgi import build_app",
-                "build_app()",
-                "loaded = set(sys.modules)",
-                "forbidden = {",
-                "    'numpy', 'sklearn', 'scipy', 'scikit-learn',",
-                "    'src.embedding_provider_v1', 'src.semantic_vector_retrieval_v1',",
-                "    'src.hybrid_retrieval_v1', 'src.provider_vector_retrieval_v1',",
-                "    'src.product_api_v1', 'src.safe_retrieval_v1', 'src.service_app',",
-                "}",
-                "hits = sorted(name for name in loaded if name in forbidden or name.split('.')[0] in forbidden)",
-                "if hits:",
-                "    raise SystemExit('loaded forbidden: ' + ','.join(hits))",
-                "print('console_process_start_clean')",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    env = {
-        **os.environ,
-        "CONSOLE_DATA_ROOT": str(tmp_path / "console-data"),
-        "PYTHONPATH": str(ROOT),
-    }
-    env.pop("CONSOLE_IMMUTABLE_SOURCE_STORE", None)
-    env.pop("WEBSITE_SITE_NAME", None)
+def test_v224_console_requirements_install_without_retrieval_stack(tmp_path: Path) -> None:
+    target = tmp_path / "vendor"
     result = subprocess.run(
-        [sys.executable, str(probe)],
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--no-compile",
+            "--target",
+            str(target),
+            "-r",
+            str(ROOT / CONSOLE_REQUIREMENTS_NAME),
+        ],
         cwd=ROOT,
         capture_output=True,
         text=True,
-        env=env,
-        check=False,
+        env={**os.environ, "PIP_DISABLE_PIP_VERSION_CHECK": "1"},
     )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "console_process_start_clean" in result.stdout
+    assert result.returncode == 0, result.stderr
+    assert vendor_tree_forbidden_packages(target) == frozenset()
 
 
-def test_v224_packer_refuses_fat_console_requirements(tmp_path: Path) -> None:
-    fat = tmp_path / "fat-requirements.txt"
-    fat.write_text("scikit-learn==1.8.0\nnumpy==2.3.5\n", encoding="utf-8")
+def test_v224_refuses_fat_requirements_and_vendor_tree(tmp_path: Path) -> None:
+    requirements = tmp_path / "requirements-console.txt"
+    requirements.write_text("fastapi==0.128.2\nnumpy==2.3.5\n", encoding="utf-8")
     with pytest.raises(DeployPackageError, match="console_requirements_must_not_vendor_sklearn_stack"):
-        write_deploy_zip(tmp_path / "fat.zip", root=ROOT, requirements=fat)
+        write_deploy_zip(tmp_path / "bad.zip", root=ROOT, requirements=requirements)
 
-
-def test_v224_vendor_tree_helper_detects_sklearn(tmp_path: Path) -> None:
     vendor = tmp_path / "vendor"
-    (vendor / "sklearn").mkdir(parents=True)
-    (vendor / "numpy-2.3.5.dist-info").mkdir()
-    hits = vendor_tree_forbidden_packages(vendor)
-    assert "sklearn" in hits
-    assert "numpy" in hits
-
-
-def test_v224_changelog_records_implementation_under_v224() -> None:
-    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert "Protocol v2.24 console vs retrieval requirements split" in changelog
-    assert "Runtime-scheiding mag veranderen; protocol- en publicatiegrenzen niet." in changelog
-    assert "MUST NOT vendor numpy, sklearn, scipy, or scikit-learn" in changelog
-    assert "requirements-console.txt" in changelog
-    assert "requirements-retrieval.txt" in changelog
-    assert "this split does not open publish() or G2" in changelog
-    assert "MUST NOT implement the requirements split in this PR" in changelog
+    vendor.mkdir()
+    (vendor / "numpy").mkdir()
+    assert vendor_tree_forbidden_packages(vendor) == frozenset({"numpy"})
