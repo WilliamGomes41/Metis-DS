@@ -9,8 +9,9 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import pytest
 
@@ -52,11 +53,21 @@ class MemorySourceStore:
 
 
 class MemoryCanonicalStore:
-    def __init__(self, *, fail: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        fail: bool = False,
+        before_commit: Callable[[dict[str, Any]], None] | None = None,
+    ) -> None:
         self.fail = fail
+        self.before_commit = before_commit
         self.releases: dict[str, dict[str, Any]] = {}
+        self.order: list[str] = []
 
     def persist_published_release(self, **payload: Any) -> None:
+        self.order.append("durable_commit")
+        if self.before_commit is not None:
+            self.before_commit(payload)
         if self.fail:
             raise CanonicalPublicationStoreError("simulated_durable_failure")
         release_id = str(payload["release_id"])
@@ -65,6 +76,55 @@ class MemoryCanonicalStore:
         if prior is not None and prior != normalized:
             raise CanonicalPublicationStoreError("simulated_release_conflict")
         self.releases[release_id] = normalized
+
+    def release_for_snapshot(self, snapshot_id: str) -> dict[str, Any] | None:
+        matches = [row for row in self.releases.values() if row["snapshot_id"] == snapshot_id]
+        if not matches:
+            return None
+        payload = sorted(matches, key=lambda row: row["published_at"])[-1]
+        return {
+            "release_id": payload["release_id"],
+            "release_version": payload["release_version"],
+            "release_owner": payload["release_owner"],
+            "published_at": payload["published_at"],
+            "snapshot_id": payload["snapshot_id"],
+            "source_sha256": payload["source_sha256"],
+            "source_locator": payload["source_locator"],
+            "objects": [
+                {
+                    "object_id": obj["object_id"],
+                    "object_version": obj["object_version"],
+                    "canonical_object_hash": (obj.get("provenance") or {}).get("canonical_object_hash"),
+                    "content_hash": (obj.get("provenance") or {}).get("content_hash"),
+                    "confirmed_object_type": obj.get("confirmed_object_type"),
+                }
+                for obj in payload["objects"]
+            ],
+        }
+
+    def active_publication_rows(self) -> list[dict[str, Any]]:
+        latest_by_object: dict[str, tuple[str, dict[str, Any], dict[str, Any]]] = {}
+        for payload in self.releases.values():
+            for obj in payload["objects"]:
+                object_id = str(obj["object_id"])
+                prior = latest_by_object.get(object_id)
+                if prior is None or prior[0] < payload["published_at"]:
+                    latest_by_object[object_id] = (payload["published_at"], payload, obj)
+        rows: list[dict[str, Any]] = []
+        for _stamp, payload, obj in sorted(latest_by_object.values(), key=lambda item: item[2]["object_id"]):
+            rows.append(
+                {
+                    "knowledge_object": deepcopy(obj),
+                    "publication": {
+                        "release_id": payload["release_id"],
+                        "release_version": payload["release_version"],
+                        "published_at": payload["published_at"],
+                    },
+                    "snapshot_id": payload["snapshot_id"],
+                    "release_owner": payload["release_owner"],
+                }
+            )
+        return rows
 
 
 def _ready_console(tmp_path: Path, durable: MemoryCanonicalStore) -> tuple[DurablePublicationConsole, dict[str, dict], dict]:
@@ -112,7 +172,35 @@ def _ready_console(tmp_path: Path, durable: MemoryCanonicalStore) -> tuple[Durab
     return console, accounts, receipt
 
 
-def test_successful_publication_is_persisted_in_durable_authority(tmp_path: Path) -> None:
+def test_durable_commit_precedes_every_local_publication_artifact(tmp_path: Path) -> None:
+    observed: dict[str, Any] = {}
+    durable = MemoryCanonicalStore()
+    console, accounts, receipt = _ready_console(tmp_path, durable)
+    snapshot_id = receipt["snapshot_id"]
+
+    def observe(_payload: dict[str, Any]) -> None:
+        observed["envelope_state"] = console._envelope(snapshot_id)["state"]
+        observed["projection_exists"] = (console.runtime / "published_projection.jsonl").exists()
+        observed["manifest_exists"] = (console.runtime / "release_manifests").exists()
+        observed["ledger_has_release"] = "release_published" in (
+            console.runtime / "review_ledger.jsonl"
+        ).read_text(encoding="utf-8")
+
+    durable.before_commit = observe
+    result = console.publish(
+        actor_id=accounts["publisher"]["account_id"], snapshot_id=snapshot_id
+    )
+
+    assert result["status"] == "PASS"
+    assert observed == {
+        "envelope_state": "captured_not_published",
+        "projection_exists": False,
+        "manifest_exists": False,
+        "ledger_has_release": False,
+    }
+
+
+def test_successful_publication_is_persisted_then_projected_from_authority(tmp_path: Path) -> None:
     durable = MemoryCanonicalStore()
     console, accounts, receipt = _ready_console(tmp_path, durable)
 
@@ -122,14 +210,22 @@ def test_successful_publication_is_persisted_in_durable_authority(tmp_path: Path
 
     assert result["status"] == "PASS"
     assert result["canonical_authority"] == "postgres"
+    assert result["local_projection"] == "derived"
     stored = durable.releases[result["release_id"]]
     assert stored["snapshot_id"] == receipt["snapshot_id"]
     assert stored["source_sha256"] == receipt["sha256"]
     assert stored["source_locator"] == receipt["immutable_storage_locator"]
     assert len(stored["objects"]) == 1
+    projection = [
+        json.loads(line)
+        for line in (console.runtime / "published_projection.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert len(projection) == 1
+    assert projection[0]["metadata"]["snapshot_id"] == receipt["snapshot_id"]
 
 
-def test_durable_failure_rolls_back_local_publication(tmp_path: Path) -> None:
+def test_durable_failure_creates_no_local_publication_state(tmp_path: Path) -> None:
     durable = MemoryCanonicalStore(fail=True)
     console, accounts, receipt = _ready_console(tmp_path, durable)
     snapshot_id = receipt["snapshot_id"]
@@ -142,53 +238,78 @@ def test_durable_failure_rolls_back_local_publication(tmp_path: Path) -> None:
     assert not list((console.runtime / "release_manifests").glob("*.json"))
     ledger = (console.runtime / "review_ledger.jsonl").read_text(encoding="utf-8")
     assert "release_published" not in ledger
+    assert durable.releases == {}
 
 
-def test_startup_reconciliation_is_idempotent(tmp_path: Path) -> None:
-    first_store = MemoryCanonicalStore()
-    console, accounts, receipt = _ready_console(tmp_path, first_store)
-    result = console.publish(
-        actor_id=accounts["publisher"]["account_id"], snapshot_id=receipt["snapshot_id"]
-    )
+def test_local_copy_failure_does_not_undo_durable_release_and_retry_reconciles(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    durable = MemoryCanonicalStore()
+    console, accounts, receipt = _ready_console(tmp_path, durable)
+    snapshot_id = receipt["snapshot_id"]
+
+    import src.durable_publication_console_v1 as module
+
+    real_replace = module.atomic_replace_projection
+    calls = {"count": 0}
+
+    def fail_once(path: Path, rows: Any) -> None:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise OSError("simulated local projection failure")
+        real_replace(path, rows)
+
+    monkeypatch.setattr(module, "atomic_replace_projection", fail_once)
+    with pytest.raises(Exception, match="durable_publication_local_copy_failed"):
+        console.publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=snapshot_id)
+
+    assert len(durable.releases) == 1
+    assert console._envelope(snapshot_id)["state"] == "captured_not_published"
+    assert not (console.runtime / "published_projection.jsonl").exists()
+
+    result = console.publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=snapshot_id)
     assert result["status"] == "PASS"
-
-    replacement = MemoryCanonicalStore()
-    restarted = DurablePublicationConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources" / "private",
-        runtime=tmp_path / "runtime",
-        immutable_source_store=console.immutable_source_store,
-        canonical_publication_store=replacement,  # type: ignore[arg-type]
-    )
-    report = restarted.reconcile_durable_publications()
-    assert report == {"checked": 1, "reconciled": 1}
-    assert result["release_id"] in replacement.releases
-
-    again = restarted.reconcile_durable_publications()
-    assert again == {"checked": 1, "reconciled": 1}
-    assert len(replacement.releases) == 1
+    assert result["local_projection"] == "reconciled"
+    assert len(durable.releases) == 1
+    assert console._envelope(snapshot_id)["state"] == "published"
+    assert (console.runtime / "published_projection.jsonl").is_file()
 
 
-def test_reconciliation_refuses_tampered_manifest(tmp_path: Path) -> None:
+def test_startup_reconciliation_flows_from_authority_to_local_copy(tmp_path: Path) -> None:
     durable = MemoryCanonicalStore()
     console, accounts, receipt = _ready_console(tmp_path, durable)
     result = console.publish(
         actor_id=accounts["publisher"]["account_id"], snapshot_id=receipt["snapshot_id"]
     )
-    manifest_path = console.runtime / "release_manifests" / f'{result["release_id"]}.json'
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest["source_sha256"] = "0" * 64
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert result["status"] == "PASS"
+
+    projection_path = console.runtime / "published_projection.jsonl"
+    projection_path.unlink()
+    envelope = console._envelope(receipt["snapshot_id"])
+    envelope["state"] = "captured_not_published"
+    envelope.pop("release_id", None)
+    envelope.pop("release_version", None)
+    envelope.pop("published_at", None)
+    envelope.pop("published_by", None)
+    console._save_envelopes()
 
     restarted = DurablePublicationConsole(
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "runtime",
         immutable_source_store=console.immutable_source_store,
-        canonical_publication_store=MemoryCanonicalStore(),  # type: ignore[arg-type]
+        canonical_publication_store=durable,  # type: ignore[arg-type]
     )
-    with pytest.raises(Exception, match="published_release_manifest_invalid"):
-        restarted.reconcile_durable_publications()
+    report = restarted.reconcile_durable_publications()
+    assert report == {"checked": 1, "reconciled": 1}
+    assert projection_path.is_file()
+    assert restarted._envelope(receipt["snapshot_id"])["release_id"] == result["release_id"]
+    assert restarted._envelope(receipt["snapshot_id"])["state"] == "published"
+
+    again = restarted.reconcile_durable_publications()
+    assert again == {"checked": 1, "reconciled": 1}
+    ledger = (restarted.runtime / "review_ledger.jsonl").read_text(encoding="utf-8")
+    assert ledger.count(result["release_id"]) == 1
 
 
 def test_registry_replay_never_moves_newer_pointer_backwards() -> None:
