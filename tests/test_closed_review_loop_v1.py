@@ -374,6 +374,10 @@ def test_publication_fails_closed_on_disposition_mismatch(tmp_path):
     metadata["passage_register"] = register
     live["metadata"] = metadata
     stamp_canonical_hashes(live)
+    new_hash = live["provenance"]["canonical_object_hash"]
+    for binding in console._bindings.get(sid, []):
+        if binding.get("object_id") == oid and binding.get("decision") == "approve":
+            binding["canonical_object_hash"] = new_hash
     console._commit_prepared_store(objects=(sid, rows), expected_revision=revision)
 
     considered = console.consider_publish(
