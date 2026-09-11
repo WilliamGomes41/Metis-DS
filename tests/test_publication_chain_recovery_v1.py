@@ -238,3 +238,54 @@ def test_archive_tampering_is_rejected_before_restore(tmp_path: Path):
     verification = verify_publication_chain_backup(tampered)
     assert verification["ok"] is False
     assert any("blob_backup_hash_mismatch" in err for err in verification["errors"])
+
+
+def test_semantically_broken_registry_is_rejected_even_when_archive_hashes_are_resealed(tmp_path: Path):
+    """A checksum-valid archive must still fail if registry/release identity is broken."""
+    state, locator, source_bytes, checksum = _state()
+    runtime_root = tmp_path / "source-runtime"
+    _runtime(runtime_root, checksum=checksum, locator=locator)
+    archive = tmp_path / "chain-backup.zip"
+    backup_publication_chain(
+        archive,
+        database=FakeDatabase(state),
+        source_store=FakeBlobStore({locator: source_bytes}),
+        runtime_root=runtime_root,
+    )
+
+    broken = tmp_path / "logically-broken.zip"
+    with zipfile.ZipFile(archive) as src:
+        manifest = json.loads(src.read("chain_manifest.json").decode("utf-8"))
+        database_state = json.loads(src.read("database.json").decode("utf-8"))
+        database_state["tables"]["publication_registry"][0]["release_id"] = "release-missing"
+        database_bytes = json.dumps(
+            database_state,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        manifest["database"]["sha256"] = hashlib.sha256(database_bytes).hexdigest()
+
+        with zipfile.ZipFile(broken, "w") as dst:
+            for name in src.namelist():
+                if name == "database.json":
+                    dst.writestr(name, database_bytes)
+                elif name == "chain_manifest.json":
+                    dst.writestr(name, json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
+                else:
+                    dst.writestr(name, src.read(name))
+
+    verification = verify_publication_chain_backup(broken)
+    assert verification["ok"] is False
+    assert any("registry_release_missing" in err for err in verification["errors"])
+    assert any("registry_release_item_missing" in err for err in verification["errors"])
+
+    target_db = FakeDatabase()
+    with pytest.raises(PublicationChainRecoveryError, match="chain_restore_backup_invalid"):
+        restore_publication_chain(
+            broken,
+            database=target_db,
+            source_store=FakeBlobStore(),
+            runtime_dest=tmp_path / "restore-broken",
+        )
+    assert target_db.restore_calls == 0
