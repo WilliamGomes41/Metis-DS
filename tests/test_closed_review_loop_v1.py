@@ -9,6 +9,8 @@
 """
 from __future__ import annotations
 
+from copy import deepcopy
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -375,10 +377,15 @@ def test_publication_fails_closed_on_disposition_mismatch(tmp_path):
     live["metadata"] = metadata
     stamp_canonical_hashes(live)
     new_hash = live["provenance"]["canonical_object_hash"]
-    for binding in console._bindings.get(sid, []):
+    bindings = deepcopy(console._bindings)
+    for binding in bindings.get(sid, []):
         if binding.get("object_id") == oid and binding.get("decision") == "approve":
             binding["canonical_object_hash"] = new_hash
-    console._commit_prepared_store(objects=(sid, rows), expected_revision=revision)
+    console._commit_prepared_store(
+        objects=(sid, rows),
+        bindings=bindings,
+        expected_revision=revision,
+    )
 
     considered = console.consider_publish(
         actor_id=publisher["account_id"], snapshot_id=sid
