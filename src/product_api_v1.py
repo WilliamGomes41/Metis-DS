@@ -1,20 +1,13 @@
 #!/usr/bin/env python3
 """External Product API v1 for V&VN Data Services.
 
-This is the machine-to-machine contract intended for chatbots, knowledge
-assistants and other external consumers. It is deliberately separate from the
-internal inspection service.
-
-Security and product rules:
-- REAL mode is default; only published retrieval records are reachable.
-- API-key authentication is tenant-aware and keys are hashed at rest.
-- tenant entitlements filter the corpus *before* retrieval.
-- usage logging stores a hash of the query, not query plaintext.
-- no generation/LLM occurs in this service; /v1/retrieve returns V&VN source data.
-- fixture mode requires explicit construction and is marked synthetic.
+REAL mode reads the active publication registry from PostgreSQL and builds the
+retrieval projection in memory. Local JSONL files are never a REAL-mode corpus
+source or fallback. Fixture mode remains file-backed and explicitly synthetic.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
@@ -28,19 +21,28 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from .abstain_catalog_v1 import sentence_for
-from .answerability_gate_v1 import AnswerabilityConfig, evaluate_answerability
-from .object_taxonomy_v1 import serving_block_reason
+from .answerability_gate_v1 import AnswerabilityConfig
+from .canonical_publication_postgres_v1 import (
+    CanonicalPublicationStoreError,
+    PostgresCanonicalPublicationStore,
+)
 from .hybrid_retrieval_v1 import HybridConfig
-from .safe_retrieval_v1 import SafeRetrievalIndex
 from .lexical_retrieval_v1 import RetrievalConfig
+from .object_taxonomy_v1 import serving_block_reason
 from .product_security_v1 import SlidingWindowRateLimiter, TenantPolicy, TenantRegistry
+from .retrieval_projection_v2 import build_projection
+from .safe_retrieval_v1 import SafeRetrievalIndex
 from .semantic_vector_retrieval_v1 import VectorConfig
 from .serving_relations_v1 import applies_if_targets, except_if_targets, historical_type_must_not_serve
 from .usage_ledger_v1 import UsageLedger
 
 ROOT = Path(__file__).resolve().parents[1]
 API_VERSION = "v1"
-SERVICE_VERSION = "product-api-v1.1.0"
+SERVICE_VERSION = "product-api-v1.2.0"
+
+
+class ProductCorpusError(RuntimeError):
+    """Fail-closed error for the REAL published corpus."""
 
 
 class RetrieveFilters(BaseModel):
@@ -56,6 +58,9 @@ class RetrieveRequest(BaseModel):
 
 @dataclass(frozen=True)
 class ProductPaths:
+    # ``real_records`` and ``real_published`` are retained as compatibility
+    # coordinates for older tooling/tests only. REAL Product API code MUST NOT
+    # read either path; PostgreSQL is the only published-knowledge authority.
     real_records: Path
     fixture_records: Path
     real_published: Path
@@ -101,6 +106,20 @@ def _extract_api_key(authorization: str | None, x_api_key: str | None) -> str | 
     return None
 
 
+def _corpus_revision(records: list[dict[str, Any]]) -> str:
+    identity = [
+        (
+            str((row.get("metadata") or {}).get("object_id") or ""),
+            str((row.get("metadata") or {}).get("object_version") or ""),
+            str((row.get("metadata") or {}).get("release_id") or ""),
+            str(row.get("projection_hash") or ""),
+        )
+        for row in records
+    ]
+    payload = json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
 class ProductState:
     def __init__(
         self,
@@ -108,49 +127,100 @@ class ProductState:
         paths: ProductPaths,
         tenant_registry: TenantRegistry,
         *,
+        canonical_publication_store: Any | None = None,
         usage_ledger: UsageLedger | None = None,
         rate_limiter: SlidingWindowRateLimiter | None = None,
     ):
         self.mode = mode
         self.synthetic = mode == "fixture"
         self.paths = paths
-        self.records_path = paths.real_records if mode == "real" else paths.fixture_records
+        self.canonical_publication_store = canonical_publication_store
+        self.records_path = paths.fixture_records if mode == "fixture" else None
         self._records_mtime_ns: int | None = None
+        self._corpus_revision: str | None = None
         self.records: list[dict[str, Any]] = []
         self.record_by_object: dict[str, dict[str, Any]] = {}
-        self.published_envelopes = _read_jsonl(paths.real_published) if mode == "real" else []
-        self._reload_records(force=True)
         self.tenant_registry = tenant_registry
         self.ledger = usage_ledger or UsageLedger(paths.usage_db)
         self.rate_limiter = rate_limiter or SlidingWindowRateLimiter()
         self.lexical_config = RetrievalConfig.from_dict(_read_json(paths.lexical_config, {}))
         self.vector_config = VectorConfig.from_dict(_read_json(paths.vector_config, {}))
         self.hybrid_config = HybridConfig.from_dict(_read_json(paths.hybrid_config, {}))
-        self.answerability_config = AnswerabilityConfig.from_dict(_read_json(paths.hybrid_config.parent / "answerability_gate_v1.json", {}))
+        self.answerability_config = AnswerabilityConfig.from_dict(
+            _read_json(paths.hybrid_config.parent / "answerability_gate_v1.json", {})
+        )
         self._index_cache: dict[tuple[Any, ...], SafeRetrievalIndex] = {}
+        self._reload_records(force=True)
 
-    def _reload_records(self, *, force: bool = False) -> bool:
+    def _install_records(self, records: list[dict[str, Any]], *, revision: str) -> bool:
+        records = [
+            row
+            for row in records
+            if not historical_type_must_not_serve((row.get("metadata") or {}).get("object_type"))
+        ]
+        if revision == self._corpus_revision:
+            return False
+        self.records = records
+        self.record_by_object = {
+            r.get("metadata", {}).get("object_id"): r
+            for r in records
+            if (r.get("metadata") or {}).get("object_id")
+        }
+        self._corpus_revision = revision
+        self._index_cache = {}
+        return True
+
+    def _reload_fixture_records(self, *, force: bool = False) -> bool:
+        assert self.records_path is not None
         try:
             mtime = self.records_path.stat().st_mtime_ns
         except FileNotFoundError:
             mtime = None
         if not force and mtime == self._records_mtime_ns:
             return False
-        self.records = _read_jsonl(self.records_path)
-        self.records = [
-            row
-            for row in self.records
-            if not historical_type_must_not_serve((row.get("metadata") or {}).get("object_type"))
-        ]
-        self.record_by_object = {r.get("metadata", {}).get("object_id"): r for r in self.records if (r.get("metadata") or {}).get("object_id")}
+        records = _read_jsonl(self.records_path)
+        revision = "fixture:" + str(mtime) + ":" + _corpus_revision(records)
+        changed = self._install_records(records, revision=revision)
         self._records_mtime_ns = mtime
-        return True
+        return changed
+
+    def _reload_real_records(self) -> bool:
+        store = self.canonical_publication_store
+        if store is None:
+            raise ProductCorpusError("canonical_publication_store_required")
+        try:
+            authority_rows = store.active_publication_rows()
+        except CanonicalPublicationStoreError as exc:
+            raise ProductCorpusError("canonical_publication_store_unavailable") from exc
+        except Exception as exc:
+            raise ProductCorpusError("canonical_publication_store_unavailable") from exc
+
+        envelopes = [
+            {
+                "knowledge_object": dict(row["knowledge_object"]),
+                "publication": dict(row["publication"]),
+            }
+            for row in authority_rows
+        ]
+        records, blocked = build_projection(envelopes)
+        if blocked:
+            raise ProductCorpusError(
+                "canonical_publication_projection_invalid:" + json.dumps(blocked, ensure_ascii=False, sort_keys=True)
+            )
+        if len({str((row.get("metadata") or {}).get("object_id") or "") for row in records}) != len(records):
+            raise ProductCorpusError("canonical_publication_projection_duplicate_object")
+        return self._install_records(records, revision="postgres:" + _corpus_revision(records))
+
+    def _reload_records(self, *, force: bool = False) -> bool:
+        if self.mode == "real":
+            return self._reload_real_records()
+        return self._reload_fixture_records(force=force)
 
     def refresh(self) -> bool:
-        """Reload the derived published corpus if its file changed.
+        """Refresh from the authoritative source for the selected mode.
 
-        Local pilot implementation only. A production search service replaces this
-        file watcher while preserving the same API contract.
+        REAL always queries PostgreSQL's active publication registry. There is no
+        local-file fallback. Fixture mode alone reloads its explicit JSONL fixture.
         """
         return self._reload_records(force=False)
 
@@ -173,7 +243,6 @@ class ProductState:
         self.refresh()
         requested_docs = set(filters.document_ids) if filters else set()
         requested_topics = set(filters.topics) if filters else set()
-        # Reject filters outside entitlement rather than silently broadening access.
         for did in requested_docs:
             if not tenant.allows_document(did):
                 raise HTTPException(status_code=403, detail={"code": "document_not_entitled", "document_id": did})
@@ -197,7 +266,7 @@ class ProductState:
         return rows
 
     def _safe_index(self, records: list[dict[str, Any]]) -> SafeRetrievalIndex:
-        key = (self._records_mtime_ns, tuple((r.get("metadata") or {}).get("object_id") for r in records))
+        key = (self._corpus_revision, tuple((r.get("metadata") or {}).get("object_id") for r in records))
         engine = self._index_cache.get(key)
         if engine is None:
             engine = SafeRetrievalIndex(
@@ -334,7 +403,6 @@ class ProductState:
             raise HTTPException(status_code=404, detail={"code": "knowledge_object_not_found"})
         md = record.get("metadata") or {}
         if not tenant.allows_document(md.get("document_id")) or not tenant.allows_topics(md.get("topic") or []):
-            # Deliberately use 404 to avoid disclosing existence outside entitlement.
             raise HTTPException(status_code=404, detail={"code": "knowledge_object_not_found"})
         blocked = serving_block_reason(record)
         if blocked:
@@ -357,8 +425,17 @@ class ProductState:
             "object_type": md.get("confirmed_object_type") or md.get("object_type"),
             "content": record.get("retrieval_text"),
             "structured_logic": record.get("structured_logic"),
-            "source": {"title": md.get("source_title"), "url": md.get("source_url"), "page": md.get("source_page"), "version": md.get("source_version")},
-            "release": {"release_id": md.get("release_id"), "release_version": md.get("release_version"), "published_at": md.get("published_at")},
+            "source": {
+                "title": md.get("source_title"),
+                "url": md.get("source_url"),
+                "page": md.get("source_page"),
+                "version": md.get("source_version"),
+            },
+            "release": {
+                "release_id": md.get("release_id"),
+                "release_version": md.get("release_version"),
+                "published_at": md.get("published_at"),
+            },
             "content_hash": md.get("content_hash"),
             "projection_hash": record.get("projection_hash"),
             "chunk_readiness": md.get("chunk_readiness"),
@@ -410,11 +487,18 @@ class ProductState:
         return sorted(out, key=lambda x: (x.get("published_at") or "", x["release_id"]), reverse=True)
 
 
+def _default_real_store() -> PostgresCanonicalPublicationStore:
+    store = PostgresCanonicalPublicationStore()
+    store.verify_schema()
+    return store
+
+
 def create_product_app(
     mode: Literal["real", "fixture"] = "real",
     *,
     paths: ProductPaths | None = None,
     tenant_registry: TenantRegistry | None = None,
+    canonical_publication_store: Any | None = None,
     usage_ledger: UsageLedger | None = None,
     rate_limiter: SlidingWindowRateLimiter | None = None,
     allow_fixture: bool = False,
@@ -423,7 +507,17 @@ def create_product_app(
         raise ValueError("fixture mode is disabled for Product API unless allow_fixture=True")
     p = paths or ProductPaths.defaults()
     registry = tenant_registry or TenantRegistry.from_path(p.tenant_config)
-    state = ProductState(mode, p, registry, usage_ledger=usage_ledger, rate_limiter=rate_limiter)
+    store = canonical_publication_store
+    if mode == "real" and store is None:
+        store = _default_real_store()
+    state = ProductState(
+        mode,
+        p,
+        registry,
+        canonical_publication_store=store,
+        usage_ledger=usage_ledger,
+        rate_limiter=rate_limiter,
+    )
     app = FastAPI(
         title="V&VN Data Services API",
         version=SERVICE_VERSION,
@@ -478,7 +572,8 @@ def create_product_app(
             "synthetic_fixture": state.synthetic,
             "published_retrieval_records": len(state.records) if state.synthetic else None,
             "published_corpus_ready": bool(state.records),
-            "corpus_reload_policy": "reload_on_file_change",
+            "corpus_reload_policy": "postgres_active_publication_registry" if state.mode == "real" else "reload_fixture_on_file_change",
+            "published_corpus_authority": "postgres" if state.mode == "real" else "fixture_jsonl",
             "generation_enabled": False,
         }
 
@@ -532,7 +627,6 @@ def create_product_app(
     def usage(request: Request, tenant: TenantPolicy = Depends(current_tenant)) -> dict[str, Any]:
         started = time.perf_counter()
         state.require_scope(tenant, "usage:read")
-        # Read summary before recording this usage-summary call so the response is stable/intuitive.
         summary = state.ledger.summary(tenant.tenant_id)
         logged_response(request_id=request.state.request_id, tenant=tenant, endpoint="/v1/usage", started=started,
                         status_code=200, behavior="read", object_ids=[])
@@ -541,5 +635,6 @@ def create_product_app(
     return app
 
 
-# Production-safe default: real mode and registry loaded from config/env.
-app = create_product_app("real")
+# Production serves through the ``serve-api`` CLI factory. Keeping module import
+# side-effect free prevents local/test imports from constructing a fake REAL
+# corpus when PostgreSQL is intentionally not configured.
