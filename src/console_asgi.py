@@ -15,6 +15,7 @@ from pathlib import Path
 from src.audit_llm_settings_v1 import install_audit_llm_settings_routes
 from src.audit_room_v1 import install_audit_routes
 from src.closed_review_loop_v1 import install_closed_review_routes
+from src.console_navigation_simplify_v1 import install_navigation_simplification
 from src.deterministic_review_repair_v1 import install_deterministic_review_repair_routes
 from src.g2_source_store import AzureBlobSourceStore
 from src.operations_console_app import create_console_app
@@ -97,6 +98,8 @@ def build_app() -> object:
     # structured /review/resolve path may write a repair in the live runtime.
     harden_legacy_repair_routes(app, console)
     install_audit_routes(app, console)
+    # Presentation-only: remove duplicate non-Audit doors after all routes exist.
+    install_navigation_simplification(app)
     return app
 
 
