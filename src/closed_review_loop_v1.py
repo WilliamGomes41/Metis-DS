@@ -5,15 +5,22 @@ ledger mechanisms. It does not introduce a second workflow store.
 """
 from __future__ import annotations
 
+import html
+from contextlib import contextmanager
 from copy import deepcopy
-from typing import Any
+from typing import Any, Iterator
+from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from src.integrity_kernel import compute_canonical_object_hash
-from src.operations_console_v1 import ConsoleError
-from src.passage_register_v1 import passage_register_of
+from src.integrity_kernel import compute_canonical_object_hash, stamp_canonical_hashes
+from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
+from src.passage_register_v1 import (
+    apply_register_from_review,
+    passage_register_of,
+    register_status_from_suitability,
+)
 from src.proportionate_review_v1 import ProportionateReviewConsole
 from src.publish_authorization_v1 import invalidate_for_object
 from src.review_cockpit_v1 import broncontext_parts, map_eindoordeel
@@ -22,6 +29,7 @@ from src.serving_relations_v1 import binding_relations
 
 
 REVIEW_AUDIT_EVIDENCE_EVENT = "review_audit_evidence"
+REVIEW_DISPOSITION_INCONSISTENT = "review_disposition_inconsistent"
 ALLOWED_FINAL_BY_SUITABILITY = {
     "ja": {"approve", "revise", "reject"},
     "mist_context": {"revise", "reject"},
@@ -33,6 +41,10 @@ ALLOWED_FINAL_BY_SUITABILITY = {
 
 def _norm(value: str) -> str:
     return " ".join(str(value or "").split())
+
+
+def _esc(value: Any) -> str:
+    return html.escape(str(value or ""), quote=True)
 
 
 def _source_context(obj: dict[str, Any]) -> str:
@@ -51,6 +63,13 @@ def _source_locator(obj: dict[str, Any], fallback: str = "") -> Any:
         if locator:
             return deepcopy(locator)
     return fallback
+
+
+def _review_url(snapshot_id: str, object_id: str = "") -> str:
+    target = f"/review?document={quote(snapshot_id, safe='')}"
+    if object_id:
+        target += f"&object={quote(object_id, safe='')}"
+    return target
 
 
 class ClosedLoopReviewConsole(ProportionateReviewConsole):
@@ -77,12 +96,41 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             if (
                 "reviewer" in roles
                 and account_id in (envelope.get("named_reviewers") or [])
-                and "needs_review" in statuses
+                and ("needs_review" in statuses or "revise" in statuses)
             ):
                 review += 1
         counts["ingest"] = ingest if "researcher" in roles else 0
         counts["review"] = review if "reviewer" in roles else 0
         return counts
+
+    @contextmanager
+    def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
+        """Rollback objects, bindings, envelopes and ledger as one local transaction.
+
+        The generic review/revision helpers historically append ledger rows before
+        their durable object commit. The closed-loop console therefore wraps the
+        existing path with the already-supported store lock and rollback helpers.
+        No second store or service is introduced.
+        """
+        with self._store_write_lock():
+            path = self._objects_path(snapshot_id)
+            prior_objects = path.read_bytes() if path.exists() else None
+            prior_envelopes = deepcopy(self._envelopes)
+            prior_bindings = deepcopy(self._bindings)
+            prior_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
+            try:
+                yield
+            except Exception:
+                self._rollback_store_files(
+                    objects_snapshot=(snapshot_id, prior_objects),
+                    envelopes=prior_envelopes,
+                    bindings=prior_bindings,
+                    ledger_size=prior_ledger,
+                )
+                self._envelopes = prior_envelopes
+                self._bindings = prior_bindings
+                self.refresh_objects_expected_revision(snapshot_id)
+                raise
 
     def _has_inbound_support(self, snapshot_id: str, support_object_id: str) -> bool:
         for obj in self.snapshot_objects(snapshot_id):
@@ -96,6 +144,22 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                 return True
         return False
 
+    def _latest_review_signal(
+        self,
+        object_id: str,
+        *,
+        decision: str = "",
+    ) -> dict[str, Any] | None:
+        for event in reversed(read_events(self._ledger_path)):
+            if event.get("event_type") != REVIEW_AUDIT_EVIDENCE_EVENT:
+                continue
+            if str(event.get("object_id") or "") != object_id:
+                continue
+            if decision and str((event.get("details") or {}).get("decision") or "") != decision:
+                continue
+            return event
+        return None
+
     def _append_audit_evidence(
         self,
         *,
@@ -103,13 +167,15 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
         snapshot_id: str,
         target: dict[str, Any],
         decision: str,
-        suitability: str,
+        original_suitability: str,
+        final_disposition: str,
         comment: str,
         proposed_correction: str,
-    ) -> None:
+        prior_passage_status: str = "",
+    ) -> dict[str, Any]:
         envelope = self._envelope(snapshot_id)
         actor = self._account(actor_id)
-        append_event(
+        return append_event(
             self._ledger_path,
             event_type=REVIEW_AUDIT_EVIDENCE_EVENT,
             object_id=str(target.get("object_id") or ""),
@@ -122,11 +188,54 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                 "review_snapshot_hash": compute_canonical_object_hash(target),
                 "current_passage": str((target.get("content") or {}).get("clean_text") or ""),
                 "decision": decision,
-                "suitability": suitability,
+                "suitability": original_suitability,
+                "original_suitability": original_suitability,
+                "final_disposition": final_disposition,
+                "prior_passage_status": prior_passage_status,
                 "comment": comment,
                 "proposed_correction": proposed_correction,
             },
         )
+
+    def _restore_original_review_input(
+        self,
+        *,
+        snapshot_id: str,
+        object_id: str,
+        original_suitability: str,
+        original_eindoordeel: str,
+    ) -> dict[str, Any]:
+        """Store the human input without turning revise into a terminal disposition."""
+        revision = self.objects_revision(snapshot_id)
+        rows = deepcopy(self._load_objects(snapshot_id, remember=False))
+        current = self.snapshot_objects(snapshot_id)
+        live = next((row for row in current if row.get("object_id") == object_id), None)
+        if live is None:
+            raise ConsoleError("unknown_object")
+        version = str(live.get("object_version") or "")
+        updated: dict[str, Any] | None = None
+        for index in range(len(rows) - 1, -1, -1):
+            row = rows[index]
+            if row.get("object_id") != object_id or str(row.get("object_version") or "") != version:
+                continue
+            row = deepcopy(row)
+            metadata = dict(row.get("metadata") or {})
+            passage = dict(metadata.get("review_passage") or {})
+            passage["suitability"] = original_suitability
+            passage["eindoordeel"] = original_eindoordeel
+            metadata["review_passage"] = passage
+            row["metadata"] = metadata
+            stamp_canonical_hashes(row)
+            rows[index] = row
+            updated = row
+            break
+        if updated is None:
+            raise ConsoleError("unknown_object")
+        self._commit_prepared_store(
+            objects=(snapshot_id, rows),
+            expected_revision=revision,
+        )
+        return deepcopy(updated)
 
     def review_object(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
         if args:
@@ -135,17 +244,14 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             str(kwargs.get("eindoordeel") or ""),
             str(kwargs.get("decision") or ""),
         )
-        suitability = str(kwargs.get("suitability") or "").strip()
+        original_suitability = str(kwargs.get("suitability") or "").strip()
+        original_eindoordeel = str(kwargs.get("eindoordeel") or "").strip()
         snapshot_id = str(kwargs.get("snapshot_id") or "")
         object_id = str(kwargs.get("object_id") or "")
         actor_id = str(kwargs.get("actor_id") or "")
 
-        # Structural/batch paths without a passage disposition keep the existing
-        # kernel semantics. Passage-review choices get the closed matrix.
-        if suitability:
+        if original_suitability:
             if decision == "later":
-                # Later is not a decision: do not mutate type, relation, register
-                # or governance based on form choices that were not committed.
                 deferred = dict(kwargs)
                 for key in (
                     "suitability",
@@ -160,54 +266,208 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                     deferred[key] = None
                 deferred["decision"] = "later"
                 return super().review_object(**deferred)
-            allowed = ALLOWED_FINAL_BY_SUITABILITY.get(suitability)
+            allowed = ALLOWED_FINAL_BY_SUITABILITY.get(original_suitability)
             if allowed is None or decision not in allowed:
                 raise ConsoleError("review_disposition_conflict")
-            if decision == "approve" and suitability == "alleen_onderbouwing":
+            if decision == "approve" and original_suitability == "alleen_onderbouwing":
                 if not self._has_inbound_support(snapshot_id, object_id):
                     raise ConsoleError("support_relation_required")
-            if decision == "reject":
-                # Reject is a terminal exclusion from the active knowledge layer.
-                kwargs["suitability"] = "geen_kenniseenheid"
-                suitability = "geen_kenniseenheid"
 
-        before = next(
-            (row for row in self.snapshot_objects(snapshot_id) if row.get("object_id") == object_id),
-            None,
-        )
-        updated = super().review_object(**kwargs)
-        if before is not None and decision in {"revise", "reject"}:
+        delegated = dict(kwargs)
+        if decision == "revise" and original_suitability:
+            delegated["suitability"] = None
+            delegated["eindoordeel"] = None
+            delegated["decision"] = "revise"
+        elif decision == "reject" and original_suitability:
+            delegated["suitability"] = "geen_kenniseenheid"
+
+        if decision not in {"revise", "reject"}:
+            return super().review_object(**delegated)
+
+        with self._atomic_snapshot_mutation(snapshot_id):
+            before = next(
+                (row for row in self.snapshot_objects(snapshot_id) if row.get("object_id") == object_id),
+                None,
+            )
+            if before is None:
+                raise ConsoleError("unknown_object")
+            prior_status = str(passage_register_of(before).get("status") or "")
+            super().review_object(**delegated)
+            current = self._restore_original_review_input(
+                snapshot_id=snapshot_id,
+                object_id=object_id,
+                original_suitability=original_suitability,
+                original_eindoordeel=original_eindoordeel,
+            )
+            final_disposition = (
+                "excluded_with_reason"
+                if decision == "reject"
+                else "repair_required"
+            )
             self._append_audit_evidence(
                 actor_id=actor_id,
                 snapshot_id=snapshot_id,
                 target=before,
                 decision=decision,
-                suitability=suitability,
+                original_suitability=original_suitability,
+                final_disposition=final_disposition,
+                prior_passage_status=prior_status,
                 comment=str(kwargs.get("comment") or "").strip(),
                 proposed_correction=str(kwargs.get("proposed_correction") or "").strip(),
             )
-        return updated
+            _ = current
+            return deepcopy(self.snapshot_objects(snapshot_id))
+
+    def _validate_source_bound_patch(
+        self,
+        *,
+        snapshot_id: str,
+        object_id: str,
+        patch: dict[str, Any],
+    ) -> tuple[dict[str, Any], list[str]]:
+        current = next(
+            (row for row in self.snapshot_objects(snapshot_id) if row.get("object_id") == object_id),
+            None,
+        )
+        if current is None:
+            raise ConsoleError("unknown_object")
+        clean_text_candidates: list[str] = []
+        for op in patch.get("operations") or []:
+            if op.get("op") != "set" or op.get("path") != "content.clean_text":
+                continue
+            candidate = _norm(str(op.get("value") or ""))
+            context = _source_context(current)
+            if not candidate or candidate not in context:
+                raise ConsoleError("correction_not_source_bound")
+            clean_text_candidates.append(candidate)
+        return current, clean_text_candidates
 
     def correct_object(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Keep proposed reviewer text a proposal until the explicit repair route runs."""
         if args:
             return super().correct_object(*args, **kwargs)
         snapshot_id = str(kwargs.get("snapshot_id") or "")
         object_id = str(kwargs.get("object_id") or "")
         patch = kwargs.get("patch") or {}
-        for op in patch.get("operations") or []:
-            if op.get("op") != "set" or op.get("path") != "content.clean_text":
-                continue
-            candidate = _norm(str(op.get("value") or ""))
-            current = next(
-                (row for row in self.snapshot_objects(snapshot_id) if row.get("object_id") == object_id),
-                None,
-            )
-            if current is None:
-                raise ConsoleError("unknown_object")
-            context = _source_context(current)
-            if not candidate or candidate not in context:
-                raise ConsoleError("correction_not_source_bound")
+        current, candidates = self._validate_source_bound_patch(
+            snapshot_id=snapshot_id,
+            object_id=object_id,
+            patch=patch,
+        )
+        if candidates and (current.get("governance") or {}).get("validation_status") == "revise":
+            signal = self._latest_review_signal(object_id, decision="revise")
+            proposed = _norm(str(((signal or {}).get("details") or {}).get("proposed_correction") or ""))
+            operations = list(patch.get("operations") or [])
+            if proposed and len(operations) == 1 and candidates == [proposed]:
+                return deepcopy(current)
         return super().correct_object(**kwargs)
+
+    def _require_repair_access(
+        self,
+        *,
+        actor_id: str,
+        snapshot_id: str,
+    ) -> dict[str, Any]:
+        account = self._account(actor_id)
+        roles = set(account.get("roles") or [])
+        envelope = self._envelope(snapshot_id)
+        allowed = (
+            "researcher" in roles and envelope.get("uploader_account_id") == actor_id
+        ) or (
+            "reviewer" in roles and actor_id in (envelope.get("named_reviewers") or [])
+        )
+        if not allowed:
+            raise ConsoleError("correction_role_required")
+        return account
+
+    def _clear_pending_review_metadata(
+        self,
+        *,
+        snapshot_id: str,
+        object_id: str,
+    ) -> dict[str, Any]:
+        revision = self.objects_revision(snapshot_id)
+        rows = deepcopy(self._load_objects(snapshot_id, remember=False))
+        live = next(
+            (row for row in self.snapshot_objects(snapshot_id) if row.get("object_id") == object_id),
+            None,
+        )
+        if live is None:
+            raise ConsoleError("unknown_object")
+        version = str(live.get("object_version") or "")
+        updated: dict[str, Any] | None = None
+        for index in range(len(rows) - 1, -1, -1):
+            row = rows[index]
+            if row.get("object_id") != object_id or str(row.get("object_version") or "") != version:
+                continue
+            row = deepcopy(row)
+            metadata = dict(row.get("metadata") or {})
+            metadata.pop("review_passage", None)
+            row["metadata"] = metadata
+            stamp_canonical_hashes(row)
+            rows[index] = row
+            updated = row
+            break
+        if updated is None:
+            raise ConsoleError("unknown_object")
+        self._commit_prepared_store(
+            objects=(snapshot_id, rows),
+            expected_revision=revision,
+        )
+        return deepcopy(updated)
+
+    def repair_source(
+        self,
+        *,
+        actor_id: str,
+        snapshot_id: str,
+        object_id: str,
+        corrected_text: str,
+        reason: str,
+        expected_revision: str,
+    ) -> dict[str, Any]:
+        self._require_repair_access(actor_id=actor_id, snapshot_id=snapshot_id)
+        if not expected_revision:
+            raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+        patch = {
+            "reason": reason.strip(),
+            "operations": [
+                {"op": "set", "path": "content.clean_text", "value": corrected_text}
+            ],
+        }
+        with self._atomic_snapshot_mutation(snapshot_id):
+            if self.objects_revision(snapshot_id) != expected_revision:
+                raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+            current, _ = self._validate_source_bound_patch(
+                snapshot_id=snapshot_id,
+                object_id=object_id,
+                patch=patch,
+            )
+            if (current.get("governance") or {}).get("validation_status") != "revise":
+                raise ConsoleError("repair_object_not_in_revise")
+            revised = super().correct_object(
+                actor_id=actor_id,
+                snapshot_id=snapshot_id,
+                object_id=object_id,
+                patch=patch,
+            )
+            revised = self._clear_pending_review_metadata(
+                snapshot_id=snapshot_id,
+                object_id=object_id,
+            )
+            signal = self._latest_review_signal(object_id, decision="revise")
+            original = str(((signal or {}).get("details") or {}).get("original_suitability") or "")
+            self._append_audit_evidence(
+                actor_id=actor_id,
+                snapshot_id=snapshot_id,
+                target=revised,
+                decision="repair",
+                original_suitability=original,
+                final_disposition="needs_review",
+                comment=reason.strip(),
+                proposed_correction="",
+            )
+            return deepcopy(revised)
 
     def _reopen_for_review(self, snapshot_id: str, object_ids: set[str]) -> None:
         if not object_ids:
@@ -215,7 +475,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
         current, revision = self.snapshot_objects_and_revision(snapshot_id)
         live = {row["object_id"]: row for row in current}
         versions = {oid: str(live[oid]["object_version"]) for oid in object_ids if oid in live}
-        rows = deepcopy(self._load_objects(snapshot_id))
+        rows = deepcopy(self._load_objects(snapshot_id, remember=False))
         for row in rows:
             oid = str(row.get("object_id") or "")
             if oid not in versions or str(row.get("object_version") or "") != versions[oid]:
@@ -241,6 +501,37 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             expected_revision=revision,
         )
 
+    def _mark_support_disposition(
+        self,
+        *,
+        snapshot_id: str,
+        support_object_id: str,
+    ) -> None:
+        revision = self.objects_revision(snapshot_id)
+        rows = deepcopy(self._load_objects(snapshot_id, remember=False))
+        live = next(
+            (row for row in self.snapshot_objects(snapshot_id) if row.get("object_id") == support_object_id),
+            None,
+        )
+        if live is None:
+            raise ConsoleError("unknown_object")
+        version = str(live.get("object_version") or "")
+        for index in range(len(rows) - 1, -1, -1):
+            row = rows[index]
+            if row.get("object_id") != support_object_id or str(row.get("object_version") or "") != version:
+                continue
+            row = apply_register_from_review(deepcopy(row), suitability="alleen_onderbouwing")
+            metadata = dict(row.get("metadata") or {})
+            metadata.pop("review_passage", None)
+            row["metadata"] = metadata
+            stamp_canonical_hashes(row)
+            rows[index] = row
+            break
+        self._commit_prepared_store(
+            objects=(snapshot_id, rows),
+            expected_revision=revision,
+        )
+
     def resolve_support_relation(
         self,
         *,
@@ -248,37 +539,125 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
         snapshot_id: str,
         support_object_id: str,
         claim_object_id: str,
+        expected_revision: str = "",
     ) -> None:
         self._require_role(actor_id, "reviewer")
-        current = {row["object_id"]: row for row in self.snapshot_objects(snapshot_id)}
-        support = current.get(support_object_id)
-        claim = current.get(claim_object_id)
-        if support is None or claim is None or support_object_id == claim_object_id:
-            raise ConsoleError("unknown_object")
-        if (support.get("governance") or {}).get("validation_status") != "revise":
-            raise ConsoleError("support_object_not_in_revise")
-        if passage_register_of(support).get("status") != "linked_as_support":
-            raise ConsoleError("support_disposition_required")
-        relations = list(binding_relations(claim))
-        if not any(
-            rel.get("relation_type") == "supported_by"
-            and rel.get("target_object_id") == support_object_id
-            for rel in relations
-        ):
-            relations.append(
-                {
-                    "relation_type": "supported_by",
-                    "target_object_id": support_object_id,
-                    "confirmed": True,
-                }
+        if not expected_revision:
+            raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+        with self._atomic_snapshot_mutation(snapshot_id):
+            if self.objects_revision(snapshot_id) != expected_revision:
+                raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+            current = {row["object_id"]: row for row in self.snapshot_objects(snapshot_id)}
+            support = current.get(support_object_id)
+            claim = current.get(claim_object_id)
+            if support is None or claim is None or support_object_id == claim_object_id:
+                raise ConsoleError("unknown_object")
+            if (support.get("governance") or {}).get("validation_status") != "revise":
+                raise ConsoleError("support_object_not_in_revise")
+            pending = self._latest_review_signal(support_object_id, decision="revise")
+            original = str(((pending or {}).get("details") or {}).get("original_suitability") or "")
+            if original != "alleen_onderbouwing":
+                raise ConsoleError("support_disposition_required")
+            relations = list(binding_relations(claim))
+            if not any(
+                rel.get("relation_type") == "supported_by"
+                and rel.get("target_object_id") == support_object_id
+                for rel in relations
+            ):
+                relations.append(
+                    {
+                        "relation_type": "supported_by",
+                        "target_object_id": support_object_id,
+                        "confirmed": True,
+                    }
+                )
+                self.confirm_relations(
+                    actor_id=actor_id,
+                    snapshot_id=snapshot_id,
+                    object_id=claim_object_id,
+                    relations=relations,
+                    expected_revision=expected_revision,
+                )
+            self._reopen_for_review(snapshot_id, {support_object_id, claim_object_id})
+            self._mark_support_disposition(
+                snapshot_id=snapshot_id,
+                support_object_id=support_object_id,
             )
-            self.confirm_relations(
+            current_support = next(
+                row for row in self.snapshot_objects(snapshot_id)
+                if row.get("object_id") == support_object_id
+            )
+            self._append_audit_evidence(
                 actor_id=actor_id,
                 snapshot_id=snapshot_id,
-                object_id=claim_object_id,
-                relations=relations,
+                target=current_support,
+                decision="repair_support",
+                original_suitability=original,
+                final_disposition="linked_as_support",
+                comment=f"support relation to {claim_object_id}",
+                proposed_correction="",
             )
-        self._reopen_for_review(snapshot_id, {support_object_id, claim_object_id})
+
+    def _disposition_conflicts(self, snapshot_id: str) -> list[str]:
+        objects = {row["object_id"]: row for row in self.snapshot_objects(snapshot_id)}
+        conflicts: list[str] = []
+        for binding in self.object_review_bindings(snapshot_id):
+            if not binding.get("valid") or binding.get("decision") != "approve":
+                continue
+            suitability = str(binding.get("suitability") or "").strip()
+            if not suitability:
+                continue
+            obj = objects.get(str(binding.get("object_id") or ""))
+            if obj is None:
+                conflicts.append(str(binding.get("object_id") or ""))
+                continue
+            try:
+                expected = register_status_from_suitability(suitability)
+            except ValueError:
+                conflicts.append(str(binding.get("object_id") or ""))
+                continue
+            actual = str(passage_register_of(obj).get("status") or "")
+            if actual != expected:
+                conflicts.append(str(binding.get("object_id") or ""))
+        return list(dict.fromkeys(conflicts))
+
+    def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
+        considered = super().consider_publish(actor_id=actor_id, snapshot_id=snapshot_id)
+        conflicts = self._disposition_conflicts(snapshot_id)
+        if not conflicts:
+            considered["disposition_consistent"] = True
+            return considered
+        blockers = list(considered.get("blockers") or [])
+        if REVIEW_DISPOSITION_INCONSISTENT not in blockers:
+            blockers.append(REVIEW_DISPOSITION_INCONSISTENT)
+        considered["blockers"] = blockers
+        considered["publish_allowed"] = False
+        considered["disposition_consistent"] = False
+        considered["disposition_conflict_object_ids"] = conflicts
+        return considered
+
+    def select_for_question(self, *, family: str, asked_class: str) -> list[dict[str, Any]]:
+        """Prove the console selector cannot leak revise/reject/pending objects."""
+        selected = super().select_for_question(family=family, asked_class=asked_class)
+        out: list[dict[str, Any]] = []
+        for item in selected:
+            obj = next(
+                (
+                    row
+                    for row in self.snapshot_objects(str(item.get("snapshot_id") or ""))
+                    if row.get("object_id") == item.get("object_id")
+                ),
+                None,
+            )
+            if obj is None:
+                continue
+            governance = obj.get("governance") or {}
+            if governance.get("validation_status") != "approved":
+                continue
+            if passage_register_of(obj).get("status") in {"excluded_with_reason", "not_yet_assessed"}:
+                continue
+            out.append(item)
+        return out
 
     def audit_review_signals(self) -> list[dict[str, Any]]:
         return [
@@ -289,7 +668,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
 
 
 def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole) -> None:
-    """Expose repair work and read-only Review evidence inside Audit."""
+    """Expose revision-pinned repair work and read-only Review evidence in Audit."""
 
     def account_for(request: Request) -> dict[str, Any]:
         return console.session_account(request.cookies.get("console_session"))
@@ -304,59 +683,116 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
         )
 
     @app.get("/review/repair", response_class=HTMLResponse)
-    def repair_home(request: Request) -> str:
+    def repair_home(request: Request, document: str = "", object: str = "") -> str:
         account = account_for(request)
-        if not ({"researcher", "reviewer"} & set(account.get("roles") or [])):
+        roles = set(account.get("roles") or [])
+        if not ({"researcher", "reviewer"} & roles):
             raise ConsoleError("researcher_role_required")
         cards: list[str] = []
         for envelope in console.list_envelopes():
-            sid = envelope["snapshot_id"]
-            for obj in console.snapshot_objects(sid):
+            sid = str(envelope["snapshot_id"])
+            if document and sid != document:
+                continue
+            allowed = (
+                "researcher" in roles and envelope.get("uploader_account_id") == account["account_id"]
+            ) or (
+                "reviewer" in roles and account["account_id"] in (envelope.get("named_reviewers") or [])
+            )
+            if not allowed:
+                continue
+            current, revision = console.snapshot_objects_and_revision(sid)
+            for obj in current:
+                oid = str(obj.get("object_id") or "")
+                if object and oid != object:
+                    continue
                 if (obj.get("governance") or {}).get("validation_status") != "revise":
                     continue
                 text = str((obj.get("content") or {}).get("clean_text") or "")
-                suit = str(passage_register_of(obj).get("suitability") or "")
+                signal = console._latest_review_signal(oid, decision="revise")
+                details = (signal or {}).get("details") or {}
+                suitability = str(details.get("original_suitability") or details.get("suitability") or "")
+                proposed = str(details.get("proposed_correction") or "")
+                comment = str(details.get("comment") or "")
+                action = ""
+                if suitability == "alleen_onderbouwing":
+                    options = []
+                    for claim in current:
+                        claim_id = str(claim.get("object_id") or "")
+                        if not claim_id or claim_id == oid or claim.get("object_type") == "document":
+                            continue
+                        if (claim.get("governance") or {}).get("validation_status") == "rejected":
+                            continue
+                        claim_text = str((claim.get("content") or {}).get("clean_text") or claim_id)
+                        options.append(
+                            f'<option value="{_esc(claim_id)}">{_esc(claim_text[:180])}</option>'
+                        )
+                    action = (
+                        '<form method="post" action="/review/repair/support">'
+                        f'<input type="hidden" name="snapshot_id" value="{_esc(sid)}">'
+                        f'<input type="hidden" name="support_object_id" value="{_esc(oid)}">'
+                        f'<input type="hidden" name="snapshot_revision" value="{_esc(revision)}">'
+                        '<label>Koppel als onderbouwing aan kennisobject'
+                        f'<select name="claim_object_id" required>{"".join(options)}</select></label>'
+                        '<button class="btn-primary" type="submit">Onderbouwing koppelen</button>'
+                        '</form>'
+                    ) if options else '<p class="muted">Geen geschikt kennisobject beschikbaar om aan te koppelen.</p>'
+                else:
+                    action = (
+                        '<form method="post" action="/review/repair/source">'
+                        f'<input type="hidden" name="snapshot_id" value="{_esc(sid)}">'
+                        f'<input type="hidden" name="object_id" value="{_esc(oid)}">'
+                        f'<input type="hidden" name="snapshot_revision" value="{_esc(revision)}">'
+                        '<label>Herstelde, brongebonden passage'
+                        f'<textarea name="corrected_text" required>{_esc(proposed)}</textarea></label>'
+                        '<label>Reden voor herstel'
+                        f'<textarea name="reason" required>{_esc(comment)}</textarea></label>'
+                        '<button class="btn-primary" type="submit">Herstel uitvoeren</button>'
+                        '</form>'
+                    )
                 cards.append(
-                    f"<article class='doc-card'><p class='doc-title'>{text}</p>"
-                    f"<p>Status: herstel nodig · {suit or 'geen categorie'}</p>"
-                    f"<p><a href='/review?document={sid}&object={obj['object_id']}'>Open in Review</a></p></article>"
+                    "<article class='doc-card'>"
+                    f"<p class='doc-title'>{_esc(text)}</p>"
+                    f"<p>Status: herstel nodig · {_esc(suitability or 'geen categorie')}</p>"
+                    f"{action}"
+                    f"<p><a href='{_esc(_review_url(sid, oid))}'>Terug naar Review</a></p>"
+                    "</article>"
                 )
         return chrome(
             request,
-            "<h1>Review — herstel nodig</h1><p class='lead'>Alleen actuele objectversies met status revise.</p>"
+            "<h1>Review — herstel nodig</h1>"
+            "<p class='lead'>Voorgestelde correcties worden hier pas expliciet uitgevoerd. Elk formulier is gebonden aan de getoonde snapshot-revisie.</p>"
             + ("".join(cards) or "<p class='muted'>Geen herstelwerk.</p>")
             + "<p><a href='/audit/review-signals'>Bekijk signalen in Audit</a></p>",
             "review",
         )
 
     @app.post("/review/repair/source")
-    def repair_source(
+    def repair_source_route(
         request: Request,
         snapshot_id: str = Form(...),
         object_id: str = Form(...),
         corrected_text: str = Form(...),
         reason: str = Form(...),
+        snapshot_revision: str = Form(...),
     ) -> RedirectResponse:
         account = account_for(request)
-        console.correct_object(
+        console.repair_source(
             actor_id=account["account_id"],
             snapshot_id=snapshot_id,
             object_id=object_id,
-            patch={
-                "reason": reason,
-                "operations": [
-                    {"op": "set", "path": "content.clean_text", "value": corrected_text}
-                ],
-            },
+            corrected_text=corrected_text,
+            reason=reason,
+            expected_revision=snapshot_revision.strip(),
         )
-        return RedirectResponse(f"/review?document={snapshot_id}&object={object_id}", status_code=303)
+        return RedirectResponse(_review_url(snapshot_id, object_id), status_code=303)
 
     @app.post("/review/repair/support")
-    def repair_support(
+    def repair_support_route(
         request: Request,
         snapshot_id: str = Form(...),
         support_object_id: str = Form(...),
         claim_object_id: str = Form(...),
+        snapshot_revision: str = Form(...),
     ) -> RedirectResponse:
         account = account_for(request)
         console.resolve_support_relation(
@@ -364,8 +800,9 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
             snapshot_id=snapshot_id,
             support_object_id=support_object_id,
             claim_object_id=claim_object_id,
+            expected_revision=snapshot_revision.strip(),
         )
-        return RedirectResponse(f"/review?document={snapshot_id}&object={support_object_id}", status_code=303)
+        return RedirectResponse(_review_url(snapshot_id, support_object_id), status_code=303)
 
     @app.get("/audit/review-signals", response_class=HTMLResponse)
     def audit_review_signals(request: Request) -> str:
@@ -377,16 +814,17 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
             details = event.get("details") or {}
             rows.append(
                 "<article class='doc-card'>"
-                f"<p class='doc-title'>{details.get('current_passage') or event.get('object_id')}</p>"
-                f"<p>{details.get('decision')} · {details.get('suitability')}</p>"
-                f"<p>{details.get('comment') or ''}</p>"
-                f"<p class='meta'>snapshot {details.get('snapshot_id')} · object {event.get('object_id')} · versie {event.get('object_version')}</p>"
+                f"<p class='doc-title'>{_esc(details.get('current_passage') or event.get('object_id'))}</p>"
+                f"<p>{_esc(details.get('decision'))} · {_esc(details.get('original_suitability') or details.get('suitability'))} → {_esc(details.get('final_disposition'))}</p>"
+                f"<p>{_esc(details.get('comment') or '')}</p>"
+                f"<p class='meta'>snapshot {_esc(details.get('snapshot_id'))} · object {_esc(event.get('object_id'))} · versie {_esc(event.get('object_version'))}</p>"
                 "</article>"
             )
         return chrome(
             request,
             "<p><a href='/audit'>← Terug naar Audit</a></p><h1>Signalen uit Review</h1>"
-            "<p class='lead'>Append-only evidence van revise- en rejectbesluiten. Audit wijzigt geen kennisobjecten.</p>"
+            "<p class='lead'>Append-only evidence van review en herstel. Audit wijzigt geen kennisobjecten.</p>"
+            "<p><a class='btn-secondary' href='/review/repair'>Open herstelwerk in Review</a></p>"
             + ("".join(rows) or "<p class='muted'>Nog geen signalen.</p>"),
             "audit",
         )
