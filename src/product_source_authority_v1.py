@@ -23,7 +23,10 @@ def verify_active_publication_sources(
     PostgreSQL decides which object versions/releases are active. Azure Blob
     decides whether the exact source bytes still exist. REAL serving requires
     both authorities to agree; no cached/local file is accepted as fallback.
+    An empty active registry has no source bytes to prove.
     """
+    if not authority_rows:
+        return 0
     if source_store is None:
         raise ProductSourceAuthorityError("product_source_store_required")
 
