@@ -7,7 +7,7 @@ Supported console topology remains one Gunicorn worker / one instance with
 serialized writes. Azure runtime requires both the durable PostgreSQL canonical
 publication store and Azure Blob as the authoritative immutable source store;
 local development may continue without either. Shared PostgreSQL workflow
-identity and document authority are opt-in until the later Azure cut-over.
+identity, documents and review authority are opt-in until the later Azure cut-over.
 """
 from __future__ import annotations
 
@@ -38,6 +38,11 @@ from src.workflow_identity_postgres_v1 import (
     PostgresIdentityDurablePublicationConsole,
     PostgresWorkflowIdentityStore,
 )
+from src.workflow_review_cutover_v1 import (
+    PostgresReviewWorkflowAzureAuthoritativePublicationConsole,
+    PostgresReviewWorkflowDurablePublicationConsole,
+)
+from src.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 
 ROOT = Path(__file__).resolve().parents[1]
 AZURE_DATA_ROOT = Path("/home/data/metis-console")
@@ -99,6 +104,22 @@ def _workflow_document_store() -> PostgresWorkflowDocumentRuntimeStore | None:
     return store
 
 
+def _workflow_review_store() -> PostgresWorkflowReviewStore | None:
+    """Review authority is enabled only after identity and documents are shared."""
+    kind = os.environ.get("METIS_WORKFLOW_REVIEW_STORE", "").strip().lower()
+    if not kind:
+        return None
+    if kind != "postgres":
+        raise RuntimeError("unsupported_workflow_review_store")
+    if os.environ.get("METIS_WORKFLOW_STORE", "").strip().lower() != "postgres":
+        raise RuntimeError("workflow_identity_store_required_for_review_store")
+    if os.environ.get("METIS_WORKFLOW_DOCUMENT_STORE", "").strip().lower() != "postgres":
+        raise RuntimeError("workflow_document_store_required_for_review_store")
+    store = PostgresWorkflowReviewStore()
+    store.verify_review_schema()
+    return store
+
+
 def _immutable_source_store() -> AzureBlobSourceStore | None:
     """Azure production may never run without Blob as source-byte authority."""
     kind = os.environ.get("CONSOLE_IMMUTABLE_SOURCE_STORE", "").strip().lower()
@@ -148,6 +169,7 @@ def build_app() -> object:
     canonical_store = _canonical_store()
     workflow_identity_store = _workflow_identity_store()
     workflow_document_store = _workflow_document_store()
+    workflow_review_store = _workflow_review_store()
     running_in_azure = _running_in_azure()
 
     common = dict(
@@ -157,7 +179,21 @@ def build_app() -> object:
         immutable_source_store=immutable_store,
         canonical_publication_store=canonical_store,
     )
-    if workflow_document_store is not None:
+    if workflow_review_store is not None:
+        if workflow_identity_store is None or workflow_document_store is None:
+            raise RuntimeError("workflow_prerequisites_required_for_review_store")
+        console_cls = (
+            PostgresReviewWorkflowAzureAuthoritativePublicationConsole
+            if running_in_azure
+            else PostgresReviewWorkflowDurablePublicationConsole
+        )
+        console = console_cls(
+            **common,
+            workflow_identity_store=workflow_identity_store,
+            workflow_document_store=workflow_document_store,
+            workflow_review_store=workflow_review_store,
+        )
+    elif workflow_document_store is not None:
         if workflow_identity_store is None:  # defensive; helper already enforces this
             raise RuntimeError("workflow_identity_store_required_for_document_store")
         console_cls = (
