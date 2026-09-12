@@ -34,6 +34,7 @@ from src.workflow_documents_cutover_v1 import (
     PostgresWorkflowDocumentRuntimeStore,
     PostgresWorkflowDurablePublicationConsole,
 )
+from src.workflow_identity_cutover_v1 import CutoverPostgresWorkflowIdentityStore
 from src.workflow_identity_postgres_v1 import (
     PostgresIdentityAzureAuthoritativePublicationConsole,
     PostgresIdentityDurablePublicationConsole,
@@ -91,7 +92,7 @@ def _workflow_identity_store() -> PostgresWorkflowIdentityStore | None:
         return None
     if kind != "postgres":
         raise RuntimeError("unsupported_workflow_store")
-    store = PostgresWorkflowIdentityStore()
+    store = CutoverPostgresWorkflowIdentityStore()
     store.verify_schema()
     return store
 
