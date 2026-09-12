@@ -40,17 +40,20 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         self.verify_schema()
         try:
             with self._connect() as con:
-                row = con.execute(
-                    "SELECT 1 FROM information_schema.columns "
-                    "WHERE table_schema='workflow' AND table_name='documents' "
-                    "AND column_name='envelope_payload'"
-                ).fetchone()
+                rows = con.execute(
+                    "SELECT table_name,column_name FROM information_schema.columns "
+                    "WHERE table_schema='workflow' AND "
+                    "((table_name='documents' AND column_name='envelope_payload') OR "
+                    "(table_name='document_objects' AND column_name='position'))"
+                ).fetchall()
         except WorkflowDocumentStoreError:
             raise
         except Exception as exc:
             raise WorkflowDocumentStoreError("workflow_document_cutover_schema_check_failed") from exc
-        if row is None:
-            raise WorkflowDocumentStoreError("workflow_document_envelope_payload_missing")
+        present = {(str(row["table_name"]), str(row["column_name"])) for row in rows}
+        required = {("documents", "envelope_payload"), ("document_objects", "position")}
+        if present != required:
+            raise WorkflowDocumentStoreError("workflow_document_cutover_schema_missing")
 
     @staticmethod
     def _payload(value: Any) -> dict[str, Any]:
@@ -110,16 +113,36 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         except Exception as exc:
             raise WorkflowDocumentStoreError("workflow_document_read_failed") from exc
 
+    def list_document_objects(self, snapshot_id: str) -> list[dict[str, Any]]:
+        try:
+            with self._connect() as con:
+                rows = con.execute(
+                    "SELECT position,payload FROM workflow.document_objects WHERE snapshot_id=%s ORDER BY position",
+                    (snapshot_id,),
+                ).fetchall()
+            if any(row["position"] is None for row in rows):
+                raise WorkflowDocumentStoreError("workflow_document_cutover_not_prepared")
+            return [
+                dict(row["payload"]) if isinstance(row["payload"], dict) else json.loads(row["payload"])
+                for row in rows
+            ]
+        except WorkflowDocumentStoreError:
+            raise
+        except Exception as exc:
+            raise WorkflowDocumentStoreError("workflow_document_objects_read_failed") from exc
+
     @staticmethod
     def _revision(rows: list[dict[str, Any]]) -> str:
         return hashlib.sha256(_objects_jsonl_bytes(rows)).hexdigest()
 
     def _objects_locked(self, con: Any, snapshot_id: str) -> list[dict[str, Any]]:
         rows = con.execute(
-            "SELECT payload FROM workflow.document_objects WHERE snapshot_id=%s "
-            "ORDER BY object_id,object_version FOR UPDATE",
+            "SELECT position,payload FROM workflow.document_objects WHERE snapshot_id=%s "
+            "ORDER BY position FOR UPDATE",
             (snapshot_id,),
         ).fetchall()
+        if any(row["position"] is None for row in rows):
+            raise WorkflowDocumentStoreError("workflow_document_cutover_not_prepared")
         return [
             dict(row["payload"]) if isinstance(row["payload"], dict) else json.loads(row["payload"])
             for row in rows
@@ -201,11 +224,11 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                         raise WorkflowDocumentStoreError("workflow_object_identity_invalid")
                     if objects is not None:
                         con.execute("DELETE FROM workflow.document_objects WHERE snapshot_id=%s", (snapshot_id,))
-                        for obj in next_objects:
+                        for position, obj in enumerate(next_objects):
                             con.execute(
-                                "INSERT INTO workflow.document_objects(snapshot_id,object_id,object_version,payload) "
-                                "VALUES(%s,%s,%s,%s::jsonb)",
-                                (snapshot_id, obj["object_id"], obj["object_version"], _json_text(obj)),
+                                "INSERT INTO workflow.document_objects(snapshot_id,object_id,object_version,payload,position) "
+                                "VALUES(%s,%s,%s,%s::jsonb,%s)",
+                                (snapshot_id, obj["object_id"], obj["object_version"], _json_text(obj), position),
                             )
             return self._revision(next_objects)
         except WorkflowDocumentStoreError:
@@ -214,7 +237,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             raise WorkflowDocumentStoreError("workflow_document_bundle_write_failed") from exc
 
     def prepare_legacy_cutover(self, runtime: Path) -> dict[str, int]:
-        """Backfill full envelopes only after the migration-only store proves exact equality."""
+        """Backfill full envelope and original object order after exact migration proof."""
         bundles = _read_legacy_runtime(Path(runtime))
         prepared = 0
         try:
@@ -235,6 +258,12 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                             "UPDATE workflow.documents SET envelope_payload=%s::jsonb WHERE snapshot_id=%s",
                             (_json_text(envelope), snapshot_id),
                         )
+                        for position, obj in enumerate(objects):
+                            con.execute(
+                                "UPDATE workflow.document_objects SET position=%s "
+                                "WHERE snapshot_id=%s AND object_id=%s AND object_version=%s",
+                                (position, snapshot_id, obj["object_id"], obj["object_version"]),
+                            )
                 prepared += 1
             return {"documents": len(bundles), "prepared": prepared}
         except WorkflowDocumentStoreError:
