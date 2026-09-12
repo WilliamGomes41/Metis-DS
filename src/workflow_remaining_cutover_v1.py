@@ -219,6 +219,17 @@ class _PostgresRemainingWorkflowMixin:
                 return True
         return False
 
+    def _apply_local_release_copy(self, release: dict[str, Any], projection: list[dict[str, Any]]) -> None:
+        """Maintain local copies, then persist the envelope in PostgreSQL authority."""
+        super()._apply_local_release_copy(release, projection)
+        snapshot_id = str(release["snapshot_id"])
+        current = deepcopy(self._envelopes[snapshot_id])
+        try:
+            self.workflow_document_store.write_bundle(envelope=current)
+        except Exception as exc:
+            raise ConsoleError("workflow_document_write_failed", str(exc)) from exc
+        self.refresh_workflow_documents()
+
 
 class PostgresCompleteWorkflowDurablePublicationConsole(
     _PostgresRemainingWorkflowMixin,
