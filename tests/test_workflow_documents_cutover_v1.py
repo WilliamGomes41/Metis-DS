@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from src.operations_console_v1 import _objects_jsonl_bytes
+from src.operations_console_v1 import SNAPSHOT_OBJECT_WRITE_CONFLICT, _objects_jsonl_bytes
 from src.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,7 +46,7 @@ def test_cutover_runtime_reads_objects_by_migrated_position() -> None:
     assert "ORDER BY position" in source
     assert "workflow_document_cutover_not_prepared" in source
     assert "expected_revision" in source
-    assert "snapshot_object_write_conflict" in source
+    assert SNAPSHOT_OBJECT_WRITE_CONFLICT == "snapshot_object_write_conflict"
 
 
 def test_local_files_are_declared_compatibility_mirrors_not_authority() -> None:
