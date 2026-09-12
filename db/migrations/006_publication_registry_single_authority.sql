@@ -1,32 +1,71 @@
 -- Publication registry is the sole authority for externally visible publication state.
--- Canonical JSON may retain legacy publication-shaped governance fields for schema
--- compatibility, but those fields are inert and may never claim live publication.
--- Release status remains lifecycle/audit evidence and must never gate serving reads.
+--
+-- This cut-over is intentionally destructive. The current corpus is test data, so we
+-- reset durable canonical/publication state instead of carrying legacy publication
+-- fields into the production contract. Workflow/identity tables are not touched.
 
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1
-        FROM canonical_object_versions
-        WHERE COALESCE(canonical_json #>> '{governance,publication_status}', 'unpublished') <> 'unpublished'
-           OR NULLIF(canonical_json #>> '{governance,release_owner}', '') IS NOT NULL
-           OR NULLIF(canonical_json #>> '{governance,release_date}', '') IS NOT NULL
-           OR NULLIF(canonical_json #>> '{governance,superseded_by}', '') IS NOT NULL
-    ) THEN
-        RAISE EXCEPTION 'canonical JSON contains publication authority; migrate/repair before applying registry-only authority';
-    END IF;
-END
-$$;
+TRUNCATE TABLE
+    audit_events,
+    publication_registry,
+    publication_release_items,
+    canonical_object_sources,
+    publication_releases,
+    canonical_object_versions,
+    source_snapshots
+RESTART IDENTITY;
+
+ALTER TABLE canonical_object_versions
+    ADD COLUMN IF NOT EXISTS canonical_schema_version TEXT NOT NULL DEFAULT '1.3';
 
 ALTER TABLE canonical_object_versions
     DROP CONSTRAINT IF EXISTS canonical_json_no_publication_authority;
 
+-- Incoming workflow objects can still be produced by an older transform during the
+-- cut-over. Durable canonical storage strips publication lifecycle fields before the
+-- row is constrained. Governance remains review governance only.
+CREATE OR REPLACE FUNCTION strip_publication_governance_from_canonical_json()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    governance_json JSONB;
+BEGIN
+    governance_json := COALESCE(NEW.canonical_json -> 'governance', '{}'::jsonb);
+    governance_json := governance_json
+        - 'publication_status'
+        - 'release_owner'
+        - 'release_date'
+        - 'superseded_by';
+
+    NEW.canonical_json := jsonb_set(
+        NEW.canonical_json,
+        '{governance}',
+        governance_json,
+        true
+    );
+    NEW.canonical_schema_version := '1.3';
+    RETURN NEW;
+END
+$$;
+
+DROP TRIGGER IF EXISTS trg_strip_publication_governance ON canonical_object_versions;
+CREATE TRIGGER trg_strip_publication_governance
+BEFORE INSERT OR UPDATE OF canonical_json
+ON canonical_object_versions
+FOR EACH ROW
+EXECUTE FUNCTION strip_publication_governance_from_canonical_json();
+
 ALTER TABLE canonical_object_versions
     ADD CONSTRAINT canonical_json_no_publication_authority CHECK (
-        COALESCE(canonical_json #>> '{governance,publication_status}', 'unpublished') = 'unpublished'
-        AND NULLIF(canonical_json #>> '{governance,release_owner}', '') IS NULL
-        AND NULLIF(canonical_json #>> '{governance,release_date}', '') IS NULL
-        AND NULLIF(canonical_json #>> '{governance,superseded_by}', '') IS NULL
+        NOT COALESCE(
+            (canonical_json -> 'governance') ?| ARRAY[
+                'publication_status',
+                'release_owner',
+                'release_date',
+                'superseded_by'
+            ],
+            false
+        )
     );
 
 -- An active pointer may only be created for a release that completed the publish
@@ -95,6 +134,7 @@ SELECT
     c.object_version,
     c.document_id,
     c.object_type,
+    c.canonical_schema_version,
     c.content_hash,
     c.canonical_json,
     r.release_id,
@@ -107,6 +147,10 @@ JOIN publication_releases rel
   ON rel.release_id = r.release_id
 WHERE r.state = 'active';
 
+COMMENT ON TABLE canonical_object_versions IS
+    'Immutable canonical knowledge versions. Publication lifecycle state is forbidden inside canonical_json.';
+COMMENT ON COLUMN canonical_object_versions.canonical_schema_version IS
+    'Durable canonical knowledge contract version. Version 1.3 removes publication lifecycle fields from governance.';
 COMMENT ON TABLE publication_registry IS
     'Sole authority for whether an exact canonical object version is externally published.';
 COMMENT ON COLUMN publication_registry.state IS
