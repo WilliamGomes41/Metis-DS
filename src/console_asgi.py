@@ -6,7 +6,8 @@ database credentials come from the deployment environment, never from Git.
 Supported console topology remains one Gunicorn worker / one instance with
 serialized writes. Azure runtime requires both the durable PostgreSQL canonical
 publication store and Azure Blob as the authoritative immutable source store;
-local development may continue without either.
+local development may continue without either. Shared PostgreSQL workflow
+identity is opt-in until the later Azure cut-over.
 """
 from __future__ import annotations
 
@@ -27,6 +28,11 @@ from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.proportionate_review_v1 import install_proportionate_review_routes
 from src.review_closure_v1 import harden_legacy_repair_routes
 from src.topology_bound_v1 import assert_supported_topology
+from src.workflow_identity_postgres_v1 import (
+    PostgresIdentityAzureAuthoritativePublicationConsole,
+    PostgresIdentityDurablePublicationConsole,
+    PostgresWorkflowIdentityStore,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 AZURE_DATA_ROOT = Path("/home/data/metis-console")
@@ -58,6 +64,18 @@ def _canonical_store() -> PostgresCanonicalPublicationStore | None:
     if kind != "postgres":
         raise RuntimeError("unsupported_canonical_store")
     store = PostgresCanonicalPublicationStore()
+    store.verify_schema()
+    return store
+
+
+def _workflow_identity_store() -> PostgresWorkflowIdentityStore | None:
+    """Shared identity can land in code before the Azure runtime is switched."""
+    kind = os.environ.get("METIS_WORKFLOW_STORE", "").strip().lower()
+    if not kind:
+        return None
+    if kind != "postgres":
+        raise RuntimeError("unsupported_workflow_store")
+    store = PostgresWorkflowIdentityStore()
     store.verify_schema()
     return store
 
@@ -109,14 +127,31 @@ def build_app() -> object:
     data_root = _env_path("CONSOLE_DATA_ROOT", _default_data_root())
     immutable_store = _immutable_source_store()
     canonical_store = _canonical_store()
-    console_cls = AzureAuthoritativePublicationConsole if _running_in_azure() else DurablePublicationConsole
-    console = console_cls(
-        root=ROOT,
-        source_store=_env_path("CONSOLE_SOURCE_STORE", data_root / "sources" / "private"),
-        runtime=_env_path("CONSOLE_RUNTIME", data_root / "output" / "runtime" / "operations-console"),
-        immutable_source_store=immutable_store,
-        canonical_publication_store=canonical_store,
-    )
+    workflow_identity_store = _workflow_identity_store()
+    running_in_azure = _running_in_azure()
+    if workflow_identity_store is None:
+        console_cls = AzureAuthoritativePublicationConsole if running_in_azure else DurablePublicationConsole
+        console = console_cls(
+            root=ROOT,
+            source_store=_env_path("CONSOLE_SOURCE_STORE", data_root / "sources" / "private"),
+            runtime=_env_path("CONSOLE_RUNTIME", data_root / "output" / "runtime" / "operations-console"),
+            immutable_source_store=immutable_store,
+            canonical_publication_store=canonical_store,
+        )
+    else:
+        console_cls = (
+            PostgresIdentityAzureAuthoritativePublicationConsole
+            if running_in_azure
+            else PostgresIdentityDurablePublicationConsole
+        )
+        console = console_cls(
+            root=ROOT,
+            source_store=_env_path("CONSOLE_SOURCE_STORE", data_root / "sources" / "private"),
+            runtime=_env_path("CONSOLE_RUNTIME", data_root / "output" / "runtime" / "operations-console"),
+            immutable_source_store=immutable_store,
+            canonical_publication_store=canonical_store,
+            workflow_identity_store=workflow_identity_store,
+        )
     bootstrap_accounts(console)
     # One-time/idempotent compatibility step for revise rows persisted before
     # structured repair existed. They must re-enter Review, not a legacy editor.
