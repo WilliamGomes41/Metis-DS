@@ -29,10 +29,13 @@ def _migrate_audits(runtime: Path, store: PostgresWorkflowRemainingStore) -> int
     root = runtime / "audits"
     local = [_read_json(path) for path in sorted(root.glob("audit-*.json"))] if root.is_dir() else []
     existing = store.list_audits()
+    if not local:
+        return len(existing)
+    expected = sorted(local, key=lambda row: (str(row.get("created_at") or ""), str(row.get("audit_id") or "")), reverse=True)
     if existing:
-        if existing != sorted(local, key=lambda row: (str(row.get("created_at") or ""), str(row.get("audit_id") or "")), reverse=True):
+        if existing != expected:
             raise RuntimeError("workflow_audit_migration_conflict")
-        return len(local)
+        return len(existing)
     for record in local:
         store.create_audit(record)
     return len(local)
@@ -42,11 +45,13 @@ def _migrate_secret(runtime: Path, store: PostgresWorkflowRemainingStore) -> int
     path = runtime / "audit_secrets" / "llm_api_key.json"
     local = _read_json(path) if path.is_file() else None
     existing = store.get_secret_payload("llm_api_key")
+    if local is None:
+        return 1 if existing is not None else 0
     if existing is not None and existing != local:
         raise RuntimeError("workflow_audit_secret_migration_conflict")
-    if existing is None and local is not None:
+    if existing is None:
         store.set_secret_payload("llm_api_key", local)
-    return 1 if local is not None else 0
+    return 1
 
 
 def _history_rows(path: Path) -> list[dict]:
