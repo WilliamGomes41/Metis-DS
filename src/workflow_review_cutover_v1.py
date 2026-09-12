@@ -96,13 +96,19 @@ class _PostgresWorkflowReviewMixin:
         self,
         *,
         bindings: dict[str, Any],
+        snapshot_id: str | None,
         envelope: dict[str, Any] | None,
         objects: list[dict[str, Any]] | None,
     ) -> None:
-        with suppress(Exception):
-            self.workflow_review_store.replace_bindings(bindings)
-        self._bindings = deepcopy(bindings)
-        self._bindings_baseline = deepcopy(bindings)
+        if snapshot_id is not None:
+            with suppress(Exception):
+                self.workflow_review_store.replace_snapshot_bindings(
+                    snapshot_id,
+                    list(bindings.get(snapshot_id, [])),
+                )
+        current = self.workflow_review_store.read_bindings()
+        self._bindings = current
+        self._bindings_baseline = deepcopy(current)
         self._mirror_bindings()
         if envelope is not None and objects is not None:
             with suppress(Exception):
@@ -146,6 +152,7 @@ class _PostgresWorkflowReviewMixin:
         except WorkflowReviewStoreError as exc:
             self._restore_review_state(
                 bindings=prior_bindings,
+                snapshot_id=sid,
                 envelope=prior_envelope,
                 objects=prior_objects,
             )
@@ -153,6 +160,7 @@ class _PostgresWorkflowReviewMixin:
         except Exception:
             self._restore_review_state(
                 bindings=prior_bindings,
+                snapshot_id=sid,
                 envelope=prior_envelope,
                 objects=prior_objects,
             )
@@ -170,6 +178,7 @@ class _PostgresWorkflowReviewMixin:
         except Exception:
             self._restore_review_state(
                 bindings=prior_bindings,
+                snapshot_id=snapshot_id,
                 envelope=prior_envelope,
                 objects=prior_objects,
             )
