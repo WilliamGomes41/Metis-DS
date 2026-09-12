@@ -45,7 +45,7 @@ Startup importeert nooit stil lokale state. De migratievolgorde blijft expliciet
 
 Een ontbrekend klassehistoriebestand, afwijkende object-ID-volgorde of conflicterende bestaande PostgreSQL-state blokkeert de migratie fail-closed.
 
-De migratie verplaatst workflow-authority naar een **managed database**. Dat betekent niet dat meerdere App Service-instances al ondersteund zijn; die topologie wordt pas in stap 6 geopend na expliciet concurrencybewijs.
+De migratie verplaatst workflow-authority naar een **managed database**. Dat betekent niet dat meerdere App Service-instances of gelijktijdige multi-reviewer writes al ondersteund zijn; die topologie wordt pas in stap 6 geopend na expliciet concurrencybewijs.
 
 ## Lokale runtime-inventaris
 
