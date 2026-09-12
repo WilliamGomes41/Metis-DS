@@ -7,7 +7,7 @@ Supported console topology remains one Gunicorn worker / one instance with
 serialized writes. Azure runtime requires both the durable PostgreSQL canonical
 publication store and Azure Blob as the authoritative immutable source store;
 local development may continue without either. Shared PostgreSQL workflow
-identity is opt-in until the later Azure cut-over.
+identity and document authority are opt-in until the later Azure cut-over.
 """
 from __future__ import annotations
 
@@ -28,6 +28,11 @@ from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.proportionate_review_v1 import install_proportionate_review_routes
 from src.review_closure_v1 import harden_legacy_repair_routes
 from src.topology_bound_v1 import assert_supported_topology
+from src.workflow_documents_cutover_v1 import (
+    PostgresWorkflowAzureAuthoritativePublicationConsole,
+    PostgresWorkflowDocumentRuntimeStore,
+    PostgresWorkflowDurablePublicationConsole,
+)
 from src.workflow_identity_postgres_v1 import (
     PostgresIdentityAzureAuthoritativePublicationConsole,
     PostgresIdentityDurablePublicationConsole,
@@ -80,6 +85,20 @@ def _workflow_identity_store() -> PostgresWorkflowIdentityStore | None:
     return store
 
 
+def _workflow_document_store() -> PostgresWorkflowDocumentRuntimeStore | None:
+    """Document authority is a separate cut-over gate after explicit migration."""
+    kind = os.environ.get("METIS_WORKFLOW_DOCUMENT_STORE", "").strip().lower()
+    if not kind:
+        return None
+    if kind != "postgres":
+        raise RuntimeError("unsupported_workflow_document_store")
+    if os.environ.get("METIS_WORKFLOW_STORE", "").strip().lower() != "postgres":
+        raise RuntimeError("workflow_identity_store_required_for_document_store")
+    store = PostgresWorkflowDocumentRuntimeStore()
+    store.verify_cutover_schema()
+    return store
+
+
 def _immutable_source_store() -> AzureBlobSourceStore | None:
     """Azure production may never run without Blob as source-byte authority."""
     kind = os.environ.get("CONSOLE_IMMUTABLE_SOURCE_STORE", "").strip().lower()
@@ -128,30 +147,43 @@ def build_app() -> object:
     immutable_store = _immutable_source_store()
     canonical_store = _canonical_store()
     workflow_identity_store = _workflow_identity_store()
+    workflow_document_store = _workflow_document_store()
     running_in_azure = _running_in_azure()
-    if workflow_identity_store is None:
-        console_cls = AzureAuthoritativePublicationConsole if running_in_azure else DurablePublicationConsole
-        console = console_cls(
-            root=ROOT,
-            source_store=_env_path("CONSOLE_SOURCE_STORE", data_root / "sources" / "private"),
-            runtime=_env_path("CONSOLE_RUNTIME", data_root / "output" / "runtime" / "operations-console"),
-            immutable_source_store=immutable_store,
-            canonical_publication_store=canonical_store,
+
+    common = dict(
+        root=ROOT,
+        source_store=_env_path("CONSOLE_SOURCE_STORE", data_root / "sources" / "private"),
+        runtime=_env_path("CONSOLE_RUNTIME", data_root / "output" / "runtime" / "operations-console"),
+        immutable_source_store=immutable_store,
+        canonical_publication_store=canonical_store,
+    )
+    if workflow_document_store is not None:
+        if workflow_identity_store is None:  # defensive; helper already enforces this
+            raise RuntimeError("workflow_identity_store_required_for_document_store")
+        console_cls = (
+            PostgresWorkflowAzureAuthoritativePublicationConsole
+            if running_in_azure
+            else PostgresWorkflowDurablePublicationConsole
         )
-    else:
+        console = console_cls(
+            **common,
+            workflow_identity_store=workflow_identity_store,
+            workflow_document_store=workflow_document_store,
+        )
+    elif workflow_identity_store is not None:
         console_cls = (
             PostgresIdentityAzureAuthoritativePublicationConsole
             if running_in_azure
             else PostgresIdentityDurablePublicationConsole
         )
         console = console_cls(
-            root=ROOT,
-            source_store=_env_path("CONSOLE_SOURCE_STORE", data_root / "sources" / "private"),
-            runtime=_env_path("CONSOLE_RUNTIME", data_root / "output" / "runtime" / "operations-console"),
-            immutable_source_store=immutable_store,
-            canonical_publication_store=canonical_store,
+            **common,
             workflow_identity_store=workflow_identity_store,
         )
+    else:
+        console_cls = AzureAuthoritativePublicationConsole if running_in_azure else DurablePublicationConsole
+        console = console_cls(**common)
+
     bootstrap_accounts(console)
     # One-time/idempotent compatibility step for revise rows persisted before
     # structured repair existed. They must re-enter Review, not a legacy editor.
