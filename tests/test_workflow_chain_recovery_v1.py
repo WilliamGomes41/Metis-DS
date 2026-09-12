@@ -247,5 +247,5 @@ def test_identity_migration_is_explicit_operator_command() -> None:
     asgi = (ROOT / "src" / "console_asgi.py").read_text(encoding="utf-8")
     assert "--runtime" in script
     assert "migrate_legacy_if_empty" in script
-    assert "CutoverPostgresWorkflowIdentityStore" in asgi
-    assert "PostgresWorkflowIdentityStore()" not in asgi
+    assert "store = CutoverPostgresWorkflowIdentityStore()" in asgi
+    assert "store = PostgresWorkflowIdentityStore()" not in asgi
