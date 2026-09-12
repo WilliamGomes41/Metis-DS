@@ -34,6 +34,7 @@ class _PostgresWorkflowReviewMixin:
         self.workflow_review_store.bind_ledger_mirror(self._ledger_path)
         register_backend(self._ledger_path, self.workflow_review_store)
         self._bindings = self.workflow_review_store.read_bindings()
+        self._bindings_baseline = deepcopy(self._bindings)
         self._mirror_bindings()
 
     def _assert_review_cutover_prepared(self) -> None:
@@ -53,14 +54,33 @@ class _PostgresWorkflowReviewMixin:
         with suppress(OSError):
             _atomic_write(self._bindings_path, self._bindings)
 
+    @staticmethod
+    def _changed_binding_snapshots(
+        before: dict[str, list[dict[str, Any]]],
+        after: dict[str, list[dict[str, Any]]],
+    ) -> set[str]:
+        keys = set(before) | set(after)
+        return {snapshot_id for snapshot_id in keys if before.get(snapshot_id, []) != after.get(snapshot_id, [])}
+
+    def _persist_binding_changes(
+        self,
+        before: dict[str, list[dict[str, Any]]],
+        after: dict[str, list[dict[str, Any]]],
+    ) -> None:
+        for snapshot_id in sorted(self._changed_binding_snapshots(before, after)):
+            self.workflow_review_store.replace_snapshot_bindings(snapshot_id, list(after.get(snapshot_id, [])))
+
     def _save_bindings(self) -> None:
         payload = getattr(self, "_prepared_bindings", None)
         source = self._bindings if payload is None else payload
+        baseline = deepcopy(self._bindings_baseline)
         try:
-            self.workflow_review_store.replace_bindings(source)
+            self._persist_binding_changes(baseline, source)
+            current = self.workflow_review_store.read_bindings()
         except WorkflowReviewStoreError as exc:
             raise ConsoleError("workflow_review_write_failed", str(exc)) from exc
-        self._bindings = deepcopy(source)
+        self._bindings = current
+        self._bindings_baseline = deepcopy(current)
         self._mirror_bindings()
 
     def _reload_store_locked(self) -> None:
@@ -69,18 +89,26 @@ class _PostgresWorkflowReviewMixin:
             self._bindings = self.workflow_review_store.read_bindings()
         except WorkflowReviewStoreError as exc:
             raise ConsoleError("workflow_review_unavailable", str(exc)) from exc
+        self._bindings_baseline = deepcopy(self._bindings)
         self._mirror_bindings()
 
     def _restore_review_state(
         self,
         *,
         bindings: dict[str, Any],
+        snapshot_id: str | None,
         envelope: dict[str, Any] | None,
         objects: list[dict[str, Any]] | None,
     ) -> None:
-        with suppress(Exception):
-            self.workflow_review_store.replace_bindings(bindings)
-        self._bindings = deepcopy(bindings)
+        if snapshot_id is not None:
+            with suppress(Exception):
+                self.workflow_review_store.replace_snapshot_bindings(
+                    snapshot_id,
+                    list(bindings.get(snapshot_id, [])),
+                )
+        current = self.workflow_review_store.read_bindings()
+        self._bindings = current
+        self._bindings_baseline = deepcopy(current)
         self._mirror_bindings()
         if envelope is not None and objects is not None:
             with suppress(Exception):
@@ -117,11 +145,14 @@ class _PostgresWorkflowReviewMixin:
                     snapshot_id=snapshot_id,
                 )
                 if bindings is not None:
-                    self.workflow_review_store.replace_bindings(self._bindings)
+                    current = self.workflow_review_store.read_bindings()
+                    self._bindings = current
+                    self._bindings_baseline = deepcopy(current)
                     self._mirror_bindings()
         except WorkflowReviewStoreError as exc:
             self._restore_review_state(
                 bindings=prior_bindings,
+                snapshot_id=sid,
                 envelope=prior_envelope,
                 objects=prior_objects,
             )
@@ -129,6 +160,7 @@ class _PostgresWorkflowReviewMixin:
         except Exception:
             self._restore_review_state(
                 bindings=prior_bindings,
+                snapshot_id=sid,
                 envelope=prior_envelope,
                 objects=prior_objects,
             )
@@ -146,6 +178,7 @@ class _PostgresWorkflowReviewMixin:
         except Exception:
             self._restore_review_state(
                 bindings=prior_bindings,
+                snapshot_id=snapshot_id,
                 envelope=prior_envelope,
                 objects=prior_objects,
             )
