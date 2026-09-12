@@ -17,7 +17,7 @@ import os
 import re
 import tempfile
 import zipfile
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
@@ -93,7 +93,7 @@ class ImmutableBackupSourceStore(Protocol):
 
 
 def _json_safe(value: Any) -> Any:
-    if isinstance(value, datetime):
+    if isinstance(value, (datetime, date)):
         return value.isoformat()
     if isinstance(value, Mapping):
         return {str(key): _json_safe(item) for key, item in value.items()}
@@ -236,7 +236,7 @@ class PostgresPublicationBackupAdapter:
                                ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)""",
                             (
                                 row["release_id"], row["release_version"], row["release_owner"], row["status"],
-                                row.get("notes"), row["created_at"], row.get("published_at"), row.get("withdrawn_at"),
+                                row["notes"], row["created_at"], row["published_at"], row["withdrawn_at"],
                             ),
                         )
                     for row in rows["publication_release_items"]:
@@ -246,7 +246,7 @@ class PostgresPublicationBackupAdapter:
                                ) VALUES(%s,%s,%s,%s,%s,%s)""",
                             (
                                 row["release_id"], row["object_id"], row["object_version"], row["action"],
-                                row.get("replaces_object_version"), row["content_hash"],
+                                row["replaces_object_version"], row["content_hash"],
                             ),
                         )
                     for row in rows["publication_registry"]:
@@ -256,7 +256,7 @@ class PostgresPublicationBackupAdapter:
                                ) VALUES(%s,%s,%s,%s,%s,%s,%s)""",
                             (
                                 row["object_id"], row["object_version"], row["release_id"], row["state"],
-                                row["published_at"], row.get("unpublished_at"), row.get("unpublish_reason"),
+                                row["published_at"], row["unpublished_at"], row["unpublish_reason"],
                             ),
                         )
                     for row in rows["audit_events"]:
@@ -265,236 +265,276 @@ class PostgresPublicationBackupAdapter:
                                event_id,entity_type,entity_id,entity_version,event_type,actor,event_at,details
                                ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
                             (
-                                row["event_id"], row["entity_type"], row["entity_id"], row.get("entity_version"),
+                                row["event_id"], row["entity_type"], row["entity_id"], row["entity_version"],
                                 row["event_type"], row["actor"], row["event_at"],
-                                json.dumps(row.get("details") or {}, ensure_ascii=False, sort_keys=True),
+                                json.dumps(row["details"], ensure_ascii=False, sort_keys=True),
                             ),
                         )
-                    audit_rows = rows["audit_events"]
-                    if audit_rows:
-                        max_id = max(int(row["event_id"]) for row in audit_rows)
+                    row = con.execute("SELECT MAX(event_id) AS n FROM audit_events").fetchone()
+                    if row and row["n"] is not None:
                         con.execute(
                             "SELECT setval(pg_get_serial_sequence('audit_events','event_id'), %s, true)",
-                            (max_id,),
+                            (int(row["n"]),),
                         )
+        except PublicationChainRecoveryError:
+            raise
         except Exception as exc:
             raise PublicationChainRecoveryError("database_restore_failed") from exc
 
 
 def _validate_database_backup_shape(state: Mapping[str, Any]) -> None:
-    if str(state.get("format") or "") != BACKUP_FORMAT:
+    if state.get("format") != BACKUP_FORMAT:
         raise PublicationChainRecoveryError("database_backup_format_invalid")
-    tables = state.get("tables")
-    if not isinstance(tables, Mapping):
-        raise PublicationChainRecoveryError("database_backup_tables_missing")
-    missing = [table for table in DB_TABLES if table not in tables]
-    if missing:
-        raise PublicationChainRecoveryError("database_backup_tables_missing:" + ",".join(missing))
     for table in DB_TABLES:
         _table_rows(state, table)
 
 
 def check_chain_integrity(
-    database_state: Mapping[str, Any],
+    state: Mapping[str, Any],
     *,
-    source_store: ImmutableBackupSourceStore | None = None,
+    source_store: ImmutableBackupSourceStore,
     runtime_root: Path | None = None,
 ) -> dict[str, Any]:
-    """Validate relational identity plus Blob read-back and release manifests."""
     errors: list[str] = []
     try:
-        _validate_database_backup_shape(database_state)
+        _validate_database_backup_shape(state)
     except PublicationChainRecoveryError as exc:
-        return {"ok": False, "errors": [str(exc)], "verified_blobs": 0, "verified_release_manifests": 0}
+        return {"ok": False, "errors": [str(exc)]}
 
-    objects, err = _index_unique(_table_rows(database_state, "canonical_object_versions"), ("object_id", "object_version"), "canonical_object")
-    errors.extend(err)
-    snapshots, err = _index_unique(_table_rows(database_state, "source_snapshots"), ("snapshot_id",), "source_snapshot")
-    errors.extend(err)
-    links, err = _index_unique(_table_rows(database_state, "canonical_object_sources"), ("object_id", "object_version"), "source_link")
-    errors.extend(err)
-    releases, err = _index_unique(_table_rows(database_state, "publication_releases"), ("release_id",), "release")
-    errors.extend(err)
-    release_items, err = _index_unique(
-        _table_rows(database_state, "publication_release_items"),
-        ("release_id", "object_id", "object_version"),
-        "release_item",
-    )
-    errors.extend(err)
-    registry, err = _index_unique(_table_rows(database_state, "publication_registry"), ("object_id",), "registry")
-    errors.extend(err)
-    audits = _table_rows(database_state, "audit_events")
+    object_rows = _table_rows(state, "canonical_object_versions")
+    source_rows = _table_rows(state, "source_snapshots")
+    link_rows = _table_rows(state, "canonical_object_sources")
+    release_rows = _table_rows(state, "publication_releases")
+    item_rows = _table_rows(state, "publication_release_items")
+    registry_rows = _table_rows(state, "publication_registry")
 
-    for key, row in objects.items():
-        content_hash = str(row.get("content_hash") or "").lower()
-        canonical = row.get("canonical_json")
-        if not isinstance(canonical, dict):
-            errors.append(f"canonical_json_invalid:{key[0]}@{key[1]}")
-            continue
-        actual = compute_canonical_object_hash(canonical)
-        if actual != content_hash:
-            errors.append(f"canonical_content_hash_mismatch:{key[0]}@{key[1]}")
-        source_checksum = str(row.get("source_checksum") or "").lower()
-        if SHA256_RE.fullmatch(source_checksum) is None:
-            errors.append(f"canonical_source_checksum_invalid:{key[0]}@{key[1]}")
-        link = links.get(key)
-        if link is None:
-            errors.append(f"canonical_source_link_missing:{key[0]}@{key[1]}")
-            continue
-        snapshot = snapshots.get((str(link.get("snapshot_id") or ""),))
-        if snapshot is None:
-            errors.append(f"source_snapshot_missing:{key[0]}@{key[1]}")
-            continue
-        if str(snapshot.get("source_checksum") or "").lower() != source_checksum:
-            errors.append(f"canonical_source_checksum_conflict:{key[0]}@{key[1]}")
+    objects, object_errors = _index_unique(object_rows, ("object_id", "object_version"), "object")
+    sources, source_errors = _index_unique(source_rows, ("snapshot_id",), "source")
+    releases, release_errors = _index_unique(release_rows, ("release_id",), "release")
+    errors.extend(object_errors + source_errors + release_errors)
 
-    for key, row in release_items.items():
-        release_id, object_id, object_version = key
-        if (release_id,) not in releases:
-            errors.append(f"release_item_release_missing:{release_id}")
-        obj = objects.get((object_id, object_version))
+    source_by_object: dict[tuple[str, str], str] = {}
+    for link in link_rows:
+        key = (str(link.get("object_id") or ""), str(link.get("object_version") or ""))
+        snapshot_id = str(link.get("snapshot_id") or "")
+        if key not in objects:
+            errors.append(f"source_link_object_missing:{'|'.join(key)}")
+            continue
+        if snapshot_id not in sources:
+            errors.append(f"source_link_snapshot_missing:{snapshot_id}")
+            continue
+        if key in source_by_object:
+            errors.append(f"source_link_duplicate:{'|'.join(key)}")
+            continue
+        source_by_object[key] = snapshot_id
+
+    for key, obj in objects.items():
+        if obj.get("validation_status") != "approved":
+            errors.append(f"object_not_approved:{'|'.join(key)}")
+        canonical = obj.get("canonical_json")
+        if not isinstance(canonical, Mapping):
+            errors.append(f"canonical_json_invalid:{'|'.join(key)}")
+            continue
+        try:
+            if compute_canonical_object_hash(dict(canonical)) != obj.get("content_hash"):
+                errors.append(f"content_hash_mismatch:{'|'.join(key)}")
+        except Exception:
+            errors.append(f"content_hash_invalid:{'|'.join(key)}")
+        if key not in source_by_object:
+            errors.append(f"object_source_missing:{'|'.join(key)}")
+            continue
+        source = sources.get((source_by_object[key],))
+        if source is None:
+            continue
+        if source.get("source_checksum") != obj.get("source_checksum"):
+            errors.append(f"source_checksum_lineage_mismatch:{'|'.join(key)}")
+
+    for snapshot_key, source in sources.items():
+        checksum = str(source.get("source_checksum") or "")
+        locator = str(source.get("source_locator") or "")
+        if not SHA256_RE.fullmatch(checksum):
+            errors.append(f"source_checksum_invalid:{snapshot_key[0]}")
+            continue
+        try:
+            parsed = parse_g2_locator(locator)
+            if parsed.sha256 != checksum:
+                errors.append(f"source_locator_checksum_mismatch:{snapshot_key[0]}")
+            data = source_store.load_verified(locator)
+            if sha256_bytes(data) != checksum:
+                errors.append(f"source_blob_checksum_mismatch:{snapshot_key[0]}")
+        except (G2SourceStoreError, ValueError, KeyError):
+            errors.append(f"source_blob_unavailable:{snapshot_key[0]}")
+
+    items_by_release: dict[str, list[dict[str, Any]]] = {}
+    for item in item_rows:
+        release_id = str(item.get("release_id") or "")
+        items_by_release.setdefault(release_id, []).append(item)
+        key = (str(item.get("object_id") or ""), str(item.get("object_version") or ""))
+        obj = objects.get(key)
         if obj is None:
-            errors.append(f"release_item_object_missing:{object_id}@{object_version}")
-        elif str(row.get("content_hash") or "") != str(obj.get("content_hash") or ""):
-            errors.append(f"release_item_hash_mismatch:{release_id}:{object_id}@{object_version}")
+            errors.append(f"release_item_object_missing:{release_id}:{'|'.join(key)}")
+        elif item.get("content_hash") != obj.get("content_hash"):
+            errors.append(f"release_item_hash_mismatch:{release_id}:{'|'.join(key)}")
+        if release_id not in releases:
+            errors.append(f"release_item_release_missing:{release_id}")
 
-    for (object_id,), row in registry.items():
+    for row in registry_rows:
+        object_id = str(row.get("object_id") or "")
         object_version = str(row.get("object_version") or "")
         release_id = str(row.get("release_id") or "")
-        obj = objects.get((object_id, object_version))
+        key = (object_id, object_version)
+        if row.get("state") not in {"active", "emergency_unpublished"}:
+            errors.append(f"registry_state_invalid:{object_id}")
+        if key not in objects:
+            errors.append(f"registry_object_missing:{object_id}")
         release = releases.get((release_id,))
-        if obj is None:
-            errors.append(f"registry_object_missing:{object_id}@{object_version}")
         if release is None:
             errors.append(f"registry_release_missing:{object_id}:{release_id}")
-        elif row.get("state") == "active" and release.get("status") != "published":
-            errors.append(f"registry_active_release_not_published:{object_id}:{release_id}")
-        if (release_id, object_id, object_version) not in release_items:
-            errors.append(f"registry_release_item_missing:{object_id}@{object_version}:{release_id}")
+        elif release.get("status") != "published":
+            errors.append(f"registry_release_not_published:{object_id}:{release_id}")
+        release_items = items_by_release.get(release_id, [])
+        if not any(
+            str(item.get("object_id")) == object_id
+            and str(item.get("object_version")) == object_version
+            for item in release_items
+        ):
+            errors.append(f"registry_release_item_missing:{object_id}:{release_id}")
 
-    release_audits: dict[str, dict[str, Any]] = {}
-    for event in audits:
-        if event.get("entity_type") != "release" or event.get("event_type") != "release_published":
-            continue
-        release_id = str(event.get("entity_id") or "")
-        if release_id in release_audits:
-            errors.append(f"release_published_audit_duplicate:{release_id}")
-            continue
-        release_audits[release_id] = event
-
-    for (release_id,), release in releases.items():
-        if release.get("status") != "published":
-            continue
-        event = release_audits.get(release_id)
-        if event is None:
-            errors.append(f"release_published_audit_missing:{release_id}")
-            continue
-        details = event.get("details") or {}
-        snapshot_id = str(details.get("snapshot_id") or "")
-        snapshot = snapshots.get((snapshot_id,))
-        if snapshot is None:
-            errors.append(f"release_source_snapshot_missing:{release_id}:{snapshot_id}")
-            continue
-        if str(details.get("source_sha256") or "").lower() != str(snapshot.get("source_checksum") or "").lower():
-            errors.append(f"release_source_sha256_mismatch:{release_id}")
-        if str(details.get("source_locator") or "") != str(snapshot.get("source_locator") or ""):
-            errors.append(f"release_source_locator_mismatch:{release_id}")
-        for (rid, object_id, object_version), _item in release_items.items():
-            if rid != release_id:
-                continue
-            link = links.get((object_id, object_version))
-            if link is None or str(link.get("snapshot_id") or "") != snapshot_id:
-                errors.append(f"release_item_source_snapshot_mismatch:{release_id}:{object_id}@{object_version}")
-
-    verified_blobs = 0
-    if source_store is not None:
-        for (snapshot_id,), snapshot in snapshots.items():
-            checksum = str(snapshot.get("source_checksum") or "").lower()
-            locator = str(snapshot.get("source_locator") or "")
-            parsed = parse_g2_locator(locator)
-            if parsed is None:
-                errors.append(f"blob_locator_invalid:{snapshot_id}")
-                continue
-            if parsed["sha256"] != checksum:
-                errors.append(f"blob_locator_hash_mismatch:{snapshot_id}")
-                continue
-            try:
-                data = source_store.load_verified(locator)
-            except (G2SourceStoreError, ValueError, KeyError) as exc:
-                errors.append(f"blob_readback_failed:{snapshot_id}:{type(exc).__name__}")
-                continue
-            if sha256_bytes(data) != checksum:
-                errors.append(f"blob_sha256_mismatch:{snapshot_id}")
-                continue
-            verified_blobs += 1
-
-    verified_release_manifests = 0
     if runtime_root is not None:
-        manifest_dir = Path(runtime_root) / "output" / "runtime" / "operations-console" / "release_manifests"
-        if manifest_dir.is_dir():
-            for path in sorted(manifest_dir.glob("*.json")):
-                try:
-                    payload = json.loads(path.read_text(encoding="utf-8"))
-                except Exception:
-                    errors.append(f"release_manifest_invalid_json:{path.name}")
-                    continue
-                release_id = str(payload.get("release_id") or "")
-                release = releases.get((release_id,))
-                event = release_audits.get(release_id)
-                if release is None or event is None:
-                    errors.append(f"release_manifest_orphan:{path.name}")
-                    continue
-                details = event.get("details") or {}
-                expected = {
-                    "release_version": str(release.get("release_version") or ""),
-                    "snapshot_id": str(details.get("snapshot_id") or ""),
-                    "source_sha256": str(details.get("source_sha256") or "").lower(),
-                    "immutable_storage_locator": str(details.get("source_locator") or ""),
-                }
-                actual = {
-                    "release_version": str(payload.get("release_version") or ""),
-                    "snapshot_id": str(payload.get("snapshot_id") or ""),
-                    "source_sha256": str(payload.get("source_sha256") or "").lower(),
-                    "immutable_storage_locator": str(payload.get("immutable_storage_locator") or ""),
-                }
-                if actual != expected:
-                    errors.append(f"release_manifest_mismatch:{release_id}")
-                    continue
-                verified_release_manifests += 1
+        try:
+            _check_runtime_consistency(state, runtime_root, errors)
+        except Exception:
+            errors.append("runtime_consistency_check_failed")
 
     return {
         "ok": not errors,
         "errors": errors,
-        "canonical_objects": len(objects),
-        "source_snapshots": len(snapshots),
+        "objects": len(objects),
+        "sources": len(sources),
         "releases": len(releases),
-        "registry_entries": len(registry),
-        "verified_blobs": verified_blobs,
-        "verified_release_manifests": verified_release_manifests,
+        "registry": len(registry_rows),
     }
 
 
-def _blob_entries_from_state(database_state: Mapping[str, Any]) -> list[dict[str, str]]:
-    entries: dict[str, dict[str, str]] = {}
-    for snapshot in _table_rows(database_state, "source_snapshots"):
-        snapshot_id = str(snapshot.get("snapshot_id") or "")
-        checksum = str(snapshot.get("source_checksum") or "").lower()
-        locator = str(snapshot.get("source_locator") or "")
-        parsed = parse_g2_locator(locator)
-        if parsed is None or parsed["sha256"] != checksum:
-            raise PublicationChainRecoveryError(f"source_snapshot_locator_invalid:{snapshot_id}")
-        member = _backup_member(f"blobs/{checksum}/{parsed['filename']}")
-        previous = entries.get(locator)
-        current = {
-            "locator": locator,
-            "sha256": checksum,
-            "filename": parsed["filename"],
-            "member": member,
+def _check_runtime_consistency(
+    state: Mapping[str, Any],
+    runtime_root: Path,
+    errors: list[str],
+) -> None:
+    runtime = Path(runtime_root) / "output" / "runtime" / "operations-console"
+    release_dir = runtime / "release_manifests"
+    projection_path = runtime / "published_projection.jsonl"
+    releases = {str(row["release_id"]): row for row in _table_rows(state, "publication_releases")}
+    items = _table_rows(state, "publication_release_items")
+    registry = _table_rows(state, "publication_registry")
+
+    for release_id, release in releases.items():
+        if release.get("status") != "published":
+            continue
+        path = release_dir / f"{release_id}.json"
+        if not path.exists():
+            errors.append(f"runtime_release_manifest_missing:{release_id}")
+            continue
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            errors.append(f"runtime_release_manifest_invalid:{release_id}")
+            continue
+        if str(manifest.get("release_id") or "") != release_id:
+            errors.append(f"runtime_release_manifest_id_mismatch:{release_id}")
+        expected = sorted(
+            (str(row["object_id"]), str(row["object_version"]), str(row["content_hash"]))
+            for row in items if str(row["release_id"]) == release_id
+        )
+        actual = sorted(
+            (
+                str(row.get("object_id") or ""),
+                str(row.get("object_version") or ""),
+                str(row.get("canonical_object_hash") or row.get("content_hash") or ""),
+            )
+            for row in (manifest.get("objects") or []) if isinstance(row, Mapping)
+        )
+        if expected != actual:
+            errors.append(f"runtime_release_manifest_items_mismatch:{release_id}")
+
+    if projection_path.exists():
+        try:
+            rows = [
+                json.loads(line) for line in projection_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        except (OSError, json.JSONDecodeError):
+            errors.append("runtime_projection_invalid")
+            return
+        active = {
+            (str(row["object_id"]), str(row["object_version"]))
+            for row in registry if row.get("state") == "active"
         }
-        if previous is not None and previous != current:
-            raise PublicationChainRecoveryError(f"source_snapshot_locator_conflict:{snapshot_id}")
-        entries[locator] = current
-    return sorted(entries.values(), key=lambda item: item["locator"])
+        projected = {
+            (
+                str((row.get("metadata") or {}).get("object_id") or ""),
+                str((row.get("metadata") or {}).get("object_version") or ""),
+            )
+            for row in rows
+        }
+        if active != projected:
+            errors.append("runtime_projection_registry_mismatch")
+
+
+def _read_archive_json(zipf: zipfile.ZipFile, member: str) -> Any:
+    try:
+        return json.loads(zipf.read(member).decode("utf-8"))
+    except (KeyError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise PublicationChainRecoveryError(f"chain_backup_member_invalid:{member}") from exc
+
+
+def _archive_member_bytes(zipf: zipfile.ZipFile, member: str) -> bytes:
+    try:
+        return zipf.read(member)
+    except KeyError as exc:
+        raise PublicationChainRecoveryError(f"chain_backup_member_missing:{member}") from exc
+
+
+def verify_publication_chain_backup(archive: Path) -> dict[str, Any]:
+    errors: list[str] = []
+    try:
+        with zipfile.ZipFile(archive) as zipf:
+            manifest = _read_archive_json(zipf, "chain_manifest.json")
+            if manifest.get("format") != BACKUP_FORMAT:
+                errors.append("chain_backup_format_invalid")
+            database = manifest.get("database") or {}
+            db_member = _backup_member(str(database.get("member") or ""))
+            db_bytes = _archive_member_bytes(zipf, db_member)
+            if _sha256(db_bytes) != database.get("sha256"):
+                errors.append("chain_backup_database_hash_mismatch")
+            database_state = json.loads(db_bytes.decode("utf-8"))
+            try:
+                _validate_database_backup_shape(database_state)
+            except PublicationChainRecoveryError as exc:
+                errors.append(str(exc))
+
+            runtime = manifest.get("runtime") or {}
+            runtime_member = runtime.get("member")
+            if runtime_member:
+                member = _backup_member(str(runtime_member))
+                runtime_bytes = _archive_member_bytes(zipf, member)
+                if _sha256(runtime_bytes) != runtime.get("sha256"):
+                    errors.append("chain_backup_runtime_hash_mismatch")
+
+            blob_members: set[str] = set()
+            for blob in manifest.get("blobs") or []:
+                member = _backup_member(str(blob.get("member") or ""))
+                if member in blob_members:
+                    errors.append(f"chain_backup_duplicate_blob_member:{member}")
+                    continue
+                blob_members.add(member)
+                data = _archive_member_bytes(zipf, member)
+                checksum = str(blob.get("sha256") or "")
+                if not SHA256_RE.fullmatch(checksum) or _sha256(data) != checksum:
+                    errors.append(f"chain_backup_blob_hash_mismatch:{checksum}")
+    except (OSError, zipfile.BadZipFile, PublicationChainRecoveryError, json.JSONDecodeError) as exc:
+        errors.append(f"chain_backup_unreadable:{type(exc).__name__}")
+    return {"ok": not errors, "errors": errors}
 
 
 def backup_publication_chain(
@@ -504,131 +544,66 @@ def backup_publication_chain(
     source_store: ImmutableBackupSourceStore,
     runtime_root: Path | None = None,
 ) -> dict[str, Any]:
-    """Create one verifiable archive covering DB, Blob bytes and runtime releases."""
     database_state = database.export_state()
-    preflight = check_chain_integrity(database_state, source_store=source_store, runtime_root=runtime_root)
-    if not preflight["ok"]:
-        raise PublicationChainRecoveryError("chain_backup_preflight_failed:" + ";".join(preflight["errors"]))
-
     db_bytes = _canonical_json_bytes(database_state)
-    blob_entries = _blob_entries_from_state(database_state)
-    blobs: dict[str, bytes] = {}
-    for entry in blob_entries:
-        try:
-            data = source_store.load_verified(entry["locator"])
-        except Exception as exc:
-            raise PublicationChainRecoveryError("chain_backup_blob_read_failed") from exc
-        if sha256_bytes(data) != entry["sha256"]:
-            raise PublicationChainRecoveryError("chain_backup_blob_hash_mismatch")
-        blobs[entry["member"]] = data
-        entry["size"] = str(len(data))
-
     runtime_bytes: bytes | None = None
-    runtime_manifest: dict[str, Any] | None = None
     if runtime_root is not None:
-        with tempfile.TemporaryDirectory(prefix="metis-chain-backup-") as temp_dir:
-            runtime_archive = Path(temp_dir) / "runtime.zip"
-            runtime_manifest = export_runtime_data(Path(runtime_root), runtime_archive)
-            runtime_bytes = runtime_archive.read_bytes()
+        with tempfile.TemporaryDirectory(prefix="metis-runtime-backup-") as tmpdir:
+            runtime_path = Path(tmpdir) / "runtime.zip"
+            export_runtime_data(runtime_path, root=runtime_root)
+            runtime_bytes = runtime_path.read_bytes()
+
+    source_rows = _table_rows(database_state, "source_snapshots")
+    blobs: list[tuple[dict[str, Any], bytes]] = []
+    for row in source_rows:
+        locator = str(row.get("source_locator") or "")
+        checksum = str(row.get("source_checksum") or "")
+        if not SHA256_RE.fullmatch(checksum):
+            raise PublicationChainRecoveryError("source_checksum_invalid_for_backup")
+        try:
+            data = source_store.load_verified(locator)
+        except Exception as exc:
+            raise PublicationChainRecoveryError("source_blob_unavailable_for_backup") from exc
+        if _sha256(data) != checksum:
+            raise PublicationChainRecoveryError("source_blob_checksum_mismatch_for_backup")
+        filename = "source.bin"
+        try:
+            filename = parse_g2_locator(locator).filename
+        except (G2SourceStoreError, ValueError):
+            pass
+        member = _backup_member(f"blobs/{checksum}/{filename}")
+        blobs.append(({"sha256": checksum, "locator": locator, "member": member}, data))
 
     manifest: dict[str, Any] = {
         "format": BACKUP_FORMAT,
         "created_at": _utc_now(),
-        "database": {
-            "member": "database.json",
-            "sha256": _sha256(db_bytes),
-            "tables": {table: len(_table_rows(database_state, table)) for table in DB_TABLES},
-        },
-        "blobs": blob_entries,
+        "database": {"member": "database.json", "sha256": _sha256(db_bytes)},
         "runtime": None,
-        "preflight_integrity": preflight,
+        "blobs": [entry for entry, _data in blobs],
     }
     if runtime_bytes is not None:
         manifest["runtime"] = {
-            "member": "runtime/runtime_backup.zip",
+            "member": "runtime/runtime.zip",
             "sha256": _sha256(runtime_bytes),
-            "manifest": runtime_manifest,
         }
 
     archive = Path(archive)
     archive.parent.mkdir(parents=True, exist_ok=True)
-    temp_archive = archive.with_name(f".{archive.name}.{os.getpid()}.tmp")
-    try:
-        with zipfile.ZipFile(temp_archive, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
-            zipf.writestr("database.json", db_bytes)
-            for member, data in blobs.items():
-                zipf.writestr(member, data)
-            if runtime_bytes is not None:
-                zipf.writestr("runtime/runtime_backup.zip", runtime_bytes)
-            zipf.writestr("chain_manifest.json", json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
-        os.replace(temp_archive, archive)
-    finally:
-        if temp_archive.exists():
-            temp_archive.unlink()
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
+        zipf.writestr("database.json", db_bytes)
+        if runtime_bytes is not None:
+            zipf.writestr("runtime/runtime.zip", runtime_bytes)
+        for entry, data in blobs:
+            zipf.writestr(entry["member"], data)
+        zipf.writestr(
+            "chain_manifest.json",
+            json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+        )
 
     verification = verify_publication_chain_backup(archive)
     if not verification["ok"]:
         raise PublicationChainRecoveryError("chain_backup_verification_failed:" + ";".join(verification["errors"]))
     return manifest
-
-
-def verify_publication_chain_backup(archive: Path) -> dict[str, Any]:
-    errors: list[str] = []
-    try:
-        with zipfile.ZipFile(archive) as zipf:
-            names = zipf.namelist()
-            if len(names) != len(set(names)):
-                errors.append("duplicate_archive_member")
-            if "chain_manifest.json" not in names:
-                return {"ok": False, "errors": ["chain_manifest_missing"]}
-            if "database.json" not in names:
-                return {"ok": False, "errors": ["database_backup_missing"]}
-            for name in names:
-                _backup_member(name)
-            manifest = json.loads(zipf.read("chain_manifest.json").decode("utf-8"))
-            if manifest.get("format") != BACKUP_FORMAT:
-                errors.append("chain_manifest_format_invalid")
-            db_bytes = zipf.read("database.json")
-            if _sha256(db_bytes) != str((manifest.get("database") or {}).get("sha256") or ""):
-                errors.append("database_backup_hash_mismatch")
-            try:
-                database_state = json.loads(db_bytes.decode("utf-8"))
-                logical = check_chain_integrity(database_state)
-                errors.extend(f"database:{item}" for item in logical["errors"])
-            except Exception as exc:
-                errors.append(f"database_backup_invalid:{type(exc).__name__}")
-
-            expected_members = {"chain_manifest.json", "database.json"}
-            for entry in manifest.get("blobs") or []:
-                member = _backup_member(str(entry.get("member") or ""))
-                expected_members.add(member)
-                if member not in names:
-                    errors.append(f"blob_backup_missing:{member}")
-                    continue
-                data = zipf.read(member)
-                expected = str(entry.get("sha256") or "").lower()
-                if _sha256(data) != expected:
-                    errors.append(f"blob_backup_hash_mismatch:{member}")
-                if str(len(data)) != str(entry.get("size") or ""):
-                    errors.append(f"blob_backup_size_mismatch:{member}")
-
-            runtime = manifest.get("runtime")
-            if runtime:
-                member = _backup_member(str(runtime.get("member") or ""))
-                expected_members.add(member)
-                if member not in names:
-                    errors.append("runtime_backup_missing")
-                elif _sha256(zipf.read(member)) != str(runtime.get("sha256") or ""):
-                    errors.append("runtime_backup_hash_mismatch")
-
-            unexpected = sorted(set(names) - expected_members)
-            if unexpected:
-                errors.append("unexpected_archive_members:" + ",".join(unexpected))
-    except PublicationChainRecoveryError as exc:
-        errors.append(str(exc))
-    except Exception as exc:
-        errors.append(f"chain_backup_unreadable:{type(exc).__name__}")
-    return {"ok": not errors, "errors": errors}
 
 
 def restore_publication_chain(
@@ -638,80 +613,66 @@ def restore_publication_chain(
     source_store: ImmutableBackupSourceStore,
     runtime_dest: Path | None = None,
 ) -> dict[str, Any]:
-    """Restore a clean target and prove the recovered chain before success."""
     verification = verify_publication_chain_backup(archive)
     if not verification["ok"]:
         raise PublicationChainRecoveryError("chain_restore_backup_invalid:" + ";".join(verification["errors"]))
 
-    database.assert_empty()
-    if runtime_dest is not None:
-        runtime_dest = Path(runtime_dest)
-        if runtime_dest.exists() and any(runtime_dest.iterdir()):
-            raise PublicationChainRecoveryError("runtime_restore_target_not_clean")
-
     with zipfile.ZipFile(archive) as zipf:
-        manifest = json.loads(zipf.read("chain_manifest.json").decode("utf-8"))
-        database_state = json.loads(zipf.read("database.json").decode("utf-8"))
+        manifest = _read_archive_json(zipf, "chain_manifest.json")
+        database_state = _read_archive_json(zipf, _backup_member(manifest["database"]["member"]))
 
-        restored_blobs = 0
-        for entry in manifest.get("blobs") or []:
-            locator = str(entry["locator"])
-            checksum = str(entry["sha256"]).lower()
-            filename = str(entry["filename"])
-            data = zipf.read(str(entry["member"]))
-            if sha256_bytes(data) != checksum:
-                raise PublicationChainRecoveryError("chain_restore_blob_hash_mismatch")
-            try:
-                restored_locator = source_store.store_verified(data=data, sha256=checksum, filename=filename)
-            except Exception as exc:
-                raise PublicationChainRecoveryError("chain_restore_blob_write_failed") from exc
-            if restored_locator != locator:
-                raise PublicationChainRecoveryError("chain_restore_blob_locator_changed")
-            restored_blobs += 1
+        # Fail closed before changing any external authority.
+        database.assert_empty()
+        blob_plan: list[tuple[dict[str, Any], bytes]] = []
+        for row in manifest.get("blobs") or []:
+            blob_plan.append((dict(row), _archive_member_bytes(zipf, _backup_member(row["member"]))))
 
-        restored_runtime_files = 0
-        runtime = manifest.get("runtime")
-        if runtime_dest is not None and runtime:
-            runtime_bytes = zipf.read(str(runtime["member"]))
-            with tempfile.TemporaryDirectory(prefix="metis-chain-restore-") as temp_dir:
-                runtime_archive = Path(temp_dir) / "runtime.zip"
-                runtime_archive.write_bytes(runtime_bytes)
-                result = restore_runtime_data(runtime_archive, runtime_dest)
-                restored_runtime_files = len(result["restored"])
+        # Restore immutable source bytes first and require a read-back proof.
+        for row, data in blob_plan:
+            parsed = parse_g2_locator(str(row["locator"]))
+            restored = source_store.store_verified(
+                data=data,
+                sha256=str(row["sha256"]),
+                filename=parsed.filename,
+            )
+            if restored != row["locator"]:
+                raise PublicationChainRecoveryError("restored_blob_locator_mismatch")
+            if source_store.load_verified(restored) != data:
+                raise PublicationChainRecoveryError("restored_blob_readback_mismatch")
 
-    # Publication authority is committed only after source bytes and runtime
-    # recovery data are in place.
-    database.restore_state(database_state)
+        runtime = manifest.get("runtime") or {}
+        if runtime.get("member"):
+            if runtime_dest is None:
+                raise PublicationChainRecoveryError("runtime_restore_destination_required")
+            runtime_zip = _archive_member_bytes(zipf, _backup_member(runtime["member"]))
+            with tempfile.TemporaryDirectory(prefix="metis-runtime-restore-") as tmpdir:
+                path = Path(tmpdir) / "runtime.zip"
+                path.write_bytes(runtime_zip)
+                restore_runtime_data(path, destination=runtime_dest)
+
+        # Authority is restored last.
+        database.restore_state(database_state)
+
     restored_state = database.export_state()
-    if _sha256(_canonical_json_bytes(restored_state.get("tables") or {})) != _sha256(
-        _canonical_json_bytes(database_state.get("tables") or {})
+    if _sha256(_canonical_json_bytes(restored_state.get("tables"))) != _sha256(
+        _canonical_json_bytes(database_state.get("tables"))
     ):
         raise PublicationChainRecoveryError("database_restore_roundtrip_mismatch")
-
     integrity = check_chain_integrity(
         restored_state,
         source_store=source_store,
         runtime_root=runtime_dest,
     )
     if not integrity["ok"]:
-        raise PublicationChainRecoveryError("chain_restore_integrity_failed:" + ";".join(integrity["errors"]))
-    return {
-        "ok": True,
-        "restored_blobs": restored_blobs,
-        "restored_runtime_files": restored_runtime_files,
-        "integrity": integrity,
-    }
+        raise PublicationChainRecoveryError("restored_chain_integrity_failed:" + ";".join(integrity["errors"]))
+    return {"ok": True, "integrity": integrity}
 
 
-def live_publication_chain_integrity(
+def live_chain_integrity(
     *,
     database: DatabaseBackupAdapter,
     source_store: ImmutableBackupSourceStore,
     runtime_root: Path | None = None,
 ) -> dict[str, Any]:
-    """Read all current authorities and produce a release-control integrity report."""
-    return check_chain_integrity(
-        database.export_state(),
-        source_store=source_store,
-        runtime_root=runtime_root,
-    )
+    state = database.export_state()
+    return check_chain_integrity(state, source_store=source_store, runtime_root=runtime_root)
