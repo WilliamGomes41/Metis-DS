@@ -31,21 +31,21 @@ De deployment-secret `METIS_AUDIT_SECRET_KEY` blijft buiten de database. Postgre
 
 ## Expliciete workflow-migratie
 
-Startup importeert nooit stil lokale state. De migratievolgorde blijft expliciet:
+Startup importeert geen lokale authority-state meer stil in PostgreSQL. De migratievolgorde is expliciet:
 
 1. `002_workflow_schema.sql`;
 2. `003_workflow_document_envelope_payload.sql`;
 3. `004_workflow_review_authority.sql`;
 4. `005_workflow_remaining_authority.sql`;
-5. identity/accounts/sessions migreren;
-6. documents/objects migreren en document-cut-over voorbereiden;
-7. review ledger + publish authorizations migreren;
+5. `scripts/migrate_workflow_identity_postgres.py --runtime <runtime>` voor accounts/sessies;
+6. `scripts/migrate_workflow_documents_postgres.py --runtime <runtime>` en daarna document-cut-over voorbereiden;
+7. review ledger + publish authorizations expliciet migreren;
 8. `scripts/migrate_workflow_remaining_postgres.py` uitvoeren voor Auditstate, Audit-secretpayload en klassewijzigingshistorie;
 9. pas na verificatie de bijbehorende `METIS_WORKFLOW_*`-schakelaars activeren.
 
 Een ontbrekend klassehistoriebestand, afwijkende object-ID-volgorde of conflicterende bestaande PostgreSQL-state blokkeert de migratie fail-closed.
 
-De migratie verplaatst workflow-authority naar een **managed database**. Dit is bewust een reeks kleine, omkeerbare stappen en **geen grote databasemigratie**. Dat betekent ook niet dat meerdere App Service-instances of gelijktijdige multi-reviewer writes al ondersteund zijn; die topologie wordt pas in stap 6 geopend na expliciet concurrencybewijs.
+De migratie verplaatst workflow-authority naar een **managed database**. Dit is bewust een reeks kleine, omkeerbare stappen en **geen grote databasemigratie**. Het doel hiervan is uiteindelijk meerdere App Service-instances veilig dezelfde gedeelde authority te laten gebruiken; het aanzetten van meerdere instances is echter een aparte topology-wijziging.
 
 ## Lokale runtime-inventaris
 
@@ -63,6 +63,42 @@ Historisch rapporteert de inventaris onder meer:
 
 Na volledige cut-over mogen deze bestanden niet worden gebruikt als fallback wanneer PostgreSQL leeg, onbereikbaar of afwijkend is.
 
+## Volledige recoveryketen
+
+De operator-CLI `scripts/publication_chain_recovery.py` gebruikt de bestaande publication-chain archive en Blob restore-guard, uitgebreid met de volledige `workflow`-authority.
+
+De database-export bevat nu twee delen in dezelfde `database.json`:
+
+- `tables`: canonical/publication PostgreSQL;
+- `workflow_tables`: accounts, sessies, documenten, reviewers, objects, review-events, authorizations, audits en Audit-secretpayloads.
+
+De export gebeurt in één `REPEATABLE READ, READ ONLY` PostgreSQL-transactie. Daardoor horen workflow- en publicatiestate bij exact dezelfde databasesnapshot.
+
+De restorevolgorde blijft fail-closed:
+
+1. backup-archive en hashes controleren;
+2. immutable Blob-bytes herstellen en teruglezen;
+3. optionele lokale mirrors herstellen;
+4. workflow + canonical/publication PostgreSQL in **één database-transactie** herstellen;
+5. database opnieuw exporteren en roundtrip vergelijken;
+6. canonical/publication-integriteit én workflow-integriteit opnieuw bewijzen.
+
+PostgreSQL wordt dus pas authoritative nadat de bronbytes aanwezig en gecontroleerd zijn.
+
+## Workflow-integriteitsbewijs
+
+`src/workflow_chain_recovery_v1.py` controleert aanvullend:
+
+- referentiële identiteit van accounts, sessies, documenten en reviewers;
+- dat ieder document een volledige `envelope_payload` heeft;
+- objectvolgorde (`position`) en authorization-volgorde;
+- snapshot- en reviewerreferenties;
+- de volledige review-ledger hash-chain, inclusief exacte `event_payload`-hash;
+- Audit-record creator-relaties en JSON payloads;
+- aanwezigheid en vorm van versleutelde Audit-secretpayloads.
+
+Een checksum-geldige archive waarin een reviewevent inhoudelijk is aangepast en waarvan `database.json` opnieuw is gehasht, wordt daardoor alsnog afgewezen.
+
 ## Publicatieketen
 
 Voor gepubliceerde kennis blijft de kern dezelfde:
@@ -73,25 +109,6 @@ Voor gepubliceerde kennis blijft de kern dezelfde:
 - lokale kopieën mogen nooit een nieuwere of afwijkende PostgreSQL-publicatie terugdraaien.
 
 `DurablePublicationConsole` reconcilieert release manifests en de Product API-projectie vanuit PostgreSQL. In de volledige workflowmodus wordt ook de gepubliceerde envelope-status teruggeschreven naar de PostgreSQL workflow-authority. De lokale `envelopes.json` blijft daarbij alleen mirror.
-
-## Publicatieketen-backup
-
-`src/publication_chain_recovery_v1.py` maakt een verifieerbare backup van de gepubliceerde keten met:
-
-- canonical/publication PostgreSQL-tabellen;
-- iedere vanuit `source_snapshots` bereikbare Azure Blob;
-- optioneel de lokale runtimekopieën;
-- `chain_manifest.json` met hashes.
-
-De database-export gebeurt in een `REPEATABLE READ, READ ONLY`-transactie. Integriteitscontrole valideert onder meer objecthashes, source lineage, release-items, registry, Blob-locators en Blob read-back.
-
-Release manifests kunnen aanvullend worden gecontroleerd wanneer zij lokaal aanwezig zijn, maar zijn geen zelfstandige authority en mogen niet nodig zijn om een geldige PostgreSQL-publicatie te bewijzen.
-
-## Belangrijke recovery-grens voor de workflow-cut-over
-
-De bestaande `publication_chain_recovery_v1.py` dekt het canonical/publication PostgreSQL-schema, Blob en lokale runtimekopieën. De nieuw gedeelde `workflow`-tabellen vallen nog niet onder die production recovery-adapter.
-
-Daarom geldt vóór Azure-activatie van de volledige workflow-cut-over nog een aparte releasevoorwaarde: workflow PostgreSQL backup/restore en restore-integriteit moeten expliciet worden toegevoegd en getest. Totdat dat bewijs bestaat, is de nieuwe code wel mergeable/opt-in, maar is de volledige production cut-over nog niet operationeel herstelbewezen.
 
 ## `--clean true`
 
@@ -105,15 +122,16 @@ De één-worker/één-instance-beperking blijft voorlopig actief:
 - one instance;
 - sequential writes.
 
-Elke andere multi-writerconfiguratie, waaronder meerdere App Service-instances die tegelijk schrijven, blijft **out of bound** totdat stap 6 die beperking expliciet vervangt met bewezen PostgreSQL-concurrencygedrag.
+Een configuratie met meerdere workers, meerdere instances of een andere write-mode blijft **buiten de topologie** en faalt via de bestaande guard. Multi-writer activering is dus niet impliciet onderdeel van stap 7. Ook multi-reviewer gedrag verandert hier niet.
 
-Dat is nu geen gevolg meer van een gewenste lokale workflow-authority, maar een expliciete veiligheidsgrens totdat stap 6 multi-instance/concurrencybewijs levert voor de nieuwe PostgreSQL-paden. De beperking mag pas worden verwijderd nadat gelijktijdige document-, review-, authorization-, Audit- en sessiemutaties aantoonbaar geen lost updates, dubbele ledgerketens of stille overschrijvingen veroorzaken.
+Stap 6 heeft PostgreSQL-concurrencygedrag inmiddels met echte PostgreSQL-tests bewezen en de drie eerder gevonden blockers zijn opgelost. Het versoepelen van de topology-guard blijft echter een aparte expliciete wijziging; stap 7 verandert die deploymentgrens niet.
 
-## Herstelbewijs
+## Herstelbewijs en resterende productiegrens
 
-De bestaande deterministische publicatieketentests blijven bewijs voor canonical/publication + Blob-recovery. Zij zijn geen bewijs voor volledige workflow recovery en ook geen echte production recovery drill.
+De CI bevat nu echte PostgreSQL backup/restore-roundtriptests voor zowel canonical/publication als de volledige workflowstate. Die tests wissen de database na backup, herstellen uit het archive en vergelijken de herstelde authority opnieuw met de oorspronkelijke state. Ook workflow-tampering wordt getest.
 
-Voor production readiness blijven daarom twee afzonderlijke bewijzen nodig:
+Dit is herstelbewijs op CI/PostgreSQL 16, maar nog **geen echte production recovery drill**. Voor volledige production readiness blijft daarom nog vereist:
 
-1. workflow PostgreSQL backup/restore inclusief de nieuwe `workflow`-tabellen;
-2. een echte recovery drill tegen Azure PostgreSQL en Azure Blob.
+1. dezelfde recoveryprocedure uitvoeren tegen de echte Azure PostgreSQL-omgeving;
+2. Blob restore/read-back tegen de echte Azure Storage authority bewijzen;
+3. pas daarna de volledige Azure workflow-cut-over operationeel activeren.

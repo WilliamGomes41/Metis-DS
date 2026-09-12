@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Operator CLI for Metis publication-chain backup, restore and integrity proof."""
+"""Operator CLI for full Metis PostgreSQL + Blob backup, restore and integrity proof."""
 from __future__ import annotations
 
 import argparse
@@ -8,22 +8,20 @@ from pathlib import Path
 
 from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 from src.g2_source_store import AzureBlobSourceStore
-from src.publication_chain_recovery_v1 import (
-    PostgresPublicationBackupAdapter,
-    backup_publication_chain,
-    live_publication_chain_integrity,
-)
-from src.publication_chain_recovery_guard_v1 import (
-    restore_publication_chain,
-    verify_publication_chain_backup,
-)
 from src.runtime_data_inventory_v1 import DEFAULT_DATA_ROOT
+from src.workflow_chain_recovery_v1 import (
+    PostgresWorkflowRecoveryAdapter,
+    backup_workflow_chain,
+    live_workflow_chain_integrity,
+    restore_workflow_chain,
+    verify_workflow_chain_backup,
+)
 
 
 def _live_dependencies():
     store = PostgresCanonicalPublicationStore()
     store.verify_schema()
-    return PostgresPublicationBackupAdapter(store), AzureBlobSourceStore()
+    return PostgresWorkflowRecoveryAdapter(store), AzureBlobSourceStore()
 
 
 def main() -> int:
@@ -47,11 +45,11 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.command == "verify-backup":
-            result = verify_publication_chain_backup(args.archive)
+            result = verify_workflow_chain_backup(args.archive)
         else:
             database, source_store = _live_dependencies()
             if args.command == "backup":
-                manifest = backup_publication_chain(
+                manifest = backup_workflow_chain(
                     args.archive,
                     database=database,
                     source_store=source_store,
@@ -59,14 +57,14 @@ def main() -> int:
                 )
                 result = {"ok": True, "archive": str(args.archive), "manifest": manifest}
             elif args.command == "restore":
-                result = restore_publication_chain(
+                result = restore_workflow_chain(
                     args.archive,
                     database=database,
                     source_store=source_store,
                     runtime_dest=args.runtime_dest,
                 )
             elif args.command == "check-live":
-                result = live_publication_chain_integrity(
+                result = live_workflow_chain_integrity(
                     database=database,
                     source_store=source_store,
                     runtime_root=args.runtime_root,
