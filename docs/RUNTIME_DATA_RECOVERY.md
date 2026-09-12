@@ -45,7 +45,7 @@ Startup importeert geen lokale authority-state meer stil in PostgreSQL. De migra
 
 Een ontbrekend klassehistoriebestand, afwijkende object-ID-volgorde of conflicterende bestaande PostgreSQL-state blokkeert de migratie fail-closed.
 
-De migratie verplaatst workflow-authority naar een **managed database**. Dit is bewust een reeks kleine, omkeerbare stappen en **geen grote databasemigratie**.
+De migratie verplaatst workflow-authority naar een **managed database**. Dit is bewust een reeks kleine, omkeerbare stappen en **geen grote databasemigratie**. Het doel hiervan is uiteindelijk meerdere App Service-instances veilig dezelfde gedeelde authority te laten gebruiken; het aanzetten van meerdere instances is echter een aparte topology-wijziging.
 
 ## Lokale runtime-inventaris
 
@@ -116,11 +116,13 @@ Voor gepubliceerde kennis blijft de kern dezelfde:
 
 ## Topologie
 
-De huidige topology-guard blijft voorlopig actief:
+De één-worker/één-instance-beperking blijft voorlopig actief:
 
 - one Gunicorn worker;
 - one instance;
 - sequential writes.
+
+Een configuratie met meerdere workers, meerdere instances of een andere write-mode blijft **buiten de topologie** en faalt via de bestaande guard. Multi-writer activering is dus niet impliciet onderdeel van stap 7. Ook multi-reviewer gedrag verandert hier niet.
 
 Stap 6 heeft PostgreSQL-concurrencygedrag inmiddels met echte PostgreSQL-tests bewezen en de drie eerder gevonden blockers zijn opgelost. Het versoepelen van de topology-guard blijft echter een aparte expliciete wijziging; stap 7 verandert die deploymentgrens niet.
 
