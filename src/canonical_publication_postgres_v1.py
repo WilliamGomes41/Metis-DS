@@ -391,7 +391,7 @@ class PostgresCanonicalPublicationStore:
             raise CanonicalPublicationStoreError("canonical_postgres_write_failed") from exc
 
     def active_publication_rows(self) -> list[dict[str, Any]]:
-        """Read the complete active publication set used to derive API projection."""
+        """Read the complete active publication set from the registry authority."""
         try:
             with self._connect() as con:
                 rows = con.execute(
@@ -410,7 +410,7 @@ class PostgresCanonicalPublicationStore:
                       ON rel.release_id=r.release_id
                     JOIN canonical_object_sources s
                       ON s.object_id=c.object_id AND s.object_version=c.object_version
-                    WHERE r.state='active' AND rel.status='published'
+                    WHERE r.state='active'
                     ORDER BY c.object_id
                     """
                 ).fetchall()
