@@ -53,11 +53,28 @@ class _PostgresWorkflowReviewMixin:
         with suppress(OSError):
             _atomic_write(self._bindings_path, self._bindings)
 
+    @staticmethod
+    def _changed_binding_snapshots(
+        before: dict[str, list[dict[str, Any]]],
+        after: dict[str, list[dict[str, Any]]],
+    ) -> set[str]:
+        keys = set(before) | set(after)
+        return {snapshot_id for snapshot_id in keys if before.get(snapshot_id, []) != after.get(snapshot_id, [])}
+
+    def _persist_binding_changes(
+        self,
+        before: dict[str, list[dict[str, Any]]],
+        after: dict[str, list[dict[str, Any]]],
+    ) -> None:
+        for snapshot_id in sorted(self._changed_binding_snapshots(before, after)):
+            self.workflow_review_store.replace_snapshot_bindings(snapshot_id, list(after.get(snapshot_id, [])))
+
     def _save_bindings(self) -> None:
         payload = getattr(self, "_prepared_bindings", None)
         source = self._bindings if payload is None else payload
+        before = self.workflow_review_store.read_bindings()
         try:
-            self.workflow_review_store.replace_bindings(source)
+            self._persist_binding_changes(before, source)
         except WorkflowReviewStoreError as exc:
             raise ConsoleError("workflow_review_write_failed", str(exc)) from exc
         self._bindings = deepcopy(source)
@@ -117,7 +134,7 @@ class _PostgresWorkflowReviewMixin:
                     snapshot_id=snapshot_id,
                 )
                 if bindings is not None:
-                    self.workflow_review_store.replace_bindings(self._bindings)
+                    self._persist_binding_changes(prior_bindings, self._bindings)
                     self._mirror_bindings()
         except WorkflowReviewStoreError as exc:
             self._restore_review_state(
