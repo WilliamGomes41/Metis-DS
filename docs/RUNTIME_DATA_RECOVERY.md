@@ -1,124 +1,119 @@
 # Runtime-data en publicatieketen: backup, restore en integriteitscontrole
 
-De herstelgrens voor het eindproduct is niet langer alleen `/home/data/metis-console`. De gepubliceerde keten bestaat uit drie samenhangende delen:
+De productie-authority is niet langer `/home/data/metis-console`.
 
-1. Azure Blob bevat de immutable canonical source bytes;
-2. PostgreSQL bevat canonical object versions, bronlineage, releases, release-items, publication registry en audit-events;
-3. `/home/data/metis-console` bevat lokale console-/workflowstate en afgeleide herstelartefacten, waaronder publish authorizations en release manifests.
+Na de volledige workflow-cut-over bestaat de authority uit:
 
-Een backup of restore is pas geldig wanneer deze drie delen samen aantoonbaar consistent zijn.
+1. Azure Blob voor immutable canonical source bytes;
+2. PostgreSQL publicatieschema voor canonical object versions, bronlineage, releases, release-items, publication registry en publication audit-events;
+3. PostgreSQL `workflow`-schema voor accounts, sessies, documenten/envelopes, work objects, review-events, publish authorizations, Audit-records en versleutelde Audit-secretpayloads.
 
-## Runtime-inventaris van `/home/data/metis-console`
+`/home/data/metis-console` bevat daarna alleen rebuildable compatibility mirrors, caches, lokale bronkopieën en afgeleide artefacten. Het is dan **geen workflow-authority** en geen authority voor gepubliceerde kennis.
 
-De lokale console-runtime (Azure default `CONSOLE_DATA_ROOT=/home/data/metis-console`) bevat deze categorieën:
+## Authority-matrix
 
-| Categorie | Pad onder de data-root |
-| --- | --- |
-| accounts / roles | `output/runtime/operations-console/accounts.json` |
-| document snapshots | `output/runtime/operations-console/envelopes.json` plus `sources/private` |
-| review decisions and audit ledger | `output/runtime/operations-console/review_ledger.jsonl` |
-| canonical work objects | `output/runtime/operations-console/objects/*.jsonl` |
-| publication authorizations | `output/runtime/operations-console/publish_authorizations.json` |
-| release manifests | `output/runtime/operations-console/release_manifests/*.json` |
-| derived projections | `output/runtime/operations-console/published_projection.jsonl` |
+| Gegeven | Authority na volledige cut-over | Lokale `/home/data`-kopie |
+| --- | --- | --- |
+| accounts / rollen / sessies | PostgreSQL `workflow` | compatibility mirror waar nog aanwezig |
+| documenten / envelopes | PostgreSQL `workflow` | `envelopes.json` is mirror |
+| work objects | PostgreSQL `workflow` | `objects/*.jsonl` is mirror |
+| review ledger | PostgreSQL `workflow` | `review_ledger.jsonl` is mirror |
+| publish authorizations | PostgreSQL `workflow` | `publish_authorizations.json` is mirror |
+| klassewijzigingshistorie | document-envelope in PostgreSQL `workflow` | oude `class_change_history/*.jsonl` alleen migratiebron |
+| Audit-records | PostgreSQL `workflow` | oude `audits/*.json` alleen migratiebron |
+| versleutelde Audit LLM-key | PostgreSQL `workflow` | oude `audit_secrets/llm_api_key.json` alleen migratiebron |
+| canonical kennis + releases + registry | PostgreSQL publicatieschema | geen authority-kopie |
+| immutable bronbytes | Azure Blob | lokale freeze is cache/werkexemplaar |
+| release manifests | PostgreSQL releasegegevens zijn authority | lokale manifests zijn rebuildable release mirrors |
+| Product API projectie | canonical/publication PostgreSQL | `published_projection.jsonl` is rebuildable derived output |
 
-Functie: `inventory_runtime_data()` in `src/runtime_data_inventory_v1.py`.
+De deployment-secret `METIS_AUDIT_SECRET_KEY` blijft buiten de database. PostgreSQL bewaart alleen de reeds versleutelde Audit-secretpayload.
 
-Deze runtimebestanden zijn niet de authority voor gepubliceerde kennis. PostgreSQL en Azure Blob zijn dat wel. De runtimebackup blijft nodig om de console-/reviewstaat en lokale releasebewijzen gecontroleerd te kunnen herstellen.
+## Expliciete workflow-migratie
 
-## Volledige publicatieketen-backup
+Startup importeert nooit stil lokale state. De migratievolgorde blijft expliciet:
 
-`src/publication_chain_recovery_v1.py` voegt de eindproduct-backup toe. `backup_publication_chain()` maakt één controleerbaar archief met:
+1. `002_workflow_schema.sql`;
+2. `003_workflow_document_envelope_payload.sql`;
+3. `004_workflow_review_authority.sql`;
+4. `005_workflow_remaining_authority.sql`;
+5. identity/accounts/sessions migreren;
+6. documents/objects migreren en document-cut-over voorbereiden;
+7. review ledger + publish authorizations migreren;
+8. `scripts/migrate_workflow_remaining_postgres.py` uitvoeren voor Auditstate, Audit-secretpayload en klassewijzigingshistorie;
+9. pas na verificatie de bijbehorende `METIS_WORKFLOW_*`-schakelaars activeren.
 
-- een transactioneel consistente, logische PostgreSQL-snapshot van:
-  - `canonical_object_versions`;
-  - `source_snapshots`;
-  - `canonical_object_sources`;
-  - `publication_releases`;
-  - `publication_release_items`;
-  - `publication_registry`;
-  - `audit_events`;
-- iedere Blob die vanuit `source_snapshots` bereikbaar is, met de originele content-addressed locator en SHA-256;
-- de runtimebackup, inclusief publish authorizations en release manifests;
-- `chain_manifest.json` met SHA-256 van de database-export, iedere Blob en het runtime-archief.
+Een ontbrekend klassehistoriebestand, afwijkende object-ID-volgorde of conflicterende bestaande PostgreSQL-state blokkeert de migratie fail-closed.
 
-De database-export gebeurt in een `REPEATABLE READ, READ ONLY`-transactie. Daarmee worden objectversies, releases, registry en audit-events uit één consistente database-snapshot gelezen.
+De migratie verplaatst workflow-authority naar een **managed database**. Dit is bewust een reeks kleine, omkeerbare stappen en **geen grote databasemigratie**. Dat betekent ook niet dat meerdere App Service-instances of gelijktijdige multi-reviewer writes al ondersteund zijn; die topologie wordt pas in stap 6 geopend na expliciet concurrencybewijs.
 
-Voor het archief wordt geschreven, voert de ketenbackup een live integriteitscontrole uit. Een ontbrekende Blob, afwijkende SHA-256, inconsistente release-itemhash, ontbrekende source lineage of inconsistente registry blokkeert de backup.
+## Lokale runtime-inventaris
 
-## Gecontroleerde restore
+`inventory_runtime_data()` in `src/runtime_data_inventory_v1.py` blijft beschikbaar voor bestaande lokale bestanden. Die inventaris is na de volledige cut-over nadrukkelijk geen authority-map. De bestanden zijn bruikbaar voor diagnostiek, rollback tijdens migratie en het reconstrueren/controleren van rebuildable lokale kopieën.
 
-`restore_publication_chain()` herstelt alleen naar een lege database en, wanneer runtime-state wordt teruggezet, naar een lege runtime-root.
+Historisch rapporteert de inventaris onder meer:
 
-De volgorde is bewust:
+- `accounts.json`;
+- `envelopes.json` en lokale source freezes;
+- `review_ledger.jsonl`;
+- `objects/*.jsonl`;
+- `publish_authorizations.json`;
+- `release_manifests/*.json`;
+- `published_projection.jsonl`.
 
-1. valideer het volledige backup-archief en alle opgenomen hashes;
-2. herstel iedere immutable Blob en laat de Blob-adapter de bytes opnieuw teruglezen/verifiëren;
-3. herstel de lokale runtimebackup;
-4. herstel PostgreSQL in één transactie;
-5. exporteer de herstelde database opnieuw en vergelijk de volledige tabelinhoud met de backup;
-6. voer opnieuw de ketenintegriteitscontrole uit tegen PostgreSQL + Blob + release manifests.
+Na volledige cut-over mogen deze bestanden niet worden gebruikt als fallback wanneer PostgreSQL leeg, onbereikbaar of afwijkend is.
 
-PostgreSQL wordt dus als laatste authority hersteld. Als Blob-restore faalt, wordt de publication registry niet teruggezet en kan er geen half herstelde actieve publicatie ontstaan.
+## Publicatieketen
 
-## Integriteitscontrole
+Voor gepubliceerde kennis blijft de kern dezelfde:
 
-`live_publication_chain_integrity()` / `check_chain_integrity()` controleert onder andere:
+- PostgreSQL publicatiegegevens worden transactioneel vastgelegd;
+- Azure Blob bevat de exacte immutable bronbytes;
+- release manifests en Product API projecties zijn afgeleide lokale kopieën en kunnen uit de authority worden opgebouwd;
+- lokale kopieën mogen nooit een nieuwere of afwijkende PostgreSQL-publicatie terugdraaien.
 
-- canonical JSON ↔ canonical content hash;
-- canonical object version ↔ source snapshot;
-- source snapshot SHA-256 ↔ Azure Blob locator;
-- Blob read-back ↔ SHA-256;
-- release item ↔ exacte object ID + versie + content hash;
-- publication registry ↔ bestaande gepubliceerde release + release item;
-- `release_published` audit-event ↔ snapshot ID + bronhash + Blob locator;
-- release manifest ↔ dezelfde releaseversie, snapshot ID, bronhash en immutable locator.
+`DurablePublicationConsole` reconcilieert release manifests en de Product API-projectie vanuit PostgreSQL. In de volledige workflowmodus wordt ook de gepubliceerde envelope-status teruggeschreven naar de PostgreSQL workflow-authority. De lokale `envelopes.json` blijft daarbij alleen mirror.
 
-De controle is fail-closed: ieder verschil levert `ok: false` op en een restore wordt niet succesvol verklaard.
+## Publicatieketen-backup
 
-## Lokale runtimebackup
+`src/publication_chain_recovery_v1.py` maakt een verifieerbare backup van de gepubliceerde keten met:
 
-Voor uitsluitend lokale console-/workflowstate blijft `export_runtime_data()` beschikbaar:
+- canonical/publication PostgreSQL-tabellen;
+- iedere vanuit `source_snapshots` bereikbare Azure Blob;
+- optioneel de lokale runtimekopieën;
+- `chain_manifest.json` met hashes.
 
-```bash
-python -c "from pathlib import Path; from src.runtime_data_inventory_v1 import export_runtime_data; export_runtime_data(Path('/home/data/metis-console'), Path('/tmp/metis-console-runtime.zip'))"
-```
+De database-export gebeurt in een `REPEATABLE READ, READ ONLY`-transactie. Integriteitscontrole valideert onder meer objecthashes, source lineage, release-items, registry, Blob-locators en Blob read-back.
 
-Het archief bevat alleen allowlisted relatieve paden en een `inventory_manifest.json` met SHA-256 per bestand. Restore controleert nu ook vóór schrijven dat de leden exact overeenkomen met het manifest en dat iedere memberhash klopt; na restore wordt `integrity_check()` automatisch uitgevoerd.
+Release manifests kunnen aanvullend worden gecontroleerd wanneer zij lokaal aanwezig zijn, maar zijn geen zelfstandige authority en mogen niet nodig zijn om een geldige PostgreSQL-publicatie te bewijzen.
 
-Dit lokale archief alleen is geen volledige productiebackup. Voor disaster recovery van gepubliceerde kennis moet de publicatieketen-backup worden gebruikt.
+## Belangrijke recovery-grens voor de workflow-cut-over
 
-## `--clean true` wist wwwroot, niet runtime-data
+De bestaande `publication_chain_recovery_v1.py` dekt het canonical/publication PostgreSQL-schema, Blob en lokale runtimekopieën. De nieuw gedeelde `workflow`-tabellen vallen nog niet onder die production recovery-adapter.
 
-`az webapp deploy --clean true` wist `wwwroot` (`/home/web_sierra/wwwroot`). Runtime-data leeft onder `/home/data` (inclusief `/home/data/metis-console`). `apply_clean_wwwroot()` bewaakt die grens: wwwroot-inhoud weg, `/home/data` onaangeroerd. Deployment packaging schrijft niet naar `/home/data` en neemt runtime-data niet op in de applicatie-ZIP.
+Daarom geldt vóór Azure-activatie van de volledige workflow-cut-over nog een aparte releasevoorwaarde: workflow PostgreSQL backup/restore en restore-integriteit moeten expliciet worden toegevoegd en getest. Totdat dat bewijs bestaat, is de nieuwe code wel mergeable/opt-in, maar is de volledige production cut-over nog niet operationeel herstelbewezen.
 
-## Topologie en authority-grens
+## `--clean true`
 
-De lokale console-write state blijft vooralsnog gebonden aan één ondersteunde writer-topologie:
+`az webapp deploy --clean true` wist de deployment-managed `wwwroot`, niet `/home/data`. Dat blijft nuttig omdat lokale caches/mirrors niet bij iedere deployment hoeven te verdwijnen. Hun voortbestaan is echter niet meer vereist voor correctness wanneer alle workflow stores zijn geactiveerd.
 
-- one Gunicorn worker (`scripts/azure_console_startup.sh` pins `gunicorn -w 1`);
-- one instance (`CONSOLE_INSTANCE_COUNT=1` or unset);
-- sequential writes (`CONSOLE_WRITE_MODE=sequential` or unset).
+## Topologie
 
-Runtime assert: `src/topology_bound_v1.py` / `assert_supported_topology()`.
+De één-worker/één-instance-beperking blijft voorlopig actief:
 
-Elke andere multi-writerconfiguratie — waaronder meerdere App Service-instances die tegelijk kunnen schrijven — is voor de resterende lokale workflowstate out of bound en valt buiten de ondersteunde topologie.
+- one Gunicorn worker;
+- one instance;
+- sequential writes.
 
-Deze beperking geldt niet meer als opslagmodel voor gepubliceerde kennis: canonical publicatie, releases en publication registry zijn PostgreSQL-authority; immutable bronbytes zijn Azure Blob-authority. `/home/data` is alleen console work state/cache/derived recovery state.
+Elke andere multi-writerconfiguratie, waaronder meerdere App Service-instances die tegelijk schrijven, blijft **out of bound** totdat stap 6 die beperking expliciet vervangt met bewezen PostgreSQL-concurrencygedrag.
 
-De migratiegrens is expliciet: de authority voor gepubliceerde kennis is al naar een managed database (Azure PostgreSQL) verplaatst. Dit is geen grote databasemigratie van alle console-runtime. Meerdere App Service-instances of gelijktijdige multi-reviewer writes zijn voor de resterende mutable workflowstate nog niet ondersteund. Voordat die topologie wordt geopend, moeten accounts/envelopes/bindings/sessions/review writes naar een gedeelde transactionele store worden gemigreerd.
+Dat is nu geen gevolg meer van een gewenste lokale workflow-authority, maar een expliciete veiligheidsgrens totdat stap 6 multi-instance/concurrencybewijs levert voor de nieuwe PostgreSQL-paden. De beperking mag pas worden verwijderd nadat gelijktijdige document-, review-, authorization-, Audit- en sessiemutaties aantoonbaar geen lost updates, dubbele ledgerketens of stille overschrijvingen veroorzaken.
 
-## Aantoonbaar herstelbewijs
+## Herstelbewijs
 
-`tests/test_publication_chain_recovery_v1.py` bevat een end-to-end roundtrip met geïsoleerde test-adapters:
+De bestaande deterministische publicatieketentests blijven bewijs voor canonical/publication + Blob-recovery. Zij zijn geen bewijs voor volledige workflow recovery en ook geen echte production recovery drill.
 
-- start met één gepubliceerde canonical object version, source snapshot, release, release item, active registry entry en release audit-event;
-- backup van database + Blob + runtime/release manifest;
-- restore naar lege Blob-store + lege database + lege runtime-root;
-- vergelijking van herstelde registry en release-items met de oorspronkelijke staat;
-- nieuwe Blob read-back/SHA-256-controle na restore;
-- nieuwe release-manifestcontrole na restore;
-- bewijs dat een Blob-writefout de database-restore niet laat committen;
-- detectie van gemanipuleerde release hashes, Blob-bytes en backup-archiveleden.
+Voor production readiness blijven daarom twee afzonderlijke bewijzen nodig:
 
-Dit test het herstelprotocol deterministisch zonder afhankelijk te zijn van live Azure-resources. Daarnaast blijft een echte production recovery drill tegen Azure PostgreSQL en Azure Blob vereist voordat disaster recovery operationeel als bewezen kan worden beschouwd.
+1. workflow PostgreSQL backup/restore inclusief de nieuwe `workflow`-tabellen;
+2. een echte recovery drill tegen Azure PostgreSQL en Azure Blob.

@@ -4,10 +4,10 @@ Internal researcher surface only. Not a public website. Bootstrap passwords and
 database credentials come from the deployment environment, never from Git.
 
 Supported console topology remains one Gunicorn worker / one instance with
-serialized writes. Azure runtime requires both the durable PostgreSQL canonical
-publication store and Azure Blob as the authoritative immutable source store;
-local development may continue without either. Shared PostgreSQL workflow
-identity, documents and review authority are opt-in until the later Azure cut-over.
+serialized writes until explicit multi-instance proof lands. Azure runtime
+requires both the durable PostgreSQL canonical publication store and Azure Blob
+as the authoritative immutable source store; local development may continue
+without either. Shared PostgreSQL workflow layers are opt-in until Azure cut-over.
 """
 from __future__ import annotations
 
@@ -38,6 +38,12 @@ from src.workflow_identity_postgres_v1 import (
     PostgresIdentityDurablePublicationConsole,
     PostgresWorkflowIdentityStore,
 )
+from src.workflow_remaining_cutover_v1 import (
+    PostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
+    PostgresCompleteWorkflowDurablePublicationConsole,
+    bind_remaining_route_backends,
+)
+from src.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
 from src.workflow_review_cutover_v1 import (
     PostgresReviewWorkflowAzureAuthoritativePublicationConsole,
     PostgresReviewWorkflowDurablePublicationConsole,
@@ -58,7 +64,7 @@ def _running_in_azure() -> bool:
 
 
 def _default_data_root() -> Path:
-    """Keep Azure runtime data outside the deployment-managed wwwroot."""
+    """Keep rebuildable runtime copies outside deployment-managed wwwroot."""
     if _running_in_azure():
         return AZURE_DATA_ROOT
     return ROOT
@@ -79,7 +85,6 @@ def _canonical_store() -> PostgresCanonicalPublicationStore | None:
 
 
 def _workflow_identity_store() -> PostgresWorkflowIdentityStore | None:
-    """Shared identity can land in code before the Azure runtime is switched."""
     kind = os.environ.get("METIS_WORKFLOW_STORE", "").strip().lower()
     if not kind:
         return None
@@ -91,7 +96,6 @@ def _workflow_identity_store() -> PostgresWorkflowIdentityStore | None:
 
 
 def _workflow_document_store() -> PostgresWorkflowDocumentRuntimeStore | None:
-    """Document authority is a separate cut-over gate after explicit migration."""
     kind = os.environ.get("METIS_WORKFLOW_DOCUMENT_STORE", "").strip().lower()
     if not kind:
         return None
@@ -105,7 +109,6 @@ def _workflow_document_store() -> PostgresWorkflowDocumentRuntimeStore | None:
 
 
 def _workflow_review_store() -> PostgresWorkflowReviewStore | None:
-    """Review authority is enabled only after identity and documents are shared."""
     kind = os.environ.get("METIS_WORKFLOW_REVIEW_STORE", "").strip().lower()
     if not kind:
         return None
@@ -117,6 +120,25 @@ def _workflow_review_store() -> PostgresWorkflowReviewStore | None:
         raise RuntimeError("workflow_document_store_required_for_review_store")
     store = PostgresWorkflowReviewStore()
     store.verify_review_schema()
+    return store
+
+
+def _workflow_remaining_store() -> PostgresWorkflowRemainingStore | None:
+    kind = os.environ.get("METIS_WORKFLOW_REMAINING_STORE", "").strip().lower()
+    if not kind:
+        return None
+    if kind != "postgres":
+        raise RuntimeError("unsupported_workflow_remaining_store")
+    required = {
+        "METIS_WORKFLOW_STORE": "workflow_identity_store_required_for_remaining_store",
+        "METIS_WORKFLOW_DOCUMENT_STORE": "workflow_document_store_required_for_remaining_store",
+        "METIS_WORKFLOW_REVIEW_STORE": "workflow_review_store_required_for_remaining_store",
+    }
+    for name, error in required.items():
+        if os.environ.get(name, "").strip().lower() != "postgres":
+            raise RuntimeError(error)
+    store = PostgresWorkflowRemainingStore()
+    store.verify_remaining_schema()
     return store
 
 
@@ -170,6 +192,7 @@ def build_app() -> object:
     workflow_identity_store = _workflow_identity_store()
     workflow_document_store = _workflow_document_store()
     workflow_review_store = _workflow_review_store()
+    workflow_remaining_store = _workflow_remaining_store()
     running_in_azure = _running_in_azure()
 
     common = dict(
@@ -179,7 +202,23 @@ def build_app() -> object:
         immutable_source_store=immutable_store,
         canonical_publication_store=canonical_store,
     )
-    if workflow_review_store is not None:
+    if workflow_remaining_store is not None:
+        if workflow_identity_store is None or workflow_document_store is None or workflow_review_store is None:
+            raise RuntimeError("workflow_prerequisites_required_for_remaining_store")
+        console_cls = (
+            PostgresCompleteWorkflowAzureAuthoritativePublicationConsole
+            if running_in_azure
+            else PostgresCompleteWorkflowDurablePublicationConsole
+        )
+        console = console_cls(
+            **common,
+            workflow_identity_store=workflow_identity_store,
+            workflow_document_store=workflow_document_store,
+            workflow_review_store=workflow_review_store,
+            workflow_remaining_store=workflow_remaining_store,
+        )
+        bind_remaining_route_backends(workflow_remaining_store)
+    elif workflow_review_store is not None:
         if workflow_identity_store is None or workflow_document_store is None:
             raise RuntimeError("workflow_prerequisites_required_for_review_store")
         console_cls = (
@@ -194,7 +233,7 @@ def build_app() -> object:
             workflow_review_store=workflow_review_store,
         )
     elif workflow_document_store is not None:
-        if workflow_identity_store is None:  # defensive; helper already enforces this
+        if workflow_identity_store is None:
             raise RuntimeError("workflow_identity_store_required_for_document_store")
         console_cls = (
             PostgresWorkflowAzureAuthoritativePublicationConsole
@@ -212,33 +251,22 @@ def build_app() -> object:
             if running_in_azure
             else PostgresIdentityDurablePublicationConsole
         )
-        console = console_cls(
-            **common,
-            workflow_identity_store=workflow_identity_store,
-        )
+        console = console_cls(**common, workflow_identity_store=workflow_identity_store)
     else:
         console_cls = AzureAuthoritativePublicationConsole if running_in_azure else DurablePublicationConsole
         console = console_cls(**common)
 
     bootstrap_accounts(console)
-    # One-time/idempotent compatibility step for revise rows persisted before
-    # structured repair existed. They must re-enter Review, not a legacy editor.
     console.migrate_legacy_revise_to_review()
-    # PostgreSQL may restore local publication copies only after Azure Blob has
-    # proved that every active source still exists and matches its recorded hash.
     console.reconcile_durable_publications()
 
     app = create_console_app(console)
     install_proportionate_review_routes(app, console)
     install_audit_llm_settings_routes(app, console)
     install_deterministic_review_repair_routes(app, console)
-    # Register exact closed-loop routes before the generic /audit/{audit_id} route.
     install_closed_review_routes(app, console)
-    # Delete the old writable repair endpoints after route installation. Only the
-    # structured /review/resolve path may write a repair in the live runtime.
     harden_legacy_repair_routes(app, console)
     install_audit_routes(app, console)
-    # Presentation-only: remove duplicate non-Audit doors after all routes exist.
     install_navigation_simplification(app)
     return app
 
