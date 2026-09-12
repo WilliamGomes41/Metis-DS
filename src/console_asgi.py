@@ -28,6 +28,7 @@ from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.proportionate_review_v1 import install_proportionate_review_routes
 from src.review_closure_v1 import harden_legacy_repair_routes
 from src.topology_bound_v1 import assert_supported_topology
+from src.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
 from src.workflow_documents_cutover_v1 import (
     PostgresWorkflowAzureAuthoritativePublicationConsole,
     PostgresWorkflowDocumentRuntimeStore,
@@ -103,7 +104,7 @@ def _workflow_document_store() -> PostgresWorkflowDocumentRuntimeStore | None:
         raise RuntimeError("unsupported_workflow_document_store")
     if os.environ.get("METIS_WORKFLOW_STORE", "").strip().lower() != "postgres":
         raise RuntimeError("workflow_identity_store_required_for_document_store")
-    store = PostgresWorkflowDocumentRuntimeStore()
+    store = PostgresConcurrentWorkflowDocumentStore()
     store.verify_cutover_schema()
     return store
 
