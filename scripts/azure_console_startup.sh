@@ -13,6 +13,9 @@ if [ -d "${ROOT}/.python_packages" ]; then
   export PYTHONPATH="${ROOT}/.python_packages:${PYTHONPATH}"
 fi
 export CONSOLE_DATA_ROOT="${CONSOLE_DATA_ROOT:-/home/data/metis-console}"
+
+# Reject an unsupported writer topology first. Authority configuration is a
+# separate production precondition and must not mask topology violations.
 if [ -n "${WEB_CONCURRENCY:-}" ] && [ "${WEB_CONCURRENCY}" != "1" ]; then
   echo "topology_bound: WEB_CONCURRENCY=${WEB_CONCURRENCY} is out of bound (supported: 1 worker)" >&2
   exit 1
@@ -26,4 +29,17 @@ if [ -n "${CONSOLE_INSTANCE_COUNT:-}" ] && [ "${CONSOLE_INSTANCE_COUNT}" != "1" 
   exit 1
 fi
 python -c "from src.topology_bound_v1 import assert_supported_topology; assert_supported_topology()"
+
+# Production authority is explicit and fail-closed. /home/data is work state;
+# PostgreSQL owns published object/release metadata and Azure Blob owns the exact
+# immutable source bytes. App startup must never silently degrade either one.
+if [ "${METIS_CANONICAL_STORE:-}" != "postgres" ]; then
+  echo "canonical_store_required_in_azure: METIS_CANONICAL_STORE must be postgres" >&2
+  exit 1
+fi
+if [ "${CONSOLE_IMMUTABLE_SOURCE_STORE:-}" != "azure" ]; then
+  echo "azure_blob_source_store_required_in_azure: CONSOLE_IMMUTABLE_SOURCE_STORE must be azure" >&2
+  exit 1
+fi
+
 exec python -m gunicorn -w 1 -k uvicorn.workers.UvicornWorker src.console_asgi:app --bind "0.0.0.0:${PORT:-8000}"

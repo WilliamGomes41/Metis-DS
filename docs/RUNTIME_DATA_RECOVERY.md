@@ -1,77 +1,124 @@
-# Runtime-data: inventaris, backup, restore en `--clean true`
+# Runtime-data en publicatieketen: backup, restore en integriteitscontrole
 
-Protocol v2.22 golf D. Geen grote databasemigratie. `publish()` blijft
-G2-BLOCKED. MUST NOT SSH-wipe van `/home/data` als productpad.
+De herstelgrens voor het eindproduct is niet langer alleen `/home/data/metis-console`. De gepubliceerde keten bestaat uit drie samenhangende delen:
 
-## Inventaris van `/home/data/metis-console`
+1. Azure Blob bevat de immutable canonical source bytes;
+2. PostgreSQL bevat canonical object versions, bronlineage, releases, release-items, publication registry en audit-events;
+3. `/home/data/metis-console` bevat lokale console-/workflowstate en afgeleide herstelartefacten, waaronder publish authorizations en release manifests.
 
-De console-runtime (Azure default `CONSOLE_DATA_ROOT=/home/data/metis-console`)
-bevat deze categorieën:
+Een backup of restore is pas geldig wanneer deze drie delen samen aantoonbaar consistent zijn.
+
+## Runtime-inventaris van `/home/data/metis-console`
+
+De lokale console-runtime (Azure default `CONSOLE_DATA_ROOT=/home/data/metis-console`) bevat deze categorieën:
 
 | Categorie | Pad onder de data-root |
 | --- | --- |
 | accounts / roles | `output/runtime/operations-console/accounts.json` |
 | document snapshots | `output/runtime/operations-console/envelopes.json` plus `sources/private` |
 | review decisions and audit ledger | `output/runtime/operations-console/review_ledger.jsonl` |
-| canonical objects | `output/runtime/operations-console/objects/*.jsonl` |
+| canonical work objects | `output/runtime/operations-console/objects/*.jsonl` |
+| publication authorizations | `output/runtime/operations-console/publish_authorizations.json` |
+| release manifests | `output/runtime/operations-console/release_manifests/*.json` |
 | derived projections | `output/runtime/operations-console/published_projection.jsonl` |
 
 Functie: `inventory_runtime_data()` in `src/runtime_data_inventory_v1.py`.
 
-## Export / backup
+Deze runtimebestanden zijn niet de authority voor gepubliceerde kennis. PostgreSQL en Azure Blob zijn dat wel. De runtimebackup blijft nodig om de console-/reviewstaat en lokale releasebewijzen gecontroleerd te kunnen herstellen.
 
-```bash
-python -c "from pathlib import Path; from src.runtime_data_inventory_v1 import export_runtime_data; export_runtime_data(Path('/home/data/metis-console'), Path('/tmp/metis-console-backup.zip'))"
-```
+## Volledige publicatieketen-backup
 
-Het archief bevat alleen allowlisted relatieve paden en een
-`inventory_manifest.json` met SHA-256 per bestand. `..` en extra slashes
-worden geweigerd vóór iedere filesystem-join.
+`src/publication_chain_recovery_v1.py` voegt de eindproduct-backup toe. `backup_publication_chain()` maakt één controleerbaar archief met:
+
+- een transactioneel consistente, logische PostgreSQL-snapshot van:
+  - `canonical_object_versions`;
+  - `source_snapshots`;
+  - `canonical_object_sources`;
+  - `publication_releases`;
+  - `publication_release_items`;
+  - `publication_registry`;
+  - `audit_events`;
+- iedere Blob die vanuit `source_snapshots` bereikbaar is, met de originele content-addressed locator en SHA-256;
+- de runtimebackup, inclusief publish authorizations en release manifests;
+- `chain_manifest.json` met SHA-256 van de database-export, iedere Blob en het runtime-archief.
+
+De database-export gebeurt in een `REPEATABLE READ, READ ONLY`-transactie. Daarmee worden objectversies, releases, registry en audit-events uit één consistente database-snapshot gelezen.
+
+Voor het archief wordt geschreven, voert de ketenbackup een live integriteitscontrole uit. Een ontbrekende Blob, afwijkende SHA-256, inconsistente release-itemhash, ontbrekende source lineage of inconsistente registry blokkeert de backup.
 
 ## Gecontroleerde restore
 
-Restore MUST naar een schone omgeving. Een niet-lege doelmap wordt geweigerd.
+`restore_publication_chain()` herstelt alleen naar een lege database en, wanneer runtime-state wordt teruggezet, naar een lege runtime-root.
+
+De volgorde is bewust:
+
+1. valideer het volledige backup-archief en alle opgenomen hashes;
+2. herstel iedere immutable Blob en laat de Blob-adapter de bytes opnieuw teruglezen/verifiëren;
+3. herstel de lokale runtimebackup;
+4. herstel PostgreSQL in één transactie;
+5. exporteer de herstelde database opnieuw en vergelijk de volledige tabelinhoud met de backup;
+6. voer opnieuw de ketenintegriteitscontrole uit tegen PostgreSQL + Blob + release manifests.
+
+PostgreSQL wordt dus als laatste authority hersteld. Als Blob-restore faalt, wordt de publication registry niet teruggezet en kan er geen half herstelde actieve publicatie ontstaan.
+
+## Integriteitscontrole
+
+`live_publication_chain_integrity()` / `check_chain_integrity()` controleert onder andere:
+
+- canonical JSON ↔ canonical content hash;
+- canonical object version ↔ source snapshot;
+- source snapshot SHA-256 ↔ Azure Blob locator;
+- Blob read-back ↔ SHA-256;
+- release item ↔ exacte object ID + versie + content hash;
+- publication registry ↔ bestaande gepubliceerde release + release item;
+- `release_published` audit-event ↔ snapshot ID + bronhash + Blob locator;
+- release manifest ↔ dezelfde releaseversie, snapshot ID, bronhash en immutable locator.
+
+De controle is fail-closed: ieder verschil levert `ok: false` op en een restore wordt niet succesvol verklaard.
+
+## Lokale runtimebackup
+
+Voor uitsluitend lokale console-/workflowstate blijft `export_runtime_data()` beschikbaar:
 
 ```bash
-python -c "from pathlib import Path; from src.runtime_data_inventory_v1 import restore_runtime_data; restore_runtime_data(Path('/tmp/metis-console-backup.zip'), Path('/home/data/metis-console-restore'))"
+python -c "from pathlib import Path; from src.runtime_data_inventory_v1 import export_runtime_data; export_runtime_data(Path('/home/data/metis-console'), Path('/tmp/metis-console-runtime.zip'))"
 ```
 
-Daarna `integrity_check()` tegen het manifest. Afwijkende of ontbrekende
-bytes falen fail-closed.
+Het archief bevat alleen allowlisted relatieve paden en een `inventory_manifest.json` met SHA-256 per bestand. Restore controleert nu ook vóór schrijven dat de leden exact overeenkomen met het manifest en dat iedere memberhash klopt; na restore wordt `integrity_check()` automatisch uitgevoerd.
+
+Dit lokale archief alleen is geen volledige productiebackup. Voor disaster recovery van gepubliceerde kennis moet de publicatieketen-backup worden gebruikt.
 
 ## `--clean true` wist wwwroot, niet runtime-data
 
-`az webapp deploy --clean true` wist `wwwroot` (`/home/web_sierra/wwwroot`).
-Runtime-data leeft onder `/home/data` (inclusief `/home/data/metis-console`).
-`apply_clean_wwwroot()` bewijst die grens: wwwroot-inhoud weg, `/home/data`
-onaangeroerd. MUST NOT SSH-wipe van `/home/data`. Packaging schrijft niet
-naar `/home/data` en stopt runtime-data uit de ZIP.
+`az webapp deploy --clean true` wist `wwwroot` (`/home/web_sierra/wwwroot`). Runtime-data leeft onder `/home/data` (inclusief `/home/data/metis-console`). `apply_clean_wwwroot()` bewaakt die grens: wwwroot-inhoud weg, `/home/data` onaangeroerd. Deployment packaging schrijft niet naar `/home/data` en neemt runtime-data niet op in de applicatie-ZIP.
 
-## Migratiegrens (geen grote databasemigratie)
+## Topologie en authority-grens
 
-De huidige store is één-instance filesystem JSON/JSONL onder
-`/home/data/metis-console`. Dat is voldoende voor één App Service-instance
-en sequentiële reviewer-writes.
+De lokale console-write state blijft vooralsnog gebonden aan één ondersteunde writer-topologie:
 
-## Supported topology (Post-#120 remediation 5)
-
-Supported console topology **now** (CONFIGURE):
-
-- one Gunicorn worker (`scripts/azure_console_startup.sh` pins `gunicorn -w 1`)
-- one instance (`CONSOLE_INSTANCE_COUNT=1` or unset)
-- sequential writes (`CONSOLE_WRITE_MODE=sequential` or unset)
+- one Gunicorn worker (`scripts/azure_console_startup.sh` pins `gunicorn -w 1`);
+- one instance (`CONSOLE_INSTANCE_COUNT=1` or unset);
+- sequential writes (`CONSOLE_WRITE_MODE=sequential` or unset).
 
 Runtime assert: `src/topology_bound_v1.py` / `assert_supported_topology()`.
-`WEB_CONCURRENCY` / `GUNICORN_WORKERS` / `GUNICORN_CMD_ARGS --workers` greater
-than 1, or `CONSOLE_INSTANCE_COUNT` greater than 1, fail closed
-(`multi_worker_out_of_bound` / `multi_instance_out_of_bound`). Accidental
-multi-writer scale is **out of bound** — not silently assumed.
 
-EXTEND for multiple writers (consistent mutate-path for
-accounts/envelopes/bindings; session reload/lock) is **not** implemented
-here. A **managed database** remains required before:
+Elke andere multi-writerconfiguratie — waaronder meerdere App Service-instances die tegelijk kunnen schrijven — is voor de resterende lokale workflowstate out of bound en valt buiten de ondersteunde topologie.
 
-- meerdere App Service-instances (geen gedeelde lokale schijf);
-- gelijktijdige multi-reviewer-writes (accounts, ledger, objecten, projectie).
+Deze beperking geldt niet meer als opslagmodel voor gepubliceerde kennis: canonical publicatie, releases en publication registry zijn PostgreSQL-authority; immutable bronbytes zijn Azure Blob-authority. `/home/data` is alleen console work state/cache/derived recovery state.
 
-Deze golf migreert die store niet. Geen grote databasemigratie.
+De migratiegrens is expliciet: de authority voor gepubliceerde kennis is al naar een managed database (Azure PostgreSQL) verplaatst. Dit is geen grote databasemigratie van alle console-runtime. Meerdere App Service-instances of gelijktijdige multi-reviewer writes zijn voor de resterende mutable workflowstate nog niet ondersteund. Voordat die topologie wordt geopend, moeten accounts/envelopes/bindings/sessions/review writes naar een gedeelde transactionele store worden gemigreerd.
+
+## Aantoonbaar herstelbewijs
+
+`tests/test_publication_chain_recovery_v1.py` bevat een end-to-end roundtrip met geïsoleerde test-adapters:
+
+- start met één gepubliceerde canonical object version, source snapshot, release, release item, active registry entry en release audit-event;
+- backup van database + Blob + runtime/release manifest;
+- restore naar lege Blob-store + lege database + lege runtime-root;
+- vergelijking van herstelde registry en release-items met de oorspronkelijke staat;
+- nieuwe Blob read-back/SHA-256-controle na restore;
+- nieuwe release-manifestcontrole na restore;
+- bewijs dat een Blob-writefout de database-restore niet laat committen;
+- detectie van gemanipuleerde release hashes, Blob-bytes en backup-archiveleden.
+
+Dit test het herstelprotocol deterministisch zonder afhankelijk te zijn van live Azure-resources. Daarnaast blijft een echte production recovery drill tegen Azure PostgreSQL en Azure Blob vereist voordat disaster recovery operationeel als bewezen kan worden beschouwd.

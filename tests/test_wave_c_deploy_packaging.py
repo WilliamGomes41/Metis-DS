@@ -12,11 +12,11 @@ import pytest
 from src.azure_deploy_package import (
     AZURE_MANYLINUX_PLATFORM,
     CONSOLE_REQUIREMENTS_NAME,
-    FORBIDDEN_CONSOLE_PACKAGES,
     RUNTIME_DATA_MARKERS,
     DeployPackageError,
     default_console_requirements,
     package_contains_runtime_data,
+    vendor_tree_forbidden_packages,
     write_deploy_zip,
 )
 from src.deploy_identity_v1 import (
@@ -83,6 +83,11 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
         cryptography_rust = archive.read(
             ".python_packages/cryptography/hazmat/bindings/_rust.abi3.so"
         )
+        vendor_roots = {
+            name.split("/", 2)[1]
+            for name in names
+            if name.startswith(".python_packages/") and len(name.split("/", 2)) > 1
+        }
     assert any(name.startswith(".python_packages/") for name in names)
     assert any(name.endswith("gunicorn/__init__.py") or "/gunicorn/" in name for name in names)
     assert any("fastapi" in name for name in names)
@@ -96,19 +101,15 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
     assert AZURE_MANYLINUX_PLATFORM == "manylinux2014_x86_64"
     assert b"GLIBC_2.33" not in cryptography_rust
     assert b"GLIBC_2.34" not in cryptography_rust
-    forbidden_hits = [
-        name
-        for name in names
-        if name.startswith(".python_packages/")
-        and any(
-            part.split("-", 1)[0].split(".", 1)[0].lower().replace("_", "-")
-            in FORBIDDEN_CONSOLE_PACKAGES
-            or part.lower().startswith("scikit_learn")
-            or part.lower().startswith("scikit-learn")
-            for part in name.replace("\\", "/").split("/")
-        )
-    ]
-    assert forbidden_hits == [], f"console ZIP vendored forbidden packages: {forbidden_hits[:20]}"
+
+    # Only top-level installed packages define the package boundary. A dependency
+    # may legitimately contain an optional module named numpy.py without vendoring
+    # the NumPy distribution itself.
+    vendor_probe = tmp_path / "vendor-roots"
+    vendor_probe.mkdir()
+    for root in vendor_roots:
+        (vendor_probe / root).mkdir(exist_ok=True)
+    assert vendor_tree_forbidden_packages(vendor_probe) == frozenset()
 
 
 def test_packaging_excludes_runtime_data_and_does_not_overwrite_home_data(tmp_path: Path) -> None:

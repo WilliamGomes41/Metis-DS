@@ -65,6 +65,7 @@ ALLOWED_CONSOLE_PACKAGES = frozenset(
         "azure-identity",
         "azure-storage-blob",
         "cryptography",
+        "psycopg",
     }
 )
 
@@ -216,6 +217,7 @@ def test_v224_console_process_start_does_not_load_sklearn_or_retrieval(tmp_path:
     }
     env.pop("CONSOLE_IMMUTABLE_SOURCE_STORE", None)
     env.pop("WEBSITE_SITE_NAME", None)
+    env.pop("METIS_CANONICAL_STORE", None)
     result = subprocess.run(
         [sys.executable, str(probe)],
         cwd=ROOT,

@@ -21,6 +21,8 @@ INVENTORY_CATEGORIES = (
     "document_snapshots",
     "review_ledger",
     "canonical_objects",
+    "publication_authorizations",
+    "release_manifests",
     "derived_projections",
 )
 
@@ -32,6 +34,8 @@ _CATEGORY_PATHS: dict[str, tuple[str, ...]] = {
     ),
     "review_ledger": ("output/runtime/operations-console/review_ledger.jsonl",),
     "canonical_objects": ("output/runtime/operations-console/objects",),
+    "publication_authorizations": ("output/runtime/operations-console/publish_authorizations.json",),
+    "release_manifests": ("output/runtime/operations-console/release_manifests",),
     "derived_projections": ("output/runtime/operations-console/published_projection.jsonl",),
 }
 
@@ -116,6 +120,9 @@ def inventory_runtime_data(data_root: Path | None = None) -> dict[str, Any]:
         elif name == "canonical_objects":
             count = len(files)
             ids = [path.stem for path in files]
+        elif name == "release_manifests":
+            count = len(files)
+            ids = [path.stem for path in files]
         elif name == "review_ledger":
             ledger = root / "output" / "runtime" / "operations-console" / "review_ledger.jsonl"
             if ledger.is_file():
@@ -167,22 +174,27 @@ def restore_runtime_data(archive: Path, dest: Path, *, allow_nonempty: bool = Fa
         if "inventory_manifest.json" not in names:
             raise RuntimeDataError("backup_manifest_missing")
         manifest = json.loads(zipf.read("inventory_manifest.json").decode("utf-8"))
-        for name in names:
-            if name.endswith("/") or name == "inventory_manifest.json":
-                continue
+        expected = manifest.get("files") or {}
+        archive_members = {name for name in names if name != "inventory_manifest.json" and not name.endswith("/")}
+        if archive_members != set(expected):
+            raise RuntimeDataError("backup_manifest_members_mismatch")
+        for name in sorted(archive_members):
             member = safe_backup_member(name)
+            data = zipf.read(name)
+            if hashlib.sha256(data).hexdigest() != expected.get(member):
+                raise RuntimeDataError("backup_member_hash_mismatch")
             target = dest.joinpath(*member.split("/"))
             resolved_dest = Path(os.path.realpath(os.fspath(dest)))
             target.parent.mkdir(parents=True, exist_ok=True)
-            with zipf.open(name) as src, target.open("wb") as out:
-                shutil.copyfileobj(src, out)
+            target.write_bytes(data)
             resolved_target = Path(os.path.realpath(os.fspath(target)))
-            if resolved_target != resolved_dest and not str(resolved_target).startswith(
-                str(resolved_dest) + os.sep
-            ):
+            if resolved_target != resolved_dest and not str(resolved_target).startswith(str(resolved_dest) + os.sep):
                 target.unlink(missing_ok=True)
                 raise RuntimeDataError("unsafe_backup_member")
             restored.append(member)
+    check = integrity_check(dest, manifest)
+    if not check["ok"]:
+        raise RuntimeDataError("restore_integrity_failed")
     return {"ok": True, "restored": restored, "manifest": manifest}
 
 

@@ -1,11 +1,12 @@
 """ASGI entry for hosting the internal operations console.
 
-Internal researcher surface only. Not a public website. G2 remains BLOCKED.
-Bootstrap passwords come from environment, never from Git.
+Internal researcher surface only. Not a public website. Bootstrap passwords and
+database credentials come from the deployment environment, never from Git.
 
-Supported topology (Post-#120 remediation 5): one Gunicorn worker /
-one instance / sequential writes. ``build_app()`` fail-closes if a
-multi-writer assumption is declared. EXTEND for multiple writers is later.
+Supported console topology remains one Gunicorn worker / one instance with
+serialized writes. Azure runtime requires both the durable PostgreSQL canonical
+publication store and Azure Blob as the authoritative immutable source store;
+local development may continue without either.
 """
 from __future__ import annotations
 
@@ -14,14 +15,17 @@ from pathlib import Path
 
 from src.audit_llm_settings_v1 import install_audit_llm_settings_routes
 from src.audit_room_v1 import install_audit_routes
+from src.azure_authoritative_publication_console_v1 import AzureAuthoritativePublicationConsole
+from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 from src.closed_review_loop_v1 import install_closed_review_routes
 from src.console_navigation_simplify_v1 import install_navigation_simplification
 from src.deterministic_review_repair_v1 import install_deterministic_review_repair_routes
+from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import AzureBlobSourceStore
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.proportionate_review_v1 import install_proportionate_review_routes
-from src.review_closure_v1 import ReviewClosureConsole, harden_legacy_repair_routes
+from src.review_closure_v1 import harden_legacy_repair_routes
 from src.topology_bound_v1 import assert_supported_topology
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,11 +37,42 @@ def _env_path(name: str, default: Path) -> Path:
     return Path(raw) if raw else default
 
 
+def _running_in_azure() -> bool:
+    return bool(os.environ.get("WEBSITE_SITE_NAME", "").strip())
+
+
 def _default_data_root() -> Path:
     """Keep Azure runtime data outside the deployment-managed wwwroot."""
-    if os.environ.get("WEBSITE_SITE_NAME", "").strip():
+    if _running_in_azure():
         return AZURE_DATA_ROOT
     return ROOT
+
+
+def _canonical_store() -> PostgresCanonicalPublicationStore | None:
+    kind = os.environ.get("METIS_CANONICAL_STORE", "").strip().lower()
+    running_in_azure = _running_in_azure()
+    if not kind:
+        if running_in_azure:
+            raise RuntimeError("canonical_store_required_in_azure")
+        return None
+    if kind != "postgres":
+        raise RuntimeError("unsupported_canonical_store")
+    store = PostgresCanonicalPublicationStore()
+    store.verify_schema()
+    return store
+
+
+def _immutable_source_store() -> AzureBlobSourceStore | None:
+    """Azure production may never run without Blob as source-byte authority."""
+    kind = os.environ.get("CONSOLE_IMMUTABLE_SOURCE_STORE", "").strip().lower()
+    running_in_azure = _running_in_azure()
+    if not kind:
+        if running_in_azure:
+            raise RuntimeError("azure_blob_source_store_required_in_azure")
+        return None
+    if kind != "azure":
+        raise RuntimeError("unsupported_immutable_source_store")
+    return AzureBlobSourceStore()
 
 
 def bootstrap_accounts(console: OperationsConsole) -> None:
@@ -72,22 +107,24 @@ def bootstrap_accounts(console: OperationsConsole) -> None:
 def build_app() -> object:
     assert_supported_topology()
     data_root = _env_path("CONSOLE_DATA_ROOT", _default_data_root())
-    immutable_store = None
-    source_store_kind = os.environ.get("CONSOLE_IMMUTABLE_SOURCE_STORE", "").strip().lower()
-    if source_store_kind:
-        if source_store_kind != "azure":
-            raise RuntimeError("unsupported_immutable_source_store")
-        immutable_store = AzureBlobSourceStore()
-    console = ReviewClosureConsole(
+    immutable_store = _immutable_source_store()
+    canonical_store = _canonical_store()
+    console_cls = AzureAuthoritativePublicationConsole if _running_in_azure() else DurablePublicationConsole
+    console = console_cls(
         root=ROOT,
         source_store=_env_path("CONSOLE_SOURCE_STORE", data_root / "sources" / "private"),
         runtime=_env_path("CONSOLE_RUNTIME", data_root / "output" / "runtime" / "operations-console"),
         immutable_source_store=immutable_store,
+        canonical_publication_store=canonical_store,
     )
     bootstrap_accounts(console)
     # One-time/idempotent compatibility step for revise rows persisted before
     # structured repair existed. They must re-enter Review, not a legacy editor.
     console.migrate_legacy_revise_to_review()
+    # PostgreSQL may restore local publication copies only after Azure Blob has
+    # proved that every active source still exists and matches its recorded hash.
+    console.reconcile_durable_publications()
+
     app = create_console_app(console)
     install_proportionate_review_routes(app, console)
     install_audit_llm_settings_routes(app, console)

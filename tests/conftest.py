@@ -77,6 +77,35 @@ def _freeze_v2_root_documents_for_historical_contracts(request, monkeypatch):  #
     monkeypatch.setattr(Path, "read_bytes", historical_read_bytes)
 
 
+class _EmptyCanonicalPublicationAuthority:
+    """Canonical test authority with no active publication rows."""
+
+    def active_publication_rows(self) -> list[dict]:
+        return []
+
+
+@pytest.fixture(autouse=True)
+def _migrate_legacy_product_api_regression_to_canonical_authority(request, monkeypatch):  # type: ignore[no-untyped-def]
+    """Keep the legacy REAL-mode abstention regression valid after PostgreSQL cutover.
+
+    The regression predates the canonical-store requirement and used absence of
+    local published JSONL data to represent an empty REAL corpus. REAL mode is
+    now PostgreSQL-authoritative, so this single historical caller receives an
+    explicit empty canonical authority instead of relying on missing database
+    configuration or a local-file fallback.
+    """
+    if request.node.nodeid != "tests/test_operations_console_mvp.py::test_product_api_still_object_level_retrieve_and_unpublished_abstain":
+        return
+
+    from src import product_api_v1
+
+    monkeypatch.setattr(
+        product_api_v1,
+        "_default_real_store",
+        lambda: _EmptyCanonicalPublicationAuthority(),
+    )
+
+
 _orig_init = TestClient.__init__
 
 
