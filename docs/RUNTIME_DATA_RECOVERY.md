@@ -102,9 +102,11 @@ De lokale console-write state blijft vooralsnog gebonden aan één ondersteunde 
 
 Runtime assert: `src/topology_bound_v1.py` / `assert_supported_topology()`.
 
+Elke andere multi-writerconfiguratie — waaronder meerdere App Service-instances die tegelijk kunnen schrijven — is voor de resterende lokale workflowstate out of bound en valt buiten de ondersteunde topologie.
+
 Deze beperking geldt niet meer als opslagmodel voor gepubliceerde kennis: canonical publicatie, releases en publication registry zijn PostgreSQL-authority; immutable bronbytes zijn Azure Blob-authority. `/home/data` is alleen console work state/cache/derived recovery state.
 
-Meerdere gelijktijdige consolewriters vereisen nog steeds verdere migratie van de resterende mutable workflowstate (accounts/envelopes/bindings/sessions/review writes) naar een gedeelde transactionele store.
+De migratiegrens is expliciet: de authority voor gepubliceerde kennis is al naar een managed database (Azure PostgreSQL) verplaatst. Dit is geen grote databasemigratie van alle console-runtime. Meerdere App Service-instances of gelijktijdige multi-reviewer writes zijn voor de resterende mutable workflowstate nog niet ondersteund. Voordat die topologie wordt geopend, moeten accounts/envelopes/bindings/sessions/review writes naar een gedeelde transactionele store worden gemigreerd.
 
 ## Aantoonbaar herstelbewijs
 
