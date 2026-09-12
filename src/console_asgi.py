@@ -51,6 +51,7 @@ from src.workflow_review_cutover_v1 import (
     PostgresReviewWorkflowDurablePublicationConsole,
 )
 from src.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+from src.workflow_transaction_v1 import bind_workflow_stores
 
 ROOT = Path(__file__).resolve().parents[1]
 AZURE_DATA_ROOT = Path("/home/data/metis-console")
@@ -207,6 +208,12 @@ def build_app() -> object:
     if workflow_remaining_store is not None:
         if workflow_identity_store is None or workflow_document_store is None or workflow_review_store is None:
             raise RuntimeError("workflow_prerequisites_required_for_remaining_store")
+        bind_workflow_stores(
+            workflow_identity_store,
+            workflow_document_store,
+            workflow_review_store,
+            workflow_remaining_store,
+        )
         console_cls = (
             PostgresCompleteWorkflowAzureAuthoritativePublicationConsole
             if running_in_azure
@@ -223,6 +230,11 @@ def build_app() -> object:
     elif workflow_review_store is not None:
         if workflow_identity_store is None or workflow_document_store is None:
             raise RuntimeError("workflow_prerequisites_required_for_review_store")
+        bind_workflow_stores(
+            workflow_identity_store,
+            workflow_document_store,
+            workflow_review_store,
+        )
         console_cls = (
             PostgresReviewWorkflowAzureAuthoritativePublicationConsole
             if running_in_azure

@@ -16,6 +16,7 @@ from src.workflow_review_postgres_v1 import (
     PostgresWorkflowReviewStore,
     WorkflowReviewStoreError,
 )
+from src.workflow_transaction_v1 import workflow_transaction
 
 
 class _PostgresWorkflowReviewMixin:
@@ -135,20 +136,21 @@ class _PostgresWorkflowReviewMixin:
                 prior_envelope = deepcopy(self._envelope(sid))
                 prior_objects = deepcopy(self._load_objects(sid, remember=False))
         try:
-            with buffer_events(self._ledger_path):
-                super()._commit_prepared_store(
-                    envelopes=envelopes,
-                    bindings=bindings,
-                    objects=objects,
-                    expected_revision=expected_revision,
-                    ledger_fn=ledger_fn,
-                    snapshot_id=snapshot_id,
-                )
-                if bindings is not None:
-                    current = self.workflow_review_store.read_bindings()
-                    self._bindings = current
-                    self._bindings_baseline = deepcopy(current)
-                    self._mirror_bindings()
+            with workflow_transaction(self.workflow_review_store):
+                with buffer_events(self._ledger_path):
+                    super()._commit_prepared_store(
+                        envelopes=envelopes,
+                        bindings=bindings,
+                        objects=objects,
+                        expected_revision=expected_revision,
+                        ledger_fn=ledger_fn,
+                        snapshot_id=snapshot_id,
+                    )
+                    if bindings is not None:
+                        current = self.workflow_review_store.read_bindings()
+                        self._bindings = current
+                        self._bindings_baseline = deepcopy(current)
+                        self._mirror_bindings()
         except WorkflowReviewStoreError as exc:
             self._restore_review_state(
                 bindings=prior_bindings,
@@ -172,9 +174,10 @@ class _PostgresWorkflowReviewMixin:
         prior_envelope = deepcopy(self._envelope(snapshot_id))
         prior_objects = deepcopy(self._load_objects(snapshot_id, remember=False))
         try:
-            with buffer_events(self._ledger_path):
-                with super()._atomic_snapshot_mutation(snapshot_id):
-                    yield
+            with workflow_transaction(self.workflow_review_store):
+                with buffer_events(self._ledger_path):
+                    with super()._atomic_snapshot_mutation(snapshot_id):
+                        yield
         except Exception:
             self._restore_review_state(
                 bindings=prior_bindings,
