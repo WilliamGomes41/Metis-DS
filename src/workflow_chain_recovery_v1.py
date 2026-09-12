@@ -292,8 +292,12 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
                         tables[table] = [_json_safe(dict(row)) for row in rows]
                     workflow_tables: dict[str, list[dict[str, Any]]] = {}
                     for table in WORKFLOW_TABLES:
+                        select_columns = [
+                            "source_date::text AS source_date" if table == "documents" and column == "source_date" else column
+                            for column in _WORKFLOW_COLUMNS[table]
+                        ]
                         rows = con.execute(
-                            f"SELECT {','.join(_WORKFLOW_COLUMNS[table])} FROM workflow.{table} ORDER BY {_WORKFLOW_ORDER_BY[table]}"
+                            f"SELECT {','.join(select_columns)} FROM workflow.{table} ORDER BY {_WORKFLOW_ORDER_BY[table]}"
                         ).fetchall()
                         workflow_tables[table] = [_json_safe(dict(row)) for row in rows]
         except PublicationChainRecoveryError:
