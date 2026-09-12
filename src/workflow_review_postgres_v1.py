@@ -30,6 +30,9 @@ class WorkflowReviewStoreError(RuntimeError):
 class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
     """Shared authority for hash-chained review evidence and authorizations."""
 
+    REVIEW_LEDGER_LOCK_KEY = 714812479584013
+    AUTHORIZATION_LOCK_KEY = 714812479584014
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._buffer: ContextVar[list[dict[str, Any]] | None] = ContextVar(
@@ -107,6 +110,14 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
         body["event_hash"] = stable_hash(body)
         return body
 
+    @classmethod
+    def _lock_review_ledger(cls, con: Any) -> None:
+        con.execute("SELECT pg_advisory_xact_lock(%s)", (cls.REVIEW_LEDGER_LOCK_KEY,))
+
+    @classmethod
+    def _lock_authorizations(cls, con: Any) -> None:
+        con.execute("SELECT pg_advisory_xact_lock(%s)", (cls.AUTHORIZATION_LOCK_KEY,))
+
     def _last_hash(self) -> str | None:
         try:
             with self._connect() as con:
@@ -142,6 +153,7 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
         try:
             with self._connect() as con:
                 with con.transaction():
+                    self._lock_review_ledger(con)
                     row = con.execute(
                         "SELECT event_hash FROM workflow.review_events "
                         "ORDER BY event_id DESC LIMIT 1 FOR UPDATE"
@@ -221,6 +233,7 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
         try:
             with self._connect() as con:
                 with con.transaction():
+                    self._lock_review_ledger(con)
                     row = con.execute(
                         "SELECT event_hash FROM workflow.review_events "
                         "ORDER BY event_id DESC LIMIT 1 FOR UPDATE"
@@ -280,31 +293,55 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
         except Exception as exc:
             raise WorkflowReviewStoreError("workflow_publish_authorizations_read_failed") from exc
 
-    def replace_bindings(self, bindings: Mapping[str, list[dict[str, Any]]]) -> None:
+    @staticmethod
+    def _insert_binding_rows(con: Any, snapshot_id: str, rows: list[dict[str, Any]]) -> None:
+        for position, row in enumerate(rows):
+            con.execute(
+                "INSERT INTO workflow.publish_authorizations("
+                "snapshot_id,object_id,object_version,canonical_object_hash,"
+                "confirmed_object_type,reviewer_account_id,reviewer_display_name,"
+                "decision,valid,position) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (
+                    snapshot_id,
+                    row["object_id"],
+                    row["object_version"],
+                    row["canonical_object_hash"],
+                    row["confirmed_object_type"],
+                    row["reviewer_id"],
+                    row["reviewer"],
+                    row["decision"],
+                    bool(row.get("valid")),
+                    position,
+                ),
+            )
+
+    def replace_snapshot_bindings(self, snapshot_id: str, rows: list[dict[str, Any]]) -> None:
+        """Replace one snapshot without rewriting unrelated authorization state."""
         try:
             with self._connect() as con:
                 with con.transaction():
+                    self._lock_authorizations(con)
+                    con.execute(
+                        "SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
+                        (snapshot_id,),
+                    ).fetchone()
+                    con.execute(
+                        "DELETE FROM workflow.publish_authorizations WHERE snapshot_id=%s",
+                        (snapshot_id,),
+                    )
+                    self._insert_binding_rows(con, snapshot_id, rows)
+        except Exception as exc:
+            raise WorkflowReviewStoreError("workflow_publish_authorizations_write_failed") from exc
+
+    def replace_bindings(self, bindings: Mapping[str, list[dict[str, Any]]]) -> None:
+        """Replace all authorization state for migration or explicit whole-store restore."""
+        try:
+            with self._connect() as con:
+                with con.transaction():
+                    self._lock_authorizations(con)
                     con.execute("DELETE FROM workflow.publish_authorizations")
                     for snapshot_id in sorted(bindings):
-                        for position, row in enumerate(bindings[snapshot_id]):
-                            con.execute(
-                                "INSERT INTO workflow.publish_authorizations("
-                                "snapshot_id,object_id,object_version,canonical_object_hash,"
-                                "confirmed_object_type,reviewer_account_id,reviewer_display_name,"
-                                "decision,valid,position) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                                (
-                                    snapshot_id,
-                                    row["object_id"],
-                                    row["object_version"],
-                                    row["canonical_object_hash"],
-                                    row["confirmed_object_type"],
-                                    row["reviewer_id"],
-                                    row["reviewer"],
-                                    row["decision"],
-                                    bool(row.get("valid")),
-                                    position,
-                                ),
-                            )
+                        self._insert_binding_rows(con, snapshot_id, bindings[snapshot_id])
         except Exception as exc:
             raise WorkflowReviewStoreError("workflow_publish_authorizations_write_failed") from exc
 
@@ -356,6 +393,7 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
             try:
                 with self._connect() as con:
                     with con.transaction():
+                        self._lock_review_ledger(con)
                         previous = None
                         for event in events:
                             if event.get("previous_event_hash") != previous:
