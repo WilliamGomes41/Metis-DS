@@ -45,6 +45,8 @@ Startup importeert nooit stil lokale state. De migratievolgorde blijft expliciet
 
 Een ontbrekend klassehistoriebestand, afwijkende object-ID-volgorde of conflicterende bestaande PostgreSQL-state blokkeert de migratie fail-closed.
 
+De migratie verplaatst workflow-authority naar een **managed database**. Dat betekent niet dat meerdere App Service-instances al ondersteund zijn; die topologie wordt pas in stap 6 geopend na expliciet concurrencybewijs.
+
 ## Lokale runtime-inventaris
 
 `inventory_runtime_data()` in `src/runtime_data_inventory_v1.py` blijft beschikbaar voor bestaande lokale bestanden. Die inventaris is na de volledige cut-over nadrukkelijk geen authority-map. De bestanden zijn bruikbaar voor diagnostiek, rollback tijdens migratie en het reconstrueren/controleren van rebuildable lokale kopieën.
@@ -100,8 +102,10 @@ Daarom geldt vóór Azure-activatie van de volledige workflow-cut-over nog een a
 De één-worker/één-instance-beperking blijft voorlopig actief:
 
 - one Gunicorn worker;
-- one App Service instance;
+- one instance;
 - sequential writes.
+
+Elke andere multi-writerconfiguratie, waaronder meerdere App Service-instances die tegelijk schrijven, blijft **out of bound** totdat stap 6 die beperking expliciet vervangt met bewezen PostgreSQL-concurrencygedrag.
 
 Dat is nu geen gevolg meer van een gewenste lokale workflow-authority, maar een expliciete veiligheidsgrens totdat stap 6 multi-instance/concurrencybewijs levert voor de nieuwe PostgreSQL-paden. De beperking mag pas worden verwijderd nadat gelijktijdige document-, review-, authorization-, Audit- en sessiemutaties aantoonbaar geen lost updates, dubbele ledgerketens of stille overschrijvingen veroorzaken.
 
