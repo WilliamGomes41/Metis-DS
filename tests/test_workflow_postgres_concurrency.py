@@ -39,6 +39,14 @@ MIGRATIONS = (
 )
 
 
+def _migration_statements(text: str) -> list[str]:
+    """Split these simple DDL migrations without treating comment semicolons as SQL."""
+    sql = "\n".join(
+        line for line in text.splitlines() if not line.lstrip().startswith("--")
+    )
+    return [statement.strip() for statement in sql.split(";") if statement.strip()]
+
+
 @pytest.fixture(autouse=True)
 def workflow_postgres() -> PostgresCanonicalConfig:
     dsn = os.environ.get("METIS_TEST_POSTGRES_DSN", "").strip()
@@ -51,10 +59,8 @@ def workflow_postgres() -> PostgresCanonicalConfig:
         con.execute("DROP SCHEMA IF EXISTS workflow CASCADE")
         for migration in MIGRATIONS:
             text = (ROOT / "db" / "migrations" / migration).read_text(encoding="utf-8")
-            for statement in text.split(";"):
-                statement = statement.strip()
-                if statement:
-                    con.execute(statement)
+            for statement in _migration_statements(text):
+                con.execute(statement)
 
     config = PostgresCanonicalConfig(dsn=dsn)
     yield config
