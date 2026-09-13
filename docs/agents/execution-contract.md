@@ -32,6 +32,14 @@ Before implementation, the agent reads:
 
 Architecture conflicts must be surfaced, not silently overridden.
 
+## Vertical-slice completeness
+
+When a user promise crosses architectural layers, the implementation must be completed and verified as a vertical slice. Trace the behavior through the layers that are actually required by that promise:
+
+`trigger -> authorization -> validation -> domain transition -> API/backend -> durable write -> concurrency/recovery -> deterministic follow-up -> observable result`
+
+A frontend-only, API-only, backend-only, or storage-only implementation is incomplete when other layers are necessary for the promised behavior. Do not substitute process memory for durable PostgreSQL-backed state when persistence is required.
+
 ## Completion gate
 
 A task is not complete merely because a UI, endpoint, or happy-path code branch exists. Where relevant, the implementation must cover and verify:
@@ -41,7 +49,8 @@ A task is not complete merely because a UI, endpoint, or happy-path code branch 
 - deterministic state transitions and follow-up actions;
 - concurrency and recovery behavior;
 - failure/abstention paths;
-- tests that prove the promised behavior.
+- an observable result consistent with the user promise;
+- tests that prove the promised behavior end to end where practical.
 
 The agent must run the normal repository verification sequence before opening a PR and must not merge its own PR.
 
