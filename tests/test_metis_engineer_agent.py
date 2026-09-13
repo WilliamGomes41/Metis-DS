@@ -27,7 +27,7 @@ def test_metis_engineer_agent_is_explicit_and_fail_closed() -> None:
     assert "ready-for-agent" in profile
     assert "Work on exactly one issue per run" in profile
     assert "Do not deploy" in profile
-    assert "do not merge its own pull request" in profile.lower()
+    assert "merge your own pull request" in profile.lower()
 
     assert "does **not** start an agent by itself" in execution
     assert "explicitly assigns one issue" in execution
