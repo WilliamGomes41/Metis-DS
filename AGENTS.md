@@ -2,16 +2,16 @@
 
 ### Issue tracker
 
-Issues live in this repo’s GitHub Issues (`gh` CLI). See `docs/agents/issue-tracker.md`.
+Issues live in this repo’s GitHub Issues (`gh` CLI). See `docs/agents/issue-tracker.md` when present (PR #169).
 
 ### Triage labels
 
-Canonical roles map 1:1 to tracker labels. See `docs/agents/triage-labels.md`.
+Canonical roles map 1:1 to tracker labels. See `docs/agents/triage-labels.md` when present.
+
+### Improve codebase architecture
+
+Periodic architecture survey (mattpocock). Skill files: `.agents/skills/improve-codebase-architecture/`. Invoke explicitly — do not auto-run. Companion vocabulary: install `codebase-design` + `grilling` from https://github.com/mattpocock/skills when grilling a candidate.
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents/domain.md`.
-
-### Execution contract
-
-`ready-for-agent` marks a ticket as executable but does not start work automatically. Repository coding runs use the `Metis Engineer` profile in `.github/agents/metis-engineer.agent.md` and follow `docs/agents/execution-contract.md`.
+Single-context: `CONTEXT.md` + `docs/adr/` at repo root when present.
