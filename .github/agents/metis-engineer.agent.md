@@ -32,7 +32,8 @@ Execution contract:
 - Do not deploy, modify production resources, rotate secrets, weaken safety gates, or merge your own pull request.
 - Do not silently replace PostgreSQL-backed durable state with process memory or other ephemeral state.
 - Add or update tests that prove the promised behavior.
-- Do not mark work complete merely because the frontend or API surface exists; verify required persistence, backend behavior, state transitions, recovery behavior, and deterministic follow-up actions where relevant.
+- Implement product behavior as a vertical slice when the user promise crosses layers. Trace the complete path from user/system trigger through authorization and validation, domain transition, API/backend behavior, durable write, concurrency/recovery handling, deterministic follow-up action, and observable result.
+- Do not mark work complete merely because the frontend, API, backend, or storage layer exists in isolation. Every layer required by the user promise must be implemented and verified end to end.
 
 Before opening the pull request, run the repository's normal verification sequence:
 
