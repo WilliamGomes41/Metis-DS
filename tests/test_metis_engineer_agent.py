@@ -28,11 +28,16 @@ def test_metis_engineer_agent_is_explicit_and_fail_closed() -> None:
     assert "Work on exactly one issue per run" in profile
     assert "Do not deploy" in profile
     assert "merge your own pull request" in profile.lower()
+    assert "vertical slice" in profile
+    assert "Every layer required by the user promise" in profile
 
     assert "does **not** start an agent by itself" in execution
     assert "explicitly assigns one issue" in execution
     assert "must stop without modifying code" in execution
     assert "must not merge its own PR" in execution
+    assert "## Vertical-slice completeness" in execution
+    assert "trigger -> authorization -> validation -> domain transition" in execution
+    assert "frontend-only, API-only, backend-only, or storage-only" in execution
 
     assert ".github/agents/metis-engineer.agent.md" in agents
     assert "docs/agents/execution-contract.md" in agents
