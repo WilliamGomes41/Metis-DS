@@ -92,6 +92,10 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
     assert any(name.endswith("gunicorn/__init__.py") or "/gunicorn/" in name for name in names)
     assert any("fastapi" in name for name in names)
     assert "scripts/azure_console_startup.sh" in names
+    assert "scripts/azure_step9_cutover.py" in names
+    assert "scripts/migrate_workflow_cutover_postgres.py" in names
+    assert "db/migrations/002_workflow_schema.sql" in names
+    assert "db/migrations/005_workflow_remaining_authority.sql" in names
     assert "src/console_asgi.py" in names
     assert "requirements.txt" in names
     assert CONSOLE_REQUIREMENTS_NAME in names

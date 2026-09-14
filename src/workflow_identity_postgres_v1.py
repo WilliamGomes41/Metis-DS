@@ -21,6 +21,7 @@ from src.operations_console_v1 import (
     ALLOWED_ROLES,
     DEFAULT_SESSION_TTL_SECONDS,
     ConsoleError,
+    _parse_utc,
     _hash_password,
     _is_forbidden_identity,
     utc_after,
@@ -36,6 +37,29 @@ class WorkflowIdentityStoreError(RuntimeError):
 
 def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def migratable_legacy_sessions(
+    accounts: dict[str, dict[str, Any]],
+    sessions: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Return only legacy sessions representable by the secure SQL schema.
+
+    The file-backed runtime already treats a missing or unreadable ``expires_at``
+    as expired.  Such rows must not be revived by inventing an expiry during the
+    PostgreSQL cut-over.  Rows with invalid creation/expiry ordering are likewise
+    non-representable under the existing database constraint and are omitted.
+    """
+    valid: dict[str, dict[str, Any]] = {}
+    for token, session in sessions.items():
+        if str(session.get("account_id") or "") not in accounts:
+            continue
+        created_at = _parse_utc(str(session.get("created_at") or ""))
+        expires_at = _parse_utc(str(session.get("expires_at") or ""))
+        if created_at is None or expires_at is None or expires_at <= created_at:
+            continue
+        valid[str(token)] = session
+    return valid
 
 
 class PostgresWorkflowIdentityStore:
@@ -246,10 +270,7 @@ class PostgresWorkflowIdentityStore:
                                 list(record["roles"]), record["password_salt"], record["password_hash"], record["created_at"],
                             ),
                         )
-                    known_accounts = set(accounts)
-                    for token, session in sessions.items():
-                        if session.get("account_id") not in known_accounts:
-                            continue
+                    for token, session in migratable_legacy_sessions(accounts, sessions).items():
                         con.execute(
                             "INSERT INTO workflow.sessions(token_hash,account_id,created_at,expires_at,revoked_at) "
                             "VALUES(%s,%s,%s,%s,NULL) ON CONFLICT(token_hash) DO NOTHING",

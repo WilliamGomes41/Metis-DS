@@ -28,6 +28,7 @@ AZURE_NATIVE_WHEEL_PACKAGES = ("cryptography",)
 INCLUDE_DIRS = (
     "src",
     "scripts",
+    "db",
     "config",
     "schemas",
     "assets",

@@ -18,6 +18,7 @@ from src.operations_console_v1 import ConsoleError
 from src.workflow_identity_postgres_v1 import (
     PostgresIdentityDurablePublicationConsole,
     _token_hash,
+    migratable_legacy_sessions,
 )
 
 
@@ -165,3 +166,35 @@ def test_session_tokens_are_one_way_hashed_for_shared_storage() -> None:
     assert digest != token
     assert len(digest) == 64
     assert digest == _token_hash(token)
+
+
+def test_legacy_sessions_without_secure_expiry_are_not_migratable() -> None:
+    accounts = {"acc-1": {"account_id": "acc-1"}}
+    sessions = {
+        "valid": {
+            "account_id": "acc-1",
+            "created_at": "2026-09-12T10:00:00Z",
+            "expires_at": "2026-09-12T18:00:00Z",
+        },
+        "missing-expiry": {
+            "account_id": "acc-1",
+            "created_at": "2026-09-12T10:00:00Z",
+        },
+        "invalid-expiry": {
+            "account_id": "acc-1",
+            "created_at": "2026-09-12T10:00:00Z",
+            "expires_at": "not-a-date",
+        },
+        "expiry-before-creation": {
+            "account_id": "acc-1",
+            "created_at": "2026-09-12T10:00:00Z",
+            "expires_at": "2026-09-12T09:00:00Z",
+        },
+        "unknown-account": {
+            "account_id": "acc-missing",
+            "created_at": "2026-09-12T10:00:00Z",
+            "expires_at": "2026-09-12T18:00:00Z",
+        },
+    }
+
+    assert migratable_legacy_sessions(accounts, sessions) == {"valid": sessions["valid"]}
