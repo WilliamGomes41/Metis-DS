@@ -82,7 +82,14 @@ def test_identity_verification_compares_accounts_and_hashed_sessions_exactly() -
     result = _verify_identity_snapshot(  # type: ignore[arg-type]
         _store(), {"account-1": ACCOUNT}, {TOKEN: SESSION}
     )
-    assert result == {"accounts": 1, "sessions": 1, "skipped_sessions": 0}
+    assert result == {
+        "accounts": 1,
+        "sessions": 1,
+        "skipped_sessions": 0,
+        "active_legacy_sessions": 1,
+        "revoked_legacy_sessions": 0,
+        "additional_sessions": 0,
+    }
     assert TOKEN not in str(result)
 
 
@@ -101,4 +108,55 @@ def test_identity_verification_skips_legacy_session_without_expiry() -> None:
         {"account-1": ACCOUNT},
         {TOKEN: {"account_id": "account-1", "created_at": "2026-09-12T10:01:00Z"}},
     )
-    assert result == {"accounts": 1, "sessions": 0, "skipped_sessions": 1}
+    assert result == {
+        "accounts": 1,
+        "sessions": 0,
+        "skipped_sessions": 1,
+        "active_legacy_sessions": 0,
+        "revoked_legacy_sessions": 0,
+        "additional_sessions": 0,
+    }
+
+
+def test_identity_verification_allows_additional_post_cutover_session() -> None:
+    store = _store()
+    store.sessions.append(
+        {
+            "token_hash": "f" * 64,
+            "account_id": "account-1",
+            "created_at": "2026-09-13T10:01:00+00:00",
+            "expires_at": "2026-09-13T18:01:00+00:00",
+            "revoked_at": None,
+        }
+    )
+    result = _verify_identity_snapshot(  # type: ignore[arg-type]
+        store, {"account-1": ACCOUNT}, {TOKEN: SESSION}
+    )
+    assert result["additional_sessions"] == 1
+
+
+def test_identity_verification_accepts_matching_revoked_legacy_session() -> None:
+    store = _store()
+    store.sessions[0]["revoked_at"] = "2026-09-12T12:00:00+00:00"
+    result = _verify_identity_snapshot(  # type: ignore[arg-type]
+        store, {"account-1": ACCOUNT}, {TOKEN: SESSION}
+    )
+    assert result["active_legacy_sessions"] == 0
+    assert result["revoked_legacy_sessions"] == 1
+
+
+def test_identity_verification_still_fails_when_legacy_session_is_missing() -> None:
+    store = _store()
+    store.sessions = [
+        {
+            "token_hash": "f" * 64,
+            "account_id": "account-1",
+            "created_at": "2026-09-13T10:01:00+00:00",
+            "expires_at": "2026-09-13T18:01:00+00:00",
+            "revoked_at": None,
+        }
+    ]
+    with pytest.raises(RuntimeError, match="workflow_identity_session_migration_conflict"):
+        _verify_identity_snapshot(  # type: ignore[arg-type]
+            store, {"account-1": ACCOUNT}, {TOKEN: SESSION}
+        )

@@ -208,6 +208,7 @@ class PostgresCanonicalPublicationStore:
         release_owner: str,
         published_at: str,
         objects: list[dict[str, Any]],
+        preserve_newer_registry: bool = False,
     ) -> None:
         """Atomically persist one authorized publication and its Azure lineage."""
         if not objects:
@@ -326,12 +327,15 @@ class PostgresCanonicalPublicationStore:
                         ).fetchone()
                         advance = registry_update_required(current, release_id=release_id, published_at=published_at)
                         if current and str(current["release_id"]) != release_id and not advance:
-                            if not existing_release:
+                            if not existing_release and not preserve_newer_registry:
                                 raise CanonicalPublicationStoreError("stale_release_replay")
-                            continue
 
                         if not existing_release:
-                            action = "supersede" if current and str(current["release_id"]) != release_id else "publish"
+                            action = (
+                                "supersede"
+                                if current and str(current["release_id"]) != release_id and advance
+                                else "publish"
+                            )
                             replaces = str(current["object_version"]) if action == "supersede" else None
                             con.execute(
                                 "INSERT INTO publication_release_items(release_id,object_id,object_version,action,replaces_object_version,content_hash) VALUES(%s,%s,%s,%s,%s,%s)",
@@ -363,6 +367,22 @@ class PostgresCanonicalPublicationStore:
                                 actor=release_owner,
                                 event_at=published_at,
                                 details={"release_id": release_id, "snapshot_id": snapshot_id},
+                            )
+                        elif not existing_release and preserve_newer_registry:
+                            self._audit(
+                                con,
+                                entity_type="object",
+                                entity_id=object_id,
+                                entity_version=object_version,
+                                event_type="published",
+                                actor=release_owner,
+                                event_at=published_at,
+                                details={
+                                    "release_id": release_id,
+                                    "snapshot_id": snapshot_id,
+                                    "historical_recovery": True,
+                                    "registry_preserved": True,
+                                },
                             )
 
                     release_event = con.execute(

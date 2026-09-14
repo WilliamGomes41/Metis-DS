@@ -86,26 +86,37 @@ def _verify_identity_snapshot(
     try:
         with store._connect() as connection:
             rows = connection.execute(
-                "SELECT token_hash,account_id,created_at,expires_at FROM workflow.sessions "
-                "WHERE revoked_at IS NULL ORDER BY token_hash"
+                "SELECT token_hash,account_id,created_at,expires_at,revoked_at "
+                "FROM workflow.sessions ORDER BY token_hash"
             ).fetchall()
     except Exception as exc:
         raise RuntimeError("workflow_identity_session_verification_failed") from exc
-    actual_sessions = [
-        {
+    actual_sessions = {
+        str(row["token_hash"]): {
             "token_hash": str(row["token_hash"]),
             "account_id": str(row["account_id"]),
             "created_at": _instant(row["created_at"]),
             "expires_at": _instant(row["expires_at"]),
+            "revoked": row.get("revoked_at") is not None,
         }
         for row in rows
-    ]
-    if actual_sessions != expected_sessions:
-        raise RuntimeError("workflow_identity_session_migration_conflict")
+    }
+    revoked_legacy = 0
+    for expected in expected_sessions:
+        actual = actual_sessions.get(expected["token_hash"])
+        if actual is None:
+            raise RuntimeError("workflow_identity_session_migration_conflict")
+        actual_identity = {key: actual[key] for key in expected}
+        if actual_identity != expected:
+            raise RuntimeError("workflow_identity_session_migration_conflict")
+        revoked_legacy += int(actual["revoked"])
     return {
         "accounts": len(expected_accounts),
         "sessions": len(expected_sessions),
         "skipped_sessions": len(sessions) - len(valid_sessions),
+        "active_legacy_sessions": len(expected_sessions) - revoked_legacy,
+        "revoked_legacy_sessions": revoked_legacy,
+        "additional_sessions": len(actual_sessions) - len(expected_sessions),
     }
 
 
