@@ -1,6 +1,7 @@
 """Fail-closed proof for pre-cutover canonical release recovery.
 
 # release-control-evidence: opslag
+# release-control-evidence: opslag concurrent stale
 # release-control-evidence: toegang
 # release-control-evidence: kwaliteit
 # release-control-evidence: scope/belofte
@@ -16,6 +17,10 @@ from pathlib import Path
 import pytest
 
 from src.integrity_kernel import compute_canonical_object_hash
+from src.canonical_publication_postgres_v1 import (
+    PostgresCanonicalConfig,
+    PostgresCanonicalPublicationStore,
+)
 from src.legacy_canonical_recovery_v1 import (
     LegacyCanonicalRecoveryError,
     prepare_legacy_canonical_candidate,
@@ -104,6 +109,58 @@ class Canonical:
         self.calls.append(kwargs)
 
 
+class HistoricalConnection:
+    def __init__(self, *, checksum: str, locator: str, content_hash: str) -> None:
+        self.checksum = checksum
+        self.locator = locator
+        self.content_hash = content_hash
+        self.queries: list[tuple[str, tuple | None]] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+    def transaction(self):
+        return self
+
+    def execute(self, query: str, params: tuple | None = None):
+        self.queries.append((query, params))
+        normalized = " ".join(query.split())
+        if normalized.startswith("SELECT source_checksum, source_locator"):
+            return Row({"source_checksum": self.checksum, "source_locator": self.locator})
+        if normalized.startswith("SELECT content_hash FROM canonical_object_versions"):
+            return Row({"content_hash": self.content_hash})
+        if normalized.startswith("SELECT snapshot_id FROM canonical_object_sources"):
+            return Row({"snapshot_id": "snapshot-1"})
+        if normalized.startswith("SELECT release_version,release_owner,status,published_at"):
+            return Row(None)
+        if normalized.startswith("SELECT object_version,release_id,state,published_at"):
+            return Row(
+                {
+                    "object_version": "2.0.0",
+                    "release_id": "release-newer",
+                    "state": "active",
+                    "published_at": "2026-09-10T17:28:39+00:00",
+                }
+            )
+        if normalized.startswith("SELECT 1 FROM audit_events"):
+            return Row(None)
+        return Row(None)
+
+
+class Row:
+    def __init__(self, row: dict | None) -> None:
+        self.row = row
+
+    def fetchone(self) -> dict | None:
+        return self.row
+
+    def fetchall(self) -> list[dict]:
+        return [] if self.row is None else [self.row]
+
+
 def _fixture(tmp_path: Path) -> tuple[Path, Documents, Reviews, Blobs, dict]:
     source = b"immutable source bytes"
     checksum = hashlib.sha256(source).hexdigest()
@@ -186,3 +243,28 @@ def test_execute_delegates_exact_release_to_transactional_canonical_store(tmp_pa
     assert len(canonical.calls) == 1
     assert canonical.calls[0]["release_id"] == manifest["release_id"]
     assert canonical.calls[0]["objects"] == documents.objects
+    assert canonical.calls[0]["preserve_newer_registry"] is True
+
+
+def test_historical_recovery_persists_release_without_rewinding_newer_registry(tmp_path: Path) -> None:
+    path, documents, reviews, blobs, manifest = _fixture(tmp_path)
+    candidate = prepare_legacy_canonical_candidate(
+        path, documents=documents, reviews=reviews, source_store=blobs
+    )
+    connection = HistoricalConnection(
+        checksum=candidate.source_sha256,
+        locator=candidate.source_locator,
+        content_hash=manifest["objects"][0]["content_hash"],
+    )
+    store = PostgresCanonicalPublicationStore(PostgresCanonicalConfig(dsn="test"))
+    store._connect = lambda: connection  # type: ignore[method-assign]
+
+    result = recover_legacy_canonical_release(candidate, canonical_store=store)
+
+    assert result["status"] == "PASS"
+    statements = [" ".join(query.split()) for query, _params in connection.queries]
+    assert any(statement.startswith("INSERT INTO publication_releases") for statement in statements)
+    assert any(statement.startswith("INSERT INTO publication_release_items") for statement in statements)
+    assert not any(statement.startswith("INSERT INTO publication_registry") for statement in statements)
+    audit_params = [params for query, params in connection.queries if query.startswith("INSERT INTO audit_events")]
+    assert any('"registry_preserved": true' in str(params[-1]) for params in audit_params if params)
