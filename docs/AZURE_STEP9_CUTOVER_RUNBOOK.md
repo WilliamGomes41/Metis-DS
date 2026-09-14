@@ -98,7 +98,7 @@ select * from pgaadauth_create_principal('vvn-metis-console', false, false);
 
 Voer dit alleen uit als de principal aantoonbaar ontbreekt. Rechten worden pas na het toepassen van het workflowschema in de bedoelde applicatiedatabase toegekend; niet op andere databases.
 
-## 3. Migraties 002–005 plannen, toepassen en verifiëren
+## 3. Migraties 002–006 plannen, toepassen en verifiëren
 
 Gebruik de host en databasenaam uit de geslaagde preflight. `$METIS_DB_ADMIN_USER` is de bestaande Entra databasebeheerder waarmee Cloud Shell inlogt.
 

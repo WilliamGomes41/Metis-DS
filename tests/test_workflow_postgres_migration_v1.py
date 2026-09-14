@@ -74,7 +74,7 @@ def test_apply_requires_exact_digest_and_verifies_all_required_shape() -> None:
     )
     assert result["status"] == "PASS"
     assert result["applied"] == list(MIGRATION_NAMES)
-    assert len(connection.applied) == 4
+    assert len(connection.applied) == 5
     assert result["verification"]["row_counts"] == {name: 0 for name in sorted(REQUIRED_TABLES)}
 
 

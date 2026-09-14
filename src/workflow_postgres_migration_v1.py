@@ -1,4 +1,4 @@
-"""Controlled schema application and verification for workflow migrations 002-005."""
+"""Controlled schema application and verification for workflow migrations 002-006."""
 from __future__ import annotations
 
 import hashlib
@@ -15,6 +15,7 @@ MIGRATION_NAMES = (
     "003_workflow_document_envelope_payload.sql",
     "004_workflow_review_authority.sql",
     "005_workflow_remaining_authority.sql",
+    "006_workflow_authorization_payload.sql",
 )
 REQUIRED_TABLES = frozenset(
     {
@@ -36,6 +37,7 @@ REQUIRED_COLUMNS = frozenset(
         ("review_events", "actor_text"),
         ("review_events", "event_payload"),
         ("publish_authorizations", "position"),
+        ("publish_authorizations", "authorization_payload"),
     }
 )
 

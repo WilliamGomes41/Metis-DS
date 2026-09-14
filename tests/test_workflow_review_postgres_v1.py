@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -64,6 +65,28 @@ class FakeLedgerBackend:
             self.pending = None
 
 
+class _Rows:
+    def __init__(self, rows: list[dict]) -> None:
+        self._rows = rows
+
+    def fetchall(self) -> list[dict]:
+        return self._rows
+
+
+class _Connection:
+    def __init__(self, rows: list[dict]) -> None:
+        self._rows = rows
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+    def execute(self, _query: str) -> _Rows:
+        return _Rows(self._rows)
+
+
 def test_review_ledger_backend_keeps_existing_api_and_buffer_rollback(tmp_path: Path) -> None:
     path = tmp_path / "review_ledger.jsonl"
     backend = FakeLedgerBackend()
@@ -112,6 +135,38 @@ def test_legacy_review_chain_is_verified_without_rewriting(tmp_path: Path) -> No
     path.write_text(__import__("json").dumps(broken, sort_keys=True) + "\n", encoding="utf-8")
     with pytest.raises(WorkflowReviewStoreError):
         PostgresWorkflowReviewStore._read_legacy_events(path)
+
+
+def test_authorization_read_preserves_complete_exact_payload() -> None:
+    payload = {
+        "object_id": "obj-1",
+        "object_version": "1.0",
+        "canonical_object_hash": "a" * 64,
+        "confirmed_object_type": "recommendation",
+        "reviewer": "Reviewer",
+        "reviewer_id": "acc-reviewer",
+        "decision": "approve",
+        "valid": True,
+        "suitability": "ja",
+        "eindoordeel": "goedkeuren",
+        "documentpositie": {"path": ["Preventie"]},
+    }
+    row = {
+        "snapshot_id": "snap-1",
+        "object_id": payload["object_id"],
+        "object_version": payload["object_version"],
+        "canonical_object_hash": payload["canonical_object_hash"],
+        "confirmed_object_type": payload["confirmed_object_type"],
+        "reviewer_display_name": payload["reviewer"],
+        "reviewer_account_id": payload["reviewer_id"],
+        "decision": payload["decision"],
+        "valid": payload["valid"],
+        "authorization_payload": json.dumps(payload),
+    }
+    store = object.__new__(PostgresWorkflowReviewStore)
+    store._connect = lambda: _Connection([row])
+
+    assert store.read_bindings() == {"snap-1": [payload]}
 
 
 def test_review_schema_preserves_exact_payload_and_authorization_order() -> None:
