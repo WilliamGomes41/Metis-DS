@@ -7,6 +7,7 @@ cut-over step. Publication authority remains separate.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -25,6 +26,23 @@ class WorkflowDocumentStoreError(RuntimeError):
 
 def _json_text(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _instant_text(value: Any) -> str:
+    """Normalize equivalent UTC timestamp spellings for exact replay checks."""
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        raw = str(value or "").strip()
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except ValueError as exc:
+            raise WorkflowDocumentStoreError("workflow_document_timestamp_invalid") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()
 
 
 def _read_legacy_runtime(runtime: Path) -> list[dict[str, Any]]:
@@ -160,7 +178,7 @@ class PostgresWorkflowDocumentStore:
             "replaces_snapshot_id": envelope.get("replaces_snapshot_id"),
             "object_diff": envelope.get("object_diff"),
             "clinical_rereview_required": bool(envelope.get("clinical_rereview_required", False)),
-            "acquired_at": str(envelope.get("acquired_at") or ""),
+            "acquired_at": _instant_text(envelope.get("acquired_at")),
             "console_version": str(envelope.get("console_version") or ""),
         }
 
@@ -184,7 +202,7 @@ class PostgresWorkflowDocumentStore:
             "live_url": str(row["live_url"] or ""), "uploader_account_id": str(row["uploader_account_id"]),
             "replaces_snapshot_id": row["replaces_snapshot_id"], "object_diff": diff,
             "clinical_rereview_required": bool(row["clinical_rereview_required"]),
-            "acquired_at": text(row["acquired_at"]), "console_version": str(row["console_version"]),
+            "acquired_at": _instant_text(row["acquired_at"]), "console_version": str(row["console_version"]),
         }
 
     def _assert_existing_matches(

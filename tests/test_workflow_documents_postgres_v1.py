@@ -8,11 +8,13 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from src.workflow_documents_postgres_v1 import (
+    PostgresWorkflowDocumentStore,
     WorkflowDocumentStoreError,
     _read_legacy_runtime,
 )
@@ -88,6 +90,38 @@ def test_legacy_runtime_rejects_duplicate_object_identity(tmp_path: Path) -> Non
     runtime = _write_runtime(tmp_path, objects=[obj, dict(obj)])
     with pytest.raises(WorkflowDocumentStoreError, match="workflow_legacy_object_identity_invalid"):
         _read_legacy_runtime(runtime)
+
+
+def test_exact_replay_normalizes_equivalent_utc_acquired_at_spellings() -> None:
+    envelope = _envelope()
+    database_row = {
+        "snapshot_id": envelope["snapshot_id"],
+        "source_id": envelope["source_id"],
+        "document_id": envelope["document_id"],
+        "title": envelope["title"],
+        "family": envelope["family"],
+        "class": envelope["class"],
+        "state": envelope["state"],
+        "publication_eligibility": envelope["publication_eligibility"],
+        "content_kind": envelope["content_kind"],
+        "ingest_kind": envelope["ingest_kind"],
+        "source_version": envelope["version"],
+        "source_date": envelope["date"],
+        "source_sha256": envelope["sha256"],
+        "source_locator": envelope["locator"],
+        "immutable_storage_locator": envelope["immutable_storage_locator"],
+        "live_url": envelope["live_url"],
+        "uploader_account_id": envelope["uploader_account_id"],
+        "replaces_snapshot_id": envelope["replaces_snapshot_id"],
+        "object_diff": envelope["object_diff"],
+        "clinical_rereview_required": envelope["clinical_rereview_required"],
+        "acquired_at": datetime(2026, 9, 12, 9, tzinfo=timezone.utc),
+        "console_version": envelope["console_version"],
+    }
+
+    assert PostgresWorkflowDocumentStore._normalized_database_document(database_row) == (
+        PostgresWorkflowDocumentStore._document_projection(envelope)
+    )
 
 
 def test_document_store_keeps_atomic_and_exact_replay_contract() -> None:
