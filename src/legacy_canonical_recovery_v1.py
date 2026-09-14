@@ -222,5 +222,6 @@ def recover_legacy_canonical_release(
         release_owner=candidate.release_owner,
         published_at=candidate.published_at,
         objects=list(candidate.objects),
+        preserve_newer_registry=True,
     )
     return candidate.summary(status="PASS")
