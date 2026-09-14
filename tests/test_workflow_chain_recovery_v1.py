@@ -38,6 +38,7 @@ WORKFLOW_MIGRATIONS = (
     "003_workflow_document_envelope_payload.sql",
     "004_workflow_review_authority.sql",
     "005_workflow_remaining_authority.sql",
+    "006_workflow_authorization_payload.sql",
 )
 
 

@@ -51,7 +51,8 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
                     "SELECT table_name,column_name FROM information_schema.columns "
                     "WHERE table_schema='workflow' AND ("
                     "(table_name='review_events' AND column_name IN ('actor_text','event_payload')) OR "
-                    "(table_name='publish_authorizations' AND column_name='position'))"
+                    "(table_name='publish_authorizations' AND column_name IN "
+                    "('position','authorization_payload')))"
                 ).fetchall()
         except Exception as exc:
             raise WorkflowReviewStoreError("workflow_review_schema_check_failed") from exc
@@ -60,6 +61,7 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
             ("review_events", "actor_text"),
             ("review_events", "event_payload"),
             ("publish_authorizations", "position"),
+            ("publish_authorizations", "authorization_payload"),
         }
         if present != required:
             raise WorkflowReviewStoreError("workflow_review_schema_missing")
@@ -271,27 +273,48 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
             with self._connect() as con:
                 rows = con.execute(
                     "SELECT snapshot_id,object_id,object_version,canonical_object_hash,"
-                    "confirmed_object_type,reviewer_account_id,reviewer_display_name,decision,valid "
+                    "confirmed_object_type,reviewer_account_id,reviewer_display_name,decision,valid,"
+                    "authorization_payload "
                     "FROM workflow.publish_authorizations "
                     "ORDER BY snapshot_id,position NULLS LAST,authorization_id"
                 ).fetchall()
             out: dict[str, list[dict[str, Any]]] = {}
             for row in rows:
-                out.setdefault(str(row["snapshot_id"]), []).append(
-                    {
-                        "object_id": str(row["object_id"]),
-                        "object_version": str(row["object_version"]),
-                        "canonical_object_hash": str(row["canonical_object_hash"]),
-                        "confirmed_object_type": str(row["confirmed_object_type"]),
-                        "reviewer": str(row["reviewer_display_name"]),
-                        "reviewer_id": str(row["reviewer_account_id"]),
-                        "decision": str(row["decision"]),
-                        "valid": bool(row["valid"]),
-                    }
-                )
+                relational = self._binding_projection(row)
+                payload = row["authorization_payload"]
+                if payload is None:
+                    binding = relational
+                else:
+                    binding = self._authorization_payload(payload)
+                    if self._binding_projection(binding) != relational:
+                        raise WorkflowReviewStoreError("workflow_publish_authorization_payload_invalid")
+                out.setdefault(str(row["snapshot_id"]), []).append(binding)
             return out
         except Exception as exc:
             raise WorkflowReviewStoreError("workflow_publish_authorizations_read_failed") from exc
+
+    @staticmethod
+    def _authorization_payload(value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            return deepcopy(value)
+        if isinstance(value, str):
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                return parsed
+        raise WorkflowReviewStoreError("workflow_publish_authorization_payload_invalid")
+
+    @staticmethod
+    def _binding_projection(row: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            "object_id": str(row["object_id"]),
+            "object_version": str(row["object_version"]),
+            "canonical_object_hash": str(row["canonical_object_hash"]),
+            "confirmed_object_type": str(row["confirmed_object_type"]),
+            "reviewer": str(row.get("reviewer", row.get("reviewer_display_name", ""))),
+            "reviewer_id": str(row.get("reviewer_id", row.get("reviewer_account_id", ""))),
+            "decision": str(row["decision"]),
+            "valid": bool(row["valid"]),
+        }
 
     @staticmethod
     def _insert_binding_rows(con: Any, snapshot_id: str, rows: list[dict[str, Any]]) -> None:
@@ -300,7 +323,8 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
                 "INSERT INTO workflow.publish_authorizations("
                 "snapshot_id,object_id,object_version,canonical_object_hash,"
                 "confirmed_object_type,reviewer_account_id,reviewer_display_name,"
-                "decision,valid,position) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                "decision,valid,position,authorization_payload) "
+                "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)",
                 (
                     snapshot_id,
                     row["object_id"],
@@ -312,8 +336,54 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
                     row["decision"],
                     bool(row.get("valid")),
                     position,
+                    _json_text(row),
                 ),
             )
+
+    def _backfill_exact_binding_payloads(
+        self, bindings: Mapping[str, list[dict[str, Any]]]
+    ) -> None:
+        """Attach exact legacy payloads only after every relational field matches."""
+        expected = [
+            (snapshot_id, position, row)
+            for snapshot_id in sorted(bindings)
+            for position, row in enumerate(bindings[snapshot_id])
+        ]
+        try:
+            with self._connect() as con:
+                with con.transaction():
+                    self._lock_authorizations(con)
+                    rows = con.execute(
+                        "SELECT authorization_id,snapshot_id,object_id,object_version,"
+                        "canonical_object_hash,confirmed_object_type,reviewer_account_id,"
+                        "reviewer_display_name,decision,valid,position,authorization_payload "
+                        "FROM workflow.publish_authorizations "
+                        "ORDER BY snapshot_id,position NULLS LAST,authorization_id FOR UPDATE"
+                    ).fetchall()
+                    if len(rows) != len(expected):
+                        raise WorkflowReviewStoreError("workflow_publish_authorizations_migration_conflict")
+                    for database_row, (snapshot_id, position, legacy_row) in zip(rows, expected):
+                        if (
+                            str(database_row["snapshot_id"]) != snapshot_id
+                            or database_row["position"] != position
+                            or self._binding_projection(database_row)
+                            != self._binding_projection(legacy_row)
+                        ):
+                            raise WorkflowReviewStoreError("workflow_publish_authorizations_migration_conflict")
+                        payload = database_row["authorization_payload"]
+                        if payload is not None and self._authorization_payload(payload) != legacy_row:
+                            raise WorkflowReviewStoreError("workflow_publish_authorizations_migration_conflict")
+                    for database_row, (_, _, legacy_row) in zip(rows, expected):
+                        if database_row["authorization_payload"] is None:
+                            con.execute(
+                                "UPDATE workflow.publish_authorizations "
+                                "SET authorization_payload=%s::jsonb WHERE authorization_id=%s",
+                                (_json_text(legacy_row), database_row["authorization_id"]),
+                            )
+        except WorkflowReviewStoreError:
+            raise
+        except Exception as exc:
+            raise WorkflowReviewStoreError("workflow_publish_authorizations_migration_failed") from exc
 
     def replace_snapshot_bindings(self, snapshot_id: str, rows: list[dict[str, Any]]) -> None:
         """Replace one snapshot without rewriting unrelated authorization state."""
@@ -388,7 +458,10 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
         if current_events and current_events != events:
             raise WorkflowReviewStoreError("workflow_review_ledger_migration_conflict")
         if current_bindings and current_bindings != bindings:
-            raise WorkflowReviewStoreError("workflow_publish_authorizations_migration_conflict")
+            self._backfill_exact_binding_payloads(bindings)
+            current_bindings = self.read_bindings()
+            if current_bindings != bindings:
+                raise WorkflowReviewStoreError("workflow_publish_authorizations_migration_conflict")
         if not current_events and events:
             try:
                 with self._connect() as con:

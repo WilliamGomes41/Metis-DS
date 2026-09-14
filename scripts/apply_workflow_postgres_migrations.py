@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plan, apply, or verify Metis workflow migrations 002-005 with Entra auth."""
+"""Plan, apply, or verify Metis workflow migrations 002-006 with Entra auth."""
 from __future__ import annotations
 
 import argparse
