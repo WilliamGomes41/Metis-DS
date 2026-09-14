@@ -6,7 +6,10 @@ import argparse
 import json
 from pathlib import Path
 
-from src.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
+from src.workflow_identity_postgres_v1 import (
+    PostgresWorkflowIdentityStore,
+    migratable_legacy_sessions,
+)
 
 
 def _read_map(path: Path) -> dict[str, dict]:
@@ -25,13 +28,15 @@ def main() -> int:
 
     accounts = _read_map(args.runtime / "accounts.json")
     sessions = _read_map(args.runtime / "sessions.json")
+    valid_sessions = migratable_legacy_sessions(accounts, sessions)
     store = PostgresWorkflowIdentityStore()
     store.verify_schema()
     migrated = store.migrate_legacy_if_empty(accounts, sessions)
     result = {
         "migrated": migrated,
         "accounts": len(accounts),
-        "sessions": len(sessions),
+        "sessions": len(valid_sessions),
+        "skipped_sessions": len(sessions) - len(valid_sessions),
     }
     print(json.dumps(result, sort_keys=True))
     return 0
