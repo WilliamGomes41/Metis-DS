@@ -21,7 +21,9 @@ python scripts/publication_chain_recovery.py recover-legacy-release \
 
 Execution reuses the existing transactional, idempotent canonical publication
 store. It does not create resources, change application settings, or remove
-runtime files.
+runtime files. If a newer release already owns an active registry pointer, the
+historical release and its audit trail are restored without rewinding that
+pointer.
 
 Workflow identity replay treats valid legacy sessions as a required subset.
 Additional post-cutover sessions are allowed. A revoked legacy session remains
