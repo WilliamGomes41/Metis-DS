@@ -195,6 +195,12 @@ Naast `/health` controleert een bevoegde onderzoeker na iedere fase dat de besta
 
 Houd `WEB_CONCURRENCY=1` en `CONSOLE_INSTANCE_COUNT=1`. Stap 10 (restart/failure/recovery-drill) is een aparte productiehandeling en valt niet binnen deze cut-over.
 
+Na succesvolle stap 10 mag een latere, afzonderlijk gereviewde release
+`WEB_CONCURRENCY=2` activeren, uitsluitend wanneer canonical/publication, alle
+vier workflowstores en Azure Blob authority actief en gezond zijn. Houd
+`CONSOLE_INSTANCE_COUNT=1`; meer dan twee workers of meer dan één instance
+blijven fail-closed.
+
 ## Stopcondities
 
 Stop zonder automatische herstelactie bij een Azure CLI-fout, ontbrekende of ambigue PostgreSQL-server, onverwachte App Setting, ontbrekende RBAC/Entra-principal, schema- of migratieconflict, `503`, dataverschil of mislukte smoke. Verwijder geen blobs, database-rijen, releases of `/home/data`-bestanden. Een rollback van een workflowflag is een afzonderlijke eigenaarbeslissing na foutanalyse.

@@ -93,6 +93,16 @@ class _PostgresWorkflowReviewMixin:
         self._bindings_baseline = deepcopy(self._bindings)
         self._mirror_bindings()
 
+    def object_review_bindings(self, snapshot_id: str) -> list[dict[str, Any]]:
+        """Refresh PostgreSQL authorizations before deriving the public view."""
+        try:
+            current = self.workflow_review_store.read_bindings()
+        except WorkflowReviewStoreError as exc:
+            raise ConsoleError("workflow_review_unavailable", str(exc)) from exc
+        self._bindings = current
+        self._bindings_baseline = deepcopy(current)
+        return super().object_review_bindings(snapshot_id)
+
     def _restore_review_state(
         self,
         *,
@@ -128,60 +138,70 @@ class _PostgresWorkflowReviewMixin:
         snapshot_id: str | None = None,
     ) -> None:
         sid = snapshot_id or (objects[0] if objects is not None else None)
-        prior_bindings = deepcopy(self.workflow_review_store.read_bindings())
-        prior_envelope: dict[str, Any] | None = None
-        prior_objects: list[dict[str, Any]] | None = None
-        if sid:
-            with suppress(ConsoleError):
-                prior_envelope = deepcopy(self._envelope(sid))
-                prior_objects = deepcopy(self._load_objects(sid, remember=False))
-        try:
-            with workflow_transaction(self.workflow_review_store):
-                with buffer_events(self._ledger_path):
-                    super()._commit_prepared_store(
-                        envelopes=envelopes,
-                        bindings=bindings,
-                        objects=objects,
-                        expected_revision=expected_revision,
-                        ledger_fn=ledger_fn,
-                        snapshot_id=snapshot_id,
-                    )
-                    if bindings is not None:
-                        current = self.workflow_review_store.read_bindings()
-                        self._bindings = current
-                        self._bindings_baseline = deepcopy(current)
-                        self._mirror_bindings()
-        except WorkflowReviewStoreError as exc:
-            self._restore_review_state(
-                bindings=prior_bindings,
-                snapshot_id=sid,
-                envelope=prior_envelope,
-                objects=prior_objects,
-            )
-            raise ConsoleError("workflow_review_write_failed", str(exc)) from exc
-        except Exception:
-            self._restore_review_state(
-                bindings=prior_bindings,
-                snapshot_id=sid,
-                envelope=prior_envelope,
-                objects=prior_objects,
-            )
-            raise
+        with self._store_write_lock():
+            self._reload_store_locked()
+            prior_bindings = deepcopy(self._bindings)
+            prior_envelope: dict[str, Any] | None = None
+            prior_objects: list[dict[str, Any]] | None = None
+            if sid:
+                with suppress(ConsoleError):
+                    prior_envelope = deepcopy(self._envelope(sid))
+                    prior_objects = deepcopy(self._load_objects(sid, remember=False))
+            try:
+                with workflow_transaction(self.workflow_review_store):
+                    with buffer_events(self._ledger_path):
+                        super()._commit_prepared_store(
+                            envelopes=envelopes,
+                            bindings=bindings,
+                            objects=objects,
+                            expected_revision=expected_revision,
+                            ledger_fn=ledger_fn,
+                            snapshot_id=snapshot_id,
+                        )
+                        if bindings is not None:
+                            current = self.workflow_review_store.read_bindings()
+                            self._bindings = current
+                            self._bindings_baseline = deepcopy(current)
+                            self._mirror_bindings()
+            except WorkflowReviewStoreError as exc:
+                self._restore_review_state(
+                    bindings=prior_bindings,
+                    snapshot_id=sid,
+                    envelope=prior_envelope,
+                    objects=prior_objects,
+                )
+                raise ConsoleError("workflow_review_write_failed", str(exc)) from exc
+            except Exception:
+                self._restore_review_state(
+                    bindings=prior_bindings,
+                    snapshot_id=sid,
+                    envelope=prior_envelope,
+                    objects=prior_objects,
+                )
+                raise
 
     @contextmanager
     def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
-        prior_bindings = deepcopy(self.workflow_review_store.read_bindings())
-        prior_envelope = deepcopy(self._envelope(snapshot_id))
-        prior_objects = deepcopy(self._load_objects(snapshot_id, remember=False))
+        prior_bindings: dict[str, Any] = {}
+        prior_envelope: dict[str, Any] | None = None
+        prior_objects: list[dict[str, Any]] | None = None
+        restore_snapshot_id: str | None = None
         try:
-            with workflow_transaction(self.workflow_review_store):
-                with buffer_events(self._ledger_path):
-                    with super()._atomic_snapshot_mutation(snapshot_id):
+            # The document context takes the process-shared store lock and
+            # refreshes documents plus bindings before these rollback values
+            # are captured. That ordering is required for a second worker.
+            with super()._atomic_snapshot_mutation(snapshot_id):
+                prior_bindings = deepcopy(self.workflow_review_store.read_bindings())
+                prior_envelope = deepcopy(self._envelope(snapshot_id))
+                prior_objects = deepcopy(self._load_objects(snapshot_id, remember=False))
+                restore_snapshot_id = snapshot_id
+                with workflow_transaction(self.workflow_review_store):
+                    with buffer_events(self._ledger_path):
                         yield
         except Exception:
             self._restore_review_state(
                 bindings=prior_bindings,
-                snapshot_id=snapshot_id,
+                snapshot_id=restore_snapshot_id,
                 envelope=prior_envelope,
                 objects=prior_objects,
             )

@@ -4,9 +4,9 @@ set -euo pipefail
 # Vendored dependencies live in .python_packages (wave C ZIP). Runtime data
 # stays under CONSOLE_DATA_ROOT / /home/data — never in this wwwroot tree.
 #
-# Supported topology (Post-#120 remediation 5): one Gunicorn worker /
-# one instance / sequential writes. Accidental multi-writer scale is
-# out of bound (CONFIGURE). EXTEND for multiple writers is later.
+# Supported topology: one worker by default, or two workers on exactly one
+# instance when every durable PostgreSQL/Azure authority is active. Writes stay
+# sequential through the process-shared store lock.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export PYTHONPATH="${ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 if [ -d "${ROOT}/.python_packages" ]; then
@@ -14,21 +14,9 @@ if [ -d "${ROOT}/.python_packages" ]; then
 fi
 export CONSOLE_DATA_ROOT="${CONSOLE_DATA_ROOT:-/home/data/metis-console}"
 
-# Reject an unsupported writer topology first. Authority configuration is a
-# separate production precondition and must not mask topology violations.
-if [ -n "${WEB_CONCURRENCY:-}" ] && [ "${WEB_CONCURRENCY}" != "1" ]; then
-  echo "topology_bound: WEB_CONCURRENCY=${WEB_CONCURRENCY} is out of bound (supported: 1 worker)" >&2
-  exit 1
-fi
-if [ -n "${CONSOLE_GUNICORN_WORKERS:-}" ] && [ "${CONSOLE_GUNICORN_WORKERS}" != "1" ]; then
-  echo "topology_bound: CONSOLE_GUNICORN_WORKERS=${CONSOLE_GUNICORN_WORKERS} is out of bound (supported: 1 worker)" >&2
-  exit 1
-fi
-if [ -n "${CONSOLE_INSTANCE_COUNT:-}" ] && [ "${CONSOLE_INSTANCE_COUNT}" != "1" ]; then
-  echo "topology_bound: CONSOLE_INSTANCE_COUNT=${CONSOLE_INSTANCE_COUNT} is out of bound (supported: 1 instance)" >&2
-  exit 1
-fi
-python -c "from src.topology_bound_v1 import assert_supported_topology; assert_supported_topology()"
+# Resolve one authoritative worker count and reject conflicting declarations,
+# unsupported counts, missing durable stores, or more than one instance.
+WORKERS="$(python -c "from src.topology_bound_v1 import assert_supported_topology; print(assert_supported_topology()['workers'])")"
 
 # Production authority is explicit and fail-closed. /home/data is work state;
 # PostgreSQL owns published object/release metadata and Azure Blob owns the exact
@@ -42,4 +30,4 @@ if [ "${CONSOLE_IMMUTABLE_SOURCE_STORE:-}" != "azure" ]; then
   exit 1
 fi
 
-exec python -m gunicorn -w 1 -k uvicorn.workers.UvicornWorker src.console_asgi:app --bind "0.0.0.0:${PORT:-8000}"
+exec python -m gunicorn -w "${WORKERS}" -k uvicorn.workers.UvicornWorker src.console_asgi:app --bind "0.0.0.0:${PORT:-8000}"

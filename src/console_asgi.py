@@ -3,8 +3,8 @@
 Internal researcher surface only. Not a public website. Bootstrap passwords and
 database credentials come from the deployment environment, never from Git.
 
-Supported console topology remains one Gunicorn worker / one instance with
-serialized writes until explicit multi-instance proof lands. Azure runtime
+Supported console topology is one worker by default or two workers on one
+instance with serialized writes. Multi-instance remains fail-closed. Azure runtime
 requires both the durable PostgreSQL canonical publication store and Azure Blob
 as the authoritative immutable source store; local development may continue
 without either. Shared PostgreSQL workflow layers are opt-in until Azure cut-over.
@@ -191,7 +191,7 @@ def bootstrap_accounts(console: OperationsConsole) -> None:
 
 
 def build_app() -> object:
-    assert_supported_topology()
+    topology = assert_supported_topology()
     data_root = _env_path("CONSOLE_DATA_ROOT", _default_data_root())
     immutable_store = _immutable_source_store()
     canonical_store = _canonical_store()
@@ -273,9 +273,15 @@ def build_app() -> object:
         console_cls = AzureAuthoritativePublicationConsole if running_in_azure else DurablePublicationConsole
         console = console_cls(**common)
 
-    bootstrap_accounts(console)
-    console.migrate_legacy_revise_to_review()
-    console.reconcile_durable_publications()
+    # Gunicorn workers initialize independently. Keep migration and local-copy
+    # reconciliation inside the same process-shared store lock used by runtime
+    # commits, and refresh after acquiring it so worker two cannot replay a
+    # stale startup snapshot over worker one's completed work.
+    with console._store_write_lock():
+        console._reload_store_locked()
+        bootstrap_accounts(console)
+        console.migrate_legacy_revise_to_review()
+        console.reconcile_durable_publications()
 
     app = create_console_app(console)
     install_publish_readiness_ui(app, console)
@@ -288,6 +294,7 @@ def build_app() -> object:
     harden_legacy_repair_routes(app, console)
     install_audit_routes(app, console)
     install_navigation_simplification(app)
+    app.state.console_topology = topology
     return app
 
 
