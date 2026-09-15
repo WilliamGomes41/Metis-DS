@@ -22,7 +22,9 @@ from src.canonical_publication_postgres_v1 import (
 )
 from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
+from src.operations_console_v1 import review_lane
 from src.passage_register_v1 import passage_register_of
+from src.review_disposition_v1 import definitive_review_disposition
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
@@ -184,6 +186,20 @@ def _ready_console(tmp_path: Path, durable: MemoryCanonicalStore) -> tuple[Durab
             object_id=obj["object_id"],
             decision="reject",
             comment="Testfixture: candidate definitief afgehandeld en niet publiceren.",
+        )
+    for obj in console.snapshot_objects(snapshot_id):
+        if obj.get("object_type") == "document" or review_lane(obj) == "fast":
+            continue
+        if definitive_review_disposition(obj)["final"]:
+            continue
+        console.review_object(
+            actor_id=accounts["reviewer"]["account_id"],
+            snapshot_id=snapshot_id,
+            object_id=obj["object_id"],
+            decision="reject",
+            suitability="ja",
+            eindoordeel="afwijzen",
+            comment="Testfixture: inhoudelijke bronpassage definitief afgehandeld.",
         )
     return console, accounts, receipt
 
