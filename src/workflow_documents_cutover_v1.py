@@ -370,6 +370,17 @@ class _PostgresWorkflowDocumentsMixin:
         loaded = self._load_map(self._bindings_path)
         self._bindings = {key: list(value) for key, value in loaded.items()}
 
+    def _apply_local_release_copy(self, release: dict[str, Any], projection: list[dict[str, Any]]) -> None:
+        """Maintain local copies, then persist the envelope in PostgreSQL authority."""
+        super()._apply_local_release_copy(release, projection)
+        snapshot_id = str(release["snapshot_id"])
+        current = deepcopy(self._envelopes[snapshot_id])
+        try:
+            self.workflow_document_store.write_bundle(envelope=current)
+        except Exception as exc:
+            raise ConsoleError("workflow_document_write_failed", str(exc)) from exc
+        self.refresh_workflow_documents()
+
     def _commit_prepared_store(
         self,
         *,
