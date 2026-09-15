@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
+from src.document_status_v1 import DocumentStatusReadinessMixin
 from src.operations_console_v1 import PUBLICATION_PROTOCOL_VERSION, RELEASE_MANIFEST_DIRNAME, ConsoleError, _atomic_replace_bytes, _atomic_write
 from src.published_projection_v1 import atomic_replace_projection
 from src.retrieval_projection_v2 import build_projection
@@ -23,7 +24,7 @@ from src.review_closure_v1 import ReviewClosureConsole
 from src.review_ledger import append_event
 
 
-class DurablePublicationConsole(ReviewClosureConsole):
+class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConsole):
     """Review console whose successful publication is PostgreSQL-first."""
 
     def __init__(self, *args: Any, canonical_publication_store: PostgresCanonicalPublicationStore | None = None, **kwargs: Any) -> None:
