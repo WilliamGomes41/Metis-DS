@@ -86,5 +86,4 @@ JOIN canonical_object_versions c
   ON c.object_id = r.object_id AND c.object_version = r.object_version
 JOIN publication_releases rel
   ON rel.release_id = r.release_id
-WHERE r.state = 'active'
-  AND rel.status = 'published';
+WHERE r.state = 'active';
