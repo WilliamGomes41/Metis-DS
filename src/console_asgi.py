@@ -117,7 +117,7 @@ def _workflow_review_store() -> PostgresWorkflowReviewStore | None:
     if not kind:
         return None
     if kind != "postgres":
-        raise RuntimeError("unsupported_workflow_store")
+        raise RuntimeError("unsupported_workflow_review_store")
     if os.environ.get("METIS_WORKFLOW_STORE", "").strip().lower() != "postgres":
         raise RuntimeError("workflow_identity_store_required_for_review_store")
     if os.environ.get("METIS_WORKFLOW_DOCUMENT_STORE", "").strip().lower() != "postgres":
@@ -132,7 +132,7 @@ def _workflow_remaining_store() -> PostgresWorkflowRemainingStore | None:
     if not kind:
         return None
     if kind != "postgres":
-        raise RuntimeError("unsupported_workflow_store")
+        raise RuntimeError("unsupported_workflow_remaining_store")
     required = {
         "METIS_WORKFLOW_STORE": "workflow_identity_store_required_for_remaining_store",
         "METIS_WORKFLOW_DOCUMENT_STORE": "workflow_document_store_required_for_remaining_store",
