@@ -1,7 +1,8 @@
 """Derived publication readiness for completed review work.
 
-This slice is read-only: it derives readiness from current passage-register and
-governance state. It does not publish or persist a duplicate completion status.
+This slice is read-only: it derives readiness from current passage-register,
+governance and existing publication-gate state. It does not publish or persist
+a duplicate completion status.
 """
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ from src.review_disposition_v1 import definitive_review_disposition
 
 REVIEW_WORK_INCOMPLETE = "review_work_incomplete"
 SOURCE_PASSAGE_REVIEW_INCOMPLETE = "source_passage_review_incomplete"
+REVIEW_DISPOSITION_INCONSISTENT = "review_disposition_inconsistent"
 
 
 def publication_review_readiness(objects: Iterable[dict[str, Any]]) -> dict[str, Any]:
@@ -72,11 +74,43 @@ def source_passage_closure(objects: Iterable[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _existing_gate_readiness(considered: dict[str, Any]) -> dict[str, Any]:
+    """Separate existing technical gates from inherited curation blockers.
+
+    ``OperationsConsole.consider_publish`` remains the technical authority.
+    Closed Review can add a disposition-consistency blocker above that layer;
+    this helper only classifies that already-computed result and never reruns a
+    technical gate.
+    """
+    blockers = list(considered.get("blockers") or [])
+    has_disposition_conflict = bool(considered.get("disposition_conflict_object_ids"))
+    inherited_curation = [
+        code
+        for code in blockers
+        if has_disposition_conflict and code == REVIEW_DISPOSITION_INCONSISTENT
+    ]
+    technical_blockers = [code for code in blockers if code not in inherited_curation]
+
+    if inherited_curation:
+        technical_ready = not technical_blockers and bool(
+            considered.get("publishable_object_count")
+        )
+    else:
+        technical_ready = bool(considered.get("publish_allowed"))
+
+    return {
+        "technical_ready": technical_ready,
+        "technical_blockers": technical_blockers,
+        "inherited_curation_blockers": inherited_curation,
+    }
+
+
 class PublicationReadinessMixin:
-    """Fail closed while candidate review or substantive passage work is open."""
+    """Combine curator completeness with the existing technical publish gates."""
 
     def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         considered = super().consider_publish(actor_id=actor_id, snapshot_id=snapshot_id)  # type: ignore[misc]
+        existing = _existing_gate_readiness(considered)
         objects = self.snapshot_objects(snapshot_id)  # type: ignore[attr-defined]
         readiness = publication_review_readiness(objects)
         closure = source_passage_closure(objects)
@@ -84,15 +118,27 @@ class PublicationReadinessMixin:
         considered.update(closure)
 
         blockers = list(considered.get("blockers") or [])
-        if not readiness["review_complete"] and REVIEW_WORK_INCOMPLETE not in blockers:
-            blockers.append(REVIEW_WORK_INCOMPLETE)
-        if (
-            not closure["source_passage_review_complete"]
-            and SOURCE_PASSAGE_REVIEW_INCOMPLETE not in blockers
-        ):
-            blockers.append(SOURCE_PASSAGE_REVIEW_INCOMPLETE)
-        if blockers != list(considered.get("blockers") or []):
-            considered["blockers"] = blockers
-        if not readiness["review_complete"] or not closure["source_passage_review_complete"]:
-            considered["publish_allowed"] = False
+        curation_blockers = list(existing["inherited_curation_blockers"])
+        if not readiness["review_complete"]:
+            if REVIEW_WORK_INCOMPLETE not in blockers:
+                blockers.append(REVIEW_WORK_INCOMPLETE)
+            if REVIEW_WORK_INCOMPLETE not in curation_blockers:
+                curation_blockers.append(REVIEW_WORK_INCOMPLETE)
+        if not closure["source_passage_review_complete"]:
+            if SOURCE_PASSAGE_REVIEW_INCOMPLETE not in blockers:
+                blockers.append(SOURCE_PASSAGE_REVIEW_INCOMPLETE)
+            if SOURCE_PASSAGE_REVIEW_INCOMPLETE not in curation_blockers:
+                curation_blockers.append(SOURCE_PASSAGE_REVIEW_INCOMPLETE)
+
+        curation_ready = not curation_blockers
+        technical_ready = bool(existing["technical_ready"])
+        publication_ready = technical_ready and curation_ready
+
+        considered["blockers"] = blockers
+        considered["technical_ready"] = technical_ready
+        considered["technical_blockers"] = list(existing["technical_blockers"])
+        considered["curation_ready"] = curation_ready
+        considered["curation_blockers"] = curation_blockers
+        considered["publication_ready"] = publication_ready
+        considered["publish_allowed"] = publication_ready
         return considered
