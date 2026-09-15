@@ -56,7 +56,12 @@ def _obj(
     gate_result: str | None = "allowed",
     section_path: list[str] | None = None,
 ) -> dict[str, Any]:
-    metadata: dict[str, Any] = {}
+    metadata: dict[str, Any] = {
+        "passage_register": {
+            "status": "not_yet_assessed" if gate_result == "blocked" else "selected_as_candidate",
+            "source": "extract",
+        }
+    }
     if gate_result is not None or section_path is not None:
         metadata["admission"] = {
             "gate_result": gate_result,
