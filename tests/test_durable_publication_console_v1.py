@@ -22,6 +22,7 @@ from src.canonical_publication_postgres_v1 import (
 )
 from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
+from src.passage_register_v1 import passage_register_of
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
@@ -161,14 +162,29 @@ def _ready_console(tmp_path: Path, durable: MemoryCanonicalStore) -> tuple[Durab
         family="continentie",
         named_reviewers=[accounts["researcher"]["account_id"], accounts["reviewer"]["account_id"]],
     )
-    target = next(obj for obj in console.snapshot_objects(receipt["snapshot_id"]) if obj.get("object_type") == "unclassified")
+    snapshot_id = receipt["snapshot_id"]
+    target = next(obj for obj in console.snapshot_objects(snapshot_id) if obj.get("object_type") == "unclassified")
     console.review_object(
         actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
+        snapshot_id=snapshot_id,
         object_id=target["object_id"],
         decision="approve",
         confirmed_object_type="explanation",
     )
+    for obj in console.snapshot_objects(snapshot_id):
+        if obj.get("object_id") == target["object_id"]:
+            continue
+        if passage_register_of(obj).get("status") != "selected_as_candidate":
+            continue
+        if (obj.get("governance") or {}).get("validation_status") in {"approved", "rejected"}:
+            continue
+        console.review_object(
+            actor_id=accounts["reviewer"]["account_id"],
+            snapshot_id=snapshot_id,
+            object_id=obj["object_id"],
+            decision="reject",
+            comment="Testfixture: candidate definitief afgehandeld en niet publiceren.",
+        )
     return console, accounts, receipt
 
 
