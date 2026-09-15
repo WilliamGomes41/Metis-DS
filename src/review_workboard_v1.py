@@ -31,8 +31,10 @@ from src.operations_console_v1 import ConsoleError, OperationsConsole, review_st
 from src.proportionate_review_v1 import (
     ProportionateReviewConsole,
     normal_risk_batch_counts,
+    normal_risk_batch_queue,
     regular_individual_review_queue,
 )
+from src.publication_readiness_v1 import source_passage_closure
 
 
 _TASK_COPY = {
@@ -48,6 +50,10 @@ _TASK_COPY = {
     "control": (
         "Technisch herstel nodig",
         "Controleer passages die Metis nog niet veilig als gewone reviewtaak kan aanbieden",
+    ),
+    "closure": (
+        "Review afronden",
+        "Rond de nog openstaande disposition af voordat publicatie kan worden vrijgegeven",
     ),
 }
 
@@ -84,9 +90,14 @@ def review_work_item(
         return None
 
     objects = console.snapshot_objects(snapshot_id)
+    closure = source_passage_closure(objects)
+    unresolved_closure_ids = list(closure["unresolved_source_passage_ids"])
+    unresolved_closure_set = set(unresolved_closure_ids)
+
     review_path = review_path_for_klasse(str(envelope.get("class") or ""))
     headings, _ = review_stacks(objects, review_path=review_path)
-    heading_pending = _pending_count(headings)
+    open_headings = [row for row in headings if not _review_is_final(row)]
+    heading_pending = len(open_headings)
 
     duty = slow_review_duty(objects, review_path=review_path)
     regular_individual = (
@@ -95,18 +106,42 @@ def review_work_item(
         else []
     )
     individual = [*duty, *regular_individual]
-    individual_pending = _pending_count(individual)
+    open_individual = [row for row in individual if not _review_is_final(row)]
+    individual_pending = len(open_individual)
 
+    normal_rows: list[dict[str, Any]] = []
     normal_passages = 0
     normal_batches = 0
     if isinstance(console, ProportionateReviewConsole):
+        normal_rows = normal_risk_batch_queue(objects, review_path=review_path)
         normal_passages, normal_batches = normal_risk_batch_counts(
             objects,
             review_path=review_path,
         )
 
-    blocked_count = len(blocked_audit_lane(objects)) if review_path != "boom" else 0
-    remaining = heading_pending + individual_pending + normal_passages
+    blocked = (
+        [
+            row
+            for row in blocked_audit_lane(objects)
+            if str(row.get("object_id") or "") in unresolved_closure_set
+        ]
+        if review_path != "boom"
+        else []
+    )
+    blocked_count = len(blocked)
+
+    represented_ids = {
+        str(row.get("object_id") or "")
+        for row in [*open_individual, *normal_rows, *blocked]
+        if str(row.get("object_id") or "")
+    }
+    closure_gap_ids = [
+        object_id
+        for object_id in unresolved_closure_ids
+        if object_id not in represented_ids
+    ]
+    closure_gap_count = len(closure_gap_ids)
+    remaining = heading_pending + individual_pending + normal_passages + closure_gap_count
 
     task_counts = (
         ("headings", heading_pending),
@@ -116,6 +151,8 @@ def review_work_item(
     next_task = next((task for task, pending in task_counts if pending), "")
     if not next_task and blocked_count:
         next_task = "control"
+    if not next_task and closure_gap_count:
+        next_task = "closure"
 
     try:
         meaningful_status = str(console.document_status(snapshot_id))  # type: ignore[attr-defined]
@@ -132,11 +169,17 @@ def review_work_item(
         work_state = "complete"
 
     next_title, next_description = _TASK_COPY.get(next_task, ("", ""))
-    next_href = (
-        f"/review?document={quote(snapshot_id, safe='')}&task={quote(next_task, safe='')}"
-        if next_task
-        else ""
-    )
+    if next_task == "closure":
+        next_href = (
+            f"/review?document={quote(snapshot_id, safe='')}"
+            f"&object={quote(closure_gap_ids[0], safe='')}"
+        )
+    else:
+        next_href = (
+            f"/review?document={quote(snapshot_id, safe='')}&task={quote(next_task, safe='')}"
+            if next_task
+            else ""
+        )
 
     return {
         "snapshot_id": snapshot_id,
@@ -149,6 +192,9 @@ def review_work_item(
         "normal_passages": normal_passages,
         "normal_batches": normal_batches,
         "blocked_count": blocked_count,
+        "closure_gap_ids": closure_gap_ids,
+        "closure_gap_count": closure_gap_count,
+        "source_passage_review_complete": bool(closure["source_passage_review_complete"]),
         "next_task": next_task,
         "next_title": next_title,
         "next_description": next_description,
@@ -216,6 +262,8 @@ def _workboard_card(item: dict[str, Any]) -> str:
         )
     if item["blocked_count"]:
         detail_parts.append(f"{item['blocked_count']} technisch herstel")
+    if item["closure_gap_count"]:
+        detail_parts.append(f"{item['closure_gap_count']} disposition afronden")
     details = " · ".join(detail_parts)
     detail_html = f'<p class="muted">{_esc(details)}</p>' if details else ""
 
