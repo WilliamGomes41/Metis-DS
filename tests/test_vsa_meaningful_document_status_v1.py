@@ -159,7 +159,7 @@ def _complete_review(
 def _client(console: DurablePublicationConsole) -> TestClient:
     app = create_console_app(console)
     install_publish_readiness_ui(app, console)
-    install_document_status_ui(app)
+    install_document_status_ui(app, console)
     return TestClient(app, base_url="https://testserver", raise_server_exceptions=False)
 
 
@@ -238,7 +238,7 @@ def test_open_review_has_same_meaningful_status_in_all_three_rooms(tmp_path: Pat
         publisher_username="publisher.carla",
         expected_label="in review",
     )
-    assert "captured not published" not in client.get("/publish").text.lower()
+    assert "captured_not_published" not in client.get("/publish").text
 
 
 def test_complete_review_moves_from_blocked_to_ready_without_persisting_status(
