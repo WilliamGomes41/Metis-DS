@@ -45,3 +45,19 @@ def publication_review_readiness(objects: Iterable[dict[str, Any]]) -> dict[str,
         "unresolved_review_object_ids": unresolved_ids,
         "unresolved_review_object_count": len(unresolved_ids),
     }
+
+
+class PublicationReadinessMixin:
+    """Fail closed before publication while candidate review remains open."""
+
+    def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
+        considered = super().consider_publish(actor_id=actor_id, snapshot_id=snapshot_id)  # type: ignore[misc]
+        readiness = publication_review_readiness(self.snapshot_objects(snapshot_id))  # type: ignore[attr-defined]
+        considered.update(readiness)
+        if not readiness["review_complete"]:
+            blockers = list(considered.get("blockers") or [])
+            if REVIEW_WORK_INCOMPLETE not in blockers:
+                blockers.append(REVIEW_WORK_INCOMPLETE)
+            considered["blockers"] = blockers
+            considered["publish_allowed"] = False
+        return considered
