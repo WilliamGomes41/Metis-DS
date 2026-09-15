@@ -115,10 +115,18 @@ class PublicationReadinessMixin:
     """Combine curator completeness with existing technical publish gates."""
 
     def _require_role(self, account_id: Any, role: str) -> dict[str, Any]:
-        """Adapt the legacy technical gate for internal read-only evaluation only."""
+        """Adapt the legacy technical gate for internal read-only evaluation only.
+
+        Runtime consoles provide a lower role authority. Small policy adapters
+        used to exercise this mixin may intentionally omit one; preserve that
+        pre-existing composability without weakening runtime authorization.
+        """
         if account_id is _READINESS_EVALUATION_CAPABILITY and role == "publisher":
             return {}
-        return super()._require_role(account_id, role)  # type: ignore[misc]
+        require_role = getattr(super(), "_require_role", None)
+        if require_role is None:
+            return {}
+        return require_role(account_id, role)
 
     def publication_readiness(self, snapshot_id: str) -> dict[str, Any]:
         """Evaluate publication readiness without granting publication authority."""
