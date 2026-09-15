@@ -6,7 +6,6 @@ for presentation in workflow rooms.
 """
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any
 
 
@@ -16,16 +15,6 @@ DOCUMENT_STATUS_LABELS = {
     "blocked": "geblokkeerd",
     "ready_for_publication": "klaar voor publicatie",
     "published": "gepubliceerd",
-}
-
-# Internal object identity, not a user/account identifier. It can only satisfy
-# the read-only publisher check while deriving readiness below.
-_READ_ONLY_STATUS_ACTOR = object()
-_READ_ONLY_STATUS_ACCOUNT = {
-    "account_id": "document-status-read",
-    "username": "document-status-read",
-    "display_name": "document-status-read",
-    "roles": ["publisher"],
 }
 
 
@@ -50,19 +39,11 @@ def derive_document_status(
 
 
 class DocumentStatusReadinessMixin:
-    """Expose deterministic document status without widening action authority."""
-
-    def _require_role(self, account_id: Any, role: str) -> dict[str, Any]:
-        if account_id is _READ_ONLY_STATUS_ACTOR and role == "publisher":
-            return deepcopy(_READ_ONLY_STATUS_ACCOUNT)
-        return super()._require_role(account_id, role)  # type: ignore[misc]
+    """Expose deterministic document status without action authorization."""
 
     def document_readiness(self, snapshot_id: str) -> dict[str, Any]:
-        """Evaluate the existing publication gates without granting an action role."""
-        return self.consider_publish(  # type: ignore[attr-defined]
-            actor_id=_READ_ONLY_STATUS_ACTOR,
-            snapshot_id=snapshot_id,
-        )
+        """Read the shared publication-readiness contract without impersonation."""
+        return self.publication_readiness(snapshot_id)  # type: ignore[attr-defined]
 
     def document_status(self, snapshot_id: str) -> str:
         envelope = self._envelope(snapshot_id)  # type: ignore[attr-defined]

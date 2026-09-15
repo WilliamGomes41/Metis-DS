@@ -16,6 +16,12 @@ REVIEW_WORK_INCOMPLETE = "review_work_incomplete"
 SOURCE_PASSAGE_REVIEW_INCOMPLETE = "source_passage_review_incomplete"
 REVIEW_DISPOSITION_INCONSISTENT = "review_disposition_inconsistent"
 
+# The lower technical gate predates the read/action split and performs a publisher
+# role check before its otherwise read-only evaluation. Keep that compatibility
+# detail private to the readiness boundary: this object is a capability, not an
+# account identity, and is accepted only while evaluating readiness.
+_READINESS_EVALUATION_CAPABILITY = object()
+
 
 def publication_review_readiness(objects: Iterable[dict[str, Any]]) -> dict[str, Any]:
     """Return whether every current review-required candidate is final."""
@@ -106,10 +112,28 @@ def _existing_gate_readiness(considered: dict[str, Any]) -> dict[str, Any]:
 
 
 class PublicationReadinessMixin:
-    """Combine curator completeness with the existing technical publish gates."""
+    """Combine curator completeness with existing technical publish gates."""
 
-    def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
-        considered = super().consider_publish(actor_id=actor_id, snapshot_id=snapshot_id)  # type: ignore[misc]
+    def _require_role(self, account_id: Any, role: str) -> dict[str, Any]:
+        """Adapt the legacy technical gate for internal read-only evaluation only.
+
+        Runtime consoles provide a lower role authority. Small policy adapters
+        used to exercise this mixin may intentionally omit one; preserve that
+        pre-existing composability without weakening runtime authorization.
+        """
+        if account_id is _READINESS_EVALUATION_CAPABILITY and role == "publisher":
+            return {}
+        require_role = getattr(super(), "_require_role", None)
+        if require_role is None:
+            return {}
+        return require_role(account_id, role)
+
+    def publication_readiness(self, snapshot_id: str) -> dict[str, Any]:
+        """Evaluate publication readiness without granting publication authority."""
+        considered = super().consider_publish(  # type: ignore[misc]
+            actor_id=_READINESS_EVALUATION_CAPABILITY,
+            snapshot_id=snapshot_id,
+        )
         existing = _existing_gate_readiness(considered)
         objects = self.snapshot_objects(snapshot_id)  # type: ignore[attr-defined]
         readiness = publication_review_readiness(objects)
@@ -142,3 +166,8 @@ class PublicationReadinessMixin:
         considered["publication_ready"] = publication_ready
         considered["publish_allowed"] = publication_ready
         return considered
+
+    def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
+        """Authorize the publisher action boundary, then reuse read-only readiness."""
+        self._require_role(actor_id, "publisher")
+        return self.publication_readiness(snapshot_id)
