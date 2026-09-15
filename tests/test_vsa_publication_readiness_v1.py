@@ -1,4 +1,9 @@
-"""VSA Slice 1: publication requires completed candidate review."""
+"""VSA Slice 1: publication requires completed candidate review.
+
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+"""
 from __future__ import annotations
 
 from typing import Any
