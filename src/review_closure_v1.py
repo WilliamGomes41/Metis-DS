@@ -28,6 +28,7 @@ from src.deterministic_review_repair_v1 import (
 )
 from src.integrity_kernel import compute_canonical_object_hash, schema_errors, stamp_canonical_hashes
 from src.operations_console_v1 import ConsoleError
+from src.publication_readiness_v1 import PublicationReadinessMixin
 from src.review_ledger import append_event
 
 LEGACY_REVISE_REOPENED_EVENT = "legacy_revise_reopened"
@@ -52,7 +53,7 @@ def _repair_evidence(spec: dict[str, Any]) -> Iterator[None]:
         _REPAIR_EVIDENCE.reset(token)
 
 
-class ReviewClosureConsole(DeterministicRepairReviewConsole):
+class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewConsole):
     """One-path Review repair with migration and reconstructable evidence."""
 
     def repair_source(self, **_kwargs: Any) -> dict[str, Any]:
