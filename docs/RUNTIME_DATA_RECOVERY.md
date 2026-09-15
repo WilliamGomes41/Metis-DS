@@ -116,15 +116,18 @@ Voor gepubliceerde kennis blijft de kern dezelfde:
 
 ## Topologie
 
-De één-worker/één-instance-beperking blijft voorlopig actief:
+De ondersteunde productiegrens is:
 
-- one Gunicorn worker;
+- één Gunicorn-worker standaard, of twee Gunicorn-workers wanneer alle durable authorities actief zijn;
 - one instance;
 - sequential writes.
 
-Een configuratie met meerdere workers, meerdere instances of een andere write-mode blijft **buiten de topologie** en faalt via de bestaande guard. Multi-writer activering is dus niet impliciet onderdeel van stap 7. Ook multi-reviewer gedrag verandert hier niet.
+Twee workers vereisen canonical/publication plus alle vier workflowstores in PostgreSQL en immutable bronbytes in Azure Blob. Iedere commit ververst de gedeelde PostgreSQL-state nadat de procesoverschrijdende `/home/data`-storelock is verkregen; objectrevisies blokkeren een stale write. Lokale envelopes, bindings, ledger en projectie blijven mirrors. Startupmigratie en reconciliation gebruiken dezelfde lock.
 
-Stap 6 heeft PostgreSQL-concurrencygedrag inmiddels met echte PostgreSQL-tests bewezen en de drie eerder gevonden blockers zijn opgelost. Het versoepelen van de topology-guard blijft echter een aparte expliciete wijziging; stap 7 verandert die deploymentgrens niet.
+Dit ondersteunt gelijktijdige multi-reviewer toegang via twee processen, maar
+verandert de bestaande review-, autorisatie- en four-eyesregels niet.
+
+Meer dan twee workers, meerdere instances, ontbrekende durable authorities, tegenstrijdige workerinstellingen of een andere write-mode blijven **buiten de topologie** en falen bij startup. Schaal dus niet horizontaal: de procesoverschrijdende lock is alleen gegarandeerd op dezelfde App Service-instance.
 
 ## Herstelbewijs en resterende productiegrens
 

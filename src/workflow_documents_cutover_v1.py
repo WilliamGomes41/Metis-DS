@@ -1,9 +1,9 @@
-"""Opt-in PostgreSQL authority for mutable console documents and work objects.
+"""PostgreSQL authority for mutable console documents and work objects.
 
-The console UI and domain methods stay unchanged. PostgreSQL becomes authority for
-complete envelopes and object snapshots; local envelope/object files are maintained
-only as a compatibility mirror until review ledger and publish authorizations move in
-step 4. Production topology therefore remains one instance / one writer for now.
+Complete envelopes and object snapshots are authoritative in PostgreSQL. Local
+files are compatibility mirrors. Two processes on one instance share the store
+lock and use optimistic object revisions; multiple App Service instances remain
+outside the supported topology.
 """
 from __future__ import annotations
 
@@ -293,6 +293,11 @@ class _PostgresWorkflowDocumentsMixin:
             raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
         self._envelopes = {str(row["snapshot_id"]): row for row in envelopes}
 
+    def list_envelopes(self) -> list[dict[str, Any]]:
+        """Read the authoritative list instead of a process-local startup cache."""
+        self.refresh_workflow_documents()
+        return [self._receipt(row) for row in self._envelopes.values()]
+
     def _envelope(self, snapshot_id: str) -> dict[str, Any]:
         try:
             envelope = self.workflow_document_store.get_envelope(snapshot_id)
@@ -309,7 +314,7 @@ class _PostgresWorkflowDocumentsMixin:
             revision = self.workflow_document_store.objects_revision(snapshot_id)
         except WorkflowDocumentStoreError as exc:
             raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
-        if remember and snapshot_id not in self._objects_expected_revs():
+        if remember:
             self._objects_expected_revs()[snapshot_id] = revision
         return rows
 
@@ -398,7 +403,10 @@ class _PostgresWorkflowDocumentsMixin:
                 snapshot_id=snapshot_id,
             )
         with self._store_write_lock():
-            self.refresh_workflow_documents()
+            # The review mixin extends this reload with authoritative bindings.
+            # Refresh after taking the process-shared file lock so a stale worker
+            # cannot replace another worker's already-committed snapshot maps.
+            self._reload_store_locked()
             sid = snapshot_id or (objects[0] if objects is not None else None)
             if sid is None:
                 raise ConsoleError("unknown_snapshot")
@@ -418,10 +426,13 @@ class _PostgresWorkflowDocumentsMixin:
                 if envelope is None:
                     raise ConsoleError("unknown_snapshot")
                 try:
+                    pinned_revision = expected_revision
+                    if objects is not None and pinned_revision is None:
+                        pinned_revision = self._objects_expected_revs().get(sid)
                     revision = self.workflow_document_store.write_bundle(
                         envelope=envelope,
                         objects=objects[1] if objects is not None else None,
-                        expected_revision=expected_revision if objects is not None else None,
+                        expected_revision=pinned_revision if objects is not None else None,
                     )
                 except WorkflowDocumentStoreError as exc:
                     if str(exc) == SNAPSHOT_OBJECT_WRITE_CONFLICT:
@@ -447,26 +458,28 @@ class _PostgresWorkflowDocumentsMixin:
     @contextmanager
     def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
         """Preserve current rollback behavior while documents/objects are PostgreSQL-backed."""
-        before_envelope = deepcopy(self._envelope(snapshot_id))
-        before_objects = deepcopy(self._load_objects(snapshot_id, remember=False))
-        before_bindings = deepcopy(self._bindings)
-        before_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
-        try:
-            yield
-        except Exception:
-            with suppress(Exception):
-                self.workflow_document_store.write_bundle(
-                    envelope=before_envelope,
-                    objects=before_objects,
-                )
-            self._bindings = before_bindings
-            _atomic_write(self._bindings_path, before_bindings)
-            if self._ledger_path.exists() and self._ledger_path.stat().st_size > before_ledger:
-                with self._ledger_path.open("r+b") as handle:
-                    handle.truncate(before_ledger)
-            self.refresh_workflow_documents()
-            self.refresh_objects_expected_revision(snapshot_id)
-            raise
+        with self._store_write_lock():
+            self._reload_store_locked()
+            before_envelope = deepcopy(self._envelope(snapshot_id))
+            before_objects = deepcopy(self._load_objects(snapshot_id, remember=False))
+            before_bindings = deepcopy(self._bindings)
+            before_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
+            try:
+                yield
+            except Exception:
+                with suppress(Exception):
+                    self.workflow_document_store.write_bundle(
+                        envelope=before_envelope,
+                        objects=before_objects,
+                    )
+                self._bindings = before_bindings
+                _atomic_write(self._bindings_path, before_bindings)
+                if self._ledger_path.exists() and self._ledger_path.stat().st_size > before_ledger:
+                    with self._ledger_path.open("r+b") as handle:
+                        handle.truncate(before_ledger)
+                self.refresh_workflow_documents()
+                self.refresh_objects_expected_revision(snapshot_id)
+                raise
 
 
 class PostgresWorkflowDurablePublicationConsole(

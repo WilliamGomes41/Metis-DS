@@ -1118,11 +1118,12 @@ class OperationsConsole:
     def waiting_task_counts(self, account_id: str) -> dict[str, int]:
         account = self._account(account_id)
         roles = set(account["roles"])
+        envelopes = self.list_envelopes()
         ingest = 0
         review = 0
         publish = 0
         tree = 0
-        for envelope in self._envelopes.values():
+        for envelope in envelopes:
             objects = self._load_objects(envelope["snapshot_id"], remember=False)
             statuses = {(row.get("governance") or {}).get("validation_status") for row in objects}
             if envelope.get("uploader_account_id") == account_id and statuses & {"revise", "rejected"}:
@@ -1150,7 +1151,7 @@ class OperationsConsole:
             review = len(
                 [
                     envelope
-                    for envelope in self._envelopes.values()
+                    for envelope in envelopes
                     if account_id in (envelope.get("named_reviewers") or [])
                     and any(
                         (row.get("governance") or {}).get("validation_status") == "needs_review"
@@ -1711,6 +1712,7 @@ class OperationsConsole:
         if not confirmed:
             raise ConsoleError("delete_confirmation_required")
         with self._store_write_lock():
+            self._reload_store_locked()
             return self._delete_unpublished_snapshot_locked(
                 actor_id=actor_id,
                 token=token,
@@ -1872,7 +1874,7 @@ class OperationsConsole:
 
     def family_tree(self) -> dict[str, Any]:
         families: dict[str, dict[str, Any]] = {}
-        for envelope in self._envelopes.values():
+        for envelope in self.list_envelopes():
             family = envelope["family"]
             bucket = families.setdefault(family, {"family": family, "children": []})
             bucket["children"].append(
@@ -1899,10 +1901,15 @@ class OperationsConsole:
         family = new_family.strip()
         if not family:
             raise ConsoleError("family_required")
-        envelope = self._envelope(snapshot_id)
-        envelope["family"] = family
-        envelope["clinical_rereview_required"] = False
-        self._save_envelopes()
+        with self._store_write_lock():
+            self._reload_store_locked()
+            envelope = self._envelope(snapshot_id)
+            envelope["family"] = family
+            envelope["clinical_rereview_required"] = False
+            self._commit_prepared_store(
+                envelopes={snapshot_id: envelope},
+                snapshot_id=snapshot_id,
+            )
         return self._receipt(envelope)
 
     def _class_change_history_dir(self) -> Path:
@@ -2918,6 +2925,7 @@ class OperationsConsole:
         }
 
     def live_snapshot(self, *, family: str, class_: str) -> dict[str, Any] | None:
+        self.list_envelopes()
         live = [
             envelope
             for envelope in self._envelopes.values()
@@ -2929,6 +2937,7 @@ class OperationsConsole:
         return self._receipt(live[-1])
 
     def select_for_question(self, *, family: str, asked_class: str) -> list[dict[str, Any]]:
+        self.list_envelopes()
         if asked_class not in ALLOWED_CLASSES:
             raise ConsoleError("invalid_class")
         matching = [
@@ -2963,6 +2972,7 @@ class OperationsConsole:
 
     def resolve_document(self, *, title: str, version: str, family: str) -> dict[str, Any]:
         """Map researcher-visible document identity onto the kernel snapshot."""
+        self.list_envelopes()
         wanted = (title.strip(), version.strip(), family.strip())
         matches = [
             row

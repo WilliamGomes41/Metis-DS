@@ -1,10 +1,8 @@
-"""Post-#120 audit remediation 5: topology bound (scale).
+"""Supported one-instance topology: one worker by default, two when durable.
 
-Supported console topology is CONFIGURE-only: one Gunicorn worker,
-one instance, sequential writes. Accidental multi-worker / multi-instance
-/ multi-writer assumptions MUST fail closed or be clearly out-of-bound.
-EXTEND for multiple writers (consistent mutate-path for accounts /
-envelopes / bindings) is out of scope here.
+Two workers MUST fail closed unless all mutable authorities are shared and
+durable. More than two workers, multiple instances and conflicting worker
+declarations stay out of bound.
 
 Markers in this file are CI metadata pointing at these checks
 (scripts/release_control_preflight.py and this suite). They are not
@@ -25,6 +23,8 @@ from pathlib import Path
 import pytest
 
 from src.topology_bound_v1 import (
+    DEFAULT_WORKERS,
+    DURABLE_MULTI_WORKER_SETTINGS,
     SUPPORTED_INSTANCE_COUNT,
     SUPPORTED_WRITE_MODE,
     SUPPORTED_WORKERS,
@@ -53,12 +53,19 @@ def _clean_topology_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "GUNICORN_CMD_ARGS",
         "CONSOLE_INSTANCE_COUNT",
         "CONSOLE_WRITE_MODE",
+        *DURABLE_MULTI_WORKER_SETTINGS,
     ):
         monkeypatch.delenv(name, raising=False)
 
 
-def test_supported_topology_is_one_worker_one_instance_sequential_writes() -> None:
-    assert SUPPORTED_WORKERS == 1
+def _enable_durable_authorities(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name, value in DURABLE_MULTI_WORKER_SETTINGS.items():
+        monkeypatch.setenv(name, value)
+
+
+def test_supported_topology_is_one_or_two_workers_one_instance_sequential_writes() -> None:
+    assert DEFAULT_WORKERS == 1
+    assert SUPPORTED_WORKERS == (1, 2)
     assert SUPPORTED_INSTANCE_COUNT == 1
     assert SUPPORTED_WRITE_MODE == "sequential"
 
@@ -85,13 +92,25 @@ def test_explicit_single_writer_env_stays_in_bound(monkeypatch: pytest.MonkeyPat
     assert result["instances"] == 1
 
 
+@pytest.mark.parametrize("name", ("WEB_CONCURRENCY", "GUNICORN_WORKERS", "CONSOLE_GUNICORN_WORKERS"))
+def test_two_workers_pass_with_every_durable_authority(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    _clean_topology_env(monkeypatch)
+    _enable_durable_authorities(monkeypatch)
+    monkeypatch.setenv(name, "2")
+    result = assert_supported_topology(os.environ)
+    assert result["status"] == "PASS"
+    assert result["workers"] == 2
+    assert result["instances"] == 1
+
+
 @pytest.mark.parametrize(
     "name,value",
     (
-        ("WEB_CONCURRENCY", "2"),
         ("WEB_CONCURRENCY", "4"),
         ("GUNICORN_WORKERS", "3"),
-        ("CONSOLE_GUNICORN_WORKERS", "2"),
+        ("CONSOLE_GUNICORN_WORKERS", "5"),
     ),
 )
 def test_multi_worker_env_fails_closed(
@@ -122,8 +141,30 @@ def test_gunicorn_cmd_args_dash_w_multi_worker_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _clean_topology_env(monkeypatch)
-    monkeypatch.setenv("GUNICORN_CMD_ARGS", "-w 2 -k uvicorn.workers.UvicornWorker")
+    monkeypatch.setenv("GUNICORN_CMD_ARGS", "-w 3 -k uvicorn.workers.UvicornWorker")
     with pytest.raises(TopologyBoundError, match="multi_worker_out_of_bound"):
+        assert_supported_topology(os.environ)
+
+
+def test_two_workers_fail_closed_without_complete_durable_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clean_topology_env(monkeypatch)
+    _enable_durable_authorities(monkeypatch)
+    monkeypatch.delenv("METIS_WORKFLOW_REVIEW_STORE")
+    monkeypatch.setenv("WEB_CONCURRENCY", "2")
+    with pytest.raises(TopologyBoundError, match="multi_worker_durable_authority_required"):
+        assert_supported_topology(os.environ)
+
+
+def test_conflicting_worker_declarations_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clean_topology_env(monkeypatch)
+    _enable_durable_authorities(monkeypatch)
+    monkeypatch.setenv("WEB_CONCURRENCY", "2")
+    monkeypatch.setenv("GUNICORN_WORKERS", "1")
+    with pytest.raises(TopologyBoundError, match="worker_count_conflict"):
         assert_supported_topology(os.environ)
 
 
@@ -133,6 +174,25 @@ def test_invalid_worker_count_fails_closed(monkeypatch: pytest.MonkeyPatch) -> N
     result = evaluate_topology(os.environ)
     assert result["status"] == "BLOCKED"
     with pytest.raises(TopologyBoundError):
+        assert_supported_topology(os.environ)
+
+
+def test_invalid_gunicorn_worker_flag_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clean_topology_env(monkeypatch)
+    monkeypatch.setenv("GUNICORN_CMD_ARGS", "--workers many")
+    with pytest.raises(TopologyBoundError, match="invalid_worker_count"):
+        assert_supported_topology(os.environ)
+
+
+def test_conflicting_gunicorn_worker_flags_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clean_topology_env(monkeypatch)
+    _enable_durable_authorities(monkeypatch)
+    monkeypatch.setenv("GUNICORN_CMD_ARGS", "-w 1 --workers=2")
+    with pytest.raises(TopologyBoundError, match="worker_count_conflict"):
         assert_supported_topology(os.environ)
 
 
@@ -156,7 +216,7 @@ def test_explicit_multi_writer_mode_fails_closed(monkeypatch: pytest.MonkeyPatch
         assert_supported_topology(os.environ)
 
 
-def test_build_app_fails_closed_when_multi_worker_assumed(
+def test_build_app_fails_closed_when_two_workers_lack_durable_authorities(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from src.console_asgi import build_app
@@ -166,7 +226,7 @@ def test_build_app_fails_closed_when_multi_worker_assumed(
     monkeypatch.delenv("CONSOLE_BOOTSTRAP_USERNAME", raising=False)
     monkeypatch.delenv("CONSOLE_BOOTSTRAP_PASSWORD", raising=False)
     monkeypatch.setenv("WEB_CONCURRENCY", "2")
-    with pytest.raises(TopologyBoundError, match="multi_worker_out_of_bound"):
+    with pytest.raises(TopologyBoundError, match="multi_worker_durable_authority_required"):
         build_app()
 
 
@@ -184,13 +244,12 @@ def test_build_app_fails_closed_when_multi_instance_assumed(
         build_app()
 
 
-def test_azure_startup_pins_one_gunicorn_worker_and_asserts_topology() -> None:
+def test_azure_startup_uses_validated_gunicorn_worker_count() -> None:
     text = STARTUP.read_text(encoding="utf-8")
-    assert "gunicorn -w 1 " in text
-    assert "-w 2" not in text
-    assert "--workers" not in text
+    assert 'print(assert_supported_topology()[\'workers\'])' in text
+    assert 'gunicorn -w "${WORKERS}"' in text
     assert "assert_supported_topology" in text
-    assert "one Gunicorn worker" in text or "één Gunicorn-worker" in text
+    assert "one worker by default" in text
     assert "sequential" in text.lower() or "sequentiële" in text
 
 
@@ -200,7 +259,7 @@ def test_azure_startup_fails_closed_on_web_concurrency(
     script = tmp_path / "azure_console_startup.sh"
     script.write_text(STARTUP.read_text(encoding="utf-8"), encoding="utf-8")
     env = os.environ.copy()
-    env["WEB_CONCURRENCY"] = "2"
+    env["WEB_CONCURRENCY"] = "3"
     env["PORT"] = "8099"
     result = subprocess.run(
         ["bash", str(script)],
@@ -218,11 +277,11 @@ def test_azure_startup_fails_closed_on_web_concurrency(
 def test_docs_declare_supported_topology_not_silent_multi_writer() -> None:
     recovery = (ROOT / "docs" / "RUNTIME_DATA_RECOVERY.md").read_text(encoding="utf-8")
     startup = STARTUP.read_text(encoding="utf-8")
-    assert "één Gunicorn-worker" in recovery or "one Gunicorn worker" in recovery
+    assert "twee Gunicorn-workers" in recovery or "two Gunicorn workers" in recovery
     assert "één instance" in recovery or "one instance" in recovery
     assert "sequentiële writes" in recovery or "sequential writes" in recovery
-    assert "multi-writer" in recovery.lower() or "multi-writer" in startup.lower()
     assert "out of bound" in recovery.lower() or "buiten de topologie" in recovery.lower()
+    assert "procesoverschrijdende" in recovery.lower()
 
 
 def test_roadmap_records_remediation_5_landing_note() -> None:
@@ -239,12 +298,12 @@ def test_roadmap_records_remediation_5_landing_note() -> None:
     assert "one Gunicorn worker" in changelog or "one gunicorn worker" in changelog.lower()
 
 
-def test_remediation_5_does_not_open_multi_writer_extend_or_protocol() -> None:
+def test_two_worker_extension_requires_durable_authority_without_protocol_delta() -> None:
     module = (ROOT / "src" / "topology_bound_v1.py").read_text(encoding="utf-8")
-    assert "CONFIGURE" in module
-    assert "EXTEND" in module
-    assert "accounts/envelopes/bindings" in module or "session reload" in module
+    assert "DURABLE_MULTI_WORKER_SETTINGS" in module
+    assert "multi_worker_durable_authority_required" in module
+    assert "SUPPORTED_WORKERS = (1, 2)" in module
     root_protocol = (ROOT / "PROTOCOL.md").read_text(encoding="utf-8")
-    assert root_protocol.count("De geldende normatieve baseline is Protocol v2.32.0") == 1
+    assert root_protocol.count("# V&VN Data Services — Protocol v3") == 1
     assert not (ROOT / "docs" / "PROTOCOL_V2_32_TOPOLOGY_BOUND_DELTA.md").exists()
     assert not (ROOT / "HANDOFF.md").exists()
