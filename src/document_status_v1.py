@@ -71,22 +71,3 @@ class DocumentStatusReadinessMixin:
             envelope_state=str(envelope.get("state") or ""),
             readiness=readiness,
         )
-
-    def list_envelopes(self) -> list[dict[str, Any]]:
-        rows = super().list_envelopes()  # type: ignore[misc]
-        for row in rows:
-            snapshot_id = str(row.get("snapshot_id") or "")
-            row["meaningful_status"] = (
-                self.document_status(snapshot_id) if snapshot_id else "processing"
-            )
-        return rows
-
-    def family_tree(self) -> dict[str, Any]:
-        tree = super().family_tree()  # type: ignore[misc]
-        for node in (tree.get("families") or {}).values():
-            for child in node.get("children") or []:
-                snapshot_id = str(child.get("snapshot_id") or "")
-                child["meaningful_status"] = (
-                    self.document_status(snapshot_id) if snapshot_id else "processing"
-                )
-        return tree
