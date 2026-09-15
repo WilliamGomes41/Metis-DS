@@ -9,9 +9,9 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 from src.passage_register_v1 import passage_register_of
+from src.review_disposition_v1 import definitive_review_disposition
 
 REVIEW_WORK_INCOMPLETE = "review_work_incomplete"
-FINAL_REVIEW_STATUSES = frozenset({"approved", "rejected"})
 
 
 def publication_review_readiness(objects: Iterable[dict[str, Any]]) -> dict[str, Any]:
@@ -34,8 +34,7 @@ def publication_review_readiness(objects: Iterable[dict[str, Any]]) -> dict[str,
         if not object_id:
             continue
         required_ids.append(object_id)
-        status = str((obj.get("governance") or {}).get("validation_status") or "")
-        if status not in FINAL_REVIEW_STATUSES:
+        if not definitive_review_disposition(obj)["final"]:
             unresolved_ids.append(object_id)
 
     return {
