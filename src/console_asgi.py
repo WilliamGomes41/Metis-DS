@@ -26,6 +26,7 @@ from src.g2_source_store import AzureBlobSourceStore
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.proportionate_review_v1 import install_proportionate_review_routes
+from src.publish_readiness_ui_v1 import install_publish_readiness_ui
 from src.review_closure_v1 import harden_legacy_repair_routes
 from src.topology_bound_v1 import assert_supported_topology
 from src.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
@@ -275,6 +276,7 @@ def build_app() -> object:
     console.reconcile_durable_publications()
 
     app = create_console_app(console)
+    install_publish_readiness_ui(app, console)
     install_proportionate_review_routes(app, console)
     install_audit_llm_settings_routes(app, console)
     install_deterministic_review_repair_routes(app, console)
