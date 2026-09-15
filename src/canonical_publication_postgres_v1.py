@@ -430,7 +430,7 @@ class PostgresCanonicalPublicationStore:
                       ON rel.release_id=r.release_id
                     JOIN canonical_object_sources s
                       ON s.object_id=c.object_id AND s.object_version=c.object_version
-                    WHERE r.state='active' AND rel.status='published'
+                    WHERE r.state='active'
                     ORDER BY c.object_id
                     """
                 ).fetchall()
@@ -477,7 +477,6 @@ class PostgresCanonicalPublicationStore:
                     WHERE ev.entity_type='release'
                       AND ev.event_type='release_published'
                       AND ev.details->>'snapshot_id'=%s
-                      AND rel.status='published'
                     ORDER BY rel.published_at DESC
                     LIMIT 1
                     """,

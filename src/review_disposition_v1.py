@@ -14,6 +14,7 @@ FINAL_CANDIDATE_REVIEW_STATUSES = frozenset({"approved", "rejected"})
 FINAL_NON_CANDIDATE_DISPOSITIONS = frozenset(
     {"used_as_context", "linked_as_support", "excluded_with_reason"}
 )
+SUPERSEDED_REVIEW_STATUS = "superseded"
 
 
 def definitive_review_disposition(obj: dict[str, Any]) -> dict[str, Any]:
@@ -21,7 +22,10 @@ def definitive_review_disposition(obj: dict[str, Any]) -> dict[str, Any]:
 
     Unknown or contradictory state fails closed. ``selected_as_candidate`` only
     becomes final after an existing terminal governance review outcome.
-    ``not_yet_assessed`` is always open.
+    ``not_yet_assessed`` is always open unless the object has already been
+    retired by an existing ``superseded`` transition. A passage disposition
+    written by an explicit review is not final while that review is still
+    non-terminal.
     """
     if obj.get("object_type") == "document":
         return {
@@ -33,7 +37,8 @@ def definitive_review_disposition(obj: dict[str, Any]) -> dict[str, Any]:
             "review_status": "",
         }
 
-    register_status = str(passage_register_of(obj).get("status") or "")
+    passage = passage_register_of(obj)
+    register_status = str(passage.get("status") or "")
     review_status = str((obj.get("governance") or {}).get("validation_status") or "")
 
     if register_status not in PASSAGE_REGISTER_STATUSES:
@@ -42,6 +47,16 @@ def definitive_review_disposition(obj: dict[str, Any]) -> dict[str, Any]:
             "final": False,
             "valid": False,
             "outcome": "invalid_register_status",
+            "register_status": register_status,
+            "review_status": review_status,
+        }
+
+    if review_status == SUPERSEDED_REVIEW_STATUS:
+        return {
+            "state": "final",
+            "final": True,
+            "valid": True,
+            "outcome": SUPERSEDED_REVIEW_STATUS,
             "register_status": register_status,
             "review_status": review_status,
         }
@@ -57,6 +72,18 @@ def definitive_review_disposition(obj: dict[str, Any]) -> dict[str, Any]:
         }
 
     if register_status in FINAL_NON_CANDIDATE_DISPOSITIONS:
+        if (
+            passage.get("source") == "review"
+            and review_status not in FINAL_CANDIDATE_REVIEW_STATUSES
+        ):
+            return {
+                "state": "open",
+                "final": False,
+                "valid": True,
+                "outcome": "review_open",
+                "register_status": register_status,
+                "review_status": review_status,
+            }
         return {
             "state": "final",
             "final": True,

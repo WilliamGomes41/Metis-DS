@@ -21,12 +21,15 @@ from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationSt
 from src.closed_review_loop_v1 import install_closed_review_routes
 from src.console_navigation_simplify_v1 import install_navigation_simplification
 from src.deterministic_review_repair_v1 import install_deterministic_review_repair_routes
+from src.document_status_ui_v1 import install_document_status_ui
 from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import AzureBlobSourceStore
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.proportionate_review_v1 import install_proportionate_review_routes
+from src.publish_readiness_ui_v1 import install_publish_readiness_ui
 from src.review_closure_v1 import harden_legacy_repair_routes
+from src.review_workboard_v1 import install_review_workboard
 from src.topology_bound_v1 import assert_supported_topology
 from src.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
 from src.workflow_documents_cutover_v1 import (
@@ -275,6 +278,9 @@ def build_app() -> object:
     console.reconcile_durable_publications()
 
     app = create_console_app(console)
+    install_publish_readiness_ui(app, console)
+    install_document_status_ui(app, console)
+    install_review_workboard(app, console)
     install_proportionate_review_routes(app, console)
     install_audit_llm_settings_routes(app, console)
     install_deterministic_review_repair_routes(app, console)
