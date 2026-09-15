@@ -278,7 +278,7 @@ def build_app() -> object:
 
     app = create_console_app(console)
     install_publish_readiness_ui(app, console)
-    install_document_status_ui(app)
+    install_document_status_ui(app, console)
     install_proportionate_review_routes(app, console)
     install_audit_llm_settings_routes(app, console)
     install_deterministic_review_repair_routes(app, console)
