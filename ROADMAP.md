@@ -1,40 +1,8 @@
 # Metis — Roadmap v3
 
 **Status:** actief  
-**Datum:** 2026-09-10  
+**Datum:** 2026-09-16  
 **Functie:** alleen actieve veranderopgaven, experimenten, beslispoorten en stopvoorwaarden. Uitgevoerde geschiedenis hoort in changelog, audit of `docs/history/`.
-
-## R3.1 Governance-migratie afronden
-
-**Status:** GEREED — Protocol v3.0.0 is geactiveerd via PR #149; de definitieve CI was groen.
-
-Doel: Protocol v3 als enige actuele norm laten functioneren zonder verlies van V2-auditbewijs.
-
-Gereed wanneer:
-- `PROTOCOL.md` Protocol v3 is;
-- historische V2-rootstanden bevroren zijn onder `docs/history/protocol-v2/`;
-- approval-manifests controleerbaar blijven;
-- governance-tests huidige invarianten bewijzen in plaats van historische V2-tekst in actuele stuurdocumenten af te dwingen;
-- CI groen is.
-
-Besluit: `ACTIVATE V3` — uitgevoerd via PR #149.
-
-## R3.2 Governance-tests migreren
-
-**Status:** GEREED — actuele V3-tests en historische V2-auditchecks zijn gescheiden; volledige CI was groen voor merge.
-
-Doel: documenttests terugbrengen tot actuele V3-invarianten en afzonderlijke historische auditchecks.
-
-Niet doen:
-- productgedrag wijzigen om documenttests groen te krijgen;
-- historische approval-manifests herschrijven;
-- oude V2-artefacten verwijderen wanneer hun bytes of paden deel zijn van auditbewijs.
-
-Gereed wanneer:
-- actuele tests geen V2-deltatekst meer vereisen in root `PROTOCOL.md` of `ROADMAP.md`;
-- historische tests alleen historische bestanden en manifests controleren;
-- release-control preflight de migratie accepteert;
-- volledige CI groen is.
 
 ## R3.3 Audit-kamer + experimentbasis
 
@@ -163,15 +131,26 @@ Softwareontwerp, codewijziging en PR vallen buiten Audit en zijn geen Metis-runt
 
 Geen brede rewrite.
 
-## R3.6 Review-statusovergangen isoleren
-
-Alleen wanneer verdere consolewijzigingen dit aantoonbaar nodig maken: isoleer statusovergangen uit grote consolefuncties tot een kleine expliciete grens. Geen algemene console-refactor.
-
 ## R3.7 GitHub Actions → Azure OIDC herstellen
 
 Herstel de bedoelde CI/CD-route en bewijs een gecontroleerde deployment vanaf een identificeerbare commit. Cloud Shell ZIP blijft daarna uitsluitend noodprocedure, niet de normale workflow.
 
 Dit spoor verandert geen kennis-, review- of publicatielogica en is onafhankelijk van Audit-verbeterbundels.
+
+## R3.8 Lifecycle closure na Repairs 1–11
+
+**Status:** ACTIEF — post-merge gap-analyse 2026-09-16.
+
+De lifecycle-architectuur wordt niet verder uitgebreid zonder aangetoonde gap. Repairs voor lifecycle-identiteit, published WorkingRevision-immutability, gedeelde lifecycle-status, live v1 met werkende v2, atomic successor cutover, replay/recovery-hardening en documentbrede withdrawal zijn uitgevoerd. `publication_registry` blijft de enige serving authority.
+
+Resterende volgorde:
+1. **Historical Lifecycle Audit — read-only.** Controleer bestaande canonical/workflow-data op ontbrekende `logical_document_id` en contradicties zoals meerdere actieve releases, active registry-rows bij withdrawn history, conflicterende release-lineage en niet-eenduidige snapshot → LogicalDocument-koppeling.
+2. **Legacy lineage repair — alleen indien nodig.** Backfill alleen waar release → snapshot → workflow exact één `logical_document_id` oplevert. Geen inferentie uit `object_id` of fuzzy `document_id`; ambiguïteit blijft fail-closed.
+3. **REAL Product API lifecycle proof — proof-only.** Bind de echte Product API aan dezelfde PostgreSQL authority en bewijs R1 actief → R2 actief/R1 weg → withdrawal niets actief → gecorrigeerde R3 actief.
+4. **End-to-end lifecycle closure — proof-only.** Eén black-box keten van ingest → review → publish → successor → withdraw → correct successor, inclusief restart en stale replay/recovery.
+5. **Performance pas daarna.** Eerst baseline meten; alleen optimaliseren op aangetoonde bottlenecks.
+
+Stopregel: een proof-slice wordt pas een nieuwe repair wanneer hij een concrete invariantbreuk reproduceert. Geen nieuwe lifecycle-feature, status-authority, serving-tabel, lineage-heuristiek of transaction manager toevoegen om alleen extra zekerheid te organiseren.
 
 ## Open governancebesluiten
 
@@ -208,7 +187,6 @@ AI, Grok Bot en Metis tellen niet als vereiste menselijke C3–C6-reviewer, moge
 
 | Besluit | Status |
 |---|---|
-| Protocol v3 activeren | GEREED — PR #149 gemerged; Protocol v3.0.0 actief; CI groen |
 | Audit-kamer als brede inspectiekamer | LOCKED — 2026-09-10 |
 | Gebruiker maakt zelf audit aan via audittype | LOCKED — 2026-09-10 |
 | AuditStore blijft type-onafhankelijk; type-uitvoering lokaal | LOCKED NA RETRO — 2026-09-10 |
