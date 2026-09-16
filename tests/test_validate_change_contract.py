@@ -1,4 +1,13 @@
+import pytest
+
 from scripts.validate_change_contract import validate_change_contract
+
+
+pytestmark = [
+    pytest.mark.release_control_scope_belofte,
+    pytest.mark.release_control_slop,
+    pytest.mark.release_control_releasebewijs,
+]
 
 
 def base_contract(**overrides: str) -> str:
