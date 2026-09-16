@@ -110,8 +110,7 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
             with store._connect() as con:
                 release = con.execute(
                     """
-                    SELECT rel.release_id,
-                           rel.status,
+                    SELECT rel.release_id, rel.status,
                            ev.details->>'logical_document_id' AS logical_document_id
                     FROM audit_events ev
                     JOIN publication_releases rel ON rel.release_id=ev.entity_id
