@@ -110,7 +110,8 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
             with store._connect() as con:
                 release = con.execute(
                     """
-                    SELECT rel.release_id, rel.status
+                    SELECT rel.release_id, rel.status,
+                           ev.details->>'logical_document_id' AS logical_document_id
                     FROM audit_events ev
                     JOIN publication_releases rel ON rel.release_id=ev.entity_id
                     WHERE ev.entity_type='release'
@@ -126,6 +127,7 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
 
                 release_id = str(release["release_id"])
                 release_status = str(release["status"] or "")
+                logical_document_id = str(release.get("logical_document_id") or "")
                 if release_status == "withdrawn":
                     return {"release_status": "withdrawn", "serving_status": "inactive"}
                 if release_status != "published":
@@ -156,6 +158,24 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
                 active_other = int(counts["active_other_release"] or 0)
                 if active_same == item_count:
                     return {"release_status": "published", "serving_status": "active"}
+                if active_same == 0 and logical_document_id:
+                    active_successor = con.execute(
+                        """
+                        SELECT 1
+                        FROM publication_registry r
+                        JOIN audit_events ev
+                          ON ev.entity_type='release'
+                         AND ev.entity_id=r.release_id
+                         AND ev.event_type='release_published'
+                        WHERE r.state='active'
+                          AND r.release_id<>%s
+                          AND ev.details->>'logical_document_id'=%s
+                        LIMIT 1
+                        """,
+                        (release_id, logical_document_id),
+                    ).fetchone()
+                    if active_successor:
+                        return {"release_status": "superseded", "serving_status": "inactive"}
                 if active_same == 0 and active_other == item_count:
                     return {"release_status": "superseded", "serving_status": "inactive"}
                 return {"release_status": "published", "serving_status": "inactive"}

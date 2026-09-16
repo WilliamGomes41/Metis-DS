@@ -324,7 +324,8 @@ class PostgresCanonicalPublicationStore:
 
                     predecessor_rows: list[dict[str, Any]] = []
                     predecessor_release_ids: set[str] = set()
-                    if logical_document_id and not existing_release:
+                    preserve_document_registry = False
+                    if logical_document_id:
                         predecessor_rows = con.execute(
                             """
                             SELECT r.object_id, r.object_version, r.release_id, r.published_at
@@ -341,12 +342,15 @@ class PostgresCanonicalPublicationStore:
                             (logical_document_id, release_id),
                         ).fetchall()
                         predecessor_release_ids = {str(row["release_id"]) for row in predecessor_rows}
+                        if len(predecessor_release_ids) > 1:
+                            raise CanonicalPublicationStoreError("canonical_active_predecessor_ambiguous")
                         if predecessor_rows and any(
                             _timestamp(row["published_at"]) >= _timestamp(published_at)
                             for row in predecessor_rows
                         ):
                             if not preserve_newer_registry:
                                 raise CanonicalPublicationStoreError("stale_release_replay")
+                            preserve_document_registry = True
                             predecessor_rows = []
                             predecessor_release_ids = set()
 
@@ -357,7 +361,11 @@ class PostgresCanonicalPublicationStore:
                             "SELECT object_version,release_id,state,published_at FROM publication_registry WHERE object_id=%s",
                             (object_id,),
                         ).fetchone()
-                        advance = registry_update_required(current, release_id=release_id, published_at=published_at)
+                        advance = (
+                            False
+                            if preserve_document_registry
+                            else registry_update_required(current, release_id=release_id, published_at=published_at)
+                        )
                         if current and str(current["release_id"]) != release_id and not advance:
                             if not existing_release and not preserve_newer_registry:
                                 raise CanonicalPublicationStoreError("stale_release_replay")
