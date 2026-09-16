@@ -1,4 +1,4 @@
-"""Opt-in PostgreSQL authority for review evidence and publish authorizations."""
+"""Opt-in PostgreSQL authority with rebuildable review-state disk mirrors."""
 from __future__ import annotations
 
 import json
