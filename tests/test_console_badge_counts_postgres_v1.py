@@ -197,11 +197,11 @@ def test_badges_use_constant_round_trips_and_reflect_next_read() -> None:
             ),
         )
 
+    original_connect = store._connect
     try:
         for envelope, objects in zip(envelopes, object_sets, strict=True):
             store.write_bundle(envelope=envelope, objects=objects)
 
-        original_connect = store._connect
         workflow_connects = 0
 
         def counted_connect() -> Any:
