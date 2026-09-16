@@ -22,6 +22,7 @@ from src.review_ledger import (
     unregister_backend,
     verify_ledger,
 )
+from src.workflow_review_cutover_v1 import _PostgresWorkflowReviewMixin
 from src.workflow_review_postgres_v1 import PostgresWorkflowReviewStore, WorkflowReviewStoreError
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -65,6 +66,18 @@ class FakeLedgerBackend:
             self.pending = None
 
 
+class FakeAuthoritativeReviewStore:
+    def __init__(self, events: list[dict], bindings: dict[str, list[dict]]) -> None:
+        self.events = events
+        self.bindings = bindings
+
+    def read_events(self) -> list[dict]:
+        return list(self.events)
+
+    def read_bindings(self) -> dict[str, list[dict]]:
+        return {snapshot_id: list(rows) for snapshot_id, rows in self.bindings.items()}
+
+
 class _Rows:
     def __init__(self, rows: list[dict]) -> None:
         self._rows = rows
@@ -85,6 +98,37 @@ class _Connection:
 
     def execute(self, _query: str) -> _Rows:
         return _Rows(self._rows)
+
+
+def _event_chain(count: int) -> list[dict]:
+    events: list[dict] = []
+    previous = None
+    for index in range(count):
+        event = PostgresWorkflowReviewStore._new_event(
+            event_type="review_approve",
+            object_id=f"obj-{index}",
+            object_version="1.0",
+            actor="reviewer",
+            details={"snapshot_id": "snap-1"},
+            previous_event_hash=previous,
+        )
+        events.append(event)
+        previous = event["event_hash"]
+    return events
+
+
+def _remirror_subject(
+    tmp_path: Path,
+    *,
+    events: list[dict],
+    bindings: dict[str, list[dict]],
+) -> _PostgresWorkflowReviewMixin:
+    subject = object.__new__(_PostgresWorkflowReviewMixin)
+    subject.workflow_review_store = FakeAuthoritativeReviewStore(events, bindings)
+    subject._ledger_path = tmp_path / "review_ledger.jsonl"
+    subject._bindings_path = tmp_path / "publish_authorizations.json"
+    subject._bindings = {}
+    return subject
 
 
 def test_review_ledger_backend_keeps_existing_api_and_buffer_rollback(tmp_path: Path) -> None:
@@ -128,13 +172,50 @@ def test_legacy_review_chain_is_verified_without_rewriting(tmp_path: Path) -> No
         details={},
         previous_event_hash=None,
     )
-    path.write_text(__import__("json").dumps(first, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(first, sort_keys=True) + "\n", encoding="utf-8")
     assert PostgresWorkflowReviewStore._read_legacy_events(path) == [first]
     broken = dict(first)
     broken["actor"] = "changed"
-    path.write_text(__import__("json").dumps(broken, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(broken, sort_keys=True) + "\n", encoding="utf-8")
     with pytest.raises(WorkflowReviewStoreError):
         PostgresWorkflowReviewStore._read_legacy_events(path)
+
+
+def test_boot_remirror_replaces_stale_subset_mirrors_from_postgres(tmp_path: Path) -> None:
+    events = _event_chain(3)
+    bindings = {"snap-1": [{"decision": "approve", "valid": True}]}
+    subject = _remirror_subject(tmp_path, events=events, bindings=bindings)
+    subject._ledger_path.write_text(
+        json.dumps(events[0], ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    subject._bindings_path.write_text(json.dumps({"stale": []}) + "\n", encoding="utf-8")
+
+    current = subject._remirror_review_runtime()
+
+    assert current == bindings
+    assert PostgresWorkflowReviewStore._read_legacy_events(subject._ledger_path) == events
+    assert json.loads(subject._bindings_path.read_text(encoding="utf-8")) == bindings
+
+
+def test_boot_remirror_creates_missing_mirrors_from_postgres(tmp_path: Path) -> None:
+    events = _event_chain(3)
+    bindings = {"snap-1": [{"decision": "approve", "valid": True}]}
+    subject = _remirror_subject(tmp_path, events=events, bindings=bindings)
+
+    current = subject._remirror_review_runtime()
+
+    assert current == bindings
+    assert PostgresWorkflowReviewStore._read_legacy_events(subject._ledger_path) == events
+    assert json.loads(subject._bindings_path.read_text(encoding="utf-8")) == bindings
+
+
+def test_postgres_event_payload_missing_still_fails_closed() -> None:
+    store = object.__new__(PostgresWorkflowReviewStore)
+    store._connect = lambda: _Connection([{"event_payload": None}])
+
+    with pytest.raises(WorkflowReviewStoreError, match="workflow_review_cutover_not_prepared"):
+        store.read_events()
 
 
 def test_authorization_read_preserves_complete_exact_payload() -> None:
@@ -191,5 +272,7 @@ def test_review_runtime_buffers_events_and_keeps_local_files_as_mirrors() -> Non
     assert "buffer_events(self._ledger_path)" in source
     assert "workflow_review_store.replace_snapshot_bindings" in source
     assert "workflow_review_store.replace_bindings" not in source
-    assert "workflow_review_cutover_not_prepared" in source
+    assert "_remirror_review_runtime" in source
+    assert "_atomic_replace_bytes(self._ledger_path" in source
+    assert "_assert_review_cutover_prepared" not in source
     assert "_mirror_bindings" in source
