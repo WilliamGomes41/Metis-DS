@@ -337,7 +337,7 @@ def test_multiple_active_predecessor_releases_fail_closed() -> None:
             object_id=object_other,
             document_id=f"doc-other-{suffix}",
             checksum="6" * 64,
-            version="1.0",
+            version="1.1",
             published_at="2026-09-16T15:00:30+00:00",
         )
         with store._connect() as con:
