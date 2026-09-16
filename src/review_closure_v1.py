@@ -32,6 +32,7 @@ from src.publication_readiness_v1 import PublicationReadinessMixin
 from src.review_ledger import append_event
 
 LEGACY_REVISE_REOPENED_EVENT = "legacy_revise_reopened"
+PUBLISHED_WORKING_REVISION_IMMUTABLE = "published_working_revision_immutable"
 _REPAIR_EVIDENCE: ContextVar[dict[str, Any] | None] = ContextVar(
     "metis_repair_evidence", default=None
 )
@@ -59,6 +60,27 @@ class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewC
     def repair_source(self, **_kwargs: Any) -> dict[str, Any]:
         """The old free-text canonical repair path is permanently disabled."""
         raise ConsoleError("legacy_free_text_repair_disabled")
+
+    def _require_mutable_working_revision(self, snapshot_id: str) -> None:
+        """Published work is historical input, never current review work."""
+        if snapshot_id and self.snapshot_is_published(snapshot_id):
+            raise ConsoleError(PUBLISHED_WORKING_REVISION_IMMUTABLE)
+
+    @contextmanager
+    def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
+        self._require_mutable_working_revision(snapshot_id)
+        with super()._atomic_snapshot_mutation(snapshot_id):
+            yield
+
+    def review_object(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        snapshot_id = str(kwargs.get("snapshot_id") or "")
+        self._require_mutable_working_revision(snapshot_id)
+        return super().review_object(*args, **kwargs)
+
+    def correct_object(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        snapshot_id = str(kwargs.get("snapshot_id") or "")
+        self._require_mutable_working_revision(snapshot_id)
+        return super().correct_object(*args, **kwargs)
 
     def repair_kind_for_submission(self, submission: dict[str, Any]) -> str:
         suitability = str(submission.get("suitability") or "")
@@ -184,10 +206,11 @@ class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewC
         )
 
     def submit_review_resolution(self, **kwargs: Any) -> dict[str, Any]:
+        snapshot_id = str(kwargs.get("snapshot_id") or "")
+        self._require_mutable_working_revision(snapshot_id)
         repair_kind = str(kwargs.get("repair_kind") or "")
         spec: dict[str, Any] = {"repair_kind": repair_kind}
         if repair_kind == REPAIR_SOURCE_UNITS:
-            snapshot_id = str(kwargs.get("snapshot_id") or "")
             object_id = str(kwargs.get("object_id") or "")
             units = self.source_units(snapshot_id=snapshot_id, object_id=object_id)
             by_id = {row["unit_id"]: row for row in units}
@@ -225,10 +248,12 @@ class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewC
             return super().submit_review_resolution(**kwargs)
 
     def migrate_legacy_revise_to_review(self) -> int:
-        """Idempotently reopen pre-closure ``revise`` objects for structured Review."""
+        """Reopen legacy revise work, but never reopen a published WorkingRevision."""
         migrated = 0
         for envelope in self.list_envelopes():
             snapshot_id = str(envelope.get("snapshot_id") or "")
+            if self.snapshot_is_published(snapshot_id):
+                continue
             current = self.snapshot_objects(snapshot_id)
             object_ids = {
                 str(row.get("object_id") or "")
