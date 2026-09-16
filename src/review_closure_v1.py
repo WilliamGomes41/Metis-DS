@@ -66,6 +66,85 @@ class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewC
         if snapshot_id and self.snapshot_is_published(snapshot_id):
             raise ConsoleError(PUBLISHED_WORKING_REVISION_IMMUTABLE)
 
+    @staticmethod
+    def _changed_snapshot_ids(
+        current: dict[str, Any], prepared: dict[str, Any]
+    ) -> set[str]:
+        keys = set(current) | set(prepared)
+        return {
+            str(key)
+            for key in keys
+            if current.get(key) != prepared.get(key)
+        }
+
+    def _guard_prepared_working_revision_mutation(
+        self,
+        *,
+        envelopes: dict[str, Any] | None,
+        bindings: dict[str, Any] | None,
+        objects: tuple[str, list[dict[str, Any]]] | None,
+        snapshot_id: str | None,
+    ) -> None:
+        """Seal every curation commit, not only named Review entry points.
+
+        File-backed and Azure-without-workflow-Postgres topologies otherwise let
+        direct helpers such as ``confirm_object_type`` and ``confirm_relations``
+        reach the generic commit boundary without passing through ``review_object``.
+        """
+        candidates: set[str] = set()
+        if snapshot_id:
+            candidates.add(str(snapshot_id))
+        if objects is not None:
+            candidates.add(str(objects[0]))
+        if envelopes is not None:
+            candidates.update(
+                self._changed_snapshot_ids(
+                    dict(getattr(self, "_envelopes", {})), envelopes
+                )
+            )
+        if bindings is not None:
+            candidates.update(
+                self._changed_snapshot_ids(
+                    dict(getattr(self, "_bindings", {})), bindings
+                )
+            )
+
+        for candidate in sorted(value for value in candidates if value):
+            try:
+                self._require_mutable_working_revision(candidate)
+            except ConsoleError as exc:
+                # A brand-new ingest is not a mutation of an existing
+                # WorkingRevision and may reach the commit boundary before the
+                # envelope exists in the current store.
+                if exc.code == "unknown_snapshot":
+                    continue
+                raise
+
+    def _commit_prepared_store(
+        self,
+        *,
+        envelopes: dict[str, Any] | None = None,
+        bindings: dict[str, Any] | None = None,
+        objects: tuple[str, list[dict[str, Any]]] | None = None,
+        expected_revision: str | None = None,
+        ledger_fn: Any | None = None,
+        snapshot_id: str | None = None,
+    ) -> None:
+        self._guard_prepared_working_revision_mutation(
+            envelopes=envelopes,
+            bindings=bindings,
+            objects=objects,
+            snapshot_id=snapshot_id,
+        )
+        return super()._commit_prepared_store(
+            envelopes=envelopes,
+            bindings=bindings,
+            objects=objects,
+            expected_revision=expected_revision,
+            ledger_fn=ledger_fn,
+            snapshot_id=snapshot_id,
+        )
+
     @contextmanager
     def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
         self._require_mutable_working_revision(snapshot_id)
