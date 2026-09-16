@@ -1,4 +1,4 @@
-"""Contract tests for the normative lifecycle-VSA agent governance.
+"""Contract tests for Metis continuous-development and lifecycle-VSA governance.
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: slop
@@ -23,7 +23,40 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_all_agent_entrypoints_require_the_same_lifecycle_contract() -> None:
+def test_agent_entrypoints_route_through_continuous_development_model() -> None:
+    agents = _read("AGENTS.md")
+    execution = _read("docs/agents/execution-contract.md")
+    engineer = _read(".github/agents/metis-engineer.agent.md")
+
+    model_ref = "docs/agents/continuous-development.md"
+    assert model_ref in agents
+    assert model_ref in execution
+    assert model_ref in engineer
+
+    assert "Class A" in agents and "Class B" in agents and "Class C" in agents
+    assert "Apply the lightest process that safely proves the promise" in agents
+    assert "classify the issue as A, B, or C" in execution
+    assert "classify the issue as Class A, B, or C before implementation" in engineer
+    assert "stop and reclassify" in engineer.lower()
+
+
+def test_continuous_development_model_limits_heavy_governance_to_lifecycle_core() -> None:
+    model = _read("docs/agents/continuous-development.md")
+
+    assert "Class A — Lifecycle core" in model
+    assert "Class B — Normal product behavior" in model
+    assert "Class C — Cosmetic, copy, documentation, and non-semantic maintenance" in model
+    assert "apply the lightest process that safely proves the user promise" in model.lower()
+    assert "Class A MUST follow `docs/agents/lifecycle-vsa.md` in full." in model
+    assert "do not create lifecycle paperwork when lifecycle semantics are unchanged" in model
+    assert "Vertical slicing defines promise completeness, not mandatory PR size." in model
+    assert "MUST NOT create a new architecture rule unless it prevents a named failure mode" in model
+    assert "MUST NOT create a new durable source of truth" in model
+    assert "Stop implementation and return to design" in model
+    assert "the cost of proving a change is proportional to the risk of the change" in model
+
+
+def test_lifecycle_entrypoints_require_same_normative_contract_for_class_a() -> None:
     agents = _read("AGENTS.md")
     execution = _read("docs/agents/execution-contract.md")
     engineer = _read(".github/agents/metis-engineer.agent.md")
@@ -33,9 +66,9 @@ def test_all_agent_entrypoints_require_the_same_lifecycle_contract() -> None:
     assert contract_ref in execution
     assert contract_ref in engineer
 
-    assert "the lifecycle transition MUST be specified before code changes" in agents
+    assert "Class A issues MUST also follow `docs/agents/lifecycle-vsa.md` in full." in agents
     assert "is normative" in execution
-    assert "read and apply `docs/agents/lifecycle-vsa.md` before implementation" in engineer
+    assert "read and apply `docs/agents/lifecycle-vsa.md` in full before implementation" in engineer
     assert "Do not fill the gap with a reasonable assumption" in engineer
 
 
