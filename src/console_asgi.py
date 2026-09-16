@@ -31,6 +31,10 @@ from src.publish_readiness_ui_v1 import install_publish_readiness_ui
 from src.review_closure_v1 import harden_legacy_repair_routes
 from src.review_workboard_v1 import install_review_workboard
 from src.topology_bound_v1 import assert_supported_topology
+from src.workflow_badge_counts_postgres_v1 import (
+    FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
+    FastBadgePostgresCompleteWorkflowDurablePublicationConsole,
+)
 from src.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
 from src.workflow_documents_cutover_v1 import (
     PostgresWorkflowAzureAuthoritativePublicationConsole,
@@ -43,11 +47,7 @@ from src.workflow_identity_postgres_v1 import (
     PostgresIdentityDurablePublicationConsole,
     PostgresWorkflowIdentityStore,
 )
-from src.workflow_remaining_cutover_v1 import (
-    PostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
-    PostgresCompleteWorkflowDurablePublicationConsole,
-    bind_remaining_route_backends,
-)
+from src.workflow_remaining_cutover_v1 import bind_remaining_route_backends
 from src.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
 from src.workflow_review_cutover_v1 import (
     PostgresReviewWorkflowAzureAuthoritativePublicationConsole,
@@ -218,9 +218,9 @@ def build_app() -> object:
             workflow_remaining_store,
         )
         console_cls = (
-            PostgresCompleteWorkflowAzureAuthoritativePublicationConsole
+            FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole
             if running_in_azure
-            else PostgresCompleteWorkflowDurablePublicationConsole
+            else FastBadgePostgresCompleteWorkflowDurablePublicationConsole
         )
         console = console_cls(
             **common,
