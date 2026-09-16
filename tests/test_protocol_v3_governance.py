@@ -45,21 +45,25 @@ def test_v3_keeps_hard_publication_and_review_invariants() -> None:
 def test_roadmap_only_contains_active_v3_work() -> None:
     roadmap = ROADMAP.read_text(encoding="utf-8")
     assert roadmap.startswith("# Metis — Roadmap v3")
-    for work_item in ("R3.1", "R3.2", "R3.3", "R3.4", "R3.7"):
+    for work_item in ("R3.3", "R3.4", "R3.5", "R3.7", "R3.8"):
         assert work_item in roadmap
+    for completed_or_removed in ("## R3.1 ", "## R3.2 ", "## R3.6 "):
+        assert completed_or_removed not in roadmap
     assert "Historische supersessie-index" not in roadmap
     assert "Eigenaarslock 2026-" not in roadmap
     assert "Geen keten van Protocol-v3-delta's" in roadmap
 
 
-def test_roadmap_records_v3_closeout_and_current_next_work() -> None:
+def test_roadmap_keeps_history_out_and_current_next_work_in() -> None:
     roadmap = ROADMAP.read_text(encoding="utf-8")
-    assert "## R3.1 Governance-migratie afronden\n\n**Status:** GEREED" in roadmap
-    assert "## R3.2 Governance-tests migreren\n\n**Status:** GEREED" in roadmap
-    assert "Besluit: `ACTIVATE V3` — uitgevoerd via PR #149." in roadmap
+    assert "Uitgevoerde geschiedenis hoort in changelog, audit of `docs/history/`." in roadmap
+    assert "## R3.1 Governance-migratie afronden" not in roadmap
+    assert "## R3.2 Governance-tests migreren" not in roadmap
+    assert "Besluit: `ACTIVATE V3` — uitgevoerd via PR #149." not in roadmap
     assert "## R3.3 Audit-kamer + experimentbasis\n\n**Status:** IN UITVOERING" in roadmap
     assert "## R3.4 Eerste experiment: passagevorming\n\n**Status:** ARCHITECTUUR HERZIEN EN LOCKED" in roadmap
-    assert "| Protocol v3 activeren | GEREED — PR #149 gemerged; Protocol v3.0.0 actief; CI groen |" in roadmap
+    assert "## R3.8 Lifecycle closure na Repairs 1–11" in roadmap
+    assert "Historical Lifecycle Audit — read-only" in roadmap
 
 
 def test_audit_room_passage_experiment_and_evidence_boundary_are_locked() -> None:
