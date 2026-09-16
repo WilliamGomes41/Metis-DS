@@ -272,18 +272,19 @@ def _workboard_card(item: dict[str, Any]) -> str:
         )
 
     detail_parts: list[str] = []
-    if item["heading_pending"]:
-        detail_parts.append(f"{item['heading_pending']} kop/pad")
-    if item["individual_pending"]:
-        detail_parts.append(f"{item['individual_pending']} individueel")
-    if item["normal_passages"]:
-        detail_parts.append(
-            f"{item['normal_passages']} samen in {item['normal_batches']} groep(en)"
-        )
-    if item["blocked_count"]:
-        detail_parts.append(f"{item['blocked_count']} technisch herstel")
-    if item["closure_gap_count"]:
-        detail_parts.append(f"{item['closure_gap_count']} disposition afronden")
+    if lifecycle["workflow_status"] != "closed":
+        if item["heading_pending"]:
+            detail_parts.append(f"{item['heading_pending']} kop/pad")
+        if item["individual_pending"]:
+            detail_parts.append(f"{item['individual_pending']} individueel")
+        if item["normal_passages"]:
+            detail_parts.append(
+                f"{item['normal_passages']} samen in {item['normal_batches']} groep(en)"
+            )
+        if item["blocked_count"]:
+            detail_parts.append(f"{item['blocked_count']} technisch herstel")
+        if item["closure_gap_count"]:
+            detail_parts.append(f"{item['closure_gap_count']} disposition afronden")
     details = " · ".join(detail_parts)
     detail_html = f'<p class="muted">{_esc(details)}</p>' if details else ""
 
