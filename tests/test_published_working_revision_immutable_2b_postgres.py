@@ -104,6 +104,12 @@ def test_withdrawn_projection_is_not_forced_back_to_published() -> None:
             )
         store.write_bundle(envelope=envelope, objects=objects)
 
+        enriched = store.get_envelope(snapshot_id)
+        assert enriched is not None
+        assert enriched["logical_document_id"]
+        assert enriched["working_revision_id"]
+        assert enriched["working_revision_number"] == 1
+
         with store._connect() as con:
             con.execute(
                 "INSERT INTO publication_releases(release_id,release_version,release_owner,status,created_at,published_at,withdrawn_at) "
@@ -116,6 +122,8 @@ def test_withdrawn_projection_is_not_forced_back_to_published() -> None:
                 (release_id, release_version, published_at, json.dumps({"snapshot_id": snapshot_id})),
             )
 
+        # Intentionally reconcile from the stale pre-trigger envelope. PostgreSQL
+        # owns the lifecycle identity projection and may enrich it independently.
         withdrawn = deepcopy(envelope)
         withdrawn.update({
             "state": "withdrawn",
@@ -130,6 +138,15 @@ def test_withdrawn_projection_is_not_forced_back_to_published() -> None:
         assert stored is not None
         assert stored["state"] == "withdrawn"
         assert stored["published"] is False
+        assert stored["logical_document_id"] == enriched["logical_document_id"]
+        assert stored["working_revision_id"] == enriched["working_revision_id"]
+        assert stored["working_revision_number"] == enriched["working_revision_number"]
+
+        tampered_identity = deepcopy(stored)
+        tampered_identity["logical_document_id"] = "ldoc-forbidden-rewrite"
+        with pytest.raises(WorkflowDocumentStoreError, match=PUBLISHED_WORKING_REVISION_IMMUTABLE):
+            store.write_bundle(envelope=tampered_identity)
+        assert store.get_envelope(snapshot_id)["logical_document_id"] == enriched["logical_document_id"]  # type: ignore[index]
 
         before = store.list_document_objects(snapshot_id)
         mutated = deepcopy(before)
