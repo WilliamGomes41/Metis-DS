@@ -1,8 +1,9 @@
-"""Shared document-status presentation for existing workflow room cards.
+"""Shared lifecycle-status presentation for existing workflow room cards.
 
-Status calculation remains in the backend policy. This module supplies the
-current request with derived statuses and makes the existing shared document
-card renderer use them in Documenten, Review and Publiceren.
+Lifecycle calculation remains in backend policy. This module supplies the
+current request with one combined derived read model and makes the existing
+shared document-card renderer use its presentation status in Documenten,
+Review and Publiceren.
 """
 from __future__ import annotations
 
@@ -15,15 +16,24 @@ from src.document_status_v1 import DOCUMENT_STATUS_LABELS
 from src.operations_console_v1 import ConsoleError
 
 
-_STATUS_BY_SNAPSHOT: ContextVar[dict[str, str]] = ContextVar(
-    "document_status_by_snapshot",
+_LIFECYCLE_BY_SNAPSHOT: ContextVar[dict[str, dict[str, str]]] = ContextVar(
+    "document_lifecycle_by_snapshot",
     default={},
 )
 _STATUS_PATHS = frozenset({"/tree", "/review", "/publish"})
 
 
+def _closed_fallback() -> dict[str, str]:
+    return {
+        "workflow_status": "processing",
+        "release_status": "none",
+        "serving_status": "inactive",
+        "presentation_status": "processing",
+    }
+
+
 def install_document_status_ui(app: FastAPI, console: Any) -> None:
-    """Use one request-local status map with the existing shared card renderer."""
+    """Use one request-local lifecycle map with the existing shared card renderer."""
     if getattr(app.state, "document_status_ui_v1", False):
         return
 
@@ -40,9 +50,10 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
         def meaningful_document_card_heading(row: dict[str, Any]) -> str:
             shown = dict(row)
             snapshot_id = str(shown.get("snapshot_id") or "")
+            lifecycle = _LIFECYCLE_BY_SNAPSHOT.get().get(snapshot_id) or {}
             meaningful = str(
                 shown.get("meaningful_status")
-                or _STATUS_BY_SNAPSHOT.get().get(snapshot_id)
+                or lifecycle.get("presentation_status")
                 or ""
             )
             if meaningful:
@@ -64,22 +75,24 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
         except ConsoleError:
             return await call_next(request)
 
-        statuses: dict[str, str] = {}
+        lifecycle_by_snapshot: dict[str, dict[str, str]] = {}
         for row in console.list_envelopes():
             snapshot_id = str(row.get("snapshot_id") or "")
             if not snapshot_id:
                 continue
             try:
-                statuses[snapshot_id] = console.document_status(snapshot_id)
-            except ConsoleError:
-                # Presentation fails closed: no error can turn an unresolved
-                # document into ready/published state.
-                statuses[snapshot_id] = "processing"
+                lifecycle_by_snapshot[snapshot_id] = dict(
+                    console.document_lifecycle_status(snapshot_id)
+                )
+            except (AttributeError, ConsoleError):
+                # Presentation fails closed: no read failure can make an
+                # unresolved document look ready, published or actively served.
+                lifecycle_by_snapshot[snapshot_id] = _closed_fallback()
 
-        token = _STATUS_BY_SNAPSHOT.set(statuses)
+        token = _LIFECYCLE_BY_SNAPSHOT.set(lifecycle_by_snapshot)
         try:
             return await call_next(request)
         finally:
-            _STATUS_BY_SNAPSHOT.reset(token)
+            _LIFECYCLE_BY_SNAPSHOT.reset(token)
 
     app.state.document_status_ui_v1 = True
