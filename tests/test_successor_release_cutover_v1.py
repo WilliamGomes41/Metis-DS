@@ -76,6 +76,7 @@ def _publish(
     checksum: str,
     version: str,
     published_at: str,
+    preserve_newer_registry: bool = False,
 ) -> None:
     store.persist_published_release(
         logical_document_id=logical_document_id,
@@ -96,6 +97,7 @@ def _publish(
                 text=f"content {version}",
             )
         ],
+        preserve_newer_registry=preserve_newer_registry,
     )
 
 
@@ -221,6 +223,67 @@ def test_replay_of_superseded_release_cannot_reactivate_removed_object_ids() -> 
                 version="1.0",
                 published_at="2026-09-16T15:00:00+00:00",
             )
+
+        active = store.active_publication_rows()
+        assert _active_release_ids(store) == {release2}
+        assert {str(row["knowledge_object"]["object_id"]) for row in active} == {new_object_id}
+    finally:
+        _cleanup(
+            store,
+            release_ids=[release1, release2],
+            snapshot_ids=[snapshot1, snapshot2],
+            object_ids=[old_object_id, new_object_id],
+        )
+
+
+def test_historical_recovery_preserves_newer_changed_object_set() -> None:
+    store = _store()
+    suffix = uuid.uuid4().hex
+    logical_document_id = f"ld-{suffix}"
+    document_id = f"doc-{suffix}"
+    snapshot1, snapshot2 = f"snap1-{suffix}", f"snap2-{suffix}"
+    release1, release2 = f"release1-{suffix}", f"release2-{suffix}"
+    old_object_id, new_object_id = f"old-{suffix}", f"new-{suffix}"
+
+    try:
+        _publish(
+            store,
+            logical_document_id=logical_document_id,
+            working_revision_id=f"work1-{suffix}",
+            snapshot_id=snapshot1,
+            release_id=release1,
+            object_id=old_object_id,
+            document_id=document_id,
+            checksum="a" * 64,
+            version="1.0",
+            published_at="2026-09-16T15:00:00+00:00",
+        )
+        _publish(
+            store,
+            logical_document_id=logical_document_id,
+            working_revision_id=f"work2-{suffix}",
+            snapshot_id=snapshot2,
+            release_id=release2,
+            object_id=new_object_id,
+            document_id=document_id,
+            checksum="b" * 64,
+            version="2.0",
+            published_at="2026-09-16T15:01:00+00:00",
+        )
+
+        _publish(
+            store,
+            logical_document_id=logical_document_id,
+            working_revision_id=f"work1-{suffix}",
+            snapshot_id=snapshot1,
+            release_id=release1,
+            object_id=old_object_id,
+            document_id=document_id,
+            checksum="a" * 64,
+            version="1.0",
+            published_at="2026-09-16T15:00:00+00:00",
+            preserve_newer_registry=True,
+        )
 
         active = store.active_publication_rows()
         assert _active_release_ids(store) == {release2}
