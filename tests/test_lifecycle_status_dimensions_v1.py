@@ -120,7 +120,11 @@ def _status_from_canonical(
     console = object.__new__(DurablePublicationConsole)
     console.canonical_publication_store = _CanonicalStore(
         release=(
-            {"release_id": "release-1", "status": release_status}
+            {
+                "release_id": "release-1",
+                "status": release_status,
+                "published_at": "2026-09-16T12:00:00+00:00",
+            }
             if release_status is not None
             else None
         ),
