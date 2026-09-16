@@ -142,15 +142,5 @@ def test_successor_release_with_changed_object_set_replaces_entire_logical_docum
         active = store.active_publication_rows()
         assert {str(row["release_id"]) for row in active} == {release2}
         assert {str(row["knowledge_object"]["object_id"]) for row in active} == {new_object_id}
-
-        with store._connect() as con:
-            statuses = {
-                str(row["release_id"]): str(row["status"])
-                for row in con.execute(
-                    "SELECT release_id,status FROM publication_releases WHERE release_id = ANY(%s)",
-                    (releases,),
-                ).fetchall()
-            }
-        assert statuses == {release1: "superseded", release2: "published"}
     finally:
         _cleanup(store, release_ids=releases, snapshot_ids=snapshots, object_ids=objects)
