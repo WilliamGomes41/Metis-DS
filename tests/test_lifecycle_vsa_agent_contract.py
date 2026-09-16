@@ -39,14 +39,15 @@ def test_agent_entrypoints_route_through_continuous_development_model() -> None:
     assert model_ref in execution
     assert model_ref in engineer
 
-    # Prove the contract requires risk classification; do not bind the test to
-    # one editorial sentence that can change without changing semantics.
-    for text in (agents, execution, engineer):
-        _assert_terms(text, "Class A", "Class B", "Class C")
+    # Prove each entrypoint routes work through the same A/B/C classifier without
+    # requiring every document to spell each class name in the same editorial form.
+    _assert_terms(agents, "Class A", "Class B", "Class C")
+    _assert_terms(execution, "Class A", "Class B", "Class C")
+    _assert_terms(engineer, "classify the issue", "Class A, B, or C", "before implementation")
+    _assert_terms(engineer, "Class B or C", "stop", "reclassify")
 
     _assert_terms(agents, "lightest process", "safely proves the promise")
     _assert_terms(execution, "classifies the issue", "A, B, or C", "before implementation")
-    _assert_terms(engineer, "classify the issue", "Class A, B, or C", "before implementation")
     _assert_terms(engineer, "stop", "reclassify")
 
 
