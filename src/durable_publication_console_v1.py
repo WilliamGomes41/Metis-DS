@@ -190,8 +190,6 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
         account = self._require_role(actor_id, "publisher"); publish_ids = set(considered["publishable_object_ids"]); objects = [deepcopy(obj) for obj in self.snapshot_objects(snapshot_id) if obj.get("object_id") in publish_ids]
         logical_document_id = str(envelope.get("logical_document_id") or "")
         working_revision_id = str(envelope.get("working_revision_id") or "")
-        if not logical_document_id or not working_revision_id:
-            raise ConsoleError("lifecycle_identity_required_for_publication")
         # Preserve enough precision that two valid releases in one wall-clock second remain ordered.
         published_at = datetime.now(timezone.utc).isoformat(timespec="microseconds")
         release_id = f"release-{uuid.uuid4().hex}"; release_version = f"{envelope['version']}-{release_id[-8:]}"
