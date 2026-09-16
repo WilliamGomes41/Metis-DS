@@ -66,6 +66,11 @@ def _config() -> PostgresCanonicalConfig:
         paths = migration_paths(ROOT)
         apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))
         con.execute((ROOT / "db" / "schema_v2.sql").read_text(encoding="utf-8"))
+        con.execute(
+            (ROOT / "db" / "migrations" / "001_canonical_source_lineage.sql").read_text(
+                encoding="utf-8"
+            )
+        )
     return config
 
 
@@ -302,7 +307,10 @@ def test_published_v1_stays_live_while_successor_v2_is_mutable_and_unreleased(
         restarted_v2 = restarted.document_lifecycle_status(snap2)
         assert restarted_v2["release_status"] == "none"
         assert restarted_v2["serving_status"] == "inactive"
-        assert {str(row["snapshot_id"]) for row in PostgresCanonicalPublicationStore(config).active_publication_rows()} == {snap1}
+        assert {
+            str(row["snapshot_id"])
+            for row in PostgresCanonicalPublicationStore(config).active_publication_rows()
+        } == {snap1}
     finally:
         _cleanup(
             config,
