@@ -23,6 +23,12 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def _assert_terms(text: str, *terms: str) -> None:
+    lowered = text.lower()
+    for term in terms:
+        assert term.lower() in lowered
+
+
 def test_agent_entrypoints_route_through_continuous_development_model() -> None:
     agents = _read("AGENTS.md")
     execution = _read("docs/agents/execution-contract.md")
@@ -33,11 +39,15 @@ def test_agent_entrypoints_route_through_continuous_development_model() -> None:
     assert model_ref in execution
     assert model_ref in engineer
 
-    assert "Class A" in agents and "Class B" in agents and "Class C" in agents
-    assert "Apply the lightest process that safely proves the promise" in agents
-    assert "classify the issue as A, B, or C" in execution
-    assert "classify the issue as Class A, B, or C before implementation" in engineer
-    assert "stop and reclassify" in engineer.lower()
+    # Prove the contract requires risk classification; do not bind the test to
+    # one editorial sentence that can change without changing semantics.
+    for text in (agents, execution, engineer):
+        _assert_terms(text, "Class A", "Class B", "Class C")
+
+    _assert_terms(agents, "lightest process", "safely proves the promise")
+    _assert_terms(execution, "classifies the issue", "A, B, or C", "before implementation")
+    _assert_terms(engineer, "classify the issue", "Class A, B, or C", "before implementation")
+    _assert_terms(engineer, "stop", "reclassify")
 
 
 def test_continuous_development_model_limits_heavy_governance_to_lifecycle_core() -> None:
@@ -46,14 +56,18 @@ def test_continuous_development_model_limits_heavy_governance_to_lifecycle_core(
     assert "Class A — Lifecycle core" in model
     assert "Class B — Normal product behavior" in model
     assert "Class C — Cosmetic, copy, documentation, and non-semantic maintenance" in model
-    assert "apply the lightest process that safely proves the user promise" in model.lower()
+    _assert_terms(model, "lightest process", "safely proves the user promise")
     assert "Class A MUST follow `docs/agents/lifecycle-vsa.md` in full." in model
-    assert "do not create lifecycle paperwork when lifecycle semantics are unchanged" in model
-    assert "Vertical slicing defines promise completeness, not mandatory PR size." in model
+    _assert_terms(model, "do not create lifecycle paperwork", "lifecycle semantics are unchanged")
+
+    # VSA governs promise completeness, not the size/count of implementation PRs.
+    _assert_terms(model, "VSA means user-promise completeness, not PR size")
+    _assert_terms(model, "multiple small PRs", "user promise", "proven end to end")
+
     assert "MUST NOT create a new architecture rule unless it prevents a named failure mode" in model
     assert "MUST NOT create a new durable source of truth" in model
     assert "Stop implementation and return to design" in model
-    assert "the cost of proving a change is proportional to the risk of the change" in model
+    _assert_terms(model, "cost of proving a change", "proportional to the risk")
 
 
 def test_lifecycle_entrypoints_require_same_normative_contract_for_class_a() -> None:
