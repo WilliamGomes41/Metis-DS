@@ -76,6 +76,10 @@ def _cleanup(store: PostgresCanonicalPublicationStore, *, release_ids: list[str]
         con.execute("DELETE FROM canonical_object_versions WHERE object_id = ANY(%s)", (object_ids,))
 
 
+def _active_release_ids(store: PostgresCanonicalPublicationStore) -> set[str]:
+    return {str(row["publication"]["release_id"]) for row in store.active_publication_rows()}
+
+
 def test_successor_release_with_changed_object_set_replaces_entire_logical_document() -> None:
     store = _store()
     suffix = uuid.uuid4().hex
@@ -116,7 +120,7 @@ def test_successor_release_with_changed_object_set_replaces_entire_logical_docum
                 )
             ],
         )
-        assert {str(row["release_id"]) for row in store.active_publication_rows()} == {release1}
+        assert _active_release_ids(store) == {release1}
 
         store.persist_published_release(
             logical_document_id=logical_document_id,
@@ -140,7 +144,7 @@ def test_successor_release_with_changed_object_set_replaces_entire_logical_docum
         )
 
         active = store.active_publication_rows()
-        assert {str(row["release_id"]) for row in active} == {release2}
+        assert _active_release_ids(store) == {release2}
         assert {str(row["knowledge_object"]["object_id"]) for row in active} == {new_object_id}
     finally:
         _cleanup(store, release_ids=releases, snapshot_ids=snapshots, object_ids=objects)
