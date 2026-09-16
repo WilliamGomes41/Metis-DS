@@ -1,5 +1,13 @@
 from pathlib import Path
 
+import pytest
+
+
+pytestmark = [
+    pytest.mark.release_control_scope_belofte,
+    pytest.mark.release_control_slop,
+    pytest.mark.release_control_releasebewijs,
+]
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -46,8 +54,14 @@ def test_roadmap_has_only_active_v3_controls() -> None:
     roadmap = _read("ROADMAP.md")
 
     assert roadmap.startswith("# Metis — Roadmap v3")
-    for required in ("R3.1", "R3.2", "R3.3", "R3.4", "R3.7", "## Stopregels"):
+    for required in ("R3.3", "R3.4", "R3.7", "R3.8", "## Stopregels"):
         assert required in roadmap
+    for completed_or_obsolete in ("## R3.1 ", "## R3.2 ", "## R3.6 "):
+        assert completed_or_obsolete not in roadmap
+    assert "Historical Lifecycle Audit — read-only" in roadmap
+    assert "REAL Product API lifecycle proof — proof-only" in roadmap
+    assert "End-to-end lifecycle closure — proof-only" in roadmap
+    assert "Performance pas daarna" in roadmap
     assert "Historische supersessie-index" not in roadmap
     assert "Eigenaarslock 2026-" not in roadmap
 
