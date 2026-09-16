@@ -299,12 +299,14 @@ class PostgresCanonicalPublicationStore:
                         (release_id,),
                     ).fetchone()
                     if existing_release:
-                        if (
-                            str(existing_release["release_version"]) != release_version
-                            or str(existing_release["release_owner"]) != release_owner
-                            or str(existing_release["status"]) != "published"
-                            or _timestamp(existing_release["published_at"]) != _timestamp(published_at)
-                        ):
+                        metadata_matches = (
+                            str(existing_release["release_version"]) == release_version
+                            and str(existing_release["release_owner"]) == release_owner
+                            and _timestamp(existing_release["published_at"]) == _timestamp(published_at)
+                        )
+                        if str(existing_release["status"]) == "withdrawn" and metadata_matches:
+                            raise CanonicalPublicationStoreError("stale_release_replay")
+                        if not metadata_matches or str(existing_release["status"]) != "published":
                             raise CanonicalPublicationStoreError("canonical_release_conflict")
                         rows = con.execute(
                             "SELECT object_id,object_version,content_hash FROM publication_release_items WHERE release_id=%s",
@@ -326,6 +328,26 @@ class PostgresCanonicalPublicationStore:
                     predecessor_release_ids: set[str] = set()
                     preserve_document_registry = False
                     if logical_document_id:
+                        withdrawn_barrier = con.execute(
+                            """
+                            SELECT rel.withdrawn_at
+                            FROM audit_events ev
+                            JOIN publication_releases rel ON rel.release_id=ev.entity_id
+                            WHERE ev.entity_type='release'
+                              AND ev.event_type='release_published'
+                              AND ev.details->>'logical_document_id'=%s
+                              AND rel.status='withdrawn'
+                              AND rel.withdrawn_at IS NOT NULL
+                            ORDER BY rel.withdrawn_at DESC
+                            LIMIT 1
+                            """,
+                            (logical_document_id,),
+                        ).fetchone()
+                        if withdrawn_barrier and _timestamp(published_at) <= _timestamp(withdrawn_barrier["withdrawn_at"]):
+                            if not preserve_newer_registry:
+                                raise CanonicalPublicationStoreError("stale_release_replay")
+                            preserve_document_registry = True
+
                         predecessor_rows = con.execute(
                             """
                             SELECT r.object_id, r.object_version, r.release_id, r.published_at
@@ -472,6 +494,139 @@ class PostgresCanonicalPublicationStore:
         except Exception as exc:
             raise CanonicalPublicationStoreError("canonical_postgres_write_failed") from exc
 
+    def withdraw_logical_document(
+        self,
+        *,
+        logical_document_id: str,
+        actor: str,
+        reason: str,
+        withdrawn_at: str,
+    ) -> dict[str, Any]:
+        """Withdraw the complete active serving release for one LogicalDocument."""
+        logical_document_id = str(logical_document_id or "").strip()
+        actor = str(actor or "").strip()
+        reason = str(reason or "").strip()
+        if not logical_document_id:
+            raise CanonicalPublicationStoreError("canonical_logical_document_id_required")
+        if not actor:
+            raise CanonicalPublicationStoreError("canonical_withdrawal_actor_required")
+        if not reason:
+            raise CanonicalPublicationStoreError("canonical_withdrawal_reason_required")
+        _timestamp(withdrawn_at)
+
+        try:
+            with self._connect() as con:
+                with con.transaction():
+                    active_rows = con.execute(
+                        """
+                        SELECT r.object_id,
+                               r.object_version,
+                               r.release_id,
+                               rel.release_version,
+                               rel.status,
+                               rel.published_at
+                        FROM publication_registry r
+                        JOIN audit_events ev
+                          ON ev.entity_type='release'
+                         AND ev.entity_id=r.release_id
+                         AND ev.event_type='release_published'
+                        JOIN publication_releases rel ON rel.release_id=r.release_id
+                        WHERE r.state='active'
+                          AND ev.details->>'logical_document_id'=%s
+                        FOR UPDATE OF r
+                        """,
+                        (logical_document_id,),
+                    ).fetchall()
+                    active_release_ids = {str(row["release_id"]) for row in active_rows}
+                    if len(active_release_ids) > 1:
+                        raise CanonicalPublicationStoreError("canonical_active_predecessor_ambiguous")
+                    if not active_rows:
+                        withdrawn = con.execute(
+                            """
+                            SELECT rel.release_id, rel.release_version
+                            FROM audit_events ev
+                            JOIN publication_releases rel ON rel.release_id=ev.entity_id
+                            WHERE ev.entity_type='release'
+                              AND ev.event_type='release_published'
+                              AND ev.details->>'logical_document_id'=%s
+                              AND rel.status='withdrawn'
+                            ORDER BY rel.withdrawn_at DESC NULLS LAST
+                            LIMIT 1
+                            """,
+                            (logical_document_id,),
+                        ).fetchone()
+                        if withdrawn:
+                            return {
+                                "status": "PASS",
+                                "logical_document_id": logical_document_id,
+                                "release_id": str(withdrawn["release_id"]),
+                                "withdrawn_active_objects": 0,
+                                "idempotent": True,
+                            }
+                        raise CanonicalPublicationStoreError("canonical_active_release_missing")
+
+                    release_id = next(iter(active_release_ids))
+                    release = active_rows[0]
+                    if str(release["status"]) != "published":
+                        raise CanonicalPublicationStoreError("canonical_release_status_invalid")
+                    if _timestamp(withdrawn_at) < _timestamp(release["published_at"]):
+                        raise CanonicalPublicationStoreError("canonical_withdrawal_timestamp_invalid")
+
+                    con.execute(
+                        """
+                        UPDATE publication_registry
+                        SET state='emergency_unpublished',
+                            unpublished_at=%s,
+                            unpublish_reason=%s
+                        WHERE release_id=%s AND state='active'
+                        """,
+                        (withdrawn_at, reason, release_id),
+                    )
+                    con.execute(
+                        "UPDATE publication_releases SET status='withdrawn', withdrawn_at=%s WHERE release_id=%s",
+                        (withdrawn_at, release_id),
+                    )
+                    for row in active_rows:
+                        self._audit(
+                            con,
+                            entity_type="object",
+                            entity_id=str(row["object_id"]),
+                            entity_version=str(row["object_version"]),
+                            event_type="release_withdrawal_unpublished",
+                            actor=actor,
+                            event_at=withdrawn_at,
+                            details={
+                                "reason": reason,
+                                "release_id": release_id,
+                                "logical_document_id": logical_document_id,
+                            },
+                        )
+                    self._audit(
+                        con,
+                        entity_type="release",
+                        entity_id=release_id,
+                        entity_version=str(release["release_version"]),
+                        event_type="release_withdrawn",
+                        actor=actor,
+                        event_at=withdrawn_at,
+                        details={
+                            "reason": reason,
+                            "logical_document_id": logical_document_id,
+                            "affected_active_objects": len(active_rows),
+                        },
+                    )
+                    return {
+                        "status": "PASS",
+                        "logical_document_id": logical_document_id,
+                        "release_id": release_id,
+                        "withdrawn_active_objects": len(active_rows),
+                        "idempotent": False,
+                    }
+        except CanonicalPublicationStoreError:
+            raise
+        except Exception as exc:
+            raise CanonicalPublicationStoreError("canonical_postgres_write_failed") from exc
+
     def active_publication_rows(self) -> list[dict[str, Any]]:
         """Read the complete active publication set used to derive API projection."""
         try:
@@ -493,6 +648,7 @@ class PostgresCanonicalPublicationStore:
                     JOIN canonical_object_sources s
                       ON s.object_id=c.object_id AND s.object_version=c.object_version
                     WHERE r.state='active'
+                      AND rel.status='published'
                     ORDER BY c.object_id
                     """
                 ).fetchall()
