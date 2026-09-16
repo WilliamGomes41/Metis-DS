@@ -8,7 +8,18 @@ on:
   pull_request:
 
 jobs:
+  change-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Validate Metis change contract
+        run: python scripts/validate_change_contract.py
+
   test:
+    needs: change-contract
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
