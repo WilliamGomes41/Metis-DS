@@ -28,31 +28,57 @@ Before implementation, the agent reads:
 1. `AGENTS.md` and relevant linked agent docs;
 2. the assigned issue and comments;
 3. `CONTEXT.md` or relevant `CONTEXT-MAP.md` entries;
-4. applicable ADRs.
+4. applicable ADRs;
+5. `docs/agents/continuous-development.md` and classifies the issue as A, B, or C;
+6. `docs/agents/lifecycle-vsa.md` in full when the issue is Class A.
 
 Architecture conflicts must be surfaced, not silently overridden.
 
+## Change-class rule
+
+The default development model is `docs/agents/continuous-development.md`.
+
+- Class A = lifecycle core. Apply the full lifecycle-VSA contract.
+- Class B = normal product behavior. Prove the user/system promise with the smallest coherent implementation and relevant tests; do not add lifecycle-grade paperwork unless lifecycle semantics actually change.
+- Class C = cosmetic/documentation/non-semantic maintenance. Keep the diff and proof proportionate to the change.
+
+If Class B or C work reveals that a lifecycle invariant, document/version identity, durable authority, supersession, withdrawal, migration, reconciliation, or lifecycle recovery rule must change, the agent must STOP and reclassify the issue before continuing.
+
 ## Vertical-slice completeness
 
-When a user promise crosses architectural layers, the implementation must be completed and verified as a vertical slice. Trace the behavior through the layers that are actually required by that promise:
+When a user promise crosses architectural layers, the implementation must be completed and verified as a vertical slice. Trace the behavior through the layers actually required by that promise:
 
 `trigger -> authorization -> validation -> domain transition -> API/backend -> durable write -> concurrency/recovery -> deterministic follow-up -> observable result`
 
 A frontend-only, API-only, backend-only, or storage-only implementation is incomplete when other layers are necessary for the promised behavior. Do not substitute process memory for durable PostgreSQL-backed state when persistence is required.
 
+Vertical slicing defines promise completeness, not mandatory PR size. Technical prerequisites MAY be delivered in multiple small PRs when that lowers risk, but the product promise MUST NOT be called complete until the required end-to-end proof passes.
+
+For Class A lifecycle work, the generic path is necessary but not sufficient. `docs/agents/lifecycle-vsa.md` is normative and defines the entities, authorities, allowed states, immutability rules, successor-version semantics, supersession, withdrawal, restart/recovery requirements, mandatory slice fields, stop conditions, and black-box lifecycle proof.
+
 ## Completion gate
 
-A task is not complete merely because a UI, endpoint, or happy-path code branch exists. Where relevant, the implementation must cover and verify:
+A task is not complete merely because a UI, endpoint, or happy-path code branch exists. Where relevant, the implementation must cover and verify the layers required by the promise.
 
-- backend behavior;
-- durable persistence;
-- deterministic state transitions and follow-up actions;
-- concurrency and recovery behavior;
-- failure/abstention paths;
-- an observable result consistent with the user promise;
-- tests that prove the promised behavior end to end where practical.
+For Class A, every relevant Definition-of-Done item in `docs/agents/lifecycle-vsa.md` must be proven. Any relevant `FAIL`, `UNKNOWN`, or `NOT TESTED` means the slice is not done.
+
+For Class B, tests and acceptance evidence MUST be limited to what is necessary to prove the stated user/system promise and prevent its relevant regressions.
+
+For Class C, focused artifact/contract verification plus mandatory repository checks is sufficient unless the change modifies governance semantics.
 
 The agent must run the normal repository verification sequence before opening a PR and must not merge its own PR.
+
+## Cost and architecture discipline
+
+The agent MUST follow the cost-control and stop-loss rules in `docs/agents/continuous-development.md`.
+
+In particular, do not create a new architecture rule, durable authority, abstraction layer, gate, or adjacent cleanup program unless the assigned promise or a named invariant requires it. Prefer reuse, consolidation, and deletion over parallel mechanisms.
+
+## Fail-closed lifecycle rule
+
+For Class A work, the agent must stop before implementation when the assigned issue leaves a required lifecycle, identity, authority, supersession, withdrawal, migration, or recovery decision undefined. The agent must not fill such a gap with a reasonable assumption.
+
+Published work must not be mutated in place. Current serving eligibility is determined only by the publication registry. Successor work, policy re-evaluation, supersession, and withdrawal must follow `docs/agents/lifecycle-vsa.md`.
 
 ## Infrastructure boundary
 
