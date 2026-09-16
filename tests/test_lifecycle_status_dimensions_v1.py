@@ -15,7 +15,7 @@ import pytest
 from src.document_status_v1 import derive_lifecycle_status
 from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.proportionate_review_v1 import ProportionateReviewConsole
-from src.review_workboard_v1 import review_work_item
+from src.review_workboard_v1 import _workboard_card, review_work_item
 
 
 pytestmark = [
@@ -226,3 +226,10 @@ def test_closed_historical_revision_never_reopens_from_stale_review_rows() -> No
     assert item["work_state"] == "complete"
     assert item["next_task"] == ""
     assert item["next_href"] == ""
+
+    card = _workboard_card(item)
+    assert 'data-workflow-status="closed"' in card
+    assert 'data-release-status="published"' in card
+    assert 'data-serving-status="active"' in card
+    assert "kop/pad" not in card
+    assert "Ga verder" not in card
