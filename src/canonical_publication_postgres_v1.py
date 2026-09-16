@@ -208,6 +208,8 @@ class PostgresCanonicalPublicationStore:
         release_owner: str,
         published_at: str,
         objects: list[dict[str, Any]],
+        logical_document_id: str = "",
+        working_revision_id: str = "",
         preserve_newer_registry: bool = False,
     ) -> None:
         """Atomically persist one authorized publication and its Azure lineage."""
@@ -217,6 +219,8 @@ class PostgresCanonicalPublicationStore:
             raise CanonicalPublicationStoreError("canonical_source_sha256_invalid")
         if not snapshot_id or not source_locator or not release_id or not release_version or not release_owner:
             raise CanonicalPublicationStoreError("canonical_release_metadata_incomplete")
+        if bool(logical_document_id) != bool(working_revision_id):
+            raise CanonicalPublicationStoreError("canonical_release_lineage_incomplete")
         _timestamp(published_at)
 
         prepared = [(obj, *self._canonical_payload(obj)) for obj in objects]
@@ -318,6 +322,34 @@ class PostgresCanonicalPublicationStore:
                             (release_id, release_version, release_owner, published_at, published_at),
                         )
 
+                    predecessor_rows: list[dict[str, Any]] = []
+                    predecessor_release_ids: set[str] = set()
+                    if logical_document_id and not existing_release:
+                        predecessor_rows = con.execute(
+                            """
+                            SELECT r.object_id, r.object_version, r.release_id, r.published_at
+                            FROM publication_registry r
+                            JOIN audit_events ev
+                              ON ev.entity_type='release'
+                             AND ev.entity_id=r.release_id
+                             AND ev.event_type='release_published'
+                            WHERE r.state='active'
+                              AND ev.details->>'logical_document_id'=%s
+                              AND r.release_id<>%s
+                            FOR UPDATE OF r
+                            """,
+                            (logical_document_id, release_id),
+                        ).fetchall()
+                        predecessor_release_ids = {str(row["release_id"]) for row in predecessor_rows}
+                        if predecessor_rows and any(
+                            _timestamp(row["published_at"]) >= _timestamp(published_at)
+                            for row in predecessor_rows
+                        ):
+                            if not preserve_newer_registry:
+                                raise CanonicalPublicationStoreError("stale_release_replay")
+                            predecessor_rows = []
+                            predecessor_release_ids = set()
+
                     for obj, _payload, content_hash in prepared:
                         object_id = str(obj["object_id"])
                         object_version = str(obj["object_version"])
@@ -385,6 +417,26 @@ class PostgresCanonicalPublicationStore:
                                 },
                             )
 
+                    if predecessor_release_ids:
+                        con.execute(
+                            "DELETE FROM publication_registry WHERE release_id = ANY(%s)",
+                            (list(predecessor_release_ids),),
+                        )
+                        for row in predecessor_rows:
+                            self._audit(
+                                con,
+                                entity_type="object",
+                                entity_id=str(row["object_id"]),
+                                entity_version=str(row["object_version"]),
+                                event_type="superseded",
+                                actor=release_owner,
+                                event_at=published_at,
+                                details={
+                                    "superseded_by_release_id": release_id,
+                                    "logical_document_id": logical_document_id,
+                                },
+                            )
+
                     release_event = con.execute(
                         "SELECT 1 FROM audit_events WHERE entity_type='release' AND entity_id=%s AND event_type='release_published' LIMIT 1",
                         (release_id,),
@@ -403,6 +455,8 @@ class PostgresCanonicalPublicationStore:
                                 "snapshot_id": snapshot_id,
                                 "source_sha256": source_sha256.lower(),
                                 "source_locator": source_locator,
+                                "logical_document_id": logical_document_id,
+                                "working_revision_id": working_revision_id,
                             },
                         )
         except CanonicalPublicationStoreError:
@@ -530,5 +584,7 @@ class PostgresCanonicalPublicationStore:
             "snapshot_id": str(details.get("snapshot_id") or ""),
             "source_sha256": str(details.get("source_sha256") or ""),
             "source_locator": str(details.get("source_locator") or ""),
+            "logical_document_id": str(details.get("logical_document_id") or ""),
+            "working_revision_id": str(details.get("working_revision_id") or ""),
             "objects": objects,
         }
