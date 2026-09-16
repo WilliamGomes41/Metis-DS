@@ -153,6 +153,15 @@ def _cleanup(
 ) -> None:
     store = PostgresConcurrentWorkflowDocumentStore(config)
     with store._connect() as con:
+        canonical_rows = []
+        if snapshot_ids:
+            canonical_rows = con.execute(
+                "SELECT object_id,object_version FROM canonical_object_sources "
+                "WHERE snapshot_id = ANY(%s)",
+                (snapshot_ids,),
+            ).fetchall()
+        canonical_object_ids = sorted({str(row["object_id"]) for row in canonical_rows})
+
         if release_ids:
             con.execute("DELETE FROM publication_registry WHERE release_id = ANY(%s)", (release_ids,))
             con.execute("DELETE FROM publication_release_items WHERE release_id = ANY(%s)", (release_ids,))
@@ -161,6 +170,29 @@ def _cleanup(
                 (release_ids, release_ids),
             )
             con.execute("DELETE FROM publication_releases WHERE release_id = ANY(%s)", (release_ids,))
+        if snapshot_ids:
+            con.execute(
+                "DELETE FROM audit_events WHERE details->>'snapshot_id' = ANY(%s)",
+                (snapshot_ids,),
+            )
+            con.execute(
+                "DELETE FROM canonical_object_sources WHERE snapshot_id = ANY(%s)",
+                (snapshot_ids,),
+            )
+        if canonical_object_ids:
+            con.execute(
+                "DELETE FROM canonical_object_versions AS cov "
+                "WHERE cov.object_id = ANY(%s) "
+                "AND NOT EXISTS ("
+                "SELECT 1 FROM canonical_object_sources AS cos "
+                "WHERE cos.object_id=cov.object_id AND cos.object_version=cov.object_version"
+                ") "
+                "AND NOT EXISTS ("
+                "SELECT 1 FROM publication_release_items AS pri "
+                "WHERE pri.object_id=cov.object_id AND pri.object_version=cov.object_version"
+                ")",
+                (canonical_object_ids,),
+            )
         for snapshot_id in reversed(snapshot_ids):
             con.execute("DELETE FROM workflow.documents WHERE snapshot_id=%s", (snapshot_id,))
             con.execute("DELETE FROM source_snapshots WHERE snapshot_id=%s", (snapshot_id,))
