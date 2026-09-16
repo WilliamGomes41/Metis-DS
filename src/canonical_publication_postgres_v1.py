@@ -648,7 +648,6 @@ class PostgresCanonicalPublicationStore:
                     JOIN canonical_object_sources s
                       ON s.object_id=c.object_id AND s.object_version=c.object_version
                     WHERE r.state='active'
-                      AND rel.status='published'
                     ORDER BY c.object_id
                     """
                 ).fetchall()
