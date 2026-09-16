@@ -29,12 +29,12 @@ Before implementation, the agent reads:
 2. the assigned issue and comments;
 3. `CONTEXT.md` or relevant `CONTEXT-MAP.md` entries;
 4. applicable ADRs;
-5. `docs/agents/continuous-development.md` and classifies the issue as A, B, or C;
+5. `docs/agents/continuous-development.md`, classifies the issue as A, B, or C, and determines `Rewrite risk: none | high`;
 6. `docs/agents/lifecycle-vsa.md` in full when the issue is Class A.
 
 Architecture conflicts must be surfaced, not silently overridden.
 
-## Change-class rule
+## Change-class and rewrite-risk rule
 
 The default development model is `docs/agents/continuous-development.md`.
 
@@ -42,7 +42,11 @@ The default development model is `docs/agents/continuous-development.md`.
 - Class B = normal product behavior. Prove the user/system promise with the smallest coherent implementation and relevant tests; do not add lifecycle-grade paperwork unless lifecycle semantics actually change.
 - Class C = cosmetic/documentation/non-semantic maintenance. Keep the diff and proof proportionate to the change.
 
-If Class B or C work reveals that a lifecycle invariant, document/version identity, durable authority, supersession, withdrawal, migration, reconciliation, or lifecycle recovery rule must change, the agent must STOP and reclassify the issue before continuing.
+Every implementation issue also states `Rewrite risk: none | high`. Rewrite risk is semantic, not based on line count. Replacing or redefining a durable authority, persisted identity/schema semantics, a shared cross-topology mutation/read boundary, a lifecycle/publication/retrieval kernel, or a migration/cutover that affects restart/recovery is high risk.
+
+High-risk rewrite work MUST complete the system map, compatibility/migration, rollback/recovery, cutover, cleanup, failure-blast-radius, and adversarial-proof fields in `docs/agents/continuous-development.md` before code changes. Prefer staged expand/migrate/contract or additive/strangler migration. Big-bang replacement is forbidden by default.
+
+If Class B or C work reveals that a lifecycle invariant, document/version identity, durable authority, supersession, withdrawal, migration, reconciliation, or lifecycle recovery rule must change, the agent must STOP and reclassify the issue before continuing. If work initially marked `Rewrite risk: none` becomes high risk, the agent must STOP and rescope before adding more code.
 
 ## Vertical-slice completeness
 
@@ -54,7 +58,7 @@ A frontend-only, API-only, backend-only, or storage-only implementation is incom
 
 Vertical slicing defines promise completeness, not mandatory PR size. Technical prerequisites MAY be delivered in multiple small PRs when that lowers risk, but the product promise MUST NOT be called complete until the required end-to-end proof passes.
 
-For Class A lifecycle work, the generic path is necessary but not sufficient. `docs/agents/lifecycle-vsa.md` is normative and defines the entities, authorities, allowed states, immutability rules, successor-version semantics, supersession, withdrawal, restart/recovery requirements, mandatory slice fields, stop conditions, and black-box lifecycle proof.
+For Class A lifecycle work, the generic path is necessary but not sufficient. `docs/agents/lifecycle-vsa.md` is normative and defines the entities, authorities, allowed states, immutability rules, successor-version semantics, supersession, withdrawal, restart/recovery requirements, rewrite-risk overlay, mandatory slice fields, stop conditions, and black-box lifecycle proof.
 
 ## Completion gate
 
@@ -66,17 +70,23 @@ For Class B, tests and acceptance evidence MUST be limited to what is necessary 
 
 For Class C, focused artifact/contract verification plus mandatory repository checks is sufficient unless the change modifies governance semantics.
 
+For `Rewrite risk: high`, completion additionally requires a separate adversarial review pass that tries alternate writers/readers, inheritance/override/fallback paths, supported runtime/storage topologies, stale local versus durable state, duplicate authorities, partial cutover, restart, recovery, rollback, and failed cutover. Green CI alone is insufficient evidence that a high-risk rewrite is complete.
+
 The agent must run the normal repository verification sequence before opening a PR and must not merge its own PR.
 
 ## Cost and architecture discipline
 
-The agent MUST follow the cost-control and stop-loss rules in `docs/agents/continuous-development.md`.
+The agent MUST follow the cost-control, rewrite-risk, and stop-loss rules in `docs/agents/continuous-development.md`.
 
 In particular, do not create a new architecture rule, durable authority, abstraction layer, gate, or adjacent cleanup program unless the assigned promise or a named invariant requires it. Prefer reuse, consolidation, and deletion over parallel mechanisms.
 
+Temporary dual-read or dual-write behavior is acceptable only when one authority remains named, divergence is detectable, reconciliation is deterministic, and removal criteria are defined. A mirror, cache, envelope, projection, or fallback must not silently become a second source of truth.
+
+Destructive or irreversible migration must not be executed autonomously. It requires explicit human approval and tested backup/recovery evidence before execution.
+
 ## Fail-closed lifecycle rule
 
-For Class A work, the agent must stop before implementation when the assigned issue leaves a required lifecycle, identity, authority, supersession, withdrawal, migration, or recovery decision undefined. The agent must not fill such a gap with a reasonable assumption.
+For Class A work, the agent must stop before implementation when the assigned issue leaves a required lifecycle, identity, authority, supersession, withdrawal, migration, recovery, or high-risk rewrite decision undefined. The agent must not fill such a gap with a reasonable assumption.
 
 Published work must not be mutated in place. Current serving eligibility is determined only by the publication registry. Successor work, policy re-evaluation, supersession, and withdrawal must follow `docs/agents/lifecycle-vsa.md`.
 
