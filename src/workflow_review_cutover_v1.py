@@ -1,12 +1,12 @@
 """Opt-in PostgreSQL authority for review evidence and publish authorizations."""
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager, suppress
 from copy import deepcopy
-from pathlib import Path
 from typing import Any, Iterator
 
-from src.operations_console_v1 import ConsoleError, _atomic_write
+from src.operations_console_v1 import ConsoleError, _atomic_replace_bytes, _atomic_write
 from src.review_ledger import buffer_events, register_backend
 from src.workflow_documents_cutover_v1 import (
     PostgresWorkflowAzureAuthoritativePublicationConsole,
@@ -31,25 +31,23 @@ class _PostgresWorkflowReviewMixin:
         super().__init__(*args, **kwargs)
         self.workflow_review_store = workflow_review_store
         self.workflow_review_store.verify_review_schema()
-        self._assert_review_cutover_prepared()
         self.workflow_review_store.bind_ledger_mirror(self._ledger_path)
-        register_backend(self._ledger_path, self.workflow_review_store)
-        self._bindings = self.workflow_review_store.read_bindings()
+        self._bindings = self._remirror_review_runtime()
         self._bindings_baseline = deepcopy(self._bindings)
-        self._mirror_bindings()
+        register_backend(self._ledger_path, self.workflow_review_store)
 
-    def _assert_review_cutover_prepared(self) -> None:
-        runtime = Path(self.runtime)
-        legacy_events = self.workflow_review_store._read_legacy_events(runtime / "review_ledger.jsonl")
-        legacy_bindings = self.workflow_review_store._read_legacy_bindings(
-            runtime / "publish_authorizations.json"
+    def _remirror_review_runtime(self) -> dict[str, list[dict[str, Any]]]:
+        """Rebuild disk mirrors from the authoritative PostgreSQL review state."""
+        events = self.workflow_review_store.read_events()
+        bindings = self.workflow_review_store.read_bindings()
+        ledger_text = "".join(
+            json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n" for event in events
         )
-        db_events = self.workflow_review_store.read_events()
-        db_bindings = self.workflow_review_store.read_bindings()
-        if legacy_events and db_events != legacy_events:
-            raise ConsoleError("workflow_review_cutover_not_prepared")
-        if legacy_bindings and db_bindings != legacy_bindings:
-            raise ConsoleError("workflow_review_cutover_not_prepared")
+        with suppress(OSError):
+            _atomic_replace_bytes(self._ledger_path, ledger_text.encode("utf-8"))
+        self._bindings = bindings
+        self._mirror_bindings()
+        return bindings
 
     def _mirror_bindings(self) -> None:
         with suppress(OSError):
