@@ -155,11 +155,23 @@ def review_work_item(
         next_task = "closure"
 
     try:
-        meaningful_status = str(console.document_status(snapshot_id))  # type: ignore[attr-defined]
+        lifecycle_status = dict(console.document_lifecycle_status(snapshot_id))  # type: ignore[attr-defined]
     except (AttributeError, ConsoleError):
-        meaningful_status = "processing"
+        lifecycle_status = {
+            "workflow_status": "processing",
+            "release_status": "none",
+            "serving_status": "inactive",
+            "presentation_status": "processing",
+        }
+    meaningful_status = str(lifecycle_status["presentation_status"])
 
-    if remaining:
+    if lifecycle_status["workflow_status"] == "closed":
+        # Historical release truth wins over stale reviewer rows. Repair 2/2b
+        # makes this WorkingRevision immutable, so the workboard must not offer
+        # a continuation into review even if legacy rows remain unresolved.
+        work_state = "complete"
+        next_task = ""
+    elif remaining:
         work_state = "review"
     elif blocked_count:
         work_state = "technical_repair"
@@ -184,6 +196,7 @@ def review_work_item(
     return {
         "snapshot_id": snapshot_id,
         "envelope": envelope,
+        "lifecycle_status": lifecycle_status,
         "meaningful_status": meaningful_status,
         "work_state": work_state,
         "remaining_review_items": remaining,
@@ -228,7 +241,13 @@ def _work_summary(item: dict[str, Any]) -> str:
     if state == "publication_blocked":
         return "Review afgerond; publicatie is technisch geblokkeerd."
     if item["meaningful_status"] == "published":
-        return "Review afgerond; document is gepubliceerd."
+        return "Review afgerond; deze release wordt actief gepubliceerd."
+    if item["meaningful_status"] == "published_inactive":
+        return "Review afgerond; deze release is gepubliceerd maar niet actief."
+    if item["meaningful_status"] == "superseded":
+        return "Review afgerond; deze release is vervangen door nieuwere publicatie."
+    if item["meaningful_status"] == "withdrawn":
+        return "Review afgerond; deze release is ingetrokken."
     if item["meaningful_status"] == "ready_for_publication":
         return "Review afgerond; document is klaar voor publicatie."
     return "Geen open reviewtaak."
@@ -236,6 +255,7 @@ def _work_summary(item: dict[str, Any]) -> str:
 
 def _workboard_card(item: dict[str, Any]) -> str:
     envelope = item["envelope"]
+    lifecycle = item["lifecycle_status"]
     next_step = ""
     if item["next_task"]:
         next_step = f'''
@@ -268,8 +288,8 @@ def _workboard_card(item: dict[str, Any]) -> str:
     detail_html = f'<p class="muted">{_esc(details)}</p>' if details else ""
 
     return f'''
-      <article class="doc-card" data-workboard-document="{_esc(item['snapshot_id'])}" data-workboard-state="{_esc(item['work_state'])}">
-        {console_ui._document_card_heading({**envelope, "status": envelope.get("state", "")})}
+      <article class="doc-card" data-workboard-document="{_esc(item['snapshot_id'])}" data-workboard-state="{_esc(item['work_state'])}" data-workflow-status="{_esc(lifecycle['workflow_status'])}" data-release-status="{_esc(lifecycle['release_status'])}" data-serving-status="{_esc(lifecycle['serving_status'])}">
+        {console_ui._document_card_heading({**envelope, "meaningful_status": item["meaningful_status"]})}
         <p class="lead">{_esc(_work_summary(item))}</p>
         {detail_html}
         {next_step}
