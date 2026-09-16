@@ -4,6 +4,10 @@ import re
 
 from scripts.historical_lifecycle_audit import CHECKS, run_audit
 
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+
 
 class _Rows:
     def __init__(self, rows):
