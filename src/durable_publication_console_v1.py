@@ -91,6 +91,79 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
         try: return store.release_for_snapshot(snapshot_id)
         except CanonicalPublicationStoreError as exc: raise ConsoleError("durable_publication_lookup_failed", str(exc)) from exc
 
+    def document_release_serving_status(
+        self,
+        snapshot_id: str,
+        *,
+        envelope: dict[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """Derive release history and serving eligibility from canonical tables only."""
+        store = self.canonical_publication_store
+        if store is None:
+            return super().document_release_serving_status(
+                snapshot_id,
+                envelope=envelope,
+            )
+        if not snapshot_id:
+            raise ConsoleError("canonical_snapshot_id_required")
+        try:
+            with store._connect() as con:
+                release = con.execute(
+                    """
+                    SELECT rel.release_id, rel.status
+                    FROM audit_events ev
+                    JOIN publication_releases rel ON rel.release_id=ev.entity_id
+                    WHERE ev.entity_type='release'
+                      AND ev.event_type='release_published'
+                      AND ev.details->>'snapshot_id'=%s
+                    ORDER BY rel.published_at DESC
+                    LIMIT 1
+                    """,
+                    (snapshot_id,),
+                ).fetchone()
+                if not release:
+                    return {"release_status": "none", "serving_status": "inactive"}
+
+                release_id = str(release["release_id"])
+                release_status = str(release["status"] or "")
+                if release_status == "withdrawn":
+                    return {"release_status": "withdrawn", "serving_status": "inactive"}
+                if release_status != "published":
+                    raise CanonicalPublicationStoreError("canonical_release_status_invalid")
+
+                counts = con.execute(
+                    """
+                    SELECT COUNT(*) AS item_count,
+                           COUNT(*) FILTER (
+                               WHERE r.state='active'
+                                 AND r.release_id=i.release_id
+                                 AND r.object_version=i.object_version
+                           ) AS active_same_release,
+                           COUNT(*) FILTER (
+                               WHERE r.state='active'
+                                 AND r.release_id<>i.release_id
+                           ) AS active_other_release
+                    FROM publication_release_items i
+                    LEFT JOIN publication_registry r ON r.object_id=i.object_id
+                    WHERE i.release_id=%s
+                    """,
+                    (release_id,),
+                ).fetchone()
+                if not counts or int(counts["item_count"] or 0) <= 0:
+                    raise CanonicalPublicationStoreError("canonical_release_items_missing")
+                item_count = int(counts["item_count"])
+                active_same = int(counts["active_same_release"] or 0)
+                active_other = int(counts["active_other_release"] or 0)
+                if active_same == item_count:
+                    return {"release_status": "published", "serving_status": "active"}
+                if active_same == 0 and active_other == item_count:
+                    return {"release_status": "superseded", "serving_status": "inactive"}
+                return {"release_status": "published", "serving_status": "inactive"}
+        except CanonicalPublicationStoreError as exc:
+            raise ConsoleError("durable_lifecycle_status_read_failed", str(exc)) from exc
+        except Exception as exc:
+            raise ConsoleError("durable_lifecycle_status_read_failed", str(exc)) from exc
+
     def snapshot_is_published(self, snapshot_id: str) -> bool:
         """Return durable publication history from the configured authority.
 
