@@ -23,6 +23,15 @@ _PUBLICATION_PROJECTION_FIELDS = frozenset(
         "published_by",
     }
 )
+_DATABASE_MANAGED_LIFECYCLE_PROJECTION_FIELDS = frozenset(
+    {
+        "logical_document_id",
+        "source_snapshot_id",
+        "source_version",
+        "working_revision_id",
+        "working_revision_number",
+    }
+)
 
 
 def _instant(value: Any) -> datetime:
@@ -171,6 +180,29 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
             if str(key) not in _PUBLICATION_PROJECTION_FIELDS
         }
 
+    @classmethod
+    def _assert_working_payload_unchanged(
+        cls,
+        *,
+        current_payload: Mapping[str, Any],
+        submitted: Mapping[str, Any],
+    ) -> None:
+        """Allow omission, but never alteration, of DB-managed identity projections.
+
+        Migration 008 enriches ``envelope_payload`` inside PostgreSQL with lifecycle
+        identity fields. A caller may legitimately hold a pre-enrichment envelope
+        while reconciling release metadata. Missing database-managed projections are
+        therefore filled from the locked current row for comparison. Supplying a
+        conflicting value remains an immutable-working-revision violation.
+        """
+        current_working = cls._working_payload(current_payload)
+        submitted_working = cls._working_payload(submitted)
+        for field in _DATABASE_MANAGED_LIFECYCLE_PROJECTION_FIELDS:
+            if field in current_working and field not in submitted_working:
+                submitted_working[field] = current_working[field]
+        if current_working != submitted_working:
+            raise WorkflowDocumentStoreError(PUBLISHED_WORKING_REVISION_IMMUTABLE)
+
     @staticmethod
     def _release_history_locked(con: Any, snapshot_id: str) -> Mapping[str, Any] | None:
         """Read immutable publication history from canonical PostgreSQL authority.
@@ -211,8 +243,10 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         submitted: Mapping[str, Any],
         release: Mapping[str, Any],
     ) -> None:
-        if cls._working_payload(current_payload) != cls._working_payload(submitted):
-            raise WorkflowDocumentStoreError(PUBLISHED_WORKING_REVISION_IMMUTABLE)
+        cls._assert_working_payload_unchanged(
+            current_payload=current_payload,
+            submitted=submitted,
+        )
 
         submitted_state = str(submitted.get("state") or "")
         release_status = str(release.get("status") or "")
