@@ -238,6 +238,40 @@ Recovery MUST NOT:
 - reactivate a superseded release;
 - alter immutable published content.
 
+## 13A. High-risk rewrite overlay
+
+The rewrite-risk rules in `docs/agents/continuous-development.md` apply in full to Class A work.
+
+Any Class A change is `Rewrite risk: high` when it replaces or materially redefines a lifecycle authority, persisted lifecycle identity/schema semantics, a shared mutation/read/reconciliation boundary, or a migration/cutover that changes restart/recovery behavior.
+
+Before code changes, a high-risk lifecycle issue MUST additionally define:
+
+```text
+Rewrite target:
+Why local patching is insufficient:
+Current authority/writer/reader map:
+Supported runtime topologies:
+Persisted-state impact:
+Compatibility/migration plan:
+Rollback/recovery plan:
+Cutover trigger:
+Cleanup/decommission criteria:
+Failure blast radius:
+Adversarial proof matrix:
+```
+
+The authority/writer/reader map MUST enumerate every supported path that can mutate or consume the affected lifecycle truth, including inheritance/override paths, storage backends, local compatibility projections, startup/reconciliation flows, and restart/recovery paths.
+
+For a high-risk lifecycle rewrite:
+
+- the old path MUST remain rollback-capable until the new path has passed the required lifecycle proof, unless staged coexistence is technically unsafe or impossible and explicit human approval records why;
+- temporary dual-read/dual-write MUST retain one named authority and MUST include deterministic reconciliation plus written removal criteria;
+- an irreversible migration MUST NOT be executed autonomously and requires explicit human approval plus tested backup/recovery evidence;
+- a separate adversarial review MUST attempt alternate writers/readers, stale fallback state, topology gaps, duplicate authority, partial cutover, concurrency where relevant, restart, recovery, rollback, and failed cutover;
+- green CI without this surface review is insufficient evidence that the lifecycle rewrite is done.
+
+If rewrite risk is discovered only after implementation begins, the agent MUST stop and rescope before additional code is added.
+
 ## 14. Definition of a lifecycle vertical slice
 
 A lifecycle vertical slice is one user/system event that realizes and proves one valid lifecycle transition across every layer needed by that promise.
@@ -267,9 +301,10 @@ Recovery result:
 Legacy-data result:
 Required black-box scenario:
 Explicit non-goals:
+Rewrite risk: none | high
 ```
 
-No field may be omitted. `N/A` requires a written reason.
+No field may be omitted. `N/A` requires a written reason. When `Rewrite risk: high`, every field in section 13A is also mandatory before implementation.
 
 A slice MUST be specified as:
 
@@ -309,6 +344,7 @@ A lifecycle slice is DONE only when every relevant item is proven:
 - Product API result when relevant;
 - audit evidence;
 - at least one black-box lifecycle scenario;
+- high-risk rewrite mitigation and adversarial review when `Rewrite risk: high`;
 - full required repository verification.
 
 A relevant item with `FAIL`, `UNKNOWN`, or `NOT TESTED` means the slice is NOT DONE.
@@ -326,7 +362,10 @@ The agent MUST stop without implementation and surface the missing decision when
 - serving behavior after supersession or withdrawal is unspecified;
 - restart/recovery behavior is unspecified;
 - the required black-box lifecycle scenario cannot be stated before implementation;
-- the user promise crosses layers but only a local/component proof is available.
+- the user promise crosses layers but only a local/component proof is available;
+- the work is a high-risk rewrite but the authority/writer/reader map, compatibility/migration plan, rollback/recovery plan, cutover, cleanup, failure blast radius, or adversarial proof matrix is missing;
+- a big-bang lifecycle replacement is proposed without a written reason staged coexistence is unsafe/impossible and explicit human approval;
+- rewrite risk is discovered mid-implementation and the issue has not been respecified.
 
 The agent MUST NOT fill these gaps with a reasonable assumption.
 

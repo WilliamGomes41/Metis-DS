@@ -65,7 +65,68 @@ Rules:
 - do not add product architecture, new runtime state, or broad test suites to justify a cosmetic change;
 - a documentation change that changes agent governance, release rules, lifecycle semantics, or development policy is NOT ordinary Class C; it requires a focused contract test for the rule being changed.
 
-## 2. VSA means user-promise completeness, not PR size
+## 2. Rewrite-risk overlay
+
+Every implementation issue MUST also state exactly one rewrite-risk value:
+
+```text
+Rewrite risk: none | high
+```
+
+Rewrite risk is semantic, not a line-count threshold. A change is `high` when it materially replaces, redefines, or cuts over any of the following:
+
+- a durable authority or source of truth;
+- persisted identity, lineage, or schema semantics that require migration/backfill;
+- a shared mutation, read, authorization, or reconciliation boundary used by multiple entry points or runtime topologies;
+- a lifecycle, publication, serving, retrieval, or review kernel whose old and new behavior must coexist during transition;
+- a migration/cutover path that can change restart, recovery, rollback, or data-integrity behavior.
+
+A large refactor that preserves all durable semantics and boundaries may still be `none`. A small patch that changes one of the items above is `high`.
+
+### Required mitigation for `Rewrite risk: high`
+
+Before implementation, the issue MUST define:
+
+```text
+Rewrite target:
+Why local patching is insufficient:
+Current authority/writer/reader map:
+Supported runtime topologies:
+Persisted-state impact:
+Compatibility/migration plan:
+Rollback/recovery plan:
+Cutover trigger:
+Cleanup/decommission criteria:
+Failure blast radius:
+Adversarial proof matrix:
+```
+
+The map MUST identify the one intended authority, every writer that can mutate the affected truth, every reader that can influence behavior, supported storage/runtime topologies, persisted state, and restart/recovery paths.
+
+High-risk implementation rules:
+
+- Prefer expand -> migrate -> contract, additive replacement, or a strangler-style cutover over a big-bang rewrite.
+- A big-bang replacement is forbidden by default. It requires an explicit written reason that staged coexistence is technically unsafe or impossible and explicit human approval before implementation continues.
+- Temporary dual-read or dual-write behavior MAY exist only when one authority remains explicitly named, reconciliation is deterministic, divergence is detectable, and removal/expiry criteria are written before the dual path is introduced.
+- A compatibility mirror, cache, envelope, projection, or fallback MUST NOT silently become a second authority.
+- Destructive or irreversible migration MUST NOT be executed autonomously. It requires explicit human approval and a tested backup/recovery path before execution.
+- Where possible, behavior cutover and destructive contract/removal SHOULD be separate steps so rollback remains available until the new path is proven.
+- If high rewrite risk is discovered after implementation started, STOP. Do not keep patching the branch; update/rescope the issue and complete the required mitigation fields first.
+
+Before merge, high-risk work MUST receive a separate adversarial review pass that tries to break the promised invariant rather than only confirm the implementation. That review MUST explicitly challenge:
+
+- alternate mutation/read entry points;
+- inheritance, override, and fallback paths;
+- all supported runtime/storage topologies;
+- stale local state versus durable authority;
+- duplicate or ambiguous authorities;
+- partial migration/cutover states;
+- concurrency where relevant;
+- restart, recovery, rollback, and failed cutover behavior.
+
+A green CI run proves the written tests passed; it is not by itself proof that the rewrite surface was complete.
+
+## 3. VSA means user-promise completeness, not PR size
 
 A vertical slice is the end-to-end proof of a user/system promise. It is not a requirement that every technical step be delivered in one large PR.
 
@@ -89,7 +150,7 @@ For Class A, the lifecycle transition itself is the slice and `lifecycle-vsa.md`
 
 For Class B, the issue's user/system promise defines completion.
 
-## 3. Cost-control rules
+## 4. Cost-control rules
 
 These rules apply to all classes.
 
@@ -102,7 +163,7 @@ These rules apply to all classes.
 - SHOULD prefer one strong behavioral/integration test over several tests that only restate implementation details.
 - MUST distinguish a regression in an existing contract from discovery that the contract itself is wrong. The latter requires a model/ADR decision before further patching.
 
-## 4. Stop-loss rule
+## 5. Stop-loss rule
 
 Stop implementation and return to design when any of these occurs:
 
@@ -111,11 +172,12 @@ Stop implementation and return to design when any of these occurs:
 - a local feature requires redefining document/version identity;
 - two consecutive fixes move the same lifecycle inconsistency to a different layer instead of eliminating it;
 - the acceptance scenario cannot be stated without implementation-specific language;
-- the proposed solution adds more lifecycle states or authorities because the existing states are ambiguous.
+- the proposed solution adds more lifecycle states or authorities because the existing states are ambiguous;
+- an implementation classified `Rewrite risk: none` starts replacing or redefining an existing authority, persisted schema/identity semantics, or shared cross-topology boundary.
 
-At that point, do not add another patch slice. Define or repair the domain boundary first.
+At that point, do not add another patch slice. Define or repair the domain boundary first. If rewrite risk is now high, rescope under the rewrite-risk overlay before additional code changes.
 
-## 5. Required issue header
+## 6. Required issue header
 
 Every implementation issue MUST begin with:
 
@@ -124,7 +186,10 @@ Change class: A | B | C
 Promise: <one sentence>
 Proof: <the smallest observable acceptance evidence>
 Touches lifecycle invariants: yes | no
+Rewrite risk: none | high
 ```
+
+For `Rewrite risk: high`, append every mandatory mitigation field from section 2 before implementation.
 
 For Class A, append the full mandatory lifecycle fields from `docs/agents/lifecycle-vsa.md`.
 
@@ -132,12 +197,13 @@ For Class B, no additional lifecycle template is required unless the work is rec
 
 For Class C, `Proof` may be a focused artifact/contract check plus existing repository checks.
 
-## 6. Definition of continuous development
+## 7. Definition of continuous development
 
 Metis is continuously developable when:
 
 - ordinary Class B/C changes remain small and can move independently;
 - Class A changes are rare and rigorously proven against the lifecycle invariants;
+- high-risk rewrites are rare, staged, reversible where possible, and adversarially reviewed before merge;
 - main remains releasable after every merge;
 - existing authorities are reused rather than multiplied;
 - recovery/restart behavior is tested where durable state changes;

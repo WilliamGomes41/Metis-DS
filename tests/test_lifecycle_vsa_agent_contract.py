@@ -71,6 +71,63 @@ def test_continuous_development_model_limits_heavy_governance_to_lifecycle_core(
     _assert_terms(model, "cost of proving a change", "proportional to the risk")
 
 
+def test_rewrite_risk_is_mandatory_semantic_and_fail_closed() -> None:
+    model = _read("docs/agents/continuous-development.md")
+
+    assert "Rewrite risk: none | high" in model
+    _assert_terms(model, "rewrite risk is semantic", "not a line-count threshold")
+    _assert_terms(
+        model,
+        "durable authority",
+        "persisted identity",
+        "shared mutation",
+        "migration/cutover",
+        "restart/recovery",
+    )
+    for field in (
+        "Rewrite target:",
+        "Why local patching is insufficient:",
+        "Current authority/writer/reader map:",
+        "Supported runtime topologies:",
+        "Persisted-state impact:",
+        "Compatibility/migration plan:",
+        "Rollback/recovery plan:",
+        "Cutover trigger:",
+        "Cleanup/decommission criteria:",
+        "Failure blast radius:",
+        "Adversarial proof matrix:",
+    ):
+        assert field in model
+
+    _assert_terms(model, "big-bang replacement is forbidden by default")
+    _assert_terms(model, "temporary dual-read or dual-write", "one authority", "reconciliation", "removal/expiry")
+    _assert_terms(model, "destructive or irreversible migration", "explicit human approval", "backup/recovery")
+    _assert_terms(model, "separate adversarial review pass", "green CI", "not by itself proof")
+    _assert_terms(model, "rewrite risk is discovered after implementation started", "STOP")
+
+
+def test_high_risk_rewrite_rules_reach_execution_and_pr_surfaces() -> None:
+    agents = _read("AGENTS.md")
+    execution = _read("docs/agents/execution-contract.md")
+    engineer = _read(".github/agents/metis-engineer.agent.md")
+    template = _read(".github/pull_request_template.md")
+
+    for text in (agents, execution, engineer, template):
+        _assert_terms(text, "Rewrite risk", "high")
+
+    _assert_terms(agents, "authority", "writer", "reader", "adversarial")
+    _assert_terms(execution, "big-bang", "destructive or irreversible migration", "human approval")
+    _assert_terms(engineer, "stop and rescope", "temporary dual-read/dual-write", "green CI")
+    _assert_terms(
+        template,
+        "Current authority/writer/reader map",
+        "rollback/recovery",
+        "cutover trigger",
+        "failure blast radius",
+        "separate adversarial review",
+    )
+
+
 def test_lifecycle_entrypoints_require_same_normative_contract_for_class_a() -> None:
     agents = _read("AGENTS.md")
     execution = _read("docs/agents/execution-contract.md")
@@ -131,6 +188,16 @@ def test_successor_publication_and_withdrawal_are_closed_lifecycle_transitions()
     assert "Restart/recovery MUST NOT reactivate the release." in contract
 
 
+def test_lifecycle_high_risk_rewrite_requires_surface_map_and_adversarial_proof() -> None:
+    contract = _read("docs/agents/lifecycle-vsa.md")
+
+    assert "## 13A. High-risk rewrite overlay" in contract
+    _assert_terms(contract, "authority/writer/reader map", "inheritance/override", "storage backends")
+    _assert_terms(contract, "rollback-capable", "temporary dual-read/dual-write", "one named authority")
+    _assert_terms(contract, "separate adversarial review", "failed cutover", "green CI")
+    _assert_terms(contract, "irreversible migration", "explicit human approval", "backup/recovery")
+
+
 def test_lifecycle_slice_requires_exact_transition_and_black_box_proof() -> None:
     contract = _read("docs/agents/lifecycle-vsa.md")
 
@@ -152,6 +219,7 @@ def test_lifecycle_slice_requires_exact_transition_and_black_box_proof() -> None
         "Recovery result:",
         "Required black-box scenario:",
         "Explicit non-goals:",
+        "Rewrite risk: none | high",
     ):
         assert field in contract
 
