@@ -78,7 +78,8 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
             _atomic_write(manifest_path, self._manifest_from_release(release)); atomic_replace_projection(projection_path, projection)
             current = deepcopy(self._envelope(snapshot_id))
             current_state = str(current.get("state") or "")
-            release_state = current_state if current_state in _HISTORICAL_RELEASE_STATES else "published"
+            authority_state = str(release.get("release_status") or "")
+            release_state = authority_state if authority_state in _HISTORICAL_RELEASE_STATES else current_state if current_state in _HISTORICAL_RELEASE_STATES else "published"
             current.update({"state":release_state,"published":True,"release_id":release_id,"release_version":str(release["release_version"]),"published_at":str(release["published_at"]),"published_by":str(release["release_owner"])})
             self._envelopes[snapshot_id] = current; _atomic_write(self._envelopes_path, self._envelopes)
             if not self._local_ledger_has_release(release_id): append_event(self._ledger_path,event_type="release_published",object_id=snapshot_id,object_version=str(current.get("version") or ""),actor=str(release["release_owner"]),details={"release_id":release_id,"release_version":str(release["release_version"]),"published_object_ids":sorted(str(row["object_id"]) for row in release["objects"]),"source_sha256":str(release["source_sha256"]),"authority":"postgres"})
@@ -88,7 +89,12 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
     def _durable_release_for_snapshot(self, snapshot_id: str) -> dict[str, Any] | None:
         store = self.canonical_publication_store
         if store is None: return None
-        try: return store.release_for_snapshot(snapshot_id)
+        try:
+            release = store.release_for_snapshot(snapshot_id)
+            if release is not None and isinstance(store, PostgresCanonicalPublicationStore):
+                release = deepcopy(release)
+                release["release_status"] = self.document_release_serving_status(snapshot_id)["release_status"]
+            return release
         except CanonicalPublicationStoreError as exc: raise ConsoleError("durable_publication_lookup_failed", str(exc)) from exc
 
     def document_release_serving_status(
@@ -110,7 +116,7 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
             with store._connect() as con:
                 release = con.execute(
                     """
-                    SELECT rel.release_id, rel.status,
+                    SELECT rel.release_id, rel.status, rel.published_at,
                            ev.details->>'logical_document_id' AS logical_document_id
                     FROM audit_events ev
                     JOIN publication_releases rel ON rel.release_id=ev.entity_id
@@ -127,6 +133,7 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
 
                 release_id = str(release["release_id"])
                 release_status = str(release["status"] or "")
+                release_published_at = release["published_at"]
                 logical_document_id = str(release.get("logical_document_id") or "")
                 if release_status == "withdrawn":
                     return {"release_status": "withdrawn", "serving_status": "inactive"}
@@ -159,22 +166,21 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
                 if active_same == item_count:
                     return {"release_status": "published", "serving_status": "active"}
                 if active_same == 0 and logical_document_id:
-                    active_successor = con.execute(
+                    later_release = con.execute(
                         """
                         SELECT 1
-                        FROM publication_registry r
-                        JOIN audit_events ev
-                          ON ev.entity_type='release'
-                         AND ev.entity_id=r.release_id
-                         AND ev.event_type='release_published'
-                        WHERE r.state='active'
-                          AND r.release_id<>%s
+                        FROM audit_events ev
+                        JOIN publication_releases rel ON rel.release_id=ev.entity_id
+                        WHERE ev.entity_type='release'
+                          AND ev.event_type='release_published'
+                          AND rel.release_id<>%s
                           AND ev.details->>'logical_document_id'=%s
+                          AND rel.published_at>%s
                         LIMIT 1
                         """,
-                        (release_id, logical_document_id),
+                        (release_id, logical_document_id, release_published_at),
                     ).fetchone()
-                    if active_successor:
+                    if later_release:
                         return {"release_status": "superseded", "serving_status": "inactive"}
                 if active_same == 0 and active_other == item_count:
                     return {"release_status": "superseded", "serving_status": "inactive"}
@@ -204,7 +210,10 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
         store = self.canonical_publication_store
         if store is None: return super()._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id)
         existing = self._sync_snapshot_from_authority(snapshot_id)
-        if existing is not None: return {"status":"PASS","state":"published","snapshot_id":snapshot_id,"release_id":str(existing["release_id"]),"release_version":str(existing["release_version"]),"published_items":len(existing["objects"]),"g2":"PASS","cutover":True,"canonical_authority":"postgres","local_projection":"reconciled"}
+        if existing is not None:
+            if str(existing.get("release_status") or "") == "withdrawn":
+                return {"status":"BLOCKED","state":"withdrawn","snapshot_id":snapshot_id,"release_id":str(existing["release_id"]),"release_version":str(existing["release_version"]),"blockers":["release_withdrawn"],"g2":"PASS","cutover":False,"canonical_authority":"postgres","local_projection":"reconciled"}
+            return {"status":"PASS","state":"published","snapshot_id":snapshot_id,"release_id":str(existing["release_id"]),"release_version":str(existing["release_version"]),"published_items":len(existing["objects"]),"g2":"PASS","cutover":True,"canonical_authority":"postgres","local_projection":"reconciled"}
         considered = self.consider_publish(actor_id=actor_id, snapshot_id=snapshot_id); envelope = self._envelope(snapshot_id)
         if not considered.get("publish_allowed"): return {"status":"BLOCKED","state":envelope["state"],"snapshot_id":snapshot_id,"blockers":considered.get("blockers") or ["object_tuple_required"],"g2":considered.get("g2","BLOCKED"),"cutover":False}
         account = self._require_role(actor_id, "publisher"); publish_ids = set(considered["publishable_object_ids"]); objects = [deepcopy(obj) for obj in self.snapshot_objects(snapshot_id) if obj.get("object_id") in publish_ids]
