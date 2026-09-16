@@ -84,6 +84,17 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
         try: return store.release_for_snapshot(snapshot_id)
         except CanonicalPublicationStoreError as exc: raise ConsoleError("durable_publication_lookup_failed", str(exc)) from exc
 
+    def snapshot_is_published(self, snapshot_id: str) -> bool:
+        """Canonical publication authority seals work even before envelope reconciliation.
+
+        This closes the crash window where PostgreSQL canonical publication already
+        succeeded but the workflow envelope still says captured_not_published.
+        """
+        if self.canonical_publication_store is not None:
+            if self._durable_release_for_snapshot(snapshot_id) is not None:
+                return True
+        return super().snapshot_is_published(snapshot_id)
+
     def _sync_snapshot_from_authority(self, snapshot_id: str) -> dict[str, Any] | None:
         release = self._durable_release_for_snapshot(snapshot_id)
         if release is None: return None
