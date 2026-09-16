@@ -7,7 +7,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
-from src.operations_console_v1 import SNAPSHOT_OBJECT_WRITE_CONFLICT
+from src.operations_console_v1 import PUBLISHED_ENVELOPE_STATES, SNAPSHOT_OBJECT_WRITE_CONFLICT
 from src.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
 from src.workflow_documents_postgres_v1 import WorkflowDocumentStoreError, _json_text
 
@@ -172,8 +172,8 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         }
 
     @staticmethod
-    def _published_release_locked(con: Any, snapshot_id: str) -> Mapping[str, Any] | None:
-        """Read publication truth from the same canonical authority used by release lookup.
+    def _release_history_locked(con: Any, snapshot_id: str) -> Mapping[str, Any] | None:
+        """Read immutable publication history from canonical PostgreSQL authority.
 
         Local/test workflow databases may exist without canonical tables. In that
         topology there is no durable publication authority to seal against.
@@ -204,7 +204,7 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         ).fetchone()
 
     @classmethod
-    def _assert_published_projection_reconciliation(
+    def _assert_release_projection_reconciliation(
         cls,
         *,
         current_payload: Mapping[str, Any],
@@ -213,10 +213,20 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
     ) -> None:
         if cls._working_payload(current_payload) != cls._working_payload(submitted):
             raise WorkflowDocumentStoreError(PUBLISHED_WORKING_REVISION_IMMUTABLE)
-        if str(submitted.get("state") or "") != "published":
+
+        submitted_state = str(submitted.get("state") or "")
+        release_status = str(release.get("status") or "")
+        if submitted_state not in PUBLISHED_ENVELOPE_STATES:
             raise WorkflowDocumentStoreError(PUBLISHED_WORKING_REVISION_IMMUTABLE)
-        if submitted.get("published") is not True:
+        if release_status == "withdrawn":
+            if submitted_state != "withdrawn":
+                raise WorkflowDocumentStoreError(PUBLISHED_WORKING_REVISION_IMMUTABLE)
+        elif release_status == "published":
+            if submitted_state not in {"published", "superseded"}:
+                raise WorkflowDocumentStoreError(PUBLISHED_WORKING_REVISION_IMMUTABLE)
+        else:
             raise WorkflowDocumentStoreError(PUBLISHED_WORKING_REVISION_IMMUTABLE)
+
         if str(submitted.get("release_id") or "") != str(release["release_id"]):
             raise WorkflowDocumentStoreError(PUBLISHED_WORKING_REVISION_IMMUTABLE)
         if str(submitted.get("release_version") or "") != str(release["release_version"]):
@@ -227,22 +237,24 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
             raise WorkflowDocumentStoreError(PUBLISHED_WORKING_REVISION_IMMUTABLE)
 
     @staticmethod
-    def _write_published_projection_locked(
+    def _write_release_projection_locked(
         con: Any,
         *,
         snapshot_id: str,
         envelope: Mapping[str, Any],
     ) -> None:
-        """Update only rebuildable publication projection fields after sealing.
+        """Update only rebuildable release projection fields after sealing.
 
-        Reviewer rows and working-object rows are deliberately untouched.
+        Reviewer rows and working-object rows are deliberately untouched. The
+        workflow state is copied from the already-validated historical projection
+        instead of being hard-coded back to ``published``.
         """
         con.execute(
             "UPDATE workflow.documents SET "
-            "state='published',envelope_payload=%s::jsonb,"
+            "state=%s,envelope_payload=%s::jsonb,"
             "revision=revision+1,updated_at=CURRENT_TIMESTAMP "
             "WHERE snapshot_id=%s",
-            (_json_text(dict(envelope)), snapshot_id),
+            (str(envelope.get("state") or ""), _json_text(dict(envelope)), snapshot_id),
         )
 
     def write_bundle(
@@ -266,17 +278,17 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                     current_objects: list[dict[str, Any]] = []
                     if existing is not None:
                         current_objects = self._objects_locked(con, snapshot_id)
-                        published_release = self._published_release_locked(con, snapshot_id)
-                        if published_release is not None:
+                        release_history = self._release_history_locked(con, snapshot_id)
+                        if release_history is not None:
                             if objects is not None:
                                 raise WorkflowDocumentStoreError(PUBLISHED_WORKING_REVISION_IMMUTABLE)
                             current_payload = self._payload(existing["envelope_payload"])
-                            self._assert_published_projection_reconciliation(
+                            self._assert_release_projection_reconciliation(
                                 current_payload=current_payload,
                                 submitted=envelope,
-                                release=published_release,
+                                release=release_history,
                             )
-                            self._write_published_projection_locked(
+                            self._write_release_projection_locked(
                                 con,
                                 snapshot_id=snapshot_id,
                                 envelope=envelope,
