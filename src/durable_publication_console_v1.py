@@ -24,6 +24,9 @@ from src.review_closure_v1 import ReviewClosureConsole
 from src.review_ledger import append_event
 
 
+_HISTORICAL_RELEASE_STATES = frozenset({"superseded", "withdrawn"})
+
+
 class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConsole):
     """Review console whose successful publication is PostgreSQL-first."""
 
@@ -73,7 +76,11 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
         prior_projection = self._read_optional(projection_path); prior_manifest = self._read_optional(manifest_path); prior_envelopes = self._read_optional(self._envelopes_path); prior_ledger = self._read_optional(self._ledger_path); prior_envelope_map = deepcopy(self._envelopes)
         try:
             _atomic_write(manifest_path, self._manifest_from_release(release)); atomic_replace_projection(projection_path, projection)
-            current = deepcopy(self._envelope(snapshot_id)); current.update({"state":"published","published":True,"release_id":release_id,"release_version":str(release["release_version"]),"published_at":str(release["published_at"]),"published_by":str(release["release_owner"])}); self._envelopes[snapshot_id] = current; _atomic_write(self._envelopes_path, self._envelopes)
+            current = deepcopy(self._envelope(snapshot_id))
+            current_state = str(current.get("state") or "")
+            release_state = current_state if current_state in _HISTORICAL_RELEASE_STATES else "published"
+            current.update({"state":release_state,"published":True,"release_id":release_id,"release_version":str(release["release_version"]),"published_at":str(release["published_at"]),"published_by":str(release["release_owner"])})
+            self._envelopes[snapshot_id] = current; _atomic_write(self._envelopes_path, self._envelopes)
             if not self._local_ledger_has_release(release_id): append_event(self._ledger_path,event_type="release_published",object_id=snapshot_id,object_version=str(current.get("version") or ""),actor=str(release["release_owner"]),details={"release_id":release_id,"release_version":str(release["release_version"]),"published_object_ids":sorted(str(row["object_id"]) for row in release["objects"]),"source_sha256":str(release["source_sha256"]),"authority":"postgres"})
         except Exception:
             self._restore_optional(projection_path, prior_projection); self._restore_optional(manifest_path, prior_manifest); self._restore_optional(self._envelopes_path, prior_envelopes); self._restore_optional(self._ledger_path, prior_ledger); self._envelopes = prior_envelope_map; raise
@@ -85,14 +92,14 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
         except CanonicalPublicationStoreError as exc: raise ConsoleError("durable_publication_lookup_failed", str(exc)) from exc
 
     def snapshot_is_published(self, snapshot_id: str) -> bool:
-        """Canonical publication authority seals work even before envelope reconciliation.
+        """Return durable publication history from the configured authority.
 
-        This closes the crash window where PostgreSQL canonical publication already
-        succeeded but the workflow envelope still says captured_not_published.
+        When the canonical PostgreSQL store is configured, it is the exclusive
+        publication authority. Stale local envelope/object/projection state may
+        not manufacture publication truth when the authority has no release.
         """
         if self.canonical_publication_store is not None:
-            if self._durable_release_for_snapshot(snapshot_id) is not None:
-                return True
+            return self._durable_release_for_snapshot(snapshot_id) is not None
         return super().snapshot_is_published(snapshot_id)
 
     def _sync_snapshot_from_authority(self, snapshot_id: str) -> dict[str, Any] | None:
