@@ -112,7 +112,10 @@ def _workflow_identity_store(*, credential: Any | None = None) -> PostgresWorkfl
         return None
     if kind != "postgres":
         raise RuntimeError("unsupported_workflow_store")
-    store = CutoverPostgresWorkflowIdentityStore(credential=credential)
+    if credential is None:
+        store = CutoverPostgresWorkflowIdentityStore()
+    else:
+        store = CutoverPostgresWorkflowIdentityStore(credential=credential)
     store.verify_schema()
     return store
 
