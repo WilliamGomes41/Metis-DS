@@ -300,6 +300,13 @@ class _HotPathRouteConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole):
     def snapshot_objects(self, _snapshot_id: str) -> list[dict[str, Any]]:
         raise AssertionError("Review index must not load full snapshot objects")
 
+    def snapshot_objects_and_revision(
+        self,
+        snapshot_id: str,
+    ) -> tuple[list[dict[str, Any]], str]:
+        assert snapshot_id == "snap-unpublished"
+        raise AssertionError("Review detail must keep full snapshot read")
+
 
 def _installed_client(console: OperationsConsole) -> TestClient:
     app = create_console_app(console)
@@ -365,8 +372,9 @@ def test_review_detail_keeps_existing_full_path(tmp_path: Path) -> None:
     console.workflow_document_store = workflow
     client = _installed_client(console)
 
-    with pytest.raises(AssertionError, match="document_readiness|snapshot objects"):
+    with pytest.raises(AssertionError, match="Review detail must keep full snapshot read"):
         client.get("/review?document=snap-unpublished")
+    assert console.list_status_calls == 0
 
 
 class _Token:
