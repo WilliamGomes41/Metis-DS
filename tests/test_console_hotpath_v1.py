@@ -21,8 +21,10 @@ from src.canonical_publication_postgres_v1 import (
     PostgresCanonicalConfig,
     PostgresCanonicalPublicationStore,
 )
+from src.document_status_ui_v1 import install_document_status_ui
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
+from src.review_workboard_v1 import install_review_workboard
 from src.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin
 from src.workflow_documents_postgres_v1 import PostgresWorkflowDocumentStore
 
@@ -184,6 +186,7 @@ _ROUTE_ENVELOPES = [
         "family": "hotpath",
         "class": "richtlijn",
         "state": "captured_not_published",
+        "named_reviewers": ["acc-hotpath"],
     },
     {
         "snapshot_id": "snap-unpublished",
@@ -192,6 +195,7 @@ _ROUTE_ENVELOPES = [
         "family": "hotpath",
         "class": "richtlijn",
         "state": "captured_not_published",
+        "named_reviewers": ["acc-hotpath"],
     },
 ]
 
@@ -230,10 +234,92 @@ class _RouteFixtureConsole(OperationsConsole):
 
 
 class _HotPathRouteConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole):
-    pass
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.list_status_calls = 0
+        self.workboard_summary_calls = 0
+
+    def list_document_lifecycle_statuses(
+        self,
+        snapshot_ids: list[str] | None = None,
+    ) -> dict[str, dict[str, str]]:
+        self.list_status_calls += 1
+        assert snapshot_ids is None
+        return {
+            "snap-published": {
+                "workflow_status": "closed",
+                "release_status": "published",
+                "serving_status": "active",
+                "presentation_status": "published",
+            },
+            "snap-unpublished": {
+                "workflow_status": "in_review",
+                "release_status": "none",
+                "serving_status": "inactive",
+                "presentation_status": "in_review",
+            },
+        }
+
+    def review_workboard_summaries(self, account_id: str) -> dict[str, dict[str, Any]]:
+        self.workboard_summary_calls += 1
+        assert account_id == "acc-hotpath"
+        return {
+            "snap-published": {
+                "envelope": dict(_ROUTE_ENVELOPES[0]),
+                "heading_pending": 0,
+                "individual_pending": 0,
+                "normal_passages": 0,
+                "normal_batches": 0,
+                "blocked_count": 0,
+                "closure_gap_count": 0,
+                "closure_gap_first": "",
+                "source_passage_review_complete": True,
+            },
+            "snap-unpublished": {
+                "envelope": dict(_ROUTE_ENVELOPES[1]),
+                "heading_pending": 1,
+                "individual_pending": 2,
+                "normal_passages": 20,
+                "normal_batches": 1,
+                "blocked_count": 0,
+                "closure_gap_count": 0,
+                "closure_gap_first": "",
+                "source_passage_review_complete": False,
+            },
+        }
+
+    def document_readiness(self, _snapshot_id: str) -> dict[str, Any]:
+        raise AssertionError("list GET must not invoke document_readiness")
+
+    def publication_readiness(self, _snapshot_id: str) -> dict[str, Any]:
+        raise AssertionError("list GET must not invoke publication_readiness")
+
+    def consider_publish(self, **_kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("list GET must not invoke consider_publish")
+
+    def snapshot_objects(self, _snapshot_id: str) -> list[dict[str, Any]]:
+        raise AssertionError("Review index must not load full snapshot objects")
+
+    def snapshot_objects_and_revision(
+        self,
+        snapshot_id: str,
+    ) -> tuple[list[dict[str, Any]], str]:
+        assert snapshot_id == "snap-unpublished"
+        raise AssertionError("Review detail must keep full snapshot read")
 
 
-def test_authenticated_tree_and_review_gets_keep_constant_db_budget(tmp_path: Path) -> None:
+def _installed_client(console: OperationsConsole) -> TestClient:
+    app = create_console_app(console)
+    install_document_status_ui(app, console)
+    install_review_workboard(app, console)
+    client = TestClient(app)
+    client.cookies.set("console_session", "hotpath-session")
+    return client
+
+
+def test_authenticated_tree_and_review_gets_use_production_list_installers(
+    tmp_path: Path,
+) -> None:
     canonical = _CanonicalStore({"snap-published"})
     workflow = _WorkflowStore()
     assert sum(len(rows) for rows in workflow.objects.values()) == 410
@@ -245,13 +331,13 @@ def test_authenticated_tree_and_review_gets_keep_constant_db_budget(tmp_path: Pa
     )
     console.canonical_publication_store = canonical
     console.workflow_document_store = workflow
-    client = TestClient(create_console_app(console))
-    client.cookies.set("console_session", "hotpath-session")
+    client = _installed_client(console)
 
     tree = client.get("/tree")
     assert tree.status_code == 200
     assert "Published fixture" in tree.text
     assert "Unpublished fixture" in tree.text
+    assert console.list_status_calls == 1
     assert workflow.connect_calls == 1
     assert workflow.execute_calls == 1
     assert canonical.connect_calls == 1
@@ -265,10 +351,30 @@ def test_authenticated_tree_and_review_gets_keep_constant_db_budget(tmp_path: Pa
     assert review.status_code == 200
     assert "Published fixture" in review.text
     assert "Unpublished fixture" in review.text
+    assert "data-review-workboard" in review.text
+    assert console.list_status_calls == 2
+    assert console.workboard_summary_calls == 1
     assert workflow.connect_calls == 1
     assert workflow.execute_calls == 1
     assert canonical.connect_calls == 0
     assert canonical.execute_calls == 0
+
+
+def test_review_detail_keeps_existing_full_path(tmp_path: Path) -> None:
+    canonical = _CanonicalStore(set())
+    workflow = _WorkflowStore()
+    console = _HotPathRouteConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / "output" / "runtime" / "operations-console",
+    )
+    console.canonical_publication_store = canonical
+    console.workflow_document_store = workflow
+    client = _installed_client(console)
+
+    with pytest.raises(AssertionError, match="Review detail must keep full snapshot read"):
+        client.get("/review?document=snap-unpublished")
+    assert console.list_status_calls == 0
 
 
 class _Token:

@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse
 import src.operations_console_app as console_ui
 from src.admission_gate_v1 import blocked_audit_lane
 from src.beslisboom_path_v1 import review_path_for_klasse
+from src.document_status_ui_v1 import current_document_lifecycle_status
 from src.operations_console_app import (
     COOKIE,
     REVIEW_TASKS,
@@ -72,6 +73,106 @@ def _assigned_to_reviewer(envelope: dict[str, Any], account_id: str) -> bool:
 
 def _pending_count(rows: list[dict[str, Any]]) -> int:
     return sum(not _review_is_final(row) for row in rows)
+
+
+def _fallback_lifecycle_status() -> dict[str, str]:
+    return {
+        "workflow_status": "processing",
+        "release_status": "none",
+        "serving_status": "inactive",
+        "presentation_status": "processing",
+    }
+
+
+def _lifecycle_for_work_item(
+    console: OperationsConsole,
+    snapshot_id: str,
+) -> dict[str, str]:
+    cached = current_document_lifecycle_status(snapshot_id)
+    if cached is not None:
+        return cached
+    try:
+        return dict(console.document_lifecycle_status(snapshot_id))  # type: ignore[attr-defined]
+    except (AttributeError, ConsoleError):
+        return _fallback_lifecycle_status()
+
+
+def _work_item_from_counts(
+    *,
+    envelope: dict[str, Any],
+    snapshot_id: str,
+    lifecycle_status: dict[str, str],
+    heading_pending: int,
+    individual_pending: int,
+    normal_passages: int,
+    normal_batches: int,
+    blocked_count: int,
+    closure_gap_ids: list[str],
+    closure_gap_count: int,
+    source_passage_review_complete: bool,
+) -> dict[str, Any]:
+    remaining = heading_pending + individual_pending + normal_passages + closure_gap_count
+
+    task_counts = (
+        ("headings", heading_pending),
+        ("individual", individual_pending),
+        ("together", normal_passages),
+    )
+    next_task = next((task for task, pending in task_counts if pending), "")
+    if not next_task and blocked_count:
+        next_task = "control"
+    if not next_task and closure_gap_count:
+        next_task = "closure"
+
+    meaningful_status = str(lifecycle_status["presentation_status"])
+    if lifecycle_status["workflow_status"] == "closed":
+        # Historical release truth wins over stale reviewer rows. Repair 2/2b
+        # makes this WorkingRevision immutable, so the workboard must not offer
+        # a continuation into review even if legacy rows remain unresolved.
+        work_state = "complete"
+        next_task = ""
+    elif remaining:
+        work_state = "review"
+    elif blocked_count:
+        work_state = "technical_repair"
+    elif meaningful_status == "blocked":
+        work_state = "publication_blocked"
+    else:
+        work_state = "complete"
+
+    next_title, next_description = _TASK_COPY.get(next_task, ("", ""))
+    if next_task == "closure" and closure_gap_ids:
+        next_href = (
+            f"/review?document={quote(snapshot_id, safe='')}"
+            f"&object={quote(closure_gap_ids[0], safe='')}"
+        )
+    else:
+        next_href = (
+            f"/review?document={quote(snapshot_id, safe='')}&task={quote(next_task, safe='')}"
+            if next_task
+            else ""
+        )
+
+    return {
+        "snapshot_id": snapshot_id,
+        "envelope": envelope,
+        "lifecycle_status": lifecycle_status,
+        "meaningful_status": meaningful_status,
+        "work_state": work_state,
+        "remaining_review_items": remaining,
+        "heading_pending": heading_pending,
+        "individual_pending": individual_pending,
+        "normal_passages": normal_passages,
+        "normal_batches": normal_batches,
+        "blocked_count": blocked_count,
+        "closure_gap_ids": closure_gap_ids,
+        "closure_gap_count": closure_gap_count,
+        "source_passage_review_complete": source_passage_review_complete,
+        "next_task": next_task,
+        "next_title": next_title,
+        "next_description": next_description,
+        "next_href": next_href,
+    }
 
 
 def review_work_item(
@@ -140,79 +241,20 @@ def review_work_item(
         for object_id in unresolved_closure_ids
         if object_id not in represented_ids
     ]
-    closure_gap_count = len(closure_gap_ids)
-    remaining = heading_pending + individual_pending + normal_passages + closure_gap_count
 
-    task_counts = (
-        ("headings", heading_pending),
-        ("individual", individual_pending),
-        ("together", normal_passages),
+    return _work_item_from_counts(
+        envelope=envelope,
+        snapshot_id=snapshot_id,
+        lifecycle_status=_lifecycle_for_work_item(console, snapshot_id),
+        heading_pending=heading_pending,
+        individual_pending=individual_pending,
+        normal_passages=normal_passages,
+        normal_batches=normal_batches,
+        blocked_count=blocked_count,
+        closure_gap_ids=closure_gap_ids,
+        closure_gap_count=len(closure_gap_ids),
+        source_passage_review_complete=bool(closure["source_passage_review_complete"]),
     )
-    next_task = next((task for task, pending in task_counts if pending), "")
-    if not next_task and blocked_count:
-        next_task = "control"
-    if not next_task and closure_gap_count:
-        next_task = "closure"
-
-    try:
-        lifecycle_status = dict(console.document_lifecycle_status(snapshot_id))  # type: ignore[attr-defined]
-    except (AttributeError, ConsoleError):
-        lifecycle_status = {
-            "workflow_status": "processing",
-            "release_status": "none",
-            "serving_status": "inactive",
-            "presentation_status": "processing",
-        }
-    meaningful_status = str(lifecycle_status["presentation_status"])
-
-    if lifecycle_status["workflow_status"] == "closed":
-        # Historical release truth wins over stale reviewer rows. Repair 2/2b
-        # makes this WorkingRevision immutable, so the workboard must not offer
-        # a continuation into review even if legacy rows remain unresolved.
-        work_state = "complete"
-        next_task = ""
-    elif remaining:
-        work_state = "review"
-    elif blocked_count:
-        work_state = "technical_repair"
-    elif meaningful_status == "blocked":
-        work_state = "publication_blocked"
-    else:
-        work_state = "complete"
-
-    next_title, next_description = _TASK_COPY.get(next_task, ("", ""))
-    if next_task == "closure":
-        next_href = (
-            f"/review?document={quote(snapshot_id, safe='')}"
-            f"&object={quote(closure_gap_ids[0], safe='')}"
-        )
-    else:
-        next_href = (
-            f"/review?document={quote(snapshot_id, safe='')}&task={quote(next_task, safe='')}"
-            if next_task
-            else ""
-        )
-
-    return {
-        "snapshot_id": snapshot_id,
-        "envelope": envelope,
-        "lifecycle_status": lifecycle_status,
-        "meaningful_status": meaningful_status,
-        "work_state": work_state,
-        "remaining_review_items": remaining,
-        "heading_pending": heading_pending,
-        "individual_pending": individual_pending,
-        "normal_passages": normal_passages,
-        "normal_batches": normal_batches,
-        "blocked_count": blocked_count,
-        "closure_gap_ids": closure_gap_ids,
-        "closure_gap_count": closure_gap_count,
-        "source_passage_review_complete": bool(closure["source_passage_review_complete"]),
-        "next_task": next_task,
-        "next_title": next_title,
-        "next_description": next_description,
-        "next_href": next_href,
-    }
 
 
 def review_workboard_items(
@@ -221,6 +263,35 @@ def review_workboard_items(
     account: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """Return only documents assigned to the current reviewer, in store order."""
+    account_id = str(account.get("account_id") or "")
+    summary_reader = getattr(console, "review_workboard_summaries", None)
+    if account_id and callable(summary_reader):
+        summaries = summary_reader(account_id)
+        items: list[dict[str, Any]] = []
+        for snapshot_id, summary in summaries.items():
+            envelope = dict(summary["envelope"])
+            closure_gap_count = int(summary.get("closure_gap_count") or 0)
+            closure_gap_first = str(summary.get("closure_gap_first") or "")
+            closure_gap_ids = [closure_gap_first] if closure_gap_count and closure_gap_first else []
+            items.append(
+                _work_item_from_counts(
+                    envelope=envelope,
+                    snapshot_id=snapshot_id,
+                    lifecycle_status=_lifecycle_for_work_item(console, snapshot_id),
+                    heading_pending=int(summary.get("heading_pending") or 0),
+                    individual_pending=int(summary.get("individual_pending") or 0),
+                    normal_passages=int(summary.get("normal_passages") or 0),
+                    normal_batches=int(summary.get("normal_batches") or 0),
+                    blocked_count=int(summary.get("blocked_count") or 0),
+                    closure_gap_ids=closure_gap_ids,
+                    closure_gap_count=closure_gap_count,
+                    source_passage_review_complete=bool(
+                        summary.get("source_passage_review_complete")
+                    ),
+                )
+            )
+        return items
+
     return [
         item
         for envelope in console.list_envelopes()
