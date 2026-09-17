@@ -311,7 +311,7 @@ class _PostgresWorkflowDocumentsMixin:
     def _load_objects(self, snapshot_id: str, *, remember: bool = True) -> list[dict[str, Any]]:
         try:
             rows = self.workflow_document_store.list_document_objects(snapshot_id)
-            revision = self.workflow_document_store.objects_revision(snapshot_id)
+            revision = self.workflow_document_store._revision(rows)
         except WorkflowDocumentStoreError as exc:
             raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
         if remember:
