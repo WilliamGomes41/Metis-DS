@@ -60,7 +60,7 @@ def workflow_postgres() -> PostgresCanonicalConfig:
         con.execute("DROP SCHEMA IF EXISTS workflow CASCADE")
 
 
-def _fresh_validation_statuses(
+def _fresh_current_validation_statuses(
     config: PostgresCanonicalConfig,
     *,
     snapshot_id: str,
@@ -72,9 +72,11 @@ def _fresh_validation_statuses(
     assert config.dsn
     with psycopg.connect(config.dsn, row_factory=dict_row) as con:
         rows = con.execute(
-            "SELECT object_id, payload->'governance'->>'validation_status' AS validation_status "
+            "SELECT DISTINCT ON (object_id) object_id, "
+            "payload->'governance'->>'validation_status' AS validation_status "
             "FROM workflow.document_objects "
-            "WHERE snapshot_id=%s AND object_id=ANY(%s) ORDER BY object_id",
+            "WHERE snapshot_id=%s AND object_id=ANY(%s) "
+            "ORDER BY object_id, position DESC NULLS LAST",
             (snapshot_id, sorted(object_ids)),
         ).fetchall()
     return {
@@ -160,7 +162,7 @@ def test_batch_confirmed_headings_disappear_from_fast_workboard_summary(
     assert confirmed
     assert set(confirmed.values()) == {"approved"}
 
-    committed = _fresh_validation_statuses(
+    committed = _fresh_current_validation_statuses(
         workflow_postgres,
         snapshot_id=snapshot_id,
         object_ids=heading_ids,
