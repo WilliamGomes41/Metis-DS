@@ -32,20 +32,26 @@ class _PostgresBadgeCountsMixin:
             with self.workflow_document_store._connect() as con:
                 row = con.execute(
                     """
-                    WITH document_status AS (
+                    WITH current_objects AS (
+                        SELECT DISTINCT ON (o.snapshot_id,o.object_id)
+                               o.snapshot_id,o.object_id,o.payload
+                        FROM workflow.document_objects o
+                        ORDER BY o.snapshot_id,o.object_id,o.position DESC NULLS LAST
+                    ),
+                    document_status AS (
                         SELECT d.snapshot_id,
                                d.uploader_account_id,
                                d.state,
                                d.clinical_rereview_required,
                                EXISTS (
                                    SELECT 1
-                                   FROM workflow.document_objects o
+                                   FROM current_objects o
                                    WHERE o.snapshot_id=d.snapshot_id
                                      AND o.payload->'governance'->>'validation_status'='revise'
                                ) AS has_revise,
                                EXISTS (
                                    SELECT 1
-                                   FROM workflow.document_objects o
+                                   FROM current_objects o
                                    WHERE o.snapshot_id=d.snapshot_id
                                      AND o.payload->'governance'->>'validation_status'='needs_review'
                                ) AS has_needs_review
@@ -94,11 +100,17 @@ class _PostgresBadgeCountsMixin:
             with self.workflow_document_store._connect() as con:
                 rows = con.execute(
                     f"""
+                    WITH current_objects AS (
+                        SELECT DISTINCT ON (o.snapshot_id,o.object_id)
+                               o.snapshot_id,o.object_id,o.payload
+                        FROM workflow.document_objects o
+                        ORDER BY o.snapshot_id,o.object_id,o.position DESC NULLS LAST
+                    )
                     SELECT d.snapshot_id,
                            d.state,
                            EXISTS (
                                SELECT 1
-                               FROM workflow.document_objects o
+                               FROM current_objects o
                                WHERE o.snapshot_id=d.snapshot_id
                                  AND COALESCE(o.payload->>'object_type','')<>'document'
                                  AND COALESCE(
@@ -289,6 +301,13 @@ class _PostgresBadgeCountsMixin:
                           ON r.snapshot_id=d.snapshot_id
                         WHERE r.account_id=%s
                     ),
+                    current_objects AS (
+                        SELECT DISTINCT ON (o.snapshot_id,o.object_id)
+                               o.snapshot_id,o.object_id,o.payload
+                        FROM workflow.document_objects o
+                        JOIN assigned a ON a.snapshot_id=o.snapshot_id
+                        ORDER BY o.snapshot_id,o.object_id,o.position DESC NULLS LAST
+                    ),
                     base AS (
                         SELECT a.snapshot_id,
                                a.class,
@@ -338,7 +357,7 @@ class _PostgresBadgeCountsMixin:
                                    )
                                END AS section_path
                         FROM assigned a
-                        JOIN workflow.document_objects o
+                        JOIN current_objects o
                           ON o.snapshot_id=a.snapshot_id
                     ),
                     classified AS (
