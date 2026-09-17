@@ -1,6 +1,7 @@
 """Regression proof for source-bound semantic passage formation before Review.
 
 # release-control-evidence: scope/belofte
+# release-control-evidence: toegang
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
@@ -182,7 +183,6 @@ def test_runtime_policy_uses_semantic_route_and_keeps_explicit_rollback_mode() -
 
     try:
         semantic_module._INSTALLED = False
-        semantic_module._ORIGINAL_SPEC_BUILDER = None
         install_pre_review_semantic_processing(environ=env, post_json=fake_post)
         semantic_spec = console_module._spec_from_fragments(
             document_id="doc-1",
@@ -207,4 +207,3 @@ def test_runtime_policy_uses_semantic_route_and_keeps_explicit_rollback_mode() -
     finally:
         console_module._spec_from_fragments = original
         semantic_module._INSTALLED = False
-        semantic_module._ORIGINAL_SPEC_BUILDER = None
