@@ -32,6 +32,20 @@ def _closed_fallback() -> dict[str, str]:
     }
 
 
+def current_document_lifecycle_status(snapshot_id: str) -> dict[str, str] | None:
+    """Return the request-local presentation status when middleware populated it."""
+    row = _LIFECYCLE_BY_SNAPSHOT.get().get(str(snapshot_id or ""))
+    return dict(row) if row else None
+
+
+def _is_list_request(request: Request) -> bool:
+    if request.url.path == "/tree":
+        return True
+    if request.url.path != "/review":
+        return False
+    return not str(request.query_params.get("document") or "").strip()
+
+
 def install_document_status_ui(app: FastAPI, console: Any) -> None:
     """Use one request-local lifecycle map with the existing shared card renderer."""
     if getattr(app.state, "document_status_ui_v1", False):
@@ -76,18 +90,30 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
             return await call_next(request)
 
         lifecycle_by_snapshot: dict[str, dict[str, str]] = {}
-        for row in console.list_envelopes():
-            snapshot_id = str(row.get("snapshot_id") or "")
-            if not snapshot_id:
-                continue
+        list_reader = getattr(console, "list_document_lifecycle_statuses", None)
+        if _is_list_request(request) and callable(list_reader):
+            # Production PostgreSQL list pages use one light workflow aggregate plus
+            # one canonical release read. Never enter full publish-readiness here.
             try:
-                lifecycle_by_snapshot[snapshot_id] = dict(
-                    console.document_lifecycle_status(snapshot_id)
-                )
+                lifecycle_by_snapshot = {
+                    str(snapshot_id): dict(row)
+                    for snapshot_id, row in list_reader().items()
+                }
             except (AttributeError, ConsoleError):
-                # Presentation fails closed: no read failure can make an
-                # unresolved document look ready, published or actively served.
-                lifecycle_by_snapshot[snapshot_id] = _closed_fallback()
+                lifecycle_by_snapshot = {}
+        else:
+            # Publish and selected Review detail keep their existing full lifecycle
+            # semantics. Local/non-PostgreSQL runtimes also retain the compatibility path.
+            for row in console.list_envelopes():
+                snapshot_id = str(row.get("snapshot_id") or "")
+                if not snapshot_id:
+                    continue
+                try:
+                    lifecycle_by_snapshot[snapshot_id] = dict(
+                        console.document_lifecycle_status(snapshot_id)
+                    )
+                except (AttributeError, ConsoleError):
+                    lifecycle_by_snapshot[snapshot_id] = _closed_fallback()
 
         token = _LIFECYCLE_BY_SNAPSHOT.set(lifecycle_by_snapshot)
         try:
