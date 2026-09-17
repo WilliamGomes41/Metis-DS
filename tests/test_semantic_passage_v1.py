@@ -1,3 +1,10 @@
+"""Contract tests for source-bound semantic passage proposals.
+
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+"""
+
 import pytest
 
 from src.semantic_passage_v1 import (
