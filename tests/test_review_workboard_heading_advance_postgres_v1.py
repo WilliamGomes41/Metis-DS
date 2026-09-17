@@ -15,6 +15,7 @@ import pytest
 
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.operations_console_v1 import review_lane
+from src.review_workboard_v1 import review_workboard_items
 from src.workflow_badge_counts_postgres_v1 import (
     FastBadgePostgresCompleteWorkflowDurablePublicationConsole,
 )
@@ -171,3 +172,9 @@ def test_batch_confirmed_headings_disappear_from_fast_workboard_summary(
 
     after = console.review_workboard_summaries(str(reviewer["account_id"]))[snapshot_id]
     assert after["heading_pending"] == 0
+
+    items = review_workboard_items(console, account=reviewer)
+    work_item = next(row for row in items if row["snapshot_id"] == snapshot_id)
+    assert work_item["heading_pending"] == 0
+    assert work_item["next_task"] != "headings"
+    assert work_item["next_href"] != f"/review?document={snapshot_id}&task=headings"
