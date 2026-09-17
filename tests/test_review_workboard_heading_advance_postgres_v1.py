@@ -60,6 +60,29 @@ def workflow_postgres() -> PostgresCanonicalConfig:
         con.execute("DROP SCHEMA IF EXISTS workflow CASCADE")
 
 
+def _fresh_validation_statuses(
+    config: PostgresCanonicalConfig,
+    *,
+    snapshot_id: str,
+    object_ids: set[str],
+) -> dict[str, str]:
+    import psycopg
+    from psycopg.rows import dict_row
+
+    assert config.dsn
+    with psycopg.connect(config.dsn, row_factory=dict_row) as con:
+        rows = con.execute(
+            "SELECT object_id, payload->'governance'->>'validation_status' AS validation_status "
+            "FROM workflow.document_objects "
+            "WHERE snapshot_id=%s AND object_id=ANY(%s) ORDER BY object_id",
+            (snapshot_id, sorted(object_ids)),
+        ).fetchall()
+    return {
+        str(row["object_id"]): str(row["validation_status"] or "")
+        for row in rows
+    }
+
+
 def test_batch_confirmed_headings_disappear_from_fast_workboard_summary(
     tmp_path: Path,
     workflow_postgres: PostgresCanonicalConfig,
@@ -136,6 +159,13 @@ def test_batch_confirmed_headings_disappear_from_fast_workboard_summary(
     }
     assert confirmed
     assert set(confirmed.values()) == {"approved"}
+
+    committed = _fresh_validation_statuses(
+        workflow_postgres,
+        snapshot_id=snapshot_id,
+        object_ids=heading_ids,
+    )
+    assert committed == confirmed
 
     after = console.review_workboard_summaries(str(reviewer["account_id"]))[snapshot_id]
     assert after["heading_pending"] == 0
