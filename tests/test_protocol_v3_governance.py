@@ -66,24 +66,26 @@ def test_roadmap_keeps_history_out_and_current_next_work_in() -> None:
     assert "Historical Lifecycle Audit — read-only" in roadmap
 
 
-def test_audit_room_passage_experiment_and_evidence_boundary_are_locked() -> None:
+def test_audit_room_and_pre_review_semantic_boundaries_are_locked() -> None:
     roadmap = ROADMAP.read_text(encoding="utf-8")
     for required in (
         "de Audit-kamer is generiek; onderliggende audits blijven expliciet en lokaal",
         "**Experiment** en een minimale read-only **Documentkwaliteit**-audit",
         "geen nieuwe accountrol `auditor`",
         "geen console-rewrite, nieuw frontendframework, microservicesplitsing of generieke `AuditEngine`",
-        "Beide routes lopen na kandidaatvorming door dezelfde deterministische verificatie van harde invarianten.",
-        "AI is uitsluitend een experimenteel instrument binnen de Audit-kamer",
-        "de Kernel blijft AI-vrij",
+        "AI mag worden gebruikt in Audit-experimenten én in de expliciet geconfigureerde brongebonden pre-Review passagevormingsstap",
+        "geen modelcall, modeloutput of modelprovider krijgt een direct schrijfpad naar canonieke kennis",
+        "de pre-Review route levert uitsluitend brongebonden kandidaatobjecten aan de bestaande menselijke Review",
         "het LLM mag uitsluitend exacte bronspans selecteren of combineren",
-        "Metis reconstrueert een kandidaat zelf uit de aangewezen spans van de frozen bron",
+        "Metis reconstrueert een kandidaat zelf uit de aangewezen bronspans",
+        "semantic mode faalt closed en valt niet stil terug op de deterministische splitter",
+        "METIS_PRE_REVIEW_LLM_API_KEY",
+        "METIS_PRE_REVIEW_LLM_MODEL",
         "**Blind beoordelen**",
         "A, B, gelijkwaardig of beide onvoldoende",
         "**Menselijke correctie vastleggen**",
         "**Verbetercollectie vullen**",
         "**READY FOR IMPLEMENTATION**",
-        "Metis programmeert zichzelf niet",
         "GitHub blijft de bron van waarheid voor software",
         "een individueel voorbeeld leidt niet tot een softwarewijziging of PR",
         "bruikbare yield/coverage",
@@ -91,13 +93,17 @@ def test_audit_room_passage_experiment_and_evidence_boundary_are_locked() -> Non
     ):
         assert required in roadmap
     assert "Geen generiek auditframework voordat meerdere echte auditvormen aantoonbaar dezelfde state en persistence delen." in roadmap
-    assert "Geen AI/modelroute buiten Audit zolang geen afzonderlijk architectuurbesluit dat expliciet wijzigt." in roadmap
+    assert "Geen AI/modelroute buiten Audit behalve de expliciet geconfigureerde brongebonden pre-Review passagevormingsroute" in roadmap
+    assert "Geen silent deterministic fallback wanneer semantic pre-Review mode is geactiveerd." in roadmap
     assert "Geen individuele fout of correctie die automatisch een softwarewijziging, branch of PR veroorzaakt." in roadmap
     assert "Geen `READY FOR IMPLEMENTATION` als impliciete autorisatie voor codewijziging, GitHub-write, merge, deploy of publicatie." in roadmap
     assert "Geen downstream-capability als werkend beschrijven zolang geen echte technische executor bestaat." in roadmap
     assert "| Audit-kamer als brede inspectiekamer | LOCKED — 2026-09-10 |" in roadmap
     assert "| Passagevormingsexperiment | LOCKED — frozen dataset, blind A/B, menselijke correctie en verbetercollectie |" in roadmap
-    assert "| Audit → READY FOR IMPLEMENTATION | LOCKED — hier eindigt Metis; ontwikkeling gebeurt buiten Metis |" in roadmap
+    assert "| Brongebonden LLM-passagevorming vóór menselijke Review | LOCKED" in roadmap
+    assert "| Productie semantic-mode foutgedrag | LOCKED — fail-closed, geen silent fallback |" in roadmap
+    assert "| AI uitsluitend als experimenteel instrument binnen Audit | VERVALLEN" in roadmap
+    assert "| Audit → READY FOR IMPLEMENTATION | LOCKED — hier eindigt Audit; ontwikkeling gebeurt buiten Audit |" in roadmap
     assert "| Metis programmeert zichzelf / automatische APPLY → GitHub | AFGEWEZEN" in roadmap
 
 

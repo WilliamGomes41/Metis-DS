@@ -1,7 +1,7 @@
 # Metis — Roadmap v3
 
 **Status:** actief  
-**Datum:** 2026-09-16  
+**Datum:** 2026-09-17  
 **Functie:** alleen actieve veranderopgaven, experimenten, beslispoorten en stopvoorwaarden. Uitgevoerde geschiedenis hoort in changelog, audit of `docs/history/`.
 
 ## R3.3 Audit-kamer + experimentbasis
@@ -47,33 +47,40 @@ Capability-closure-regel:
 
 ## R3.4 Eerste experiment: passagevorming
 
-**Status:** ARCHITECTUUR HERZIEN EN LOCKED — owner-approved 2026-09-10; Audit stopt bij bewijs en verbeterbundel, softwareontwikkeling blijft buiten Metis.
+**Status:** ARCHITECTUUR HERZIEN EN LOCKED — owner-approved 2026-09-10; productieroute expliciet gecorrigeerd 2026-09-17: brongebonden LLM-passagevorming hoort als eigen processingstap vóór menselijke Review, niet als Audit-only productieroute.
 
 Onderzoeksvraag: kan brongebonden semantische passagevorming betere kennisobjectvoorstellen maken dan de huidige deterministische passagevorming zonder brontrouw of publicatieveiligheid te verliezen?
 
-Baseline: huidige productiepassagevorming.  
-Kandidaat: brongebonden semantische bronselectie binnen Audit.  
-Beide routes lopen na kandidaatvorming door dezelfde deterministische verificatie van harde invarianten.
+Baseline in Audit: huidige deterministische passagevorming.  
+Kandidaat in Audit: brongebonden semantische bronselectie op een frozen dataset.  
+Productie: een afzonderlijk geconfigureerde brongebonden semantische passagevormingsstap mag vóór menselijke Review kandidaatobjecten vormen. Beide routes gebruiken dezelfde deterministische verificatie van harde invarianten.
 
 Architectuurlock AI en Kernel:
-- AI is uitsluitend een experimenteel instrument binnen de Audit-kamer;
-- de Kernel blijft AI-vrij: geen modelcall, modeloutput of modelprovider krijgt een direct schrijfpad naar canonieke kennis, reviewstatus, publicatielogica of productie-state;
+- AI mag worden gebruikt in Audit-experimenten én in de expliciet geconfigureerde brongebonden pre-Review passagevormingsstap;
+- geen modelcall, modeloutput of modelprovider krijgt een direct schrijfpad naar canonieke kennis, menselijke reviewbesluiten, publicatielogica of serving-state;
+- de pre-Review route levert uitsluitend brongebonden kandidaatobjecten aan de bestaande menselijke Review en introduceert geen nieuwe lifecycle-state;
 - het LLM mag uitsluitend exacte bronspans selecteren of combineren en context/type/relaties voorstellen;
 - het LLM mag geen canonieke brontekst schrijven, herschrijven of parafraseren als bronwaarheid;
-- Metis reconstrueert een kandidaat zelf uit de aangewezen spans van de frozen bron, zodat kandidaattekst herleidbaar blijft tot bronbytes, bronhash en locator;
-- de reviewer ziet altijd de relevante originele bron, baseline, kandidaat en bijbehorende bronspans;
-- modeloutput, experimentresultaten en conclusies blijven Audit-bewijs en stromen niet automatisch door naar de Kernel.
+- Metis reconstrueert een kandidaat zelf uit de aangewezen bronspans, zodat kandidaattekst herleidbaar blijft tot bronfragmenten en locators;
+- structuur zoals headings blijft deterministisch waar bestaande extractiestructuur gezaghebbend is;
+- een fout, refusal, timeout, ongeldig schema of ongeldige span in semantic mode faalt closed en valt niet stil terug op de deterministische splitter;
+- de menselijke reviewer blijft verantwoordelijk voor Review; AI telt niet als reviewer en kan niet goedkeuren of publiceren;
+- Audit-resultaten en conclusies blijven Audit-bewijs en stromen niet automatisch door naar productie.
 
 LLM-secretlock:
 - de gebruiker kan de LLM API-key uitsluitend via **Audit → LLM-instellingen** invoeren, vervangen of verwijderen;
 - de API-key is write-only: na opslaan toont de console alleen `Geconfigureerd` of `Niet geconfigureerd` en nooit de sleutel zelf;
-- de plaintext API-key komt niet in Audit-records, frozen datasets, Kernel-state, roadmap/configbestanden of Git;
-- de opgeslagen API-key wordt versleuteld met een afzonderlijke deployment-masterkey uit `METIS_AUDIT_SECRET_KEY`; zonder geldige masterkey is invoer in de console fail-closed niet beschikbaar;
-- alleen de Audit-runtime mag de ontsleutelde key opvragen voor een toekomstige modelcall; de Kernel importeert deze secretstore niet;
+- de plaintext Audit API-key komt niet in Audit-records, frozen datasets, Kernel-state, roadmap/configbestanden of Git;
+- de opgeslagen Audit API-key wordt versleuteld met een afzonderlijke deployment-masterkey uit `METIS_AUDIT_SECRET_KEY`; zonder geldige masterkey is invoer in de console fail-closed niet beschikbaar;
+- alleen de Audit-runtime mag de ontsleutelde Audit-key opvragen voor Audit-modelcalls; de Kernel importeert deze secretstore niet;
 - dit is geen algemene environment-variable- of secret-editor: andere deploymentsettings blijven buiten de console;
-- vervangen en verwijderen van de LLM-key geven geen implementatie-, merge-, deploy- of publicatierechten.
+- de productiekey voor de pre-Review route is een afzonderlijke deployment-secret (`METIS_PRE_REVIEW_LLM_API_KEY`) en wordt niet via de Audit-console beheerd;
+- het productiemodel wordt expliciet gekozen via `METIS_PRE_REVIEW_LLM_MODEL` wanneer semantic mode actief is;
+- de productiekey komt niet in Audit-records, frozen datasets, WorkingRevision-state, roadmap/configbestanden of Git;
+- de Audit-secretstore is geen authority voor de productie pre-Review route en de productiekey is geen tweede Audit-secretpad;
+- vervangen of configureren van een LLM-key geeft geen implementatie-, review-, merge-, deploy- of publicatierechten.
 
-Vaste workflow:
+Vaste Audit-workflow:
 1. **Opzetten** — onderzoeksvraag, baseline, kandidaat, beoordelingscriteria en stopregel vastleggen;
 2. **Dataset vastzetten** — een kleine representatieve frozen set maken met gewone én moeilijke passages, `item_id`, `snapshot_id`, `source_hash`, `source_locator`, exacte `source_text` en `baseline_commit`; na freeze niet stilzwijgend wijzigen of vervangen;
 3. **Beide routes uitvoeren** — baseline en kandidaat produceren alleen experimentoutputs; de kandidaatroute mag uitsluitend werken binnen de frozen bron en publiceert niets;
@@ -82,7 +89,7 @@ Vaste workflow:
 6. **Menselijke correctie vastleggen** — een reviewer kan een uitkomst als correct of incorrect markeren en, bij incorrect, de gewenste brongebonden uitkomst vastleggen;
 7. **Verbetercollectie vullen** — bevestigde foutgevallen én bestaande goede voorbeelden worden append-only verzameld als regressiebewijs; een individueel voorbeeld leidt niet tot een softwarewijziging of PR;
 8. **Patroon bundelen** — meerdere voorbeelden van hetzelfde onderliggende probleem kunnen als één verbeterbundel worden samengebracht met probleemomschrijving, foutgevallen, goede regressiegevallen, gewenste uitkomsten en onderzochte Metis-versie;
-9. **READY FOR IMPLEMENTATION** — alleen een voldoende onderbouwde verbeterbundel kan deze status krijgen. Daarmee eindigt de verantwoordelijkheid van Metis; softwareontwerp, programmeren, tests, branch, PR, merge en deployment gebeuren buiten Metis.
+9. **READY FOR IMPLEMENTATION** — alleen een voldoende onderbouwde verbeterbundel kan deze status krijgen. Daarmee eindigt de verantwoordelijkheid van Audit; softwareontwerp, programmeren, tests, branch, PR, merge en deployment gebeuren buiten Audit.
 
 Verbetercollectie-lock:
 - de collectie is Audit-evidence, geen tweede bron van waarheid en geen generieke learning engine;
@@ -92,10 +99,10 @@ Verbetercollectie-lock:
 - één voorbeeld mag nooit automatisch één change proposal, codewijziging of PR veroorzaken.
 
 Verantwoordelijkheidsgrens:
-- Metis detecteert, vergelijkt, laat beoordelen, bewaart bewijs en bundelt verbeterbehoeften;
-- Metis programmeert zichzelf niet;
-- Metis krijgt voor deze flow geen GitHub-write-integratie, ingebouwde coding-agent of algemene APPLY-executor;
-- een menselijke architect/developer kan een `READY FOR IMPLEMENTATION`-bundel buiten Metis samen met een coding-agent of andere ontwikkeltools omzetten in code en regressietests;
+- Audit detecteert, vergelijkt, laat beoordelen, bewaart bewijs en bundelt verbeterbehoeften;
+- Audit programmeert zichzelf niet;
+- Audit krijgt voor deze flow geen GitHub-write-integratie, ingebouwde coding-agent of algemene APPLY-executor;
+- een menselijke architect/developer kan een `READY FOR IMPLEMENTATION`-bundel buiten Audit samen met een coding-agent of andere ontwikkeltools omzetten in code en regressietests;
 - na een externe implementatie mag Audit dezelfde evidence opnieuw gebruiken om te toetsen of het probleem is opgelost en regressies zijn ontstaan;
 - een PR- of commitreferentie mag achteraf als Audit-metadata worden vastgelegd, maar GitHub blijft de bron van waarheid voor software.
 
@@ -112,22 +119,22 @@ Meet minimaal:
 
 Veiligheidscriterium: nul tolerantie voor onverifieerbare toevoegingen die als brongebonden kennis zouden kunnen doorstromen.
 
-Beslisbetekenis:
-- `KEEP`: huidige productieaanpak behouden;
+Beslisbetekenis Audit:
+- `KEEP`: huidige aanpak behouden;
 - `ITERATE`: kandidaat aanpassen binnen Audit en opnieuw experimenteren;
 - `EVIDENCE`: een menselijke beoordeling is sterk genoeg om als fout- of regressievoorbeeld in de verbetercollectie op te nemen;
-- `READY FOR IMPLEMENTATION`: een gebundeld probleem is voldoende onderbouwd om buiten Metis als ontwikkelopdracht te gebruiken; deze status autoriseert geen codewijziging, GitHub-actie, merge, deploy of publicatie.
+- `READY FOR IMPLEMENTATION`: een gebundeld probleem is voldoende onderbouwd om buiten Audit als ontwikkelopdracht te gebruiken; deze status autoriseert geen codewijziging, GitHub-actie, merge, deploy of publicatie.
 
-Tot een afzonderlijk extern ontwikkelde, geautoriseerde en gereleasete productiewijziging blijft de bestaande productiepassagevorming leidend.
+Productiebesluit 2026-09-17: issue #255 autoriseert een afzonderlijke pre-Review semantic processing route. Tot activatie via expliciete `METIS_PASSAGE_FORMATION_MODE=semantic-source-bound-v1` blijft `deterministic-v1` de rollback/default-route; semantic-mode fouten veroorzaken geen automatische fallback.
 
 ## R3.5 Semantiek en invarianten gericht scheiden
 
-Alleen wanneer een `READY FOR IMPLEMENTATION`-verbeterbundel buiten Metis als expliciete ontwikkelopdracht wordt opgepakt:
+Wanneer een onderbouwde verbetering expliciet als ontwikkelopdracht wordt opgepakt:
 - identificeer lexicale regels die semantische interpretatie proberen te doen;
 - behoud bron-, review-, status- en publicatie-invarianten deterministisch;
-- verwijder of vereenvoudig semantische uitzonderingslogica alleen met regressiebewijs uit de verbetercollectie.
+- verwijder of vereenvoudig semantische uitzonderingslogica alleen met regressiebewijs.
 
-Softwareontwerp, codewijziging en PR vallen buiten Audit en zijn geen Metis-runtimeverantwoordelijkheid.
+Softwareontwerp en codewijzigingen blijven gewone externe ontwikkelhandelingen en worden niet door Audit autonoom uitgevoerd.
 
 Geen brede rewrite.
 
@@ -172,10 +179,11 @@ AI, Grok Bot en Metis tellen niet als vereiste menselijke C3–C6-reviewer, moge
 - Geen frontend-rewrite.
 - Geen microservicesplitsing zonder afzonderlijk bewijs dat de huidige grens het probleem veroorzaakt.
 - Geen generiek auditframework voordat meerdere echte auditvormen aantoonbaar dezelfde state en persistence delen.
-- Geen AI/modelroute buiten Audit zolang geen afzonderlijk architectuurbesluit dat expliciet wijzigt.
-- Geen modeloutput met directe schrijf-, review-, publicatie- of canonieke rechten in de Kernel.
-- Geen algemene environment-variable- of secret-editor in de console voor de Audit-LLM-koppeling.
-- Geen plaintext LLM API-key in Git, gewone config, auditrecords, frozen datasets of Kernel-state.
+- Geen AI/modelroute buiten Audit behalve de expliciet geconfigureerde brongebonden pre-Review passagevormingsroute uit besluit 2026-09-17.
+- Geen modeloutput met directe schrijf-, review-, publicatie- of canonieke rechten.
+- Geen silent deterministic fallback wanneer semantic pre-Review mode is geactiveerd.
+- Geen algemene environment-variable- of secret-editor in de console.
+- Geen plaintext LLM API-key in Git, gewone config, auditrecords, frozen datasets of WorkingRevision-state.
 - Geen individuele fout of correctie die automatisch een softwarewijziging, branch of PR veroorzaakt.
 - Geen `READY FOR IMPLEMENTATION` als impliciete autorisatie voor codewijziging, GitHub-write, merge, deploy of publicatie.
 - Geen GitHub-write-integratie, coding-agent of algemene software-executor in Audit zonder een nieuw expliciet architectuurbesluit met capability-closure.
@@ -194,11 +202,13 @@ AI, Grok Bot en Metis tellen niet als vereiste menselijke C3–C6-reviewer, moge
 | Audit als normale nav-kamer + brede paarse meta-tegel onder workflow | LOCKED UX — 2026-09-10 |
 | Generiek auditframework vooraf bouwen | AFGEWEZEN — eerst expliciete auditvormen en hergebruik |
 | Passagevormingsexperiment | LOCKED — frozen dataset, blind A/B, menselijke correctie en verbetercollectie |
-| AI uitsluitend als experimenteel instrument binnen Audit | LOCKED — geen direct pad naar Kernel of productie-state |
-| LLM API-key via Audit-console | LOCKED — write-only, versleuteld at rest, geen algemene secret-editor |
+| AI uitsluitend als experimenteel instrument binnen Audit | VERVALLEN — gecorrigeerd door owner-besluit 2026-09-17 |
+| Brongebonden LLM-passagevorming vóór menselijke Review | LOCKED — expliciete processingstap; geen review- of publicatierechten |
+| Productie semantic-mode foutgedrag | LOCKED — fail-closed, geen silent fallback |
+| Audit LLM API-key via Audit-console | LOCKED — write-only, versleuteld at rest, alleen Audit |
+| Productie pre-Review LLM-key | LOCKED — afzonderlijke deployment-secret, niet via Audit |
 | Audit-verbetercollectie | LOCKED — append-only bewijs van fouten én goede regressiegevallen; geen tweede bron van waarheid |
-| Audit → READY FOR IMPLEMENTATION | LOCKED — hier eindigt Metis; ontwikkeling gebeurt buiten Metis |
+| Audit → READY FOR IMPLEMENTATION | LOCKED — hier eindigt Audit; ontwikkeling gebeurt buiten Audit |
 | Metis programmeert zichzelf / automatische APPLY → GitHub | AFGEWEZEN — geen coding- of GitHub-writeverantwoordelijkheid in Audit |
-| Hybride passagevorming invoeren | NIET BESLOTEN — afhankelijk van bewijs en afzonderlijke externe implementatiebeslissing |
-| Bestaande passagevorming vervangen | NIET BESLOTEN |
+| Bestaande passagevorming vervangen | IN CUTOVER — semantic route expliciet beschikbaar; deterministic-v1 blijft tijdelijke rollback/default tot activatie |
 | OIDC standaard deployment herstellen | OPEN |
