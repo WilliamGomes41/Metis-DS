@@ -152,6 +152,26 @@ def test_badges_use_constant_round_trips_and_reflect_next_read() -> None:
     with store._connect() as con:
         paths = migration_paths(ROOT)
         apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))
+        workflow_indexes = {
+            str(row["indexname"])
+            for row in con.execute(
+                "SELECT indexname FROM pg_indexes WHERE indexname="
+                "'workflow_document_objects_snapshot_validation_status_idx'"
+            ).fetchall()
+        }
+        assert workflow_indexes == {
+            "workflow_document_objects_snapshot_validation_status_idx"
+        }
+
+        # The same migration must also install the canonical read index when the
+        # canonical authority is present, while remaining safe in workflow-only
+        # environments. A temporary table proves that branch without polluting
+        # the shared PostgreSQL test database.
+        con.execute(
+            "CREATE TEMP TABLE audit_events ("
+            "entity_type TEXT NOT NULL, event_type TEXT NOT NULL, details JSONB NOT NULL)"
+        )
+        con.execute((ROOT / "db" / "migrations" / "009_console_hotpath_indexes.sql").read_text(encoding="utf-8"))
         indexes = {
             str(row["indexname"])
             for row in con.execute(
@@ -160,10 +180,10 @@ def test_badges_use_constant_round_trips_and_reflect_next_read() -> None:
                 "'audit_events_release_snapshot_idx')"
             ).fetchall()
         }
-    assert indexes == {
-        "workflow_document_objects_snapshot_validation_status_idx",
-        "audit_events_release_snapshot_idx",
-    }
+        assert indexes == {
+            "workflow_document_objects_snapshot_validation_status_idx",
+            "audit_events_release_snapshot_idx",
+        }
 
     token = uuid.uuid4().hex
     account_id = f"acc-badges-{token[:16]}"
