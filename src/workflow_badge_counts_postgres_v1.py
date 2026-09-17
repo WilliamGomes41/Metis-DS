@@ -29,23 +29,19 @@ class _PostgresBadgeCountsMixin:
                                d.uploader_account_id,
                                d.state,
                                d.clinical_rereview_required,
-                               COALESCE(
-                                   BOOL_OR(
-                                       o.payload->'governance'->>'validation_status' = 'revise'
-                                   ), FALSE
+                               EXISTS (
+                                   SELECT 1
+                                   FROM workflow.document_objects o
+                                   WHERE o.snapshot_id=d.snapshot_id
+                                     AND o.payload->'governance'->>'validation_status'='revise'
                                ) AS has_revise,
-                               COALESCE(
-                                   BOOL_OR(
-                                       o.payload->'governance'->>'validation_status' = 'needs_review'
-                                   ), FALSE
+                               EXISTS (
+                                   SELECT 1
+                                   FROM workflow.document_objects o
+                                   WHERE o.snapshot_id=d.snapshot_id
+                                     AND o.payload->'governance'->>'validation_status'='needs_review'
                                ) AS has_needs_review
                         FROM workflow.documents d
-                        LEFT JOIN workflow.document_objects o
-                          ON o.snapshot_id=d.snapshot_id
-                        GROUP BY d.snapshot_id,
-                                 d.uploader_account_id,
-                                 d.state,
-                                 d.clinical_rereview_required
                     )
                     SELECT COUNT(*) FILTER (
                                WHERE s.uploader_account_id=%s AND s.has_revise
@@ -98,6 +94,13 @@ class _PostgresBadgeCountsMixin:
         except Exception as exc:
             raise CanonicalPublicationStoreError("canonical_postgres_read_failed") from exc
         return {str(row["snapshot_id"]) for row in rows if row.get("snapshot_id")}
+
+    def published_snapshot_ids(self, snapshot_ids: list[str]) -> set[str]:
+        """Return publication history for many snapshots in one canonical read."""
+        try:
+            return self._published_snapshot_ids(snapshot_ids)
+        except CanonicalPublicationStoreError as exc:
+            raise ConsoleError("durable_publication_lookup_failed", str(exc)) from exc
 
     def waiting_task_counts(self, account_id: str) -> dict[str, int]:
         account = self._account(account_id)
