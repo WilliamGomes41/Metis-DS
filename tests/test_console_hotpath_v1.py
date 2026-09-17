@@ -12,6 +12,7 @@ import time
 from typing import Any
 
 import psycopg
+import pytest
 
 from src.azure_postgres_credential_v1 import CachedAzurePostgresCredential
 from src.canonical_publication_postgres_v1 import (
@@ -20,6 +21,15 @@ from src.canonical_publication_postgres_v1 import (
 )
 from src.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin
 from src.workflow_documents_postgres_v1 import PostgresWorkflowDocumentStore
+
+
+pytestmark = [
+    pytest.mark.release_control_scope_belofte,
+    pytest.mark.release_control_opslag,
+    pytest.mark.release_control_toegang,
+    pytest.mark.release_control_slop,
+    pytest.mark.release_control_releasebewijs,
+]
 
 
 class _Result:
