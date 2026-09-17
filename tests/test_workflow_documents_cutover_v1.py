@@ -37,7 +37,7 @@ class _SharedDocumentStore:
             "snap-a": [{"object_id": "a", "object_version": "1.0"}],
             "snap-b": [{"object_id": "b", "object_version": "1.0"}],
         }
-        self.revisions = {"snap-a": "rev-a-1", "snap-b": "rev-b-1"}
+        self.object_reads = 0
         self.lock = threading.Lock()
 
     def verify_cutover_schema(self) -> None:
@@ -54,11 +54,16 @@ class _SharedDocumentStore:
 
     def list_document_objects(self, snapshot_id: str) -> list[dict[str, Any]]:
         with self.lock:
+            self.object_reads += 1
             return deepcopy(self.objects[snapshot_id])
+
+    @staticmethod
+    def _revision(rows: list[dict[str, Any]]) -> str:
+        return PostgresWorkflowDocumentRuntimeStore._revision(rows)
 
     def objects_revision(self, snapshot_id: str) -> str:
         with self.lock:
-            return self.revisions[snapshot_id]
+            return self._revision(self.objects[snapshot_id])
 
     def write_bundle(
         self,
@@ -69,12 +74,13 @@ class _SharedDocumentStore:
     ) -> str:
         snapshot_id = str(envelope["snapshot_id"])
         with self.lock:
-            if expected_revision is not None and expected_revision != self.revisions[snapshot_id]:
+            current_revision = self._revision(self.objects[snapshot_id])
+            if expected_revision is not None and expected_revision != current_revision:
                 raise AssertionError("unexpected stale revision")
             self.envelopes[snapshot_id] = deepcopy(envelope)
             if objects is not None:
                 self.objects[snapshot_id] = deepcopy(objects)
-            return self.revisions[snapshot_id]
+            return self._revision(self.objects[snapshot_id])
 
 
 class _DocumentConsole(_PostgresWorkflowDocumentsMixin, OperationsConsole):
@@ -167,11 +173,48 @@ def test_two_console_process_models_rebase_distinct_envelope_commits(tmp_path: P
     assert store.envelopes["snap-b"]["family"] == "new-b"
 
 
+def test_snapshot_objects_and_revision_uses_one_authoritative_object_fetch(tmp_path: Path) -> None:
+    store = _SharedDocumentStore()
+    store.objects["snap-a"] = [
+        {"object_id": f"a-{index:03d}", "object_version": "1.0", "text": f"row-{index}"}
+        for index in range(250)
+    ]
+    expected_objects = deepcopy(store.objects["snap-a"])
+    expected_revision = PostgresWorkflowDocumentRuntimeStore._revision(expected_objects)
+    console = _document_console(tmp_path, store)
+    store.object_reads = 0
+
+    objects, revision = console.snapshot_objects_and_revision("snap-a", include_blocked=True)
+
+    assert store.object_reads == 1
+    assert objects == expected_objects
+    assert revision == expected_revision
+
+
 def test_authoritative_object_read_replaces_stale_worker_revision(tmp_path: Path) -> None:
     store = _SharedDocumentStore()
     console = _document_console(tmp_path, store)
     console._load_objects("snap-a", remember=True)
-    assert console._objects_expected_revs()["snap-a"] == "rev-a-1"
-    store.revisions["snap-a"] = "rev-a-2"
+    first_revision = PostgresWorkflowDocumentRuntimeStore._revision(store.objects["snap-a"])
+    assert console._objects_expected_revs()["snap-a"] == first_revision
+
+    store.objects["snap-a"][0]["object_version"] = "2.0"
     console._load_objects("snap-a", remember=True)
-    assert console._objects_expected_revs()["snap-a"] == "rev-a-2"
+    next_revision = PostgresWorkflowDocumentRuntimeStore._revision(store.objects["snap-a"])
+
+    assert next_revision != first_revision
+    assert console._objects_expected_revs()["snap-a"] == next_revision
+
+
+def test_separate_authoritative_snapshot_reads_detect_intervening_change(tmp_path: Path) -> None:
+    store = _SharedDocumentStore()
+    console = _document_console(tmp_path, store)
+    store.object_reads = 0
+
+    first_objects, first_revision = console.snapshot_objects_and_revision("snap-a", include_blocked=True)
+    store.objects["snap-a"][0] = {"object_id": "a", "object_version": "2.0"}
+    second_objects, second_revision = console.snapshot_objects_and_revision("snap-a", include_blocked=True)
+
+    assert store.object_reads == 2
+    assert first_objects != second_objects
+    assert first_revision != second_revision
