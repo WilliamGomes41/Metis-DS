@@ -38,10 +38,8 @@ OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 DEFAULT_TIMEOUT_SECONDS = 60
 
 PostJson = Callable[[str, dict[str, str], dict[str, Any], int], dict[str, Any]]
-SpecBuilder = Callable[..., dict[str, Any]]
 
 _INSTALLED = False
-_ORIGINAL_SPEC_BUILDER: SpecBuilder | None = None
 
 
 def _post_json(
@@ -285,7 +283,7 @@ def install_pre_review_semantic_processing(
     deterministic path is never invoked as an implicit fallback.
     """
 
-    global _INSTALLED, _ORIGINAL_SPEC_BUILDER
+    global _INSTALLED
     if _INSTALLED:
         return
 
@@ -307,6 +305,5 @@ def install_pre_review_semantic_processing(
             post_json=post_json,
         )
 
-    _ORIGINAL_SPEC_BUILDER = original
     console_module._spec_from_fragments = configured_builder
     _INSTALLED = True
