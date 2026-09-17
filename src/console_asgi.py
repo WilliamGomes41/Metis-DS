@@ -13,10 +13,12 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 from src.audit_llm_settings_v1 import install_audit_llm_settings_routes
 from src.audit_room_v1 import install_audit_routes
 from src.azure_authoritative_publication_console_v1 import AzureAuthoritativePublicationConsole
+from src.azure_postgres_credential_v1 import CachedAzurePostgresCredential
 from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 from src.closed_review_loop_v1 import install_closed_review_routes
 from src.console_navigation_simplify_v1 import install_navigation_simplification
@@ -76,7 +78,21 @@ def _default_data_root() -> Path:
     return ROOT
 
 
-def _canonical_store() -> PostgresCanonicalPublicationStore | None:
+def _postgres_credential() -> CachedAzurePostgresCredential | None:
+    """Create one process-local cached AAD credential for all configured PG stores."""
+    store_names = (
+        "METIS_CANONICAL_STORE",
+        "METIS_WORKFLOW_STORE",
+        "METIS_WORKFLOW_DOCUMENT_STORE",
+        "METIS_WORKFLOW_REVIEW_STORE",
+        "METIS_WORKFLOW_REMAINING_STORE",
+    )
+    if not any(os.environ.get(name, "").strip().lower() == "postgres" for name in store_names):
+        return None
+    return CachedAzurePostgresCredential()
+
+
+def _canonical_store(*, credential: Any | None = None) -> PostgresCanonicalPublicationStore | None:
     kind = os.environ.get("METIS_CANONICAL_STORE", "").strip().lower()
     running_in_azure = _running_in_azure()
     if not kind:
@@ -85,23 +101,26 @@ def _canonical_store() -> PostgresCanonicalPublicationStore | None:
         return None
     if kind != "postgres":
         raise RuntimeError("unsupported_canonical_store")
-    store = PostgresCanonicalPublicationStore()
+    store = PostgresCanonicalPublicationStore(credential=credential)
     store.verify_schema()
     return store
 
 
-def _workflow_identity_store() -> PostgresWorkflowIdentityStore | None:
+def _workflow_identity_store(*, credential: Any | None = None) -> PostgresWorkflowIdentityStore | None:
     kind = os.environ.get("METIS_WORKFLOW_STORE", "").strip().lower()
     if not kind:
         return None
     if kind != "postgres":
         raise RuntimeError("unsupported_workflow_store")
-    store = CutoverPostgresWorkflowIdentityStore()
+    if credential is None:
+        store = CutoverPostgresWorkflowIdentityStore()
+    else:
+        store = CutoverPostgresWorkflowIdentityStore(credential=credential)
     store.verify_schema()
     return store
 
 
-def _workflow_document_store() -> PostgresWorkflowDocumentRuntimeStore | None:
+def _workflow_document_store(*, credential: Any | None = None) -> PostgresWorkflowDocumentRuntimeStore | None:
     kind = os.environ.get("METIS_WORKFLOW_DOCUMENT_STORE", "").strip().lower()
     if not kind:
         return None
@@ -109,12 +128,12 @@ def _workflow_document_store() -> PostgresWorkflowDocumentRuntimeStore | None:
         raise RuntimeError("unsupported_workflow_document_store")
     if os.environ.get("METIS_WORKFLOW_STORE", "").strip().lower() != "postgres":
         raise RuntimeError("workflow_identity_store_required_for_document_store")
-    store = PostgresConcurrentWorkflowDocumentStore()
+    store = PostgresConcurrentWorkflowDocumentStore(credential=credential)
     store.verify_cutover_schema()
     return store
 
 
-def _workflow_review_store() -> PostgresWorkflowReviewStore | None:
+def _workflow_review_store(*, credential: Any | None = None) -> PostgresWorkflowReviewStore | None:
     kind = os.environ.get("METIS_WORKFLOW_REVIEW_STORE", "").strip().lower()
     if not kind:
         return None
@@ -124,12 +143,12 @@ def _workflow_review_store() -> PostgresWorkflowReviewStore | None:
         raise RuntimeError("workflow_identity_store_required_for_review_store")
     if os.environ.get("METIS_WORKFLOW_DOCUMENT_STORE", "").strip().lower() != "postgres":
         raise RuntimeError("workflow_document_store_required_for_review_store")
-    store = PostgresWorkflowReviewStore()
+    store = PostgresWorkflowReviewStore(credential=credential)
     store.verify_review_schema()
     return store
 
 
-def _workflow_remaining_store() -> PostgresWorkflowRemainingStore | None:
+def _workflow_remaining_store(*, credential: Any | None = None) -> PostgresWorkflowRemainingStore | None:
     kind = os.environ.get("METIS_WORKFLOW_REMAINING_STORE", "").strip().lower()
     if not kind:
         return None
@@ -143,7 +162,7 @@ def _workflow_remaining_store() -> PostgresWorkflowRemainingStore | None:
     for name, error in required.items():
         if os.environ.get(name, "").strip().lower() != "postgres":
             raise RuntimeError(error)
-    store = PostgresWorkflowRemainingStore()
+    store = PostgresWorkflowRemainingStore(credential=credential)
     store.verify_remaining_schema()
     return store
 
@@ -194,11 +213,12 @@ def build_app() -> object:
     topology = assert_supported_topology()
     data_root = _env_path("CONSOLE_DATA_ROOT", _default_data_root())
     immutable_store = _immutable_source_store()
-    canonical_store = _canonical_store()
-    workflow_identity_store = _workflow_identity_store()
-    workflow_document_store = _workflow_document_store()
-    workflow_review_store = _workflow_review_store()
-    workflow_remaining_store = _workflow_remaining_store()
+    postgres_credential = _postgres_credential()
+    canonical_store = _canonical_store(credential=postgres_credential)
+    workflow_identity_store = _workflow_identity_store(credential=postgres_credential)
+    workflow_document_store = _workflow_document_store(credential=postgres_credential)
+    workflow_review_store = _workflow_review_store(credential=postgres_credential)
+    workflow_remaining_store = _workflow_remaining_store(credential=postgres_credential)
     running_in_azure = _running_in_azure()
 
     common = dict(

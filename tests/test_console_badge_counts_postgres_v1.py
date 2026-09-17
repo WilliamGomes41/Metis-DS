@@ -152,6 +152,38 @@ def test_badges_use_constant_round_trips_and_reflect_next_read() -> None:
     with store._connect() as con:
         paths = migration_paths(ROOT)
         apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))
+        workflow_indexes = {
+            str(row["indexname"])
+            for row in con.execute(
+                "SELECT indexname FROM pg_indexes WHERE indexname="
+                "'workflow_document_objects_snapshot_validation_status_idx'"
+            ).fetchall()
+        }
+        assert workflow_indexes == {
+            "workflow_document_objects_snapshot_validation_status_idx"
+        }
+
+        # The same migration must also install the canonical read index when the
+        # canonical authority is present, while remaining safe in workflow-only
+        # environments. A temporary table proves that branch without polluting
+        # the shared PostgreSQL test database.
+        con.execute(
+            "CREATE TEMP TABLE audit_events ("
+            "entity_type TEXT NOT NULL, event_type TEXT NOT NULL, details JSONB NOT NULL)"
+        )
+        con.execute((ROOT / "db" / "migrations" / "009_console_hotpath_indexes.sql").read_text(encoding="utf-8"))
+        indexes = {
+            str(row["indexname"])
+            for row in con.execute(
+                "SELECT indexname FROM pg_indexes WHERE indexname IN ("
+                "'workflow_document_objects_snapshot_validation_status_idx',"
+                "'audit_events_release_snapshot_idx')"
+            ).fetchall()
+        }
+        assert indexes == {
+            "workflow_document_objects_snapshot_validation_status_idx",
+            "audit_events_release_snapshot_idx",
+        }
 
     token = uuid.uuid4().hex
     account_id = f"acc-badges-{token[:16]}"
@@ -178,10 +210,11 @@ def test_badges_use_constant_round_trips_and_reflect_next_read() -> None:
         ),
     ]
     object_sets = [
-        _objects(snapshots[0], 20, "revise"),
-        _objects(snapshots[1], 20, "needs_review"),
+        _objects(snapshots[0], 200, "revise"),
+        _objects(snapshots[1], 200, "needs_review"),
         _objects(snapshots[2], 10, "approved"),
     ]
+    assert sum(len(rows) for rows in object_sets) >= 400
 
     with store._connect() as con:
         con.execute(
