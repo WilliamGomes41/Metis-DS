@@ -68,12 +68,16 @@ Architectuurlock AI en Kernel:
 - Audit-resultaten en conclusies blijven Audit-bewijs en stromen niet automatisch door naar productie.
 
 LLM-secretlock:
-- de Audit-experimentkey blijft uitsluitend via **Audit → LLM-instellingen** invoerbaar, write-only en versleuteld met `METIS_AUDIT_SECRET_KEY`;
+- de gebruiker kan de LLM API-key uitsluitend via **Audit → LLM-instellingen** invoeren, vervangen of verwijderen;
+- de API-key is write-only: na opslaan toont de console alleen `Geconfigureerd` of `Niet geconfigureerd` en nooit de sleutel zelf;
+- de plaintext Audit API-key komt niet in Audit-records, frozen datasets, Kernel-state, roadmap/configbestanden of Git;
+- de opgeslagen Audit API-key wordt versleuteld met een afzonderlijke deployment-masterkey uit `METIS_AUDIT_SECRET_KEY`; zonder geldige masterkey is invoer in de console fail-closed niet beschikbaar;
+- alleen de Audit-runtime mag de ontsleutelde Audit-key opvragen voor Audit-modelcalls; de Kernel importeert deze secretstore niet;
+- dit is geen algemene environment-variable- of secret-editor: andere deploymentsettings blijven buiten de console;
 - de productiekey voor de pre-Review route is een afzonderlijke deployment-secret (`METIS_PRE_REVIEW_LLM_API_KEY`) en wordt niet via de Audit-console beheerd;
 - het productiemodel wordt expliciet gekozen via `METIS_PRE_REVIEW_LLM_MODEL` wanneer semantic mode actief is;
-- plaintext API-keys komen niet in Audit-records, frozen datasets, WorkingRevision-state, roadmap/configbestanden of Git;
+- de productiekey komt niet in Audit-records, frozen datasets, WorkingRevision-state, roadmap/configbestanden of Git;
 - de Audit-secretstore is geen authority voor de productie pre-Review route en de productiekey is geen tweede Audit-secretpad;
-- andere deploymentsettings blijven buiten de console;
 - vervangen of configureren van een LLM-key geeft geen implementatie-, review-, merge-, deploy- of publicatierechten.
 
 Vaste Audit-workflow:

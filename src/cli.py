@@ -64,7 +64,6 @@ def cmd_semantic_generic(a: argparse.Namespace) -> dict:
         "schema_errors": errors,
         "out": str(a.out),
     }
-
 def cmd_prepublish(a:argparse.Namespace)->dict:
     return evaluate_prepublication(read_jsonl(a.input),schema=a.schema,source_registry=a.source_registry,raw_extract=a.raw_extract)
 
@@ -103,6 +102,7 @@ def cmd_serve_console(a: argparse.Namespace) -> dict:
     import uvicorn
     from src.operations_console_app import create_console_app
     from src.operations_console_v1 import OperationsConsole
+    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
     from src.topology_bound_v1 import assert_supported_topology
 
     assert_supported_topology()
@@ -111,6 +111,7 @@ def cmd_serve_console(a: argparse.Namespace) -> dict:
         source_store=a.source_store,
         runtime=a.runtime,
     )
+    bind_pre_review_semantic_processing(console)
     uvicorn.run(create_console_app(console), host=a.host, port=a.port)
     return {"status": "PASS"}
 
@@ -121,7 +122,6 @@ def cmd_console_account(a: argparse.Namespace) -> dict:
     console = OperationsConsole(root=ROOT, source_store=a.source_store, runtime=a.runtime)
     account = console.create_account(a.username, a.password, roles=[item.strip() for item in a.roles.split(",") if item.strip()], display_name=a.display_name)
     return {"status": "PASS", "account": account}
-
 def main()->int:
     ap=argparse.ArgumentParser(prog='vvn-data-service'); sub=ap.add_subparsers(dest='cmd',required=True)
     p=sub.add_parser('audit-current'); p.add_argument('--input',type=Path,default=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v21.jsonl'); p.add_argument('--schema',type=Path,default=ROOT/'schemas/knowledge_object.schema.v1.1.json'); p.add_argument('--source-registry',type=Path,default=ROOT/'data/source_registry.json'); p.add_argument('--raw-extract',type=Path,default=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_raw.jsonl'); p.add_argument('--report',type=Path)

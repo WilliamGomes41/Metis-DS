@@ -28,7 +28,7 @@ from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import AzureBlobSourceStore
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
-from src.pre_review_semantic_v1 import install_pre_review_semantic_processing
+from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 from src.proportionate_review_v1 import install_proportionate_review_routes
 from src.publish_readiness_ui_v1 import install_publish_readiness_ui
 from src.review_closure_v1 import harden_legacy_repair_routes
@@ -212,7 +212,6 @@ def bootstrap_accounts(console: OperationsConsole) -> None:
 
 def build_app() -> object:
     topology = assert_supported_topology()
-    install_pre_review_semantic_processing()
     data_root = _env_path("CONSOLE_DATA_ROOT", _default_data_root())
     immutable_store = _immutable_source_store()
     postgres_credential = _postgres_credential()
@@ -294,6 +293,8 @@ def build_app() -> object:
     else:
         console_cls = AzureAuthoritativePublicationConsole if running_in_azure else DurablePublicationConsole
         console = console_cls(**common)
+
+    bind_pre_review_semantic_processing(console)
 
     # Gunicorn workers initialize independently. Keep migration and local-copy
     # reconciliation inside the same process-shared store lock used by runtime

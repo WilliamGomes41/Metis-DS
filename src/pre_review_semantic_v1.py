@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+from contextvars import ContextVar
 from typing import Any, Callable, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -38,8 +39,6 @@ OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 DEFAULT_TIMEOUT_SECONDS = 60
 
 PostJson = Callable[[str, dict[str, str], dict[str, Any], int], dict[str, Any]]
-
-_INSTALLED = False
 
 
 def _post_json(
@@ -137,8 +136,8 @@ def _request_payload(*, model: str, blocks: list[dict[str, Any]]) -> dict[str, A
                     "Do not write, rewrite or paraphrase candidate knowledge text. "
                     "Group spans only when they form one independently understandable unit. "
                     "Keep target group, conditions, exceptions and modality with the statement "
-                    "they qualify. If no safe source-bound proposal is possible, return zero "
-                    "objects and a short abstain_reason."
+                    "they qualify. Preserve source order. If no safe source-bound proposal is "
+                    "possible, return zero objects and a short abstain_reason."
                 ),
             },
             {
@@ -179,6 +178,43 @@ def _heading_units(
     return split_context_aware_units(headings, document_id=document_id) if headings else []
 
 
+def _source_ordered_units(
+    fragments: list[dict[str, Any]],
+    *,
+    headings: list[dict[str, Any]],
+    content: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Reinsert deterministic headings without moving them ahead of content."""
+
+    source_position: dict[str, int] = {}
+    for index, fragment in enumerate(fragments):
+        ids = list(fragment.get("source_fragment_ids") or [])
+        fragment_id = str(fragment.get("fragment_id") or "").strip()
+        if fragment_id and fragment_id not in ids:
+            ids.append(fragment_id)
+        for source_id in ids:
+            if source_id:
+                source_position.setdefault(str(source_id), index)
+
+    combined = headings + content
+
+    def position(unit: dict[str, Any]) -> int:
+        candidates = [
+            source_position[str(source_id)]
+            for source_id in unit.get("source_fragment_ids") or []
+            if str(source_id) in source_position
+        ]
+        return min(candidates) if candidates else len(fragments)
+
+    return [
+        unit
+        for _index, unit in sorted(
+            enumerate(combined),
+            key=lambda item: (position(item[1]), item[0]),
+        )
+    ]
+
+
 def semantic_units_before_review(
     fragments: list[dict[str, Any]],
     *,
@@ -187,7 +223,7 @@ def semantic_units_before_review(
     model: str,
     post_json: PostJson | None = None,
 ) -> list[dict[str, Any]]:
-    """Return headings plus source-reconstructed LLM content candidates."""
+    """Return deterministic headings plus source-reconstructed LLM candidates."""
 
     safe_key = str(api_key or "").strip()
     safe_model = str(model or "").strip()
@@ -217,6 +253,8 @@ def semantic_units_before_review(
             raise ConsoleError("pre_review_llm_response_invalid") from exc
         if not isinstance(proposal, dict):
             raise ConsoleError("pre_review_llm_response_invalid")
+        if str(proposal.get("abstain_reason") or "").strip():
+            raise ConsoleError("pre_review_llm_abstained")
         try:
             content_units = semantic_units_from_proposal(
                 content_fragments,
@@ -226,7 +264,11 @@ def semantic_units_before_review(
         except SemanticPassageError as exc:
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
 
-    units = _heading_units(fragments, document_id=document_id) + content_units
+    units = _source_ordered_units(
+        fragments,
+        headings=_heading_units(fragments, document_id=document_id),
+        content=content_units,
+    )
     proposed_relations_for_units(units)
     return units
 
@@ -271,39 +313,98 @@ def semantic_spec_from_fragments(
     }
 
 
-def install_pre_review_semantic_processing(
+def bind_pre_review_semantic_processing(
+    console: Any,
     *,
     environ: Mapping[str, str] | None = None,
     post_json: PostJson | None = None,
 ) -> None:
-    """Bind one explicit passage-formation policy to normal console ingest.
+    """Bind passage formation to one console instance, never process-global state.
 
-    Missing mode keeps the existing deterministic path for backwards-compatible
-    rollout. Once semantic mode is selected, every error is fail-closed and the
-    deterministic path is never invoked as an implicit fallback.
+    Normal HTML/PDF processing uses the configured semantic route. Decision-tree
+    processing remains on its dedicated deterministic path. Read-only source
+    re-extraction used by deterministic Review repair is explicitly suppressed,
+    so opening a repair catalog cannot trigger or depend on an LLM call.
     """
 
-    global _INSTALLED
-    if _INSTALLED:
+    if getattr(console, "_pre_review_semantic_bound", False):
         return
 
-    from src import operations_console_v1 as console_module
-
-    original = console_module._spec_from_fragments
     env = environ if environ is not None else os.environ
+    original_fragments_and_spec = console._fragments_and_spec
+    semantic_suppressed: ContextVar[bool] = ContextVar(
+        f"metis_pre_review_semantic_suppressed_{id(console)}",
+        default=False,
+    )
 
-    def configured_builder(**kwargs: Any) -> dict[str, Any]:
+    def configured_fragments_and_spec(
+        kind: str,
+        path: Any,
+        *,
+        data: bytes,
+        document_id: str,
+        source_id: str,
+        title: str,
+        family: str,
+        class_: str,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        if semantic_suppressed.get() or kind == "boom":
+            return original_fragments_and_spec(
+                kind,
+                path,
+                data=data,
+                document_id=document_id,
+                source_id=source_id,
+                title=title,
+                family=family,
+                class_=class_,
+            )
+
         mode = str(env.get(PASSAGE_FORMATION_MODE_ENV, "") or "").strip() or DETERMINISTIC_MODE
         if mode == DETERMINISTIC_MODE:
-            return original(**kwargs)
+            return original_fragments_and_spec(
+                kind,
+                path,
+                data=data,
+                document_id=document_id,
+                source_id=source_id,
+                title=title,
+                family=family,
+                class_=class_,
+            )
         if mode != SEMANTIC_MODE:
             raise ConsoleError("passage_formation_mode_invalid")
-        return semantic_spec_from_fragments(
-            **kwargs,
+
+        fragments = console._extract(
+            kind,
+            path,
+            document_id=document_id,
+            source_id=source_id,
+        )
+        spec = semantic_spec_from_fragments(
+            document_id=document_id,
+            title=title,
+            family=family,
+            class_=class_,
+            fragments=fragments,
+            content_kind=kind,
             api_key=str(env.get(PRE_REVIEW_LLM_API_KEY_ENV, "") or ""),
             model=str(env.get(PRE_REVIEW_LLM_MODEL_ENV, "") or ""),
             post_json=post_json,
         )
+        return fragments, spec
 
-    console_module._spec_from_fragments = configured_builder
-    _INSTALLED = True
+    console._fragments_and_spec = configured_fragments_and_spec
+
+    original_source_fragment_catalog = getattr(console, "source_fragment_catalog", None)
+    if callable(original_source_fragment_catalog):
+        def deterministic_source_fragment_catalog(*args: Any, **kwargs: Any) -> Any:
+            token = semantic_suppressed.set(True)
+            try:
+                return original_source_fragment_catalog(*args, **kwargs)
+            finally:
+                semantic_suppressed.reset(token)
+
+        console.source_fragment_catalog = deterministic_source_fragment_catalog
+
+    console._pre_review_semantic_bound = True

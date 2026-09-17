@@ -8,10 +8,11 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
-from src.operations_console_v1 import ConsoleError
+from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.pre_review_semantic_v1 import (
     DETERMINISTIC_MODE,
     OPENAI_RESPONSES_URL,
@@ -19,7 +20,7 @@ from src.pre_review_semantic_v1 import (
     PRE_REVIEW_LLM_API_KEY_ENV,
     PRE_REVIEW_LLM_MODEL_ENV,
     SEMANTIC_MODE,
-    install_pre_review_semantic_processing,
+    bind_pre_review_semantic_processing,
     semantic_units_before_review,
 )
 
@@ -49,6 +50,26 @@ def _response(proposal: dict) -> dict:
     }
 
 
+def _full_span_proposal(payload: dict, *, proposed_type: str = "recommendation") -> dict:
+    blocks = json.loads(payload["input"][1]["content"])["source_blocks"]
+    return {
+        "objects": [
+            {
+                "spans": [
+                    {
+                        "block_id": block["block_id"],
+                        "start": 0,
+                        "end": len(block["text"]),
+                    }
+                ],
+                "proposed_object_type": proposed_type,
+            }
+            for block in blocks
+        ],
+        "abstain_reason": None,
+    }
+
+
 def test_semantic_processing_runs_before_review_and_reconstructs_source_only() -> None:
     fragments = [
         _fragment("h1", "Behandeling", object_type="heading"),
@@ -58,24 +79,7 @@ def test_semantic_processing_runs_before_review_and_reconstructs_source_only() -
 
     def fake_post(url: str, headers: dict, payload: dict, timeout: int) -> dict:
         captured.update(url=url, headers=headers, payload=payload, timeout=timeout)
-        block = json.loads(payload["input"][1]["content"])["source_blocks"][0]
-        return _response(
-            {
-                "objects": [
-                    {
-                        "spans": [
-                            {
-                                "block_id": block["block_id"],
-                                "start": 0,
-                                "end": len(block["text"]),
-                            }
-                        ],
-                        "proposed_object_type": "recommendation",
-                    }
-                ],
-                "abstain_reason": None,
-            }
-        )
+        return _response(_full_span_proposal(payload))
 
     units = semantic_units_before_review(
         fragments,
@@ -96,6 +100,33 @@ def test_semantic_processing_runs_before_review_and_reconstructs_source_only() -
     assert content["proposed_object_type"] == "recommendation"
     assert content["semantic_passage"]["source_bound"] is True
     assert content["source_fragment_ids"] == ["p1"]
+
+
+def test_semantic_processing_preserves_interleaved_source_order() -> None:
+    fragments = [
+        _fragment("h1", "Diagnostiek", object_type="heading"),
+        _fragment("p1", "Bespreek eerst de diagnostiek."),
+        _fragment("h2", "Behandeling", object_type="heading"),
+        _fragment("p2", "Bespreek daarna de behandeling."),
+    ]
+
+    def fake_post(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
+        return _response(_full_span_proposal(payload))
+
+    units = semantic_units_before_review(
+        fragments,
+        document_id="doc-1",
+        api_key="product-key",
+        model="test-model",
+        post_json=fake_post,
+    )
+
+    assert [row["clean_text"] for row in units] == [
+        "Diagnostiek",
+        "Bespreek eerst de diagnostiek.",
+        "Behandeling",
+        "Bespreek daarna de behandeling.",
+    ]
 
 
 def test_semantic_mode_rejects_model_authored_text_instead_of_falling_back() -> None:
@@ -150,11 +181,29 @@ def test_provider_failure_is_fail_closed_without_deterministic_fallback() -> Non
     assert error.value.code == "pre_review_llm_provider_unavailable"
 
 
-def test_runtime_policy_uses_semantic_route_and_keeps_explicit_rollback_mode() -> None:
-    from src import operations_console_v1 as console_module
-    from src import pre_review_semantic_v1 as semantic_module
+def test_semantic_abstention_is_fail_closed_before_review() -> None:
+    def abstain(*_args):
+        return _response(
+            {
+                "objects": [],
+                "abstain_reason": "insufficient_semantic_context",
+            }
+        )
 
-    original = console_module._spec_from_fragments
+    with pytest.raises(ConsoleError) as error:
+        semantic_units_before_review(
+            [_fragment("p1", "Bespreek samen de behandeling.")],
+            document_id="doc-1",
+            api_key="product-key",
+            model="test-model",
+            post_json=abstain,
+        )
+
+    assert error.value.code == "pre_review_llm_abstained"
+
+
+def test_runtime_policy_is_instance_bound_and_keeps_explicit_rollback_mode(tmp_path: Path) -> None:
+    fragments = [_fragment("p1", "Bespreek samen de behandeling.")]
     env = {
         PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
         PRE_REVIEW_LLM_API_KEY_ENV: "product-key",
@@ -162,48 +211,102 @@ def test_runtime_policy_uses_semantic_route_and_keeps_explicit_rollback_mode() -
     }
 
     def fake_post(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
-        block = json.loads(payload["input"][1]["content"])["source_blocks"][0]
-        return _response(
-            {
-                "objects": [
-                    {
-                        "spans": [
-                            {
-                                "block_id": block["block_id"],
-                                "start": 0,
-                                "end": len(block["text"]),
-                            }
-                        ],
-                        "proposed_object_type": "recommendation",
-                    }
-                ],
-                "abstain_reason": None,
-            }
-        )
+        return _response(_full_span_proposal(payload))
 
-    try:
-        semantic_module._INSTALLED = False
-        install_pre_review_semantic_processing(environ=env, post_json=fake_post)
-        semantic_spec = console_module._spec_from_fragments(
-            document_id="doc-1",
-            title="Titel",
-            family="kwaliteit",
-            class_="richtlijn",
-            fragments=[_fragment("p1", "Bespreek samen de behandeling.")],
-            content_kind="html",
-        )
-        assert semantic_spec["objects"][1]["semantic_passage"]["source_bound"] is True
+    semantic_console = OperationsConsole(
+        root=tmp_path / "semantic",
+        source_store=tmp_path / "semantic-sources",
+        runtime=tmp_path / "semantic-runtime",
+    )
+    deterministic_console = OperationsConsole(
+        root=tmp_path / "deterministic",
+        source_store=tmp_path / "deterministic-sources",
+        runtime=tmp_path / "deterministic-runtime",
+    )
+    semantic_console._extract = lambda *_args, **_kwargs: fragments
+    deterministic_console._extract = lambda *_args, **_kwargs: fragments
+    bind_pre_review_semantic_processing(
+        semantic_console,
+        environ=env,
+        post_json=fake_post,
+    )
 
-        env[PASSAGE_FORMATION_MODE_ENV] = DETERMINISTIC_MODE
-        rollback_spec = console_module._spec_from_fragments(
-            document_id="doc-2",
-            title="Titel",
-            family="kwaliteit",
-            class_="richtlijn",
-            fragments=[_fragment("p2", "Bespreek samen de behandeling.")],
-            content_kind="html",
-        )
-        assert "semantic_passage" not in rollback_spec["objects"][1]
-    finally:
-        console_module._spec_from_fragments = original
-        semantic_module._INSTALLED = False
+    semantic_spec = semantic_console._fragments_and_spec(
+        "html",
+        tmp_path / "source.html",
+        data=b"source",
+        document_id="doc-1",
+        source_id="src-1",
+        title="Titel",
+        family="kwaliteit",
+        class_="richtlijn",
+    )[1]
+    untouched_spec = deterministic_console._fragments_and_spec(
+        "html",
+        tmp_path / "source.html",
+        data=b"source",
+        document_id="doc-2",
+        source_id="src-2",
+        title="Titel",
+        family="kwaliteit",
+        class_="richtlijn",
+    )[1]
+
+    assert semantic_spec["objects"][1]["semantic_passage"]["source_bound"] is True
+    assert "semantic_passage" not in untouched_spec["objects"][1]
+
+    env[PASSAGE_FORMATION_MODE_ENV] = DETERMINISTIC_MODE
+    rollback_spec = semantic_console._fragments_and_spec(
+        "html",
+        tmp_path / "source.html",
+        data=b"source",
+        document_id="doc-3",
+        source_id="src-3",
+        title="Titel",
+        family="kwaliteit",
+        class_="richtlijn",
+    )[1]
+    assert "semantic_passage" not in rollback_spec["objects"][1]
+
+
+def test_read_only_repair_catalog_does_not_call_llm(tmp_path: Path) -> None:
+    fragments = [_fragment("p1", "Bespreek samen de behandeling.")]
+    calls = 0
+
+    class RepairCatalogConsole(OperationsConsole):
+        def source_fragment_catalog(self) -> list[dict]:
+            self._fragments_and_spec(
+                "html",
+                tmp_path / "source.html",
+                data=b"source",
+                document_id="doc-1",
+                source_id="src-1",
+                title="Titel",
+                family="kwaliteit",
+                class_="richtlijn",
+            )
+            return []
+
+    def fake_post(*_args):
+        nonlocal calls
+        calls += 1
+        raise AssertionError("read-only repair catalog must not call the LLM")
+
+    console = RepairCatalogConsole(
+        root=tmp_path / "repair",
+        source_store=tmp_path / "repair-sources",
+        runtime=tmp_path / "repair-runtime",
+    )
+    console._extract = lambda *_args, **_kwargs: fragments
+    bind_pre_review_semantic_processing(
+        console,
+        environ={
+            PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
+            PRE_REVIEW_LLM_API_KEY_ENV: "product-key",
+            PRE_REVIEW_LLM_MODEL_ENV: "test-model",
+        },
+        post_json=fake_post,
+    )
+
+    assert console.source_fragment_catalog() == []
+    assert calls == 0
