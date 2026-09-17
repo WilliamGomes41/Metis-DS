@@ -39,11 +39,7 @@ def current_document_lifecycle_status(snapshot_id: str) -> dict[str, str] | None
 
 
 def _is_list_request(request: Request) -> bool:
-    if request.url.path == "/tree":
-        return True
-    if request.url.path != "/review":
-        return False
-    return not str(request.query_params.get("document") or "").strip()
+    return request.url.path in {"/tree", "/review"}
 
 
 def install_document_status_ui(app: FastAPI, console: Any) -> None:
@@ -92,8 +88,8 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
         lifecycle_by_snapshot: dict[str, dict[str, str]] = {}
         list_reader = getattr(console, "list_document_lifecycle_statuses", None)
         if _is_list_request(request) and callable(list_reader):
-            # Production PostgreSQL list pages use one light workflow aggregate plus
-            # one canonical release read. Never enter full publish-readiness here.
+            # Production PostgreSQL presentation GETs use one light workflow aggregate
+            # plus one canonical release read. Never enter full publish-readiness here.
             try:
                 lifecycle_by_snapshot = {
                     str(snapshot_id): dict(row)
@@ -102,8 +98,8 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
             except (AttributeError, ConsoleError):
                 lifecycle_by_snapshot = {}
         else:
-            # Publish and selected Review detail keep their existing full lifecycle
-            # semantics. Local/non-PostgreSQL runtimes also retain the compatibility path.
+            # Publish keeps its existing full lifecycle semantics. Local/non-PostgreSQL
+            # runtimes also retain the compatibility path when no list reader exists.
             for row in console.list_envelopes():
                 snapshot_id = str(row.get("snapshot_id") or "")
                 if not snapshot_id:
