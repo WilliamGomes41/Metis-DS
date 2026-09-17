@@ -318,6 +318,25 @@ class _PostgresWorkflowDocumentsMixin:
             self._objects_expected_revs()[snapshot_id] = revision
         return rows
 
+    def snapshot_objects_and_revision(
+        self,
+        snapshot_id: str,
+        include_blocked: bool = False,
+    ) -> tuple[list[dict[str, Any]], str]:
+        """Read authoritative PostgreSQL objects once and derive their revision."""
+        self._envelope(snapshot_id)
+        try:
+            rows = self.workflow_document_store.list_document_objects(snapshot_id)
+            revision = self.workflow_document_store._revision(rows)
+        except WorkflowDocumentStoreError as exc:
+            raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
+        if include_blocked:
+            return deepcopy(rows), revision
+        current: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            current[row["object_id"]] = row
+        return deepcopy(list(current.values())), revision
+
     def objects_revision(self, snapshot_id: str) -> str:
         try:
             return self.workflow_document_store.objects_revision(snapshot_id)
