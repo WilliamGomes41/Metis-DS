@@ -46,8 +46,9 @@ def workflow_postgres() -> PostgresCanonicalConfig:
         pytest.skip("METIS_TEST_POSTGRES_DSN is required for Review workboard regression evidence")
 
     import psycopg
+    from psycopg.rows import dict_row
 
-    with psycopg.connect(dsn, autocommit=True) as con:
+    with psycopg.connect(dsn, autocommit=True, row_factory=dict_row) as con:
         con.execute("DROP SCHEMA IF EXISTS workflow CASCADE")
         paths = migration_paths(ROOT)
         apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))
@@ -127,10 +128,11 @@ def test_batch_confirmed_headings_disappear_from_fast_workboard_summary(
         expected_revision=console.objects_revision(snapshot_id),
     )
 
+    heading_ids = {str(item["object_id"]) for item in headings}
     confirmed = {
         str(row["object_id"]): (row.get("governance") or {}).get("validation_status")
         for row in console.snapshot_objects(snapshot_id)
-        if str(row.get("object_id") or "") in {str(item["object_id"]) for item in headings}
+        if str(row.get("object_id") or "") in heading_ids
     }
     assert confirmed
     assert set(confirmed.values()) == {"approved"}
