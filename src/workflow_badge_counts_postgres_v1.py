@@ -5,6 +5,7 @@ for document/review work; canonical PostgreSQL remains publication authority.
 """
 from __future__ import annotations
 
+from contextvars import ContextVar
 from typing import Any
 
 from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError
@@ -17,7 +18,11 @@ from src.workflow_remaining_cutover_v1 import (
 
 
 class _PostgresBadgeCountsMixin:
-    """Derive nav counts without materializing every work-object payload in Python."""
+    """Derive hot console reads without materializing every work-object payload."""
+
+    _tree_publication_batch: ContextVar[
+        tuple[frozenset[str], frozenset[str], frozenset[str]] | None
+    ] = ContextVar("tree_publication_batch", default=None)
 
     def _workflow_badge_row(self, account_id: str) -> dict[str, Any]:
         try:
@@ -101,6 +106,41 @@ class _PostgresBadgeCountsMixin:
             return self._published_snapshot_ids(snapshot_ids)
         except CanonicalPublicationStoreError as exc:
             raise ConsoleError("durable_publication_lookup_failed", str(exc)) from exc
+
+    def family_tree(self) -> dict[str, Any]:
+        """Prefetch publication history once for the existing per-card delete checks."""
+        payload = super().family_tree()
+        snapshot_ids = [
+            str(child.get("snapshot_id") or "")
+            for node in (payload.get("families") or {}).values()
+            for child in (node.get("children") or [])
+            if str(child.get("snapshot_id") or "")
+        ]
+        all_ids = frozenset(snapshot_ids)
+        if not all_ids:
+            self._tree_publication_batch.set(None)
+            return payload
+        try:
+            published = frozenset(self.published_snapshot_ids(list(all_ids)))
+        except ConsoleError:
+            # Existing delete controls fail closed when publication truth is unavailable.
+            published = all_ids
+        self._tree_publication_batch.set((all_ids, published, all_ids))
+        return payload
+
+    def snapshot_is_published(self, snapshot_id: str) -> bool:
+        """Use the tree-prefetched publication set before falling back to lifecycle reads."""
+        snapshot_id = str(snapshot_id or "")
+        batch = self._tree_publication_batch.get()
+        if batch is not None:
+            all_ids, published, remaining = batch
+            if snapshot_id in all_ids:
+                next_remaining = remaining - {snapshot_id}
+                self._tree_publication_batch.set(
+                    None if not next_remaining else (all_ids, published, next_remaining)
+                )
+                return snapshot_id in published
+        return super().snapshot_is_published(snapshot_id)
 
     def waiting_task_counts(self, account_id: str) -> dict[str, int]:
         account = self._account(account_id)
