@@ -324,6 +324,16 @@ def _work_summary(item: dict[str, Any]) -> str:
     return "Geen open reviewtaak."
 
 
+def _work_queue_link(snapshot_id: str, task: str, label: str) -> str:
+    """Link one visible non-empty work bucket to its existing Review task."""
+    snap = quote(snapshot_id, safe="")
+    safe_task = quote(task, safe="")
+    return (
+        f'<a class="review-work-queue-link" data-work-queue="{_esc(task)}" '
+        f'href="/review?document={snap}&amp;task={safe_task}">{_esc(label)}</a>'
+    )
+
+
 def _workboard_card(item: dict[str, Any]) -> str:
     envelope = item["envelope"]
     lifecycle = item["lifecycle_status"]
@@ -344,20 +354,42 @@ def _workboard_card(item: dict[str, Any]) -> str:
 
     detail_parts: list[str] = []
     if lifecycle["workflow_status"] != "closed":
+        snapshot_id = str(item["snapshot_id"])
         if item["heading_pending"]:
-            detail_parts.append(f"{item['heading_pending']} kop/pad")
+            detail_parts.append(
+                _work_queue_link(snapshot_id, "headings", f"{item['heading_pending']} kop/pad")
+            )
         if item["individual_pending"]:
-            detail_parts.append(f"{item['individual_pending']} individueel")
+            detail_parts.append(
+                _work_queue_link(
+                    snapshot_id,
+                    "individual",
+                    f"{item['individual_pending']} individueel",
+                )
+            )
         if item["normal_passages"]:
             detail_parts.append(
-                f"{item['normal_passages']} samen in {item['normal_batches']} groep(en)"
+                _work_queue_link(
+                    snapshot_id,
+                    "together",
+                    f"{item['normal_passages']} samen in {item['normal_batches']} groep(en)",
+                )
             )
         if item["blocked_count"]:
-            detail_parts.append(f"{item['blocked_count']} technisch herstel")
+            detail_parts.append(
+                _work_queue_link(
+                    snapshot_id,
+                    "control",
+                    f"{item['blocked_count']} technisch herstel",
+                )
+            )
         if item["closure_gap_count"]:
-            detail_parts.append(f"{item['closure_gap_count']} disposition afronden")
-    details = " · ".join(detail_parts)
-    detail_html = f'<p class="muted">{_esc(details)}</p>' if details else ""
+            detail_parts.append(_esc(f"{item['closure_gap_count']} disposition afronden"))
+    detail_html = (
+        f'<p class="muted review-work-queues">{" · ".join(detail_parts)}</p>'
+        if detail_parts
+        else ""
+    )
 
     return f'''
       <article class="doc-card" data-workboard-document="{_esc(item['snapshot_id'])}" data-workboard-state="{_esc(item['work_state'])}" data-workflow-status="{_esc(lifecycle['workflow_status'])}" data-release-status="{_esc(lifecycle['release_status'])}" data-serving-status="{_esc(lifecycle['serving_status'])}">
