@@ -11,8 +11,8 @@ import html
 from typing import Any
 from urllib.parse import quote
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 import src.operations_console_app as console_ui
 from src.admission_gate_v1 import blocked_audit_lane
@@ -430,20 +430,30 @@ def _workboard_page(
 
 
 def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
-    """Replace only GET /review; all existing review mutations stay unchanged."""
+    """Install the Review workboard and its post-heading navigation."""
     if getattr(app.state, "review_workboard_v1", False):
         return
 
     retained = []
-    removed = 0
+    removed_get = 0
+    headings_post_route = None
     for route in app.router.routes:
         methods = set(getattr(route, "methods", set()) or set())
-        if getattr(route, "path", None) == "/review" and "GET" in methods:
-            removed += 1
+        path = getattr(route, "path", None)
+        if path == "/review" and "GET" in methods:
+            removed_get += 1
+            continue
+        if path == "/review/headings/batch-confirm" and "POST" in methods:
+            if headings_post_route is not None:
+                raise RuntimeError("review_headings_route_replacement_ambiguous")
+            headings_post_route = route
             continue
         retained.append(route)
-    if removed != 1:
+    if removed_get != 1:
         raise RuntimeError("review_get_route_replacement_failed")
+    if headings_post_route is None:
+        raise RuntimeError("review_headings_route_replacement_failed")
+    original_headings_batch_confirm = headings_post_route.endpoint
     app.router.routes[:] = retained
 
     @app.get("/review", response_class=HTMLResponse)
@@ -465,5 +475,28 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
                 counts=console.waiting_task_counts(str(account["account_id"])),
             )
         return _workboard_page(console, account=account)
+
+    @app.post("/review/headings/batch-confirm")
+    def review_headings_batch_confirm(
+        request: Request,
+        snapshot_id: str = Form(...),
+        object_ids: list[str] = Form(default=[]),
+        snapshot_revision: str = Form(""),
+    ) -> Any:
+        response = original_headings_batch_confirm(
+            request=request,
+            snapshot_id=snapshot_id,
+            object_ids=object_ids,
+            snapshot_revision=snapshot_revision,
+        )
+        if isinstance(response, RedirectResponse) and response.status_code == 303:
+            # The mutation succeeded. Return to the live document dashboard so
+            # it can select the next task from current review state instead of
+            # hard-coding the completed headings lane again.
+            return RedirectResponse(
+                console_ui._review_location(console, snapshot_id),
+                status_code=303,
+            )
+        return response
 
     app.state.review_workboard_v1 = True

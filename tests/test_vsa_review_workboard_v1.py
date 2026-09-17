@@ -19,6 +19,7 @@ from src.document_status_ui_v1 import install_document_status_ui
 from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
 from src.operations_console_app import create_console_app
+from src.operations_console_v1 import review_stacks
 from src.proportionate_review_v1 import ProportionateReviewConsole
 from src.publish_readiness_ui_v1 import install_publish_readiness_ui
 from src.review_workboard_v1 import install_review_workboard, review_work_item
@@ -277,6 +278,44 @@ def test_selected_document_keeps_existing_review_dashboard(tmp_path: Path) -> No
     assert "data-review-workboard" not in page.text
     assert "Alle taken" in page.text
     assert "Document A" in page.text
+
+
+def test_heading_batch_success_returns_to_live_document_dashboard(tmp_path: Path) -> None:
+    console, _accounts, first, _second = _system(tmp_path)
+    snapshot_id = str(first["snapshot_id"])
+    objects = console.snapshot_objects(snapshot_id)
+    headings, _ = review_stacks(objects, review_path="richtlijn")
+    heading_ids = [
+        str(row["object_id"])
+        for row in headings
+        if (row.get("governance") or {}).get("validation_status")
+        not in {"approved", "rejected", "superseded"}
+    ]
+    assert heading_ids
+
+    client = _client(console)
+    _login(client, "reviewer.a")
+    response = client.post(
+        "/review/headings/batch-confirm",
+        data={
+            "snapshot_id": snapshot_id,
+            "snapshot_revision": console.objects_revision(snapshot_id),
+            "object_ids": heading_ids,
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/review?document={snapshot_id}"
+    assert "task=headings" not in response.headers["location"]
+
+    page = client.get(response.headers["location"])
+    assert page.status_code == 200
+    assert "Alle taken" in page.text
+    assert (
+        f'href="/review?document={snapshot_id}&amp;task=headings">Ga verder</a>'
+        not in page.text
+    )
 
 
 def test_workboard_read_does_not_persist_progress_or_change_objects(tmp_path: Path) -> None:
