@@ -238,6 +238,7 @@ class _HotPathRouteConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole):
         super().__init__(*args, **kwargs)
         self.list_status_calls = 0
         self.workboard_summary_calls = 0
+        self.snapshot_object_reads = 0
 
     def list_document_lifecycle_statuses(
         self,
@@ -289,13 +290,13 @@ class _HotPathRouteConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole):
         }
 
     def document_readiness(self, _snapshot_id: str) -> dict[str, Any]:
-        raise AssertionError("list GET must not invoke document_readiness")
+        raise AssertionError("presentation GET must not invoke document_readiness")
 
     def publication_readiness(self, _snapshot_id: str) -> dict[str, Any]:
-        raise AssertionError("list GET must not invoke publication_readiness")
+        raise AssertionError("presentation GET must not invoke publication_readiness")
 
     def consider_publish(self, **_kwargs: Any) -> dict[str, Any]:
-        raise AssertionError("list GET must not invoke consider_publish")
+        raise AssertionError("presentation GET must not invoke consider_publish")
 
     def snapshot_objects(self, _snapshot_id: str) -> list[dict[str, Any]]:
         raise AssertionError("Review index must not load full snapshot objects")
@@ -305,7 +306,8 @@ class _HotPathRouteConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole):
         snapshot_id: str,
     ) -> tuple[list[dict[str, Any]], str]:
         assert snapshot_id == "snap-unpublished"
-        raise AssertionError("Review detail must keep full snapshot read")
+        self.snapshot_object_reads += 1
+        return [], "revision-hotpath"
 
 
 def _installed_client(console: OperationsConsole) -> TestClient:
@@ -354,13 +356,24 @@ def test_authenticated_tree_and_review_gets_use_production_list_installers(
     assert "data-review-workboard" in review.text
     assert console.list_status_calls == 2
     assert console.workboard_summary_calls == 1
+    assert console.snapshot_object_reads == 0
     assert workflow.connect_calls == 1
     assert workflow.execute_calls == 1
     assert canonical.connect_calls == 0
     assert canonical.execute_calls == 0
 
 
-def test_review_detail_keeps_existing_full_path(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/review?document=snap-unpublished",
+        "/review?document=snap-unpublished&task=headings",
+    ],
+)
+def test_review_detail_uses_list_safe_status_and_one_selected_snapshot_read(
+    tmp_path: Path,
+    path: str,
+) -> None:
     canonical = _CanonicalStore(set())
     workflow = _WorkflowStore()
     console = _HotPathRouteConsole(
@@ -372,9 +385,11 @@ def test_review_detail_keeps_existing_full_path(tmp_path: Path) -> None:
     console.workflow_document_store = workflow
     client = _installed_client(console)
 
-    with pytest.raises(AssertionError, match="Review detail must keep full snapshot read"):
-        client.get("/review?document=snap-unpublished")
-    assert console.list_status_calls == 0
+    review = client.get(path)
+    assert review.status_code == 200
+    assert "Unpublished fixture" in review.text
+    assert console.list_status_calls == 1
+    assert console.snapshot_object_reads == 1
 
 
 class _Token:
