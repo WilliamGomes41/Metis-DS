@@ -1,6 +1,7 @@
 """Regression proof for source-bound semantic passage formation before Review.
 
 # release-control-evidence: scope/belofte
+# release-control-evidence: beschikbaarheid
 # release-control-evidence: toegang
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
