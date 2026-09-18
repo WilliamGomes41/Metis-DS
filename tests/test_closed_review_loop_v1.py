@@ -154,6 +154,7 @@ def test_reject_with_revision_is_one_commit_without_type_or_position_write(tmp_p
         return real_commit(**kwargs)
 
     monkeypatch.setattr(console, "_commit_prepared_store", counted_commit)
+    revision = console.objects_revision(sid)
     console.review_object(
         actor_id=reviewer["account_id"],
         snapshot_id=sid,
@@ -167,12 +168,13 @@ def test_reject_with_revision_is_one_commit_without_type_or_position_write(tmp_p
         documentpositie_action="andere_kop",
         parent_choice=heading_id,
         type_action="type_wijzigen",
-        expected_revision=console.objects_revision(sid),
+        expected_revision=revision,
     )
 
     after = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
     passage = (after.get("metadata") or {}).get("review_passage") or {}
     assert len(commits) == 1
+    assert commits[0]["expected_revision"] == revision
     assert after["governance"]["validation_status"] == "rejected"
     assert passage_register_of(after)["status"] == "excluded_with_reason"
     assert passage["suitability"] == "ja"
