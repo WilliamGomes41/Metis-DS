@@ -87,3 +87,123 @@ def test_control_card_highlights_blocked_passages_as_work():
     assert "1 passage vereist technisch herstel" in dashboard
     assert "Metis kon deze passages niet veilig verwerken" in dashboard
     assert "review-control-card-alert" in dashboard
+
+
+
+def _with_register(
+    obj: dict,
+    status: str,
+    *,
+    source: str = "review",
+    reason_codes: list[str] | None = None,
+) -> dict:
+    row = dict(obj)
+    row["metadata"] = {
+        "passage_register": {
+            "status": status,
+            "reason_codes": list(reason_codes or []),
+            "suitability": "",
+            "source": source,
+            "linked_object_id": "",
+            "section_path": ["Inhoud"],
+        }
+    }
+    return row
+
+
+def test_review_dashboard_projects_distinct_final_dispositions_and_revision_work() -> None:
+    approved = _with_register(
+        _obj("approved", "recommendation", status="approved"),
+        "selected_as_candidate",
+    )
+    rejected = _with_register(
+        _obj("rejected", "recommendation", status="rejected"),
+        "excluded_with_reason",
+        reason_codes=["geen_kenniseenheid"],
+    )
+    context = _with_register(
+        _obj("context", "explanation", status="approved"),
+        "used_as_context",
+    )
+    support = _with_register(
+        _obj("support", "explanation", status="approved"),
+        "linked_as_support",
+    )
+    excluded = _with_register(
+        _obj("excluded", "explanation", status="approved"),
+        "excluded_with_reason",
+        reason_codes=["geen_kenniseenheid"],
+    )
+    revised = _with_register(
+        _obj("revised", "recommendation"),
+        "selected_as_candidate",
+    )
+    revised["object_version"] = "1.0.1"
+    revised["provenance"] = {
+        "previous_object_version": "1.0",
+        "revision_reason": "Gebruik de volledige bronzin.",
+    }
+    pending = _with_register(
+        _obj("pending", "recommendation"),
+        "selected_as_candidate",
+    )
+    objects = [approved, rejected, context, support, excluded, revised, pending]
+
+    dashboard = _render_review_index("snap-1", objects, "richtlijn")
+
+    assert "Reviewvoortgang" in dashboard
+    assert "5 van 7 bronpassages afgehandeld (71%)" in dashboard
+    assert "<strong>2</strong> nog te beoordelen" in dashboard
+    assert "<strong>1</strong> goedgekeurd" in dashboard
+    assert "<strong>1</strong> afgewezen" in dashboard
+    assert "<strong>1</strong> niet opgenomen" in dashboard
+    assert "<strong>1</strong> context" in dashboard
+    assert "<strong>1</strong> onderbouwing" in dashboard
+    assert "<strong>1</strong> herzien na correctie" in dashboard
+    assert 'task=decisions' in dashboard
+
+    decisions = _render_review_index(
+        "snap-1",
+        objects,
+        "richtlijn",
+        task="decisions",
+        audit_signals=[
+            {
+                "event_type": "review_audit_evidence",
+                "object_id": "rejected",
+                "actor": "reviewer.bert",
+                "occurred_at": "2026-09-18T10:00:00+00:00",
+                "details": {
+                    "snapshot_id": "snap-1",
+                    "decision": "reject",
+                    "comment": "Dit is geen zelfstandig kennisobject.",
+                },
+            },
+            {
+                "event_type": "review_audit_evidence",
+                "object_id": "revised",
+                "actor": "reviewer.bert",
+                "occurred_at": "2026-09-18T10:05:00+00:00",
+                "details": {
+                    "snapshot_id": "snap-1",
+                    "decision": "repair",
+                    "comment": "Gebruik de volledige bronzin.",
+                },
+            },
+        ],
+    )
+
+    assert "Besluiten en historie" in decisions
+    assert "Goedgekeurd" in decisions
+    assert "Afgewezen" in decisions
+    assert "Context" in decisions
+    assert "Alleen onderbouwing" in decisions
+    assert "Niet opgenomen" in decisions
+    assert "Herzien na correctie" in decisions
+    assert "Dit is geen zelfstandig kennisobject." in decisions
+    assert "Gebruik de volledige bronzin." in decisions
+    assert "vorige versie 1.0" in decisions
+    assert "versie 1.0.1" in decisions
+    assert "Passage pending." not in decisions
+    assert "data-review-form" not in decisions
+    assert "task=decisions" in decisions
