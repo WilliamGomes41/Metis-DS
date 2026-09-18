@@ -757,7 +757,7 @@ def _semantic_selection_markup(source_text: str, selection_text: str) -> tuple[s
     tokens = (selection_text or "").split()
     if not source_text or not tokens:
         return _esc(source_text), False
-    pattern = re.compile(r"\\s+".join(re.escape(token) for token in tokens))
+    pattern = re.compile(r"\s+".join(re.escape(token) for token in tokens))
     matches = list(pattern.finditer(source_text))
     if len(matches) != 1:
         return _esc(source_text), False
