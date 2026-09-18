@@ -11,7 +11,7 @@ import re
 from typing import Any, Iterable
 
 from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES, review_path_for_klasse
-from src.object_taxonomy_v1 import has_terminal_sentence_boundary, locator_of
+from src.object_taxonomy_v1 import has_terminal_sentence_boundary, locator_of, section_role_for_path
 
 
 GATE_ALLOWED = "allowed"
@@ -710,6 +710,7 @@ def candidate_from_object(
         "document_version": document_version or str(obj.get("object_version") or ""),
         "source_hash": source_hash or str((obj.get("source") or {}).get("source_checksum") or ""),
         "section_path": (obj.get("structure") or {}).get("section_path") or [],
+        "section_role": section_role_for_path((obj.get("structure") or {}).get("section_path") or []),
         "source_locator_start": start,
         "source_locator_end": end,
         "source_text_exact": source_exact,
