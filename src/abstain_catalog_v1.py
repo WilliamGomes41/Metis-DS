@@ -1,4 +1,4 @@
-"""Closed abstain-sentence catalog. No LLM. No generated prose."""
+"""Closed public abstain-reason catalog. No LLM. No generated prose."""
 from __future__ import annotations
 
 SENTENCES = {
@@ -31,6 +31,9 @@ SENTENCES = {
     "unpublished_or_unlocatable": (
         "Deze kennis is niet gepubliceerd of niet herleidbaar en wordt niet ondersteund."
     ),
+    "required_concept_not_present": (
+        "De gevraagde begrippen ontbreken in de gepubliceerde kennis."
+    ),
     "required_relation_not_present": (
         "De gevraagde relatie ontbreekt in de gepubliceerde kennis."
     ),
@@ -40,10 +43,26 @@ SENTENCES = {
     "insufficient_concept_coverage": (
         "De gepubliceerde kennis dekt de gevraagde begrippen onvoldoende."
     ),
+    "conflicting_evidence": (
+        "De gepubliceerde kennis bevat strijdige informatie voor deze vraag."
+    ),
+    "below_confidence_threshold": (
+        "De beschikbare gepubliceerde kennis voldoet niet aan de minimale antwoorddrempel."
+    ),
+    "version_context_not_satisfied": (
+        "De gevraagde versiecontext wordt niet door de gepubliceerde kennis ondersteund."
+    ),
+    "advice_bounds_missing": (
+        "De voorwaarden of uitzonderingen bij dit advies zijn niet volledig beschikbaar."
+    ),
 }
+
+ABSTAIN_REASONS = frozenset(SENTENCES)
 
 
 def sentence_for(reason: str | None) -> str:
-    if not reason:
-        return SENTENCES["insufficient_evidence"]
-    return SENTENCES.get(reason, SENTENCES["insufficient_evidence"])
+    resolved = reason or "insufficient_evidence"
+    try:
+        return SENTENCES[resolved]
+    except KeyError as exc:
+        raise ValueError(f"unknown_abstain_reason:{resolved}") from exc
