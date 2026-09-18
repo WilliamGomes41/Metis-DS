@@ -88,6 +88,76 @@ def semantic_source_blocks(fragments: Iterable[dict[str, Any]]) -> list[dict[str
     return [public for public, _source in _reconstructed_blocks(fragments)]
 
 
+def _coverage_remainders(
+    reconstructed: list[tuple[dict[str, Any], dict[str, Any]]],
+    *,
+    document_id: str,
+    selected_ranges_by_block: dict[str, list[tuple[int, int]]],
+) -> list[tuple[tuple[int, int], dict[str, Any]]]:
+    """Keep every unselected source range available for explicit disposition.
+
+    The model is allowed to choose candidate spans, not to erase source text.
+    Remainders therefore stay source-bound and deliberately unclassified so the
+    existing admission/passageregister chain keeps them as open review work.
+    """
+
+    out: list[tuple[tuple[int, int], dict[str, Any]]] = []
+    for public, source in reconstructed:
+        block_id = str(public["block_id"])
+        text = str(public["text"])
+        ranges = sorted(selected_ranges_by_block.get(block_id, []))
+
+        merged: list[tuple[int, int]] = []
+        for start, end in ranges:
+            if merged and start <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+            else:
+                merged.append((start, end))
+
+        cursor = 0
+        gaps: list[tuple[int, int]] = []
+        for start, end in merged:
+            if cursor < start:
+                gaps.append((cursor, start))
+            cursor = max(cursor, end)
+        if cursor < len(text):
+            gaps.append((cursor, len(text)))
+
+        for start, end in gaps:
+            remainder_text = normalize_visible_prose(text[start:end])
+            if not remainder_text:
+                continue
+            fragment_ids = source_fragment_ids_for_text(source, start=start, end=end)
+            identity_material = f"{block_id}:{start}:{end}:coverage"
+            identity = hashlib.sha256(identity_material.encode("utf-8")).hexdigest()[:16]
+            unit = {
+                "object_id": f"{document_id}-semcov-{identity}",
+                "object_type": DEFAULT_OBJECT_TYPE,
+                "proposed_object_type": DEFAULT_OBJECT_TYPE,
+                "text": remainder_text,
+                "clean_text": remainder_text,
+                "source_fragment_ids": fragment_ids,
+                "section_path": list(public["section_path"]),
+                "heading": public["heading"],
+                "review_track": "clinical",
+                "relations": [],
+                "confirmed_relations": [],
+                "semantic_passage": {
+                    "version": SEMANTIC_PASSAGE_VERSION,
+                    "source_bound": True,
+                    "spans": [
+                        {
+                            "block_id": block_id,
+                            "start": start,
+                            "end": end,
+                        }
+                    ],
+                },
+            }
+            out.append(((int(public["position"]), start), unit))
+    return out
+
+
 def semantic_units_from_proposal(
     fragments: Iterable[dict[str, Any]],
     *,
@@ -120,6 +190,7 @@ def semantic_units_from_proposal(
     reconstructed = _reconstructed_blocks(fragments)
     by_id = {public["block_id"]: (public, source) for public, source in reconstructed}
     units_with_position: list[tuple[tuple[int, int], dict[str, Any]]] = []
+    selected_ranges_by_block: dict[str, list[tuple[int, int]]] = {}
 
     for raw_object in raw_objects:
         if not isinstance(raw_object, dict):
@@ -166,6 +237,7 @@ def semantic_units_from_proposal(
             if range_key in seen_ranges:
                 _fail("semantic_span_duplicate")
             seen_ranges.add(range_key)
+            selected_ranges_by_block.setdefault(block_id, []).append((start, end))
 
             selected_text = text[start:end]
             if not selected_text.strip():
@@ -242,5 +314,12 @@ def semantic_units_from_proposal(
             unit["proposed_object_type"] = proposed_type
         units_with_position.append(((first["position"], first["start"]), unit))
 
+    units_with_position.extend(
+        _coverage_remainders(
+            reconstructed,
+            document_id=document_id,
+            selected_ranges_by_block=selected_ranges_by_block,
+        )
+    )
     units_with_position.sort(key=lambda pair: pair[0])
     return [unit for _position, unit in units_with_position]
