@@ -312,5 +312,4 @@ def test_object_history_reuses_one_document_read_and_shows_stored_version_diff()
     assert "Versie 1.0" in html
     assert "Versie 1.0.1" in html
     assert "huidige versie" in html
-    history_html = html.split('data-review-object-history="revised"', 1)[1]
-    assert "data-review-form" not in history_html
+    assert '<form class="review-decision-form"' not in html
