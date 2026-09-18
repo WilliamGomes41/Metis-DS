@@ -382,3 +382,187 @@ def test_full_source_selection_does_not_create_coverage_duplicate() -> None:
 
     assert len(units) == 1
     assert units[0]["clean_text"] == "Gebruik behandeling X."
+
+
+def test_noncontiguous_spans_in_one_block_fail_closed() -> None:
+    text = "Gebruik behandeling X. Niet gebruiken bij nierfalen. Controleer na vier weken."
+    fragments = [_fragment("frag-1", text)]
+    block = semantic_source_blocks(fragments)[0]
+    first = "Gebruik behandeling X."
+    third = "Controleer na vier weken."
+    third_start = block["text"].index(third)
+
+    with pytest.raises(SemanticPassageError, match="semantic_span_hidden_gap"):
+        semantic_units_from_proposal(
+            fragments,
+            document_id="doc-gap",
+            proposal={
+                "objects": [
+                    {
+                        "spans": [
+                            {
+                                "block_id": block["block_id"],
+                                "start": 0,
+                                "end": len(first),
+                            },
+                            {
+                                "block_id": block["block_id"],
+                                "start": third_start,
+                                "end": third_start + len(third),
+                            },
+                        ],
+                        "proposed_object_type": "recommendation",
+                    }
+                ],
+                "abstain_reason": None,
+            },
+        )
+
+
+def test_skipping_source_block_in_one_candidate_fails_closed() -> None:
+    fragments = [
+        _fragment("frag-a", "Gebruik behandeling X."),
+        _fragment("frag-b", "Niet gebruiken bij nierfalen."),
+        _fragment("frag-c", "Controleer na vier weken."),
+    ]
+    blocks = semantic_source_blocks(fragments)
+
+    with pytest.raises(SemanticPassageError, match="semantic_span_hidden_gap"):
+        semantic_units_from_proposal(
+            fragments,
+            document_id="doc-block-gap",
+            proposal={
+                "objects": [
+                    {
+                        "spans": [
+                            {
+                                "block_id": blocks[0]["block_id"],
+                                "start": 0,
+                                "end": len(blocks[0]["text"]),
+                            },
+                            {
+                                "block_id": blocks[2]["block_id"],
+                                "start": 0,
+                                "end": len(blocks[2]["text"]),
+                            },
+                        ],
+                        "proposed_object_type": "recommendation",
+                    }
+                ],
+                "abstain_reason": None,
+            },
+        )
+
+
+def test_same_block_spans_separated_only_by_whitespace_are_allowed() -> None:
+    text = "Gebruik behandeling X.   Controleer na vier weken."
+    fragments = [_fragment("frag-1", text)]
+    block = semantic_source_blocks(fragments)[0]
+    first = "Gebruik behandeling X."
+    second = "Controleer na vier weken."
+    second_start = block["text"].index(second)
+
+    units = semantic_units_from_proposal(
+        fragments,
+        document_id="doc-whitespace",
+        proposal={
+            "objects": [
+                {
+                    "spans": [
+                        {
+                            "block_id": block["block_id"],
+                            "start": 0,
+                            "end": len(first),
+                        },
+                        {
+                            "block_id": block["block_id"],
+                            "start": second_start,
+                            "end": second_start + len(second),
+                        },
+                    ],
+                    "proposed_object_type": "recommendation",
+                }
+            ],
+            "abstain_reason": None,
+        },
+    )
+
+    assert [unit["clean_text"] for unit in units] == [
+        "Gebruik behandeling X. Controleer na vier weken."
+    ]
+
+
+def test_full_adjacent_blocks_may_form_one_candidate() -> None:
+    fragments = [
+        _fragment("frag-a", "Gebruik behandeling X."),
+        _fragment("frag-b", "Controleer na vier weken."),
+    ]
+    blocks = semantic_source_blocks(fragments)
+
+    units = semantic_units_from_proposal(
+        fragments,
+        document_id="doc-adjacent",
+        proposal={
+            "objects": [
+                {
+                    "spans": [
+                        {
+                            "block_id": blocks[0]["block_id"],
+                            "start": 0,
+                            "end": len(blocks[0]["text"]),
+                        },
+                        {
+                            "block_id": blocks[1]["block_id"],
+                            "start": 0,
+                            "end": len(blocks[1]["text"]),
+                        },
+                    ],
+                    "proposed_object_type": "recommendation",
+                }
+            ],
+            "abstain_reason": None,
+        },
+    )
+
+    assert [unit["clean_text"] for unit in units] == [
+        "Gebruik behandeling X. Controleer na vier weken."
+    ]
+
+
+def test_empty_extracted_fragment_does_not_create_a_false_hidden_gap() -> None:
+    fragments = [
+        _fragment("frag-a", "Gebruik behandeling X."),
+        _fragment("frag-empty", ""),
+        _fragment("frag-b", "Controleer na vier weken."),
+    ]
+    blocks = semantic_source_blocks(fragments)
+    assert len(blocks) == 2
+
+    units = semantic_units_from_proposal(
+        fragments,
+        document_id="doc-empty-gap",
+        proposal={
+            "objects": [
+                {
+                    "spans": [
+                        {
+                            "block_id": blocks[0]["block_id"],
+                            "start": 0,
+                            "end": len(blocks[0]["text"]),
+                        },
+                        {
+                            "block_id": blocks[1]["block_id"],
+                            "start": 0,
+                            "end": len(blocks[1]["text"]),
+                        },
+                    ],
+                    "proposed_object_type": "recommendation",
+                }
+            ],
+            "abstain_reason": None,
+        },
+    )
+
+    assert [unit["clean_text"] for unit in units] == [
+        "Gebruik behandeling X. Controleer na vier weken."
+    ]
