@@ -8,6 +8,7 @@ introducing an AuditEngine or a universal lifecycle.
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 import uuid
@@ -19,6 +20,11 @@ from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from src.admission_gate_v1 import blocked_audit_lane
+from src.audit_semantic_safety_v1 import (
+    AUDIT_LLM_MODEL_ENV,
+    load_frozen_safety_suite,
+    run_frozen_semantic_safety_suite,
+)
 from src.extract_coverage_v1 import coverage_panel_rows
 from src.operations_console_v1 import ConsoleError, OperationsConsole, _atomic_write
 
@@ -323,6 +329,50 @@ def _render_experiment(audit: dict[str, Any]) -> str:
     """
 
 
+def _render_semantic_safety_experiment(audit: dict[str, Any]) -> str:
+    payload = audit["payload"]
+    report = payload.get("safety_report") if isinstance(payload.get("safety_report"), dict) else {}
+    rows = []
+    for result in report.get("results") or []:
+        candidate = result.get("candidate") if isinstance(result, dict) and isinstance(result.get("candidate"), dict) else {}
+        evaluation = candidate.get("evaluation") if isinstance(candidate.get("evaluation"), dict) else {}
+        status = "PASS" if candidate.get("pass") else "REVIEW"
+        details = []
+        if candidate.get("kernel_reject"):
+            details.append(f'kernel reject: {candidate.get("kernel_reject")}')
+        if evaluation.get("missing_anchors"):
+            details.append("ontbrekende bronankers: " + "; ".join(str(x) for x in evaluation["missing_anchors"]))
+        if evaluation.get("broken_co_location_groups"):
+            details.append("betekenisverband niet behouden")
+        rows.append(
+            f'<li><b>{_esc(result.get("risk_category"))}</b> · {_esc(result.get("case_id"))} '
+            f'— <b>{_esc(status)}</b>'
+            f'{f"<br><span class=\"muted\">{_esc(\" · \".join(details))}</span>" if details else ""}</li>'
+        )
+    return f"""
+      <p class="eyebrow">Experiment · {_esc(audit["audit_id"])}</p>
+      <h1>{_esc(audit["title"])}</h1>
+      <p class="lead">Frozen semantic safety audit. Dit is machinebewijs en geen activatiebesluit.</p>
+      <div class="sections">
+        <div class="section">
+          <h3>Suite</h3>
+          <p><b>{_esc(report.get("suite_id"))}</b></p>
+          <p>{_esc(report.get("case_count"))} cases · {_esc(report.get("candidate_pass_count"))} machine-pass</p>
+          <p class="muted">suite hash {_esc(report.get("suite_hash"))}</p>
+        </div>
+        <div class="section">
+          <h3>Uitvoering</h3>
+          <p>model <b>{_esc(report.get("model"))}</b></p>
+          <p>commit <b>{_esc(report.get("evaluated_commit"))}</b></p>
+          <p><b>{"Machinecheck PASS" if report.get("machine_safety_pass") else "Menselijke beoordeling vereist"}</b></p>
+        </div>
+      </div>
+      <h2>Veiligheidscases</h2>
+      <ul>{"".join(rows)}</ul>
+      <p class="muted">Menselijke beoordeling blijft vereist. Dit auditrecord activeert semantic mode niet en wijzigt geen Review- of publicatiestatus.</p>
+    """
+
+
 def _render_document_quality(audit: dict[str, Any]) -> str:
     payload = audit["payload"]
     document = payload.get("document") if isinstance(payload.get("document"), dict) else {}
@@ -354,10 +404,16 @@ def _render_document_quality(audit: dict[str, Any]) -> str:
     """
 
 
-def install_audit_routes(app: FastAPI, console: OperationsConsole) -> None:
+def install_audit_routes(
+    app: FastAPI,
+    console: OperationsConsole,
+    *,
+    semantic_safety_post_json: Any | None = None,
+) -> None:
     """Install the bounded Audit room on the existing console app."""
 
     registry = AuditRegistry(console.runtime)
+    suite_path = Path(__file__).resolve().parents[1] / "data" / "audit" / "semantic_passage_safety_v1.json"
 
     def account_for(request: Request) -> dict[str, Any]:
         return console.session_account(request.cookies.get("console_session"))
@@ -367,7 +423,7 @@ def install_audit_routes(app: FastAPI, console: OperationsConsole) -> None:
         body = f"""
           <h1>Audit</h1>
           <p class="lead">Controleer hoe Metis werkt en leg bewijs vast. Audits veranderen geen canonieke kennis en publiceren niets.</p>
-          <p><a class="btn-primary" href="/audit/new">Nieuwe audit</a> <a class="btn-secondary" href="/audit/llm-settings">LLM-instellingen</a></p>
+          <p><a class="btn-primary" href="/audit/new">Nieuwe audit</a> <a class="btn-secondary" href="/audit/semantic-safety">Frozen semantic safety</a> <a class="btn-secondary" href="/audit/llm-settings">LLM-instellingen</a></p>
           <h2>Audits</h2>
           <div class="doc-list">{_audit_rows(registry)}</div>
           <h2>Auditvormen</h2>
@@ -450,7 +506,10 @@ def install_audit_routes(app: FastAPI, console: OperationsConsole) -> None:
         if audit is None:
             return HTMLResponse(_chrome(console, account, '<h1>Audit niet gevonden</h1><p><a href="/audit">Terug naar Audit</a></p>'), status_code=404)
         if audit["audit_type"] == "experiment":
-            detail = _render_experiment(audit)
+            if (audit.get("payload") or {}).get("state") == "semantic_safety_completed":
+                detail = _render_semantic_safety_experiment(audit)
+            else:
+                detail = _render_experiment(audit)
         elif audit["audit_type"] == "document_quality":
             detail = _render_document_quality(audit)
         else:
@@ -463,7 +522,82 @@ def install_audit_routes(app: FastAPI, console: OperationsConsole) -> None:
             )
         )
 
+    def semantic_safety(request: Request, error: str = "") -> HTMLResponse:
+        account = account_for(request)
+        if "researcher" not in set(account.get("roles") or []):
+            raise ConsoleError("researcher_role_required")
+        from src import audit_llm_settings_v1 as llm_settings
+
+        suite = load_frozen_safety_suite(suite_path)
+        model = str(os.environ.get(AUDIT_LLM_MODEL_ENV, "") or "").strip()
+        commit = str(os.environ.get("METIS_AUDIT_EVALUATED_COMMIT", "") or "").strip().lower()
+        secret_status = llm_settings.AuditLLMSecretStore(console.runtime).status()
+        ready = bool(model and commit == suite["evaluated_baseline_commit"] and secret_status.get("configured"))
+        error_html = f'<div class="banner err">{_esc(error)}</div>' if error else ""
+        readiness = (
+            '<button class="btn-primary" type="submit">Frozen audit uitvoeren</button>'
+            if ready
+            else '<p class="muted">Run geblokkeerd: configureer Audit-key, METIS_AUDIT_LLM_MODEL en exact de frozen commit in METIS_AUDIT_EVALUATED_COMMIT.</p>'
+        )
+        body = f"""
+          <p><a class="btn-secondary" href="/audit">← Terug naar Audit</a></p>
+          <p class="eyebrow">Audit · Experiment</p>
+          <h1>Frozen semantic safety</h1>
+          <p class="lead">Controleer weglatingen, voorwaarden, uitzonderingen, negaties en betekenisverbanden op exact dezelfde frozen bron.</p>
+          {error_html}
+          <article class="doc-card">
+            <p><b>Suite</b> {_esc(suite["suite_id"])}</p>
+            <p><b>Frozen commit</b> {_esc(suite["evaluated_baseline_commit"])}</p>
+            <p><b>Model</b> {_esc(model or "Niet geconfigureerd")}</p>
+            <p><b>Cases</b> {len(suite["cases"])}</p>
+          </article>
+          <form method="post" action="/audit/semantic-safety/run">{readiness}</form>
+          <p class="muted">Een run maakt alleen Audit-bewijs. Menselijke beoordeling blijft vereist en semantic mode wordt niet geactiveerd.</p>
+        """
+        return HTMLResponse(_chrome(console, account, body))
+
+    def semantic_safety_run(request: Request) -> HTMLResponse:
+        account = account_for(request)
+        if "researcher" not in set(account.get("roles") or []):
+            raise ConsoleError("researcher_role_required")
+        from src import audit_llm_settings_v1 as llm_settings
+
+        suite = load_frozen_safety_suite(suite_path)
+        model = str(os.environ.get(AUDIT_LLM_MODEL_ENV, "") or "").strip()
+        commit = str(os.environ.get("METIS_AUDIT_EVALUATED_COMMIT", "") or "").strip().lower()
+        if not model:
+            return semantic_safety(request, error="METIS_AUDIT_LLM_MODEL is niet geconfigureerd.")
+        if commit != suite["evaluated_baseline_commit"]:
+            return semantic_safety(request, error="De deployment-commit komt niet overeen met de frozen auditcommit.")
+        try:
+            api_key = llm_settings.AuditLLMSecretStore(console.runtime).read_api_key()
+            report = run_frozen_semantic_safety_suite(
+                suite,
+                api_key=api_key,
+                model=model,
+                evaluated_commit=commit,
+                post_json=semantic_safety_post_json,
+            )
+        except ConsoleError as exc:
+            return semantic_safety(request, error=f"Audit kon niet worden uitgevoerd: {exc.code}")
+
+        audit = registry.create(
+            audit_type="experiment",
+            title=f'Frozen semantic safety · {suite["suite_id"]}',
+            actor_id=account["account_id"],
+            payload={
+                "question": "Behoudt semantic passage formation broninhoud en betekenisdragende qualifiers op de frozen safety-suite?",
+                "baseline": dict(EXPERIMENT_BASELINE),
+                "candidate": dict(EXPERIMENT_CANDIDATE),
+                "state": "semantic_safety_completed",
+                "safety_report": report,
+            },
+        )
+        return RedirectResponse(f'/audit/{audit["audit_id"]}', status_code=303)
+
     app.add_api_route("/audit", audit_home, methods=["GET"], response_class=HTMLResponse, name="audit_home")
     app.add_api_route("/audit/new", audit_new, methods=["GET"], response_class=HTMLResponse, name="audit_new")
+    app.add_api_route("/audit/semantic-safety", semantic_safety, methods=["GET"], response_class=HTMLResponse, name="audit_semantic_safety")
+    app.add_api_route("/audit/semantic-safety/run", semantic_safety_run, methods=["POST"], response_class=HTMLResponse, name="audit_semantic_safety_run")
     app.add_api_route("/audit", audit_create, methods=["POST"], response_class=HTMLResponse, name="audit_create")
     app.add_api_route("/audit/{audit_id}", audit_detail, methods=["GET"], response_class=HTMLResponse, name="audit_detail")
