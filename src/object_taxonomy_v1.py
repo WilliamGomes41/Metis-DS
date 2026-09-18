@@ -7,7 +7,7 @@ default, not a sixth advice type.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Iterable
 
 from src.serving_relations_v1 import HISTORICAL_NON_SERVING_TYPES
 
@@ -41,6 +41,33 @@ STRUCTURAL_HEADING_LABELS = frozenset(
         "diagnostiek",
     }
 )
+
+SUMMARY_SECTION_LABELS = frozenset({"samenvatting", "kernpunten", "kernboodschappen"})
+SECTION_ROLE_BY_LABEL = {
+    "aanbeveling": "primary",
+    "aanbevelingen": "primary",
+    "behandeling": "primary",
+    "diagnostiek": "primary",
+    "doorverwijzen": "primary",
+    "interventie": "primary",
+    "interventies": "primary",
+    "inleiding": "context",
+    "aanleiding": "context",
+    "doel": "context",
+    "doelgroep": "context",
+    "achtergrond": "context",
+    "overwegingen": "support",
+    "onderbouwing": "support",
+    "evidentie": "support",
+    "literatuur": "support",
+    "methodiek": "structural",
+    "verantwoording": "structural",
+    "colofon": "structural",
+    "inhoud": "structural",
+    "inhoudsopgave": "structural",
+    "bijlage": "structural",
+    "bijlagen": "structural",
+}
 _NUMBERED_HEADING_RE = re.compile(r"^\d+(?:\.\d+)*\.?\s+\S.{0,100}$")
 CLASS_ORDER = {
     "richtlijn": 4,
@@ -179,6 +206,30 @@ def is_continuation_fragment(text: str) -> bool:
 def normalize_visible_prose(text: str) -> str:
     """Ordinary whitespace normalisation for freeze-prose identity (v2.18)."""
     return re.sub(r"\s+", " ", text or "").strip()
+
+
+def section_role_for_path(section_path: Iterable[Any] | None) -> str:
+    """Return a deterministic document role from the existing section path.
+
+    Unknown sections stay primary to preserve current candidate behavior.
+    A summary container wins over nested labels such as Aanbevelingen so a
+    repeated summary recommendation is not mistaken for its primary source.
+    """
+
+    labels: list[str] = []
+    for value in section_path or ():
+        blob = normalize_visible_prose(str(value)).casefold().rstrip(":")
+        blob = re.sub(r"^\d+(?:\.\d+)*\.?\s+", "", blob)
+        if blob:
+            labels.append(blob)
+
+    if any(label in SUMMARY_SECTION_LABELS for label in labels):
+        return "summary"
+    for label in reversed(labels):
+        role = SECTION_ROLE_BY_LABEL.get(label)
+        if role:
+            return role
+    return "primary"
 
 
 def is_tiny_confirmable_text(text: str) -> bool:
