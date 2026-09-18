@@ -15,6 +15,11 @@ from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker
 from src.integrity_kernel import stamp_canonical_hashes, stable_hash
+from src.semantic_passage_v1 import (
+    SELECTION_ORIGIN_COVERAGE,
+    SELECTION_ORIGIN_PROPOSAL,
+    SEMANTIC_PASSAGE_VERSION,
+)
 from src.serving_relations_v1 import confirm_relation_set, proposed_relations
 
 TRANSFORM_VERSION = "semantic-generic-v1.0.0"
@@ -33,15 +38,18 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
         return None
     if not isinstance(value, dict):
         raise ValueError("semantic_passage_metadata_invalid")
-    if value.get("source_bound") is not True or not str(value.get("version") or "").strip():
+    if (
+        value.get("source_bound") is not True
+        or value.get("version") != SEMANTIC_PASSAGE_VERSION
+    ):
         raise ValueError("semantic_passage_metadata_invalid")
 
     origin = str(value.get("selection_origin") or "")
     expected_keys = (
         _SEMANTIC_PASSAGE_PROPOSAL_KEYS
-        if origin == "proposal_selected"
+        if origin == SELECTION_ORIGIN_PROPOSAL
         else _SEMANTIC_PASSAGE_BASE_KEYS
-        if origin == "coverage_remainder"
+        if origin == SELECTION_ORIGIN_COVERAGE
         else None
     )
     if expected_keys is None or set(value) != expected_keys:
@@ -65,12 +73,12 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
             raise ValueError("semantic_passage_metadata_invalid")
 
     result = {
-        "version": str(value["version"]),
+        "version": SEMANTIC_PASSAGE_VERSION,
         "source_bound": True,
         "selection_origin": origin,
         "spans": [dict(span) for span in spans],
     }
-    if origin == "proposal_selected":
+    if origin == SELECTION_ORIGIN_PROPOSAL:
         if str(value.get("formation_mode") or "") != "semantic-source-bound-v1":
             raise ValueError("semantic_passage_metadata_invalid")
         if not str(value.get("model") or "").strip():
