@@ -1405,11 +1405,33 @@ def _review_task_dashboard(
     normal_batches: int,
     blocked_count: int,
     progress: dict[str, int],
+    heading_pending_override: int | None = None,
+    heading_total_override: int | None = None,
+    individual_pending_override: int | None = None,
+    individual_total_override: int | None = None,
 ) -> str:
-    heading_pending = sum(not _review_is_final(obj) for obj in koppen)
-    heading_done = len(koppen) - heading_pending
-    individual_pending = sum(not _review_is_final(obj) for obj in individual)
-    individual_done = len(individual) - individual_pending
+    heading_pending = (
+        int(heading_pending_override)
+        if heading_pending_override is not None
+        else sum(not _review_is_final(obj) for obj in koppen)
+    )
+    heading_total = (
+        int(heading_total_override)
+        if heading_total_override is not None
+        else len(koppen)
+    )
+    heading_done = max(heading_total - heading_pending, 0)
+    individual_pending = (
+        int(individual_pending_override)
+        if individual_pending_override is not None
+        else sum(not _review_is_final(obj) for obj in individual)
+    )
+    individual_total = (
+        int(individual_total_override)
+        if individual_total_override is not None
+        else len(individual)
+    )
+    individual_done = max(individual_total - individual_pending, 0)
     tasks = [
         (
             "headings",

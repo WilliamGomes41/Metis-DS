@@ -288,6 +288,7 @@ class _PostgresBadgeCountsMixin:
     def review_workboard_summaries(
         self,
         account_id: str,
+        snapshot_id: str | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Summarize assigned Review work in one set-based workflow query."""
         try:
@@ -300,6 +301,7 @@ class _PostgresBadgeCountsMixin:
                         JOIN workflow.document_reviewers r
                           ON r.snapshot_id=d.snapshot_id
                         WHERE r.account_id=%s
+                          AND d.snapshot_id=COALESCE(%s,d.snapshot_id)
                     ),
                     current_objects AS (
                         SELECT DISTINCT ON (o.snapshot_id,o.object_id)
@@ -493,8 +495,14 @@ class _PostgresBadgeCountsMixin:
                     counts AS (
                         SELECT snapshot_id,
                                COUNT(*) FILTER (
+                                   WHERE queue_fast
+                               ) AS heading_total,
+                               COUNT(*) FILTER (
                                    WHERE queue_fast AND NOT review_final
                                ) AS heading_pending,
+                               COUNT(*) FILTER (
+                                   WHERE (slow_duty OR regular_individual)
+                               ) AS individual_total,
                                COUNT(*) FILTER (
                                    WHERE (slow_duty OR regular_individual)
                                      AND NOT review_final
@@ -527,7 +535,56 @@ class _PostgresBadgeCountsMixin:
                                ) AS closure_gap_first,
                                COUNT(*) FILTER (
                                    WHERE unresolved_closure
-                               ) AS unresolved_closure_count
+                               ) AS unresolved_closure_count,
+                               COUNT(*) FILTER (
+                                   WHERE object_type<>'document'
+                               ) AS progress_total,
+                               COUNT(*) FILTER (
+                                   WHERE object_type<>'document'
+                                     AND disposition_final
+                               ) AS progress_done,
+                               COUNT(*) FILTER (
+                                   WHERE object_type<>'document'
+                                     AND disposition_final
+                                     AND validation_status='rejected'
+                               ) AS progress_rejected,
+                               COUNT(*) FILTER (
+                                   WHERE object_type<>'document'
+                                     AND disposition_final
+                                     AND validation_status<>'rejected'
+                                     AND register_status='selected_as_candidate'
+                                     AND validation_status='approved'
+                               ) AS progress_approved,
+                               COUNT(*) FILTER (
+                                   WHERE object_type<>'document'
+                                     AND disposition_final
+                                     AND validation_status<>'rejected'
+                                     AND register_status='excluded_with_reason'
+                               ) AS progress_not_included,
+                               COUNT(*) FILTER (
+                                   WHERE object_type<>'document'
+                                     AND disposition_final
+                                     AND validation_status<>'rejected'
+                                     AND register_status='used_as_context'
+                               ) AS progress_context,
+                               COUNT(*) FILTER (
+                                   WHERE object_type<>'document'
+                                     AND disposition_final
+                                     AND validation_status<>'rejected'
+                                     AND register_status='linked_as_support'
+                               ) AS progress_support,
+                               COUNT(*) FILTER (
+                                   WHERE object_type<>'document'
+                                     AND disposition_final
+                                     AND validation_status='superseded'
+                               ) AS progress_superseded,
+                               COUNT(*) FILTER (
+                                   WHERE object_type<>'document'
+                                     AND validation_status='needs_review'
+                                     AND COALESCE(
+                                         payload->'provenance'->>'previous_object_version',''
+                                     )<>''
+                               ) AS progress_revised
                         FROM final_rows
                         GROUP BY snapshot_id
                     ),
@@ -545,20 +602,31 @@ class _PostgresBadgeCountsMixin:
                     )
                     SELECT a.snapshot_id,
                            a.envelope_payload,
+                           COALESCE(c.heading_total,0) AS heading_total,
                            COALESCE(c.heading_pending,0) AS heading_pending,
+                           COALESCE(c.individual_total,0) AS individual_total,
                            COALESCE(c.individual_pending,0) AS individual_pending,
                            COALESCE(c.normal_passages,0) AS normal_passages,
                            COALESCE(bc.normal_batches,0) AS normal_batches,
                            COALESCE(c.blocked_count,0) AS blocked_count,
                            COALESCE(c.closure_gap_count,0) AS closure_gap_count,
                            c.closure_gap_first,
-                           COALESCE(c.unresolved_closure_count,0) AS unresolved_closure_count
+                           COALESCE(c.unresolved_closure_count,0) AS unresolved_closure_count,
+                           COALESCE(c.progress_total,0) AS progress_total,
+                           COALESCE(c.progress_done,0) AS progress_done,
+                           COALESCE(c.progress_rejected,0) AS progress_rejected,
+                           COALESCE(c.progress_approved,0) AS progress_approved,
+                           COALESCE(c.progress_not_included,0) AS progress_not_included,
+                           COALESCE(c.progress_context,0) AS progress_context,
+                           COALESCE(c.progress_support,0) AS progress_support,
+                           COALESCE(c.progress_superseded,0) AS progress_superseded,
+                           COALESCE(c.progress_revised,0) AS progress_revised
                     FROM assigned a
                     LEFT JOIN counts c ON c.snapshot_id=a.snapshot_id
                     LEFT JOIN batch_counts bc ON bc.snapshot_id=a.snapshot_id
                     ORDER BY a.snapshot_id
                     """,
-                    (account_id,),
+                    (account_id, snapshot_id or None),
                 ).fetchall()
         except WorkflowDocumentStoreError:
             raise
@@ -575,7 +643,9 @@ class _PostgresBadgeCountsMixin:
             snapshot_id = str(row["snapshot_id"])
             out[snapshot_id] = {
                 "envelope": dict(envelope),
+                "heading_total": int(row.get("heading_total") or 0),
                 "heading_pending": int(row.get("heading_pending") or 0),
+                "individual_total": int(row.get("individual_total") or 0),
                 "individual_pending": int(row.get("individual_pending") or 0),
                 "normal_passages": int(row.get("normal_passages") or 0),
                 "normal_batches": int(row.get("normal_batches") or 0),
@@ -585,6 +655,15 @@ class _PostgresBadgeCountsMixin:
                 "source_passage_review_complete": int(
                     row.get("unresolved_closure_count") or 0
                 ) == 0,
+                "progress_total": int(row.get("progress_total") or 0),
+                "progress_done": int(row.get("progress_done") or 0),
+                "progress_approved": int(row.get("progress_approved") or 0),
+                "progress_rejected": int(row.get("progress_rejected") or 0),
+                "progress_not_included": int(row.get("progress_not_included") or 0),
+                "progress_context": int(row.get("progress_context") or 0),
+                "progress_support": int(row.get("progress_support") or 0),
+                "progress_superseded": int(row.get("progress_superseded") or 0),
+                "progress_revised": int(row.get("progress_revised") or 0),
             }
         return out
 
