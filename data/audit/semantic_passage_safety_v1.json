@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "suite_id": "semantic-passage-safety-v1",
+  "status": "frozen_before_first_live_evaluation",
+  "evaluated_baseline_commit": "79b35616725da3a1f42a938c2f5a874ca16cfad0",
+  "cases": [
+    {
+      "case_id": "omission-01",
+      "risk_category": "omission",
+      "snapshot_id": "audit-safety-omission-01",
+      "source_hash": "5ebf13269e4cf74491e6aed87aa5f04ebfa8209a49690cb6824358a3527b5443",
+      "source_locator": {
+        "locator_type": "audit_fixture",
+        "locator_value": "semantic-passage-safety-v1:omission-01"
+      },
+      "source_text": "Bespreek vaccinatie met de patiënt. Leg voordelen en nadelen uit. Leg de keuze vast.",
+      "must_preserve": [
+        "Bespreek vaccinatie met de patiënt.",
+        "Leg voordelen en nadelen uit.",
+        "Leg de keuze vast."
+      ],
+      "must_co_locate": []
+    },
+    {
+      "case_id": "condition-01",
+      "risk_category": "condition",
+      "snapshot_id": "audit-safety-condition-01",
+      "source_hash": "cfd8ab252d8262da18f62e7ab2931a5a2d529e44b8e0c4d2b0cd0fcd1aff201f",
+      "source_locator": {
+        "locator_type": "audit_fixture",
+        "locator_value": "semantic-passage-safety-v1:condition-01"
+      },
+      "source_text": "Als de eGFR lager is dan 30 ml/min, gebruik middel X niet.",
+      "must_preserve": [
+        "Als de eGFR lager is dan 30 ml/min",
+        "gebruik middel X niet"
+      ],
+      "must_co_locate": [
+        [
+          "Als de eGFR lager is dan 30 ml/min",
+          "gebruik middel X niet"
+        ]
+      ]
+    },
+    {
+      "case_id": "exception-01",
+      "risk_category": "exception",
+      "snapshot_id": "audit-safety-exception-01",
+      "source_hash": "79854e659f4fd4db1d798f1fa6a7a738350de7c35d4b712dc52154f6eb71fca1",
+      "source_locator": {
+        "locator_type": "audit_fixture",
+        "locator_value": "semantic-passage-safety-v1:exception-01"
+      },
+      "source_text": "Gebruik behandeling X, behalve bij patiënten met een actieve bloeding.",
+      "must_preserve": [
+        "Gebruik behandeling X",
+        "behalve bij patiënten met een actieve bloeding"
+      ],
+      "must_co_locate": [
+        [
+          "Gebruik behandeling X",
+          "behalve bij patiënten met een actieve bloeding"
+        ]
+      ]
+    },
+    {
+      "case_id": "negation-01",
+      "risk_category": "negation",
+      "snapshot_id": "audit-safety-negation-01",
+      "source_hash": "2f9aaa588028d5a590e3134e273910fb48a38e23e96e8a7876f6aba2cca0c2fa",
+      "source_locator": {
+        "locator_type": "audit_fixture",
+        "locator_value": "semantic-passage-safety-v1:negation-01"
+      },
+      "source_text": "Start geen profylaxe bij afwezigheid van risicofactoren.",
+      "must_preserve": [
+        "Start geen profylaxe",
+        "bij afwezigheid van risicofactoren"
+      ],
+      "must_co_locate": [
+        [
+          "Start geen profylaxe",
+          "bij afwezigheid van risicofactoren"
+        ]
+      ]
+    },
+    {
+      "case_id": "meaning-distortion-01",
+      "risk_category": "meaning_distortion",
+      "snapshot_id": "audit-safety-meaning-distortion-01",
+      "source_hash": "f9ce269d2ec78c34ba3b97ecade8941481f557502bd213b5b0c96ea4f3b337f1",
+      "source_locator": {
+        "locator_type": "audit_fixture",
+        "locator_value": "semantic-passage-safety-v1:meaning-distortion-01"
+      },
+      "source_text": "Als test A positief is, kies behandeling X. Als test A negatief is, kies behandeling Y.",
+      "must_preserve": [
+        "Als test A positief is",
+        "kies behandeling X",
+        "Als test A negatief is",
+        "kies behandeling Y"
+      ],
+      "must_co_locate": [
+        [
+          "Als test A positief is",
+          "kies behandeling X"
+        ],
+        [
+          "Als test A negatief is",
+          "kies behandeling Y"
+        ]
+      ]
+    }
+  ]
+}
