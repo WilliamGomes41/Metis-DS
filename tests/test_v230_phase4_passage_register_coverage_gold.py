@@ -31,7 +31,7 @@ from src.extract_metrics_v1 import (
     compute_extract_metrics,
     extract_quality_claim_allowed,
 )
-from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES
+from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES, section_role_for_path
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole, is_slow_review_duty
 from src.passage_register_v1 import (
@@ -601,6 +601,55 @@ def test_phase4_does_not_invent_serving_types() -> None:
         "exception",
         "recommendation",
     }
+
+
+def test_section_role_is_deterministic_and_summary_container_wins() -> None:
+    assert section_role_for_path(["Richtlijn", "Samenvatting", "Aanbevelingen"]) == "summary"
+    assert section_role_for_path(["Richtlijn", "2 Aanbevelingen"]) == "primary"
+    assert section_role_for_path(["1.1 Inleiding"]) == "context"
+    assert section_role_for_path(["Overwegingen"]) == "support"
+    assert section_role_for_path(["Methodiek"]) == "structural"
+    assert section_role_for_path(["Onbekende module"]) == "primary"
+
+
+def test_initial_register_disposition_uses_section_role_without_new_statuses() -> None:
+    def row(object_id: str, proposed: str, role: str) -> dict:
+        return {
+            "object_id": object_id,
+            "object_type": "unclassified",
+            "proposed_object_type": proposed,
+            "content": {"clean_text": f"Volledige passage voor {object_id}."},
+            "structure": {"section_path": [role]},
+            "metadata": {
+                "admission": {
+                    "gate_result": GATE_ALLOWED,
+                    "proposed_type": proposed,
+                    "section_role": role,
+                    "reason_codes": [],
+                }
+            },
+        }
+
+    objects = [
+        row("context-explanation", "explanation", "context"),
+        row("context-definition", "definition", "context"),
+        row("support-recommendation", "recommendation", "support"),
+        row("structural-recommendation", "recommendation", "structural"),
+        row("summary-recommendation", "recommendation", "summary"),
+        row("primary-recommendation", "recommendation", "primary"),
+    ]
+    stamped = {item["object_id"]: item for item in apply_passage_register(objects)}
+
+    assert passage_register_of(stamped["context-explanation"])["status"] == "used_as_context"
+    assert passage_register_of(stamped["context-definition"])["status"] == "selected_as_candidate"
+    assert passage_register_of(stamped["support-recommendation"])["status"] == "linked_as_support"
+    assert passage_register_of(stamped["structural-recommendation"])["status"] == "not_yet_assessed"
+    assert "structural_section" in passage_register_of(stamped["structural-recommendation"])["reason_codes"]
+    assert passage_register_of(stamped["summary-recommendation"])["status"] == "selected_as_candidate"
+    assert passage_register_of(stamped["primary-recommendation"])["status"] == "selected_as_candidate"
+    assert {
+        passage_register_of(item)["status"] for item in stamped.values()
+    } <= set(PASSAGE_REGISTER_STATUSES)
 
 
 def test_djg_still_cannot_enter_ordinary_queue_as_aanbeveling(tmp_path: Path) -> None:
