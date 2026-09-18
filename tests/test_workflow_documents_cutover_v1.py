@@ -208,6 +208,16 @@ def test_snapshot_objects_and_revision_uses_one_authoritative_object_fetch(tmp_p
     assert revision == expected_revision
 
 
+def test_snapshot_objects_and_revision_uses_store_concurrency_token(tmp_path: Path) -> None:
+    store = _SharedDocumentStore()
+    store.revision_for_rows = lambda _rows: "m2.object-aware"  # type: ignore[method-assign]
+    console = _document_console(tmp_path, store)
+
+    _objects, revision = console.snapshot_objects_and_revision("snap-a", include_blocked=True)
+
+    assert revision == "m2.object-aware"
+
+
 def test_authoritative_object_read_replaces_stale_worker_revision(tmp_path: Path) -> None:
     store = _SharedDocumentStore()
     console = _document_console(tmp_path, store)
