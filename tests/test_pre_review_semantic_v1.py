@@ -438,7 +438,7 @@ def test_prompt_injection_driven_omission_remains_open_after_ingest(tmp_path: Pa
         if (row.get("content") or {}).get("clean_text") == exception
     )
     semantic = (omitted.get("metadata") or {}).get("semantic_passage") or {}
-    assert omitted["proposed_object_type"] == "unclassified"
+    assert "proposed_object_type" not in omitted
     assert semantic["selection_origin"] == "coverage_remainder"
     assert "model" not in semantic
     assert passage_register_of(omitted)["status"] == "not_yet_assessed"

@@ -135,7 +135,6 @@ def _coverage_remainders(
             unit = {
                 "object_id": f"{document_id}-semcov-{identity}",
                 "object_type": DEFAULT_OBJECT_TYPE,
-                "proposed_object_type": DEFAULT_OBJECT_TYPE,
                 "text": remainder_text,
                 "clean_text": remainder_text,
                 "source_fragment_ids": fragment_ids,

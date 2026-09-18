@@ -314,7 +314,7 @@ def test_unselected_source_block_remains_as_unclassified_coverage_passage() -> N
     ]
     omitted = units[1]
     assert omitted["object_type"] == "unclassified"
-    assert omitted["proposed_object_type"] == "unclassified"
+    assert "proposed_object_type" not in omitted
     assert omitted["source_fragment_ids"] == ["frag-b"]
     assert omitted["semantic_passage"]["source_bound"] is True
 
@@ -352,8 +352,8 @@ def test_partial_source_selection_preserves_prefix_and_suffix_as_coverage() -> N
         "Gebruik behandeling X.",
         "Afrondende context.",
     ]
-    assert units[0]["proposed_object_type"] == "unclassified"
-    assert units[2]["proposed_object_type"] == "unclassified"
+    assert "proposed_object_type" not in units[0]
+    assert "proposed_object_type" not in units[2]
 
 
 def test_full_source_selection_does_not_create_coverage_duplicate() -> None:
