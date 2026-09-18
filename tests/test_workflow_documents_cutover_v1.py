@@ -19,6 +19,7 @@ from src.operations_console_v1 import (
     OperationsConsole,
     _objects_jsonl_bytes,
 )
+from src.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
 from src.workflow_documents_cutover_v1 import (
     PostgresWorkflowDocumentRuntimeStore,
     _PostgresWorkflowDocumentsMixin,
@@ -60,6 +61,9 @@ class _SharedDocumentStore:
     @staticmethod
     def _revision(rows: list[dict[str, Any]]) -> str:
         return PostgresWorkflowDocumentRuntimeStore._revision(rows)
+
+    def revision_for_rows(self, rows: list[dict[str, Any]]) -> str:
+        return self._revision(rows)
 
     def objects_revision(self, snapshot_id: str) -> str:
         with self.lock:
@@ -106,6 +110,19 @@ def test_cutover_revision_preserves_object_order() -> None:
     expected = hashlib.sha256(_objects_jsonl_bytes(rows)).hexdigest()
     assert PostgresWorkflowDocumentRuntimeStore._revision(rows) == expected
     assert PostgresWorkflowDocumentRuntimeStore._revision(list(reversed(rows))) != expected
+
+
+def test_concurrent_store_revision_for_rows_uses_object_aware_token() -> None:
+    rows = [
+        {"object_id": "a", "object_version": "1.0", "text": "A"},
+        {"object_id": "b", "object_version": "1.0", "text": "B"},
+    ]
+    store = object.__new__(PostgresConcurrentWorkflowDocumentStore)
+
+    revision = store.revision_for_rows(rows)
+
+    assert revision.startswith(PostgresConcurrentWorkflowDocumentStore.REVISION_PREFIX)
+    assert revision != PostgresWorkflowDocumentRuntimeStore._revision(rows)
 
 
 def test_cutover_schema_preserves_full_envelope_and_object_position() -> None:
@@ -189,6 +206,18 @@ def test_snapshot_objects_and_revision_uses_one_authoritative_object_fetch(tmp_p
     assert store.object_reads == 1
     assert objects == expected_objects
     assert revision == expected_revision
+
+
+def test_snapshot_objects_and_revision_uses_store_concurrency_token(tmp_path: Path) -> None:
+    store = _SharedDocumentStore()
+    store.revision_for_rows = lambda _rows: "m2.object-aware"  # type: ignore[method-assign]
+    console = _document_console(tmp_path, store)
+    store.object_reads = 0
+
+    _objects, revision = console.snapshot_objects_and_revision("snap-a", include_blocked=True)
+
+    assert store.object_reads == 1
+    assert revision == "m2.object-aware"
 
 
 def test_authoritative_object_read_replaces_stale_worker_revision(tmp_path: Path) -> None:

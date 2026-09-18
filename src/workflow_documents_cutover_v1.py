@@ -135,6 +135,10 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
     def _revision(rows: list[dict[str, Any]]) -> str:
         return hashlib.sha256(_objects_jsonl_bytes(rows)).hexdigest()
 
+    def revision_for_rows(self, rows: list[dict[str, Any]]) -> str:
+        """Return the optimistic-concurrency token represented by these rows."""
+        return self._revision(rows)
+
     def _objects_locked(self, con: Any, snapshot_id: str) -> list[dict[str, Any]]:
         rows = con.execute(
             "SELECT position,payload FROM workflow.document_objects WHERE snapshot_id=%s "
@@ -311,7 +315,7 @@ class _PostgresWorkflowDocumentsMixin:
     def _load_objects(self, snapshot_id: str, *, remember: bool = True) -> list[dict[str, Any]]:
         try:
             rows = self.workflow_document_store.list_document_objects(snapshot_id)
-            revision = self.workflow_document_store._revision(rows)
+            revision = self.workflow_document_store.revision_for_rows(rows)
         except WorkflowDocumentStoreError as exc:
             raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
         if remember:
@@ -327,7 +331,7 @@ class _PostgresWorkflowDocumentsMixin:
         self._envelope(snapshot_id)
         try:
             rows = self.workflow_document_store.list_document_objects(snapshot_id)
-            revision = self.workflow_document_store._revision(rows)
+            revision = self.workflow_document_store.revision_for_rows(rows)
         except WorkflowDocumentStoreError as exc:
             raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
         if include_blocked:

@@ -136,6 +136,57 @@ def test_reject_is_terminal_and_audit_preserves_original_suitability(tmp_path):
     assert signal["details"]["source_hash"] == console._envelope(sid)["sha256"]
 
 
+def test_reject_with_revision_is_one_commit_without_type_or_position_write(tmp_path, monkeypatch):
+    console, _researcher, reviewer, sid, ids = _system(tmp_path)
+    oid = ids[0]
+    before = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
+    heading_id = next(
+        row["object_id"]
+        for row in console.snapshot_objects(sid)
+        if row.get("object_type") == "heading"
+    )
+    before_relations = binding_relations(before)
+    commits = []
+    real_commit = console._commit_prepared_store
+
+    def counted_commit(**kwargs):
+        commits.append(kwargs)
+        return real_commit(**kwargs)
+
+    monkeypatch.setattr(console, "_commit_prepared_store", counted_commit)
+    revision = console.objects_revision(sid)
+    console.review_object(
+        actor_id=reviewer["account_id"],
+        snapshot_id=sid,
+        object_id=oid,
+        decision="reject",
+        comment="Niet gebruiken.",
+        confirmed_object_type="recommendation",
+        recommendation_strength="doen",
+        suitability="ja",
+        eindoordeel="afwijzen",
+        documentpositie_action="andere_kop",
+        parent_choice=heading_id,
+        type_action="type_wijzigen",
+        expected_revision=revision,
+    )
+
+    after = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
+    passage = (after.get("metadata") or {}).get("review_passage") or {}
+    assert len(commits) == 1
+    assert commits[0]["expected_revision"] == revision
+    assert after["governance"]["validation_status"] == "rejected"
+    assert passage_register_of(after)["status"] == "excluded_with_reason"
+    assert passage["suitability"] == "ja"
+    assert passage["eindoordeel"] == "afwijzen"
+    assert after.get("confirmed_object_type") == before.get("confirmed_object_type")
+    assert after.get("confirmed_recommendation_strength") == before.get(
+        "confirmed_recommendation_strength"
+    )
+    assert after.get("parent_object_id") == before.get("parent_object_id")
+    assert binding_relations(after) == before_relations
+
+
 def test_revise_is_non_terminal_until_repair(tmp_path):
     console, researcher, reviewer, sid, ids = _system(tmp_path)
     oid = ids[0]

@@ -89,6 +89,9 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         encoded = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
         return cls.REVISION_PREFIX + encoded
 
+    def revision_for_rows(self, rows: list[dict[str, Any]]) -> str:
+        return self._revision_token(rows)
+
     @classmethod
     def _decode_revision(cls, revision: str) -> dict[tuple[str, str], str] | None:
         if not revision.startswith(cls.REVISION_PREFIX):
