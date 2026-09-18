@@ -559,7 +559,7 @@ def test_semantic_selection_provenance_survives_transform_without_mislabeling_co
     assert selected["provenance"]["proposal_id"] is None
 
     proposal_copy = why_selected(selected)
-    assert "Metis stelt deze bronselectie voor als kandidaat." in proposal_copy
+    assert "Metis stelt voor deze passage als aanbeveling te beoordelen." in proposal_copy
     assert "volledige aanbeveling" not in proposal_copy
     context_html = _broncontext_html(
         selected,
