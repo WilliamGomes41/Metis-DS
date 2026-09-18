@@ -24,6 +24,19 @@ Any change that materially replaces or redefines a durable authority, persisted 
 
 If a Class B/C implementation reveals that a lifecycle invariant, identity, authority, supersession, withdrawal, migration, or recovery rule must change, STOP and reclassify before continuing. If rewrite risk changes from `none` to `high` during implementation, STOP and rescope before adding more code.
 
+### Class B program-design gate
+
+Before implementing a Class B change that alters shared extraction, review, retrieval, semantic, persistence, or cross-layer behavior, the agent MUST trace the existing execution path and state:
+
+- the existing mechanism and authority;
+- the intended behavioral change;
+- the affected functions, types, and call path;
+- which state may mutate and which state must remain unchanged;
+- behavior that must remain unchanged;
+- the smallest observable proof of the change.
+
+The agent MUST map the requested behavior onto the existing program structure before editing production code. If the current mechanism, ownership boundary, or call path is not established, investigate first instead of patching. This gate is a lightweight design check for Class B work and MUST NOT be expanded into lifecycle-grade paperwork when lifecycle semantics are unchanged.
+
 ### Lifecycle VSA contract
 
 Class A issues MUST also follow `docs/agents/lifecycle-vsa.md` in full. Class A includes changes to logical document/version lineage, source snapshot immutability, review closure required for publication, publication readiness semantics, canonical releases, serving authority/active serving set, supersession, withdrawal, published-state migration/reconciliation, or restart/recovery of lifecycle state.
