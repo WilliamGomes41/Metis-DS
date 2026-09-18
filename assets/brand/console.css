@@ -558,6 +558,52 @@ textarea:focus-visible {
   margin-top: 20px;
 }
 
+.review-progress-overview {
+  margin: 0 0 24px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--wit);
+}
+
+.review-progress-overview .review-task-heading {
+  margin: 0 0 12px;
+}
+
+.review-progress-overview progress {
+  display: block;
+  width: 100%;
+  height: 14px;
+  margin: 10px 0 12px;
+  accent-color: var(--paars);
+}
+
+.review-decision-history .object-index {
+  list-style: none;
+  padding-left: 0;
+}
+
+.review-decision-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px 24px;
+  align-items: start;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.review-decision-row > div:last-child {
+  display: flex;
+  min-width: 11rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.review-decision-row .btn-secondary {
+  margin: 0;
+}
+
 .review-next-step {
   max-width: 52rem;
   border: 2px solid var(--water);

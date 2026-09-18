@@ -65,6 +65,7 @@ from src.operations_console_v1 import (
     slow_review_duty,
 )
 from src.open_original_v1 import researcher_visible_prose
+from src.review_disposition_v1 import definitive_review_disposition
 from src.proportionate_review_v1 import (
     ProportionateReviewConsole,
     normal_risk_batch_counts,
@@ -82,7 +83,7 @@ FILENAME_HINT = (
 )
 BRAND_DIR = REPO_ROOT / "assets" / "brand"
 RESEARCHER_ROOMS = frozenset({"ingest", "tree", "review"})
-REVIEW_TASKS = frozenset({"individual", "together", "headings", "control"})
+REVIEW_TASKS = frozenset({"individual", "together", "headings", "control", "decisions"})
 HELP_ONCE = (
     "Interne operations console voor richtlijnonderzoekers en reviewers. "
     "Dit is niet de Product API. Niet ontworpen voor verpleegkundigen. "
@@ -948,6 +949,186 @@ def _review_is_final(obj: dict[str, Any]) -> bool:
     return (obj.get("governance") or {}).get("validation_status") in {"approved", "rejected", "superseded"}
 
 
+def _review_was_revised(obj: dict[str, Any]) -> bool:
+    governance = obj.get("governance") if isinstance(obj.get("governance"), dict) else {}
+    provenance = obj.get("provenance") if isinstance(obj.get("provenance"), dict) else {}
+    return (
+        governance.get("validation_status") == "needs_review"
+        and bool(provenance.get("previous_object_version"))
+    )
+
+
+def _review_progress_summary(objects: list[dict[str, Any]]) -> dict[str, int]:
+    """Read-only projection over the existing definitive review disposition."""
+    rows = [obj for obj in objects if obj.get("object_type") != "document"]
+    counts = {
+        "total": len(rows),
+        "done": 0,
+        "approved": 0,
+        "rejected": 0,
+        "not_included": 0,
+        "context": 0,
+        "support": 0,
+        "superseded": 0,
+        "revised": 0,
+    }
+    for obj in rows:
+        disposition = definitive_review_disposition(obj)
+        if disposition["final"]:
+            counts["done"] += 1
+            review_status = str(disposition.get("review_status") or "")
+            outcome = str(disposition.get("outcome") or "")
+            if review_status == "rejected":
+                counts["rejected"] += 1
+            elif outcome == "approved":
+                counts["approved"] += 1
+            elif outcome == "excluded_with_reason":
+                counts["not_included"] += 1
+            elif outcome == "used_as_context":
+                counts["context"] += 1
+            elif outcome == "linked_as_support":
+                counts["support"] += 1
+            elif outcome == "superseded":
+                counts["superseded"] += 1
+        if _review_was_revised(obj):
+            counts["revised"] += 1
+    counts["open"] = counts["total"] - counts["done"]
+    return counts
+
+
+def _review_decision_label(obj: dict[str, Any]) -> str:
+    if _review_was_revised(obj):
+        return "Herzien na correctie"
+    disposition = definitive_review_disposition(obj)
+    review_status = str(disposition.get("review_status") or "")
+    outcome = str(disposition.get("outcome") or "")
+    if review_status == "rejected":
+        return "Afgewezen"
+    labels = {
+        "approved": "Goedgekeurd",
+        "linked_as_support": "Alleen onderbouwing",
+        "used_as_context": "Context",
+        "excluded_with_reason": "Niet opgenomen",
+        "superseded": "Vervangen",
+    }
+    return labels.get(outcome, review_row_status(obj))
+
+
+def _review_signal_for_object(
+    audit_signals: list[dict[str, Any]],
+    *,
+    snapshot_id: str,
+    object_id: str,
+) -> dict[str, Any] | None:
+    for event in audit_signals:
+        details = event.get("details") if isinstance(event.get("details"), dict) else {}
+        if (
+            str(event.get("object_id") or "") == object_id
+            and str(details.get("snapshot_id") or "") == snapshot_id
+        ):
+            return event
+    return None
+
+
+def _review_decision_row(
+    obj: dict[str, Any],
+    snapshot_id: str,
+    audit_signals: list[dict[str, Any]],
+) -> str:
+    signal = _review_signal_for_object(
+        audit_signals,
+        snapshot_id=snapshot_id,
+        object_id=str(obj.get("object_id") or ""),
+    )
+    details = (signal or {}).get("details") if isinstance((signal or {}).get("details"), dict) else {}
+    provenance = obj.get("provenance") if isinstance(obj.get("provenance"), dict) else {}
+    governance = obj.get("governance") if isinstance(obj.get("governance"), dict) else {}
+    comment = str(
+        details.get("comment")
+        or provenance.get("revision_reason")
+        or ""
+    ).strip()
+    actor = str((signal or {}).get("actor") or governance.get("validated_by") or "").strip()
+    occurred_at = str((signal or {}).get("occurred_at") or governance.get("validation_date") or "").strip()
+    previous = str(provenance.get("previous_object_version") or "").strip()
+    current_version = str(obj.get("object_version") or "").strip()
+    meta = []
+    if actor:
+        meta.append(actor)
+    if occurred_at:
+        meta.append(occurred_at)
+    if previous:
+        meta.append(f"vorige versie {previous}")
+    if current_version:
+        meta.append(f"versie {current_version}")
+    meta_html = f'<span class="muted">{" · ".join(_esc(item) for item in meta)}</span>' if meta else ""
+    comment_html = f'<p class="muted">{_esc(comment)}</p>' if comment else ""
+    source_href = (
+        f"/review/bronpassage?document={quote(snapshot_id, safe='')}"
+        f"&amp;object={quote(str(obj.get('object_id') or ''), safe='')}"
+        "&amp;task=decisions"
+    )
+    return f"""
+      <li class="review-row review-decision-row">
+        <div>
+          <span class="review-row-title">{_esc(review_row_title(obj))}</span>
+          {comment_html}
+          {meta_html}
+        </div>
+        <div>
+          <span class="review-row-status">{_esc(_review_decision_label(obj))}</span>
+          <a class="btn-secondary" href="{source_href}">Bekijk bron</a>
+        </div>
+      </li>
+    """
+
+
+def _review_progress_overview(
+    snapshot_id: str,
+    progress: dict[str, int],
+) -> str:
+    total = int(progress["total"])
+    done = int(progress["done"])
+    percent = round((done / total) * 100) if total else 100
+    extras = []
+    if progress["context"]:
+        extras.append(f'<strong>{progress["context"]}</strong> context')
+    if progress["support"]:
+        extras.append(f'<strong>{progress["support"]}</strong> onderbouwing')
+    if progress["superseded"]:
+        extras.append(f'<strong>{progress["superseded"]}</strong> vervangen')
+    if progress["revised"]:
+        extras.append(f'<strong>{progress["revised"]}</strong> herzien na correctie')
+    extras_html = (" · " + " · ".join(extras)) if extras else ""
+    return f"""
+      <section class="review-progress-overview" aria-labelledby="review-progress-title">
+        <div class="review-task-heading">
+          <h2 id="review-progress-title">Reviewvoortgang</h2>
+          <p>{done} van {total} bronpassages afgehandeld ({percent}%). Afwijzen, context, onderbouwing en bewust niet opnemen tellen als afhandeling.</p>
+        </div>
+        <progress value="{done}" max="{max(total, 1)}">{percent}%</progress>
+        <p class="review-work-queues">
+          <strong>{progress["open"]}</strong> nog te beoordelen ·
+          <strong>{progress["approved"]}</strong> goedgekeurd ·
+          <strong>{progress["rejected"]}</strong> afgewezen ·
+          <strong>{progress["not_included"]}</strong> niet opgenomen
+          {extras_html}
+        </p>
+        <a class="review-control-card" href="/review?document={_esc(snapshot_id)}&amp;task=decisions">
+          <span class="review-control-card-body">
+            <span class="review-control-card-label">Besluiten en historie</span>
+            <span class="review-control-card-title">Bekijk wat is goedgekeurd, afgewezen, anders gebruikt of herzien</span>
+            <span class="review-control-card-copy">Dit overzicht is read-only en gebruikt alleen bestaande review- en revisiegegevens.</span>
+          </span>
+          <span class="review-control-card-meta">
+            <span class="review-control-card-status">{done} afgehandeld</span>
+            <span class="review-control-card-action">Open besluiten <span aria-hidden="true">→</span></span>
+          </span>
+        </a>
+      </section>
+    """
+
+
 def _review_task_card(
     snapshot_id: str,
     *,
@@ -974,6 +1155,7 @@ def _review_task_dashboard(
     normal_passages: int,
     normal_batches: int,
     blocked_count: int,
+    progress: dict[str, int],
 ) -> str:
     heading_pending = sum(not _review_is_final(obj) for obj in koppen)
     heading_done = len(koppen) - heading_pending
@@ -1044,6 +1226,7 @@ def _review_task_dashboard(
     )
     return f'''
       <section class="review-task-dashboard" aria-labelledby="review-task-title">
+        {_review_progress_overview(snapshot_id, progress)}
         {next_step}
         <div class="review-task-heading">
           <h2 id="review-task-title">Alle taken</h2>
@@ -1083,6 +1266,7 @@ def _render_review_index(
     normal_content_html: str = "",
     task: str = "",
     normal_review_enabled: bool = True,
+    audit_signals: list[dict[str, Any]] | None = None,
 ) -> str:
     koppen, _old_inhoud = review_stacks(snapshot_objects, review_path=review_path)
     duty = slow_review_duty(snapshot_objects, review_path=review_path)
@@ -1107,6 +1291,23 @@ def _render_review_index(
           </details>
                     """
     copy = _review_lane_copy(review_path, koppen)
+    progress = _review_progress_summary(snapshot_objects)
+    if task == "decisions":
+        decision_rows = [
+            obj
+            for obj in snapshot_objects
+            if obj.get("object_type") != "document"
+            and (_review_is_final(obj) or _review_was_revised(obj))
+        ]
+        return f'''
+          {_review_task_header(snapshot_id, "Besluiten en historie", "Bekijk read-only welke passages zijn afgehandeld en welke na correctie opnieuw ter beoordeling staan")}
+          {_review_progress_overview(snapshot_id, progress)}
+          <section class="review-decision-history">
+            <ol class="object-index">
+              {"".join(_review_decision_row(obj, snapshot_id, audit_signals or []) for obj in decision_rows) if decision_rows else '<li class="review-task-empty">Nog geen besluiten of correcties vastgelegd.</li>'}
+            </ol>
+          </section>
+        '''
     if task == "individual":
         return f'''
           {_review_task_header(snapshot_id, "Belangrijke passages beoordelen", "Open iedere passage en vergelijk haar met de oorspronkelijke bron")}
@@ -1144,6 +1345,7 @@ def _render_review_index(
         normal_passages=normal_passages,
         normal_batches=normal_batches,
         blocked_count=len(blocked),
+        progress=progress,
     )
 
 
@@ -1341,6 +1543,11 @@ def _render_review_room(
                     selected_ids=batch_selection or (),
                     include_individual=False,
                 )
+            audit_signals: list[dict[str, Any]] = []
+            if chosen_task == "decisions":
+                audit_reader = getattr(console, "audit_review_signals", None)
+                if callable(audit_reader):
+                    audit_signals = list(audit_reader())
             objects_html += _render_review_index(
                 chosen,
                 snapshot_objects,
@@ -1349,6 +1556,7 @@ def _render_review_room(
                 normal_content_html=normal_content_html,
                 task=chosen_task,
                 normal_review_enabled=isinstance(console, ProportionateReviewConsole),
+                audit_signals=audit_signals,
             )
         else:
             obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
