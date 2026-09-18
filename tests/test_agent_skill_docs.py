@@ -32,3 +32,21 @@ def test_agent_skill_wayfinding_docs_are_present_and_linked() -> None:
         "wontfix",
     ):
         assert label in triage_labels
+
+
+def test_class_b_program_design_gate_requires_existing_path_before_code() -> None:
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+
+    required_contract = (
+        "### Class B program-design gate",
+        "trace the existing execution path",
+        "the existing mechanism and authority",
+        "the affected functions, types, and call path",
+        "which state may mutate and which state must remain unchanged",
+        "the smallest observable proof of the change",
+        "before editing production code",
+        "investigate first instead of patching",
+        "MUST NOT be expanded into lifecycle-grade paperwork",
+    )
+    for phrase in required_contract:
+        assert phrase in agents

@@ -17,6 +17,7 @@ from src.admission_gate_v1 import (
     is_boom_object,
     is_inhoudelijk_candidate,
 )
+from src.object_taxonomy_v1 import section_role_for_path
 from src.review_cockpit_v1 import SUITABILITY_VALUES
 
 
@@ -128,6 +129,13 @@ def _initial_status(obj: dict[str, Any], *, context_headings: set[str]) -> tuple
     if is_inhoudelijk_candidate(obj) and gate == GATE_ALLOWED:
         expand = admission.get("expand_merge") if isinstance(admission.get("expand_merge"), dict) else {}
         proposed = str(obj.get("proposed_object_type") or admission.get("proposed_type") or "")
+        section_role = str(admission.get("section_role") or section_role_for_path(section_path_of(obj)))
+        if section_role == "structural":
+            return "not_yet_assessed", ["structural_section"]
+        if section_role == "support":
+            return "linked_as_support", []
+        if section_role == "context" and proposed == "explanation":
+            return "used_as_context", []
         if proposed == "explanation" or (proposed == "exception" and expand.get("performed")):
             return "linked_as_support", []
         return "selected_as_candidate", []
