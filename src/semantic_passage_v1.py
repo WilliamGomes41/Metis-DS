@@ -189,6 +189,10 @@ def semantic_units_from_proposal(
 
     reconstructed = _reconstructed_blocks(fragments)
     by_id = {public["block_id"]: (public, source) for public, source in reconstructed}
+    block_order = {
+        str(public["block_id"]): index
+        for index, (public, _source) in enumerate(reconstructed)
+    }
     units_with_position: list[tuple[tuple[int, int], dict[str, Any]]] = []
     selected_ranges_by_block: dict[str, list[tuple[int, int]]] = {}
 
@@ -270,6 +274,20 @@ def semantic_units_from_proposal(
             if previous_end is not None and row["start"] < previous_end:
                 _fail("semantic_span_overlap")
             previous_end_by_block[row["block_id"]] = row["end"]
+
+        for previous, current in zip(selected, selected[1:]):
+            if previous["block_id"] == current["block_id"]:
+                block_text = str(by_id[previous["block_id"]][0]["text"])
+                if block_text[previous["end"]:current["start"]].strip():
+                    _fail("semantic_span_hidden_gap")
+                continue
+
+            if block_order[current["block_id"]] != block_order[previous["block_id"]] + 1:
+                _fail("semantic_span_hidden_gap")
+
+            previous_text = str(by_id[previous["block_id"]][0]["text"])
+            if previous["end"] != len(previous_text) or current["start"] != 0:
+                _fail("semantic_span_hidden_gap")
 
         candidate_text = normalize_visible_prose(" ".join(row["text"] for row in selected))
         if not candidate_text:
