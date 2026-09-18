@@ -282,8 +282,6 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             delegated["suitability"] = None
             delegated["eindoordeel"] = None
             delegated["decision"] = "revise"
-        elif decision == "reject" and original_suitability:
-            delegated["suitability"] = "geen_kenniseenheid"
 
         if decision not in {"revise", "reject"}:
             return super().review_object(**delegated)
@@ -301,12 +299,13 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                 raise ConsoleError("unknown_object")
             prior_status = str(passage_register_of(before).get("status") or "")
             super().review_object(**delegated)
-            self._restore_original_review_input(
-                snapshot_id=snapshot_id,
-                object_id=object_id,
-                original_suitability=original_suitability,
-                original_eindoordeel=original_eindoordeel,
-            )
+            if decision == "revise":
+                self._restore_original_review_input(
+                    snapshot_id=snapshot_id,
+                    object_id=object_id,
+                    original_suitability=original_suitability,
+                    original_eindoordeel=original_eindoordeel,
+                )
             self._append_audit_evidence(
                 actor_id=actor_id,
                 snapshot_id=snapshot_id,
