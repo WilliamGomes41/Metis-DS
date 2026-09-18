@@ -411,3 +411,47 @@ def test_omitted_semantic_source_passage_remains_open_after_ingest(tmp_path: Pat
     )
     assert omitted["proposed_object_type"] == "unclassified"
     assert passage_register_of(omitted)["status"] == "not_yet_assessed"
+
+
+def test_hidden_gap_proposal_fails_closed_in_pre_review_product_route() -> None:
+    text = "Gebruik behandeling X. Niet gebruiken bij nierfalen. Controleer na vier weken."
+    fragments = [_fragment("p1", text)]
+
+    def fake_post(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
+        block = json.loads(payload["input"][1]["content"])["source_blocks"][0]
+        first = "Gebruik behandeling X."
+        third = "Controleer na vier weken."
+        third_start = block["text"].index(third)
+        return _response(
+            {
+                "objects": [
+                    {
+                        "spans": [
+                            {
+                                "block_id": block["block_id"],
+                                "start": 0,
+                                "end": len(first),
+                            },
+                            {
+                                "block_id": block["block_id"],
+                                "start": third_start,
+                                "end": third_start + len(third),
+                            },
+                        ],
+                        "proposed_object_type": "recommendation",
+                    }
+                ],
+                "abstain_reason": None,
+            }
+        )
+
+    with pytest.raises(ConsoleError) as error:
+        semantic_units_before_review(
+            fragments,
+            document_id="doc-gap",
+            api_key="product-key",
+            model="test-model",
+            post_json=fake_post,
+        )
+
+    assert error.value.code == "pre_review_llm_proposal_rejected"
