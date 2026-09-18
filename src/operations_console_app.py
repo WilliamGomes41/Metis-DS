@@ -1059,20 +1059,217 @@ def _review_decision_label(obj: dict[str, Any]) -> str:
     return labels.get(outcome, review_row_status(obj))
 
 
+def _review_signals_for_object(
+    audit_signals: list[dict[str, Any]],
+    *,
+    snapshot_id: str,
+    object_id: str,
+) -> list[dict[str, Any]]:
+    return [
+        event
+        for event in audit_signals
+        if str(event.get("object_id") or "") == object_id
+        and str(
+            (event.get("details") if isinstance(event.get("details"), dict) else {}).get(
+                "snapshot_id"
+            )
+            or ""
+        )
+        == snapshot_id
+    ]
+
+
 def _review_signal_for_object(
     audit_signals: list[dict[str, Any]],
     *,
     snapshot_id: str,
     object_id: str,
 ) -> dict[str, Any] | None:
-    for event in audit_signals:
-        details = event.get("details") if isinstance(event.get("details"), dict) else {}
-        if (
-            str(event.get("object_id") or "") == object_id
-            and str(details.get("snapshot_id") or "") == snapshot_id
-        ):
-            return event
-    return None
+    signals = _review_signals_for_object(
+        audit_signals,
+        snapshot_id=snapshot_id,
+        object_id=object_id,
+    )
+    return signals[0] if signals else None
+
+
+def _current_review_objects(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    current: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        object_id = str(row.get("object_id") or "")
+        if object_id:
+            current[object_id] = row
+    return list(current.values())
+
+
+def _review_object_versions(
+    rows: list[dict[str, Any]],
+    object_id: str,
+) -> list[dict[str, Any]]:
+    return [row for row in rows if str(row.get("object_id") or "") == object_id]
+
+
+def _review_history_status(obj: dict[str, Any]) -> str:
+    status = str((obj.get("governance") or {}).get("validation_status") or "")
+    return {
+        "needs_review": "Te beoordelen",
+        "approved": "Goedgekeurd",
+        "rejected": "Afgewezen",
+        "revise": "Correctie gevraagd",
+        "superseded": "Vervangen",
+        "draft": "Concept",
+    }.get(status, status.replace("_", " ") or "Onbekend")
+
+
+def _review_version_changes(
+    previous: dict[str, Any],
+    current: dict[str, Any],
+) -> list[tuple[str, str, str]]:
+    def text(obj: dict[str, Any]) -> str:
+        content = obj.get("content") if isinstance(obj.get("content"), dict) else {}
+        return str(content.get("clean_text") or content.get("raw_text") or "").strip()
+
+    def object_type(obj: dict[str, Any]) -> str:
+        return str(obj.get("confirmed_object_type") or obj.get("object_type") or "").strip()
+
+    def status(obj: dict[str, Any]) -> str:
+        return _review_history_status(obj)
+
+    def section(obj: dict[str, Any]) -> str:
+        structure = obj.get("structure") if isinstance(obj.get("structure"), dict) else {}
+        return " › ".join(str(part) for part in structure.get("section_path") or [])
+
+    fields = (
+        ("Passagetekst", text),
+        ("Type", object_type),
+        ("Reviewstatus", status),
+        ("Bronpositie", section),
+    )
+    return [
+        (label, before, after)
+        for label, getter in fields
+        if (before := getter(previous)) != (after := getter(current))
+    ]
+
+
+def _review_object_history(
+    snapshot_id: str,
+    obj: dict[str, Any],
+    all_rows: list[dict[str, Any]],
+    audit_signals: list[dict[str, Any]],
+) -> str:
+    object_id = str(obj.get("object_id") or "")
+    versions = _review_object_versions(all_rows, object_id)
+    by_version = {
+        str(row.get("object_version") or ""): row
+        for row in versions
+        if str(row.get("object_version") or "")
+    }
+    provenance = obj.get("provenance") if isinstance(obj.get("provenance"), dict) else {}
+    previous_version = str(provenance.get("previous_object_version") or "")
+    previous = by_version.get(previous_version)
+    if previous is None and len(versions) > 1:
+        previous = versions[-2]
+
+    changes = _review_version_changes(previous, obj) if previous is not None else []
+    if changes:
+        change_html = "".join(
+            f'<div class="review-version-change"><dt>{_esc(label)}</dt>'
+            f'<dd><span class="review-version-before">{_esc(before or "—")}</span>'
+            f'<span aria-hidden="true">→</span>'
+            f'<span class="review-version-after">{_esc(after or "—")}</span></dd></div>'
+            for label, before, after in changes
+        )
+        diff_html = f"""
+          <section class="review-version-diff" aria-labelledby="review-version-diff-title">
+            <h3 id="review-version-diff-title">Verschil met vorige versie</h3>
+            <p class="muted">Alleen velden die aantoonbaar tussen de opgeslagen versies verschillen worden getoond.</p>
+            <dl>{change_html}</dl>
+          </section>
+        """
+    else:
+        diff_html = """
+          <section class="review-version-diff">
+            <h3>Verschil met vorige versie</h3>
+            <p class="muted">Voor deze versie is geen eerdere opgeslagen objectversie met aantoonbare verschillen beschikbaar.</p>
+          </section>
+        """
+
+    signals = _review_signals_for_object(
+        audit_signals,
+        snapshot_id=snapshot_id,
+        object_id=object_id,
+    )
+    signals_by_version: dict[str, list[dict[str, Any]]] = {}
+    for signal in signals:
+        signals_by_version.setdefault(str(signal.get("object_version") or ""), []).append(signal)
+
+    timeline = []
+    current_version = str(obj.get("object_version") or "")
+    for version in versions:
+        version_id = str(version.get("object_version") or "")
+        governance = version.get("governance") if isinstance(version.get("governance"), dict) else {}
+        version_provenance = (
+            version.get("provenance") if isinstance(version.get("provenance"), dict) else {}
+        )
+        version_signals = signals_by_version.get(version_id) or []
+        signal = version_signals[0] if version_signals else None
+        details = (
+            (signal or {}).get("details")
+            if isinstance((signal or {}).get("details"), dict)
+            else {}
+        )
+        actor = str(
+            (signal or {}).get("actor") or governance.get("validated_by") or ""
+        ).strip()
+        occurred_at = str(
+            (signal or {}).get("occurred_at") or governance.get("validation_date") or ""
+        ).strip()
+        reason = str(
+            details.get("comment") or version_provenance.get("revision_reason") or ""
+        ).strip()
+        metadata = []
+        if actor:
+            metadata.append(actor)
+        if occurred_at:
+            metadata.append(occurred_at)
+        meta_html = (
+            f'<p class="muted">{" · ".join(_esc(item) for item in metadata)}</p>'
+            if metadata
+            else ""
+        )
+        reason_html = f'<p>{_esc(reason)}</p>' if reason else ""
+        current_badge = (
+            '<span class="review-history-current">huidige versie</span>'
+            if version_id == current_version
+            else ""
+        )
+        timeline.append(
+            f"""
+            <li class="review-history-event">
+              <div class="review-history-event-heading">
+                <strong>Versie {_esc(version_id)}</strong>
+                <span class="review-row-status">{_esc(_review_history_status(version))}</span>
+                {current_badge}
+              </div>
+              {reason_html}
+              {meta_html}
+            </li>
+            """
+        )
+
+    return f"""
+      {_review_task_header(snapshot_id, "Objecthistorie", "Bekijk opgeslagen versies en reviewbesluiten zonder de reviewstatus te wijzigen")}
+      <section class="review-object-history" data-review-object-history="{_esc(object_id)}">
+        <h3>{_esc(review_row_title(obj))}</h3>
+        <p class="muted">Object {_esc(object_id)} · huidige versie {_esc(current_version)}</p>
+        {diff_html}
+        <section aria-labelledby="review-history-timeline-title">
+          <h3 id="review-history-timeline-title">Versiehistorie</h3>
+          <ol class="review-history-timeline">{"".join(timeline)}</ol>
+        </section>
+      </section>
+    """
 
 
 def _review_decision_row(
@@ -1108,9 +1305,15 @@ def _review_decision_row(
         meta.append(f"versie {current_version}")
     meta_html = f'<span class="muted">{" · ".join(_esc(item) for item in meta)}</span>' if meta else ""
     comment_html = f'<p class="muted">{_esc(comment)}</p>' if comment else ""
+    object_id = str(obj.get("object_id") or "")
     source_href = (
         f"/review/bronpassage?document={quote(snapshot_id, safe='')}"
-        f"&amp;object={quote(str(obj.get('object_id') or ''), safe='')}"
+        f"&amp;object={quote(object_id, safe='')}"
+        "&amp;task=decisions"
+    )
+    history_href = (
+        f"/review?document={quote(snapshot_id, safe='')}"
+        f"&amp;object={quote(object_id, safe='')}"
         "&amp;task=decisions"
     )
     return f"""
@@ -1122,6 +1325,7 @@ def _review_decision_row(
         </div>
         <div>
           <span class="review-row-status">{_esc(_review_decision_label(obj))}</span>
+          <a class="btn-secondary" href="{history_href}">Bekijk historie</a>
           <a class="btn-secondary" href="{source_href}">Bekijk bron</a>
         </div>
       </li>
@@ -1577,8 +1781,23 @@ def _render_review_room(
             f'<div class="doc-card">{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}'
             "</div>"
         )
-        snapshot_objects, snapshot_revision = console.snapshot_objects_and_revision(chosen)
+        history_enabled = chosen_task == "decisions"
+        if history_enabled:
+            loaded_objects, snapshot_revision = console.snapshot_objects_and_revision(
+                chosen,
+                include_blocked=True,
+            )
+            all_object_versions = loaded_objects
+            snapshot_objects = _current_review_objects(loaded_objects)
+        else:
+            snapshot_objects, snapshot_revision = console.snapshot_objects_and_revision(chosen)
+            all_object_versions = []
         review_path = review_path_for_klasse(chosen_row["class"])
+        audit_signals: list[dict[str, Any]] = []
+        if history_enabled:
+            audit_reader = getattr(console, "audit_review_signals", None)
+            if callable(audit_reader):
+                audit_signals = list(audit_reader())
         if not chosen_object_id:
             normal_content_html = ""
             if isinstance(console, ProportionateReviewConsole) and chosen_task == "together":
@@ -1588,11 +1807,6 @@ def _render_review_room(
                     selected_ids=batch_selection or (),
                     include_individual=False,
                 )
-            audit_signals: list[dict[str, Any]] = []
-            if chosen_task == "decisions":
-                audit_reader = getattr(console, "audit_review_signals", None)
-                if callable(audit_reader):
-                    audit_signals = list(audit_reader())
             objects_html += _render_review_index(
                 chosen,
                 snapshot_objects,
@@ -1607,18 +1821,26 @@ def _render_review_room(
             obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
             if obj is None:
                 raise ConsoleError("unknown_object")
-            conflict_html = _review_conflict_html(conflict, current=obj, draft=draft)
-            objects_html += _render_review_card(
-                console,
-                chosen,
-                obj,
-                snapshot_objects,
-                review_path,
-                draft,
-                conflict_html,
-                snapshot_revision,
-                chosen_task,
-            )
+            if history_enabled:
+                objects_html += _review_object_history(
+                    chosen,
+                    obj,
+                    all_object_versions,
+                    audit_signals,
+                )
+            else:
+                conflict_html = _review_conflict_html(conflict, current=obj, draft=draft)
+                objects_html += _render_review_card(
+                    console,
+                    chosen,
+                    obj,
+                    snapshot_objects,
+                    review_path,
+                    draft,
+                    conflict_html,
+                    snapshot_revision,
+                    chosen_task,
+                )
     empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
     return _page(
         f"""
