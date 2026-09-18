@@ -461,6 +461,88 @@ def _workboard_page(
     )
 
 
+def _projected_document_dashboard(
+    console: OperationsConsole,
+    *,
+    account: dict[str, Any],
+    snapshot_id: str,
+    counts: dict[str, int],
+) -> str | None:
+    """Render the default selected-document dashboard without materializing objects."""
+    summary_reader = getattr(console, "review_workboard_summaries", None)
+    if not callable(summary_reader):
+        return None
+    account_id = str(account.get("account_id") or "")
+    if not account_id:
+        return None
+    try:
+        summaries = summary_reader(account_id, snapshot_id)
+    except TypeError:
+        # Compatibility for non-PostgreSQL test/dev consoles that still expose
+        # the older one-argument projection contract.
+        summaries = summary_reader(account_id)
+    summary = summaries.get(snapshot_id)
+    if not isinstance(summary, dict):
+        return None
+    envelope = summary.get("envelope")
+    if not isinstance(envelope, dict):
+        return None
+
+    progress_total = int(summary.get("progress_total") or 0)
+    progress_done = int(summary.get("progress_done") or 0)
+    progress = {
+        "total": progress_total,
+        "done": progress_done,
+        "open": max(progress_total - progress_done, 0),
+        "approved": int(summary.get("progress_approved") or 0),
+        "rejected": int(summary.get("progress_rejected") or 0),
+        "not_included": int(summary.get("progress_not_included") or 0),
+        "context": int(summary.get("progress_context") or 0),
+        "support": int(summary.get("progress_support") or 0),
+        "superseded": int(summary.get("progress_superseded") or 0),
+        "revised": int(summary.get("progress_revised") or 0),
+    }
+    dashboard = console_ui._review_task_dashboard(
+        snapshot_id,
+        koppen=[],
+        individual=[],
+        normal_passages=int(summary.get("normal_passages") or 0),
+        normal_batches=int(summary.get("normal_batches") or 0),
+        blocked_count=int(summary.get("blocked_count") or 0),
+        progress=progress,
+        heading_pending_override=int(summary.get("heading_pending") or 0),
+        heading_total_override=int(summary.get("heading_total") or 0),
+        individual_pending_override=int(summary.get("individual_pending") or 0),
+        individual_total_override=int(summary.get("individual_total") or 0),
+    )
+    picker = f"""
+      <div class="review-document-context">
+        <span>Document</span>
+        <b>{_esc(envelope.get("title") or "")}</b>
+        <span>versie {_esc(envelope.get("version") or "")}</span>
+        <span>onderwerp {_esc(envelope.get("family") or "")}</span>
+        <span>klasse {_esc(envelope.get("class") or "")}</span>
+        <a href="/review">Ander document kiezen</a>
+      </div>
+    """
+    heading = console_ui._document_card_heading(
+        {**envelope, "status": envelope.get("state") or ""}
+    )
+    return _page(
+        f"""
+        {_nav(account, "review", counts)}
+        <section class="room">
+          <h1>Review</h1>
+          <p class="lead">Beoordeel passages stap voor stap, met de oorspronkelijke bron als uitgangspunt.</p>
+          {picker}
+          <div class="doc-card">{heading}</div>
+          {dashboard}
+        </section>
+        {_help(room="review")}
+        """
+    )
+
+
 def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
     """Install the Review workboard and its post-heading navigation."""
     if getattr(app.state, "review_workboard_v1", False):
@@ -498,13 +580,24 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         account = _current_account(console, request)
         chosen = document.strip()
         if chosen:
+            counts = console.waiting_task_counts(str(account["account_id"]))
+            chosen_task = task.strip() if task.strip() in REVIEW_TASKS else ""
+            if not object.strip() and not chosen_task:
+                projected = _projected_document_dashboard(
+                    console,
+                    account=account,
+                    snapshot_id=chosen,
+                    counts=counts,
+                )
+                if projected is not None:
+                    return projected
             return _render_review_room(
                 console,
                 account,
                 html.escape(document, quote=True),
                 html.escape(object, quote=True),
-                task=html.escape(task, quote=True) if task.strip() in REVIEW_TASKS else "",
-                counts=console.waiting_task_counts(str(account["account_id"])),
+                task=html.escape(chosen_task, quote=True),
+                counts=counts,
             )
         return _workboard_page(console, account=account)
 
