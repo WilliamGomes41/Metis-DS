@@ -13,8 +13,10 @@ from pathlib import Path
 
 import pytest
 
+from src.operations_console_app import _broncontext_html
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.passage_register_v1 import passage_register_of
+from src.review_cockpit_v1 import why_selected
 from src.pre_review_semantic_v1 import (
     DETERMINISTIC_MODE,
     OPENAI_RESPONSES_URL,
@@ -556,6 +558,20 @@ def test_semantic_selection_provenance_survives_transform_without_mislabeling_co
     assert selected["provenance"]["transformation_mode"] == "deterministic"
     assert selected["provenance"]["proposal_id"] is None
 
+    proposal_copy = why_selected(selected)
+    assert "Metis stelt deze bronselectie voor als kandidaat." in proposal_copy
+    assert "volledige aanbeveling" not in proposal_copy
+    context_html = _broncontext_html(
+        selected,
+        receipt["snapshot_id"],
+        selected["object_id"],
+        True,
+    )
+    assert "Door Metis voorgestelde bronselectie" in context_html
+    assert 'data-semantic-origin="proposal_selected"' in context_html
+    assert 'data-semantic-span-count="1"' in context_html
+    assert "Voorafgaande context. <mark class=\"broncontext-marked\">Gebruik behandeling X.</mark> Afrondende context." in context_html
+
     coverage = [
         row
         for row in rows
@@ -577,4 +593,58 @@ def test_semantic_selection_provenance_survives_transform_without_mislabeling_co
         assert "source_blocks_hash" not in coverage_semantic
         assert "proposal_hash" not in coverage_semantic
 
+    coverage_copy = why_selected(coverage[0])
+    assert "nog niet inhoudelijk beoordeeld" in coverage_copy
+    coverage_html = _broncontext_html(
+        coverage[0],
+        receipt["snapshot_id"],
+        coverage[0]["object_id"],
+        True,
+    )
+    assert "Nog niet beoordeelde brontekst" in coverage_html
+    assert "Door Metis voorgestelde bronselectie" not in coverage_html
+    assert 'data-semantic-origin="coverage_remainder"' in coverage_html
+
     assert api_key not in json.dumps(rows, ensure_ascii=False)
+
+
+def test_semantic_review_does_not_guess_when_selection_is_ambiguous() -> None:
+    obj = {
+        "object_id": "obj-ambiguous",
+        "object_type": "unclassified",
+        "proposed_object_type": "recommendation",
+        "content": {
+            "raw_text": "Herhaal.",
+            "clean_text": "Herhaal.",
+        },
+        "metadata": {
+            "semantic_passage": {
+                "version": "semantic-passage-v1.0.0",
+                "source_bound": True,
+                "selection_origin": "proposal_selected",
+                "spans": [
+                    {
+                        "block_id": "semblock-ambiguous",
+                        "start": 0,
+                        "end": 8,
+                    }
+                ],
+                "formation_mode": SEMANTIC_MODE,
+                "model": "test-model",
+                "source_blocks_hash": "a" * 64,
+                "proposal_hash": "b" * 64,
+            },
+            "admission": {
+                "source_text_exact": "Herhaal. Midden. Herhaal.",
+                "proposed_type": "recommendation",
+            },
+        },
+    }
+
+    html = _broncontext_html(obj, "snap-1", "obj-ambiguous", True)
+
+    assert "Door Metis voorgestelde bronselectie" in html
+    assert "<mark" not in html
+    assert "Herhaal. Midden. Herhaal." in html
+    assert "kon niet eenduidig" in html
+
