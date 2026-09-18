@@ -604,6 +604,77 @@ textarea:focus-visible {
   margin: 0;
 }
 
+.review-object-history {
+  margin-top: 18px;
+}
+
+.review-version-diff,
+.review-object-history > section {
+  margin-top: 20px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--wit);
+}
+
+.review-version-diff dl {
+  margin: 14px 0 0;
+}
+
+.review-version-change {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.review-version-change:first-child {
+  border-top: 0;
+}
+
+.review-version-change dt {
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+
+.review-version-change dd {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  margin: 0;
+}
+
+.review-version-before,
+.review-version-after {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--water-light);
+  white-space: pre-wrap;
+}
+
+.review-history-timeline {
+  margin: 14px 0 0;
+  padding-left: 1.4rem;
+}
+
+.review-history-event {
+  padding: 10px 0 16px;
+}
+
+.review-history-event-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.review-history-current {
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .review-next-step {
   max-width: 52rem;
   border: 2px solid var(--water);
