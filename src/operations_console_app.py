@@ -1640,7 +1640,9 @@ def _render_review_card(
         object_text_html = f'<div class="object-text"><p>{_esc(obj_text)}</p></div>'
     expand_merge = admission_of(obj).get("expand_merge") or {}
     merged_text = str(expand_merge.get("merged_text") or "").strip()
-    if expand_merge.get("kind") == "sentence_continuation" and merged_text:
+    merged_norm = " ".join(merged_text.split())
+    merged_is_selected = bool(merged_norm and merged_norm in {heading_norm, body_norm})
+    if expand_merge.get("kind") == "sentence_continuation" and merged_text and not merged_is_selected:
         parts = list(expand_merge.get("parts") or [])
         missing = str(parts[1] if len(parts) > 1 else "").strip()
         explanation = "De bron heeft deze zin over twee aansluitende tekstblokken verdeeld. Metis voegt alleen de letterlijk aangetroffen vervolgregel toe."
@@ -1653,7 +1655,7 @@ def _render_review_card(
             <button class="btn-secondary" type="submit" formaction="/review/context/accept" formmethod="post">Passage aanvullen met brontekst</button>
           </aside>
         '''
-    elif expand_merge.get("performed") and merged_text:
+    elif expand_merge.get("performed") and merged_text and not merged_is_selected:
         object_text_html += f'<div class="object-expand-merge"><p>{_esc(merged_text)}</p></div>'
     proposed = proposed_type_of(obj)
     confirmable = confirmable_proposed_type(obj)
