@@ -3,7 +3,7 @@
 # release-control-evidence: toegang
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
-from src.operations_console_app import _render_review_index
+from src.operations_console_app import _render_review_index, _render_review_room
 
 
 def _obj(object_id: str, proposed: str, *, status: str = "needs_review", section: str = "Inhoud") -> dict:
@@ -206,4 +206,110 @@ def test_review_dashboard_projects_distinct_final_dispositions_and_revision_work
     assert "versie 1.0.1" in decisions
     assert "Passage pending." not in decisions
     assert "data-review-form" not in decisions
+    assert "Bekijk historie" in decisions
     assert "task=decisions" in decisions
+
+
+class _HistoryConsole:
+    def __init__(self, rows: list[dict], signals: list[dict]) -> None:
+        self.rows = rows
+        self.signals = signals
+        self.object_reads: list[tuple[str, bool]] = []
+
+    def list_envelopes(self) -> list[dict]:
+        return [
+            {
+                "snapshot_id": "snap-1",
+                "title": "Richtlijn",
+                "version": "1.0",
+                "family": "test",
+                "class": "richtlijn",
+                "state": "captured",
+            }
+        ]
+
+    def snapshot_objects_and_revision(
+        self,
+        snapshot_id: str,
+        include_blocked: bool = False,
+    ) -> tuple[list[dict], str]:
+        self.object_reads.append((snapshot_id, include_blocked))
+        return self.rows, "revision-1"
+
+    def audit_review_signals(self) -> list[dict]:
+        return self.signals
+
+
+def test_object_history_reuses_one_document_read_and_shows_stored_version_diff() -> None:
+    previous = _with_register(
+        _obj("revised", "recommendation", status="revise"),
+        "selected_as_candidate",
+    )
+    previous["object_version"] = "1.0"
+    previous["object_type"] = "recommendation"
+    previous["governance"].update(
+        {
+            "validated_by": "reviewer.bert",
+            "validation_date": "2026-09-18T10:00:00+00:00",
+        }
+    )
+    current = _with_register(
+        _obj("revised", "recommendation", status="needs_review"),
+        "selected_as_candidate",
+    )
+    current["object_version"] = "1.0.1"
+    current["content"] = {"clean_text": "Passage revised met volledige bronzin."}
+    current["provenance"] = {
+        "previous_object_version": "1.0",
+        "revision_reason": "Gebruik de volledige bronzin.",
+    }
+    signals = [
+        {
+            "event_type": "review_audit_evidence",
+            "object_id": "revised",
+            "object_version": "1.0.1",
+            "actor": "reviewer.bert",
+            "occurred_at": "2026-09-18T10:05:00+00:00",
+            "details": {
+                "snapshot_id": "snap-1",
+                "decision": "repair",
+                "comment": "Gebruik de volledige bronzin.",
+            },
+        },
+        {
+            "event_type": "review_audit_evidence",
+            "object_id": "revised",
+            "object_version": "1.0",
+            "actor": "reviewer.bert",
+            "occurred_at": "2026-09-18T10:00:00+00:00",
+            "details": {
+                "snapshot_id": "snap-1",
+                "decision": "revise",
+                "comment": "Passage mist context.",
+            },
+        },
+    ]
+    console = _HistoryConsole([previous, current], signals)
+
+    html = _render_review_room(
+        console,  # type: ignore[arg-type]
+        {"display_name": "Bert", "roles": ["reviewer"]},
+        "snap-1",
+        "revised",
+        task="decisions",
+        counts={},
+    )
+
+    assert console.object_reads == [("snap-1", True)]
+    assert "Objecthistorie" in html
+    assert "Verschil met vorige versie" in html
+    assert "Passage revised." in html
+    assert "Passage revised met volledige bronzin." in html
+    assert "Correctie gevraagd" in html
+    assert "Te beoordelen" in html
+    assert "Gebruik de volledige bronzin." in html
+    assert "Passage mist context." in html
+    assert "Versie 1.0" in html
+    assert "Versie 1.0.1" in html
+    assert "huidige versie" in html
+    assert '<form class="review-decision-form"' not in html
