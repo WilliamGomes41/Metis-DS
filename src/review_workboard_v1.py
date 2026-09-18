@@ -475,12 +475,7 @@ def _projected_document_dashboard(
     account_id = str(account.get("account_id") or "")
     if not account_id:
         return None
-    try:
-        summaries = summary_reader(account_id, snapshot_id)
-    except TypeError:
-        # Compatibility for non-PostgreSQL test/dev consoles that still expose
-        # the older one-argument projection contract.
-        summaries = summary_reader(account_id)
+    summaries = summary_reader(account_id, snapshot_id)
     summary = summaries.get(snapshot_id)
     if not isinstance(summary, dict):
         return None
