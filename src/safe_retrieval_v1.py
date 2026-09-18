@@ -45,6 +45,7 @@ class SafeRetrievalIndex:
             "answerability": gated["answerability"],
             "reason": gated["reason"],
             "false_positive_class": gated.get("false_positive_class"),
+            "abstain_sentence": gated.get("abstain_sentence"),
             "query_spec": gated.get("query_spec"),
             "candidate_decision": {
                 "behavior": raw.get("behavior"),
