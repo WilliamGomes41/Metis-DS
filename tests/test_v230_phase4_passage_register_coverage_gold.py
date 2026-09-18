@@ -17,9 +17,12 @@ from fastapi.testclient import TestClient
 pytestmark = [
     pytest.mark.release_control_scope_belofte,
     pytest.mark.release_control_kwaliteit,
+    pytest.mark.release_control_metrics,
     pytest.mark.release_control_slop,
     pytest.mark.release_control_releasebewijs,
 ]
+
+# release-control-evidence: metrics teller noemer score-must-drop
 
 from src.admission_gate_v1 import (
     GATE_ALLOWED,
@@ -490,6 +493,51 @@ def test_metrics_with_gold_record_the_required_hooks(tmp_path: Path) -> None:
     assert metrics["review_burden"] is None
     assert metrics["coverage_vs_gold"] > 0
     assert metrics["precision"] > 0
+
+
+def test_section_role_distribution_exposes_summary_bias_without_opening_quality_claim(
+    tmp_path: Path,
+) -> None:
+    html = (
+        "<!doctype html><html lang=\"nl\"><body>"
+        "<h1>Richtlijn</h1>"
+        "<h2>Samenvatting</h2>"
+        "<p>Overweeg behandeling X bij ouderen.</p>"
+        "<p>Bespreek behandeling Y met de cliënt.</p>"
+        "<h2>1.1 Inleiding</h2>"
+        "<p>Continentie is een klinisch begrip in de ouderenzorg.</p>"
+        "<h2>2 Aanbevelingen</h2>"
+        "<p>Overweeg behandeling X bij ouderen.</p>"
+        "</body></html>"
+    ).encode("utf-8")
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    receipt = _ingest(
+        console,
+        accounts,
+        data=html,
+        filename="section-roles.html",
+        title="Section role diagnostics",
+    )
+    objects = _passages(console.snapshot_objects(receipt["snapshot_id"]))
+    metrics = compute_extract_metrics(objects, gold=None)
+    distribution = metrics["section_role_distribution"]
+
+    assert metrics["quality_claim_allowed"] is False
+    assert metrics["reason"] == "gold_standard_required"
+    assert distribution["diagnostic_only"] is True
+    assert distribution["content_passages"] == sum(
+        int(row["passages"]) for row in distribution["roles"].values()
+    )
+    assert distribution["roles"]["primary"]["counts"]["selected_as_candidate"] >= 1
+    assert distribution["roles"]["summary"]["counts"]["selected_as_candidate"] >= 1
+    assert distribution["roles"]["context"]["counts"]["selected_as_candidate"] >= 1
+
+    repeated = [
+        obj for obj in objects if _text_of(obj) == "Overweeg behandeling X bij ouderen."
+    ]
+    assert len(repeated) == 1
+    assert admission_of(repeated[0])["section_role"] == "primary"
 
 
 def test_soft_scores_or_single_guideline_without_gold_are_not_quality(tmp_path: Path) -> None:
