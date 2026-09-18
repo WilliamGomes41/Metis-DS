@@ -2229,15 +2229,21 @@ class OperationsConsole:
             decision = mapped
         if decision in {"revise", "reject"} and not str(comment or "").strip():
             raise ConsoleError("review_comment_required")
+        rejecting = decision == "reject"
+        if rejecting:
+            confirmed_object_type = None
+            recommendation_strength = None
         current = self.snapshot_objects(snapshot_id, for_update=True)
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
-        if type_action == "dit_klopt" and not confirmed_object_type:
+        if not rejecting and type_action == "dit_klopt" and not confirmed_object_type:
             confirmed_object_type = confirmable_proposed_type(target) or None
-        parent_id = (parent_choice or "").strip()
-        if not parent_id and documentpositie_action == "dit_klopt":
-            parent_id = resolve_found_under_parent(target, current)
+        parent_id = ""
+        if not rejecting:
+            parent_id = (parent_choice or "").strip()
+            if not parent_id and documentpositie_action == "dit_klopt":
+                parent_id = resolve_found_under_parent(target, current)
         store_passage = review_passage_requested(
             suitability=suitability or "",
             eindoordeel=eindoordeel or "",
@@ -2412,7 +2418,11 @@ class OperationsConsole:
             metadata["review_passage"] = passage_meta
             updated_target = apply_register_from_review(
                 updated_target,
-                suitability=suitability or "",
+                suitability=(
+                    "geen_kenniseenheid"
+                    if rejecting
+                    else suitability or ""
+                ),
             )
         if confirmed and updated_target.get("object_type") != "document":
             updated_target["confirmed_object_type"] = confirmed
