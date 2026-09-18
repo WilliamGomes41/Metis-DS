@@ -11,6 +11,7 @@ rollback mode. Semantic-mode failures never fall back silently.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from contextvars import ContextVar
@@ -24,6 +25,7 @@ from src.object_taxonomy_v1 import extract_object_type
 from src.operations_console_v1 import ConsoleError
 from src.semantic_passage_v1 import (
     ALLOWED_PROPOSED_TYPES,
+    SELECTION_ORIGIN_PROPOSAL,
     SemanticPassageError,
     semantic_source_blocks,
     semantic_units_from_proposal,
@@ -39,6 +41,16 @@ OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 DEFAULT_TIMEOUT_SECONDS = 60
 
 PostJson = Callable[[str, dict[str, str], dict[str, Any], int], dict[str, Any]]
+
+
+def _stable_json_hash(value: Any) -> str:
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _post_json(
@@ -263,6 +275,23 @@ def semantic_units_before_review(
             )
         except SemanticPassageError as exc:
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
+
+        source_blocks_hash = _stable_json_hash(blocks)
+        proposal_hash = _stable_json_hash(proposal)
+        for unit in content_units:
+            semantic_passage = unit.get("semantic_passage")
+            if (
+                isinstance(semantic_passage, dict)
+                and semantic_passage.get("selection_origin") == SELECTION_ORIGIN_PROPOSAL
+            ):
+                semantic_passage.update(
+                    {
+                        "formation_mode": SEMANTIC_MODE,
+                        "model": safe_model,
+                        "source_blocks_hash": source_blocks_hash,
+                        "proposal_hash": proposal_hash,
+                    }
+                )
 
     units = _source_ordered_units(
         fragments,
