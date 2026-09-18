@@ -860,6 +860,30 @@ def test_correct_object_can_readmit_a_blocked_candidate(tmp_path: Path) -> None:
     assert is_slow_review_duty(revised) is True
 
 
+def test_admission_carries_section_role_from_existing_section_path(tmp_path: Path) -> None:
+    html = (
+        "<!doctype html><html lang=\"nl\"><body>"
+        "<h1>Richtlijn</h1>"
+        "<h2>1.1 Inleiding</h2>"
+        "<p>Continentie is een klinisch onderwerp in de ouderenzorg.</p>"
+        "</body></html>"
+    ).encode("utf-8")
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    receipt = _ingest_richtlijn(
+        console,
+        accounts,
+        data=html,
+        filename="inleiding.html",
+        title="Inleiding",
+    )
+    definition = _find_by_text(
+        console.snapshot_objects(receipt["snapshot_id"]),
+        "Continentie is een klinisch onderwerp",
+    )
+    assert _admission(definition)["section_role"] == "context"
+
+
 def test_extracted_definition_carries_literal_type_evidence(tmp_path: Path) -> None:
     html = (
         "<!doctype html><html lang=\"nl\"><body>"
