@@ -29,13 +29,19 @@ from src.pre_review_semantic_v1 import (
 )
 
 
-def _fragment(fragment_id: str, text: str, *, object_type: str | None = None) -> dict:
+def _fragment(
+    fragment_id: str,
+    text: str,
+    *,
+    object_type: str | None = None,
+    section_path: list[str] | None = None,
+) -> dict:
     row = {
         "fragment_id": fragment_id,
         "fragment_hash": f"hash-{fragment_id}",
         "raw_text": text,
         "clean_text": text,
-        "section_path": ["Behandeling"],
+        "section_path": list(section_path or ["Behandeling"]),
         "source_locator": {
             "locator_type": "web_line_range",
             "locator_value": "lines:1-1",
@@ -114,6 +120,31 @@ def test_semantic_processing_runs_before_review_and_reconstructs_source_only() -
     assert len(content["semantic_passage"]["source_blocks_hash"]) == 64
     assert len(content["semantic_passage"]["proposal_hash"]) == 64
     assert content["source_fragment_ids"] == ["p1"]
+
+
+def test_semantic_exact_duplicate_prefers_primary_section_without_fuzzy_merge() -> None:
+    text = "Overweeg behandeling X bij ouderen."
+    fragments = [
+        _fragment("summary-rec", text, section_path=["Samenvatting", "Aanbevelingen"]),
+        _fragment("primary-rec", text, section_path=["2 Aanbevelingen"]),
+    ]
+
+    def fake_post(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
+        return _response(_full_span_proposal(payload))
+
+    units = semantic_units_before_review(
+        fragments,
+        document_id="doc-dedup",
+        api_key="product-key",
+        model="test-model",
+        post_json=fake_post,
+    )
+
+    assert len(units) == 1
+    assert units[0]["clean_text"] == text
+    assert units[0]["section_path"] == ["2 Aanbevelingen"]
+    assert units[0]["source_fragment_ids"] == ["primary-rec"]
+    assert len(units[0]["semantic_passage"]["spans"]) == 1
 
 
 def test_semantic_processing_preserves_interleaved_source_order() -> None:
