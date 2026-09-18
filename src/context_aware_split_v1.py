@@ -36,6 +36,7 @@ from src.object_taxonomy_v1 import (
     is_truncated_sentence,
     looks_like_structural_heading,
     normalize_visible_prose,
+    section_role_for_path,
     stamp_value,
 )
 from src.source_reconstruction_v1 import (
@@ -199,16 +200,31 @@ def _merge_text(left: str, right: str) -> str:
     return re.sub(r"\s+", " ", f"{left} {right}").strip()
 
 
-def _unique_meaning_units(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    seen: set[str] = set()
-    unique: list[dict[str, Any]] = []
-    for item in rows:
+_SECTION_ROLE_PRIORITY = {
+    "primary": 0,
+    "summary": 1,
+    "context": 2,
+    "support": 3,
+    "structural": 4,
+}
+
+
+def _role_priority(section_path: Iterable[Any] | None) -> int:
+    return _SECTION_ROLE_PRIORITY.get(section_role_for_path(section_path or []), 0)
+
+
+def prefer_exact_duplicate_units(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    best_by_text: dict[str, tuple[int, dict[str, Any]]] = {}
+    for index, item in enumerate(rows):
         key = normalize_visible_prose(item.get("clean_text") or item.get("text") or "")
-        if not key or key in seen:
+        if not key:
             continue
-        seen.add(key)
-        unique.append(item)
-    return unique
+        current = best_by_text.get(key)
+        if current is None or _role_priority(item.get("section_path")) < _role_priority(
+            current[1].get("section_path")
+        ):
+            best_by_text[key] = (index, item)
+    return [item for _, item in sorted(best_by_text.values(), key=lambda pair: pair[0])]
 
 
 def split_context_aware_units(
@@ -316,6 +332,40 @@ def split_context_aware_units(
             if decision.rejected and decision.reason == REJECT_EMPTY:
                 continue
             if decision.rejected and decision.reason == REJECT_DUPLICATE:
+                duplicate = next(
+                    (
+                        item
+                        for item in meaning_units
+                        if normalize_visible_prose(
+                            item.get("clean_text") or item.get("text") or ""
+                        )
+                        == normalize_visible_prose(unit)
+                    ),
+                    None,
+                )
+                current_path = [
+                    part
+                    for part in (fragment.get("section_path") or [])
+                    if not is_strength_stamp(str(part))
+                    and not is_kennisplatform_chrome_text(str(part))
+                ]
+                if duplicate is not None and _role_priority(current_path) < _role_priority(
+                    duplicate.get("section_path")
+                ):
+                    suffix = f"-u{index:02d}" if len(units) > 1 else ""
+                    duplicate["object_id"] = f"{document_id}-{fragment['fragment_id']}{suffix}"
+                    duplicate["source_fragment_ids"] = list(
+                        dict.fromkeys(
+                            unit_source_fragment_ids or [fragment["fragment_id"]]
+                        )
+                    )
+                    duplicate["section_path"] = current_path
+                    duplicate["heading"] = (
+                        None
+                        if is_strength_stamp(str(fragment.get("heading") or ""))
+                        or is_kennisplatform_chrome_text(str(fragment.get("heading") or ""))
+                        else fragment.get("heading")
+                    )
                 continue
             if (
                 decision.rejected
@@ -379,4 +429,4 @@ def split_context_aware_units(
                 emit_unit(spec_item)
     if pending_truncated is not None:
         emit_unit(pending_truncated)
-    return _unique_meaning_units(meaning_units)
+    return prefer_exact_duplicate_units(meaning_units)

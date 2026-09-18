@@ -13,6 +13,13 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = [
+    pytest.mark.release_control_scope_belofte,
+    pytest.mark.release_control_beschikbaarheid,
+    pytest.mark.release_control_slop,
+    pytest.mark.release_control_releasebewijs,
+]
+
 from src.answerability_gate_v1 import evaluate_answerability
 from src.atomic_split_v1 import fusion_is_forbidden, split_meaning_units
 from src.context_aware_split_v1 import (
@@ -435,6 +442,55 @@ def test_trailing_clauses_attach_to_previous_sentence() -> None:
     )
     assert fusion_is_forbidden(fused_exception) is True
     assert len(split_meaning_units(fused_exception)) == 2
+
+
+def test_exact_duplicate_prefers_primary_section_and_keeps_primary_source_ref() -> None:
+    summary = _fragment(
+        FULL_RECOMMENDATION,
+        tag="p",
+        ordinal=1,
+        fragment_id="summary-rec",
+        heading="Samenvatting",
+    )
+    primary = _fragment(
+        FULL_RECOMMENDATION,
+        tag="p",
+        ordinal=2,
+        fragment_id="primary-rec",
+        heading="2 Aanbevelingen",
+    )
+    units = split_context_aware_units([summary, primary], document_id="doc-source-preference")
+    recommendations = [item for item in units if item["text"] == FULL_RECOMMENDATION]
+
+    assert len(recommendations) == 1
+    assert recommendations[0]["section_path"] == ["2 Aanbevelingen"]
+    assert recommendations[0]["source_fragment_ids"] == ["primary-rec"]
+
+
+def test_near_duplicate_wording_is_not_merged_without_semantic_authority() -> None:
+    summary_text = "Overweeg behandeling X bij ouderen."
+    primary_text = "Overweeg bij ouderen behandeling X."
+    summary = _fragment(
+        summary_text,
+        tag="p",
+        ordinal=1,
+        fragment_id="summary-near",
+        heading="Samenvatting",
+    )
+    primary = _fragment(
+        primary_text,
+        tag="p",
+        ordinal=2,
+        fragment_id="primary-near",
+        heading="2 Aanbevelingen",
+    )
+
+    units = split_context_aware_units([summary, primary], document_id="doc-near-duplicate")
+    texts = [item["text"] for item in units]
+
+    assert summary_text in texts
+    assert primary_text in texts
+    assert len([text for text in texts if "behandeling X" in text]) == 2
 
 
 def test_no_duplicate_identical_clean_text_from_same_freeze() -> None:

@@ -20,7 +20,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from src.atomic_split_v1 import proposed_relations_for_units
-from src.context_aware_split_v1 import split_context_aware_units
+from src.context_aware_split_v1 import prefer_exact_duplicate_units, split_context_aware_units
 from src.object_taxonomy_v1 import extract_object_type
 from src.operations_console_v1 import ConsoleError
 from src.semantic_passage_v1 import (
@@ -293,10 +293,12 @@ def semantic_units_before_review(
                     }
                 )
 
-    units = _source_ordered_units(
-        fragments,
-        headings=_heading_units(fragments, document_id=document_id),
-        content=content_units,
+    units = prefer_exact_duplicate_units(
+        _source_ordered_units(
+            fragments,
+            headings=_heading_units(fragments, document_id=document_id),
+            content=content_units,
+        )
     )
     proposed_relations_for_units(units)
     return units
