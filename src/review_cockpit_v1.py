@@ -15,6 +15,10 @@ from src.heading_parent_list_v1 import (
     parent_proposal_may_bind,
     parse_outline_number,
 )
+from src.semantic_passage_v1 import (
+    SELECTION_ORIGIN_COVERAGE,
+    SELECTION_ORIGIN_PROPOSAL,
+)
 
 _BIND_OUTLINE_RE = re.compile(r"^(\d+(?:\.\d+)*)\.?(?:\s+|$)")
 
@@ -69,7 +73,31 @@ def proposed_type_of(obj: dict[str, Any]) -> str:
     ).strip()
 
 
+def semantic_passage_of(obj: dict[str, Any]) -> dict[str, Any]:
+    metadata = obj.get("metadata") if isinstance(obj.get("metadata"), dict) else {}
+    passage = metadata.get("semantic_passage")
+    return passage if isinstance(passage, dict) else {}
+
+
+def semantic_selection_origin(obj: dict[str, Any]) -> str:
+    origin = str(semantic_passage_of(obj).get("selection_origin") or "").strip()
+    if origin in {SELECTION_ORIGIN_PROPOSAL, SELECTION_ORIGIN_COVERAGE}:
+        return origin
+    return ""
+
+
 def why_selected(obj: dict[str, Any]) -> str:
+    origin = semantic_selection_origin(obj)
+    if origin == SELECTION_ORIGIN_PROPOSAL:
+        return (
+            "Metis stelt deze bronselectie voor als kandidaat. "
+            "Controleer de selectie en het voorgestelde informatietype aan de hand van de bron."
+        )
+    if origin == SELECTION_ORIGIN_COVERAGE:
+        return (
+            "Deze brontekst is nog niet inhoudelijk beoordeeld. "
+            "Bepaal aan de hand van de bron wat ermee moet gebeuren."
+        )
     proposed = proposed_type_of(obj)
     if proposed in WHY_SELECTED:
         return WHY_SELECTED[proposed]
@@ -143,12 +171,27 @@ def broncontext_parts(obj: dict[str, Any]) -> dict[str, Any]:
         or fallback
         or ""
     ).strip()
+    semantic = semantic_passage_of(obj)
+    origin = semantic_selection_origin(obj)
+    selection_text = (
+        str(content.get("raw_text") or content.get("clean_text") or "").strip()
+        if origin
+        else ""
+    )
+    spans = [
+        dict(span)
+        for span in (semantic.get("spans") or [])
+        if isinstance(span, dict)
+    ]
     return {
         "ancestor_headings": ancestors,
         "current_heading": heading,
         "previous_paragraph": previous,
         "source_text_exact": marked,
         "next_paragraph": nxt,
+        "semantic_selection_origin": origin,
+        "semantic_selection_text": selection_text,
+        "semantic_spans": spans,
     }
 
 
