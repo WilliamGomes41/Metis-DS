@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable
 
 try:
-    from .abstain_catalog_v1 import sentence_for
+    from .abstain_catalog_v1 import ABSTAIN_REASONS, sentence_for
     from .object_taxonomy_v1 import (
         CLASS_ORDER,
         is_advice_weight,
@@ -26,7 +26,7 @@ try:
         type_fits_question,
     )
 except ImportError:
-    from abstain_catalog_v1 import sentence_for
+    from abstain_catalog_v1 import ABSTAIN_REASONS, sentence_for
     from object_taxonomy_v1 import (
         CLASS_ORDER,
         is_advice_weight,
@@ -500,9 +500,15 @@ def evaluate_answerability(
         )
 
     if raw_result.get("behavior") != "retrieve" or not raw_result.get("results"):
+        raw_reason = raw_result.get("reason")
+        public_reason = (
+            raw_reason
+            if raw_reason in ABSTAIN_REASONS
+            else ("no_candidates" if not raw_reason else "below_confidence_threshold")
+        )
         return _abstain(
             base,
-            reason=raw_result.get("reason") or "no_candidates",
+            reason=public_reason,
             fp_class="below_confidence_threshold",
             evidence=[],
         )
