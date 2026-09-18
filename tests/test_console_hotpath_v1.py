@@ -275,6 +275,17 @@ class _HotPathRouteConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole):
                 "closure_gap_count": 0,
                 "closure_gap_first": "",
                 "source_passage_review_complete": True,
+                "heading_total": 0,
+                "individual_total": 0,
+                "progress_total": 204,
+                "progress_done": 204,
+                "progress_approved": 204,
+                "progress_rejected": 0,
+                "progress_not_included": 0,
+                "progress_context": 0,
+                "progress_support": 0,
+                "progress_superseded": 0,
+                "progress_revised": 0,
             },
             "snap-unpublished": {
                 "envelope": dict(_ROUTE_ENVELOPES[1]),
@@ -286,6 +297,17 @@ class _HotPathRouteConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole):
                 "closure_gap_count": 0,
                 "closure_gap_first": "",
                 "source_passage_review_complete": False,
+                "heading_total": 4,
+                "individual_total": 5,
+                "progress_total": 204,
+                "progress_done": 181,
+                "progress_approved": 170,
+                "progress_rejected": 2,
+                "progress_not_included": 3,
+                "progress_context": 2,
+                "progress_support": 3,
+                "progress_superseded": 1,
+                "progress_revised": 4,
             },
         }
 
@@ -363,16 +385,8 @@ def test_authenticated_tree_and_review_gets_use_production_list_installers(
     assert canonical.execute_calls == 0
 
 
-@pytest.mark.parametrize(
-    "path",
-    [
-        "/review?document=snap-unpublished",
-        "/review?document=snap-unpublished&task=headings",
-    ],
-)
-def test_review_detail_uses_list_safe_status_and_one_selected_snapshot_read(
+def test_review_default_document_dashboard_uses_projection_without_snapshot_read(
     tmp_path: Path,
-    path: str,
 ) -> None:
     canonical = _CanonicalStore(set())
     workflow = _WorkflowStore()
@@ -385,7 +399,31 @@ def test_review_detail_uses_list_safe_status_and_one_selected_snapshot_read(
     console.workflow_document_store = workflow
     client = _installed_client(console)
 
-    review = client.get(path)
+    review = client.get("/review?document=snap-unpublished")
+    assert review.status_code == 200
+    assert "Unpublished fixture" in review.text
+    assert "Reviewvoortgang" in review.text
+    assert "181 van 204 bronpassages afgehandeld" in review.text
+    assert "1 te controleren · 3 afgerond" in review.text
+    assert "2 te beoordelen · 3 afgerond" in review.text
+    assert console.snapshot_object_reads == 0
+
+
+def test_review_task_detail_keeps_one_bounded_selected_snapshot_read(
+    tmp_path: Path,
+) -> None:
+    canonical = _CanonicalStore(set())
+    workflow = _WorkflowStore()
+    console = _HotPathRouteConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / "output" / "runtime" / "operations-console",
+    )
+    console.canonical_publication_store = canonical
+    console.workflow_document_store = workflow
+    client = _installed_client(console)
+
+    review = client.get("/review?document=snap-unpublished&task=headings")
     assert review.status_code == 200
     assert "Unpublished fixture" in review.text
     assert console.list_status_calls == 1
