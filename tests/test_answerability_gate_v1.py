@@ -47,6 +47,7 @@ def test_unknown_recommendation_subject_abstains():
     data = load_index().search("Adviseert deze kennisset het routinematig gebruik van rollators?")
     assert data["behavior"] == "abstain"
     assert data["reason"] == "below_confidence_threshold"
+    assert data["candidate_decision"]["reason"] == "all_child_engines_abstained"
     assert data["abstain_sentence"]
     assert data["results"] == []
     assert data["false_positive_class"] == "below_confidence_threshold"
