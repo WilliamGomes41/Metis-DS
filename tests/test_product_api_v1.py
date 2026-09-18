@@ -45,7 +45,7 @@ def test_fixture_retrieve_contract_and_source(tmp_path):
     c,_=client(tmp_path); r=c.post("/v1/retrieve",headers=headers(),json={"query":"Wanneer gebruik je de risicofactorenscore?","top_k":5}); assert r.status_code==200; data=r.json(); assert data["status"]=="retrieve"; assert data["answerability"]=="supported"; assert data["synthetic_fixture"] is True; assert data["request_id"]; assert data["tenant_id"]=="test-tenant"; assert data["results"]; first=data["results"][0]; assert first["knowledge_object_id"]; assert first["source"]["title"]; assert "version" in first["source"]; assert "hybrid_rrf" in first["scores"]; assert "chunk_readiness" in first
 
 def test_no_answer_abstains(tmp_path):
-    c,_=client(tmp_path); data=c.post("/v1/retrieve",headers=headers(),json={"query":"Wat is de aanbevolen dosering morfine bij nierfalen?"}).json(); assert data["status"]=="abstain"; assert data["answerability"]=="insufficient_evidence"; assert data["results"]==[]
+    c,_=client(tmp_path); data=c.post("/v1/retrieve",headers=headers(),json={"query":"Wat is de aanbevolen dosering morfine bij nierfalen?"}).json(); assert data["status"]=="abstain"; assert data["answerability"]=="insufficient_evidence"; assert data["abstain_sentence"]; assert data["results"]==[]
 
 def test_entitlement_filters_before_retrieval(tmp_path):
     c,_=client(tmp_path,reg=registry(docs=("another-document",))); data=c.post("/v1/retrieve",headers=headers(),json={"query":"Welke score geldt vanaf 60 jaar?"}).json(); assert data["status"]=="abstain"; assert data["reason"]=="empty_published_corpus"
@@ -80,7 +80,7 @@ def test_fixture_requires_explicit_allow_flag(tmp_path):
     else: raise AssertionError("fixture mode should require explicit enable")
 
 def test_real_mode_is_fail_closed_even_with_valid_tenant(tmp_path):
-    c,_=client(tmp_path,mode="real"); health=c.get("/v1/health").json(); assert health["synthetic_fixture"] is False; data=c.post("/v1/retrieve",headers=headers(),json={"query":"fractuurrisico"}).json(); assert data["status"]=="abstain"; assert data["reason"]=="empty_published_corpus"
+    c,_=client(tmp_path,mode="real"); health=c.get("/v1/health").json(); assert health["synthetic_fixture"] is False; data=c.post("/v1/retrieve",headers=headers(),json={"query":"fractuurrisico"}).json(); assert data["status"]=="abstain"; assert data["reason"]=="empty_published_corpus"; assert data["abstain_sentence"]
 
 def test_request_id_is_returned(tmp_path):
     c,_=client(tmp_path); r=c.get("/v1/documents",headers={**headers(),"X-Request-ID":"client-req-123"}); assert r.headers["X-Request-ID"]=="client-req-123"; assert r.json()["request_id"]=="client-req-123"
@@ -94,3 +94,41 @@ def test_specific_topic_entitlement_does_not_include_untagged_records(tmp_path):
 def test_product_state_reloads_changed_retrieval_file(tmp_path):
     import shutil
     base=paths(tmp_path); fixture_copy=tmp_path/"records.jsonl"; shutil.copy(base.fixture_records,fixture_copy); p=ProductPaths(real_records=base.real_records,fixture_records=fixture_copy,real_published=base.real_published,lexical_config=base.lexical_config,vector_config=base.vector_config,hybrid_config=base.hybrid_config,tenant_config=base.tenant_config,usage_db=base.usage_db); app=create_product_app("fixture",paths=p,tenant_registry=registry(),usage_ledger=UsageLedger(p.usage_db),allow_fixture=True); c=TestClient(app); assert c.get("/v1/health").json()["published_retrieval_records"]==11; lines=fixture_copy.read_text(encoding="utf-8").splitlines(); fixture_copy.write_text(lines[0]+"\n",encoding="utf-8"); docs=c.get("/v1/documents",headers=headers()).json()["documents"]; assert docs[0]["knowledge_object_count"]==1
+
+
+def test_missing_advice_bounds_has_closed_abstain_sentence(tmp_path):
+    c,_ = client(tmp_path)
+    state = c.app.state.product
+    object_id = "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02"
+
+    class SupportedIndex:
+        def search(self, query, top_k):
+            return {
+                "behavior": "retrieve",
+                "answerability": "supported",
+                "reason": "evidence_gate_passed",
+                "false_positive_class": None,
+                "labels": ["V", "VN"],
+                "advice_weight": True,
+                "abstain_sentence": None,
+                "results": [{
+                    "object_id": object_id,
+                    "object_type": "recommendation",
+                    "rrf_score": 1.0,
+                    "lexical_score": 1.0,
+                    "vector_score": 1.0,
+                }],
+            }
+
+    state._safe_index = lambda records: SupportedIndex()
+    state._attach_advice_bounds = lambda results, records: []
+
+    data = c.post(
+        "/v1/retrieve",
+        headers=headers(),
+        json={"query": "Wanneer wordt dit geadviseerd?"},
+    ).json()
+
+    assert data["status"] == "abstain"
+    assert data["reason"] == "advice_bounds_missing"
+    assert data["abstain_sentence"]
