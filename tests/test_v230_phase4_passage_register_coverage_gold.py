@@ -14,6 +14,13 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = [
+    pytest.mark.release_control_scope_belofte,
+    pytest.mark.release_control_kwaliteit,
+    pytest.mark.release_control_slop,
+    pytest.mark.release_control_releasebewijs,
+]
+
 from src.admission_gate_v1 import (
     GATE_ALLOWED,
     GATE_BLOCKED,
