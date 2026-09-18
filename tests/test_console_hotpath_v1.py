@@ -261,10 +261,14 @@ class _HotPathRouteConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole):
             },
         }
 
-    def review_workboard_summaries(self, account_id: str) -> dict[str, dict[str, Any]]:
+    def review_workboard_summaries(
+        self,
+        account_id: str,
+        snapshot_id: str | None = None,
+    ) -> dict[str, dict[str, Any]]:
         self.workboard_summary_calls += 1
         assert account_id == "acc-hotpath"
-        return {
+        summaries = {
             "snap-published": {
                 "envelope": dict(_ROUTE_ENVELOPES[0]),
                 "heading_pending": 0,
@@ -310,6 +314,9 @@ class _HotPathRouteConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole):
                 "progress_revised": 4,
             },
         }
+        if snapshot_id is not None:
+            return {snapshot_id: summaries[snapshot_id]} if snapshot_id in summaries else {}
+        return summaries
 
     def document_readiness(self, _snapshot_id: str) -> dict[str, Any]:
         raise AssertionError("presentation GET must not invoke document_readiness")
