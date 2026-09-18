@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from src.operations_console_v1 import ConsoleError, OperationsConsole
+from src.passage_register_v1 import passage_register_of
 from src.pre_review_semantic_v1 import (
     DETERMINISTIC_MODE,
     OPENAI_RESPONSES_URL,
@@ -28,9 +29,14 @@ from src.pre_review_semantic_v1 import (
 def _fragment(fragment_id: str, text: str, *, object_type: str | None = None) -> dict:
     row = {
         "fragment_id": fragment_id,
+        "fragment_hash": f"hash-{fragment_id}",
         "raw_text": text,
         "clean_text": text,
         "section_path": ["Behandeling"],
+        "source_locator": {
+            "locator_type": "web_line_range",
+            "locator_value": "lines:1-1",
+        },
     }
     if object_type:
         row["object_type"] = object_type
@@ -310,3 +316,98 @@ def test_read_only_repair_catalog_does_not_call_llm(tmp_path: Path) -> None:
 
     assert console.source_fragment_catalog() == []
     assert calls == 0
+
+
+def test_omitted_semantic_source_passage_remains_open_after_ingest(tmp_path: Path) -> None:
+    fragments = [
+        _fragment("p1", "Gebruik behandeling X."),
+        _fragment("p2", "Niet gebruiken bij patiënten met nierfalen."),
+        _fragment("p3", "Controleer na vier weken."),
+    ]
+
+    def select_first_and_third(
+        _url: str,
+        _headers: dict,
+        payload: dict,
+        _timeout: int,
+    ) -> dict:
+        blocks = json.loads(payload["input"][1]["content"])["source_blocks"]
+        return _response(
+            {
+                "objects": [
+                    {
+                        "spans": [
+                            {
+                                "block_id": blocks[0]["block_id"],
+                                "start": 0,
+                                "end": len(blocks[0]["text"]),
+                            }
+                        ],
+                        "proposed_object_type": "recommendation",
+                    },
+                    {
+                        "spans": [
+                            {
+                                "block_id": blocks[2]["block_id"],
+                                "start": 0,
+                                "end": len(blocks[2]["text"]),
+                            }
+                        ],
+                        "proposed_object_type": "recommendation",
+                    },
+                ],
+                "abstain_reason": None,
+            }
+        )
+
+    console = OperationsConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources",
+        runtime=tmp_path / "runtime",
+    )
+    researcher = console.create_account(
+        username="researcher",
+        password="researcher-secret",
+        roles=("researcher",),
+        display_name="Researcher",
+    )
+    reviewer = console.create_account(
+        username="reviewer",
+        password="reviewer-secret",
+        roles=("reviewer",),
+        display_name="Reviewer",
+    )
+    console._extract = lambda *_args, **_kwargs: fragments
+    bind_pre_review_semantic_processing(
+        console,
+        environ={
+            PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
+            PRE_REVIEW_LLM_API_KEY_ENV: "product-key",
+            PRE_REVIEW_LLM_MODEL_ENV: "test-model",
+        },
+        post_json=select_first_and_third,
+    )
+
+    receipt = console.ingest(
+        actor_id=researcher["account_id"],
+        filename="coverage.html",
+        data=b"<html><body>coverage</body></html>",
+        content_type="text/html",
+        ingest_kind="new",
+        title="Coverage",
+        version="1.0",
+        date="2026-09-18",
+        live_url="",
+        class_="richtlijn",
+        family="kwaliteit",
+        named_reviewers=[reviewer["account_id"]],
+    )
+
+    omitted = next(
+        row
+        for row in console.snapshot_objects(receipt["snapshot_id"])
+        if (row.get("content") or {}).get("clean_text")
+        == "Niet gebruiken bij patiënten met nierfalen."
+    )
+    assert omitted["proposed_object_type"] == "unclassified"
+    assert passage_register_of(omitted)["status"] == "not_yet_assessed"
