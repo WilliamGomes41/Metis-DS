@@ -15,6 +15,10 @@ from src.heading_parent_list_v1 import (
     parent_proposal_may_bind,
     parse_outline_number,
 )
+from src.semantic_passage_v1 import (
+    SELECTION_ORIGIN_COVERAGE,
+    SELECTION_ORIGIN_PROPOSAL,
+)
 
 _BIND_OUTLINE_RE = re.compile(r"^(\d+(?:\.\d+)*)\.?(?:\s+|$)")
 
@@ -47,16 +51,16 @@ EINDOORDEEL_TO_DECISION = {
     "later_beoordelen": "later",
 }
 WHY_SELECTED = {
-    "recommendation": "Geselecteerd omdat dit een volledige aanbeveling is.",
-    "definition": "Geselecteerd omdat dit een definitie is.",
-    "condition": "Geselecteerd omdat dit een voorwaarde is.",
-    "exception": "Geselecteerd omdat dit een uitzondering is.",
-    "explanation": "Geselecteerd omdat dit een toelichting is.",
-    "factual_finding": "Geselecteerd omdat dit een feitelijke constatering is.",
-    "heading": "Geselecteerd als kop in de documentstructuur.",
-    "path": "Geselecteerd omdat dit een pad is.",
-    "node": "Geselecteerd omdat dit een knoop is.",
-    "outcome": "Geselecteerd omdat dit een uitkomst is.",
+    "recommendation": "Metis stelt voor deze passage als aanbeveling te beoordelen. Controleer dit aan de hand van de bron.",
+    "definition": "Metis stelt voor deze passage als definitie te beoordelen. Controleer dit aan de hand van de bron.",
+    "condition": "Metis stelt voor deze passage als voorwaarde te beoordelen. Controleer dit aan de hand van de bron.",
+    "exception": "Metis stelt voor deze passage als uitzondering te beoordelen. Controleer dit aan de hand van de bron.",
+    "explanation": "Metis stelt voor deze passage als toelichting te beoordelen. Controleer dit aan de hand van de bron.",
+    "factual_finding": "Metis stelt voor deze passage als feitelijke constatering te beoordelen. Controleer dit aan de hand van de bron.",
+    "heading": "Metis stelt voor deze passage als kop in de documentstructuur te beoordelen. Controleer de plaatsing aan de hand van de bron.",
+    "path": "Metis stelt voor deze passage als pad te beoordelen. Controleer dit aan de hand van de bron.",
+    "node": "Metis stelt voor deze passage als knoop te beoordelen. Controleer dit aan de hand van de bron.",
+    "outcome": "Metis stelt voor deze passage als uitkomst te beoordelen. Controleer dit aan de hand van de bron.",
 }
 
 
@@ -69,11 +73,29 @@ def proposed_type_of(obj: dict[str, Any]) -> str:
     ).strip()
 
 
+def semantic_passage_of(obj: dict[str, Any]) -> dict[str, Any]:
+    metadata = obj.get("metadata") if isinstance(obj.get("metadata"), dict) else {}
+    passage = metadata.get("semantic_passage")
+    return passage if isinstance(passage, dict) else {}
+
+
+def semantic_selection_origin(obj: dict[str, Any]) -> str:
+    origin = str(semantic_passage_of(obj).get("selection_origin") or "").strip()
+    if origin in {SELECTION_ORIGIN_PROPOSAL, SELECTION_ORIGIN_COVERAGE}:
+        return origin
+    return ""
+
+
 def why_selected(obj: dict[str, Any]) -> str:
+    if semantic_selection_origin(obj) == SELECTION_ORIGIN_COVERAGE:
+        return (
+            "Deze brontekst is nog niet inhoudelijk beoordeeld. "
+            "Bepaal aan de hand van de bron wat ermee moet gebeuren."
+        )
     proposed = proposed_type_of(obj)
     if proposed in WHY_SELECTED:
         return WHY_SELECTED[proposed]
-    return "Geselecteerd omdat dit een bruikbare passage is."
+    return "Metis stelt voor deze passage te beoordelen. Controleer dit aan de hand van de bron."
 
 
 def confirmable_proposed_type(obj: dict[str, Any]) -> str:
@@ -143,12 +165,27 @@ def broncontext_parts(obj: dict[str, Any]) -> dict[str, Any]:
         or fallback
         or ""
     ).strip()
+    semantic = semantic_passage_of(obj)
+    origin = semantic_selection_origin(obj)
+    selection_text = (
+        str(content.get("raw_text") or content.get("clean_text") or "").strip()
+        if origin
+        else ""
+    )
+    spans = [
+        dict(span)
+        for span in (semantic.get("spans") or [])
+        if isinstance(span, dict)
+    ]
     return {
         "ancestor_headings": ancestors,
         "current_heading": heading,
         "previous_paragraph": previous,
         "source_text_exact": marked,
         "next_paragraph": nxt,
+        "semantic_selection_origin": origin,
+        "semantic_selection_text": selection_text,
+        "semantic_spans": spans,
     }
 
 

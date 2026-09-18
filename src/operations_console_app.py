@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import html
+import re
 from typing import Any
 from urllib.parse import quote
 
@@ -752,6 +753,25 @@ def _heading_chooser(
     """
 
 
+def _semantic_selection_markup(source_text: str, selection_text: str) -> tuple[str, bool]:
+    tokens = (selection_text or "").split()
+    if not source_text or not tokens:
+        return _esc(source_text), False
+    pattern = re.compile(r"\s+".join(re.escape(token) for token in tokens))
+    matches = list(pattern.finditer(source_text))
+    if len(matches) != 1:
+        return _esc(source_text), False
+    match = matches[0]
+    return (
+        _esc(source_text[: match.start()])
+        + '<mark class="broncontext-marked">'
+        + _esc(source_text[match.start() : match.end()])
+        + "</mark>"
+        + _esc(source_text[match.end() :]),
+        True,
+    )
+
+
 def _broncontext_html(
     obj: dict[str, Any],
     snapshot_id: str,
@@ -768,10 +788,34 @@ def _broncontext_html(
         lines.append(f'<p class="broncontext-heading">{_esc(parts["current_heading"])}</p>')
     if parts["previous_paragraph"]:
         lines.append(f'<p class="broncontext-prev">{_esc(parts["previous_paragraph"])}</p>')
-    marked = parts["source_text_exact"]
-    if marked:
+
+    source_exact = str(parts["source_text_exact"] or "")
+    origin = str(parts.get("semantic_selection_origin") or "")
+    selection_text = str(parts.get("semantic_selection_text") or "")
+    spans = parts.get("semantic_spans") or []
+    selection_warning = ""
+    if source_exact and origin:
+        selection_label = (
+            "Door Metis voorgestelde bronselectie"
+            if origin == "proposal_selected"
+            else "Nog niet beoordeelde brontekst"
+        )
+        lines.append(f'<p class="eyebrow">{_esc(selection_label)}</p>')
+        source_markup, found = _semantic_selection_markup(source_exact, selection_text)
         lines.append(
-            f'<p class="broncontext-marked"><mark class="broncontext-marked">{_esc(marked)}</mark></p>'
+            f'<p class="broncontext-source" data-semantic-origin="{_esc(origin)}" '
+            f'data-semantic-span-count="{len(spans)}">{source_markup}</p>'
+        )
+        if not found:
+            selection_warning = (
+                '<p class="muted" data-semantic-selection-unresolved>'
+                "De opgeslagen bronselectie kon niet eenduidig in deze context worden gemarkeerd. "
+                "Controleer daarom de volledige bron."
+                "</p>"
+            )
+    elif source_exact:
+        lines.append(
+            f'<p class="broncontext-marked"><mark class="broncontext-marked">{_esc(source_exact)}</mark></p>'
         )
     if parts["next_paragraph"]:
         lines.append(f'<p class="broncontext-next">{_esc(parts["next_paragraph"])}</p>')
@@ -785,6 +829,7 @@ def _broncontext_html(
                   <section class="review-card-bronpassage review-broncontext" data-review-step="b" aria-label="Broncontext">
                     <h4>Broncontext</h4>
                     <div class="broncontext-freeze">{"".join(lines)}</div>
+                    {selection_warning}
                     {missing}
                     <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}{f'&amp;task={_esc(task)}' if task in REVIEW_TASKS else ''}">Open volledige richtlijn</a></p>
                   </section>
@@ -1411,7 +1456,7 @@ def _render_review_card(
                 <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
                   <div class="review-cockpit-copy">
                     <p>Metis heeft de technische controles uitgevoerd. Beoordeel deze passage aan de hand van de oorspronkelijke bron.</p>
-                    <p>Metis doet een voorstel; jij bepaalt wat met de passage gebeurt. De voorgestelde kop en het informatietype zijn al ingevuld; pas ze alleen aan als ze inhoudelijk niet kloppen.</p>
+                    <p>Metis doet een voorstel; jij bepaalt wat met de passage gebeurt. Controleer de gemarkeerde brontekst, de voorgestelde kop en het informatietype voordat je bevestigt of wijzigt.</p>
                   </div>
                   <form class="review-decision-form" method="post" action="/review" data-review-form>
                     <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">

@@ -257,6 +257,8 @@ def test_review_cockpit_uses_fixed_ordinary_dutch_copy(tmp_path: Path) -> None:
     assert "Full guideline remains unchanged" not in visible
     assert "ignore this" not in visible.casefold()
     assert "chrome" not in visible.casefold()
+    assert "pas ze alleen aan als ze inhoudelijk niet kloppen" not in visible
+    assert "Controleer de gemarkeerde brontekst, de voorgestelde kop en het informatietype" in visible
 
 
 def test_primary_surface_has_no_protocol_jargon_or_relation_chrome(tmp_path: Path) -> None:
@@ -308,8 +310,9 @@ def test_step_a_shows_selected_passage_and_why(tmp_path: Path) -> None:
     step = _step(_card(html, adviseert["object_id"]), "a")
     visible = _visible_text(step)
     assert "adviseert de verpleegkundige" in visible
-    assert "Geselecteerd omdat" in visible
+    assert "Metis stelt voor" in visible
     assert "aanbeveling" in visible.casefold()
+    assert "Geselecteerd omdat dit een volledige aanbeveling is." not in visible
 
 
 # ---------------------------------------------------------------------------
