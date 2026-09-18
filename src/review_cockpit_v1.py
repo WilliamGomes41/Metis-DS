@@ -51,16 +51,16 @@ EINDOORDEEL_TO_DECISION = {
     "later_beoordelen": "later",
 }
 WHY_SELECTED = {
-    "recommendation": "Geselecteerd omdat dit een volledige aanbeveling is.",
-    "definition": "Geselecteerd omdat dit een definitie is.",
-    "condition": "Geselecteerd omdat dit een voorwaarde is.",
-    "exception": "Geselecteerd omdat dit een uitzondering is.",
-    "explanation": "Geselecteerd omdat dit een toelichting is.",
-    "factual_finding": "Geselecteerd omdat dit een feitelijke constatering is.",
-    "heading": "Geselecteerd als kop in de documentstructuur.",
-    "path": "Geselecteerd omdat dit een pad is.",
-    "node": "Geselecteerd omdat dit een knoop is.",
-    "outcome": "Geselecteerd omdat dit een uitkomst is.",
+    "recommendation": "Metis stelt voor deze passage als aanbeveling te beoordelen. Controleer dit aan de hand van de bron.",
+    "definition": "Metis stelt voor deze passage als definitie te beoordelen. Controleer dit aan de hand van de bron.",
+    "condition": "Metis stelt voor deze passage als voorwaarde te beoordelen. Controleer dit aan de hand van de bron.",
+    "exception": "Metis stelt voor deze passage als uitzondering te beoordelen. Controleer dit aan de hand van de bron.",
+    "explanation": "Metis stelt voor deze passage als toelichting te beoordelen. Controleer dit aan de hand van de bron.",
+    "factual_finding": "Metis stelt voor deze passage als feitelijke constatering te beoordelen. Controleer dit aan de hand van de bron.",
+    "heading": "Metis stelt voor deze passage als kop in de documentstructuur te beoordelen. Controleer de plaatsing aan de hand van de bron.",
+    "path": "Metis stelt voor deze passage als pad te beoordelen. Controleer dit aan de hand van de bron.",
+    "node": "Metis stelt voor deze passage als knoop te beoordelen. Controleer dit aan de hand van de bron.",
+    "outcome": "Metis stelt voor deze passage als uitkomst te beoordelen. Controleer dit aan de hand van de bron.",
 }
 
 
@@ -87,13 +87,7 @@ def semantic_selection_origin(obj: dict[str, Any]) -> str:
 
 
 def why_selected(obj: dict[str, Any]) -> str:
-    origin = semantic_selection_origin(obj)
-    if origin == SELECTION_ORIGIN_PROPOSAL:
-        return (
-            "Metis stelt deze bronselectie voor als kandidaat. "
-            "Controleer de selectie en het voorgestelde informatietype aan de hand van de bron."
-        )
-    if origin == SELECTION_ORIGIN_COVERAGE:
+    if semantic_selection_origin(obj) == SELECTION_ORIGIN_COVERAGE:
         return (
             "Deze brontekst is nog niet inhoudelijk beoordeeld. "
             "Bepaal aan de hand van de bron wat ermee moet gebeuren."
@@ -101,7 +95,7 @@ def why_selected(obj: dict[str, Any]) -> str:
     proposed = proposed_type_of(obj)
     if proposed in WHY_SELECTED:
         return WHY_SELECTED[proposed]
-    return "Geselecteerd omdat dit een bruikbare passage is."
+    return "Metis stelt voor deze passage te beoordelen. Controleer dit aan de hand van de bron."
 
 
 def confirmable_proposed_type(obj: dict[str, Any]) -> str:
