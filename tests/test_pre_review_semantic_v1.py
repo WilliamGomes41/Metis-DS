@@ -105,6 +105,11 @@ def test_semantic_processing_runs_before_review_and_reconstructs_source_only() -
     content = units[1]
     assert content["proposed_object_type"] == "recommendation"
     assert content["semantic_passage"]["source_bound"] is True
+    assert content["semantic_passage"]["selection_origin"] == "proposal_selected"
+    assert content["semantic_passage"]["formation_mode"] == SEMANTIC_MODE
+    assert content["semantic_passage"]["model"] == "test-model"
+    assert len(content["semantic_passage"]["source_blocks_hash"]) == 64
+    assert len(content["semantic_passage"]["proposal_hash"]) == 64
     assert content["source_fragment_ids"] == ["p1"]
 
 
@@ -455,3 +460,120 @@ def test_hidden_gap_proposal_fails_closed_in_pre_review_product_route() -> None:
         )
 
     assert error.value.code == "pre_review_llm_proposal_rejected"
+
+
+def test_semantic_selection_provenance_survives_transform_without_mislabeling_coverage(
+    tmp_path: Path,
+) -> None:
+    text = "Voorafgaande context. Gebruik behandeling X. Afrondende context."
+    fragments = [_fragment("p1", text)]
+    api_key = "do-not-persist-product-key"
+    expected_span: dict = {}
+
+    def fake_post(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
+        block = json.loads(payload["input"][1]["content"])["source_blocks"][0]
+        selected = "Gebruik behandeling X."
+        start = block["text"].index(selected)
+        end = start + len(selected)
+        expected_span.update(
+            {
+                "block_id": block["block_id"],
+                "start": start,
+                "end": end,
+            }
+        )
+        return _response(
+            {
+                "objects": [
+                    {
+                        "spans": [dict(expected_span)],
+                        "proposed_object_type": "recommendation",
+                    }
+                ],
+                "abstain_reason": None,
+            }
+        )
+
+    console = OperationsConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources",
+        runtime=tmp_path / "runtime",
+    )
+    researcher = console.create_account(
+        username="researcher",
+        password="researcher-secret",
+        roles=("researcher",),
+        display_name="Researcher",
+    )
+    reviewer = console.create_account(
+        username="reviewer",
+        password="reviewer-secret",
+        roles=("reviewer",),
+        display_name="Reviewer",
+    )
+    console._extract = lambda *_args, **_kwargs: fragments
+    bind_pre_review_semantic_processing(
+        console,
+        environ={
+            PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
+            PRE_REVIEW_LLM_API_KEY_ENV: api_key,
+            PRE_REVIEW_LLM_MODEL_ENV: "test-model",
+        },
+        post_json=fake_post,
+    )
+
+    receipt = console.ingest(
+        actor_id=researcher["account_id"],
+        filename="provenance.html",
+        data=b"<html><body>provenance</body></html>",
+        content_type="text/html",
+        ingest_kind="new",
+        title="Provenance",
+        version="1.0",
+        date="2026-09-18",
+        live_url="",
+        class_="richtlijn",
+        family="kwaliteit",
+        named_reviewers=[reviewer["account_id"]],
+    )
+
+    rows = console.snapshot_objects(receipt["snapshot_id"])
+    selected = next(
+        row
+        for row in rows
+        if (row.get("content") or {}).get("clean_text") == "Gebruik behandeling X."
+    )
+    semantic = (selected.get("metadata") or {}).get("semantic_passage") or {}
+    assert semantic["version"] == "semantic-passage-v1.0.0"
+    assert semantic["source_bound"] is True
+    assert semantic["selection_origin"] == "proposal_selected"
+    assert semantic["spans"] == [expected_span]
+    assert semantic["formation_mode"] == SEMANTIC_MODE
+    assert semantic["model"] == "test-model"
+    assert len(semantic["source_blocks_hash"]) == 64
+    assert len(semantic["proposal_hash"]) == 64
+    assert selected["provenance"]["transformation_mode"] == "deterministic"
+    assert selected["provenance"]["proposal_id"] is None
+
+    coverage = [
+        row
+        for row in rows
+        if ((row.get("metadata") or {}).get("semantic_passage") or {}).get(
+            "selection_origin"
+        )
+        == "coverage_remainder"
+    ]
+    assert [row["content"]["clean_text"] for row in coverage] == [
+        "Voorafgaande context.",
+        "Afrondende context.",
+    ]
+    for row in coverage:
+        coverage_semantic = row["metadata"]["semantic_passage"]
+        assert coverage_semantic["source_bound"] is True
+        assert coverage_semantic["spans"]
+        assert "model" not in coverage_semantic
+        assert "formation_mode" not in coverage_semantic
+        assert "source_blocks_hash" not in coverage_semantic
+        assert "proposal_hash" not in coverage_semantic
+
+    assert api_key not in json.dumps(rows, ensure_ascii=False)
