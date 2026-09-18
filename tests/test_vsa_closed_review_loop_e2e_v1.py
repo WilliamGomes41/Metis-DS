@@ -8,12 +8,21 @@
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from src.operations_console_v1 import CAPTURED
 from src.passage_register_v1 import passage_register_of
+from src.pre_review_semantic_v1 import (
+    PASSAGE_FORMATION_MODE_ENV,
+    PRE_REVIEW_LLM_API_KEY_ENV,
+    PRE_REVIEW_LLM_MODEL_ENV,
+    SEMANTIC_MODE,
+    bind_pre_review_semantic_processing,
+)
 from src.proportionate_review_v1 import ProportionateReviewConsole, normal_risk_batch_queue
 from src.publication_readiness_v1 import SOURCE_PASSAGE_REVIEW_INCOMPLETE, source_passage_closure
 from src.review_closure_v1 import ReviewClosureConsole
@@ -255,3 +264,203 @@ def test_exact_object_decisions_close_document_review_only_after_last_passage(
     )
     assert second["governance"]["validation_status"] == "rejected"
     assert passage_register_of(second)["status"] == "excluded_with_reason"
+
+
+
+def _semantic_fragment(fragment_id: str, text: str) -> dict[str, Any]:
+    return {
+        "fragment_id": fragment_id,
+        "fragment_hash": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        "raw_text": text,
+        "clean_text": text,
+        "section_path": ["Behandeling"],
+        "source_locator": {
+            "locator_type": "web_line_range",
+            "locator_value": "lines:1-1",
+        },
+    }
+
+
+def _semantic_response(proposal: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "output": [
+            {
+                "type": "message",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": json.dumps(proposal),
+                    }
+                ],
+            }
+        ]
+    }
+
+
+def test_semantic_coverage_remainder_blocks_publication_until_human_disposition(
+    tmp_path: Path,
+) -> None:
+    omitted_text = "Niet gebruiken bij patiënten met nierfalen."
+    fragments = [
+        _semantic_fragment("p1", "Behandeling X kan worden toegepast."),
+        _semantic_fragment("p2", omitted_text),
+        _semantic_fragment("p3", "Controleer na vier weken."),
+    ]
+
+    def select_first_and_last(
+        _url: str,
+        _headers: dict,
+        payload: dict,
+        _timeout: int,
+    ) -> dict[str, Any]:
+        blocks = json.loads(payload["input"][1]["content"])["source_blocks"]
+        first = next(
+            block for block in blocks
+            if block["text"] == "Behandeling X kan worden toegepast."
+        )
+        last = next(
+            block for block in blocks
+            if block["text"] == "Controleer na vier weken."
+        )
+        return _semantic_response(
+            {
+                "objects": [
+                    {
+                        "spans": [
+                            {
+                                "block_id": first["block_id"],
+                                "start": 0,
+                                "end": len(first["text"]),
+                            }
+                        ],
+                        "proposed_object_type": "unclassified",
+                    },
+                    {
+                        "spans": [
+                            {
+                                "block_id": last["block_id"],
+                                "start": 0,
+                                "end": len(last["text"]),
+                            }
+                        ],
+                        "proposed_object_type": "unclassified",
+                    },
+                ],
+                "abstain_reason": None,
+            }
+        )
+
+    console = ReviewClosureConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources",
+        runtime=tmp_path / "runtime",
+    )
+    researcher = console.create_account(
+        username="researcher",
+        password="researcher-secret",
+        roles=("researcher",),
+    )
+    reviewer = console.create_account(
+        username="reviewer",
+        password="reviewer-secret",
+        roles=("reviewer",),
+    )
+    publisher = console.create_account(
+        username="publisher",
+        password="publisher-secret",
+        roles=("publisher",),
+    )
+    console._extract = lambda *_args, **_kwargs: fragments
+    bind_pre_review_semantic_processing(
+        console,
+        environ={
+            PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
+            PRE_REVIEW_LLM_API_KEY_ENV: "product-key",
+            PRE_REVIEW_LLM_MODEL_ENV: "test-model",
+        },
+        post_json=select_first_and_last,
+    )
+
+    receipt = console.ingest(
+        actor_id=researcher["account_id"],
+        filename="semantic-coverage.html",
+        data=b"<html><body>semantic coverage</body></html>",
+        content_type="text/html",
+        ingest_kind="new",
+        title="Semantic coverage",
+        version="1.0",
+        date="2026-09-18",
+        live_url="",
+        class_="richtlijn",
+        family="kwaliteit",
+        named_reviewers=[reviewer["account_id"]],
+    )
+    snapshot_id = str(receipt["snapshot_id"])
+    rows = console.snapshot_objects(snapshot_id)
+    omitted = next(
+        row
+        for row in rows
+        if (row.get("content") or {}).get("clean_text") == omitted_text
+    )
+    omitted_id = str(omitted["object_id"])
+    semantic = (omitted.get("metadata") or {}).get("semantic_passage") or {}
+
+    assert semantic["selection_origin"] == "coverage_remainder"
+    assert passage_register_of(omitted)["status"] == "not_yet_assessed"
+
+    initial_closure = source_passage_closure(rows)
+    for object_id in initial_closure["unresolved_source_passage_ids"]:
+        if object_id == omitted_id:
+            continue
+        _review(
+            console,
+            reviewer,
+            snapshot_id,
+            str(object_id),
+            decision="reject",
+            eindoordeel="afwijzen",
+            comment="Testfixture: overige bronpassage definitief afgehandeld.",
+        )
+
+    considered_before = console.consider_publish(
+        actor_id=publisher["account_id"],
+        snapshot_id=snapshot_id,
+    )
+    assert considered_before["source_passage_review_complete"] is False
+    assert considered_before["unresolved_source_passage_ids"] == [omitted_id]
+    assert SOURCE_PASSAGE_REVIEW_INCOMPLETE in considered_before["curation_blockers"]
+    assert SOURCE_PASSAGE_REVIEW_INCOMPLETE in considered_before["blockers"]
+    assert considered_before["publish_allowed"] is False
+
+    publish_before = console.publish(
+        actor_id=publisher["account_id"],
+        snapshot_id=snapshot_id,
+    )
+    assert publish_before["status"] == "BLOCKED"
+    assert SOURCE_PASSAGE_REVIEW_INCOMPLETE in publish_before["blockers"]
+    assert console._envelope(snapshot_id)["state"] == CAPTURED
+
+    console.review_object(
+        actor_id=reviewer["account_id"],
+        snapshot_id=snapshot_id,
+        object_id=omitted_id,
+        decision="reject",
+        suitability="geen_kenniseenheid",
+        eindoordeel="afwijzen",
+        comment="Menselijke disposition van eerder niet beoordeelde bronpassage.",
+    )
+
+    considered_after = console.consider_publish(
+        actor_id=publisher["account_id"],
+        snapshot_id=snapshot_id,
+    )
+    assert considered_after["source_passage_review_complete"] is True
+    assert considered_after["unresolved_source_passage_ids"] == []
+    assert SOURCE_PASSAGE_REVIEW_INCOMPLETE not in considered_after["curation_blockers"]
+    assert SOURCE_PASSAGE_REVIEW_INCOMPLETE not in considered_after["blockers"]
+
+    publish_after = console.publish(
+        actor_id=publisher["account_id"],
+        snapshot_id=snapshot_id,
+    )
+    assert SOURCE_PASSAGE_REVIEW_INCOMPLETE not in (publish_after.get("blockers") or [])
