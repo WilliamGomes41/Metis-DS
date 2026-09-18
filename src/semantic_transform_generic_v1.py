@@ -9,14 +9,92 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker
 from src.integrity_kernel import stamp_canonical_hashes, stable_hash
+from src.semantic_passage_v1 import (
+    SELECTION_ORIGIN_COVERAGE,
+    SELECTION_ORIGIN_PROPOSAL,
+    SEMANTIC_PASSAGE_VERSION,
+)
 from src.serving_relations_v1 import confirm_relation_set, proposed_relations
 
 TRANSFORM_VERSION = "semantic-generic-v1.0.0"
+_SEMANTIC_PASSAGE_BASE_KEYS = frozenset(
+    {"version", "source_bound", "selection_origin", "spans"}
+)
+_SEMANTIC_PASSAGE_PROPOSAL_KEYS = _SEMANTIC_PASSAGE_BASE_KEYS | frozenset(
+    {"formation_mode", "model", "source_blocks_hash", "proposal_hash"}
+)
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
+    value = item.get("semantic_passage")
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("semantic_passage_metadata_invalid")
+    if (
+        value.get("source_bound") is not True
+        or value.get("version") != SEMANTIC_PASSAGE_VERSION
+    ):
+        raise ValueError("semantic_passage_metadata_invalid")
+
+    origin = str(value.get("selection_origin") or "")
+    expected_keys = (
+        _SEMANTIC_PASSAGE_PROPOSAL_KEYS
+        if origin == SELECTION_ORIGIN_PROPOSAL
+        else _SEMANTIC_PASSAGE_BASE_KEYS
+        if origin == SELECTION_ORIGIN_COVERAGE
+        else None
+    )
+    if expected_keys is None or set(value) != expected_keys:
+        raise ValueError("semantic_passage_metadata_invalid")
+
+    spans = value.get("spans")
+    if not isinstance(spans, list) or not spans:
+        raise ValueError("semantic_passage_metadata_invalid")
+    for span in spans:
+        if (
+            not isinstance(span, dict)
+            or set(span) != {"block_id", "start", "end"}
+            or not str(span.get("block_id") or "").strip()
+            or isinstance(span.get("start"), bool)
+            or isinstance(span.get("end"), bool)
+            or not isinstance(span.get("start"), int)
+            or not isinstance(span.get("end"), int)
+            or span["start"] < 0
+            or span["end"] <= span["start"]
+        ):
+            raise ValueError("semantic_passage_metadata_invalid")
+
+    result = {
+        "version": SEMANTIC_PASSAGE_VERSION,
+        "source_bound": True,
+        "selection_origin": origin,
+        "spans": [dict(span) for span in spans],
+    }
+    if origin == SELECTION_ORIGIN_PROPOSAL:
+        if str(value.get("formation_mode") or "") != "semantic-source-bound-v1":
+            raise ValueError("semantic_passage_metadata_invalid")
+        if not str(value.get("model") or "").strip():
+            raise ValueError("semantic_passage_metadata_invalid")
+        for key in ("source_blocks_hash", "proposal_hash"):
+            if not _SHA256_RE.fullmatch(str(value.get(key) or "")):
+                raise ValueError("semantic_passage_metadata_invalid")
+        result.update(
+            {
+                "formation_mode": "semantic-source-bound-v1",
+                "model": str(value["model"]),
+                "source_blocks_hash": str(value["source_blocks_hash"]),
+                "proposal_hash": str(value["proposal_hash"]),
+            }
+        )
+    return result
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -94,6 +172,7 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
         risk_fields = list(dict.fromkeys(item.get("risk_fields", [])))
         high = bool(risk_fields)
         page = next((r.get("source_page") for r in (raw_by_id[x] for x in item.get("source_fragment_ids", [])) if r.get("source_page")), None)
+        semantic_passage = _semantic_passage_metadata(item)
         obj = {
             "object_id": item["object_id"],
             "document_id": spec["document_id"],
@@ -149,6 +228,11 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
                 "has_uncertainty": bool(item.get("uncertainty_items")),
                 "items": item.get("uncertainty_items", []),
             },
+            **(
+                {"metadata": {"semantic_passage": semantic_passage}}
+                if semantic_passage is not None
+                else {}
+            ),
             "governance": _governance(item.get("review_track", "clinical"), high),
             "provenance": {
                 "transformation_mode": "deterministic",

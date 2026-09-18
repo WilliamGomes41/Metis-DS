@@ -16,6 +16,8 @@ from src.source_reconstruction_v1 import reconstruct_source_fragments, source_fr
 
 
 SEMANTIC_PASSAGE_VERSION = "semantic-passage-v1.0.0"
+SELECTION_ORIGIN_PROPOSAL = "proposal_selected"
+SELECTION_ORIGIN_COVERAGE = "coverage_remainder"
 ALLOWED_PROPOSED_TYPES = frozenset(
     (set(CLOSED_OBJECT_TYPES) - {"heading"}) | {DEFAULT_OBJECT_TYPE}
 )
@@ -145,6 +147,7 @@ def _coverage_remainders(
                 "semantic_passage": {
                     "version": SEMANTIC_PASSAGE_VERSION,
                     "source_bound": True,
+                    "selection_origin": SELECTION_ORIGIN_COVERAGE,
                     "spans": [
                         {
                             "block_id": block_id,
@@ -318,6 +321,7 @@ def semantic_units_from_proposal(
             "semantic_passage": {
                 "version": SEMANTIC_PASSAGE_VERSION,
                 "source_bound": True,
+                "selection_origin": SELECTION_ORIGIN_PROPOSAL,
                 "spans": [
                     {
                         "block_id": row["block_id"],

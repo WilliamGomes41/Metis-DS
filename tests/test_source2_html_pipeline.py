@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
+import pytest
 
 from src.extract_html_v1 import extract, validate as validate_raw
 from src.semantic_transform_generic_v1 import transform, validate as validate_objects
@@ -119,6 +120,9 @@ def test_generic_transform_validates_v12_and_keeps_html_locator(tmp_path: Path):
     assert ref["source_locator"]["locator_type"] == "web_line_range"
     assert ref["coordinate_status"] == "not_applicable"
     assert rows[1]["source"]["integrity_status"] == "binary_unavailable"
+    assert "semantic_passage" not in (rows[1].get("metadata") or {})
+    assert rows[1]["provenance"]["transformation_mode"] == "deterministic"
+    assert rows[1]["provenance"]["proposal_id"] is None
 
 
 def test_source2_manifest_is_fail_closed_until_binary_available():
@@ -163,3 +167,114 @@ def test_integrity_kernel_accepts_v11_locator_hash(tmp_path: Path):
         }
     }
     assert validate_source_fragments(obj, load_raw_objects(raw_path)) == []
+
+
+def test_generic_transform_persists_closed_coverage_provenance(tmp_path: Path):
+    html = tmp_path / "source.html"
+    html.write_text("<h1>Test</h1><p>Voorafgaande context.</p>", encoding="utf-8")
+    raw = extract(html, document_id="doc-test", source_id="source-test")
+    fragment = raw[-1]
+    manifest = {
+        "canonical_source": {
+            "source_id": "source-test",
+            "title": "Test source",
+            "publisher": "V&VN",
+            "source_url": "https://example.org/test",
+            "source_type": "html",
+            "source_level": 1,
+            "canonicality": "canonical",
+            "source_checksum": None,
+            "checksum_algorithm": "sha256",
+            "integrity_status": "binary_unavailable",
+            "publication_date": "2025-04-01",
+            "version": "1.0",
+        }
+    }
+    spec = {
+        "spec_version": "1.0",
+        "document_id": "doc-test",
+        "object_version": "1.0",
+        "target_group": [],
+        "care_setting": [],
+        "topic": ["test"],
+        "objects": [
+            {
+                "object_id": "doc-test-coverage-01",
+                "object_type": "unclassified",
+                "text": fragment["clean_text"],
+                "source_fragment_ids": [fragment["fragment_id"]],
+                "semantic_passage": {
+                    "version": "semantic-passage-v1.0.0",
+                    "source_bound": True,
+                    "selection_origin": "coverage_remainder",
+                    "spans": [
+                        {
+                            "block_id": "semblock-test",
+                            "start": 0,
+                            "end": len(fragment["clean_text"]),
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+
+    rows = transform(spec, manifest, raw)
+    semantic = rows[0]["metadata"]["semantic_passage"]
+    assert semantic["selection_origin"] == "coverage_remainder"
+    assert semantic["source_bound"] is True
+    assert "model" not in semantic
+    assert "proposal_hash" not in semantic
+
+
+def test_generic_transform_rejects_untrusted_semantic_metadata(tmp_path: Path):
+    html = tmp_path / "source.html"
+    html.write_text("<h1>Test</h1><p>Gebruik de afgesproken interventie.</p>", encoding="utf-8")
+    raw = extract(html, document_id="doc-test", source_id="source-test")
+    fragment = raw[-1]
+    manifest = {
+        "canonical_source": {
+            "source_id": "source-test",
+            "title": "Test source",
+            "publisher": "V&VN",
+            "source_url": "https://example.org/test",
+            "source_type": "html",
+            "source_level": 1,
+            "canonicality": "canonical",
+            "source_checksum": None,
+            "checksum_algorithm": "sha256",
+            "integrity_status": "binary_unavailable",
+            "publication_date": "2025-04-01",
+            "version": "1.0",
+        }
+    }
+    spec = {
+        "spec_version": "1.0",
+        "document_id": "doc-test",
+        "object_version": "1.0",
+        "target_group": [],
+        "care_setting": [],
+        "topic": ["test"],
+        "objects": [
+            {
+                "object_id": "doc-test-rec-01",
+                "object_type": "unclassified",
+                "text": fragment["clean_text"],
+                "source_fragment_ids": [fragment["fragment_id"]],
+                "semantic_passage": {
+                    "version": "semantic-passage-v1.0.0",
+                    "source_bound": True,
+                    "selection_origin": "proposal_selected",
+                    "spans": [{"block_id": "semblock-test", "start": 0, "end": 5}],
+                    "formation_mode": "semantic-source-bound-v1",
+                    "model": "test-model",
+                    "source_blocks_hash": "a" * 64,
+                    "proposal_hash": "b" * 64,
+                    "api_key": "must-not-pass",
+                },
+            }
+        ],
+    }
+
+    with pytest.raises(ValueError, match="semantic_passage_metadata_invalid"):
+        transform(spec, manifest, raw)
