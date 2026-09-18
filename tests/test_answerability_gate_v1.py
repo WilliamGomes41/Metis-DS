@@ -46,8 +46,10 @@ def test_numeric_score_constraint_historical_score_rule_is_not_served():
 def test_unknown_recommendation_subject_abstains():
     data = load_index().search("Adviseert deze kennisset het routinematig gebruik van rollators?")
     assert data["behavior"] == "abstain"
+    assert data["reason"] == "below_confidence_threshold"
+    assert data["abstain_sentence"]
     assert data["results"] == []
-    assert data["false_positive_class"] in {"semantic_neighbor", "concept_overlap", "below_confidence_threshold"}
+    assert data["false_positive_class"] == "below_confidence_threshold"
 
 
 def test_linked_context_can_form_one_evidence_cluster():
