@@ -344,10 +344,14 @@ def _render_semantic_safety_experiment(audit: dict[str, Any]) -> str:
             details.append("ontbrekende bronankers: " + "; ".join(str(x) for x in evaluation["missing_anchors"]))
         if evaluation.get("broken_co_location_groups"):
             details.append("betekenisverband niet behouden")
+        details_html = (
+            f'<br><span class="muted">{_esc(" · ".join(details))}</span>'
+            if details
+            else ""
+        )
         rows.append(
             f'<li><b>{_esc(result.get("risk_category"))}</b> · {_esc(result.get("case_id"))} '
-            f'— <b>{_esc(status)}</b>'
-            f'{f"<br><span class=\"muted\">{_esc(\" · \".join(details))}</span>" if details else ""}</li>'
+            f'— <b>{_esc(status)}</b>{details_html}</li>'
         )
     return f"""
       <p class="eyebrow">Experiment · {_esc(audit["audit_id"])}</p>
