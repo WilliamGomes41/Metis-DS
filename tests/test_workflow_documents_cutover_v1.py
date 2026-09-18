@@ -212,9 +212,11 @@ def test_snapshot_objects_and_revision_uses_store_concurrency_token(tmp_path: Pa
     store = _SharedDocumentStore()
     store.revision_for_rows = lambda _rows: "m2.object-aware"  # type: ignore[method-assign]
     console = _document_console(tmp_path, store)
+    store.object_reads = 0
 
     _objects, revision = console.snapshot_objects_and_revision("snap-a", include_blocked=True)
 
+    assert store.object_reads == 1
     assert revision == "m2.object-aware"
 
 
