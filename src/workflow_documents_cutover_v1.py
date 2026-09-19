@@ -320,6 +320,12 @@ class _PostgresWorkflowDocumentsMixin:
         self.workflow_document_store = workflow_document_store
         self.workflow_document_store.verify_cutover_schema()
         self.refresh_workflow_documents()
+        self._mirror_envelopes()
+
+    def _startup_local_mirror_is_authority(self, path: Path) -> bool:
+        if path.name == "envelopes.json":
+            return False
+        return super()._startup_local_mirror_is_authority(path)
 
     def refresh_workflow_documents(self) -> None:
         try:
