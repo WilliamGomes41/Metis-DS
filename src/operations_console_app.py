@@ -2686,8 +2686,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
     def accounts_get(request: Request) -> str:
         account = _require(request)
         rows = []
-        for row in sorted(state._accounts.values(), key=lambda item: item["username"]):
-            public = state._public_account(row)
+        for public in sorted(state.list_accounts(), key=lambda item: item["username"]):
             role_boxes = "".join(
                 f'<label class="check"><input type="checkbox" name="roles" value="{name}"'
                 f'{" checked" if name in public["roles"] else ""}>{name}</label>'
