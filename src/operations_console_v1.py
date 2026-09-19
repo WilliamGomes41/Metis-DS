@@ -1065,8 +1065,11 @@ class OperationsConsole:
 
         self._with_sessions(remove)
 
+    def list_accounts(self) -> list[dict[str, Any]]:
+        return [self._public_account(row) for row in self._accounts.values()]
+
     def list_reviewer_accounts(self) -> list[dict[str, Any]]:
-        return [self._public_account(row) for row in self._accounts.values() if "reviewer" in row["roles"]]
+        return [row for row in self.list_accounts() if "reviewer" in row["roles"]]
 
     def _resolve_named_reviewers(self, named_reviewers: list[str], uploader_id: str) -> list[str]:
         if not named_reviewers:
