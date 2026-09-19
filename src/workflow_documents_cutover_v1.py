@@ -434,7 +434,8 @@ class _PostgresWorkflowDocumentsMixin:
     ) -> dict[str, Any]:
         envelope = deepcopy(self._envelope(token))
         objects_path = self._objects_path(token)
-        freeze_path = Path(str(envelope.get("binary_path") or ""))
+        freeze_raw = str(envelope.get("binary_path") or "")
+        freeze_path = Path(freeze_raw) if freeze_raw else None
         prior_objects = objects_path.read_bytes() if objects_path.exists() else None
         prior_envelopes_file = (
             self._envelopes_path.read_bytes() if self._envelopes_path.exists() else None
@@ -445,9 +446,16 @@ class _PostgresWorkflowDocumentsMixin:
         prior_ledger_file = (
             self._ledger_path.read_bytes() if self._ledger_path.exists() else None
         )
-        prior_freeze = freeze_path.read_bytes() if freeze_path.is_file() else None
+        prior_freeze = (
+            freeze_path.read_bytes()
+            if freeze_path is not None and freeze_path.is_file()
+            else None
+        )
         prior_envelopes = deepcopy(self._envelopes)
         prior_bindings = deepcopy(self._bindings)
+        prior_bindings_baseline = deepcopy(
+            getattr(self, "_bindings_baseline", None)
+        )
         expected_revs = self._objects_expected_revs()
         prior_expected_revision = expected_revs.get(token)
 
@@ -468,6 +476,8 @@ class _PostgresWorkflowDocumentsMixin:
         except Exception:
             self._envelopes = prior_envelopes
             self._bindings = prior_bindings
+            if prior_bindings_baseline is not None:
+                self._bindings_baseline = prior_bindings_baseline
             if prior_expected_revision is None:
                 expected_revs.pop(token, None)
             else:
@@ -478,16 +488,19 @@ class _PostgresWorkflowDocumentsMixin:
                 (self._envelopes_path, prior_envelopes_file),
                 (self._bindings_path, prior_bindings_file),
                 (self._ledger_path, prior_ledger_file),
-                (freeze_path, prior_freeze),
             )
             for path, prior in restore_files:
-                if not str(path):
-                    continue
                 if prior is None:
                     with suppress(OSError):
                         path.unlink()
                 else:
                     _atomic_replace_bytes(path, prior)
+            if freeze_path is not None:
+                if prior_freeze is None:
+                    with suppress(OSError):
+                        freeze_path.unlink()
+                else:
+                    _atomic_replace_bytes(freeze_path, prior_freeze)
             raise
 
     def _save_envelopes(self) -> None:
