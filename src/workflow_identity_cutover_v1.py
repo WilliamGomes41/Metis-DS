@@ -14,6 +14,8 @@ from src.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
 class CutoverPostgresWorkflowIdentityStore(PostgresWorkflowIdentityStore):
     """Runtime identity store with legacy startup import disabled."""
 
+    legacy_startup_import_enabled = False
+
     def migrate_legacy_if_empty(
         self,
         accounts: dict[str, dict[str, Any]],

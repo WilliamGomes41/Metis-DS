@@ -9,10 +9,13 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import threading
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 from src.operations_console_v1 import (
     SNAPSHOT_OBJECT_WRITE_CONFLICT,
@@ -247,3 +250,33 @@ def test_separate_authoritative_snapshot_reads_detect_intervening_change(tmp_pat
     assert store.object_reads == 2
     assert first_objects != second_objects
     assert first_revision != second_revision
+
+
+def test_postgres_document_startup_ignores_corrupt_envelope_mirror_and_repairs_it(
+    tmp_path: Path,
+) -> None:
+    runtime = tmp_path / "runtime"
+    runtime.mkdir(parents=True)
+    (runtime / "envelopes.json").write_text('{"broken":', encoding="utf-8")
+    store = _SharedDocumentStore()
+
+    console = _document_console(tmp_path, store)
+
+    assert {row["snapshot_id"] for row in console.list_envelopes()} == {"snap-a", "snap-b"}
+    repaired = json.loads((runtime / "envelopes.json").read_text(encoding="utf-8"))
+    assert set(repaired) == {"snap-a", "snap-b"}
+
+
+def test_local_only_startup_still_fails_closed_on_corrupt_envelope_json(
+    tmp_path: Path,
+) -> None:
+    runtime = tmp_path / "local-runtime"
+    runtime.mkdir(parents=True)
+    (runtime / "envelopes.json").write_text('{"broken":', encoding="utf-8")
+
+    with pytest.raises(json.JSONDecodeError):
+        OperationsConsole(
+            root=tmp_path,
+            runtime=runtime,
+            source_store=tmp_path / "local-sources",
+        )

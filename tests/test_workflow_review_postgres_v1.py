@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from src.operations_console_v1 import OperationsConsole
 from src.review_ledger import (
     append_event,
     buffer_events,
@@ -76,6 +77,18 @@ class FakeAuthoritativeReviewStore:
 
     def read_bindings(self) -> dict[str, list[dict]]:
         return {snapshot_id: list(rows) for snapshot_id, rows in self.bindings.items()}
+
+
+class _ReviewStartupConsole(_PostgresWorkflowReviewMixin, OperationsConsole):
+    pass
+
+
+class _StartupReviewStore(FakeAuthoritativeReviewStore):
+    def verify_review_schema(self) -> None:
+        return None
+
+    def bind_ledger_mirror(self, path: Path) -> None:
+        self.mirror_path = path
 
 
 class _Rows:
@@ -276,3 +289,29 @@ def test_review_runtime_buffers_events_and_keeps_local_files_as_mirrors() -> Non
     assert "_atomic_replace_bytes(self._ledger_path" in source
     assert "_assert_review_cutover_prepared" not in source
     assert "_mirror_bindings" in source
+
+
+def test_postgres_review_startup_ignores_corrupt_binding_mirror_and_repairs_it(
+    tmp_path: Path,
+) -> None:
+    runtime = tmp_path / "review-runtime"
+    runtime.mkdir(parents=True)
+    (runtime / "publish_authorizations.json").write_text('{"broken":', encoding="utf-8")
+    events = _event_chain(1)
+    bindings = {"snap-1": [{"decision": "approve", "valid": True}]}
+    store = _StartupReviewStore(events, bindings)
+
+    console = _ReviewStartupConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources",
+        runtime=runtime,
+        workflow_review_store=store,  # type: ignore[arg-type]
+    )
+
+    assert console._bindings == bindings
+    assert json.loads(
+        (runtime / "publish_authorizations.json").read_text(encoding="utf-8")
+    ) == bindings
+    assert PostgresWorkflowReviewStore._read_legacy_events(
+        runtime / "review_ledger.jsonl"
+    ) == events
