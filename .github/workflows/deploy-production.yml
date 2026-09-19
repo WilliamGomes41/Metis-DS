@@ -71,6 +71,7 @@ jobs:
           G2_STORAGE_ACCOUNT="${{ vars.AZURE_PRODUCTION_STORAGE_ACCOUNT || 'aidataservice' }}"
           G2_BLOB_CONTAINER="${{ vars.AZURE_PRODUCTION_BLOB_CONTAINER || 'canonical-sources' }}"
           CONSOLE_DATA_ROOT="/home/data/metis-console"
+          CONSOLE_PUBLIC_ORIGIN="${{ vars.AZURE_PRODUCTION_APP_URL }}"
           WEB_CONCURRENCY="1"
           CONSOLE_INSTANCE_COUNT="1"
       - name: Deploy application code only
