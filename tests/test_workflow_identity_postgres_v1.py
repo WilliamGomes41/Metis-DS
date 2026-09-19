@@ -270,3 +270,41 @@ def test_local_only_account_listing_uses_local_authority(tmp_path: Path) -> None
             "roles": ["researcher"],
         }
     ]
+
+
+def test_runtime_identity_cutover_ignores_corrupt_local_identity_mirrors(
+    tmp_path: Path,
+) -> None:
+    runtime = tmp_path / "cutover-runtime"
+    runtime.mkdir(parents=True)
+    (runtime / "accounts.json").write_text('{"broken":', encoding="utf-8")
+    (runtime / "sessions.json").write_text('{"broken":', encoding="utf-8")
+
+    shared = SharedIdentityStore()
+    shared.legacy_startup_import_enabled = False
+    shared.accounts["acc-pg"] = {
+        "account_id": "acc-pg",
+        "username": "pg-user",
+        "display_name": "PG User",
+        "roles": ["researcher"],
+        "password_salt": "00" * 16,
+        "password_hash": "00" * 32,
+        "created_at": "2026-09-19T00:00:00Z",
+    }
+
+    console = PostgresIdentityDurablePublicationConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources",
+        runtime=runtime,
+        workflow_identity_store=shared,  # type: ignore[arg-type]
+    )
+
+    assert console.list_accounts() == [
+        {
+            "account_id": "acc-pg",
+            "username": "pg-user",
+            "display_name": "PG User",
+            "roles": ["researcher"],
+        }
+    ]
+    assert shared.migration_calls == 1
