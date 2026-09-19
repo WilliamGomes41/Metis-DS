@@ -12,6 +12,7 @@ import pytest
 from src.azure_deploy_package import (
     AZURE_MANYLINUX_PLATFORM,
     CONSOLE_REQUIREMENTS_NAME,
+    DEPLOY_COMMIT_MARKER,
     RUNTIME_DATA_MARKERS,
     DeployPackageError,
     default_console_requirements,
@@ -83,11 +84,23 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
         cryptography_rust = archive.read(
             ".python_packages/cryptography/hazmat/bindings/_rust.abi3.so"
         )
+        packaged_commit = archive.read(DEPLOY_COMMIT_MARKER).decode("ascii").strip()
         vendor_roots = {
             name.split("/", 2)[1]
             for name in names
             if name.startswith(".python_packages/") and len(name.split("/", 2)) > 1
         }
+    expected_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        check=True,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    ).stdout.strip().lower()
+    assert DEPLOY_COMMIT_MARKER in names
+    assert packaged_commit == expected_commit
+    assert len(packaged_commit) == 40
+    assert all(char in "0123456789abcdef" for char in packaged_commit)
     assert any(name.startswith(".python_packages/") for name in names)
     assert any(name.endswith("gunicorn/__init__.py") or "/gunicorn/" in name for name in names)
     assert any("fastapi" in name for name in names)
