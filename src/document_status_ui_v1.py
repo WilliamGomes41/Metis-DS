@@ -77,15 +77,19 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
     # Slice 5 imported the renderer by name. Reuse the exact same wrapper.
     publish_ui._document_card_heading = console_ui._document_card_heading
 
-    def read_status_context(request: Request) -> dict[str, dict[str, str]] | None:
+    def read_status_context(
+        session_token: str | None,
+        *,
+        list_request: bool,
+    ) -> dict[str, dict[str, str]] | None:
         try:
-            console.session_account(request.cookies.get(console_ui.COOKIE))
+            console.session_account(session_token)
         except ConsoleError:
             return None
 
         lifecycle_by_snapshot: dict[str, dict[str, str]] = {}
         list_reader = getattr(console, "list_document_lifecycle_statuses", None)
-        if _is_list_request(request) and callable(list_reader):
+        if list_request and callable(list_reader):
             # Production PostgreSQL presentation GETs use one light workflow aggregate
             # plus one canonical release read. Never enter full publish-readiness here.
             try:
@@ -115,7 +119,11 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
         if request.url.path not in _STATUS_PATHS:
             return await call_next(request)
 
-        lifecycle_by_snapshot = await asyncio.to_thread(read_status_context, request)
+        lifecycle_by_snapshot = await asyncio.to_thread(
+            read_status_context,
+            request.cookies.get(console_ui.COOKIE),
+            list_request=_is_list_request(request),
+        )
         if lifecycle_by_snapshot is None:
             return await call_next(request)
 
