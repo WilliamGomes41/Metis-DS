@@ -1867,7 +1867,6 @@ def _render_review_room(
               {"".join(cards) if not chosen else ""}
               {objects_html or empty}
             </section>
-            {_help(room="review")}
             """
     )
 
@@ -2447,7 +2446,6 @@ def create_console_app(
               </article>
               <p><a class="btn-secondary" href="/review?document={_esc(chosen)}&amp;object={_esc(object_id)}{f'&amp;task={_esc(safe_task)}' if safe_task else ''}">Terug naar review</a></p>
             </section>
-            {_help(room="review")}
             """
         )
 
