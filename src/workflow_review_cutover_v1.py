@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from contextlib import contextmanager, suppress
 from copy import deepcopy
+from pathlib import Path
 from typing import Any, Iterator
 
 from src.operations_console_v1 import ConsoleError, _atomic_replace_bytes, _atomic_write
@@ -35,6 +36,11 @@ class _PostgresWorkflowReviewMixin:
         self._bindings = self._remirror_review_runtime()
         self._bindings_baseline = deepcopy(self._bindings)
         register_backend(self._ledger_path, self.workflow_review_store)
+
+    def _startup_local_mirror_is_authority(self, path: Path) -> bool:
+        if path.name == "publish_authorizations.json":
+            return False
+        return super()._startup_local_mirror_is_authority(path)
 
     def _remirror_review_runtime(self) -> dict[str, list[dict[str, Any]]]:
         """Rebuild disk mirrors from the authoritative PostgreSQL review state."""
