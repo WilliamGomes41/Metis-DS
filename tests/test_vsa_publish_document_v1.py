@@ -405,3 +405,73 @@ def test_all_postgres_document_workflow_modes_share_one_publication_followup() -
     assert PostgresReviewWorkflowDurablePublicationConsole._apply_local_release_copy is document_impl
     assert PostgresCompleteWorkflowDurablePublicationConsole._apply_local_release_copy is document_impl
     assert "_apply_local_release_copy" not in _PostgresRemainingWorkflowMixin.__dict__
+
+
+def test_reviewer_cannot_reconcile_existing_release_via_publish_route(
+    tmp_path: Path,
+    workflow_postgres: PostgresCanonicalConfig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    durable = MemoryCanonicalStore()
+    source = MemorySourceStore()
+    console, accounts, receipt = _ready_console(tmp_path, workflow_postgres, durable, source)
+    snapshot_id = str(receipt["snapshot_id"])
+
+    published = console.publish(
+        actor_id=accounts["publisher"]["account_id"], snapshot_id=snapshot_id
+    )
+    assert published["status"] == "PASS"
+
+    projection_path = console.runtime / "published_projection.jsonl"
+    manifest_path = (
+        console.runtime / "release_manifests" / f'{published["release_id"]}.json'
+    )
+    ledger_path = console.runtime / "review_ledger.jsonl"
+    before = {
+        "envelope": deepcopy(console.workflow_document_store.get_envelope(snapshot_id)),
+        "projection": projection_path.read_bytes(),
+        "manifest": manifest_path.read_bytes(),
+        "ledger": ledger_path.read_bytes(),
+        "persist_calls": durable.persist_calls,
+        "release_count": len(durable.releases),
+    }
+
+    calls = {"sync": 0, "apply": 0}
+    real_sync = console._sync_snapshot_from_authority
+    real_apply = console._apply_local_release_copy
+
+    def count_sync(target_snapshot_id: str) -> dict[str, Any] | None:
+        calls["sync"] += 1
+        return real_sync(target_snapshot_id)
+
+    def count_apply(release: dict[str, Any], projection: list[dict[str, Any]]) -> None:
+        calls["apply"] += 1
+        real_apply(release, projection)
+
+    monkeypatch.setattr(console, "_sync_snapshot_from_authority", count_sync)
+    monkeypatch.setattr(console, "_apply_local_release_copy", count_apply)
+
+    app = create_console_app(console)
+    client = TestClient(app, base_url="https://testserver", raise_server_exceptions=False)
+    login = client.post(
+        "/login",
+        data={"username": "reviewer.bert", "password": TEST_PASSWORD},
+        follow_redirects=False,
+    )
+    assert login.status_code == 303
+
+    denied = client.post(
+        "/publish",
+        data={"snapshot_id": snapshot_id, "publish_confirmed": "yes"},
+        follow_redirects=False,
+    )
+
+    assert denied.status_code == 403
+    assert "publisher_role_required" in denied.text
+    assert calls == {"sync": 0, "apply": 0}
+    assert durable.persist_calls == before["persist_calls"]
+    assert len(durable.releases) == before["release_count"]
+    assert console.workflow_document_store.get_envelope(snapshot_id) == before["envelope"]
+    assert projection_path.read_bytes() == before["projection"]
+    assert manifest_path.read_bytes() == before["manifest"]
+    assert ledger_path.read_bytes() == before["ledger"]
