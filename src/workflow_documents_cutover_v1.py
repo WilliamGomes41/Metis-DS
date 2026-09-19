@@ -31,6 +31,7 @@ from src.workflow_identity_postgres_v1 import (
     PostgresIdentityAzureAuthoritativePublicationConsole,
     PostgresIdentityDurablePublicationConsole,
 )
+from src.workflow_transaction_v1 import bind_workflow_stores, workflow_transaction
 
 
 class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
@@ -422,6 +423,72 @@ class _PostgresWorkflowDocumentsMixin:
         self._mirror_envelopes()
         with suppress(OSError):
             self._objects_path(snapshot_id).unlink()
+
+    def _delete_unpublished_snapshot_locked(
+        self,
+        *,
+        actor_id: str,
+        token: str,
+        account: dict[str, Any],
+        confirm_title: str,
+    ) -> dict[str, Any]:
+        envelope = deepcopy(self._envelope(token))
+        objects_path = self._objects_path(token)
+        freeze_path = Path(str(envelope.get("binary_path") or ""))
+        prior_objects = objects_path.read_bytes() if objects_path.exists() else None
+        prior_envelopes_file = (
+            self._envelopes_path.read_bytes() if self._envelopes_path.exists() else None
+        )
+        prior_bindings_file = (
+            self._bindings_path.read_bytes() if self._bindings_path.exists() else None
+        )
+        prior_ledger_file = (
+            self._ledger_path.read_bytes() if self._ledger_path.exists() else None
+        )
+        prior_freeze = freeze_path.read_bytes() if freeze_path.is_file() else None
+        prior_envelopes = deepcopy(self._envelopes)
+        prior_bindings = deepcopy(self._bindings)
+        expected_revs = self._objects_expected_revs()
+        prior_expected_revision = expected_revs.get(token)
+
+        participants = [self.workflow_document_store]
+        review_store = getattr(self, "workflow_review_store", None)
+        if review_store is not None:
+            participants.append(review_store)
+        bind_workflow_stores(*participants)
+
+        try:
+            with workflow_transaction(self.workflow_document_store):
+                return super()._delete_unpublished_snapshot_locked(
+                    actor_id=actor_id,
+                    token=token,
+                    account=account,
+                    confirm_title=confirm_title,
+                )
+        except Exception:
+            self._envelopes = prior_envelopes
+            self._bindings = prior_bindings
+            if prior_expected_revision is None:
+                expected_revs.pop(token, None)
+            else:
+                expected_revs[token] = prior_expected_revision
+
+            restore_files = (
+                (objects_path, prior_objects),
+                (self._envelopes_path, prior_envelopes_file),
+                (self._bindings_path, prior_bindings_file),
+                (self._ledger_path, prior_ledger_file),
+                (freeze_path, prior_freeze),
+            )
+            for path, prior in restore_files:
+                if not str(path):
+                    continue
+                if prior is None:
+                    with suppress(OSError):
+                        path.unlink()
+                else:
+                    _atomic_replace_bytes(path, prior)
+            raise
 
     def _save_envelopes(self) -> None:
         payload = getattr(self, "_prepared_envelopes", None)
