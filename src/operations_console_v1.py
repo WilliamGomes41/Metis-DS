@@ -637,12 +637,10 @@ class OperationsConsole:
         self._accounts: dict[str, dict[str, Any]] = self._load_map(self._accounts_path)
         self._sessions: dict[str, dict[str, Any]] = self._load_map(self._sessions_path)
         self._envelopes: dict[str, dict[str, Any]] = self._load_map(self._envelopes_path)
-        self._bindings: dict[str, list[dict[str, Any]]] = self._load_map(self._bindings_path)  # type: ignore[assignment]
-        if self._bindings_path.exists():
-            loaded = json.loads(self._bindings_path.read_text(encoding="utf-8"))
-            self._bindings = {key: list(value) for key, value in loaded.items()}
-        else:
-            self._bindings = {}
+        loaded_bindings = self._load_map(self._bindings_path)
+        self._bindings: dict[str, list[dict[str, Any]]] = {
+            key: list(value) for key, value in loaded_bindings.items()
+        }
         self._objects_lock_guard = threading.Lock()
         self._objects_thread_locks: dict[str, threading.RLock] = {}
         self._objects_tls = threading.local()
@@ -653,7 +651,12 @@ class OperationsConsole:
         self._prepared_envelopes: dict[str, Any] | None = None
         self._prepared_bindings: dict[str, Any] | None = None
 
+    def _startup_local_mirror_is_authority(self, path: Path) -> bool:
+        return True
+
     def _load_map(self, path: Path) -> dict[str, dict[str, Any]]:
+        if not self._startup_local_mirror_is_authority(path):
+            return {}
         if not path.exists():
             return {}
         return json.loads(path.read_text(encoding="utf-8"))
