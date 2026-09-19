@@ -287,10 +287,21 @@ class _PostgresIdentityMixin:
     workflow_identity_store: PostgresWorkflowIdentityStore
 
     def __init__(self, *args: Any, workflow_identity_store: PostgresWorkflowIdentityStore, **kwargs: Any) -> None:
+        self._identity_legacy_startup_import_enabled = bool(
+            getattr(workflow_identity_store, "legacy_startup_import_enabled", True)
+        )
         super().__init__(*args, **kwargs)
         self.workflow_identity_store = workflow_identity_store
         self.workflow_identity_store.verify_schema()
         self.workflow_identity_store.migrate_legacy_if_empty(self._accounts, self._sessions)
+
+    def _startup_local_mirror_is_authority(self, path: Path) -> bool:
+        if (
+            not self._identity_legacy_startup_import_enabled
+            and path.name in {"accounts.json", "sessions.json"}
+        ):
+            return False
+        return super()._startup_local_mirror_is_authority(path)
 
     @staticmethod
     def _public_account(record: dict[str, Any]) -> dict[str, Any]:
