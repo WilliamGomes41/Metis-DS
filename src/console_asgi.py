@@ -306,7 +306,13 @@ def build_app() -> object:
         console.migrate_legacy_revise_to_review()
         console.reconcile_durable_publications()
 
-    app = create_console_app(console)
+    trusted_origin = os.environ.get("CONSOLE_PUBLIC_ORIGIN", "").strip() or None
+    if running_in_azure:
+        if trusted_origin is None:
+            raise RuntimeError("console_public_origin_required_in_azure")
+        if not trusted_origin.lower().startswith("https://"):
+            raise RuntimeError("console_public_origin_must_be_https_in_azure")
+    app = create_console_app(console, trusted_origin=trusted_origin)
     install_publish_readiness_ui(app, console)
     install_document_status_ui(app, console)
     install_review_workboard(app, console)
