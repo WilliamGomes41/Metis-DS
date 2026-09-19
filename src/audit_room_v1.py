@@ -62,6 +62,9 @@ EXPERIMENT_CANDIDATE = {
     "id": "source_bound_semantic_passage_formation",
     "label": "Brongebonden semantische passagevorming",
 }
+DEPLOY_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+DEFAULT_DEPLOY_COMMIT_MARKER = Path(__file__).resolve().parents[1] / "config" / "deployed_commit.txt"
+
 DEFAULT_EXPERIMENT_QUESTION = (
     "Kan brongebonden semantische passagevorming betere kennisobjectvoorstellen maken "
     "dan de huidige passagevorming zonder brontrouw of publicatieveiligheid te verliezen?"
@@ -413,11 +416,20 @@ def install_audit_routes(
     console: OperationsConsole,
     *,
     semantic_safety_post_json: Any | None = None,
+    deployed_commit_path: Path | None = None,
 ) -> None:
     """Install the bounded Audit room on the existing console app."""
 
     registry = AuditRegistry(console.runtime)
     suite_path = Path(__file__).resolve().parents[1] / "data" / "audit" / "semantic_passage_safety_v1.json"
+    deploy_commit_path = Path(deployed_commit_path or DEFAULT_DEPLOY_COMMIT_MARKER)
+
+    def deployed_commit() -> str:
+        try:
+            commit = deploy_commit_path.read_text(encoding="utf-8").strip().lower()
+        except OSError:
+            return ""
+        return commit if DEPLOY_COMMIT_RE.fullmatch(commit) else ""
 
     def account_for(request: Request) -> dict[str, Any]:
         return console.session_account(request.cookies.get("console_session"))
@@ -534,14 +546,14 @@ def install_audit_routes(
 
         suite = load_frozen_safety_suite(suite_path)
         model = str(os.environ.get(AUDIT_LLM_MODEL_ENV, "") or "").strip()
-        commit = str(os.environ.get("METIS_AUDIT_EVALUATED_COMMIT", "") or "").strip().lower()
+        commit = deployed_commit()
         secret_status = llm_settings.AuditLLMSecretStore(console.runtime).status()
         ready = bool(model and commit == suite["evaluated_baseline_commit"] and secret_status.get("configured"))
         error_html = f'<div class="banner err">{_esc(error)}</div>' if error else ""
         readiness = (
             '<button class="btn-primary" type="submit">Frozen audit uitvoeren</button>'
             if ready
-            else '<p class="muted">Run geblokkeerd: configureer Audit-key, METIS_AUDIT_LLM_MODEL en exact de frozen commit in METIS_AUDIT_EVALUATED_COMMIT.</p>'
+            else '<p class="muted">Run geblokkeerd: configureer Audit-key en METIS_AUDIT_LLM_MODEL en deploy exact de frozen commit.</p>'
         )
         body = f"""
           <p><a class="btn-secondary" href="/audit">← Terug naar Audit</a></p>
@@ -568,7 +580,7 @@ def install_audit_routes(
 
         suite = load_frozen_safety_suite(suite_path)
         model = str(os.environ.get(AUDIT_LLM_MODEL_ENV, "") or "").strip()
-        commit = str(os.environ.get("METIS_AUDIT_EVALUATED_COMMIT", "") or "").strip().lower()
+        commit = deployed_commit()
         if not model:
             return semantic_safety(request, error="METIS_AUDIT_LLM_MODEL is niet geconfigureerd.")
         if commit != suite["evaluated_baseline_commit"]:
