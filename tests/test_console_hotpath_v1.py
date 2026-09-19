@@ -8,13 +8,17 @@
 """
 from __future__ import annotations
 
+import asyncio
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
+import httpx
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
+from httpx import ASGITransport
 
 from src.azure_postgres_credential_v1 import CachedAzurePostgresCredential
 from src.canonical_publication_postgres_v1 import (
@@ -473,3 +477,57 @@ def test_shared_cached_credential_avoids_token_request_per_connect(monkeypatch: 
     assert len(connect_calls) == 3
     assert raw.calls == 1
     assert {call["password"] for call in connect_calls} == {"token-1"}
+
+
+def test_status_middleware_slow_sync_read_does_not_block_event_loop(tmp_path: Path) -> None:
+    canonical = _CanonicalStore(set())
+    workflow = _WorkflowStore()
+    console = _HotPathRouteConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / "output" / "runtime" / "operations-console",
+    )
+    console.canonical_publication_store = canonical
+    console.workflow_document_store = workflow
+
+    started = threading.Event()
+    release = threading.Event()
+    original_session_account = console.session_account
+
+    def slow_session_account(token: str | None) -> dict[str, Any]:
+        started.set()
+        release.wait(timeout=2)
+        return original_session_account(token)
+
+    console.session_account = slow_session_account  # type: ignore[method-assign]
+    app = create_console_app(console)
+    install_document_status_ui(app, console)
+
+    async def _run() -> None:
+        transport = ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="https://test",
+        ) as client:
+            client.cookies.set("console_session", "hotpath-session")
+            tree_task = asyncio.create_task(client.get("/tree"))
+            for _ in range(80):
+                if started.is_set():
+                    break
+                await asyncio.sleep(0.01)
+            assert started.is_set(), "status middleware never entered the slow sync read"
+
+            t0 = time.perf_counter()
+            login = await client.get("/login")
+            elapsed = time.perf_counter() - t0
+            release.set()
+            tree = await tree_task
+
+        assert login.status_code == 200
+        assert elapsed < 0.25, (
+            f"lightweight request waited {elapsed:.3f}s; event loop was blocked"
+        )
+        assert tree.status_code == 200
+        assert console.list_status_calls == 1
+
+    asyncio.run(_run())
