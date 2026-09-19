@@ -7,6 +7,7 @@ Review and Publiceren.
 """
 from __future__ import annotations
 
+import asyncio
 from contextvars import ContextVar
 from typing import Any, Callable
 
@@ -76,14 +77,11 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
     # Slice 5 imported the renderer by name. Reuse the exact same wrapper.
     publish_ui._document_card_heading = console_ui._document_card_heading
 
-    @app.middleware("http")
-    async def document_status_context(request: Request, call_next: Callable[..., Any]):
-        if request.url.path not in _STATUS_PATHS:
-            return await call_next(request)
+    def read_status_context(request: Request) -> dict[str, dict[str, str]] | None:
         try:
             console.session_account(request.cookies.get(console_ui.COOKIE))
         except ConsoleError:
-            return await call_next(request)
+            return None
 
         lifecycle_by_snapshot: dict[str, dict[str, str]] = {}
         list_reader = getattr(console, "list_document_lifecycle_statuses", None)
@@ -110,6 +108,16 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
                     )
                 except (AttributeError, ConsoleError):
                     lifecycle_by_snapshot[snapshot_id] = _closed_fallback()
+        return lifecycle_by_snapshot
+
+    @app.middleware("http")
+    async def document_status_context(request: Request, call_next: Callable[..., Any]):
+        if request.url.path not in _STATUS_PATHS:
+            return await call_next(request)
+
+        lifecycle_by_snapshot = await asyncio.to_thread(read_status_context, request)
+        if lifecycle_by_snapshot is None:
+            return await call_next(request)
 
         token = _LIFECYCLE_BY_SNAPSHOT.set(lifecycle_by_snapshot)
         try:
