@@ -153,6 +153,8 @@ class _SupersededConnection(_Connection):
                     "active_other_release": 1,
                 }
             )
+        if "SELECT 1" in sql and "rel.published_at>%s" in sql:
+            return _Cursor({"exists": 1})
         raise AssertionError(f"unexpected SQL: {sql}")
 
 
