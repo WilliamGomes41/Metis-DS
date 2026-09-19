@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -406,6 +407,96 @@ def test_unpublished_delete_removes_postgres_authority_and_stays_deleted_after_r
         restarted = _console(tmp_path, config, source, runtime_name="delete-pg-b")
         assert restarted.workflow_document_store.get_envelope(snapshot_id) is None
         assert snapshot_id not in {row["snapshot_id"] for row in restarted.list_envelopes()}
+    finally:
+        _cleanup(
+            config,
+            snapshot_ids=snapshots,
+            account_ids=accounts,
+            release_ids=[],
+        )
+
+
+def test_failed_unpublished_delete_rolls_back_postgres_and_local_state(
+    tmp_path: Path,
+) -> None:
+    config = _config()
+    source = MemorySourceStore()
+    console = _console(tmp_path, config, source, runtime_name="delete-pg-rollback")
+    snapshots: list[str] = []
+    accounts: list[str] = []
+    try:
+        researcher = console.create_account(
+            username=f"delete.rollback.researcher.{tmp_path.name}",
+            password=TEST_PASSWORD,
+            roles=("researcher", "reviewer"),
+        )
+        reviewer = console.create_account(
+            username=f"delete.rollback.reviewer.{tmp_path.name}",
+            password=TEST_PASSWORD,
+            roles=("reviewer",),
+        )
+        accounts.extend([researcher["account_id"], reviewer["account_id"]])
+
+        receipt = console.ingest(
+            actor_id=researcher["account_id"],
+            filename="delete-rollback.html",
+            data=HTML_FIXTURE.read_bytes(),
+            content_type="text/html",
+            ingest_kind="new",
+            title="Postgres delete rollback fixture",
+            version="1.0",
+            date="2026-09-19",
+            live_url="https://example.test/delete-rollback",
+            class_="richtlijn",
+            family="delete-rollback",
+            named_reviewers=[researcher["account_id"], reviewer["account_id"]],
+        )
+        snapshot_id = str(receipt["snapshot_id"])
+        snapshots.append(snapshot_id)
+        envelope = console._envelope(snapshot_id)
+        freeze_path = Path(envelope["binary_path"])
+        objects_path = console._objects_path(snapshot_id)
+
+        before = {
+            "envelopes": console._envelopes_path.read_bytes(),
+            "objects": objects_path.read_bytes(),
+            "bindings": console._bindings_path.read_bytes()
+            if console._bindings_path.exists()
+            else None,
+            "ledger": console._ledger_path.read_bytes()
+            if console._ledger_path.exists()
+            else None,
+            "freeze": freeze_path.read_bytes(),
+        }
+        original_remove = console._maybe_remove_unpublished_freeze_bytes
+
+        def fail_after_freeze(current: dict[str, Any]) -> bool:
+            removed = original_remove(current)
+            assert removed is True
+            raise RuntimeError("simulated_delete_followup_failure")
+
+        console._maybe_remove_unpublished_freeze_bytes = fail_after_freeze  # type: ignore[method-assign]
+
+        with pytest.raises(RuntimeError, match="simulated_delete_followup_failure"):
+            console.delete_unpublished_snapshot(
+                actor_id=researcher["account_id"],
+                snapshot_id=snapshot_id,
+                confirmed=True,
+                confirm_title="Postgres delete rollback fixture",
+            )
+
+        assert console.workflow_document_store.get_envelope(snapshot_id) is not None
+        assert console.workflow_document_store.list_document_objects(snapshot_id)
+        assert console._envelopes_path.read_bytes() == before["envelopes"]
+        assert objects_path.read_bytes() == before["objects"]
+        assert (
+            console._bindings_path.read_bytes() if console._bindings_path.exists() else None
+        ) == before["bindings"]
+        assert (
+            console._ledger_path.read_bytes() if console._ledger_path.exists() else None
+        ) == before["ledger"]
+        assert freeze_path.read_bytes() == before["freeze"]
+        assert snapshot_id in {row["snapshot_id"] for row in console.list_envelopes()}
     finally:
         _cleanup(
             config,
