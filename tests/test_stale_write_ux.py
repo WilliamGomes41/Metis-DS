@@ -316,6 +316,7 @@ def test_stale_review_conflicts_preserve_special_characters_exactly(tmp_path: Pa
     final_payload = dict(retry_payload)
     final_payload["comment"] = html.unescape(second_raw_comment)
     final_payload["proposed_correction"] = html.unescape(second_raw_correction)
+    final_payload["eindoordeel"] = "afwijzen"
     saved = client.post("/review", data=final_payload, follow_redirects=False)
 
     assert saved.status_code in {200, 303}
