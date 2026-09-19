@@ -1744,8 +1744,8 @@ class OperationsConsole:
             objects_path.unlink()
         self._envelopes.pop(token, None)
         self._bindings.pop(token, None)
-        self._save_envelopes()
         self._delete_unpublished_snapshot_authority(token)
+        self._save_envelopes()
         self._save_bindings()
         freeze_removed = self._maybe_remove_unpublished_freeze_bytes(envelope)
         append_event(
