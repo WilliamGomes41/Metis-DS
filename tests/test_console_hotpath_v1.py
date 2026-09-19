@@ -537,6 +537,7 @@ class _ContextPropagationConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.canonical_publication_store = object()
+        self.workflow_document_store = _WorkflowStore()
         self.fallback_publication_reads = 0
 
     def _workflow_list_status_rows(
@@ -598,7 +599,7 @@ def test_status_offload_preserves_tree_publication_batch_context(tmp_path: Path)
             client.cookies.set("console_session", "hotpath-session")
             response = await client.get("/tree")
 
-        assert response.status_code == 200
+        assert response.status_code == 200, response.text
         assert "Published fixture" in response.text
         assert "Unpublished fixture" in response.text
 
