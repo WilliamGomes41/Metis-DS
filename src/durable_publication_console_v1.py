@@ -209,6 +209,7 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
     def _publish_locked(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         store = self.canonical_publication_store
         if store is None: return super()._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id)
+        self._require_role(actor_id, "publisher")
         existing = self._sync_snapshot_from_authority(snapshot_id)
         if existing is not None:
             if str(existing.get("release_status") or "") == "withdrawn":
