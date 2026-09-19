@@ -348,6 +348,28 @@ def install_proportionate_review_routes(app: FastAPI, console: ProportionateRevi
                 raise
             from src.operations_console_app import _render_review_room
 
+            envelope = console._envelope(snapshot_id)
+            review_path = review_path_for_klasse(envelope["class"])
+            current = {
+                str(row.get("object_id") or ""): row
+                for row in console.snapshot_objects(snapshot_id)
+            }
+            completed = [
+                object_id
+                for object_id in raw
+                if object_id in current
+                and (current[object_id].get("governance") or {}).get("validation_status")
+                == "approved"
+            ]
+            retry_selection = [
+                object_id
+                for object_id in raw
+                if object_id in current
+                and normal_risk_batch_eligible(
+                    current[object_id],
+                    review_path=review_path,
+                )
+            ]
             return HTMLResponse(
                 _render_review_room(
                     console,
@@ -355,7 +377,8 @@ def install_proportionate_review_routes(app: FastAPI, console: ProportionateRevi
                     snapshot_id,
                     task="together",
                     conflict=True,
-                    batch_selection=raw,
+                    batch_selection=retry_selection,
+                    batch_completed=len(completed),
                 ),
                 status_code=409,
             )
