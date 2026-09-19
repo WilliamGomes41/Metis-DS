@@ -353,3 +353,11 @@ def test_wave_c_does_not_open_publish(tmp_path: Path) -> None:
     assert published["cutover"] is False
     assert g2_gate_status() == "BLOCKED"
     assert load_g2_store()["g2_status"] == "BLOCKED"
+
+
+def test_deploy_workflows_bind_console_origin_to_declared_app_url() -> None:
+    test_text = _read(ROOT / ".github" / "workflows" / "deploy-test.yml")
+    prod_text = _read(ROOT / ".github" / "workflows" / "deploy-production.yml")
+
+    assert 'CONSOLE_PUBLIC_ORIGIN="${{ vars.AZURE_TEST_APP_URL }}"' in test_text
+    assert 'CONSOLE_PUBLIC_ORIGIN="${{ vars.AZURE_PRODUCTION_APP_URL }}"' in prod_text
