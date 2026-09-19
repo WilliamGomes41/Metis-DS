@@ -1,4 +1,9 @@
 """Release guard: manual test deploys must originate from main."""
+
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+
 from __future__ import annotations
 
 from pathlib import Path
