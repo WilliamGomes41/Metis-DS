@@ -22,7 +22,6 @@ from src.operations_console_app import (
     COOKIE,
     REVIEW_TASKS,
     _esc,
-    _help,
     _nav,
     _page,
     _render_review_room,
@@ -456,7 +455,6 @@ def _workboard_page(
           <p class="lead">Bekijk waar jouw reviewwerk staat en ga direct verder met de eerstvolgende taak.</p>
           {"".join(sections)}
         </section>
-        {_help(room="review")}
         '''
     )
 
@@ -533,7 +531,6 @@ def _projected_document_dashboard(
           <div class="doc-card">{heading}</div>
           {dashboard}
         </section>
-        {_help(room="review")}
         """
     )
 
