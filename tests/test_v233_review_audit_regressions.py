@@ -216,3 +216,57 @@ def test_real_uncertain_content_keeps_an_individual_review_route(review_system):
     assert response.status_code == 200
     for action in ("afwijzen", "later_beoordelen", "goedkeuren_na_correctie"):
         assert f'value="{action}"' in response.text
+
+
+def test_http_partial_batch_conflict_reports_committed_work_truthfully(
+    review_system, monkeypatch
+):
+    console, client, sid, actor, ids = review_system
+    original_review = console.review_object
+    errors = []
+
+    def review_then_other_writer(**kwargs):
+        rows = original_review(**kwargs)
+        if kwargs["object_id"] == ids[0]:
+            def other_writer():
+                try:
+                    console.confirm_object_type(
+                        actor_id=actor,
+                        snapshot_id=sid,
+                        object_id=ids[1],
+                        confirmed_object_type="recommendation",
+                    )
+                except Exception as exc:
+                    errors.append(exc)
+
+            thread = threading.Thread(target=other_writer)
+            thread.start()
+            thread.join(timeout=10)
+            assert not thread.is_alive()
+            assert not errors
+        return rows
+
+    monkeypatch.setattr(console, "review_object", review_then_other_writer)
+    revision = console.objects_revision(sid)
+    response = client.post(
+        "/review/normal-risk/batch-confirm",
+        data={
+            "snapshot_id": sid,
+            "snapshot_revision": revision,
+            "object_ids": ids,
+        },
+    )
+
+    assert response.status_code == 409
+    assert "data-partial-batch-conflict" in response.text
+    assert "1 geselecteerde passage is al opgeslagen" in response.text
+    assert "Deze beoordeling is niet opgeslagen" not in response.text
+
+    current = {obj["object_id"]: obj for obj in console.snapshot_objects(sid)}
+    assert current[ids[0]]["governance"]["validation_status"] == "approved"
+    assert current[ids[1]]["confirmed_object_type"] == "recommendation"
+    assert {row["object_id"] for row in console._bindings[sid]} == {ids[0]}
+
+    retry = Page(response.text)
+    assert all(ids[0] not in form["checked"] for form in retry.batches)
+    assert all(ids[1] not in form["checked"] for form in retry.batches)
