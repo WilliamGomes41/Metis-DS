@@ -132,3 +132,86 @@ def test_publish_retry_of_withdrawn_snapshot_fails_closed(tmp_path: Path) -> Non
     assert result["blockers"] == ["release_withdrawn"]
     assert result["cutover"] is False
     assert console._envelopes["snap-withdrawn"]["state"] == "withdrawn"
+
+
+class _SupersededConnection(_Connection):
+    def execute(self, sql: str, _params: Any = None) -> _Cursor:
+        if "SELECT rel.release_id, rel.status, rel.published_at" in sql:
+            return _Cursor(
+                {
+                    "release_id": "release-old",
+                    "status": "published",
+                    "published_at": "2026-09-16T18:00:00+00:00",
+                    "logical_document_id": "logical-doc-1",
+                }
+            )
+        if "COUNT(*) AS item_count" in sql:
+            return _Cursor(
+                {
+                    "item_count": 1,
+                    "active_same_release": 0,
+                    "active_other_release": 1,
+                }
+            )
+        if "SELECT 1" in sql and "rel.published_at>%s" in sql:
+            return _Cursor({"exists": 1})
+        raise AssertionError(f"unexpected SQL: {sql}")
+
+
+class _SupersededCanonical(_Canonical):
+    def _connect(self) -> _SupersededConnection:
+        return _SupersededConnection()
+
+    def release_for_snapshot(self, snapshot_id: str) -> dict[str, Any] | None:
+        assert snapshot_id == "snap-old"
+        return {
+            "release_id": "release-old",
+            "release_version": "1.0",
+            "release_owner": "publisher",
+            "published_at": "2026-09-16T18:00:00+00:00",
+            "snapshot_id": snapshot_id,
+            "source_sha256": "1" * 64,
+            "source_locator": "g2://sha256/source/1.0.html",
+            "objects": [
+                {
+                    "object_id": "object-old",
+                    "object_version": "1.0",
+                    "canonical_object_hash": "hash-old",
+                    "content_hash": "hash-old",
+                    "confirmed_object_type": "explanation",
+                }
+            ],
+        }
+
+
+def test_publish_retry_of_superseded_snapshot_fails_closed(tmp_path: Path) -> None:
+    console = object.__new__(DurablePublicationConsole)
+    console.canonical_publication_store = _SupersededCanonical()
+    console.runtime = tmp_path
+    console._envelopes_path = tmp_path / "envelopes.json"
+    console._ledger_path = tmp_path / "review_ledger.jsonl"
+    console._accounts = {
+        "publisher-1": {
+            "account_id": "publisher-1",
+            "username": "publisher",
+            "roles": ["publisher"],
+        }
+    }
+    console._envelopes = {
+        "snap-old": {
+            "snapshot_id": "snap-old",
+            "version": "1.0",
+            "state": "published",
+        }
+    }
+    console._published_projection_path = lambda: tmp_path / "published_projection.jsonl"  # type: ignore[method-assign]
+    console._envelope = lambda snapshot_id: console._envelopes[snapshot_id]  # type: ignore[method-assign]
+
+    result = console._publish_locked(actor_id="publisher-1", snapshot_id="snap-old")
+
+    assert result["status"] == "BLOCKED"
+    assert result["state"] == "superseded"
+    assert result["blockers"] == ["release_superseded"]
+    assert result["cutover"] is False
+    assert result["local_projection"] == "reconciled"
+    assert console._envelopes["snap-old"]["state"] == "superseded"

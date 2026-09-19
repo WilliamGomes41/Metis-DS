@@ -212,8 +212,20 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
         self._require_role(actor_id, "publisher")
         existing = self._sync_snapshot_from_authority(snapshot_id)
         if existing is not None:
-            if str(existing.get("release_status") or "") == "withdrawn":
-                return {"status":"BLOCKED","state":"withdrawn","snapshot_id":snapshot_id,"release_id":str(existing["release_id"]),"release_version":str(existing["release_version"]),"blockers":["release_withdrawn"],"g2":"PASS","cutover":False,"canonical_authority":"postgres","local_projection":"reconciled"}
+            release_status = str(existing.get("release_status") or "")
+            if release_status in _HISTORICAL_RELEASE_STATES:
+                return {
+                    "status": "BLOCKED",
+                    "state": release_status,
+                    "snapshot_id": snapshot_id,
+                    "release_id": str(existing["release_id"]),
+                    "release_version": str(existing["release_version"]),
+                    "blockers": [f"release_{release_status}"],
+                    "g2": "PASS",
+                    "cutover": False,
+                    "canonical_authority": "postgres",
+                    "local_projection": "reconciled",
+                }
             return {"status":"PASS","state":"published","snapshot_id":snapshot_id,"release_id":str(existing["release_id"]),"release_version":str(existing["release_version"]),"published_items":len(existing["objects"]),"g2":"PASS","cutover":True,"canonical_authority":"postgres","local_projection":"reconciled"}
         considered = self.consider_publish(actor_id=actor_id, snapshot_id=snapshot_id); envelope = self._envelope(snapshot_id)
         if not considered.get("publish_allowed"): return {"status":"BLOCKED","state":envelope["state"],"snapshot_id":snapshot_id,"blockers":considered.get("blockers") or ["object_tuple_required"],"g2":considered.get("g2","BLOCKED"),"cutover":False}
