@@ -79,6 +79,16 @@ def _default_data_root() -> Path:
     return ROOT
 
 
+def _console_public_origin(*, running_in_azure: bool) -> str | None:
+    origin = os.environ.get("CONSOLE_PUBLIC_ORIGIN", "").strip() or None
+    if running_in_azure:
+        if origin is None:
+            raise RuntimeError("console_public_origin_required_in_azure")
+        if not origin.lower().startswith("https://"):
+            raise RuntimeError("console_public_origin_must_be_https_in_azure")
+    return origin
+
+
 def _postgres_credential() -> CachedAzurePostgresCredential | None:
     """Create one process-local cached AAD credential for all configured PG stores."""
     store_names = (
@@ -306,13 +316,10 @@ def build_app() -> object:
         console.migrate_legacy_revise_to_review()
         console.reconcile_durable_publications()
 
-    trusted_origin = os.environ.get("CONSOLE_PUBLIC_ORIGIN", "").strip() or None
-    if running_in_azure:
-        if trusted_origin is None:
-            raise RuntimeError("console_public_origin_required_in_azure")
-        if not trusted_origin.lower().startswith("https://"):
-            raise RuntimeError("console_public_origin_must_be_https_in_azure")
-    app = create_console_app(console, trusted_origin=trusted_origin)
+    app = create_console_app(
+        console,
+        trusted_origin=_console_public_origin(running_in_azure=running_in_azure),
+    )
     install_publish_readiness_ui(app, console)
     install_document_status_ui(app, console)
     install_review_workboard(app, console)
