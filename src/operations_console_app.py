@@ -67,6 +67,7 @@ from src.operations_console_v1 import (
 )
 from src.open_original_v1 import researcher_visible_prose
 from src.review_disposition_v1 import definitive_review_disposition
+from src.product_security_v1 import SlidingWindowRateLimiter
 from src.proportionate_review_v1 import (
     ProportionateReviewConsole,
     normal_risk_batch_counts,
@@ -1899,6 +1900,8 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
     )
     if BRAND_DIR.is_dir():
         app.mount("/brand", StaticFiles(directory=str(BRAND_DIR)), name="brand")
+    login_limiter = SlidingWindowRateLimiter()
+    login_attempts_per_minute = 10
 
     def _current(request: Request) -> dict[str, Any] | None:
         token = request.cookies.get(COOKIE)
@@ -2045,7 +2048,24 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         )
 
     @app.post("/login")
-    def login(username: str = Form(...), password: str = Form(...)) -> RedirectResponse:
+    def login(username: str = Form(...), password: str = Form(...)) -> RedirectResponse | HTMLResponse:
+        login_key = str(username or "").strip()
+        allowed, retry_after = login_limiter.allow(login_key, login_attempts_per_minute)
+        if not allowed:
+            body = _page(
+                """
+                <section class="room login-card">
+                  <h1>Aanmelden tijdelijk begrensd</h1>
+                  <div class="banner err">Te veel aanmeldpogingen. Probeer het later opnieuw.</div>
+                  <p><a href="/login">Terug naar aanmelden</a></p>
+                </section>
+                """
+            )
+            return HTMLResponse(
+                body,
+                status_code=429,
+                headers={"Retry-After": str(retry_after)},
+            )
         session = state.authenticate(username, password)
         response = RedirectResponse("/", status_code=303)
         response.set_cookie(COOKIE, session["token"], httponly=True, samesite="lax", secure=True)
