@@ -18,7 +18,13 @@ from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
 
 
-def _system(tmp_path, *, with_document: bool = False, semantic_safety_post_json=None):
+def _system(
+    tmp_path,
+    *,
+    with_document: bool = False,
+    semantic_safety_post_json=None,
+    deployed_commit_path=None,
+):
     console = OperationsConsole(
         root=tmp_path,
         source_store=tmp_path / "sources",
@@ -53,7 +59,12 @@ def _system(tmp_path, *, with_document: bool = False, semantic_safety_post_json=
             named_reviewers=[reviewer["account_id"]],
         )
     app = create_console_app(console)
-    install_audit_routes(app, console, semantic_safety_post_json=semantic_safety_post_json)
+    install_audit_routes(
+        app,
+        console,
+        semantic_safety_post_json=semantic_safety_post_json,
+        deployed_commit_path=deployed_commit_path,
+    )
     client = TestClient(app)
     response = client.post(
         "/login",
@@ -230,7 +241,8 @@ def test_frozen_semantic_safety_run_uses_audit_secret_and_persists_only_audit_ev
     evaluated_commit = "79b35616725da3a1f42a938c2f5a874ca16cfad0"
     monkeypatch.setenv("METIS_AUDIT_SECRET_KEY", Fernet.generate_key().decode("ascii"))
     monkeypatch.setenv("METIS_AUDIT_LLM_MODEL", "test-model")
-    monkeypatch.setenv("METIS_AUDIT_EVALUATED_COMMIT", evaluated_commit)
+    marker = tmp_path / "deployed_commit.txt"
+    marker.write_text(evaluated_commit + "\n", encoding="utf-8")
 
     def full_source_model(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
         block = json.loads(payload["input"][1]["content"])["source_blocks"][0]
@@ -267,6 +279,7 @@ def test_frozen_semantic_safety_run_uses_audit_secret_and_persists_only_audit_ev
     console, client, researcher, _receipt = _system(
         tmp_path,
         semantic_safety_post_json=full_source_model,
+        deployed_commit_path=marker,
     )
     AuditLLMSecretStore(console.runtime).set_api_key("audit-only-secret")
     before_envelopes = console.list_envelopes()
@@ -310,9 +323,45 @@ def test_frozen_semantic_safety_run_fails_closed_on_commit_mismatch(
 ):
     monkeypatch.setenv("METIS_AUDIT_SECRET_KEY", Fernet.generate_key().decode("ascii"))
     monkeypatch.setenv("METIS_AUDIT_LLM_MODEL", "test-model")
-    monkeypatch.setenv("METIS_AUDIT_EVALUATED_COMMIT", "a" * 40)
+    monkeypatch.setenv(
+        "METIS_AUDIT_EVALUATED_COMMIT",
+        "79b35616725da3a1f42a938c2f5a874ca16cfad0",
+    )
+    marker = tmp_path / "deployed_commit.txt"
+    marker.write_text("a" * 40 + "\n", encoding="utf-8")
 
-    console, client, _researcher, _receipt = _system(tmp_path)
+    console, client, _researcher, _receipt = _system(
+        tmp_path,
+        deployed_commit_path=marker,
+    )
+    AuditLLMSecretStore(console.runtime).set_api_key("audit-only-secret")
+
+    page = client.get("/audit/semantic-safety")
+    assert "Run geblokkeerd" in page.text
+    assert "Frozen audit uitvoeren" not in page.text
+
+    response = client.post("/audit/semantic-safety/run")
+    assert response.status_code == 200
+    assert "deployment-commit komt niet overeen" in response.text
+    assert AuditRegistry(console.runtime).list_audits() == []
+
+
+
+def test_frozen_semantic_safety_run_fails_closed_without_packaged_commit(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setenv("METIS_AUDIT_SECRET_KEY", Fernet.generate_key().decode("ascii"))
+    monkeypatch.setenv("METIS_AUDIT_LLM_MODEL", "test-model")
+    monkeypatch.setenv(
+        "METIS_AUDIT_EVALUATED_COMMIT",
+        "79b35616725da3a1f42a938c2f5a874ca16cfad0",
+    )
+
+    console, client, _researcher, _receipt = _system(
+        tmp_path,
+        deployed_commit_path=tmp_path / "missing-deployed-commit.txt",
+    )
     AuditLLMSecretStore(console.runtime).set_api_key("audit-only-secret")
 
     page = client.get("/audit/semantic-safety")
