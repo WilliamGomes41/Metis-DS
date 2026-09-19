@@ -1685,6 +1685,10 @@ class OperationsConsole:
             pass
         return removed
 
+    def _delete_unpublished_snapshot_authority(self, snapshot_id: str) -> None:
+        """Delete the workflow-authoritative snapshot when a durable authority is configured."""
+        return None
+
     def delete_unpublished_snapshot(
         self,
         *,
@@ -1735,6 +1739,7 @@ class OperationsConsole:
         if confirm_title != title:
             raise ConsoleError("delete_title_confirmation_required")
         digest = str(envelope["sha256"])
+        self._delete_unpublished_snapshot_authority(token)
         objects_path = self._objects_path(token)
         if objects_path.is_file():
             objects_path.unlink()

@@ -350,3 +350,66 @@ def test_published_v1_stays_live_while_successor_v2_is_mutable_and_unreleased(
             account_ids=accounts,
             release_ids=releases,
         )
+
+
+
+def test_unpublished_delete_removes_postgres_authority_and_stays_deleted_after_restart(
+    tmp_path: Path,
+) -> None:
+    config = _config()
+    source = MemorySourceStore()
+    console = _console(tmp_path, config, source, runtime_name="delete-pg-a")
+    snapshots: list[str] = []
+    accounts: list[str] = []
+    try:
+        researcher = console.create_account(
+            username=f"delete.pg.researcher.{tmp_path.name}",
+            password=TEST_PASSWORD,
+            roles=("researcher", "reviewer"),
+        )
+        reviewer = console.create_account(
+            username=f"delete.pg.reviewer.{tmp_path.name}",
+            password=TEST_PASSWORD,
+            roles=("reviewer",),
+        )
+        accounts.extend([researcher["account_id"], reviewer["account_id"]])
+
+        receipt = console.ingest(
+            actor_id=researcher["account_id"],
+            filename="delete-pg.html",
+            data=HTML_FIXTURE.read_bytes(),
+            content_type="text/html",
+            ingest_kind="new",
+            title="Postgres delete fixture",
+            version="1.0",
+            date="2026-09-19",
+            live_url="https://example.test/delete-pg",
+            class_="richtlijn",
+            family="delete-pg",
+            named_reviewers=[researcher["account_id"], reviewer["account_id"]],
+        )
+        snapshot_id = str(receipt["snapshot_id"])
+        snapshots.append(snapshot_id)
+        assert console.workflow_document_store.get_envelope(snapshot_id) is not None
+
+        deleted = console.delete_unpublished_snapshot(
+            actor_id=researcher["account_id"],
+            snapshot_id=snapshot_id,
+            confirmed=True,
+            confirm_title="Postgres delete fixture",
+        )
+
+        assert deleted["deleted"] is True
+        assert console.workflow_document_store.get_envelope(snapshot_id) is None
+        assert snapshot_id not in {row["snapshot_id"] for row in console.list_envelopes()}
+
+        restarted = _console(tmp_path, config, source, runtime_name="delete-pg-b")
+        assert restarted.workflow_document_store.get_envelope(snapshot_id) is None
+        assert snapshot_id not in {row["snapshot_id"] for row in restarted.list_envelopes()}
+    finally:
+        _cleanup(
+            config,
+            snapshot_ids=snapshots,
+            account_ids=accounts,
+            release_ids=[],
+        )

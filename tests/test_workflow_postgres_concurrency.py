@@ -302,3 +302,39 @@ def test_independent_instances_do_not_lose_authorization_updates(workflow_postgr
     final = first.read_bindings()
     assert results == ["ok", "ok"]
     assert set(final) == {"snap-base", "snap-a", "snap-b"}
+
+
+
+def test_document_delete_preserves_review_ledger_payload(workflow_postgres: PostgresCanonicalConfig) -> None:
+    uploader, reviewer = _seed_accounts(workflow_postgres)
+    documents = PostgresConcurrentWorkflowDocumentStore(workflow_postgres)
+    reviews = PostgresWorkflowReviewStore(workflow_postgres)
+    snapshot_id = "snap-delete-ledger"
+    documents.write_bundle(
+        envelope=_envelope(snapshot_id, uploader, reviewer),
+        objects=_objects("delete-ledger"),
+    )
+    reviews.append_event(
+        event_type="review_decision",
+        object_id="delete-ledger-a",
+        object_version="1.0",
+        actor="reviewer",
+        details={"snapshot_id": snapshot_id, "decision": "approve"},
+    )
+    before = reviews.read_events()
+    assert len(before) == 1
+
+    documents.delete_document(snapshot_id)
+
+    assert documents.get_envelope(snapshot_id) is None
+    assert documents.list_document_objects(snapshot_id) == []
+    after = reviews.read_events()
+    assert after == before
+    with documents._connect() as con:
+        row = con.execute(
+            "SELECT snapshot_id,event_payload FROM workflow.review_events WHERE event_hash=%s",
+            (before[0]["event_hash"],),
+        ).fetchone()
+    assert row is not None
+    assert row["snapshot_id"] is None
+    assert row["event_payload"]["details"]["snapshot_id"] == snapshot_id
