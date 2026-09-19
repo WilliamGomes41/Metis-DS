@@ -1242,18 +1242,6 @@ mark.broncontext-marked {
   .review-document-context a { margin-left: 0; }
 }
 
-.help {
-  margin-top: 28px;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-.help summary {
-  cursor: pointer;
-  font-weight: 700;
-  color: var(--paars);
-}
-
 .login-card {
   max-width: 36rem;
   margin: clamp(1.5rem, 7vh, 4.5rem) auto 0;
