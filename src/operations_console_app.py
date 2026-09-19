@@ -2048,7 +2048,7 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
         )
 
     @app.post("/login")
-    def login(username: str = Form(...), password: str = Form(...)) -> RedirectResponse | HTMLResponse:
+    def login(username: str = Form(...), password: str = Form(...)):
         login_key = str(username or "").strip()
         allowed, retry_after = login_limiter.allow(login_key, login_attempts_per_minute)
         if not allowed:
