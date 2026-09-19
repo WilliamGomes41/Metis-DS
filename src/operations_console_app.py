@@ -1764,12 +1764,21 @@ def _render_review_room(
     draft: dict[str, str] | None = None,
     conflict: bool = False,
     batch_selection: list[str] | None = None,
+    batch_completed: int = 0,
 ) -> str:
     chosen = document.strip()
     chosen_object_id = object.strip()
     chosen_task = task.strip() if task.strip() in REVIEW_TASKS else ""
     draft = _sanitize_review_draft(draft)
     conflict_html = _review_conflict_html(conflict)
+    if conflict and batch_completed:
+        conflict_html = (
+            f'<div class="banner warn" data-partial-batch-conflict>'
+            f'{batch_completed} geselecteerde passage'
+            f'{" is" if batch_completed == 1 else "s zijn"} al opgeslagen. '
+            'Het document is tussentijds gewijzigd; controleer de resterende selectie en probeer die opnieuw.'
+            '</div>'
+        )
     snapshot_revision = ""
     envelopes = console.list_envelopes()
     chosen_row = next((row for row in envelopes if row["snapshot_id"] == chosen), None)
