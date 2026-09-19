@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import os
+
+import pytest
 from pathlib import Path
 
-from src.console_asgi import bootstrap_accounts, build_app
+from src.console_asgi import _console_public_origin, bootstrap_accounts, build_app
 from src.operations_console_v1 import OperationsConsole
 
 
@@ -29,3 +31,20 @@ def test_build_app_serves_login(tmp_path: Path, monkeypatch) -> None:
     response = client.get("/login")
     assert response.status_code == 200
     assert "Aanmelden" in response.text
+
+
+
+def test_azure_console_requires_explicit_https_public_origin(monkeypatch) -> None:
+    monkeypatch.delenv("CONSOLE_PUBLIC_ORIGIN", raising=False)
+    with pytest.raises(RuntimeError, match="console_public_origin_required_in_azure"):
+        _console_public_origin(running_in_azure=True)
+
+    monkeypatch.setenv("CONSOLE_PUBLIC_ORIGIN", "http://console.example.test")
+    with pytest.raises(RuntimeError, match="console_public_origin_must_be_https_in_azure"):
+        _console_public_origin(running_in_azure=True)
+
+    monkeypatch.setenv("CONSOLE_PUBLIC_ORIGIN", "https://console.example.test")
+    assert (
+        _console_public_origin(running_in_azure=True)
+        == "https://console.example.test"
+    )

@@ -11,7 +11,7 @@ import hashlib
 import html
 import re
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -1890,7 +1890,11 @@ def _render_review_room(
     )
 
 
-def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
+def create_console_app(
+    console: OperationsConsole | None = None,
+    *,
+    trusted_origin: str | None = None,
+) -> FastAPI:
     state = console or OperationsConsole(root=REPO_ROOT)
     install_ingest_limits(state)
     app = FastAPI(
@@ -1900,6 +1904,33 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
     )
     if BRAND_DIR.is_dir():
         app.mount("/brand", StaticFiles(directory=str(BRAND_DIR)), name="brand")
+
+    expected_origin = ""
+    if trusted_origin is not None:
+        parsed = urlsplit(str(trusted_origin).strip())
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("console_trusted_origin_invalid")
+        expected_origin = f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+
+    @app.middleware("http")
+    async def require_same_origin(request: Request, call_next):
+        if expected_origin and request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+            supplied = str(request.headers.get("origin") or "").strip().lower().rstrip("/")
+            if supplied != expected_origin:
+                return HTMLResponse(
+                    "Cross-origin request blocked.",
+                    status_code=403,
+                )
+        return await call_next(request)
+
     login_limiter = SlidingWindowRateLimiter()
     login_attempts_per_minute = 10
 
