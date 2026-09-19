@@ -725,6 +725,45 @@ def test_ssrf_redirect_from_pinned_public_to_metadata_is_rejected(
         server.server_close()
 
 
+def test_console_login_attempts_are_throttled_before_password_verification(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    console = _console(tmp_path)
+    _accounts(console)
+    calls: list[str] = []
+    original_authenticate = console.authenticate
+
+    def counted_authenticate(username: str, password: str) -> dict:
+        calls.append(username)
+        return original_authenticate(username, password)
+
+    monkeypatch.setattr(console, "authenticate", counted_authenticate)
+    client = TestClient(create_console_app(console))
+
+    for _ in range(10):
+        response = client.post(
+            "/login",
+            data={"username": "researcher.anne", "password": "wrong-password"},
+        )
+        assert response.status_code == 401
+
+    blocked = client.post(
+        "/login",
+        data={"username": "researcher.anne", "password": "wrong-password"},
+    )
+    assert blocked.status_code == 429
+    assert int(blocked.headers["Retry-After"]) >= 1
+    assert len(calls) == 10
+
+    other = client.post(
+        "/login",
+        data={"username": "reviewer.bert", "password": "wrong-password"},
+    )
+    assert other.status_code == 401
+    assert calls[-1] == "reviewer.bert"
+
+
 def test_configured_console_origin_blocks_missing_and_cross_origin_posts(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
