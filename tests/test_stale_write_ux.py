@@ -15,6 +15,7 @@ publish() stays G2-BLOCKED. Wave 2 ingest and wave 3 stay out of scope.
 """
 from __future__ import annotations
 
+import html
 import re
 from pathlib import Path
 
@@ -262,3 +263,58 @@ def test_stale_review_save_retry_applies_input_after_fresh_revision(tmp_path: Pa
     assert _passage_suitability(live) == UNIQUE_SUITABILITY
     stored = {row["object_id"]: row for row in console._load_objects(receipt["snapshot_id"])}
     assert any(row.get("reliability_marker") == "concurrent-winner" for row in stored.values())
+
+
+def test_stale_review_conflicts_preserve_special_characters_exactly(tmp_path: Path) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    receipt = _ingest(console, accounts)
+    snapshot_id = receipt["snapshot_id"]
+    first, second = _content_rows(console, snapshot_id)[:2]
+    client = _client(console)
+    opened = client.get(f"/review?document={snapshot_id}&object={first['object_id']}")
+    assert opened.status_code == 200
+
+    comment = 'Bij A & B: waarde < 5; "controle" > 1; café ☕ <script>alert("x")</script>'
+    correction = "Gebruik 'één' & controleer > 2 < 9 — patiënt"
+    payload = _review_payload(snapshot_id, first["object_id"])
+    payload["comment"] = comment
+    payload["proposed_correction"] = correction
+
+    _install_concurrent_winner(console, snapshot_id, second["object_id"])
+    first_conflict = client.post("/review", data=payload, follow_redirects=False)
+
+    assert first_conflict.status_code == 409
+    raw_comment = _textarea_value(first_conflict.text, "comment")
+    raw_correction = _textarea_value(first_conflict.text, "proposed_correction")
+    assert html.unescape(raw_comment) == comment
+    assert html.unescape(raw_correction) == correction
+    assert "<script>" not in raw_comment
+    assert "&lt;script&gt;" in raw_comment
+
+    retry_payload = dict(payload)
+    retry_payload["comment"] = html.unescape(raw_comment)
+    retry_payload["proposed_correction"] = html.unescape(raw_correction)
+
+    _install_concurrent_winner(console, snapshot_id, second["object_id"])
+    second_conflict = client.post("/review", data=retry_payload, follow_redirects=False)
+
+    assert second_conflict.status_code == 409
+    second_raw_comment = _textarea_value(second_conflict.text, "comment")
+    second_raw_correction = _textarea_value(second_conflict.text, "proposed_correction")
+    assert html.unescape(second_raw_comment) == comment
+    assert html.unescape(second_raw_correction) == correction
+    assert second_raw_comment == raw_comment
+    assert second_raw_correction == raw_correction
+
+    final_payload = dict(retry_payload)
+    final_payload["comment"] = html.unescape(second_raw_comment)
+    final_payload["proposed_correction"] = html.unescape(second_raw_correction)
+    saved = client.post("/review", data=final_payload, follow_redirects=False)
+
+    assert saved.status_code in {200, 303}
+    ledger = (console.runtime / "review_ledger.jsonl").read_text(encoding="utf-8")
+    assert comment in ledger
+    assert correction in ledger
+    assert "&amp;" not in ledger
+    assert "&lt;script&gt;" not in ledger
