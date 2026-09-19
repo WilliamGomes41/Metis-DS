@@ -1739,12 +1739,12 @@ class OperationsConsole:
         if confirm_title != title:
             raise ConsoleError("delete_title_confirmation_required")
         digest = str(envelope["sha256"])
+        self._delete_unpublished_snapshot_authority(token)
         objects_path = self._objects_path(token)
         if objects_path.is_file():
             objects_path.unlink()
         self._envelopes.pop(token, None)
         self._bindings.pop(token, None)
-        self._delete_unpublished_snapshot_authority(token)
         self._save_envelopes()
         self._save_bindings()
         freeze_removed = self._maybe_remove_unpublished_freeze_bytes(envelope)
