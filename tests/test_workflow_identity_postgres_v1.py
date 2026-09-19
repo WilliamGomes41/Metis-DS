@@ -12,8 +12,10 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from src.durable_publication_console_v1 import DurablePublicationConsole
+from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
 from src.workflow_identity_postgres_v1 import (
     PostgresIdentityDurablePublicationConsole,
@@ -198,3 +200,73 @@ def test_legacy_sessions_without_secure_expiry_are_not_migratable() -> None:
     }
 
     assert migratable_legacy_sessions(accounts, sessions) == {"valid": sessions["valid"]}
+
+
+def test_accounts_page_reads_shared_identity_authority_after_create_and_restart(tmp_path: Path) -> None:
+    shared = SharedIdentityStore()
+    first = _console(tmp_path, shared, "runtime-a")
+    publisher = first.create_account("publisher", "publisher-secret", ["publisher"])
+
+    app = create_console_app(first)
+    client = TestClient(app, base_url="https://testserver")
+    login = client.post(
+        "/login",
+        data={"username": "publisher", "password": "publisher-secret"},
+        follow_redirects=False,
+    )
+    assert login.status_code == 303
+
+    created = client.post(
+        "/accounts",
+        data={
+            "username": "new.researcher",
+            "display_name": "Nieuwe Onderzoeker",
+            "password": "researcher-secret",
+            "roles": "researcher",
+        },
+        follow_redirects=True,
+    )
+
+    assert created.status_code == 200
+    assert "new.researcher" in created.text
+    assert "Nieuwe Onderzoeker" in created.text
+    assert first._accounts == {}
+
+    second = _console(tmp_path, shared, "runtime-b")
+    assert {row["username"] for row in second.list_accounts()} == {
+        "publisher",
+        "new.researcher",
+    }
+
+    target = next(row for row in second.list_accounts() if row["username"] == "new.researcher")
+    second.assign_roles(
+        actor_id=publisher["account_id"],
+        account_id=target["account_id"],
+        roles=["researcher", "reviewer"],
+    )
+
+    page = client.get("/accounts")
+    assert page.status_code == 200
+    assert "researcher, reviewer" in page.text
+
+    restarted = _console(tmp_path, shared, "runtime-c")
+    reloaded = next(row for row in restarted.list_accounts() if row["username"] == "new.researcher")
+    assert reloaded["roles"] == ["researcher", "reviewer"]
+
+
+def test_local_only_account_listing_uses_local_authority(tmp_path: Path) -> None:
+    console = DurablePublicationConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources",
+        runtime=tmp_path / "runtime-local",
+    )
+    created = console.create_account("local-user", "local-secret", ["researcher"])
+
+    assert console.list_accounts() == [
+        {
+            "account_id": created["account_id"],
+            "username": "local-user",
+            "display_name": "local-user",
+            "roles": ["researcher"],
+        }
+    ]
