@@ -24,6 +24,7 @@ from fastapi.testclient import TestClient
 
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
+from src.review_ledger import read_events
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
@@ -320,8 +321,14 @@ def test_stale_review_conflicts_preserve_special_characters_exactly(tmp_path: Pa
     saved = client.post("/review", data=final_payload, follow_redirects=False)
 
     assert saved.status_code in {200, 303}
-    ledger = (console.runtime / "review_ledger.jsonl").read_text(encoding="utf-8")
-    assert comment in ledger
-    assert correction in ledger
-    assert "&amp;" not in ledger
-    assert "&lt;script&gt;" not in ledger
+    events = read_events(console._ledger_path)
+    saved_review = next(
+        event
+        for event in reversed(events)
+        if (event.get("details") or {}).get("comment") == comment
+    )
+    details = saved_review["details"]
+    assert details["comment"] == comment
+    assert details["proposed_correction"] == correction
+    assert "&amp;" not in details["comment"]
+    assert "&lt;script&gt;" not in details["comment"]
