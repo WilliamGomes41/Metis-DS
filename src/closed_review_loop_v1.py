@@ -694,12 +694,12 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
         return console.session_account(request.cookies.get("console_session"))
 
     def chrome(request: Request, body: str, current: str) -> str:
-        from src.operations_console_app import _help, _nav, _page
+        from src.operations_console_app import _nav, _page
 
         account = account_for(request)
         return _page(
             f"{_nav(account, current, console.waiting_task_counts(account['account_id']))}"
-            f"<section class='room'>{body}</section>{_help()}",
+            f"<section class='room'>{body}</section>",
             title="Review herstel — V&amp;VN Data Services",
         )
 
