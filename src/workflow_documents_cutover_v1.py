@@ -240,6 +240,36 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         except Exception as exc:
             raise WorkflowDocumentStoreError("workflow_document_bundle_write_failed") from exc
 
+    def delete_document(self, snapshot_id: str) -> None:
+        """Delete one mutable workflow document while preserving review-ledger history."""
+        try:
+            with self._connect() as con:
+                with con.transaction():
+                    row = con.execute(
+                        "SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
+                        (snapshot_id,),
+                    ).fetchone()
+                    if row is None:
+                        raise WorkflowDocumentStoreError("workflow_document_delete_missing")
+                    successor = con.execute(
+                        "SELECT snapshot_id FROM workflow.documents WHERE replaces_snapshot_id=%s LIMIT 1",
+                        (snapshot_id,),
+                    ).fetchone()
+                    if successor is not None:
+                        raise WorkflowDocumentStoreError("workflow_document_delete_has_successor")
+                    con.execute(
+                        "UPDATE workflow.review_events SET snapshot_id=NULL WHERE snapshot_id=%s",
+                        (snapshot_id,),
+                    )
+                    con.execute(
+                        "DELETE FROM workflow.documents WHERE snapshot_id=%s",
+                        (snapshot_id,),
+                    )
+        except WorkflowDocumentStoreError:
+            raise
+        except Exception as exc:
+            raise WorkflowDocumentStoreError("workflow_document_delete_failed") from exc
+
     def prepare_legacy_cutover(self, runtime: Path) -> dict[str, int]:
         """Backfill full envelope and original object order after exact migration proof."""
         bundles = _read_legacy_runtime(Path(runtime))
@@ -381,6 +411,17 @@ class _PostgresWorkflowDocumentsMixin:
             raise ConsoleError("workflow_document_write_failed", str(exc)) from exc
         self._objects_expected_revs()[snapshot_id] = revision
         self._mirror_objects(snapshot_id, rows)
+
+    def _delete_unpublished_snapshot_authority(self, snapshot_id: str) -> None:
+        try:
+            self.workflow_document_store.delete_document(snapshot_id)
+        except WorkflowDocumentStoreError as exc:
+            raise ConsoleError("workflow_document_delete_failed", str(exc)) from exc
+        self._envelopes.pop(snapshot_id, None)
+        self._objects_expected_revs().pop(snapshot_id, None)
+        self._mirror_envelopes()
+        with suppress(OSError):
+            self._objects_path(snapshot_id).unlink()
 
     def _save_envelopes(self) -> None:
         payload = getattr(self, "_prepared_envelopes", None)
