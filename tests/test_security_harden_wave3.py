@@ -723,3 +723,61 @@ def test_ssrf_redirect_from_pinned_public_to_metadata_is_rejected(
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_configured_console_origin_blocks_missing_and_cross_origin_posts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    console = _console(tmp_path)
+    _accounts(console)
+    calls: list[str] = []
+    original_authenticate = console.authenticate
+
+    def counted_authenticate(username: str, password: str) -> dict:
+        calls.append(username)
+        return original_authenticate(username, password)
+
+    monkeypatch.setattr(console, "authenticate", counted_authenticate)
+    app = create_console_app(
+        console,
+        trusted_origin="https://console.example.test/",
+    )
+    client = TestClient(app, base_url="https://console.example.test")
+
+    assert client.get("/login").status_code == 200
+
+    missing = client.post(
+        "/login",
+        data={"username": "researcher.anne", "password": "anne-secret"},
+        follow_redirects=False,
+    )
+    assert missing.status_code == 403
+    assert calls == []
+
+    cross = client.post(
+        "/login",
+        headers={"Origin": "https://attacker.example"},
+        data={"username": "researcher.anne", "password": "anne-secret"},
+        follow_redirects=False,
+    )
+    assert cross.status_code == 403
+    assert calls == []
+
+    null_origin = client.post(
+        "/login",
+        headers={"Origin": "null"},
+        data={"username": "researcher.anne", "password": "anne-secret"},
+        follow_redirects=False,
+    )
+    assert null_origin.status_code == 403
+    assert calls == []
+
+    same_origin = client.post(
+        "/login",
+        headers={"Origin": "https://console.example.test"},
+        data={"username": "researcher.anne", "password": "anne-secret"},
+        follow_redirects=False,
+    )
+    assert same_origin.status_code == 303
+    assert calls == ["researcher.anne"]
