@@ -21,6 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 CONSOLE_REQUIREMENTS_NAME = "requirements-console.txt"
+DEPLOY_COMMIT_MARKER = "config/deployed_commit.txt"
 AZURE_MANYLINUX_PLATFORM = "manylinux2014_x86_64"
 AZURE_PYTHON_VERSION = "3.12"
 AZURE_PYTHON_ABI = "cp312"
@@ -198,6 +199,23 @@ def _copy_tree(src: Path, dest: Path) -> None:
         shutil.copy2(item, target)
 
 
+def git_head_commit(root: Path) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            cwd=root,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise DeployPackageError("deploy_commit_unavailable") from exc
+    commit = result.stdout.strip().lower()
+    if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
+        raise DeployPackageError("deploy_commit_invalid")
+    return commit
+
+
 def write_deploy_zip(
     output: Path,
     *,
@@ -226,6 +244,9 @@ def write_deploy_zip(
             src = root / filename
             if src.is_file() and not package_contains_runtime_data(filename):
                 shutil.copy2(src, stage / filename)
+        marker = stage / DEPLOY_COMMIT_MARKER
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(git_head_commit(root) + "\n", encoding="utf-8")
         vendor = stage / ".python_packages"
         vendor.mkdir(parents=True, exist_ok=True)
         command = [
