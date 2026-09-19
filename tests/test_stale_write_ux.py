@@ -150,6 +150,8 @@ def _install_concurrent_winner(
     console: OperationsConsole,
     snapshot_id: str,
     other_object_id: str,
+    *,
+    marker: str = "concurrent-winner",
 ) -> None:
     """On the first save of this snapshot, a concurrent console wins the file.
 
@@ -171,7 +173,7 @@ def _install_concurrent_winner(
             other_rows = other._load_objects(target_snapshot)
             for row in other_rows:
                 if row["object_id"] == other_object_id:
-                    row["reliability_marker"] = "concurrent-winner"
+                    row["reliability_marker"] = marker
             other._save_objects(target_snapshot, other_rows)
         return real_save(self, target_snapshot, rows)
 
@@ -281,7 +283,9 @@ def test_stale_review_conflicts_preserve_special_characters_exactly(tmp_path: Pa
     payload["comment"] = comment
     payload["proposed_correction"] = correction
 
-    _install_concurrent_winner(console, snapshot_id, second["object_id"])
+    _install_concurrent_winner(
+        console, snapshot_id, second["object_id"], marker="concurrent-winner-1"
+    )
     first_conflict = client.post("/review", data=payload, follow_redirects=False)
 
     assert first_conflict.status_code == 409
@@ -296,7 +300,9 @@ def test_stale_review_conflicts_preserve_special_characters_exactly(tmp_path: Pa
     retry_payload["comment"] = html.unescape(raw_comment)
     retry_payload["proposed_correction"] = html.unescape(raw_correction)
 
-    _install_concurrent_winner(console, snapshot_id, second["object_id"])
+    _install_concurrent_winner(
+        console, snapshot_id, second["object_id"], marker="concurrent-winner-2"
+    )
     second_conflict = client.post("/review", data=retry_payload, follow_redirects=False)
 
     assert second_conflict.status_code == 409
