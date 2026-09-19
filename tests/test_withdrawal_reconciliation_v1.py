@@ -90,6 +90,13 @@ def _console(tmp_path: Path) -> DurablePublicationConsole:
     console.runtime = tmp_path
     console._envelopes_path = tmp_path / "envelopes.json"
     console._ledger_path = tmp_path / "review_ledger.jsonl"
+    console._accounts = {
+        "publisher-1": {
+            "account_id": "publisher-1",
+            "username": "publisher",
+            "roles": ["publisher"],
+        }
+    }
     console._envelopes = {
         "snap-withdrawn": {
             "snapshot_id": "snap-withdrawn",
@@ -118,7 +125,7 @@ def test_reconciliation_projects_canonical_withdrawn_state_locally(tmp_path: Pat
 def test_publish_retry_of_withdrawn_snapshot_fails_closed(tmp_path: Path) -> None:
     console = _console(tmp_path)
 
-    result = console._publish_locked(actor_id="irrelevant-after-authority-check", snapshot_id="snap-withdrawn")
+    result = console._publish_locked(actor_id="publisher-1", snapshot_id="snap-withdrawn")
 
     assert result["status"] == "BLOCKED"
     assert result["state"] == "withdrawn"
