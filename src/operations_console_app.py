@@ -849,18 +849,18 @@ _REVIEW_DRAFT_DEFAULTS = {
     "type_action": "dit_klopt",
 }
 def _sanitize_review_draft(draft: dict[str, str] | None) -> dict[str, str]:
-    escaped = {
-        key: html.escape(str(value or ""), quote=True)
+    sanitized = {
+        key: str(value or "")
         for key, value in (draft or {}).items()
     }
     closed_types = frozenset(CLOSED_OBJECT_TYPES) | frozenset(CLOSED_BOOM_TYPES)
     for key, allowed in _REVIEW_DRAFT_SETS.items():
         default = _REVIEW_DRAFT_DEFAULTS.get(key, "")
-        value = escaped.get(key, "") or default
-        escaped[key] = value if value in allowed else default
-    confirmed = escaped.get("confirmed_object_type", "")
-    escaped["confirmed_object_type"] = confirmed if confirmed in closed_types else ""
-    return escaped
+        value = sanitized.get(key, "") or default
+        sanitized[key] = value if value in allowed else default
+    confirmed = sanitized.get("confirmed_object_type", "")
+    sanitized["confirmed_object_type"] = confirmed if confirmed in closed_types else ""
+    return sanitized
 
 
 def _review_conflict_html(
@@ -2473,23 +2473,23 @@ def create_console_app(console: OperationsConsole | None = None) -> FastAPI:
                 _render_review_room(
                     state,
                     account,
-                    html.escape(snapshot_id, quote=True),
-                    html.escape(object_id, quote=True),
-                    task=html.escape(return_task, quote=True),
+                    snapshot_id,
+                    object_id,
+                    task=return_task,
                     counts=_counts(account),
                     draft={
-                        "suitability": html.escape(suitability, quote=True),
-                        "documentpositie_action": html.escape(documentpositie_action, quote=True),
-                        "found_under": html.escape(found_under, quote=True),
-                        "parent_choice": html.escape(parent_choice, quote=True),
-                        "type_action": html.escape(type_action, quote=True),
-                        "confirmed_object_type": html.escape(confirmed_object_type, quote=True),
-                        "recommendation_strength": html.escape(recommendation_strength, quote=True),
-                        "eindoordeel": html.escape(eindoordeel, quote=True),
-                        "decision": html.escape(decision, quote=True),
-                        "comment": html.escape(comment, quote=True),
-                        "proposed_correction": html.escape(proposed_correction, quote=True),
-                        "proposed_object_type": html.escape(proposed_object_type, quote=True),
+                        "suitability": suitability,
+                        "documentpositie_action": documentpositie_action,
+                        "found_under": found_under,
+                        "parent_choice": parent_choice,
+                        "type_action": type_action,
+                        "confirmed_object_type": confirmed_object_type,
+                        "recommendation_strength": recommendation_strength,
+                        "eindoordeel": eindoordeel,
+                        "decision": decision,
+                        "comment": comment,
+                        "proposed_correction": proposed_correction,
+                        "proposed_object_type": proposed_object_type,
                     },
                     conflict=True,
                 ),
