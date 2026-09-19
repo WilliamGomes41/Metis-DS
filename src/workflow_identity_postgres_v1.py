@@ -357,12 +357,15 @@ class _PostgresIdentityMixin:
             raise ConsoleError("unknown_account")
         return self._public_account(account)
 
-    def list_reviewer_accounts(self) -> list[dict[str, Any]]:
+    def list_accounts(self) -> list[dict[str, Any]]:
         try:
             accounts = self.workflow_identity_store.list_accounts()
         except WorkflowIdentityStoreError as exc:
             raise ConsoleError("workflow_identity_unavailable", str(exc)) from exc
-        return [self._public_account(row) for row in accounts if "reviewer" in row["roles"]]
+        return [self._public_account(row) for row in accounts]
+
+    def list_reviewer_accounts(self) -> list[dict[str, Any]]:
+        return [row for row in self.list_accounts() if "reviewer" in row["roles"]]
 
     def _resolve_named_reviewers(self, named_reviewers: list[str], uploader_id: str) -> list[str]:
         if not named_reviewers:
