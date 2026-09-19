@@ -205,3 +205,33 @@ def test_runtime_review_cutover_uses_shared_workflow_transaction() -> None:
     asgi_source = (ROOT / "src" / "console_asgi.py").read_text(encoding="utf-8")
     assert review_source.count("with workflow_transaction(self.workflow_review_store):") >= 2
     assert "bind_workflow_stores(" in asgi_source
+
+
+def test_delete_transaction_rolls_back_document_binding_and_audit_together(
+    workflow_postgres: PostgresCanonicalConfig,
+) -> None:
+    documents, reviews, _uploader, reviewer = _stores(workflow_postgres)
+    reviews.replace_snapshot_bindings(
+        "snap-atomic", [_authorization("snap-atomic", reviewer)]
+    )
+
+    with pytest.raises(RuntimeError, match="simulated_delete_failure"):
+        with workflow_transaction(reviews):
+            documents.delete_document("snap-atomic")
+            reviews.replace_snapshot_bindings("snap-atomic", [])
+            reviews.append_event(
+                event_type="unpublished_snapshot_deleted",
+                object_id="snap-atomic",
+                object_version="1.0",
+                actor="uploader",
+                details={"snapshot_id": "snap-atomic"},
+            )
+            raise RuntimeError("simulated_delete_failure")
+
+    assert documents.get_envelope("snap-atomic") is not None
+    assert documents.list_document_objects("snap-atomic") == _objects()
+    assert list(reviews.read_bindings()) == ["snap-atomic"]
+    assert reviews.read_bindings()["snap-atomic"] == [
+        _authorization("snap-atomic", reviewer)
+    ]
+    assert reviews.read_events() == []
