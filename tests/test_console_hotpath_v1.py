@@ -531,3 +531,76 @@ def test_status_middleware_slow_sync_read_does_not_block_event_loop(tmp_path: Pa
         assert console.list_status_calls == 1
 
     asyncio.run(_run())
+
+
+class _ContextPropagationConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.canonical_publication_store = object()
+        self.fallback_publication_reads = 0
+
+    def _workflow_list_status_rows(
+        self,
+        snapshot_ids: list[str] | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        assert snapshot_ids is None
+        return {
+            "snap-published": {
+                "snapshot_id": "snap-published",
+                "state": "captured_not_published",
+                "has_open_review": False,
+            },
+            "snap-unpublished": {
+                "snapshot_id": "snap-unpublished",
+                "state": "captured_not_published",
+                "has_open_review": True,
+            },
+        }
+
+    def _canonical_list_release_rows(
+        self,
+        snapshot_ids: list[str],
+    ) -> dict[str, dict[str, Any]]:
+        assert set(snapshot_ids) == {"snap-published", "snap-unpublished"}
+        return {
+            "snap-published": {
+                "snapshot_id": "snap-published",
+                "status": "published",
+                "item_count": 1,
+                "active_same_release": 1,
+                "active_other_release": 0,
+                "later_release": False,
+            }
+        }
+
+    def published_snapshot_ids(self, snapshot_ids: list[str]) -> set[str]:
+        self.fallback_publication_reads += 1
+        raise AssertionError(
+            f"request-local publication batch was lost before tree render: {snapshot_ids}"
+        )
+
+
+def test_status_offload_preserves_tree_publication_batch_context(tmp_path: Path) -> None:
+    console = _ContextPropagationConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / "output" / "runtime" / "operations-console",
+    )
+    app = create_console_app(console)
+    install_document_status_ui(app, console)
+
+    async def _run() -> None:
+        transport = ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="https://test",
+        ) as client:
+            client.cookies.set("console_session", "hotpath-session")
+            response = await client.get("/tree")
+
+        assert response.status_code == 200
+        assert "Published fixture" in response.text
+        assert "Unpublished fixture" in response.text
+
+    asyncio.run(_run())
+    assert console.fallback_publication_reads == 0
