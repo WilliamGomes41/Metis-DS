@@ -167,7 +167,7 @@ def _esc(value: Any) -> str:
 
 
 def _chrome(console: OperationsConsole, account: dict[str, Any], body: str) -> str:
-    from src.operations_console_app import _help, _nav, _page
+    from src.operations_console_app import _nav, _page
 
     counts = console.waiting_task_counts(account["account_id"])
     return _page(
@@ -176,7 +176,6 @@ def _chrome(console: OperationsConsole, account: dict[str, Any], body: str) -> s
         <section class="room">
           {body}
         </section>
-        {_help()}
         """,
         title="Audit — V&amp;VN Data Services",
     )
