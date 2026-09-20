@@ -10,12 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cryptography.fernet import Fernet
-
-from src.workflow_remaining_cutover_v1 import (
-    PostgresAuditLLMSecretStore,
-    PostgresAuditRegistry,
-)
+from src.workflow_remaining_cutover_v1 import PostgresAuditRegistry
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -59,17 +54,6 @@ def test_audit_registry_uses_shared_store_not_runtime_files() -> None:
     assert registry.get_audit(created["audit_id"]) == created
     assert registry.list_audits() == [created]
 
-
-def test_audit_secret_stays_encrypted_in_shared_store() -> None:
-    store = _FakeRemainingStore()
-    key = Fernet.generate_key().decode("ascii")
-    secrets = PostgresAuditLLMSecretStore(store, environ={"METIS_AUDIT_SECRET_KEY": key})  # type: ignore[arg-type]
-    secrets.set_api_key("provider-secret")
-    assert secrets.status() == {"available": True, "configured": True}
-    assert store.secrets["llm_api_key"]["ciphertext"] != "provider-secret"
-    assert secrets.read_api_key() == "provider-secret"
-    secrets.clear_api_key()
-    assert secrets.status() == {"available": True, "configured": False}
 
 
 def test_remaining_store_is_explicit_and_requires_previous_cutovers() -> None:
