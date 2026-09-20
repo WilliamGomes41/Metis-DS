@@ -820,3 +820,51 @@ def test_configured_console_origin_blocks_missing_and_cross_origin_posts(
     )
     assert same_origin.status_code == 303
     assert calls == ["researcher.anne"]
+
+def test_logout_requires_same_origin_post_and_get_is_non_mutating(tmp_path: Path) -> None:
+    console = _console(tmp_path)
+    _accounts(console)
+    app = create_console_app(
+        console,
+        trusted_origin="https://console.example.test/",
+    )
+    client = TestClient(app, base_url="https://console.example.test")
+
+    login = client.post(
+        "/login",
+        headers={"Origin": "https://console.example.test"},
+        data={"username": "researcher.anne", "password": "anne-secret"},
+        follow_redirects=False,
+    )
+    assert login.status_code == 303
+    token = client.cookies.get(COOKIE)
+    assert token
+    assert console.session_account(token)["username"] == "researcher.anne"
+
+    cross_get = client.get(
+        "/logout",
+        headers={"Origin": "https://attacker.example"},
+        follow_redirects=False,
+    )
+    assert cross_get.status_code == 405
+    assert console.session_account(token)["username"] == "researcher.anne"
+
+    cross_post = client.post(
+        "/logout",
+        headers={"Origin": "https://attacker.example"},
+        follow_redirects=False,
+    )
+    assert cross_post.status_code == 403
+    assert console.session_account(token)["username"] == "researcher.anne"
+
+    same_origin = client.post(
+        "/logout",
+        headers={"Origin": "https://console.example.test"},
+        follow_redirects=False,
+    )
+    assert same_origin.status_code == 303
+    assert same_origin.headers["location"] == "/login"
+    with pytest.raises(ConsoleError) as caught:
+        console.session_account(token)
+    assert caught.value.code == "not_authenticated"
+
