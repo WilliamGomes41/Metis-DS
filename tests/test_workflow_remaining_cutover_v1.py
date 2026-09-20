@@ -18,7 +18,6 @@ ROOT = Path(__file__).resolve().parents[1]
 class _FakeRemainingStore:
     def __init__(self) -> None:
         self.audits: dict[str, dict] = {}
-        self.secrets: dict[str, dict] = {}
 
     def list_audits(self):
         return sorted(self.audits.values(), key=lambda row: (row["created_at"], row["audit_id"]), reverse=True)
@@ -31,15 +30,6 @@ class _FakeRemainingStore:
             raise RuntimeError("duplicate")
         self.audits[record["audit_id"]] = dict(record)
         return dict(record)
-
-    def get_secret_payload(self, name):
-        return self.secrets.get(name)
-
-    def set_secret_payload(self, name, payload):
-        self.secrets[name] = dict(payload)
-
-    def delete_secret(self, name):
-        self.secrets.pop(name, None)
 
 
 def test_audit_registry_uses_shared_store_not_runtime_files() -> None:
