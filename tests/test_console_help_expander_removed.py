@@ -1,6 +1,15 @@
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
+
+pytestmark = [
+    pytest.mark.release_control_scope_belofte,
+    pytest.mark.release_control_toegang,
+    pytest.mark.release_control_slop,
+    pytest.mark.release_control_releasebewijs,
+]
 
 UI_FILES = (
     ROOT / "src" / "operations_console_app.py",
