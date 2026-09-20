@@ -112,6 +112,7 @@ BLOCKER_LABELS = {
     "second_named_reviewer_required": "Nog een andere benoemde reviewer moet goedkeuren.",
     "blocked_pending_immutable_locator": "Duurzame opslag ontbreekt; publicatie blijft geblokkeerd.",
     "object_tuple_required": "Publicatie is geblokkeerd totdat review is gebonden aan object, versie, hash, bevestigd type, reviewer en besluit.",
+    "pre_review_processing_incomplete": "Pre-review is nog niet afgerond; verwerk het document eerst opnieuw vanuit Documenten.",
     "four_eyes_required": "High-risk objecten vereisen four-eyes: een tweede benoemde reviewer op hetzelfde objecttupel.",
     "already_published": "Dit document is al gepubliceerd.",
     "g2_source_store_unavailable": "De beveiligde bronopslag is niet bereikbaar; publicatie blijft geblokkeerd.",
