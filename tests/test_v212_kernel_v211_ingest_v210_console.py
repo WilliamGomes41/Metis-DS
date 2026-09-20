@@ -792,10 +792,8 @@ def test_c_badges_match_kernel_queues_and_hide_at_zero(tmp_path: Path) -> None:
     accounts_html = client.get("/accounts").text
     assert "Accounts" in accounts_html
     nav = accounts_html[accounts_html.find("rooms") : accounts_html.find("</nav>")]
-    assert "Accounts" in nav
-    assert not (
-        'href="/accounts"' in nav and 'class="badge"' in nav[nav.find("Accounts") : nav.find("Accounts") + 80]
-    )
+    assert 'href="/settings" aria-current="page">Instellingen' in nav
+    assert 'href="/accounts"' not in nav
 
 
 def test_c_publisher_creates_users_and_assigns_closed_roles_others_cannot(tmp_path: Path) -> None:
