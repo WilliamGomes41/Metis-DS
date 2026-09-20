@@ -429,7 +429,7 @@ def _nav(account: dict[str, Any] | None, current: str = "", counts: dict[str, in
         current_attr = ' aria-current="page"' if current == key else ""
         badge = f'<span class="badge">{count}</span>' if count else ""
         links.append(f'<a href="{href}"{current_attr}>{label}{badge}</a>')
-    links.append('<a class="quiet" href="/logout">Uitloggen</a>')
+    links.append('<form method="post" action="/logout"><button class="quiet" type="submit">Uitloggen</button></form>')
     return f"""
     <header class="topbar">
       <a class="brand metis-brand" href="/" aria-label="Metis — V&amp;VN Data Services">
@@ -2102,7 +2102,7 @@ def create_console_app(
         response.set_cookie(COOKIE, session["token"], httponly=True, samesite="lax", secure=True)
         return response
 
-    @app.get("/logout")
+    @app.post("/logout")
     def logout(request: Request) -> RedirectResponse:
         state.logout(request.cookies.get(COOKIE))
         response = RedirectResponse("/login", status_code=303)
