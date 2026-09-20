@@ -569,7 +569,11 @@ class _PostgresWorkflowDocumentsMixin:
             prior_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
             try:
                 if bindings is not None:
-                    _atomic_write(self._bindings_path, target_bindings)
+                    self._prepared_bindings = target_bindings
+                    try:
+                        self._save_bindings()
+                    finally:
+                        self._prepared_bindings = None
                 if ledger_fn is not None:
                     ledger_fn()
                 envelope = target_envelopes.get(sid)

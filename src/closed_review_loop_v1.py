@@ -283,6 +283,9 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             delegated["eindoordeel"] = None
             delegated["decision"] = "revise"
 
+        if decision == "approve":
+            with self._atomic_snapshot_mutation(snapshot_id):
+                return super().review_object(**delegated)
         if decision not in {"revise", "reject"}:
             return super().review_object(**delegated)
 
