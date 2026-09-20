@@ -240,7 +240,7 @@ def test_delete_transaction_rolls_back_document_binding_and_audit_together(
     ]
     assert reviews.read_events() == []
 
-def test_review_stale_conflict_leaves_no_durable_event_or_authorization(
+def test_reject_stale_conflict_leaves_no_durable_event_or_authorization(
     tmp_path: Path,
     workflow_postgres: PostgresCanonicalConfig,
 ) -> None:
@@ -309,6 +309,193 @@ def test_review_stale_conflict_leaves_no_durable_event_or_authorization(
             object_id=target["object_id"],
             decision="reject",
             comment="Reject from a stale form submission.",
+            expected_revision=stale_revision,
+        )
+
+    assert caught.value.code == SNAPSHOT_OBJECT_WRITE_CONFLICT
+    assert documents.list_document_objects(snapshot_id) == before_objects
+    assert reviews.read_bindings() == before_bindings
+    assert reviews.read_events() == before_events
+
+def test_successful_approve_persists_authorization_and_survives_restart(
+    tmp_path: Path,
+    workflow_postgres: PostgresCanonicalConfig,
+) -> None:
+    identity = PostgresWorkflowIdentityStore(workflow_postgres)
+    documents = PostgresConcurrentWorkflowDocumentStore(workflow_postgres)
+    reviews = PostgresWorkflowReviewStore(workflow_postgres)
+    bind_workflow_stores(identity, documents, reviews)
+    console = PostgresReviewWorkflowDurablePublicationConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / "runtime-approve-authority-a",
+        workflow_identity_store=identity,
+        workflow_document_store=documents,
+        workflow_review_store=reviews,
+    )
+    researcher = console.create_account(
+        username="researcher.approve",
+        password=TEST_PASSWORD,
+        roles=("researcher", "reviewer"),
+    )
+    reviewer = console.create_account(
+        username="reviewer.approve",
+        password=TEST_PASSWORD,
+        roles=("reviewer",),
+    )
+    receipt = console.ingest(
+        actor_id=researcher["account_id"],
+        filename="approve-authority.html",
+        data=HTML_FIXTURE.read_bytes(),
+        content_type="text/html",
+        ingest_kind="new",
+        title="Approve authority fixture",
+        version="1.0",
+        date="2026-09-20",
+        live_url="https://example.test/approve-authority",
+        class_="richtlijn",
+        family="test",
+        named_reviewers=[researcher["account_id"], reviewer["account_id"]],
+    )
+    snapshot_id = receipt["snapshot_id"]
+    target = next(
+        row
+        for row in console.snapshot_objects(snapshot_id)
+        if row.get("object_type") == "unclassified"
+    )
+    before_events = reviews.read_events()
+
+    console.review_object(
+        actor_id=reviewer["account_id"],
+        snapshot_id=snapshot_id,
+        object_id=target["object_id"],
+        decision="approve",
+        confirmed_object_type="explanation",
+        expected_revision=console.objects_revision(snapshot_id),
+    )
+
+    approved = next(
+        row
+        for row in documents.list_document_objects(snapshot_id)
+        if row["object_id"] == target["object_id"]
+    )
+    assert approved["governance"]["validation_status"] == "approved"
+    events = reviews.read_events()
+    assert len(events) == len(before_events) + 1
+    bindings = reviews.read_bindings()
+    assert snapshot_id in bindings
+    assert len(bindings[snapshot_id]) == 1
+    binding = bindings[snapshot_id][0]
+    assert binding["object_id"] == approved["object_id"]
+    assert binding["object_version"] == approved["object_version"]
+    assert binding["reviewer_id"] == reviewer["account_id"]
+    assert binding["decision"] == "approve"
+    assert binding["valid"] is True
+
+    import psycopg
+
+    with psycopg.connect(workflow_postgres.dsn) as con:
+        row = con.execute(
+            "SELECT snapshot_id,object_id,object_version,reviewer_account_id,decision,valid "
+            "FROM workflow.publish_authorizations WHERE snapshot_id=%s",
+            (snapshot_id,),
+        ).fetchone()
+    assert row == (
+        snapshot_id,
+        approved["object_id"],
+        approved["object_version"],
+        reviewer["account_id"],
+        "approve",
+        True,
+    )
+
+    restarted_identity = PostgresWorkflowIdentityStore(workflow_postgres)
+    restarted_documents = PostgresConcurrentWorkflowDocumentStore(workflow_postgres)
+    restarted_reviews = PostgresWorkflowReviewStore(workflow_postgres)
+    bind_workflow_stores(restarted_identity, restarted_documents, restarted_reviews)
+    restarted = PostgresReviewWorkflowDurablePublicationConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / "runtime-approve-authority-b",
+        workflow_identity_store=restarted_identity,
+        workflow_document_store=restarted_documents,
+        workflow_review_store=restarted_reviews,
+    )
+    assert restarted.object_review_bindings(snapshot_id) == bindings[snapshot_id]
+
+
+def test_approve_stale_conflict_leaves_no_durable_event_or_authorization(
+    tmp_path: Path,
+    workflow_postgres: PostgresCanonicalConfig,
+) -> None:
+    identity = PostgresWorkflowIdentityStore(workflow_postgres)
+    documents = PostgresConcurrentWorkflowDocumentStore(workflow_postgres)
+    reviews = PostgresWorkflowReviewStore(workflow_postgres)
+    bind_workflow_stores(identity, documents, reviews)
+    console = PostgresReviewWorkflowDurablePublicationConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / "runtime-stale-approve",
+        workflow_identity_store=identity,
+        workflow_document_store=documents,
+        workflow_review_store=reviews,
+    )
+    researcher = console.create_account(
+        username="researcher.stale-approve",
+        password=TEST_PASSWORD,
+        roles=("researcher", "reviewer"),
+    )
+    reviewer = console.create_account(
+        username="reviewer.stale-approve",
+        password=TEST_PASSWORD,
+        roles=("reviewer",),
+    )
+    receipt = console.ingest(
+        actor_id=researcher["account_id"],
+        filename="stale-approve.html",
+        data=HTML_FIXTURE.read_bytes(),
+        content_type="text/html",
+        ingest_kind="new",
+        title="Stale approve fixture",
+        version="1.0",
+        date="2026-09-20",
+        live_url="https://example.test/stale-approve",
+        class_="richtlijn",
+        family="test",
+        named_reviewers=[researcher["account_id"], reviewer["account_id"]],
+    )
+    snapshot_id = receipt["snapshot_id"]
+    target = next(
+        row
+        for row in console.snapshot_objects(snapshot_id)
+        if row.get("object_type") == "unclassified"
+    )
+    stale_revision = console.objects_revision(snapshot_id)
+
+    concurrent = documents.list_document_objects(snapshot_id)
+    concurrent_target = next(
+        row for row in concurrent if row["object_id"] == target["object_id"]
+    )
+    concurrent_target.setdefault("metadata", {})["concurrent_marker"] = "winner"
+    envelope = documents.get_envelope(snapshot_id)
+    assert envelope is not None
+    documents.write_bundle(
+        envelope=envelope,
+        objects=concurrent,
+        expected_revision=stale_revision,
+    )
+
+    before_objects = documents.list_document_objects(snapshot_id)
+    before_events = reviews.read_events()
+    before_bindings = reviews.read_bindings()
+
+    with pytest.raises(ConsoleError) as caught:
+        console.review_object(
+            actor_id=reviewer["account_id"],
+            snapshot_id=snapshot_id,
+            object_id=target["object_id"],
+            decision="approve",
+            confirmed_object_type="explanation",
             expected_revision=stale_revision,
         )
 
