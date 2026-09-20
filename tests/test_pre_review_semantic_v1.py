@@ -359,6 +359,12 @@ def test_missing_provider_persists_blocked_capture_and_recovers_same_snapshot(
     assert console.snapshot_objects(snapshot_id) == []
     assert console.waiting_task_counts(reviewer["account_id"])["review"] == 0
     assert console.waiting_task_counts(publisher["account_id"])["publish"] == 0
+    considered = console.consider_publish(
+        actor_id=publisher["account_id"],
+        snapshot_id=snapshot_id,
+    )
+    assert considered["publish_allowed"] is False
+    assert considered["blockers"] == ["pre_review_processing_incomplete"]
 
     restarted = OperationsConsole(
         root=root,
