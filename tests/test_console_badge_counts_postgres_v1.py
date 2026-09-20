@@ -146,6 +146,55 @@ class _BadgeSubject(_PostgresBadgeCountsMixin):
         }
 
 
+
+
+def test_blocked_pre_review_capture_is_not_a_publish_badge() -> None:
+    config = PostgresCanonicalConfig(dsn=_dsn())
+    store = PostgresWorkflowDocumentRuntimeStore(config)
+    token = uuid.uuid4().hex
+    account_id = f"acc-blocked-{token[:16]}"
+    snapshot_id = f"snap-blocked-{token[:12]}"
+    envelope = _envelope(
+        snapshot_id=snapshot_id,
+        token=token,
+        account_id=account_id,
+        reviewer=True,
+    )
+    envelope["publication_eligibility"] = "blocked_pending_pre_review"
+
+    with store._connect() as con:
+        paths = migration_paths(ROOT)
+        apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))
+        con.execute(
+            "INSERT INTO workflow.accounts(account_id,username,display_name,roles,password_salt,password_hash,created_at) "
+            "VALUES(%s,%s,%s,%s,%s,%s,CURRENT_TIMESTAMP)",
+            (
+                account_id,
+                f"blocked-{token}",
+                "Blocked Badge Test",
+                ["researcher", "reviewer", "publisher"],
+                "salt",
+                "hash",
+            ),
+        )
+
+    original_connect = store._connect
+    try:
+        store.write_bundle(envelope=envelope, objects=None)
+        canonical = _CanonicalStore(set())
+        subject = _BadgeSubject(store, canonical, account_id)
+
+        counts = subject.waiting_task_counts(account_id)
+
+        assert counts["review"] == 0
+        assert counts["publish"] == 0
+    finally:
+        store._connect = original_connect  # type: ignore[method-assign]
+        with store._connect() as con:
+            con.execute("DELETE FROM workflow.documents WHERE snapshot_id=%s", (snapshot_id,))
+            con.execute("DELETE FROM workflow.accounts WHERE account_id=%s", (account_id,))
+
+
 def test_badges_use_constant_round_trips_and_reflect_next_read() -> None:
     config = PostgresCanonicalConfig(dsn=_dsn())
     store = PostgresWorkflowDocumentRuntimeStore(config)
