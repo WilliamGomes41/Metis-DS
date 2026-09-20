@@ -1,8 +1,10 @@
 """Final opt-in workflow authority boundary before multi-instance testing.
 
-PostgreSQL owns Audit records, encrypted Audit secret payloads and class-change
-history embedded in document envelopes. Local release manifests, projections,
-source freezes and JSON mirrors remain rebuildable compatibility/derived copies.
+PostgreSQL owns Audit records and class-change history embedded in document
+envelopes. Legacy encrypted Audit secret payloads may remain recoverable for
+rollback, but they are not an active LLM provider authority. Local release
+manifests, projections, source freezes and JSON mirrors remain rebuildable
+compatibility/derived copies.
 """
 from __future__ import annotations
 
