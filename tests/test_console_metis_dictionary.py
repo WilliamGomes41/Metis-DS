@@ -38,7 +38,12 @@ def test_metis_dictionary_requires_login_and_renders_read_only_explanations(tmp_
 
     assert client.get("/over-console").status_code == 401
 
-    client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
+    login = client.post(
+        "/login",
+        data={"username": "researcher.anne", "password": "anne-secret"},
+        follow_redirects=False,
+    )
+    assert login.status_code == 303
     envelopes_before = console.list_envelopes()
     response = client.get("/over-console")
 
