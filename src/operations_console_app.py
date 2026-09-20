@@ -56,6 +56,7 @@ from src.operations_console_v1 import (
     ALLOWED_CLASSES,
     ALLOWED_DELETE_NEXT,
     CONSOLE_VERSION,
+    PRE_REVIEW_BLOCKED,
     ConsoleError,
     OperationsConsole,
     REPO_ROOT,
@@ -111,6 +112,7 @@ BLOCKER_LABELS = {
     "second_named_reviewer_required": "Nog een andere benoemde reviewer moet goedkeuren.",
     "blocked_pending_immutable_locator": "Duurzame opslag ontbreekt; publicatie blijft geblokkeerd.",
     "object_tuple_required": "Publicatie is geblokkeerd totdat review is gebonden aan object, versie, hash, bevestigd type, reviewer en besluit.",
+    "pre_review_processing_incomplete": "Pre-review is nog niet afgerond; verwerk het document eerst opnieuw vanuit Documenten.",
     "four_eyes_required": "High-risk objecten vereisen four-eyes: een tweede benoemde reviewer op hetzelfde objecttupel.",
     "already_published": "Dit document is al gepubliceerd.",
     "g2_source_store_unavailable": "De beveiligde bronopslag is niet bereikbaar; publicatie blijft geblokkeerd.",
@@ -2309,16 +2311,28 @@ def create_console_app(
             named_reviewers=named_reviewers,
             replaces_snapshot_id=replaces_document.strip() or None,
         )
+        pre_review_blocked = receipt.get("publication_eligibility") == PRE_REVIEW_BLOCKED
+        lead = (
+            "Document opgeslagen. De pre-review kon nog niet worden uitgevoerd; "
+            "het document staat veilig vastgelegd en is nog niet beschikbaar voor Review."
+            if pre_review_blocked
+            else "Vastgelegd en klaar voor review."
+        )
+        next_actions = (
+            '<p><a class="btn-secondary" href="/tree">Naar Documenten</a></p>'
+            if pre_review_blocked
+            else '<p><a class="btn-secondary" href="/review">Naar review</a> <a class="btn-secondary" href="/tree">Naar Documenten</a></p>'
+        )
         return _page(
             f"""
             {_nav(account, "ingest", _counts(account))}
             <section class="room">
               <h1>Document ingeleverd</h1>
-              <p class="lead">Vastgelegd en klaar voor review.</p>
+              <p class="lead">{_esc(lead)}</p>
               <div class="doc-card">
                 {_document_card_heading({**receipt, "status": receipt["state"]})}
               </div>
-              <p><a class="btn-secondary" href="/review">Naar review</a> <a class="btn-secondary" href="/tree">Naar Documenten</a></p>
+              {next_actions}
             </section>
             """
         )
@@ -2334,6 +2348,18 @@ def create_console_app(
             cards = []
             for child in node["children"]:
                 actions = []
+                if (
+                    child.get("publication_eligibility") == PRE_REVIEW_BLOCKED
+                    and ("researcher" in account["roles"] or "reviewer" in account["roles"])
+                ):
+                    actions.append(
+                        f"""
+                        <form method="post" action="/tree/reprocess">
+                          <input type="hidden" name="snapshot_id" value="{_esc(child["snapshot_id"])}">
+                          <button class="btn-primary" type="submit">Pre-review opnieuw uitvoeren</button>
+                        </form>
+                        """
+                    )
                 if can_move:
                     actions.append(
                         f"""
@@ -2396,6 +2422,24 @@ def create_console_app(
             </section>
             """,
             title="Documenten — V&amp;VN Data Services",
+        )
+
+    @app.post("/tree/reprocess")
+    def tree_reprocess(
+        request: Request,
+        snapshot_id: str = Form(...),
+    ) -> RedirectResponse:
+        account = _require(request)
+        envelope = state._envelope(snapshot_id)
+        if envelope.get("publication_eligibility") != PRE_REVIEW_BLOCKED:
+            raise ConsoleError("pre_review_reprocess_not_required")
+        state.reextract_unpublished(
+            actor_id=account["account_id"],
+            snapshot_id=snapshot_id,
+        )
+        return RedirectResponse(
+            f"/review?document={quote(snapshot_id, safe='')}",
+            status_code=303,
         )
 
     @app.post("/tree/move")

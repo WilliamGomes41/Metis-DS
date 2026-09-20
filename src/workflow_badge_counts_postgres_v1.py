@@ -12,7 +12,7 @@ from typing import Any
 
 from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError
 from src.document_status_v1 import derive_lifecycle_status
-from src.operations_console_v1 import CAPTURED, ConsoleError
+from src.operations_console_v1 import CAPTURED, PRE_REVIEW_BLOCKED, ConsoleError
 from src.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
 from src.workflow_remaining_cutover_v1 import (
     PostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
@@ -42,6 +42,7 @@ class _PostgresBadgeCountsMixin:
                         SELECT d.snapshot_id,
                                d.uploader_account_id,
                                d.state,
+                               d.publication_eligibility,
                                d.clinical_rereview_required,
                                EXISTS (
                                    SELECT 1
@@ -68,14 +69,17 @@ class _PostgresBadgeCountsMixin:
                                WHERE s.clinical_rereview_required
                            ) AS tree,
                            COALESCE(
-                               ARRAY_AGG(s.snapshot_id) FILTER (WHERE s.state=%s),
+                               ARRAY_AGG(s.snapshot_id) FILTER (
+                                   WHERE s.state=%s
+                                     AND s.publication_eligibility<>%s
+                               ),
                                ARRAY[]::text[]
                            ) AS publish_snapshot_ids
                     FROM document_status s
                     LEFT JOIN workflow.document_reviewers r
                       ON r.snapshot_id=s.snapshot_id AND r.account_id=%s
                     """,
-                    (account_id, CAPTURED, account_id),
+                    (account_id, CAPTURED, PRE_REVIEW_BLOCKED, account_id),
                 ).fetchone()
         except WorkflowDocumentStoreError:
             raise
@@ -302,6 +306,7 @@ class _PostgresBadgeCountsMixin:
                           ON r.snapshot_id=d.snapshot_id
                         WHERE r.account_id=%s
                           AND d.snapshot_id=COALESCE(%s,d.snapshot_id)
+                          AND d.publication_eligibility<>%s
                     ),
                     current_objects AS (
                         SELECT DISTINCT ON (o.snapshot_id,o.object_id)
@@ -626,7 +631,7 @@ class _PostgresBadgeCountsMixin:
                     LEFT JOIN batch_counts bc ON bc.snapshot_id=a.snapshot_id
                     ORDER BY a.snapshot_id
                     """,
-                    (account_id, snapshot_id or None),
+                    (account_id, snapshot_id or None, PRE_REVIEW_BLOCKED),
                 ).fetchall()
         except WorkflowDocumentStoreError:
             raise
