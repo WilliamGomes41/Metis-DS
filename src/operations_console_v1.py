@@ -2738,6 +2738,26 @@ class OperationsConsole:
                 "publishable_object_ids": [],
                 "publishable_object_count": 0,
             }
+        if envelope.get("publication_eligibility") == PRE_REVIEW_BLOCKED:
+            return {
+                "snapshot_id": snapshot_id,
+                "independence_satisfied": False,
+                "tuple_authorization": False,
+                "four_eyes_required": False,
+                "four_eyes_satisfied": True,
+                "envelope_review_passes_authorizes": False,
+                "publish_allowed": False,
+                "state": envelope["state"],
+                "blockers": ["pre_review_processing_incomplete"],
+                "g2": (
+                    "PASS"
+                    if is_g2_locator(envelope.get("immutable_storage_locator"))
+                    else "BLOCKED"
+                ),
+                "object_contracts": [],
+                "publishable_object_ids": [],
+                "publishable_object_count": 0,
+            }
         objects = self.snapshot_objects(snapshot_id)
         bindings = [
             row
