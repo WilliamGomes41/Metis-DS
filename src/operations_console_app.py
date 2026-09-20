@@ -51,6 +51,7 @@ from src.ingest_limits_v1 import (
     install_ingest_limits,
     read_upload_limited,
 )
+from src.llm_provider_v1 import load_llm_provider_config
 from src.operations_console_v1 import (
     ALLOWED_CLASSES,
     ALLOWED_DELETE_NEXT,
@@ -405,12 +406,12 @@ def _nav(account: dict[str, Any] | None, current: str = "", counts: dict[str, in
         ("publish", "/publish", "Publiceren", counts.get("publish", 0)),
         ("tree", "/tree", "Documenten", counts.get("tree", 0)),
         ("audit", "/audit", "Audit", 0),
-        ("accounts", "/accounts", "Accounts", 0),
-        ("about", "/over-console", "Over console", 0),
+        ("settings", "/settings", "Instellingen", 0),
     ]
     links = []
     for key, href, label, count in rooms:
-        current_attr = ' aria-current="page"' if current == key else ""
+        current_key = "settings" if current in {"settings", "accounts", "llm-settings", "about"} else current
+        current_attr = ' aria-current="page"' if current_key == key else ""
         badge = f'<span class="badge">{count}</span>' if count else ""
         links.append(f'<a href="{href}"{current_attr}>{label}{badge}</a>')
     links.append('<form method="post" action="/logout"><button class="quiet" type="submit">Uitloggen</button></form>')
@@ -2037,6 +2038,69 @@ def create_console_app(
               {audit_tile}
             </section>
             """
+        )
+
+    @app.get("/settings", response_class=HTMLResponse)
+    def settings_home(request: Request) -> str:
+        account = _require(request)
+        cards = """
+          <div class="doc-list">
+            <a class="doc-card" href="/accounts" style="text-decoration:none;">
+              <p class="doc-title">Accounts</p>
+              <p>Beheer interne gebruikers en rollen.</p>
+            </a>
+            <a class="doc-card" href="/settings/llm" style="text-decoration:none;">
+              <p class="doc-title">LLM-instellingen</p>
+              <p>Bekijk de gedeelde provider- en modelconfiguratie van Metis.</p>
+            </a>
+            <a class="doc-card" href="/over-console" style="text-decoration:none;">
+              <p class="doc-title">Over Metis</p>
+              <p>Lees hoe Metis werkt, welke begrippen het gebruikt en waar de grenzen liggen.</p>
+            </a>
+          </div>
+        """
+        return _page(
+            f"""
+            {_nav(account, "settings", _counts(account))}
+            <section class="room">
+              <p class="eyebrow">Beheer</p>
+              <h1>Instellingen</h1>
+              <p class="lead">Accounts, gedeelde LLM-configuratie en informatie over Metis op één plek.</p>
+              {cards}
+            </section>
+            """,
+            title="Instellingen — Metis",
+        )
+
+    @app.get("/settings/llm", response_class=HTMLResponse)
+    def settings_llm(request: Request) -> str:
+        account = _require(request)
+        provider = load_llm_provider_config()
+        key_status = "Geconfigureerd" if provider.api_key else "Niet geconfigureerd"
+        model = provider.model or "Niet geconfigureerd"
+        return _page(
+            f"""
+            {_nav(account, "llm-settings", _counts(account))}
+            <section class="room">
+              <p><a href="/settings">← Terug naar Instellingen</a></p>
+              <p class="eyebrow">Instellingen · LLM</p>
+              <h1>LLM-instellingen</h1>
+              <p class="lead">Metis gebruikt één gedeelde deploymentconfiguratie voor alle toegestane LLM-capabilities.</p>
+              <div class="doc-list">
+                <article class="doc-card">
+                  <p class="doc-title">Model</p>
+                  <p><b>{_esc(model)}</b></p>
+                </article>
+                <article class="doc-card">
+                  <p class="doc-title">API-key</p>
+                  <p><b>{key_status}</b></p>
+                  <p class="muted">De sleutel wordt nooit in de console getoond.</p>
+                </article>
+              </div>
+              <div class="banner warn">Wijzigingen aan providercredential of model worden buiten de console als deploymentconfiguratie beheerd.</div>
+            </section>
+            """,
+            title="LLM-instellingen — Metis",
         )
 
     @app.get("/over-console", response_class=HTMLResponse)
