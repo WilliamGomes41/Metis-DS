@@ -1387,7 +1387,10 @@ mark.broncontext-marked {
     padding-bottom: 3px;
   }
 
-  .rooms a,
+  .rooms a {
+    white-space: nowrap;
+  }
+
   .rooms button {
     white-space: nowrap;
   }
