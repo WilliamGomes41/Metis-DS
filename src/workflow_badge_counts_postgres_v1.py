@@ -12,7 +12,7 @@ from typing import Any
 
 from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError
 from src.document_status_v1 import derive_lifecycle_status
-from src.operations_console_v1 import CAPTURED, ConsoleError
+from src.operations_console_v1 import CAPTURED, PRE_REVIEW_BLOCKED, ConsoleError
 from src.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
 from src.workflow_remaining_cutover_v1 import (
     PostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
@@ -42,6 +42,7 @@ class _PostgresBadgeCountsMixin:
                         SELECT d.snapshot_id,
                                d.uploader_account_id,
                                d.state,
+                               d.publication_eligibility,
                                d.clinical_rereview_required,
                                EXISTS (
                                    SELECT 1
@@ -75,7 +76,7 @@ class _PostgresBadgeCountsMixin:
                     LEFT JOIN workflow.document_reviewers r
                       ON r.snapshot_id=s.snapshot_id AND r.account_id=%s
                     """,
-                    (account_id, CAPTURED, account_id),
+                    (account_id, CAPTURED, PRE_REVIEW_BLOCKED, account_id),
                 ).fetchone()
         except WorkflowDocumentStoreError:
             raise
