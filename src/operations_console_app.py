@@ -75,6 +75,7 @@ from src.proportionate_review_v1 import (
     render_normal_risk_batch_panel,
 )
 from src.serving_relations_v1 import CLOSED_RELATION_TYPES, proposed_relations
+from src.metis_dictionary_ui import render as render_metis_dictionary
 
 SERVICE_VERSION = CONSOLE_VERSION
 COOKIE = "console_session"
@@ -405,6 +406,7 @@ def _nav(account: dict[str, Any] | None, current: str = "", counts: dict[str, in
         ("tree", "/tree", "Documenten", counts.get("tree", 0)),
         ("audit", "/audit", "Audit", 0),
         ("accounts", "/accounts", "Accounts", 0),
+        ("about", "/over-console", "Over console", 0),
     ]
     links = []
     for key, href, label, count in rooms:
@@ -2035,6 +2037,17 @@ def create_console_app(
               {audit_tile}
             </section>
             """
+        )
+
+    @app.get("/over-console", response_class=HTMLResponse)
+    def about_console(request: Request) -> str:
+        account = _require(request)
+        return _page(
+            f"""
+            {_nav(account, "about", _counts(account))}
+            {render_metis_dictionary(_esc)}
+            """,
+            title="Metis uitgelegd — V&amp;VN Data Services",
         )
 
     @app.get("/login", response_class=HTMLResponse)

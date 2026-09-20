@@ -1417,3 +1417,22 @@ mark.broncontext-marked {
   margin: 12px 0;
   background: var(--wit);
 }
+
+.dictionary-room { max-width: 72rem; }
+.dictionary-room > h1 { margin-bottom: 0.5rem; }
+.dictionary-chain { margin: 2.25rem 0 4.5rem; padding: clamp(20px, 4vw, 34px); border: 1px solid #c5e4ea; border-radius: 16px; background: var(--water-light); }
+.dictionary-chain ol { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; padding: 0; list-style: none; color: var(--paars); font-family: var(--font-heading); font-weight: 700; }
+.dictionary-chain li { display: flex; align-items: center; gap: 8px; }
+.dictionary-chain li:not(:last-child)::after { color: var(--water); content: "→"; }
+.dictionary-chain p { max-width: 66rem; margin: 0; color: var(--muted); }
+.dictionary-section { display: grid; grid-template-columns: minmax(170px, 0.55fr) minmax(0, 1.45fr); gap: clamp(28px, 7vw, 104px); padding: clamp(46px, 8vw, 78px) 0; border-top: 1px solid #c5e4ea; }
+.dictionary-section header h2 { margin: 0 0 10px; color: var(--paars); }
+.dictionary-section header p { margin: 0; color: var(--muted); }
+.dictionary-term { padding-bottom: 26px; }
+.dictionary-term + .dictionary-term { padding-top: 28px; border-top: 1px solid #c5e4ea; }
+.dictionary-term h3 { margin: 0 0 8px; color: var(--text); font-size: 1.25rem; }
+.dictionary-term p { margin: 0; max-width: 50rem; }
+.dictionary-example { display: grid; grid-template-columns: 5.8rem minmax(0, 1fr); gap: 10px; margin-top: 12px !important; color: var(--muted); }
+.dictionary-example span { color: var(--water); font-family: var(--font-heading); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+@media (max-width: 860px) { .dictionary-section { grid-template-columns: 1fr; gap: 22px; } }
+@media (max-width: 560px) { .dictionary-chain { margin-bottom: 3rem; } .dictionary-chain ol { display: grid; gap: 4px; } .dictionary-chain li:not(:last-child)::after { content: "↓"; } .dictionary-example { grid-template-columns: 1fr; gap: 3px; } }
