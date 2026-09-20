@@ -17,10 +17,14 @@ import pytest
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
 from src.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
+from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
+from src.workflow_review_cutover_v1 import PostgresReviewWorkflowDurablePublicationConsole
 from src.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 from src.workflow_transaction_v1 import bind_workflow_stores, workflow_transaction
 
 ROOT = Path(__file__).resolve().parents[1]
+HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
+TEST_PASSWORD = __name__
 MIGRATIONS = (
     "002_workflow_schema.sql",
     "003_workflow_document_envelope_payload.sql",
@@ -235,3 +239,79 @@ def test_delete_transaction_rolls_back_document_binding_and_audit_together(
         _authorization("snap-atomic", reviewer)
     ]
     assert reviews.read_events() == []
+
+def test_review_stale_conflict_leaves_no_durable_event_or_authorization(
+    tmp_path: Path,
+    workflow_postgres: PostgresCanonicalConfig,
+) -> None:
+    identity = PostgresWorkflowIdentityStore(workflow_postgres)
+    documents = PostgresConcurrentWorkflowDocumentStore(workflow_postgres)
+    reviews = PostgresWorkflowReviewStore(workflow_postgres)
+    bind_workflow_stores(identity, documents, reviews)
+    console = PostgresReviewWorkflowDurablePublicationConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / "runtime-review-atomicity",
+        workflow_identity_store=identity,
+        workflow_document_store=documents,
+        workflow_review_store=reviews,
+    )
+    researcher = console.create_account(
+        username="researcher.atomic",
+        password=TEST_PASSWORD,
+        roles=("researcher", "reviewer"),
+    )
+    reviewer = console.create_account(
+        username="reviewer.atomic",
+        password=TEST_PASSWORD,
+        roles=("reviewer",),
+    )
+    receipt = console.ingest(
+        actor_id=researcher["account_id"],
+        filename="atomicity.html",
+        data=HTML_FIXTURE.read_bytes(),
+        content_type="text/html",
+        ingest_kind="new",
+        title="Review atomicity fixture",
+        version="1.0",
+        date="2026-09-20",
+        live_url="https://example.test/review-atomicity",
+        class_="richtlijn",
+        family="test",
+        named_reviewers=[researcher["account_id"], reviewer["account_id"]],
+    )
+    snapshot_id = receipt["snapshot_id"]
+    current = console.snapshot_objects(snapshot_id)
+    target = next(row for row in current if row.get("object_type") == "unclassified")
+    stale_revision = console.objects_revision(snapshot_id)
+
+    concurrent = documents.list_document_objects(snapshot_id)
+    other = next(row for row in concurrent if row["object_id"] != target["object_id"])
+    other.setdefault("metadata", {})["concurrent_marker"] = "winner"
+    envelope = documents.get_envelope(snapshot_id)
+    assert envelope is not None
+    documents.write_bundle(
+        envelope=envelope,
+        objects=concurrent,
+        expected_revision=stale_revision,
+    )
+
+    before_objects = documents.list_document_objects(snapshot_id)
+    before_events = reviews.read_events()
+    before_bindings = reviews.read_bindings()
+
+    with pytest.raises(ConsoleError) as caught:
+        console.review_object(
+            actor_id=reviewer["account_id"],
+            snapshot_id=snapshot_id,
+            object_id=target["object_id"],
+            decision="reject",
+            comment="Reject from a stale form submission.",
+            expected_revision=stale_revision,
+        )
+
+    assert caught.value.code == SNAPSHOT_OBJECT_WRITE_CONFLICT
+    assert documents.list_document_objects(snapshot_id) == before_objects
+    assert reviews.read_bindings() == before_bindings
+    assert reviews.read_events() == before_events
+
