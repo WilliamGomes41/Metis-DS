@@ -27,7 +27,7 @@ from src.operations_console_app import (
     _render_review_room,
     _review_is_final,
 )
-from src.operations_console_v1 import ConsoleError, OperationsConsole, review_stacks, slow_review_duty
+from src.operations_console_v1 import PRE_REVIEW_BLOCKED, ConsoleError, OperationsConsole, review_stacks, slow_review_duty
 from src.proportionate_review_v1 import (
     ProportionateReviewConsole,
     normal_risk_batch_counts,
@@ -184,6 +184,8 @@ def review_work_item(
     account_id = str(account.get("account_id") or "")
     if not account_id or not _assigned_to_reviewer(envelope, account_id):
         return None
+    if str(envelope.get("publication_eligibility") or "") == PRE_REVIEW_BLOCKED:
+        return None
 
     snapshot_id = str(envelope.get("snapshot_id") or "")
     if not snapshot_id:
@@ -269,6 +271,8 @@ def review_workboard_items(
         items: list[dict[str, Any]] = []
         for snapshot_id, summary in summaries.items():
             envelope = dict(summary["envelope"])
+            if str(envelope.get("publication_eligibility") or "") == PRE_REVIEW_BLOCKED:
+                continue
             closure_gap_count = int(summary.get("closure_gap_count") or 0)
             closure_gap_first = str(summary.get("closure_gap_first") or "")
             closure_gap_ids = [closure_gap_first] if closure_gap_count and closure_gap_first else []
