@@ -37,6 +37,18 @@ def _client(tmp_path: Path) -> TestClient:
     return client
 
 
+def test_settings_routes_require_login(tmp_path: Path) -> None:
+    console = OperationsConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / "output" / "runtime" / "operations-console",
+    )
+    client = TestClient(create_console_app(console))
+
+    assert client.get("/settings").status_code == 401
+    assert client.get("/settings/llm").status_code == 401
+
+
 def test_settings_is_single_top_level_door_for_accounts_llm_and_about(tmp_path: Path) -> None:
     client = _client(tmp_path)
 
