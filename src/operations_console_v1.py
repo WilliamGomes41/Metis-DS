@@ -97,6 +97,7 @@ SCHEMA_V12 = REPO_ROOT / "schemas" / "knowledge_object.schema.v1.2.json"
 CONSOLE_VERSION = "operations-console-v1.0.0"
 SNAPSHOT_OBJECT_WRITE_CONFLICT = "snapshot_object_write_conflict"
 CAPTURED = "captured_not_published"
+PRE_REVIEW_BLOCKED = "blocked_pending_pre_review"
 PUBLISHED_ENVELOPE_STATES = frozenset({"published", "superseded", "withdrawn"})
 UNPUBLISHED_DELETE_EVENT = "unpublished_snapshot_deleted"
 CLASS_CHANGE_HISTORY_DIRNAME = "class_change_history"
@@ -1150,6 +1151,7 @@ class OperationsConsole:
             if (
                 "publisher" in roles
                 and envelope.get("state") == CAPTURED
+                and envelope.get("publication_eligibility") != PRE_REVIEW_BLOCKED
                 and not self.snapshot_is_published(envelope["snapshot_id"])
             ):
                 publish += 1
@@ -1486,16 +1488,63 @@ class OperationsConsole:
             if not replaces_snapshot_id:
                 raise ConsoleError("replaces_snapshot_id_required")
             previous = self._envelope(replaces_snapshot_id)
-        fragments, spec = self._fragments_and_spec(
-            kind,
-            stored_path,
-            data=data,
-            document_id=document_id,
-            source_id=source_id,
-            title=title.strip(),
-            family=family_hook,
-            class_=class_,
-        )
+
+        envelope = {
+            "snapshot_id": snapshot_id,
+            "source_id": source_id,
+            "document_id": document_id,
+            "sha256": digest,
+            "locator": locator,
+            "binary_path": str(stored_path.resolve()),
+            "immutable_storage_locator": immutable_locator,
+            "state": CAPTURED,
+            "publication_eligibility": (
+                "eligible_for_transform_and_review"
+                if immutable_locator
+                else "blocked_pending_immutable_storage"
+            ),
+            "content_kind": kind,
+            "ingest_kind": ingest_kind,
+            "title": title.strip(),
+            "version": source_version,
+            "date": source_date,
+            "live_url": live_url or url or "",
+            "class": class_,
+            "family": family_hook,
+            "named_reviewers": reviewers,
+            "uploader_account_id": actor_id,
+            "review_passes": {},
+            "is_live_capture": ingest_kind == "new",
+            "replaces_snapshot_id": replaces_snapshot_id,
+            "object_diff": None,
+            "clinical_rereview_required": False,
+            "acquired_at": utc_now(),
+            "console_version": CONSOLE_VERSION,
+        }
+
+        try:
+            fragments, spec = self._fragments_and_spec(
+                kind,
+                stored_path,
+                data=data,
+                document_id=document_id,
+                source_id=source_id,
+                title=title.strip(),
+                family=family_hook,
+                class_=class_,
+            )
+        except ConsoleError as exc:
+            if not exc.code.startswith("pre_review_llm_"):
+                raise
+            blocked_envelope = deepcopy(envelope)
+            blocked_envelope["publication_eligibility"] = PRE_REVIEW_BLOCKED
+            blocked_envelope["processing_blocker"] = exc.code
+            self._commit_prepared_store(
+                envelopes={snapshot_id: blocked_envelope},
+                snapshot_id=snapshot_id,
+            )
+            return self._receipt(blocked_envelope)
+
         manifest = {
             "canonical_source": {
                 "source_id": source_id,
@@ -1524,41 +1573,11 @@ class OperationsConsole:
                 source_hash=digest,
             )
         objects = apply_passage_register(objects)
-        object_diff = None
         if previous:
-            object_diff = self._diff_objects(self.snapshot_objects(previous["snapshot_id"]), objects)
-        envelope = {
-            "snapshot_id": snapshot_id,
-            "source_id": source_id,
-            "document_id": document_id,
-            "sha256": digest,
-            "locator": locator,
-            "binary_path": str(stored_path.resolve()),
-            "immutable_storage_locator": immutable_locator,
-            "state": CAPTURED,
-            "publication_eligibility": (
-                "eligible_for_transform_and_review"
-                if immutable_locator
-                else "blocked_pending_immutable_storage"
-            ),
-            "content_kind": kind,
-            "ingest_kind": ingest_kind,
-            "title": title.strip(),
-            "version": source_version,
-            "date": source_date,
-            "live_url": live_url or url or "",
-            "class": class_,
-            "family": family_hook,
-            "named_reviewers": reviewers,
-            "uploader_account_id": actor_id,
-            "review_passes": {},
-            "is_live_capture": ingest_kind == "new",
-            "replaces_snapshot_id": replaces_snapshot_id,
-            "object_diff": object_diff,
-            "clinical_rereview_required": False,
-            "acquired_at": utc_now(),
-            "console_version": CONSOLE_VERSION,
-        }
+            envelope["object_diff"] = self._diff_objects(
+                self.snapshot_objects(previous["snapshot_id"]),
+                objects,
+            )
         prepared_envelopes = {snapshot_id: envelope}
         self._commit_prepared_store(
             objects=(snapshot_id, objects),
@@ -1627,6 +1646,18 @@ class OperationsConsole:
         prepared_envelope = deepcopy(envelope)
         prepared_envelope["review_passes"] = {}
         prepared_envelope["state"] = CAPTURED
+        prepared_envelope["publication_eligibility"] = (
+            "eligible_for_transform_and_review"
+            if prepared_envelope.get("immutable_storage_locator")
+            else "blocked_pending_immutable_storage"
+        )
+        prepared_envelope.pop("processing_blocker", None)
+        replaces_snapshot_id = str(prepared_envelope.get("replaces_snapshot_id") or "")
+        if replaces_snapshot_id:
+            prepared_envelope["object_diff"] = self._diff_objects(
+                self.snapshot_objects(replaces_snapshot_id),
+                objects,
+            )
         self._commit_prepared_store(
             objects=(snapshot_id, objects),
             envelopes={snapshot_id: prepared_envelope},
@@ -1896,6 +1927,7 @@ class OperationsConsole:
                     "version": envelope["version"],
                     "family": family,
                     "status": envelope["state"],
+                    "publication_eligibility": envelope.get("publication_eligibility", ""),
                     "sha256": envelope["sha256"],
                     "parent": family,
                     "is_live_capture": envelope["is_live_capture"],
