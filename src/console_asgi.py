@@ -15,7 +15,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-from src.audit_llm_settings_v1 import install_audit_llm_settings_routes
 from src.audit_room_v1 import install_audit_routes
 from src.azure_authoritative_publication_console_v1 import AzureAuthoritativePublicationConsole
 from src.azure_postgres_credential_v1 import CachedAzurePostgresCredential
@@ -324,7 +323,6 @@ def build_app() -> object:
     install_document_status_ui(app, console)
     install_review_workboard(app, console)
     install_proportionate_review_routes(app, console)
-    install_audit_llm_settings_routes(app, console)
     install_deterministic_review_repair_routes(app, console)
     install_closed_review_routes(app, console)
     harden_legacy_repair_routes(app, console)
