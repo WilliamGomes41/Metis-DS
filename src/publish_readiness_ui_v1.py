@@ -19,7 +19,6 @@ from src.operations_console_app import (
     ERROR_COPY,
     _document_card_heading,
     _esc,
-    _help,
     _nav,
     _page,
 )
@@ -284,7 +283,6 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
               {success}
               <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen documenten.</p>'}</div>
             </section>
-            {_help()}
             '''
         )
 

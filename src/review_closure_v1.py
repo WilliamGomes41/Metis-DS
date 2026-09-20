@@ -402,7 +402,7 @@ def harden_legacy_repair_routes(app: FastAPI, console: ReviewClosureConsole) -> 
                     f"<p><a href='/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}'>Open in Review</a></p>"
                     "</article>"
                 )
-        from src.operations_console_app import _help, _nav, _page
+        from src.operations_console_app import _nav, _page
 
         body = (
             f"{_nav(account, 'review', console.waiting_task_counts(account['account_id']))}"
@@ -410,6 +410,5 @@ def harden_legacy_repair_routes(app: FastAPI, console: ReviewClosureConsole) -> 
             "<p class='lead'>Alleen read-only herstelzicht. Canonieke correcties lopen uitsluitend via Review → correctie specificeren.</p>"
             + ("".join(cards) or "<p class='muted'>Geen achtergebleven herstelwerk.</p>")
             + "</section>"
-            + _help(room="review")
         )
         return _page(body, title="Review herstel — V&amp;VN Data Services")

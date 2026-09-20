@@ -84,14 +84,7 @@ FILENAME_HINT = (
     "De titel hieronder mag wél spaties bevatten."
 )
 BRAND_DIR = REPO_ROOT / "assets" / "brand"
-RESEARCHER_ROOMS = frozenset({"ingest", "tree", "review"})
 REVIEW_TASKS = frozenset({"individual", "together", "headings", "control", "decisions"})
-HELP_ONCE = (
-    "Interne operations console voor richtlijnonderzoekers en reviewers. "
-    "Dit is niet de Product API. Niet ontworpen voor verpleegkundigen. "
-    "Chat is geen kamer in deze console. Geen parallel ingestpad voor engineers "
-    "als onderzoekerservaring."
-)
 STATUS_LABELS = {
     "captured_not_published": "ingevoerd, niet gepubliceerd",
     "needs_review": "wacht op beoordeling",
@@ -395,17 +388,6 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
 </body>
 </html>
 """
-
-
-def _help(*, room: str = "") -> str:
-    if room in RESEARCHER_ROOMS:
-        return ""
-    return f"""
-    <details class="help">
-      <summary>Over deze console</summary>
-      <p>{_esc(HELP_ONCE)}</p>
-    </details>
-    """
 
 
 def _nav(account: dict[str, Any] | None, current: str = "", counts: dict[str, int] | None = None) -> str:
@@ -1885,7 +1867,6 @@ def _render_review_room(
               {"".join(cards) if not chosen else ""}
               {objects_html or empty}
             </section>
-            {_help(room="review")}
             """
     )
 
@@ -1975,7 +1956,6 @@ def create_console_app(
               <p class="muted">{_esc(exc.code)}</p>
               {back}
             </section>
-            {_help()}
             """
         )
         return HTMLResponse(body, status_code=status)
@@ -1992,7 +1972,6 @@ def create_console_app(
                   <p class="lead">Meld je aan om documenten in te leveren, te reviewen of te publiceren.</p>
                   <p><a class="btn-primary" href="/login" style="display:inline-block;text-decoration:none;">Aanmelden</a></p>
                 </section>
-                {_help()}
                 """
             )
         counts = _counts(account)
@@ -2074,7 +2053,6 @@ def create_console_app(
                 <button class="btn-primary" type="submit">Aanmelden</button>
               </form>
             </section>
-            {_help()}
             """
         )
 
@@ -2186,7 +2164,6 @@ def create_console_app(
               </form>
               {_ingested_document_list(state, documents, account)}
             </section>
-            {_help(room="ingest")}
             <script>
             (function () {{
               var kind = document.getElementById("ingest_kind");
@@ -2266,7 +2243,6 @@ def create_console_app(
               </div>
               <p><a class="btn-secondary" href="/review">Naar review</a> <a class="btn-secondary" href="/tree">Naar Documenten</a></p>
             </section>
-            {_help(room="ingest")}
             """
         )
 
@@ -2341,7 +2317,6 @@ def create_console_app(
               <p class="lead">Documenten per onderwerp en klasse. Verplaatsen of klasse wijzigen vanaf het document.</p>
               {"".join(blocks) or empty}
             </section>
-            {_help(room="tree")}
             """,
             title="Documenten — V&amp;VN Data Services",
         )
@@ -2468,7 +2443,6 @@ def create_console_app(
               </article>
               <p><a class="btn-secondary" href="/review?document={_esc(chosen)}&amp;object={_esc(object_id)}{f'&amp;task={_esc(safe_task)}' if safe_task else ''}">Terug naar review</a></p>
             </section>
-            {_help(room="review")}
             """
         )
 
@@ -2723,7 +2697,6 @@ def create_console_app(
               {success}
               <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen documenten.</p>'}</div>
             </section>
-            {_help()}
             """
         )
 
@@ -2807,7 +2780,6 @@ def create_console_app(
               {form}
               <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen accounts.</p>'}</div>
             </section>
-            {_help()}
             """
         )
 
