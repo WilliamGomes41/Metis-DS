@@ -22,5 +22,6 @@ def test_legacy_console_help_expander_is_removed() -> None:
     assert "HELP_ONCE" not in combined
     assert "RESEARCHER_ROOMS" not in combined
     assert '<details class="help">' not in combined
+    assert "Over deze console" not in combined
     assert ".help {" not in css
     assert ".help summary {" not in css
