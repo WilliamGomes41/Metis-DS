@@ -15,7 +15,7 @@ import pytest
 
 from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
 from src.operations_console_app import _broncontext_html
-from src.operations_console_v1 import ConsoleError, OperationsConsole
+from src.operations_console_v1 import PRE_REVIEW_BLOCKED, ConsoleError, OperationsConsole
 from src.passage_register_v1 import passage_register_of
 from src.review_cockpit_v1 import why_selected
 from src.pre_review_semantic_v1 import (
@@ -293,6 +293,155 @@ def test_runtime_policy_is_instance_bound_and_keeps_explicit_rollback_mode(tmp_p
     )[1]
     assert "semantic_passage" not in rollback_spec["objects"][1]
 
+
+
+def test_missing_provider_persists_blocked_capture_and_recovers_same_snapshot(
+    tmp_path: Path,
+) -> None:
+    fragments = [_fragment("p1", "Bespreek samen de behandeling.")]
+    env = {PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE}
+
+    def fake_post(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
+        return _response(_full_span_proposal(payload))
+
+    root = tmp_path / "root"
+    source_store = tmp_path / "sources"
+    runtime = tmp_path / "runtime"
+    console = OperationsConsole(
+        root=root,
+        source_store=source_store,
+        runtime=runtime,
+    )
+    researcher = console.create_account(
+        username="researcher",
+        password="researcher-secret",
+        roles=("researcher",),
+        display_name="Researcher",
+    )
+    reviewer = console.create_account(
+        username="reviewer",
+        password="reviewer-secret",
+        roles=("reviewer",),
+        display_name="Reviewer",
+    )
+    publisher = console.create_account(
+        username="publisher",
+        password="publisher-secret",
+        roles=("publisher",),
+        display_name="Publisher",
+    )
+    console._extract = lambda *_args, **_kwargs: fragments
+    bind_pre_review_semantic_processing(
+        console,
+        environ=env,
+        post_json=fake_post,
+    )
+
+    receipt = console.ingest(
+        actor_id=researcher["account_id"],
+        filename="blocked.html",
+        data=b"<html><body>blocked</body></html>",
+        content_type="text/html",
+        ingest_kind="new",
+        title="Blocked",
+        version="1.0",
+        date="2026-09-20",
+        live_url="",
+        class_="richtlijn",
+        family="kwaliteit",
+        named_reviewers=[reviewer["account_id"]],
+    )
+
+    snapshot_id = receipt["snapshot_id"]
+    source_hash = receipt["sha256"]
+    assert receipt["publication_eligibility"] == PRE_REVIEW_BLOCKED
+    assert receipt["processing_blocker"] == "pre_review_llm_api_key_required"
+    assert console.snapshot_objects(snapshot_id) == []
+    assert console.waiting_task_counts(reviewer["account_id"])["review"] == 0
+    assert console.waiting_task_counts(publisher["account_id"])["publish"] == 0
+
+    restarted = OperationsConsole(
+        root=root,
+        source_store=source_store,
+        runtime=runtime,
+    )
+    restarted._extract = lambda *_args, **_kwargs: fragments
+    bind_pre_review_semantic_processing(
+        restarted,
+        environ=env,
+        post_json=fake_post,
+    )
+    durable = restarted._envelope(snapshot_id)
+    assert durable["sha256"] == source_hash
+    assert durable["publication_eligibility"] == PRE_REVIEW_BLOCKED
+    assert restarted.snapshot_objects(snapshot_id) == []
+
+    env[LLM_API_KEY_ENV] = "product-key"
+    env[LLM_MODEL_ENV] = "test-model"
+    recovered = restarted.reextract_unpublished(
+        actor_id=researcher["account_id"],
+        snapshot_id=snapshot_id,
+    )
+
+    assert recovered["snapshot_id"] == snapshot_id
+    assert recovered["sha256"] == source_hash
+    assert recovered["publication_eligibility"] != PRE_REVIEW_BLOCKED
+    assert "processing_blocker" not in recovered
+    assert restarted.snapshot_objects(snapshot_id)
+    assert restarted.waiting_task_counts(reviewer["account_id"])["review"] == 1
+
+
+def test_non_pre_review_processing_error_does_not_commit_capture(tmp_path: Path) -> None:
+    console = OperationsConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources",
+        runtime=tmp_path / "runtime",
+    )
+    researcher = console.create_account(
+        username="researcher",
+        password="researcher-secret",
+        roles=("researcher",),
+        display_name="Researcher",
+    )
+    reviewer = console.create_account(
+        username="reviewer",
+        password="reviewer-secret",
+        roles=("reviewer",),
+        display_name="Reviewer",
+    )
+
+    def fail_extract(*_args, **_kwargs):
+        raise ConsoleError("extract_failed")
+
+    console._extract = fail_extract
+    bind_pre_review_semantic_processing(
+        console,
+        environ={
+            PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
+            LLM_API_KEY_ENV: "product-key",
+            LLM_MODEL_ENV: "test-model",
+        },
+        post_json=lambda *_args: {},
+    )
+
+    with pytest.raises(ConsoleError) as error:
+        console.ingest(
+            actor_id=researcher["account_id"],
+            filename="broken.html",
+            data=b"<html><body>broken</body></html>",
+            content_type="text/html",
+            ingest_kind="new",
+            title="Broken",
+            version="1.0",
+            date="2026-09-20",
+            live_url="",
+            class_="richtlijn",
+            family="kwaliteit",
+            named_reviewers=[reviewer["account_id"]],
+        )
+
+    assert error.value.code == "extract_failed"
+    assert console.list_envelopes() == []
 
 def test_read_only_repair_catalog_does_not_call_llm(tmp_path: Path) -> None:
     fragments = [_fragment("p1", "Bespreek samen de behandeling.")]
