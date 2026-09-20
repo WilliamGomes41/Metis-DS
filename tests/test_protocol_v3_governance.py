@@ -79,8 +79,9 @@ def test_audit_room_and_pre_review_semantic_boundaries_are_locked() -> None:
         "het LLM mag uitsluitend exacte bronspans selecteren of combineren",
         "Metis reconstrueert een kandidaat zelf uit de aangewezen bronspans",
         "semantic mode faalt closed en valt niet stil terug op de deterministische splitter",
-        "METIS_PRE_REVIEW_LLM_API_KEY",
-        "METIS_PRE_REVIEW_LLM_MODEL",
+        "METIS_LLM_API_KEY",
+        "METIS_LLM_MODEL",
+        "Post-publication compiled knowledge",
         "**Blind beoordelen**",
         "A, B, gelijkwaardig of beide onvoldoende",
         "**Menselijke correctie vastleggen**",
@@ -93,7 +94,7 @@ def test_audit_room_and_pre_review_semantic_boundaries_are_locked() -> None:
     ):
         assert required in roadmap
     assert "Geen generiek auditframework voordat meerdere echte auditvormen aantoonbaar dezelfde state en persistence delen." in roadmap
-    assert "Geen AI/modelroute buiten Audit behalve de expliciet geconfigureerde brongebonden pre-Review passagevormingsroute" in roadmap
+    assert "Geen AI/modelroute buiten Audit behalve de expliciet geconfigureerde brongebonden pre-Review passagevormingsroute en een expliciet geautoriseerde post-publication compiled-knowledge-route." in roadmap
     assert "Geen silent deterministic fallback wanneer semantic pre-Review mode is geactiveerd." in roadmap
     assert "Geen individuele fout of correctie die automatisch een softwarewijziging, branch of PR veroorzaakt." in roadmap
     assert "Geen `READY FOR IMPLEMENTATION` als impliciete autorisatie voor codewijziging, GitHub-write, merge, deploy of publicatie." in roadmap
@@ -105,6 +106,18 @@ def test_audit_room_and_pre_review_semantic_boundaries_are_locked() -> None:
     assert "| AI uitsluitend als experimenteel instrument binnen Audit | VERVALLEN" in roadmap
     assert "| Audit → READY FOR IMPLEMENTATION | LOCKED — hier eindigt Audit; ontwikkeling gebeurt buiten Audit |" in roadmap
     assert "| Metis programmeert zichzelf / automatische APPLY → GitHub | AFGEWEZEN" in roadmap
+
+
+def test_protocol_locks_compiled_knowledge_as_derived_and_shared_llm_config() -> None:
+    protocol = PROTOCOL.read_text(encoding="utf-8")
+    for required in (
+        "### 12.1 Compiled knowledge",
+        "uitsluitend actieve gepubliceerde kennis",
+        "afgeleide, rebuildable projectie",
+        "geen schrijfpad naar canonieke kennis",
+        "één deployment-owned providercredential en modelkeuze",
+    ):
+        assert required in protocol
 
 
 def test_protocol_and_governance_end_audit_at_evidence_boundary() -> None:
