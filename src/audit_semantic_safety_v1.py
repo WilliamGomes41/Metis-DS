@@ -19,7 +19,6 @@ from src.pre_review_semantic_v1 import PostJson, semantic_units_before_review
 from src.semantic_passage_v1 import SELECTION_ORIGIN_COVERAGE, SELECTION_ORIGIN_PROPOSAL
 
 
-AUDIT_LLM_MODEL_ENV = "METIS_AUDIT_LLM_MODEL"
 SUITE_SCHEMA_VERSION = 1
 REQUIRED_RISK_CATEGORIES = frozenset(
     {"omission", "condition", "exception", "negation", "meaning_distortion"}
