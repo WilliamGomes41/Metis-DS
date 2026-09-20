@@ -232,12 +232,12 @@ def test_audit_creation_does_not_touch_canonical_or_publication_state(tmp_path):
 
 
 
-def test_frozen_semantic_safety_run_uses_audit_secret_and_persists_only_audit_evidence(
+def test_frozen_semantic_safety_run_uses_shared_provider_and_persists_only_audit_evidence(
     tmp_path,
     monkeypatch,
 ):
     evaluated_commit = "79b35616725da3a1f42a938c2f5a874ca16cfad0"
-        monkeypatch.setenv("METIS_LLM_MODEL", "test-model")
+    monkeypatch.setenv("METIS_LLM_MODEL", "test-model")
     monkeypatch.setenv("METIS_LLM_API_KEY", "shared-provider-secret")
     marker = tmp_path / "deployed_commit.txt"
     marker.write_text(evaluated_commit + "\n", encoding="utf-8")
@@ -318,7 +318,7 @@ def test_frozen_semantic_safety_run_fails_closed_on_commit_mismatch(
     tmp_path,
     monkeypatch,
 ):
-        monkeypatch.setenv("METIS_LLM_MODEL", "test-model")
+    monkeypatch.setenv("METIS_LLM_MODEL", "test-model")
     monkeypatch.setenv("METIS_LLM_API_KEY", "shared-provider-secret")
     monkeypatch.setenv(
         "METIS_AUDIT_EVALUATED_COMMIT",
@@ -347,7 +347,7 @@ def test_frozen_semantic_safety_run_fails_closed_without_packaged_commit(
     tmp_path,
     monkeypatch,
 ):
-        monkeypatch.setenv("METIS_LLM_MODEL", "test-model")
+    monkeypatch.setenv("METIS_LLM_MODEL", "test-model")
     monkeypatch.setenv("METIS_LLM_API_KEY", "shared-provider-secret")
     monkeypatch.setenv(
         "METIS_AUDIT_EVALUATED_COMMIT",
