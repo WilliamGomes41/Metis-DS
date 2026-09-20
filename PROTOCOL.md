@@ -205,6 +205,14 @@ Een ondersteund resultaat blijft herleidbaar tot het gepubliceerde kennisobject 
 
 Ranking of retrieval mag publicatiestatus, menselijke review of bronbinding niet omzeilen.
 
+### 12.1 Compiled knowledge
+
+Post-publication compiled knowledge is een afgeleide, rebuildable projectie en nooit canonieke kennis of serving authority. Een compiled-knowledge/wiki-route mag uitsluitend actieve gepubliceerde kennis verwerken en moet iedere materiële afgeleide claim herleidbaar houden tot de onderliggende gepubliceerde kennisobjecten en bronprovenance.
+
+Compiled knowledge mag synthese en samenhang vooraf berekenen voor efficiëntere distributie, maar krijgt geen schrijfpad naar canonieke kennis, reviewbesluiten, publicatiestatus of publication registry. Ontbrekende of conflicterende onderbouwing wordt niet door algemene modelkennis aangevuld.
+
+Alle Metis-LLM-capabilities delen één deployment-owned providercredential en modelkeuze. Capability-specifieke prompts, schemas, inputs/outputs en autorisatiegrenzen blijven afzonderlijk; het bezit of configureren van de providercredential creëert geen review-, publicatie- of canonical-writebevoegdheid.
+
 ## 13. Security, topology en deployment
 
 Productie- en testomgevingen, credentials en opslagrechten zijn zodanig gescheiden dat een fout in een niet-productieroute geen impliciete productierechten oplevert.

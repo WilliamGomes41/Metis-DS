@@ -14,12 +14,11 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
 from src.operations_console_v1 import CAPTURED
 from src.passage_register_v1 import passage_register_of
 from src.pre_review_semantic_v1 import (
     PASSAGE_FORMATION_MODE_ENV,
-    PRE_REVIEW_LLM_API_KEY_ENV,
-    PRE_REVIEW_LLM_MODEL_ENV,
     SEMANTIC_MODE,
     bind_pre_review_semantic_processing,
 )
@@ -375,8 +374,8 @@ def test_semantic_coverage_remainder_blocks_publication_until_human_disposition(
         console,
         environ={
             PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
-            PRE_REVIEW_LLM_API_KEY_ENV: "product-key",
-            PRE_REVIEW_LLM_MODEL_ENV: "test-model",
+            LLM_API_KEY_ENV: "test-credential",
+            LLM_MODEL_ENV: "test-model",
         },
         post_json=select_first_and_last,
     )

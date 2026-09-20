@@ -1,7 +1,8 @@
 """PostgreSQL authority for remaining mutable Audit workspace state.
 
-Audit records and the encrypted Audit LLM secret move off local runtime files.
-The encrypted secret payload stays opaque; this module never decrypts it.
+Audit records are active workflow state. Legacy encrypted Audit LLM payloads may
+remain opaque in this store for rollback/recovery compatibility, but active LLM
+provider configuration is deployment-owned and is never read from this module.
 """
 from __future__ import annotations
 

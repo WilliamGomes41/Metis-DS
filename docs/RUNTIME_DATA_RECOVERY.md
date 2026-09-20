@@ -21,13 +21,13 @@ Na de volledige workflow-cut-over bestaat de authority uit:
 | publish authorizations | PostgreSQL `workflow` | `publish_authorizations.json` is mirror |
 | klassewijzigingshistorie | document-envelope in PostgreSQL `workflow` | oude `class_change_history/*.jsonl` alleen migratiebron |
 | Audit-records | PostgreSQL `workflow` | oude `audits/*.json` alleen migratiebron |
-| versleutelde Audit LLM-key | PostgreSQL `workflow` | oude `audit_secrets/llm_api_key.json` alleen migratiebron |
+| legacy versleutelde Audit LLM-payload | inert rollback-/recoverydata in PostgreSQL `workflow` | oude `audit_secrets/llm_api_key.json` alleen migratiebron; geen actieve providerauthority |
 | canonical kennis + releases + registry | PostgreSQL publicatieschema | geen authority-kopie |
 | immutable bronbytes | Azure Blob | lokale freeze is cache/werkexemplaar |
 | release manifests | PostgreSQL releasegegevens zijn authority | lokale manifests zijn rebuildable release mirrors |
 | Product API projectie | canonical/publication PostgreSQL | `published_projection.jsonl` is rebuildable derived output |
 
-De deployment-secret `METIS_AUDIT_SECRET_KEY` blijft buiten de database. PostgreSQL bewaart alleen de reeds versleutelde Audit-secretpayload.
+De actieve LLM-providerconfig (`METIS_LLM_API_KEY` en `METIS_LLM_MODEL`) blijft deployment-owned en buiten de database. Bestaande versleutelde Audit-secretpayloads kunnen voor rollback/recovery bewaard blijven, maar worden niet meer als runtime-providerauthority gelezen.
 
 ## Expliciete workflow-migratie
 

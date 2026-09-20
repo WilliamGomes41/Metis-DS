@@ -21,11 +21,11 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from src.admission_gate_v1 import blocked_audit_lane
 from src.audit_semantic_safety_v1 import (
-    AUDIT_LLM_MODEL_ENV,
     load_frozen_safety_suite,
     run_frozen_semantic_safety_suite,
 )
 from src.extract_coverage_v1 import coverage_panel_rows
+from src.llm_provider_v1 import load_llm_provider_config
 from src.operations_console_v1 import ConsoleError, OperationsConsole, _atomic_write
 
 
@@ -438,7 +438,7 @@ def install_audit_routes(
         body = f"""
           <h1>Audit</h1>
           <p class="lead">Controleer hoe Metis werkt en leg bewijs vast. Audits veranderen geen canonieke kennis en publiceren niets.</p>
-          <p><a class="btn-primary" href="/audit/new">Nieuwe audit</a> <a class="btn-secondary" href="/audit/semantic-safety">Frozen semantic safety</a> <a class="btn-secondary" href="/audit/llm-settings">LLM-instellingen</a></p>
+          <p><a class="btn-primary" href="/audit/new">Nieuwe audit</a> <a class="btn-secondary" href="/audit/semantic-safety">Frozen semantic safety</a></p>
           <h2>Audits</h2>
           <div class="doc-list">{_audit_rows(registry)}</div>
           <h2>Auditvormen</h2>
@@ -541,18 +541,16 @@ def install_audit_routes(
         account = account_for(request)
         if "researcher" not in set(account.get("roles") or []):
             raise ConsoleError("researcher_role_required")
-        from src import audit_llm_settings_v1 as llm_settings
-
         suite = load_frozen_safety_suite(suite_path)
-        model = str(os.environ.get(AUDIT_LLM_MODEL_ENV, "") or "").strip()
+        provider = load_llm_provider_config()
+        model = provider.model
         commit = deployed_commit()
-        secret_status = llm_settings.AuditLLMSecretStore(console.runtime).status()
-        ready = bool(model and commit == suite["evaluated_baseline_commit"] and secret_status.get("configured"))
+        ready = bool(provider.configured and commit == suite["evaluated_baseline_commit"])
         error_html = f'<div class="banner err">{_esc(error)}</div>' if error else ""
         readiness = (
             '<button class="btn-primary" type="submit">Frozen audit uitvoeren</button>'
             if ready
-            else '<p class="muted">Run geblokkeerd: configureer Audit-key en METIS_AUDIT_LLM_MODEL en deploy exact de frozen commit.</p>'
+            else '<p class="muted">Run geblokkeerd: configureer METIS_LLM_API_KEY en METIS_LLM_MODEL en deploy exact de frozen commit.</p>'
         )
         body = f"""
           <p><a class="btn-secondary" href="/audit">← Terug naar Audit</a></p>
@@ -575,20 +573,20 @@ def install_audit_routes(
         account = account_for(request)
         if "researcher" not in set(account.get("roles") or []):
             raise ConsoleError("researcher_role_required")
-        from src import audit_llm_settings_v1 as llm_settings
-
         suite = load_frozen_safety_suite(suite_path)
-        model = str(os.environ.get(AUDIT_LLM_MODEL_ENV, "") or "").strip()
+        provider = load_llm_provider_config()
+        model = provider.model
         commit = deployed_commit()
+        if not provider.api_key:
+            return semantic_safety(request, error="METIS_LLM_API_KEY is niet geconfigureerd.")
         if not model:
-            return semantic_safety(request, error="METIS_AUDIT_LLM_MODEL is niet geconfigureerd.")
+            return semantic_safety(request, error="METIS_LLM_MODEL is niet geconfigureerd.")
         if commit != suite["evaluated_baseline_commit"]:
             return semantic_safety(request, error="De deployment-commit komt niet overeen met de frozen auditcommit.")
         try:
-            api_key = llm_settings.AuditLLMSecretStore(console.runtime).read_api_key()
             report = run_frozen_semantic_safety_suite(
                 suite,
-                api_key=api_key,
+                api_key=provider.api_key,
                 model=model,
                 evaluated_commit=commit,
                 post_json=semantic_safety_post_json,

@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
 from src.operations_console_app import _broncontext_html
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.passage_register_v1 import passage_register_of
@@ -21,8 +22,6 @@ from src.pre_review_semantic_v1 import (
     DETERMINISTIC_MODE,
     OPENAI_RESPONSES_URL,
     PASSAGE_FORMATION_MODE_ENV,
-    PRE_REVIEW_LLM_API_KEY_ENV,
-    PRE_REVIEW_LLM_MODEL_ENV,
     SEMANTIC_MODE,
     bind_pre_review_semantic_processing,
     semantic_units_before_review,
@@ -232,8 +231,8 @@ def test_runtime_policy_is_instance_bound_and_keeps_explicit_rollback_mode(tmp_p
     fragments = [_fragment("p1", "Bespreek samen de behandeling.")]
     env = {
         PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
-        PRE_REVIEW_LLM_API_KEY_ENV: "product-key",
-        PRE_REVIEW_LLM_MODEL_ENV: "test-model",
+        LLM_API_KEY_ENV: "product-key",
+        LLM_MODEL_ENV: "test-model",
     }
 
     def fake_post(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
@@ -328,8 +327,8 @@ def test_read_only_repair_catalog_does_not_call_llm(tmp_path: Path) -> None:
         console,
         environ={
             PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
-            PRE_REVIEW_LLM_API_KEY_ENV: "product-key",
-            PRE_REVIEW_LLM_MODEL_ENV: "test-model",
+            LLM_API_KEY_ENV: "product-key",
+            LLM_MODEL_ENV: "test-model",
         },
         post_json=fake_post,
     )
@@ -410,8 +409,8 @@ def test_prompt_injection_driven_omission_remains_open_after_ingest(tmp_path: Pa
         console,
         environ={
             PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
-            PRE_REVIEW_LLM_API_KEY_ENV: "product-key",
-            PRE_REVIEW_LLM_MODEL_ENV: "test-model",
+            LLM_API_KEY_ENV: "product-key",
+            LLM_MODEL_ENV: "test-model",
         },
         post_json=select_first_and_last,
     )
@@ -591,8 +590,8 @@ def test_semantic_selection_provenance_survives_transform_without_mislabeling_co
         console,
         environ={
             PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
-            PRE_REVIEW_LLM_API_KEY_ENV: api_key,
-            PRE_REVIEW_LLM_MODEL_ENV: "test-model",
+            LLM_API_KEY_ENV: api_key,
+            LLM_MODEL_ENV: "test-model",
         },
         post_json=fake_post,
     )

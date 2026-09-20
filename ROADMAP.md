@@ -67,18 +67,15 @@ Architectuurlock AI en Kernel:
 - de menselijke reviewer blijft verantwoordelijk voor Review; AI telt niet als reviewer en kan niet goedkeuren of publiceren;
 - Audit-resultaten en conclusies blijven Audit-bewijs en stromen niet automatisch door naar productie.
 
-LLM-secretlock:
-- de gebruiker kan de LLM API-key uitsluitend via **Audit → LLM-instellingen** invoeren, vervangen of verwijderen;
-- de API-key is write-only: na opslaan toont de console alleen `Geconfigureerd` of `Niet geconfigureerd` en nooit de sleutel zelf;
-- de plaintext Audit API-key komt niet in Audit-records, frozen datasets, Kernel-state, roadmap/configbestanden of Git;
-- de opgeslagen Audit API-key wordt versleuteld met een afzonderlijke deployment-masterkey uit `METIS_AUDIT_SECRET_KEY`; zonder geldige masterkey is invoer in de console fail-closed niet beschikbaar;
-- alleen de Audit-runtime mag de ontsleutelde Audit-key opvragen voor Audit-modelcalls; de Kernel importeert deze secretstore niet;
-- dit is geen algemene environment-variable- of secret-editor: andere deploymentsettings blijven buiten de console;
-- de productiekey voor de pre-Review route is een afzonderlijke deployment-secret (`METIS_PRE_REVIEW_LLM_API_KEY`) en wordt niet via de Audit-console beheerd;
-- het productiemodel wordt expliciet gekozen via `METIS_PRE_REVIEW_LLM_MODEL` wanneer semantic mode actief is;
-- de productiekey komt niet in Audit-records, frozen datasets, WorkingRevision-state, roadmap/configbestanden of Git;
-- de Audit-secretstore is geen authority voor de productie pre-Review route en de productiekey is geen tweede Audit-secretpad;
-- vervangen of configureren van een LLM-key geeft geen implementatie-, review-, merge-, deploy- of publicatierechten.
+LLM-providerlock:
+- Metis gebruikt één deployment-owned providercredential via `METIS_LLM_API_KEY` en één modelkeuze via `METIS_LLM_MODEL`;
+- Audit, brongebonden pre-Review passagevorming en toekomstige post-publication compiled knowledge mogen geen eigen providerkey of eigen modelinstelling introduceren;
+- capability-specifieke prompts, schemas, toegestane input/output, fail-closed gedrag en autorisatiegrenzen blijven lokaal bij de betreffende capability;
+- de providercredential wordt niet via Audit of een andere algemene console-editor ingevoerd, vervangen of verwijderd;
+- de plaintext providercredential komt niet in Audit-records, frozen datasets, WorkingRevision-state, roadmap/configbestanden, Git of PostgreSQL-workflowstate;
+- ontbreken van providercredential of model blokkeert een geactiveerde modelroute fail-closed;
+- `METIS_PASSAGE_FORMATION_MODE` blijft uitsluitend bepalen of pre-Review semantic mode actief is; de gedeelde providerconfig opent geen modelroute op zichzelf;
+- providerconfiguratie geeft geen implementatie-, review-, merge-, deploy-, publicatie- of canonical-writebevoegdheid.
 
 Vaste Audit-workflow:
 1. **Opzetten** — onderzoeksvraag, baseline, kandidaat, beoordelingscriteria en stopregel vastleggen;
@@ -126,6 +123,8 @@ Beslisbetekenis Audit:
 - `READY FOR IMPLEMENTATION`: een gebundeld probleem is voldoende onderbouwd om buiten Audit als ontwikkelopdracht te gebruiken; deze status autoriseert geen codewijziging, GitHub-actie, merge, deploy of publicatie.
 
 Productiebesluit 2026-09-17: issue #255 autoriseert een afzonderlijke pre-Review semantic processing route. Tot activatie via expliciete `METIS_PASSAGE_FORMATION_MODE=semantic-source-bound-v1` blijft `deterministic-v1` de rollback/default-route; semantic-mode fouten veroorzaken geen automatische fallback.
+
+Architectuurbesluit 2026-09-20: Audit en pre-Review delen één deployment-owned LLM-providercredential en één modelkeuze. Een toekomstige compiled-knowledge/wiki-executor moet dezelfde providerconfig gebruiken en mag uitsluitend actieve gepubliceerde authority-rows consumeren; deze wijziging activeert die executor nog niet.
 
 ## R3.5 Semantiek en invarianten gericht scheiden
 
@@ -179,7 +178,7 @@ AI, Grok Bot en Metis tellen niet als vereiste menselijke C3–C6-reviewer, moge
 - Geen frontend-rewrite.
 - Geen microservicesplitsing zonder afzonderlijk bewijs dat de huidige grens het probleem veroorzaakt.
 - Geen generiek auditframework voordat meerdere echte auditvormen aantoonbaar dezelfde state en persistence delen.
-- Geen AI/modelroute buiten Audit behalve de expliciet geconfigureerde brongebonden pre-Review passagevormingsroute uit besluit 2026-09-17.
+- Geen AI/modelroute buiten Audit behalve de expliciet geconfigureerde brongebonden pre-Review passagevormingsroute en een expliciet geautoriseerde post-publication compiled-knowledge-route.
 - Geen modeloutput met directe schrijf-, review-, publicatie- of canonieke rechten.
 - Geen silent deterministic fallback wanneer semantic pre-Review mode is geactiveerd.
 - Geen algemene environment-variable- of secret-editor in de console.
@@ -205,8 +204,8 @@ AI, Grok Bot en Metis tellen niet als vereiste menselijke C3–C6-reviewer, moge
 | AI uitsluitend als experimenteel instrument binnen Audit | VERVALLEN — gecorrigeerd door owner-besluit 2026-09-17 |
 | Brongebonden LLM-passagevorming vóór menselijke Review | LOCKED — expliciete processingstap; geen review- of publicatierechten |
 | Productie semantic-mode foutgedrag | LOCKED — fail-closed, geen silent fallback |
-| Audit LLM API-key via Audit-console | LOCKED — write-only, versleuteld at rest, alleen Audit |
-| Productie pre-Review LLM-key | LOCKED — afzonderlijke deployment-secret, niet via Audit |
+| Eén gedeelde LLM-providerconfig | LOCKED — `METIS_LLM_API_KEY` + `METIS_LLM_MODEL`; geen capability-specifieke providerkeys/modellen |
+| Post-publication compiled knowledge | LOCKED — uitsluitend actieve gepubliceerde kennis als input; derived/rebuildable; geen canonical-, review- of publicatierechten |
 | Audit-verbetercollectie | LOCKED — append-only bewijs van fouten én goede regressiegevallen; geen tweede bron van waarheid |
 | Audit → READY FOR IMPLEMENTATION | LOCKED — hier eindigt Audit; ontwikkeling gebeurt buiten Audit |
 | Metis programmeert zichzelf / automatische APPLY → GitHub | AFGEWEZEN — geen coding- of GitHub-writeverantwoordelijkheid in Audit |
