@@ -205,7 +205,8 @@ def test_no_separate_delete_room_or_kamer(tmp_path: Path) -> None:
     assert "/tree" in rooms
     assert "/review" in rooms
     assert "/publish" in rooms
-    assert "/accounts" in rooms
+    assert "/settings" in rooms
+    assert "/accounts" not in rooms
     assert "/delete" not in rooms
 
 
