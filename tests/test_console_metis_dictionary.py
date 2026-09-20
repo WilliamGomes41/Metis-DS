@@ -48,7 +48,7 @@ def test_metis_dictionary_requires_login_and_renders_read_only_explanations(tmp_
     response = client.get("/over-console")
 
     assert response.status_code == 200
-    assert 'href="/over-console" aria-current="page">Over console' in response.text
+    assert 'href="/settings" aria-current="page">Instellingen' in response.text
     assert "Metis uitgelegd" in response.text
     assert "Kennisobject" in response.text
     assert "Publicatiegate" in response.text
