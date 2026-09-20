@@ -275,16 +275,22 @@ a { color: var(--paars); }
   color: #11728d;
 }
 
-.rooms a {
+.rooms a,
+.rooms button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   text-decoration: none;
   font-weight: 700;
   font-family: var(--font-heading);
+  font-size: inherit;
+  line-height: inherit;
   color: var(--paars);
   padding: 8px 12px;
+  border: 0;
   border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
 }
 
 .badge {
@@ -307,7 +313,8 @@ a { color: var(--paars); }
   box-shadow: inset 0 0 0 2px var(--water);
 }
 
-.rooms a.quiet {
+.rooms a.quiet,
+.rooms button.quiet {
   font-weight: 400;
   color: var(--muted);
 }
@@ -1369,6 +1376,10 @@ mark.broncontext-marked {
   }
 
   .rooms a {
+    white-space: nowrap;
+  }
+
+  .rooms button {
     white-space: nowrap;
   }
 
