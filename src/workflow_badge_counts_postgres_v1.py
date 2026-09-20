@@ -303,6 +303,7 @@ class _PostgresBadgeCountsMixin:
                           ON r.snapshot_id=d.snapshot_id
                         WHERE r.account_id=%s
                           AND d.snapshot_id=COALESCE(%s,d.snapshot_id)
+                          AND d.publication_eligibility<>%s
                     ),
                     current_objects AS (
                         SELECT DISTINCT ON (o.snapshot_id,o.object_id)
@@ -627,7 +628,7 @@ class _PostgresBadgeCountsMixin:
                     LEFT JOIN batch_counts bc ON bc.snapshot_id=a.snapshot_id
                     ORDER BY a.snapshot_id
                     """,
-                    (account_id, snapshot_id or None),
+                    (account_id, snapshot_id or None, PRE_REVIEW_BLOCKED),
                 ).fetchall()
         except WorkflowDocumentStoreError:
             raise
