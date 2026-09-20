@@ -21,6 +21,7 @@ from urllib.request import Request, urlopen
 
 from src.atomic_split_v1 import proposed_relations_for_units
 from src.context_aware_split_v1 import split_context_aware_units
+from src.llm_provider_v1 import OPENAI_RESPONSES_URL, load_llm_provider_config
 from src.object_taxonomy_v1 import extract_object_type
 from src.operations_console_v1 import ConsoleError
 from src.semantic_passage_v1 import (
@@ -33,11 +34,8 @@ from src.semantic_passage_v1 import (
 
 
 PASSAGE_FORMATION_MODE_ENV = "METIS_PASSAGE_FORMATION_MODE"
-PRE_REVIEW_LLM_API_KEY_ENV = "METIS_PRE_REVIEW_LLM_API_KEY"
-PRE_REVIEW_LLM_MODEL_ENV = "METIS_PRE_REVIEW_LLM_MODEL"
 DETERMINISTIC_MODE = "deterministic-v1"
 SEMANTIC_MODE = "semantic-source-bound-v1"
-OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 DEFAULT_TIMEOUT_SECONDS = 60
 
 PostJson = Callable[[str, dict[str, str], dict[str, Any], int], dict[str, Any]]
@@ -410,6 +408,7 @@ def bind_pre_review_semantic_processing(
             document_id=document_id,
             source_id=source_id,
         )
+        provider = load_llm_provider_config(env)
         spec = semantic_spec_from_fragments(
             document_id=document_id,
             title=title,
@@ -417,8 +416,8 @@ def bind_pre_review_semantic_processing(
             class_=class_,
             fragments=fragments,
             content_kind=kind,
-            api_key=str(env.get(PRE_REVIEW_LLM_API_KEY_ENV, "") or ""),
-            model=str(env.get(PRE_REVIEW_LLM_MODEL_ENV, "") or ""),
+            api_key=provider.api_key,
+            model=provider.model,
             post_json=post_json,
         )
         return fragments, spec
