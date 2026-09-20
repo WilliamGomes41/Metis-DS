@@ -371,12 +371,15 @@ def test_successful_approve_persists_authorization_and_survives_restart(
         object_id=target["object_id"],
         decision="approve",
         confirmed_object_type="explanation",
+        suitability="ja",
+        eindoordeel="goedkeuren",
+        type_action="dit_klopt",
         expected_revision=console.objects_revision(snapshot_id),
     )
 
     approved = next(
         row
-        for row in documents.list_document_objects(snapshot_id)
+        for row in console.snapshot_objects(snapshot_id)
         if row["object_id"] == target["object_id"]
     )
     assert approved["governance"]["validation_status"] == "approved"
@@ -470,11 +473,31 @@ def test_approve_stale_conflict_leaves_no_durable_event_or_authorization(
         for row in console.snapshot_objects(snapshot_id)
         if row.get("object_type") == "unclassified"
     )
+    console.review_object(
+        actor_id=reviewer["account_id"],
+        snapshot_id=snapshot_id,
+        object_id=target["object_id"],
+        decision="approve",
+        confirmed_object_type="explanation",
+        suitability="ja",
+        eindoordeel="goedkeuren",
+        type_action="dit_klopt",
+        expected_revision=console.objects_revision(snapshot_id),
+    )
+    current_target = next(
+        row
+        for row in console.snapshot_objects(snapshot_id)
+        if row["object_id"] == target["object_id"]
+    )
+    confirmed_type = current_target["confirmed_object_type"]
     stale_revision = console.objects_revision(snapshot_id)
 
     concurrent = documents.list_document_objects(snapshot_id)
     concurrent_target = next(
-        row for row in concurrent if row["object_id"] == target["object_id"]
+        row
+        for row in reversed(concurrent)
+        if row["object_id"] == target["object_id"]
+        and row["object_version"] == current_target["object_version"]
     )
     concurrent_target.setdefault("metadata", {})["concurrent_marker"] = "winner"
     envelope = documents.get_envelope(snapshot_id)
@@ -495,7 +518,10 @@ def test_approve_stale_conflict_leaves_no_durable_event_or_authorization(
             snapshot_id=snapshot_id,
             object_id=target["object_id"],
             decision="approve",
-            confirmed_object_type="explanation",
+            confirmed_object_type=confirmed_type,
+            suitability="ja",
+            eindoordeel="goedkeuren",
+            type_action="dit_klopt",
             expected_revision=stale_revision,
         )
 
