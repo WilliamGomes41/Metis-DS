@@ -69,7 +69,10 @@ class _PostgresBadgeCountsMixin:
                                WHERE s.clinical_rereview_required
                            ) AS tree,
                            COALESCE(
-                               ARRAY_AGG(s.snapshot_id) FILTER (WHERE s.state=%s),
+                               ARRAY_AGG(s.snapshot_id) FILTER (
+                                   WHERE s.state=%s
+                                     AND s.publication_eligibility<>%s
+                               ),
                                ARRAY[]::text[]
                            ) AS publish_snapshot_ids
                     FROM document_status s
