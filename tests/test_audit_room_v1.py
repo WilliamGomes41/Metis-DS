@@ -83,6 +83,7 @@ def test_audit_room_exposes_two_real_types_without_generic_workflow_engine(tmp_p
     assert "Documentkwaliteit" in home.text
     assert "Publicatiecontrole" in home.text
     assert "Techniek &amp; release" in home.text
+    assert "/audit/llm-settings" not in home.text
     assert home.text.count("Later beschikbaar") == 2
 
     new = client.get("/audit/new")
