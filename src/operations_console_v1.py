@@ -802,7 +802,8 @@ class OperationsConsole:
             raise ConsoleError("unknown_snapshot")
         with self._objects_write_lock(snapshot_id):
             path = self._objects_path(snapshot_id)
-            if not path.exists():
+            exists = path.exists()
+            if not exists:
                 text = ""
                 rows: list[dict[str, Any]] = []
             else:
@@ -811,7 +812,11 @@ class OperationsConsole:
             if remember:
                 expected = self._objects_expected_revs()
                 if snapshot_id not in expected:
-                    expected[snapshot_id] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+                    expected[snapshot_id] = (
+                        hashlib.sha256(text.encode("utf-8")).hexdigest()
+                        if exists
+                        else ""
+                    )
             return rows
 
     def objects_revision(self, snapshot_id: str) -> str:
@@ -1900,13 +1905,18 @@ class OperationsConsole:
         self._envelope(snapshot_id)
         with self._objects_write_lock(snapshot_id):
             path = self._objects_path(snapshot_id)
-            if not path.exists():
+            exists = path.exists()
+            if not exists:
                 text = ""
                 rows: list[dict[str, Any]] = []
             else:
                 text = path.read_text(encoding="utf-8")
                 rows = [json.loads(line) for line in text.splitlines() if line.strip()]
-            revision = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            revision = (
+                hashlib.sha256(text.encode("utf-8")).hexdigest()
+                if exists
+                else ""
+            )
         if include_blocked:
             return deepcopy(rows), revision
         current: dict[str, dict[str, Any]] = {}
