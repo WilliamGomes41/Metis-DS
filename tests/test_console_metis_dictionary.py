@@ -1,11 +1,25 @@
+"""Authenticated, read-only regressions for the Metis explanation page.
+
+Release-control markers identify the route, login boundary and the deliberately
+small console extension. They are test metadata, not live-release evidence.
+"""
 from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
+
+
+pytestmark = [
+    pytest.mark.release_control_scope_belofte,
+    pytest.mark.release_control_toegang,
+    pytest.mark.release_control_slop,
+    pytest.mark.release_control_releasebewijs,
+]
 
 
 def test_metis_dictionary_requires_login_and_renders_read_only_explanations(tmp_path: Path) -> None:
