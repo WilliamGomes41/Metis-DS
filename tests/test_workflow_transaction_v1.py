@@ -286,8 +286,10 @@ def test_review_stale_conflict_leaves_no_durable_event_or_authorization(
     stale_revision = console.objects_revision(snapshot_id)
 
     concurrent = documents.list_document_objects(snapshot_id)
-    other = next(row for row in concurrent if row["object_id"] != target["object_id"])
-    other.setdefault("metadata", {})["concurrent_marker"] = "winner"
+    concurrent_target = next(
+        row for row in concurrent if row["object_id"] == target["object_id"]
+    )
+    concurrent_target.setdefault("metadata", {})["concurrent_marker"] = "winner"
     envelope = documents.get_envelope(snapshot_id)
     assert envelope is not None
     documents.write_bundle(
