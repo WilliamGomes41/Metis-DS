@@ -6,11 +6,8 @@ source freezes and JSON mirrors remain rebuildable compatibility/derived copies.
 """
 from __future__ import annotations
 
-import os
 from copy import deepcopy
-from typing import Any, Mapping
-
-from cryptography.fernet import Fernet, InvalidToken
+from typing import Any
 
 from src.audit_room_v1 import AUDIT_ID_RE, AUDIT_TYPE_RE
 from src.operations_console_v1 import ConsoleError
@@ -23,9 +20,6 @@ from src.workflow_review_cutover_v1 import (
     PostgresReviewWorkflowAzureAuthoritativePublicationConsole,
     PostgresReviewWorkflowDurablePublicationConsole,
 )
-
-AUDIT_SECRET_MASTER_KEY_ENV = "METIS_AUDIT_SECRET_KEY"
-AUDIT_LLM_SECRET_NAME = "llm_api_key"
 
 
 class PostgresAuditRegistry:
@@ -101,73 +95,12 @@ class PostgresAuditRegistry:
         raise RuntimeError("audit_id_collision")
 
 
-class PostgresAuditLLMSecretStore:
-    """Audit secret facade; PostgreSQL stores only the already-encrypted payload."""
-
-    def __init__(self, store: PostgresWorkflowRemainingStore, *, environ: Mapping[str, str] | None = None) -> None:
-        self.store = store
-        self.environ = environ if environ is not None else os.environ
-
-    def _fernet(self) -> Fernet:
-        raw = str(self.environ.get(AUDIT_SECRET_MASTER_KEY_ENV, "") or "").strip()
-        if not raw:
-            raise ConsoleError("audit_secret_store_unavailable")
-        try:
-            return Fernet(raw.encode("ascii"))
-        except (ValueError, UnicodeEncodeError) as exc:
-            raise ConsoleError("audit_secret_store_unavailable") from exc
-
-    def status(self) -> dict[str, bool]:
-        try:
-            self._fernet()
-            configured = self.store.get_secret_payload(AUDIT_LLM_SECRET_NAME) is not None
-        except (ConsoleError, WorkflowRemainingStoreError):
-            return {"available": False, "configured": False}
-        return {"available": True, "configured": configured}
-
-    def set_api_key(self, value: str) -> None:
-        api_key = str(value or "").strip()
-        if not api_key:
-            raise ConsoleError("audit_llm_api_key_required")
-        if len(api_key) > 4096:
-            raise ConsoleError("audit_llm_api_key_too_long")
-        payload = {
-            "schema_version": 1,
-            "ciphertext": self._fernet().encrypt(api_key.encode("utf-8")).decode("ascii"),
-        }
-        try:
-            self.store.set_secret_payload(AUDIT_LLM_SECRET_NAME, payload)
-        except WorkflowRemainingStoreError as exc:
-            raise ConsoleError("audit_secret_store_unavailable", str(exc)) from exc
-
-    def clear_api_key(self) -> None:
-        self._fernet()
-        try:
-            self.store.delete_secret(AUDIT_LLM_SECRET_NAME)
-        except WorkflowRemainingStoreError as exc:
-            raise ConsoleError("audit_secret_store_unavailable", str(exc)) from exc
-
-    def read_api_key(self) -> str:
-        fernet = self._fernet()
-        try:
-            payload = self.store.get_secret_payload(AUDIT_LLM_SECRET_NAME)
-            if payload is None:
-                raise ConsoleError("audit_llm_api_key_missing")
-            plaintext = fernet.decrypt(str(payload["ciphertext"]).encode("ascii"))
-            return plaintext.decode("utf-8")
-        except ConsoleError:
-            raise
-        except (WorkflowRemainingStoreError, KeyError, TypeError, ValueError, UnicodeError, InvalidToken) as exc:
-            raise ConsoleError("audit_llm_secret_corrupt") from exc
-
 
 def bind_remaining_route_backends(store: PostgresWorkflowRemainingStore) -> None:
     """Keep existing route installers; replace only their persistence constructors."""
-    import src.audit_llm_settings_v1 as llm_settings
     import src.audit_room_v1 as audit_room
 
     audit_room.AuditRegistry = lambda _runtime: PostgresAuditRegistry(store)  # type: ignore[assignment]
-    llm_settings.AuditLLMSecretStore = lambda _runtime: PostgresAuditLLMSecretStore(store)  # type: ignore[assignment]
 
 
 class _PostgresRemainingWorkflowMixin:
