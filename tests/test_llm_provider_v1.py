@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from src.compiled_knowledge_v1 import (
     CompiledKnowledgeInputError,
     compiled_knowledge_inputs,
 )
+from src.g2_source_store import build_g2_locator
 from src.llm_provider_v1 import (
     LLM_API_KEY_ENV,
     LLM_MODEL_ENV,
@@ -64,31 +66,72 @@ def test_active_llm_runtime_has_no_capability_specific_provider_keys_or_models()
         assert deprecated not in active
 
 
-def test_compiled_knowledge_accepts_only_publication_authority_rows() -> None:
-    rows = [
-        {
-            "knowledge_object": {"object_id": "ko-1", "text": "Kennis"},
-            "publication": {"release_id": "rel-1"},
+class _CanonicalAuthority:
+    def __init__(self, rows, *, source_bytes=b"source") -> None:
+        self.rows = rows
+        self.source_bytes = source_bytes
+        digest = hashlib.sha256(source_bytes).hexdigest()
+        self.locator = build_g2_locator(sha256=digest, filename="source.pdf")
+
+    def active_publication_rows(self):
+        return self.rows
+
+    def release_for_snapshot(self, snapshot_id):
+        return {
+            "source_sha256": hashlib.sha256(self.source_bytes).hexdigest(),
+            "source_locator": self.locator,
         }
-    ]
-    result = compiled_knowledge_inputs(rows)
-    assert result == rows
-    assert result is not rows
-    assert result[0] is not rows[0]
+
+
+class _SourceAuthority:
+    def __init__(self, data=b"source") -> None:
+        self.data = data
+
+    def load_verified(self, _locator):
+        return self.data
+
+
+def _published_row(object_id="ko-1", snapshot_id="snap-1"):
+    return {
+        "snapshot_id": snapshot_id,
+        "knowledge_object": {"object_id": object_id, "text": "Kennis"},
+        "publication": {"release_id": "rel-1"},
+    }
+
+
+def test_compiled_knowledge_reads_active_registry_and_proves_source_bytes() -> None:
+    row = _published_row()
+    canonical = _CanonicalAuthority([row])
+    result = compiled_knowledge_inputs(
+        canonical_store=canonical,
+        source_store=_SourceAuthority(),
+    )
+    assert result == [{"knowledge_object": row["knowledge_object"], "publication": row["publication"]}]
+    assert result[0]["knowledge_object"] is not row["knowledge_object"]
+
+
+def test_compiled_knowledge_fails_closed_on_source_mismatch() -> None:
+    canonical = _CanonicalAuthority([_published_row()])
+    with pytest.raises(CompiledKnowledgeInputError, match="product_source_sha256_mismatch"):
+        compiled_knowledge_inputs(
+            canonical_store=canonical,
+            source_store=_SourceAuthority(b"tampered"),
+        )
 
 
 @pytest.mark.parametrize(
     "rows,error",
     [
-        ([{"knowledge_object": {"object_id": "ko-1"}}], "compiled_knowledge_publication_row_required"),
-        ([{"publication": {"release_id": "rel-1"}}], "compiled_knowledge_publication_row_required"),
-        ([{"knowledge_object": {}, "publication": {}}], "compiled_knowledge_object_id_required"),
-        ([
-            {"knowledge_object": {"object_id": "ko-1"}, "publication": {}},
-            {"knowledge_object": {"object_id": "ko-1"}, "publication": {}},
-        ], "compiled_knowledge_duplicate_object"),
+        ([{"snapshot_id": "snap-1", "knowledge_object": {"object_id": "ko-1"}}], "compiled_knowledge_publication_row_invalid"),
+        ([{"snapshot_id": "snap-1", "publication": {"release_id": "rel-1"}}], "compiled_knowledge_publication_row_invalid"),
+        ([{"snapshot_id": "snap-1", "knowledge_object": {}, "publication": {}}], "compiled_knowledge_object_id_required"),
+        ([_published_row("ko-1", "snap-1"), _published_row("ko-1", "snap-1")], "compiled_knowledge_duplicate_object"),
     ],
 )
-def test_compiled_knowledge_rejects_non_authoritative_or_ambiguous_input(rows, error) -> None:
+def test_compiled_knowledge_rejects_invalid_or_ambiguous_active_rows(rows, error) -> None:
+    canonical = _CanonicalAuthority(rows)
     with pytest.raises(CompiledKnowledgeInputError, match=error):
-        compiled_knowledge_inputs(rows)
+        compiled_knowledge_inputs(
+            canonical_store=canonical,
+            source_store=_SourceAuthority(),
+        )
