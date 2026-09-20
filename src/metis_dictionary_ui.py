@@ -6,59 +6,62 @@ from collections.abc import Callable
 Section = tuple[str, str, tuple[tuple[str, str, str], ...]]
 
 SECTIONS: tuple[Section, ...] = (
-    ("Metis", "De basis: wat Metis is en welke rol het speelt.", (
-        ("Metis", "Het systeem waarmee V&VN brondocumenten omzet in gecontroleerde digitale kennis. Metis bewaart de herkomst, laat mensen beoordelen en bepaalt wat gepubliceerd mag worden.", "Een richtlijn wordt verwerkt tot kleine kennisstukken die Athena later kan gebruiken."),
-        ("Operations console", "De interne werkomgeving van Metis. Bevoegde medewerkers beheren hier bronnen, beoordelen kennis en zetten die klaar voor publicatie.", "Een reviewer ziet een voorstel naast de bronpassage en kiest: goedkeuren, aanpassen of afwijzen."),
-        ("Kennislaag", "De gecontroleerde laag tussen een brondocument en een toepassing. Daardoor hoeft een toepassing niet zelf te bepalen welke kennis betrouwbaar is.", "Athena krijgt een actuele aanbeveling uit de kennislaag, niet een losse kopie uit een pdf."),
+    ("Werken met een bron", "De begrippen die je nodig hebt wanneer je een richtlijn, handreiking of andere kennisbron in Metis verwerkt.", (
+        ("Bron", "Het oorspronkelijke document of de oorspronkelijke webpagina die je in Metis gebruikt. Metis verandert de bron zelf niet.", "Een vastgestelde V&VN-richtlijn over wondzorg is een bron."),
+        ("Versie van de bron", "De precieze uitgave van een bron die Metis heeft vastgelegd. Zo blijven oude en nieuwe versies van elkaar te onderscheiden.", "Versie 1.2 en 2.0 van dezelfde richtlijn blijven afzonderlijk herkenbaar."),
+        ("Passage uit de bron", "Het specifieke stuk tekst, de tabel of de aanbeveling waarop een kennisvoorstel of kennisstuk is gebaseerd.", "Bij een aanbeveling over wondreiniging is dit precies de alinea waarin die aanbeveling staat."),
+        ("Vindplaats in de bron", "De precieze plek waar de passage terug te vinden is, bijvoorbeeld pagina, hoofdstuk, paragraaf of webadres.", "Richtlijn Wondzorg, versie 2.0, hoofdstuk 4, aanbeveling 3."),
     )),
-    ("Bron en kennis", "Hoe Metis onderscheid maakt tussen het oorspronkelijke document en bruikbare digitale kennis.", (
-        ("Bron", "Het oorspronkelijke document of de oorspronkelijke pagina waarop kennis is gebaseerd. Metis verandert die bron niet.", "Een vastgestelde V&VN-richtlijn over wondzorg is een bron."),
-        ("Bronversie", "De precieze uitgave van een bron die Metis heeft vastgelegd. Dit voorkomt dat oude en nieuwe richtlijnen door elkaar worden gebruikt.", "Versie 1.2 en 2.0 van een richtlijn blijven herkenbaar van elkaar gescheiden."),
-        ("Bronpassage", "Het specifieke stuk tekst, de tabel of de aanbeveling waarop een kennisobject steunt.", "Bij een object over wondreiniging is dit precies de alinea met die aanbeveling."),
-        ("Kennisobject", "Een zelfstandig begrijpelijk stukje kennis uit een bron: bijvoorbeeld een aanbeveling, voorwaarde, uitzondering of definitie. Het blijft gekoppeld aan de bronpassage.", "‘Overweeg X bij Y, tenzij Z’ is één kennisobject, inclusief de uitzondering."),
-        ("Provenance", "De vastgelegde herkomst en bewerkingsgeschiedenis van kennis. In gewone taal: je kunt nagaan waar het vandaan kwam en wat ermee is gebeurd.", "Je kunt terugzien uit welke richtlijnversie een antwoord kwam en wie het object goedkeurde."),
-        ("Locator", "De precieze verwijzing naar een plek in de bron, zoals een pagina, hoofdstuk, paragraaf of webadres.", "‘Richtlijn Wondzorg, versie 2.0, hoofdstuk 4, aanbeveling 3’ is een locator."),
-        ("Brontrouw", "De eis dat kennis aantoonbaar klopt met de vastgelegde bron. Een samenvatting mag eenvoudiger zijn, maar de betekenis mag niet verschuiven.", "Een bron zegt ‘overweeg’; Metis mag dat niet veranderen in ‘doe altijd’."),
+    ("Van bron naar kennis", "Metis maakt van relevante broninhoud afzonderlijke kennisstukken die je inhoudelijk kunt controleren.", (
+        ("Kennisvoorstel", "Een voorgesteld kennisstuk dat nog beoordeeld moet worden. Het is nog geen goedgekeurde of gepubliceerde kennis.", "Metis herkent een aanbeveling in een richtlijn en maakt daarvan een voorstel voor beoordeling."),
+        ("Kennisstuk (kennisobject)", "Een zelfstandig begrijpelijk stukje kennis uit een bron, bijvoorbeeld een aanbeveling, voorwaarde, uitzondering of definitie. In Metis heet dit technisch een kennisobject.", "‘Overweeg X bij Y, tenzij Z’ kan één kennisstuk zijn als de voorwaarde en uitzondering nodig zijn om de betekenis te behouden."),
+        ("Context", "De informatie die nodig is om een kennisstuk correct te begrijpen en toe te passen, zoals doelgroep, situatie, setting of aanleiding.", "Een aanbeveling geldt alleen voor volwassenen in de acute zorg; die context hoort bij het kennisstuk."),
+        ("Voorwaarde", "Iets dat eerst moet gelden voordat een aanbeveling of andere kennis van toepassing is.", "‘Bij onvoldoende effect na drie dagen’ is een voorwaarde voor de vervolgstap."),
+        ("Uitzondering", "Een situatie waarin een algemene aanbeveling niet of anders geldt.", "Een aanbeveling geldt voor de meeste patiënten, behalve bij een specifiek veiligheidsrisico."),
+        ("Herkomst", "De vastgelegde relatie tussen een kennisstuk en de bron waaruit het komt. Je kunt nagaan uit welke versie en passage de kennis is afgeleid.", "Bij een kennisstuk kun je terugzien uit welke richtlijnversie en passage het afkomstig is."),
+        ("Brontrouw", "De eis dat een kennisstuk de betekenis van de bron correct behoudt. Formuleringen mogen duidelijker worden, maar mogen de inhoud niet sterker, zwakker of anders maken.", "Als de bron ‘overweeg’ zegt, mag het kennisstuk daar niet ‘doe altijd’ van maken."),
     )),
-    ("Review", "Waarom Metis menselijke beoordeling gebruikt voordat kennis verder kan.", (
-        ("Review", "De menselijke controle van een kennisvoorstel. De reviewer beoordeelt betekenis, context, type kennis en de koppeling met de bron.", "Een reviewer ziet dat een uitzondering ontbreekt en stuurt het voorstel terug voor correctie."),
-        ("Reviewer", "De bevoegde professional die een voorstel inhoudelijk beoordeelt. Een reviewer toetst meer dan taal: ook of de kennis verantwoord gebruikt kan worden.", "Een verpleegkundig inhoudsdeskundige beoordeelt of een aanbeveling nog past bij de context van de richtlijn."),
-        ("Menselijke controle", "Een mens blijft verantwoordelijk voor inhoudelijke beoordeling en publicatie. Automatisering kan voorstellen doen, maar neemt die beslissing niet over.", "Software vindt een mogelijke passage; een reviewer bepaalt of daarvan kennis mag worden gemaakt."),
-        ("Four-eyes", "Een extra controle door een tweede bevoegde persoon bij belangrijke of risicovolle stappen.", "Kennis met gevolgen voor veilig handelen krijgt naast de eerste review een tweede beoordeling."),
-        ("High-risk", "Kennis waarbij een fout grote gevolgen kan hebben, bijvoorbeeld voor patiëntveiligheid of een verplicht protocol. Daarvoor gelden zwaardere controles.", "Een instructie rond medicatieveiligheid kan high-risk zijn."),
+    ("Kennis beoordelen", "Hier controleer je of een kennisvoorstel inhoudelijk klopt voordat het verder kan.", (
+        ("Inhoudelijke beoordeling (review)", "De controle of een kennisvoorstel de bron correct weergeeft. Je beoordeelt onder meer betekenis, context, voorwaarden, uitzonderingen en de koppeling met de bron.", "Je ziet dat een uitzondering uit de oorspronkelijke aanbeveling ontbreekt en stuurt het voorstel terug voor correctie."),
+        ("Beoordelaar (reviewer)", "De bevoegde professional die een kennisvoorstel inhoudelijk beoordeelt. De beoordelaar beslist of het voorstel de bron voldoende correct en compleet weergeeft.", "Een verpleegkundig inhoudsdeskundige beoordeelt of een aanbeveling en de relevante context goed zijn overgenomen."),
+        ("Menselijke controle", "Een mens blijft verantwoordelijk voor inhoudelijke beoordeling en publicatie. Automatisering kan voorstellen doen, maar neemt die beslissing niet over.", "Software selecteert een mogelijke passage; een beoordelaar bepaalt of daarvan bruikbare kennis kan worden gemaakt."),
+        ("Tweede beoordeling (four-eyes)", "Een extra beoordeling door een tweede bevoegde persoon wanneer de kennis of de handeling voldoende risicovol is om extra controle te vereisen.", "Een instructie met mogelijke gevolgen voor patiëntveiligheid krijgt naast de eerste beoordeling een tweede controle."),
+        ("Kennis met verhoogd risico (high-risk)", "Kennis waarbij een fout grotere gevolgen kan hebben, bijvoorbeeld voor patiëntveiligheid of verplicht professioneel handelen. Daarvoor gelden zwaardere controles.", "Een instructie rond medicatieveiligheid kan als kennis met verhoogd risico worden behandeld."),
     )),
-    ("Publicatie", "Van gecontroleerd werk naar kennis die een toepassing werkelijk mag gebruiken.", (
-        ("Publiceren", "Het expliciet vrijgeven van gecontroleerde kennis voor gebruik door toepassingen. Een afgeronde review is dus niet automatisch een publicatie.", "Een object kan goedgekeurd zijn, maar blijft intern totdat een publisher het in een release opneemt."),
-        ("Publicatiegate", "De verplichte controle vóór publicatie. Als bron, review, bevoegdheid of andere vereiste ontbreekt, gaat de poort niet open.", "Een object zonder vastgelegde bronpassage komt niet door de publicatiegate."),
-        ("Snapshot", "Een vastgelegde momentopname van kennis op één tijdstip. Daarmee is later te reconstrueren wat precies beschikbaar was.", "Metis kan terugvinden welke kennisversie beschikbaar was toen Athena een antwoord gaf."),
-        ("Release", "Een herkenbare, vastgelegde publicatie van één of meer kennisobjecten.", "Release 2026.10 bevat de goedgekeurde kennis uit een vernieuwde richtlijn."),
-        ("Ingetrokken en vervangen", "Ingetrokken kennis mag niet meer gebruikt worden. Vervangen maakt zichtbaar welke nieuwe versie de oude opvolgt; de geschiedenis blijft bewaard.", "Bij een ernstige fout wordt een object ingetrokken en verwijst de opvolger naar de nieuwe aanbeveling."),
+    ("Kennis publiceren", "Goedkeuren en publiceren zijn twee verschillende stappen. Pas na publicatie mag kennis door toepassingen worden gebruikt.", (
+        ("Publiceren", "Het expliciet vrijgeven van beoordeelde kennis voor gebruik. Een afgeronde inhoudelijke beoordeling publiceert een kennisstuk niet automatisch.", "Een goedgekeurd kennisstuk blijft intern totdat een bevoegde publisher het in een publicatie opneemt."),
+        ("Publicatiecontrole (publicatiegate)", "De verplichte controle vóór publicatie. Metis controleert onder meer of bron, beoordeling, bevoegdheid en vereiste extra controles aanwezig zijn.", "Een kennisstuk zonder geldige koppeling met de bron kan niet worden gepubliceerd."),
+        ("Momentopname (snapshot)", "Een vastgelegde toestand van de kennis op één moment. Hierdoor kan later worden gereconstrueerd wat precies is beoordeeld of gepubliceerd.", "Je kunt terugvinden welke kennisversie beschikbaar was toen een bepaalde release werd gepubliceerd."),
+        ("Release", "Een herkenbare, vastgelegde publicatie van één of meer kennisstukken.", "Release 2026.10 bevat de gepubliceerde kennis uit een vernieuwde richtlijn."),
+        ("Vervangen of intrekken", "Kennis die niet meer gebruikt mag worden kan worden ingetrokken. Als nieuwe kennis de oude opvolgt, blijft zichtbaar welke versie de eerdere vervangt.", "Na herziening van een richtlijn wordt de oude aanbeveling ingetrokken en opgevolgd door de nieuwe."),
+        ("Officiële kennisversie (canonieke kennis)", "De versie van een kennisstuk die binnen Metis als geldende, vastgestelde kennis wordt beheerd. Dit voorkomt concurrerende kopieën.", "Een toepassing gebruikt de gepubliceerde Metis-versie van de aanbeveling, niet een losse kopie uit een spreadsheet."),
     )),
-    ("Veiligheid", "Waarborgen die voorkomen dat twijfelachtige kennis toch wordt gebruikt.", (
-        ("Fail-closed", "Bij twijfel geeft Metis geen toestemming. Ontbreekt een verplichte controle, dan blijft kennis geblokkeerd.", "Als Metis niet kan bevestigen dat een object gepubliceerd is, krijgt een toepassing geen antwoord uit dat object."),
-        ("SHA-256", "Een digitale vingerafdruk van een bestand. Verandert er één teken, dan verandert de vingerafdruk mee.", "Metis controleert zo of het opgeslagen bronbestand nog hetzelfde is als bij ontvangst."),
-        ("Immutable bron", "Een bronbestand dat na vastlegging niet ongemerkt kan worden gewijzigd. Een nieuwe versie krijgt een nieuw bronrecord.", "Een geactualiseerde pdf wordt als nieuwe bronversie opgeslagen; de oude blijft intact."),
-        ("Canonieke kennis", "De ene, officieel vastgestelde versie van een kennisobject die binnen Metis geldt. Dit voorkomt concurrerende kopieën.", "Athena gebruikt de canonieke aanbeveling uit Metis, niet een kopie uit een spreadsheet."),
+    ("Kennis gebruiken", "Wat er gebeurt nadat kennis is gepubliceerd en beschikbaar komt voor een toepassing.", (
+        ("Gepubliceerde kennis", "Kennis die de vereiste beoordeling en publicatiecontrole heeft doorlopen en expliciet is vrijgegeven voor gebruik.", "Een toepassing kan een gepubliceerde aanbeveling gebruiken, maar geen voorstel dat nog in review staat."),
+        ("Kennis ophalen (retrieval)", "Het gericht zoeken naar relevante, gepubliceerde kennis voor een vraag of situatie.", "Bij een vraag over wondzorg wordt gezocht binnen de gepubliceerde kennisstukken die daarbij passen."),
+        ("Onderbouwd (supported)", "Een antwoord of resultaat is onderbouwd wanneer er relevante gepubliceerde kennis met een herleidbare bron voor beschikbaar is.", "Bij het resultaat is terug te vinden op welke richtlijnversie en passage het steunt."),
+        ("Geen onderbouwd antwoord (abstain)", "Als Metis onvoldoende passende, gepubliceerde kennis heeft, wordt niet gedaan alsof er wel een betrouwbaar antwoord is.", "Bij een vraag buiten de beschikbare richtlijnen meldt de toepassing dat er geen onderbouwd antwoord beschikbaar is."),
+        ("Toegangsrecht (entitlement)", "De vastgelegde toestemming die bepaalt welke toepassing of gebruiker welke gepubliceerde kennis mag gebruiken.", "Een interne testtoepassing kan een proefrelease zien die nog niet voor een publiek product beschikbaar is."),
     )),
-    ("Gebruik van kennis", "Hoe een digitale toepassing betrouwbare Metis-kennis opvraagt en wat zij doet als die er niet is.", (
-        ("Retrieval", "Het gericht ophalen van relevante, gepubliceerde kennis voor een vraag. Retrieval zoekt binnen wat Metis heeft vrijgegeven.", "Bij een vraag over wondzorg zoekt Athena naar gepubliceerde kennisobjecten die bij de situatie passen."),
-        ("Product API", "De technische ingang waarmee een toegelaten toepassing gepubliceerde Metis-kennis kan opvragen. Ongepubliceerd reviewwerk is daar niet beschikbaar.", "Athena vraagt alleen kennis op die Metis voor gebruik heeft vrijgegeven."),
-        ("Supported", "Een antwoord is ondersteund wanneer Metis er relevante, gepubliceerde kennis met een herleidbare bron voor kan leveren.", "Een antwoord noemt de richtlijnversie en aanbeveling waarop het steunt."),
-        ("Abstain", "Het antwoord wanneer onvoldoende betrouwbare kennis beschikbaar is. Metis construeert dan geen antwoord dat misschien klopt.", "Bij een vraag buiten de beschikbare richtlijnen meldt Athena dat er geen onderbouwd antwoord beschikbaar is."),
-        ("Entitlement", "De vastgelegde toestemming die bepaalt welke toepassing of gebruiker welke kennis mag gebruiken.", "Een interne testtoepassing kan een proefrelease zien, terwijl een publiek product alleen de reguliere release ziet."),
+    ("Automatisering in Metis", "Wat software of AI mag ondersteunen en waar menselijke verantwoordelijkheid begint.", (
+        ("Automatisch voorstel", "Een voorstel dat software of AI helpt samenstellen uit een bron. Het blijft een voorstel totdat een bevoegde beoordelaar het inhoudelijk heeft gecontroleerd.", "Metis kan relevante passages selecteren en daar een kennisvoorstel van maken voor de review."),
+        ("Semantische interpretatie", "Het herkennen van betekenis en samenhang in tekst, niet alleen van dezelfde woorden. Metis kan dit gebruiken om relevante passages te vinden of te groeperen.", "‘Niet toepassen’ en ‘afzien van behandeling’ kunnen inhoudelijk verwant zijn, ook al gebruiken ze andere woorden."),
+        ("Model", "Een AI-systeem dat taalpatronen kan herkennen en gestructureerde voorstellen kan maken. Een model heeft geen inhoudelijke bevoegdheid en kent de geldigheid van een bron niet automatisch.", "Een model kan helpen een passage te selecteren, maar mag niet zelf besluiten dat de inhoud juist of publiceerbaar is."),
+        ("Vaste controle (deterministische controle)", "Een controle met een vaste, herhaalbare uitkomst, bijvoorbeeld of een bronkoppeling, beoordeling of publicatiestatus aanwezig is.", "De publicatiecontrole kijkt steeds op dezelfde manier of de vereiste goedkeuringen aanwezig zijn."),
     )),
-    ("AI in Metis", "Waar AI kan helpen en waar de grens ligt.", (
-        ("Semantische interpretatie", "Het herkennen van betekenis en samenhang in tekst, niet alleen van losse woorden. Dit kan helpen om kandidaatpassages te vinden.", "AI kan signaleren dat ‘afzien van’ en ‘niet toepassen’ waarschijnlijk dezelfde handelingsrichting beschrijven."),
-        ("Model", "Een AI-systeem dat patronen in taal kan herkennen en tekst kan genereren. Een model heeft geen professionele verantwoordelijkheid en kent de bron niet automatisch.", "Een model kan een samenvattingsvoorstel maken, maar mag niet zelf besluiten dat dit de richtlijn juist weergeeft."),
-        ("Voorstel", "Een concept dat door een mens of AI is gemaakt en nog beoordeeld moet worden. Een voorstel is nadrukkelijk nog geen geldige kennis.", "Na analyse van een bronpassage maakt Metis een voorstel voor een kennisobject; de reviewer toetst het vóór publicatie."),
-        ("Deterministische controle", "Een controle met een vaste, herhaalbare uitkomst, bijvoorbeeld of bron, reviewstatus en toestemming aanwezig zijn.", "De publicatiegate controleert steeds op dezelfde manier of de vereiste bronbinding en goedkeuring er zijn."),
+    ("Onderzoek naar Metis", "Deze begrippen zijn vooral relevant wanneer je onderzoekt hoe Metis zelf presteert of kan worden verbeterd. Voor het gewone verwerken van richtlijnen heb je ze meestal niet nodig.", (
+        ("Audit", "Het onderzoeken of Metis werkt zoals bedoeld: inhoudelijk, technisch en procesmatig. Een audit levert bewijs en verbeterpunten op en verandert de productie niet automatisch.", "Een audit controleert of ingetrokken kennis daadwerkelijk niet meer beschikbaar is."),
+        ("Experiment", "Een afgebakende proef om een aanname of nieuwe werkwijze te toetsen.", "Je vergelijkt twee manieren van passagevorming om te onderzoeken welke minder correcties door reviewers nodig heeft."),
+        ("Baseline", "De gemeten uitgangssituatie waarmee een experiment wordt vergeleken.", "De huidige reviewtijd en het huidige aantal correcties vormen samen de baseline."),
+        ("Kandidaatroute", "Een mogelijke nieuwe werkwijze die nog wordt onderzocht en nog niet automatisch onderdeel is van het gewone proces.", "Een nieuwe methode voor passagevorming draait naast de bestaande methode in een experiment."),
+        ("READY FOR IMPLEMENTATION", "De onderzoeksuitkomst dat een verbetering voldoende is onderzocht en voorbereid om als ontwikkelopdracht te worden opgepakt. Dit betekent niet dat de wijziging al live staat.", "Een experiment levert voldoende bewijs op om de verbetering gecontroleerd te laten implementeren."),
     )),
-    ("Audit en ontwikkeling", "Hoe Metis veilig leert en verbetert zonder experimenten als productie te behandelen.", (
-        ("Audit", "Het onderzoeken of Metis werkt zoals bedoeld: inhoudelijk, technisch en procesmatig. Een audit levert bewijs en verbeterpunten op, geen automatische productieaanpassing.", "Een audit controleert of ingetrokken kennis niet meer via de Product API beschikbaar is."),
-        ("Experiment", "Een afgebakende proef om een aanname of nieuwe werkwijze te toetsen.", "Metis test of een andere manier van bronpassages voorstellen de reviewtijd verkort zonder brontrouw te verlagen."),
-        ("Baseline", "De huidige, gemeten uitgangssituatie waarmee een experiment wordt vergeleken.", "De gemiddelde reviewtijd vóór een nieuwe werkwijze is de baseline voor het experiment."),
-        ("Kandidaatroute", "Een mogelijke nieuwe werkwijze die nog wordt onderzocht en niet automatisch onderdeel is van het gewone proces.", "Een nieuwe extractiemethode wordt naast de bestaande route getest."),
-        ("READY FOR IMPLEMENTATION", "De uitkomst dat een oplossing voldoende is onderzocht en voorbereid om gecontroleerd in gebruik te nemen. Het is geen synoniem voor ‘al live’.", "Na een geslaagd experiment, documentatie en passende controles kan een kandidaatroute deze status krijgen."),
+    ("Technische begrippen", "Deze termen kun je tegenkomen in Metis, maar je hoeft ze niet te begrijpen om een richtlijn inhoudelijk te beoordelen.", (
+        ("Operations console", "De interne werkomgeving waarin bevoegde medewerkers bronnen beheren, kennis beoordelen en publicaties voorbereiden.", "Je opent hier een kennisvoorstel naast de bijbehorende bronpassage."),
+        ("Product API", "De technische ingang waarmee een toegelaten toepassing gepubliceerde Metis-kennis kan opvragen. Ongepubliceerd reviewwerk is daar niet beschikbaar.", "Een toepassing vraagt via de Product API alleen kennis op die Metis voor gebruik heeft vrijgegeven."),
+        ("SHA-256", "Een digitale vingerafdruk waarmee Metis kan controleren of een opgeslagen bronbestand nog exact hetzelfde is.", "Als één teken in een bestand verandert, verandert ook de digitale vingerafdruk."),
+        ("Ongewijzigd opgeslagen bron (immutable bron)", "Een bronbestand dat na vastlegging niet stilzwijgend wordt overschreven. Een gewijzigde bron wordt als een nieuwe versie behandeld.", "Een geactualiseerde pdf krijgt een nieuwe bronversie; de eerder beoordeelde versie blijft intact."),
+        ("Bij twijfel blokkeren (fail-closed)", "Als Metis een vereiste controle niet kan bevestigen, wordt de handeling geblokkeerd in plaats van aangenomen dat het waarschijnlijk goed is.", "Als niet kan worden vastgesteld dat een kennisstuk is gepubliceerd, wordt het niet aan een toepassing geleverd."),
     )),
 )
 
@@ -82,12 +85,19 @@ def render(escape: Callable[[object], str]) -> str:
         )
     return f'''
       <section class="room dictionary-room">
-        <p class="eyebrow">Over console</p>
+        <p class="eyebrow">Over Metis</p>
         <h1>Metis uitgelegd</h1>
-        <p class="lead">De begrippen achter Metis, in gewone taal. Van brondocument tot betrouwbare digitale kennis.</p>
-        <section class="dictionary-chain" aria-label="De rol van Metis in de kennisketen">
-          <ol><li>V&amp;VN-bron</li><li>Metis</li><li>Gecontroleerde kennis</li><li>Toepassing</li></ol>
-          <p>Metis zorgt dat toepassingen V&amp;VN-kennis kunnen gebruiken zonder zelf te hoeven bepalen welke bron, versie en inhoud betrouwbaar en gepubliceerd is.</p>
+        <p class="lead">Wat er met een richtlijn gebeurt in Metis, welke keuzes jij als inhoudelijk beoordelaar maakt en wanneer kennis gebruikt mag worden.</p>
+        <section class="dictionary-chain" aria-label="Zo werkt Metis">
+          <h2>Zo werkt Metis</h2>
+          <ol>
+            <li>Bron aanleveren</li>
+            <li>Kennisvoorstellen maken</li>
+            <li>Inhoudelijk beoordelen</li>
+            <li>Publiceren</li>
+            <li>Gebruiken</li>
+          </ol>
+          <p>Je levert een richtlijn, handreiking of andere kennisbron aan. Metis maakt van relevante passages afzonderlijke kennisvoorstellen. Een bevoegde beoordelaar controleert of de inhoud, context, voorwaarden en uitzonderingen correct zijn overgenomen. Alleen kennis die de vereiste controles heeft doorlopen en expliciet is gepubliceerd, kan daarna door een toepassing worden gebruikt. Bij ieder kennisstuk blijft zichtbaar uit welke bron en passage het afkomstig is.</p>
         </section>
         <div class="dictionary-sections">{"".join(sections)}</div>
       </section>
