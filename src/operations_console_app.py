@@ -2164,7 +2164,6 @@ def create_console_app(
               </form>
               {_ingested_document_list(state, documents, account)}
             </section>
-            {_help(room="ingest")}
             <script>
             (function () {{
               var kind = document.getElementById("ingest_kind");
@@ -2244,7 +2243,6 @@ def create_console_app(
               </div>
               <p><a class="btn-secondary" href="/review">Naar review</a> <a class="btn-secondary" href="/tree">Naar Documenten</a></p>
             </section>
-            {_help(room="ingest")}
             """
         )
 
@@ -2319,7 +2317,6 @@ def create_console_app(
               <p class="lead">Documenten per onderwerp en klasse. Verplaatsen of klasse wijzigen vanaf het document.</p>
               {"".join(blocks) or empty}
             </section>
-            {_help(room="tree")}
             """,
             title="Documenten — V&amp;VN Data Services",
         )
