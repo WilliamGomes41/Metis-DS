@@ -180,7 +180,7 @@ def main() -> int:
                     "status": "PLANNED",
                     "mutation": "none",
                     "runtime": str(runtime),
-                    "order": ["identity", "documents", "document_cutover", "review", "remaining"],
+                    "order": ["identity", "topic_identity", "documents", "document_cutover", "review", "remaining"],
                     "execute_confirmation": str(runtime),
                 },
                 sort_keys=True,
