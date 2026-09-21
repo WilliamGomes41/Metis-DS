@@ -16,23 +16,8 @@ CREATE TABLE IF NOT EXISTS workflow.topics (
 );
 
 ALTER TABLE workflow.documents
-ADD COLUMN IF NOT EXISTS topic_id TEXT;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'workflow_documents_topic_id_fkey'
-          AND conrelid = 'workflow.documents'::regclass
-    ) THEN
-        ALTER TABLE workflow.documents
-        ADD CONSTRAINT workflow_documents_topic_id_fkey
-        FOREIGN KEY (topic_id)
-        REFERENCES workflow.topics(topic_id);
-    END IF;
-END
-$$;
+ADD COLUMN IF NOT EXISTS topic_id TEXT
+REFERENCES workflow.topics(topic_id);
 
 CREATE INDEX IF NOT EXISTS idx_workflow_documents_topic
 ON workflow.documents(topic_id);
