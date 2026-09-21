@@ -2175,6 +2175,10 @@ def create_console_app(
             for row in reviewers
         )
         documents = state.list_envelopes()
+        family_options = "".join(
+            f'<option value="{_esc(family)}"></option>'
+            for family in sorted({str(row.get("family") or "") for row in documents if row.get("family")}, key=str.casefold)
+        )
         return _page(
             f"""
             {_nav(account, "ingest", _counts(account))}
@@ -2219,7 +2223,9 @@ def create_console_app(
                       </div>
                     </div>
                     <label for="family">Onderwerp</label>
-                    <input id="family" name="family" required autocomplete="off">
+                    <input id="family" name="family" required autocomplete="off" list="family-options" placeholder="Kies bestaand of typ nieuw onderwerp">
+                    <datalist id="family-options">{family_options}</datalist>
+                    <p class="field-help">Bestaande onderwerpen worden hergebruikt, ongeacht hoofdletters of extra spaties.</p>
                     <label for="ingest_kind">Nieuw of nieuwe versie</label>
                     <select id="ingest_kind" name="ingest_kind">
                       <option value="new">Nieuw document</option>
@@ -2343,6 +2349,10 @@ def create_console_app(
         can_move = "researcher" in account["roles"] or "publisher" in account["roles"]
         can_promote = "reviewer" in account["roles"]
         payload = state.family_tree()
+        move_family_options = "".join(
+            f'<option value="{_esc(family)}"></option>'
+            for family in sorted(payload["families"], key=str.casefold)
+        )
         blocks: list[str] = []
         for family, node in payload["families"].items():
             cards = []
@@ -2368,8 +2378,8 @@ def create_console_app(
                           <input type="hidden" name="title" value="{_esc(child["title"])}">
                           <input type="hidden" name="version" value="{_esc(child["version"])}">
                           <input type="hidden" name="family" value="{_esc(child["family"])}">
-                          <label>Nieuw onderwerp
-                            <input name="new_family" required placeholder="onderwerp">
+                          <label>Onderwerp
+                            <input name="new_family" required list="move-family-options" placeholder="Kies bestaand of typ nieuw onderwerp" autocomplete="off">
                           </label>
                           <button class="btn-secondary" type="submit">Verplaatsen</button>
                         </form>
@@ -2417,6 +2427,7 @@ def create_console_app(
             {_nav(account, "tree", _counts(account))}
             <section class="room">
               <h1>Documenten</h1>
+              <datalist id="move-family-options">{move_family_options}</datalist>
               <p class="lead">Documenten per onderwerp en klasse. Verplaatsen of klasse wijzigen vanaf het document.</p>
               {"".join(blocks) or empty}
             </section>
