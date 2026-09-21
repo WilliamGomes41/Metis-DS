@@ -83,8 +83,6 @@ PATH_RULES: dict[str, tuple[str, ...]] = {
         "src/ingest*.py",
         "src/extract_html_v1.py",
         "src/extract_pdf_v2.py",
-        "src/semantic_transform_v2.py",
-        "src/semantic_transform_v21.py",
         "src/semantic_transform_generic_v1.py",
         "src/atomic_split_v1.py",
         "src/context_aware_split_v1.py",
@@ -103,9 +101,7 @@ PATH_RULES: dict[str, tuple[str, ...]] = {
     ),
     "kwaliteit": (
         "src/admission_gate_v1.py",
-        "src/prepublication_gate_v2.py",
         "src/prepublication_gate_v3.py",
-        "src/validation_workflow_v2.py",
         "src/integrity_kernel.py",
         "src/answerability_gate_v1.py",
         "src/validate_golden_set.py",
