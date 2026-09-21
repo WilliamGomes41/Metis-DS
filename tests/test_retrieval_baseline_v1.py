@@ -9,16 +9,11 @@ from lexical_retrieval_v1 import LexicalIndex, RetrievalConfig, tokenize
 from evaluate_retrieval_baseline import evaluate
 from object_taxonomy_v1 import CLOSED_OBJECT_TYPES
 from retrieval_projection_v2 import build_projection
-from semantic_transform_v2 import load_json, transform, sha256_bytes
 
 
 def fixture_records():
-    spec_p = ROOT / "data/semantic_page15_spec.v2.0.json"
-    man_p = ROOT / "data/source_manifest.v2.json"
-    spec = load_json(spec_p)
-    man = load_json(man_p)
-    raw_p = ROOT / spec["source_extract"]
-    objs = transform(spec, man, sha256_bytes(spec_p.read_bytes()), sha256_bytes(raw_p.read_bytes()))
+    fixture = ROOT / "data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v21.jsonl"
+    objs = [json.loads(line) for line in fixture.read_text(encoding="utf-8").splitlines() if line.strip()]
     envelopes = []
     for obj in objs:
         obj = json.loads(json.dumps(obj))

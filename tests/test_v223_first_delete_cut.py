@@ -1,4 +1,4 @@
-"""Protocol v2.23 first DELETE cut: nine zero-caller modules gone; fixtures, not v21."""
+"""Code-surface cleanup: obsolete zero-caller modules stay deleted; fixtures remain."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -16,17 +16,17 @@ DELETED = (
     "reconcile_legacy_review.py",
     "evaluate_safe_retrieval.py",
     "build_retrieval_document.py",
-)
-
-KEPT = (
     "semantic_transform_v2.py",
+    "semantic_transform_v21.py",
     "prepublication_gate_v2.py",
     "validation_workflow_v2.py",
     "apply_second_review.py",
+)
+
+KEPT = (
     "canonical_store.py",
     "service_app.py",
     "product_api_v1.py",
-    "semantic_transform_v21.py",
     "semantic_transform_generic_v1.py",
     "extract_pdf_v2.py",
     "extract_html_v1.py",
@@ -47,7 +47,7 @@ RAW = ROOT / "data/fixtures/baseline_v0_1/fractuurpreventie_page15_raw.jsonl"
 SPRINT = ROOT / "scripts/run_integrity_sprint.sh"
 
 
-def test_v223_nine_zero_caller_modules_are_gone() -> None:
+def test_obsolete_zero_caller_modules_are_gone() -> None:
     for name in DELETED:
         assert not (ROOT / "src" / name).exists(), name
 
