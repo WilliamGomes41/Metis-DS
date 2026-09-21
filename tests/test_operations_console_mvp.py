@@ -2,6 +2,12 @@
 
 Tests are the specification. They prove ingest, family tree, reviewer selection,
 the review return-loop, local G0 identity, and fail-closed publication.
+
+# release-control-evidence: scope/belofte
+# release-control-evidence: opslag concurrent stale
+# release-control-evidence: toegang
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from __future__ import annotations
 
@@ -263,6 +269,36 @@ def test_move_family_reuses_equivalent_existing_family_without_rehash(tmp_path: 
         for row in console.snapshot_objects(target["snapshot_id"])
     }
     assert hashes_after == hashes_before
+
+
+def test_stale_console_reloads_existing_family_before_ingest(tmp_path: Path) -> None:
+    first_console = _console(tmp_path)
+    stale_console = _console(tmp_path)
+    first_accounts = _accounts(first_console)
+    stale_accounts = {row["username"]: row for row in stale_console.list_accounts()}
+    researcher = stale_accounts["researcher.anne"]
+    reviewer = stale_accounts["reviewer.bert"]
+
+    first = _ingest_html(first_console, first_accounts, family="Delier", title="Eerste bron")
+
+    second = stale_console.ingest(
+        actor_id=researcher["account_id"],
+        filename="continentie.html",
+        data=HTML_FIXTURE.read_bytes() + b"<!-- stale-worker -->",
+        content_type="text/html",
+        ingest_kind="new",
+        title="Tweede bron",
+        version="1.1",
+        date="2025-04-01",
+        live_url="https://example.test/tweede",
+        class_="richtlijn",
+        family="  DELIER  ",
+        named_reviewers=[reviewer["account_id"]],
+    )
+
+    assert first["family"] == "Delier"
+    assert second["family"] == "Delier"
+    assert set(stale_console.family_tree()["families"]) == {"Delier"}
 
 
 def test_subject_inputs_suggest_existing_families_but_allow_new_text(tmp_path: Path) -> None:
