@@ -479,7 +479,7 @@ def normalize_family_label(value: str | None) -> str:
     """Clean researcher-entered Onderwerp text without changing its meaning."""
     raw = "" if value is None else str(value)
     normalized = unicodedata.normalize("NFKC", raw)
-    return re.sub(r"\\s+", " ", normalized).strip()
+    return re.sub(r"\s+", " ", normalized).strip()
 
 
 def family_identity_key(value: str | None) -> str:
