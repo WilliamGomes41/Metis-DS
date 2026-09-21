@@ -130,6 +130,7 @@ def execute(runtime: Path) -> dict[str, object]:
 
     documents = PostgresWorkflowDocumentStore()
     documents.verify_schema()
+    topic_identity_result = documents.backfill_topic_identity()
     document_result = documents.migrate_legacy_runtime(runtime)
 
     document_runtime = PostgresWorkflowDocumentRuntimeStore()
@@ -154,6 +155,7 @@ def execute(runtime: Path) -> dict[str, object]:
             **identity_verified,
             "exact": True,
         },
+        "topic_identity": topic_identity_result,
         "documents": document_result,
         "document_cutover": prepared_result,
         "review": review_result,
