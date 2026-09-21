@@ -2,6 +2,12 @@
 
 Tests are the specification. They prove ingest, family tree, reviewer selection,
 the review return-loop, local G0 identity, and fail-closed publication.
+
+# release-control-evidence: scope/belofte
+# release-control-evidence: opslag concurrent stale
+# release-control-evidence: toegang
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from __future__ import annotations
 
@@ -215,6 +221,101 @@ def test_family_set_at_ingest_move_does_not_rehash_or_require_rereview(tmp_path:
     assert "decubitus" in tree["families"]
     assert tree["families"]["decubitus"]["children"][0]["class"] == "richtlijn"
     assert tree["stable"] is True
+
+
+def test_equivalent_family_input_reuses_first_stored_spelling(tmp_path: Path) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    first = _ingest_html(
+        console,
+        accounts,
+        family="Delier",
+        title="Delier richtlijn",
+        version="1.0",
+    )
+    second = _ingest_html(
+        console,
+        accounts,
+        family="  dElIeR  ",
+        title="Delier handreiking",
+        version="1.1",
+    )
+
+    assert first["family"] == "Delier"
+    assert second["family"] == "Delier"
+    assert set(console.family_tree()["families"]) == {"Delier"}
+
+
+def test_move_family_reuses_equivalent_existing_family_without_rehash(tmp_path: Path) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    _ingest_html(console, accounts, family="Delier", title="Delier")
+    target = _ingest_html(console, accounts, family="Ander onderwerp", title="Andere bron")
+    hashes_before = {
+        row["object_id"]: compute_canonical_object_hash(row)
+        for row in console.snapshot_objects(target["snapshot_id"])
+    }
+
+    moved = console.move_family(
+        actor_id=accounts["researcher"]["account_id"],
+        snapshot_id=target["snapshot_id"],
+        new_family="  DELIER ",
+    )
+
+    assert moved["family"] == "Delier"
+    assert moved["clinical_rereview_required"] is False
+    hashes_after = {
+        row["object_id"]: compute_canonical_object_hash(row)
+        for row in console.snapshot_objects(target["snapshot_id"])
+    }
+    assert hashes_after == hashes_before
+
+
+def test_stale_console_reloads_existing_family_before_ingest(tmp_path: Path) -> None:
+    first_console = _console(tmp_path)
+    first_accounts = _accounts(first_console)
+    stale_console = _console(tmp_path)
+    stale_accounts = {row["username"]: row for row in stale_console.list_accounts()}
+    researcher = stale_accounts["researcher.anne"]
+    reviewer = stale_accounts["reviewer.bert"]
+
+    first = _ingest_html(first_console, first_accounts, family="Delier", title="Eerste bron")
+
+    second = stale_console.ingest(
+        actor_id=researcher["account_id"],
+        filename="continentie.html",
+        data=HTML_FIXTURE.read_bytes() + b"<!-- stale-worker -->",
+        content_type="text/html",
+        ingest_kind="new",
+        title="Tweede bron",
+        version="1.1",
+        date="2025-04-01",
+        live_url="https://example.test/tweede",
+        class_="richtlijn",
+        family="  DELIER  ",
+        named_reviewers=[reviewer["account_id"]],
+    )
+
+    assert first["family"] == "Delier"
+    assert second["family"] == "Delier"
+    assert set(stale_console.family_tree()["families"]) == {"Delier"}
+
+
+def test_subject_inputs_suggest_existing_families_but_allow_new_text(tmp_path: Path) -> None:
+    client, console, accounts = _html_client(tmp_path)
+    _ingest_html(console, accounts, family="Delier")
+
+    ingest = client.get("/ingest").text
+    assert 'list="family-options"' in ingest
+    assert '<datalist id="family-options">' in ingest
+    assert 'value="Delier"' in ingest
+    assert "Kies bestaand of typ nieuw onderwerp" in ingest
+
+    tree = client.get("/tree").text
+    assert 'list="move-family-options"' in tree
+    assert '<datalist id="move-family-options">' in tree
+    assert 'value="Delier"' in tree
+    assert "Nieuw onderwerp" not in tree
 
 
 def test_adding_a_branch_does_not_redraw_the_tree_and_siblings_are_not_parented(tmp_path: Path) -> None:

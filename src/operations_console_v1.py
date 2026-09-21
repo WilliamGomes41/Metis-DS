@@ -475,6 +475,18 @@ def _slug(value: str) -> str:
     return text or "document"
 
 
+def normalize_family_label(value: str | None) -> str:
+    """Clean researcher-entered Onderwerp text without changing its meaning."""
+    raw = "" if value is None else str(value)
+    normalized = unicodedata.normalize("NFKC", raw)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def family_identity_key(value: str | None) -> str:
+    """Case-insensitive identity key for the existing family/Onderwerp authority."""
+    return normalize_family_label(value).casefold()
+
+
 def _normalize_identity(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip().lower()
 
@@ -1423,8 +1435,10 @@ class OperationsConsole:
             raise ConsoleError("invalid_ingest_kind")
         if class_ not in ALLOWED_CLASSES:
             raise ConsoleError("invalid_class")
-        family_hook = family.strip()
-        if not family_hook or not title.strip():
+        with self._store_write_lock():
+            self._reload_store_locked()
+            family_hook = self.resolve_family_label(family, required_code="ingest_fields_required")
+        if not title.strip():
             raise ConsoleError("ingest_fields_required")
         source_version = safe_path_token(
             validate_ingest_source_version(version),
@@ -1924,6 +1938,34 @@ class OperationsConsole:
             current[row["object_id"]] = row
         return deepcopy(list(current.values())), revision
 
+    def resolve_family_label(self, value: str | None, *, required_code: str = "family_required") -> str:
+        """Reuse the first stored spelling for an equivalent Onderwerp.
+
+        The existing envelope family field remains the authority. Comparison
+        is Unicode-normalized, whitespace-collapsed and case-insensitive so
+        researcher input such as Delier, delier and DELIER does not create
+        separate branches. A genuinely new subject keeps the cleaned spelling.
+        """
+        label = normalize_family_label(value)
+        if not label:
+            raise ConsoleError(required_code)
+        identity = family_identity_key(label)
+        matches = [
+            row
+            for row in self.list_envelopes()
+            if family_identity_key(str(row.get("family") or "")) == identity
+        ]
+        if not matches:
+            return label
+        first = min(
+            matches,
+            key=lambda row: (
+                str(row.get("acquired_at") or "9999"),
+                str(row.get("snapshot_id") or ""),
+            ),
+        )
+        return normalize_family_label(str(first.get("family") or label)) or label
+
     def family_tree(self) -> dict[str, Any]:
         families: dict[str, dict[str, Any]] = {}
         for envelope in self.list_envelopes():
@@ -1951,11 +1993,9 @@ class OperationsConsole:
         account = self._account(actor_id)
         if "researcher" not in account["roles"] and "publisher" not in account["roles"]:
             raise ConsoleError("curator_role_required")
-        family = new_family.strip()
-        if not family:
-            raise ConsoleError("family_required")
         with self._store_write_lock():
             self._reload_store_locked()
+            family = self.resolve_family_label(new_family)
             envelope = self._envelope(snapshot_id)
             envelope["family"] = family
             envelope["clinical_rereview_required"] = False
