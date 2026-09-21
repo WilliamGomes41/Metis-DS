@@ -217,6 +217,71 @@ def test_family_set_at_ingest_move_does_not_rehash_or_require_rereview(tmp_path:
     assert tree["stable"] is True
 
 
+def test_equivalent_family_input_reuses_first_stored_spelling(tmp_path: Path) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    first = _ingest_html(
+        console,
+        accounts,
+        family="Delier",
+        title="Delier richtlijn",
+        version="1.0",
+    )
+    second = _ingest_html(
+        console,
+        accounts,
+        family="  dElIeR  ",
+        title="Delier handreiking",
+        version="1.1",
+    )
+
+    assert first["family"] == "Delier"
+    assert second["family"] == "Delier"
+    assert set(console.family_tree()["families"]) == {"Delier"}
+
+
+def test_move_family_reuses_equivalent_existing_family_without_rehash(tmp_path: Path) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    _ingest_html(console, accounts, family="Delier", title="Delier")
+    target = _ingest_html(console, accounts, family="Ander onderwerp", title="Andere bron")
+    hashes_before = {
+        row["object_id"]: compute_canonical_object_hash(row)
+        for row in console.snapshot_objects(target["snapshot_id"])
+    }
+
+    moved = console.move_family(
+        actor_id=accounts["researcher"]["account_id"],
+        snapshot_id=target["snapshot_id"],
+        new_family="  DELIER ",
+    )
+
+    assert moved["family"] == "Delier"
+    assert moved["clinical_rereview_required"] is False
+    hashes_after = {
+        row["object_id"]: compute_canonical_object_hash(row)
+        for row in console.snapshot_objects(target["snapshot_id"])
+    }
+    assert hashes_after == hashes_before
+
+
+def test_subject_inputs_suggest_existing_families_but_allow_new_text(tmp_path: Path) -> None:
+    client, console, accounts = _html_client(tmp_path)
+    _ingest_html(console, accounts, family="Delier")
+
+    ingest = client.get("/ingest").text
+    assert 'list="family-options"' in ingest
+    assert '<datalist id="family-options">' in ingest
+    assert 'value="Delier"' in ingest
+    assert "Kies bestaand of typ nieuw onderwerp" in ingest
+
+    tree = client.get("/tree").text
+    assert 'list="move-family-options"' in tree
+    assert '<datalist id="move-family-options">' in tree
+    assert 'value="Delier"' in tree
+    assert "Nieuw onderwerp" not in tree
+
+
 def test_adding_a_branch_does_not_redraw_the_tree_and_siblings_are_not_parented(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
