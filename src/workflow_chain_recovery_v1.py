@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import json
 import zipfile
+from copy import deepcopy
 from typing import Any, Mapping
 
 from src.integrity_kernel import stable_hash
+from src.topic_identity_v1 import topic_identity, topic_identity_key
 from src.publication_chain_recovery_guard_v1 import (
     restore_publication_chain as _guarded_restore,
     verify_publication_chain_backup as _guarded_verify,
@@ -28,10 +30,12 @@ from src.publication_chain_recovery_v1 import (
     check_chain_integrity,
 )
 
-WORKFLOW_RECOVERY_VERSION = 1
+WORKFLOW_RECOVERY_VERSION = 2
+LEGACY_WORKFLOW_RECOVERY_VERSION = 1
 WORKFLOW_TABLES = (
     "accounts",
     "sessions",
+    "topics",
     "documents",
     "document_reviewers",
     "document_objects",
@@ -49,8 +53,9 @@ _WORKFLOW_COLUMNS: dict[str, tuple[str, ...]] = {
     "sessions": (
         "token_hash", "account_id", "created_at", "expires_at", "revoked_at",
     ),
+    "topics": ("topic_id", "identity_key", "display_name", "created_at"),
     "documents": (
-        "snapshot_id", "source_id", "document_id", "title", "family", "class",
+        "snapshot_id", "source_id", "document_id", "title", "family", "topic_id", "class",
         "state", "publication_eligibility", "content_kind", "ingest_kind",
         "source_version", "source_date", "source_sha256", "source_locator",
         "immutable_storage_locator", "live_url", "uploader_account_id",
@@ -83,6 +88,7 @@ _WORKFLOW_COLUMNS: dict[str, tuple[str, ...]] = {
 _WORKFLOW_ORDER_BY: dict[str, str] = {
     "accounts": "account_id",
     "sessions": "token_hash",
+    "topics": "identity_key",
     "documents": "snapshot_id",
     "document_reviewers": "snapshot_id,account_id",
     "document_objects": "snapshot_id,position NULLS LAST,object_id,object_version",
@@ -104,6 +110,51 @@ _CANONICAL_JSON_COLUMNS = {
     "canonical_object_versions": {"canonical_json"},
     "audit_events": {"details"},
 }
+
+
+def _upgrade_workflow_state(state: Mapping[str, Any]) -> dict[str, Any]:
+    """Upgrade legacy workflow recovery state without inventing domain decisions."""
+    version = int(state.get("workflow_recovery_version") or 0)
+    if version == WORKFLOW_RECOVERY_VERSION:
+        return deepcopy(dict(state))
+    if version != LEGACY_WORKFLOW_RECOVERY_VERSION:
+        raise PublicationChainRecoveryError("workflow_backup_version_invalid")
+
+    upgraded = deepcopy(dict(state))
+    tables = upgraded.get("workflow_tables")
+    if not isinstance(tables, dict):
+        raise PublicationChainRecoveryError("workflow_backup_tables_missing")
+    documents = tables.get("documents")
+    if not isinstance(documents, list) or any(not isinstance(row, dict) for row in documents):
+        raise PublicationChainRecoveryError("workflow_backup_table_invalid:documents")
+
+    topics_by_key: dict[str, dict[str, Any]] = {}
+    ordered_documents = sorted(
+        documents,
+        key=lambda row: (str(row.get("acquired_at") or ""), str(row.get("snapshot_id") or "")),
+    )
+    for row in ordered_documents:
+        try:
+            topic_id, identity_key, display_name = topic_identity(str(row.get("family") or ""))
+        except ValueError as exc:
+            raise PublicationChainRecoveryError("workflow_topic_identity_invalid") from exc
+        current_topic_id = str(row.get("topic_id") or "")
+        if current_topic_id and current_topic_id != topic_id:
+            raise PublicationChainRecoveryError("workflow_topic_identity_conflict")
+        row["topic_id"] = topic_id
+        topics_by_key.setdefault(
+            identity_key,
+            {
+                "topic_id": topic_id,
+                "identity_key": identity_key,
+                "display_name": display_name,
+                "created_at": row.get("acquired_at") or upgraded.get("exported_at"),
+            },
+        )
+
+    tables["topics"] = [topics_by_key[key] for key in sorted(topics_by_key)]
+    upgraded["workflow_recovery_version"] = WORKFLOW_RECOVERY_VERSION
+    return upgraded
 
 
 def _rows(state: Mapping[str, Any], table: str) -> list[dict[str, Any]]:
@@ -132,6 +183,7 @@ def _validate_workflow_shape(state: Mapping[str, Any]) -> None:
 def check_workflow_integrity(state: Mapping[str, Any]) -> dict[str, Any]:
     errors: list[str] = []
     try:
+        state = _upgrade_workflow_state(state)
         _validate_workflow_shape(state)
     except PublicationChainRecoveryError as exc:
         return {"ok": False, "errors": [str(exc)]}
@@ -139,6 +191,29 @@ def check_workflow_integrity(state: Mapping[str, Any]) -> dict[str, Any]:
     accounts = {str(row.get("account_id") or "") for row in _rows(state, "accounts")}
     if "" in accounts:
         errors.append("workflow_account_id_missing")
+    topics: dict[str, dict[str, Any]] = {}
+    identity_keys: set[str] = set()
+    for row in _rows(state, "topics"):
+        topic_id = str(row.get("topic_id") or "")
+        identity_key = str(row.get("identity_key") or "")
+        display_name = str(row.get("display_name") or "")
+        if not topic_id or not identity_key or not display_name:
+            errors.append("workflow_topic_identity_missing")
+            continue
+        if topic_id in topics:
+            errors.append(f"workflow_topic_id_duplicate:{topic_id}")
+        if identity_key in identity_keys:
+            errors.append(f"workflow_topic_identity_key_duplicate:{identity_key}")
+        identity_keys.add(identity_key)
+        try:
+            expected_id, expected_key, _display = topic_identity(display_name)
+        except ValueError:
+            errors.append(f"workflow_topic_identity_invalid:{topic_id}")
+        else:
+            if expected_id != topic_id or expected_key != identity_key:
+                errors.append(f"workflow_topic_identity_mismatch:{topic_id}")
+        topics[topic_id] = dict(row)
+
     snapshots = {str(row.get("snapshot_id") or "") for row in _rows(state, "documents")}
     if "" in snapshots:
         errors.append("workflow_snapshot_id_missing")
@@ -154,6 +229,12 @@ def check_workflow_integrity(state: Mapping[str, Any]) -> dict[str, Any]:
         replaces = str(row.get("replaces_snapshot_id") or "")
         if replaces and replaces not in snapshots:
             errors.append(f"workflow_document_replaces_missing:{sid}:{replaces}")
+        topic_id = str(row.get("topic_id") or "")
+        topic = topics.get(topic_id)
+        if topic is None:
+            errors.append(f"workflow_document_topic_missing:{sid}:{topic_id}")
+        elif topic_identity_key(str(row.get("family") or "")) != str(topic.get("identity_key") or ""):
+            errors.append(f"workflow_document_topic_mismatch:{sid}:{topic_id}")
         if not isinstance(row.get("envelope_payload"), dict):
             errors.append(f"workflow_document_envelope_missing:{sid}")
 
@@ -230,6 +311,7 @@ def check_workflow_integrity(state: Mapping[str, Any]) -> dict[str, Any]:
         "ok": not errors,
         "errors": errors,
         "accounts": len(accounts),
+        "topics": len(topics),
         "documents": len(snapshots),
         "review_events": len(_rows(state, "review_events")),
         "authorizations": len(_rows(state, "publish_authorizations")),
@@ -340,6 +422,7 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
     def restore_state(self, state: Mapping[str, Any]) -> None:
         from src.publication_chain_recovery_v1 import _validate_database_backup_shape, _table_rows
 
+        state = _upgrade_workflow_state(state)
         _validate_database_backup_shape(state)
         _validate_workflow_shape(state)
         workflow_report = check_workflow_integrity(state)
@@ -360,6 +443,10 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
                     _insert_rows(
                         con, schema="workflow", table="sessions", rows=workflow_rows["sessions"],
                         columns=_WORKFLOW_COLUMNS["sessions"], json_columns=set(),
+                    )
+                    _insert_rows(
+                        con, schema="workflow", table="topics", rows=workflow_rows["topics"],
+                        columns=_WORKFLOW_COLUMNS["topics"], json_columns=set(),
                     )
 
                     document_rows = workflow_rows["documents"]
