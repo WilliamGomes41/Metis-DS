@@ -36,6 +36,7 @@ MIGRATIONS = (
     "004_workflow_review_authority.sql",
     "005_workflow_remaining_authority.sql",
     "006_workflow_authorization_payload.sql",
+    "010_workflow_topic_identity.sql",
 )
 
 

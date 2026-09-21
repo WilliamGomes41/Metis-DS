@@ -90,6 +90,7 @@ from src.serving_relations_v1 import (
     confirm_relation_set,
     is_closed_relation_type,
 )
+from src.topic_identity_v1 import normalize_topic_label, topic_identity_key
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -473,18 +474,6 @@ def remaining_not_duty(objects: Iterable[dict[str, Any]]) -> list[dict[str, Any]
 def _slug(value: str) -> str:
     text = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     return text or "document"
-
-
-def normalize_family_label(value: str | None) -> str:
-    """Clean researcher-entered Onderwerp text without changing its meaning."""
-    raw = "" if value is None else str(value)
-    normalized = unicodedata.normalize("NFKC", raw)
-    return re.sub(r"\s+", " ", normalized).strip()
-
-
-def family_identity_key(value: str | None) -> str:
-    """Case-insensitive identity key for the existing family/Onderwerp authority."""
-    return normalize_family_label(value).casefold()
 
 
 def _normalize_identity(value: str) -> str:
@@ -1946,14 +1935,14 @@ class OperationsConsole:
         researcher input such as Delier, delier and DELIER does not create
         separate branches. A genuinely new subject keeps the cleaned spelling.
         """
-        label = normalize_family_label(value)
+        label = normalize_topic_label(value)
         if not label:
             raise ConsoleError(required_code)
-        identity = family_identity_key(label)
+        identity = topic_identity_key(label)
         matches = [
             row
             for row in self.list_envelopes()
-            if family_identity_key(str(row.get("family") or "")) == identity
+            if topic_identity_key(str(row.get("family") or "")) == identity
         ]
         if not matches:
             return label
@@ -1964,7 +1953,7 @@ class OperationsConsole:
                 str(row.get("snapshot_id") or ""),
             ),
         )
-        return normalize_family_label(str(first.get("family") or label)) or label
+        return normalize_topic_label(str(first.get("family") or label)) or label
 
     def family_tree(self) -> dict[str, Any]:
         families: dict[str, dict[str, Any]] = {}

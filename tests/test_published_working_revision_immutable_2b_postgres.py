@@ -109,6 +109,7 @@ def test_withdrawn_projection_is_not_forced_back_to_published() -> None:
         assert enriched["logical_document_id"]
         assert enriched["working_revision_id"]
         assert enriched["working_revision_number"] == 1
+        assert enriched["topic_id"]
 
         with store._connect() as con:
             con.execute(
@@ -141,6 +142,8 @@ def test_withdrawn_projection_is_not_forced_back_to_published() -> None:
         assert stored["logical_document_id"] == enriched["logical_document_id"]
         assert stored["working_revision_id"] == enriched["working_revision_id"]
         assert stored["working_revision_number"] == enriched["working_revision_number"]
+        assert stored["topic_id"] == enriched["topic_id"]
+        assert stored["family"] == enriched["family"]
 
         tampered_identity = deepcopy(stored)
         tampered_identity["logical_document_id"] = "ldoc-forbidden-rewrite"

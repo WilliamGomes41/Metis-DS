@@ -52,3 +52,14 @@ def test_workflow_schema_keeps_review_and_publish_authorization_object_bound() -
     assert "confirmed_object_type TEXT NOT NULL" in sql
     assert "reviewer_account_id TEXT NOT NULL" in sql
     assert "valid BOOLEAN NOT NULL" in sql
+
+def test_topic_identity_expand_schema_is_unique_but_rollback_compatible() -> None:
+    sql = (ROOT / "db" / "migrations" / "010_workflow_topic_identity.sql").read_text(encoding="utf-8")
+    assert "CREATE TABLE IF NOT EXISTS workflow.topics" in sql
+    assert "UNIQUE (identity_key)" in sql
+    assert "ADD COLUMN IF NOT EXISTS topic_id TEXT" in sql
+    assert "REFERENCES workflow.topics(topic_id)" in sql
+    assert "topic_id TEXT NOT NULL" not in sql
+    assert "DROP COLUMN" not in sql
+    assert "DROP TABLE" not in sql
+

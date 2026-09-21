@@ -14,9 +14,10 @@ from typing import Any, Mapping
 from azure.identity import DefaultAzureCredential
 
 from src.canonical_publication_postgres_v1 import AZURE_POSTGRES_SCOPE, PostgresCanonicalConfig
+from src.topic_identity_v1 import topic_identity
 
 REQUIRED_WORKFLOW_DOCUMENT_TABLES = frozenset(
-    {"accounts", "documents", "document_reviewers", "document_objects"}
+    {"accounts", "topics", "documents", "document_reviewers", "document_objects"}
 )
 
 
@@ -135,6 +136,106 @@ class PostgresWorkflowDocumentStore:
         missing = sorted(REQUIRED_WORKFLOW_DOCUMENT_TABLES - present)
         if missing:
             raise WorkflowDocumentStoreError("workflow_document_schema_missing:" + ",".join(missing))
+        try:
+            with self._connect() as con:
+                column_rows = con.execute(
+                    "SELECT table_name,column_name FROM information_schema.columns "
+                    "WHERE table_schema='workflow' AND "
+                    "((table_name='documents' AND column_name='topic_id') OR "
+                    "(table_name='topics' AND column_name IN ('topic_id','identity_key','display_name')))"
+                ).fetchall()
+        except WorkflowDocumentStoreError:
+            raise
+        except Exception as exc:
+            raise WorkflowDocumentStoreError("workflow_document_schema_check_failed") from exc
+        columns = {(str(row["table_name"]), str(row["column_name"])) for row in column_rows}
+        required_columns = {
+            ("documents", "topic_id"),
+            ("topics", "topic_id"),
+            ("topics", "identity_key"),
+            ("topics", "display_name"),
+        }
+        missing_columns = sorted(required_columns - columns)
+        if missing_columns:
+            formatted = ",".join(f"{table}.{column}" for table, column in missing_columns)
+            raise WorkflowDocumentStoreError("workflow_document_schema_missing:" + formatted)
+
+    @staticmethod
+    def _resolve_topic_locked(con: Any, family: str) -> dict[str, str]:
+        try:
+            topic_id, identity_key, display_name = topic_identity(family)
+        except ValueError as exc:
+            raise WorkflowDocumentStoreError("workflow_topic_identity_required") from exc
+        con.execute(
+            "INSERT INTO workflow.topics(topic_id,identity_key,display_name) "
+            "VALUES(%s,%s,%s) ON CONFLICT DO NOTHING",
+            (topic_id, identity_key, display_name),
+        )
+        row = con.execute(
+            "SELECT topic_id,identity_key,display_name FROM workflow.topics WHERE identity_key=%s",
+            (identity_key,),
+        ).fetchone()
+        if row is None:
+            raise WorkflowDocumentStoreError("workflow_topic_identity_resolution_failed")
+        resolved = {
+            "topic_id": str(row["topic_id"]),
+            "identity_key": str(row["identity_key"]),
+            "display_name": str(row["display_name"]),
+        }
+        if resolved["topic_id"] != topic_id:
+            raise WorkflowDocumentStoreError("workflow_topic_identity_conflict")
+        return resolved
+
+    def backfill_topic_identity(self) -> dict[str, int]:
+        """Idempotently link existing documents to the durable Topic registry.
+
+        Only topic rows and documents.topic_id mutate. family/envelope/source/
+        object/review/publication state remains byte-for-byte unchanged.
+        """
+        inserted_before = 0
+        linked = 0
+        already_linked = 0
+        try:
+            with self._connect() as con:
+                with con.transaction():
+                    con.execute("LOCK TABLE workflow.documents IN SHARE ROW EXCLUSIVE MODE")
+                    before = con.execute("SELECT COUNT(*) AS n FROM workflow.topics").fetchone()
+                    inserted_before = int(before["n"]) if before else 0
+                    rows = con.execute(
+                        "SELECT snapshot_id,family,topic_id FROM workflow.documents "
+                        "ORDER BY acquired_at,snapshot_id FOR UPDATE"
+                    ).fetchall()
+                    for row in rows:
+                        topic = self._resolve_topic_locked(con, str(row["family"]))
+                        current = str(row.get("topic_id") or "")
+                        if current and current != topic["topic_id"]:
+                            raise WorkflowDocumentStoreError("workflow_topic_identity_conflict")
+                        if current:
+                            already_linked += 1
+                            continue
+                        con.execute(
+                            "UPDATE workflow.documents SET topic_id=%s WHERE snapshot_id=%s",
+                            (topic["topic_id"], str(row["snapshot_id"])),
+                        )
+                        linked += 1
+                    unresolved = con.execute(
+                        "SELECT COUNT(*) AS n FROM workflow.documents WHERE topic_id IS NULL"
+                    ).fetchone()
+                    if unresolved and int(unresolved["n"]):
+                        raise WorkflowDocumentStoreError("workflow_topic_identity_backfill_incomplete")
+                    after = con.execute("SELECT COUNT(*) AS n FROM workflow.topics").fetchone()
+                    topic_count = int(after["n"]) if after else 0
+            return {
+                "documents": linked + already_linked,
+                "linked": linked,
+                "already_linked": already_linked,
+                "topics_created": topic_count - inserted_before,
+                "topics": topic_count,
+            }
+        except WorkflowDocumentStoreError:
+            raise
+        except Exception as exc:
+            raise WorkflowDocumentStoreError("workflow_topic_identity_backfill_failed") from exc
 
     @staticmethod
     def _document_values(envelope: Mapping[str, Any]) -> tuple[Any, ...]:
@@ -210,6 +311,8 @@ class PostgresWorkflowDocumentStore:
         con: Any,
         envelope: Mapping[str, Any],
         objects: list[dict[str, Any]],
+        *,
+        expected_topic_id: str | None = None,
     ) -> None:
         snapshot_id = str(envelope["snapshot_id"])
         row = con.execute("SELECT * FROM workflow.documents WHERE snapshot_id=%s", (snapshot_id,)).fetchone()
@@ -217,6 +320,8 @@ class PostgresWorkflowDocumentStore:
             raise WorkflowDocumentStoreError("workflow_document_missing_after_conflict")
         if self._normalized_database_document(row) != self._document_projection(envelope):
             raise WorkflowDocumentStoreError("workflow_document_migration_conflict")
+        if expected_topic_id is not None and str(row.get("topic_id") or "") != expected_topic_id:
+            raise WorkflowDocumentStoreError("workflow_topic_identity_migration_conflict")
         reviewers = {
             str(item["account_id"])
             for item in con.execute(
@@ -254,22 +359,28 @@ class PostgresWorkflowDocumentStore:
         try:
             with self._connect() as con:
                 with con.transaction():
+                    topic = self._resolve_topic_locked(con, str(envelope["family"]))
                     existing = con.execute(
                         "SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE", (snapshot_id,)
                     ).fetchone()
                     if existing:
                         if not allow_exact_existing:
                             raise WorkflowDocumentStoreError("workflow_document_already_exists")
-                        self._assert_existing_matches(con, envelope, objects)
+                        self._assert_existing_matches(
+                            con,
+                            envelope,
+                            objects,
+                            expected_topic_id=topic["topic_id"],
+                        )
                         return False
                     con.execute(
                         "INSERT INTO workflow.documents("
-                        "snapshot_id,source_id,document_id,title,family,class,state,publication_eligibility,content_kind,"
+                        "snapshot_id,source_id,document_id,title,family,topic_id,class,state,publication_eligibility,content_kind,"
                         "ingest_kind,source_version,source_date,source_sha256,source_locator,immutable_storage_locator,"
                         "live_url,uploader_account_id,replaces_snapshot_id,object_diff,clinical_rereview_required,"
                         "acquired_at,console_version) VALUES("
-                        "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s)",
-                        values,
+                        "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s)",
+                        (*values[:5], topic["topic_id"], *values[5:]),
                     )
                     for reviewer in reviewers:
                         con.execute(

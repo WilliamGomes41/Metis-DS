@@ -55,6 +55,19 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         required = {("documents", "envelope_payload"), ("document_objects", "position")}
         if present != required:
             raise WorkflowDocumentStoreError("workflow_document_cutover_schema_missing")
+        try:
+            with self._connect() as con:
+                unresolved = con.execute(
+                    "SELECT COUNT(*) AS n FROM workflow.documents d "
+                    "LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id "
+                    "WHERE d.topic_id IS NULL OR t.topic_id IS NULL"
+                ).fetchone()
+        except WorkflowDocumentStoreError:
+            raise
+        except Exception as exc:
+            raise WorkflowDocumentStoreError("workflow_topic_identity_check_failed") from exc
+        if unresolved and int(unresolved["n"]):
+            raise WorkflowDocumentStoreError("workflow_topic_identity_not_prepared")
 
     @staticmethod
     def _payload(value: Any) -> dict[str, Any]:
@@ -79,6 +92,10 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
     def _envelope_from_row(self, con: Any, row: Mapping[str, Any]) -> dict[str, Any]:
         if row.get("envelope_payload") is None:
             raise WorkflowDocumentStoreError("workflow_document_cutover_not_prepared")
+        topic_id = str(row.get("topic_id") or "")
+        display_name = str(row.get("display_name") or "")
+        if not topic_id or not display_name:
+            raise WorkflowDocumentStoreError("workflow_topic_identity_not_prepared")
         envelope = self._payload(row["envelope_payload"])
         snapshot_id = str(row["snapshot_id"])
         if str(envelope.get("snapshot_id") or "") != snapshot_id:
@@ -87,13 +104,18 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         payload_reviewers = sorted(str(x) for x in envelope.get("named_reviewers") or [])
         if reviewers != payload_reviewers:
             raise WorkflowDocumentStoreError("workflow_document_reviewers_authority_mismatch")
+        envelope["topic_id"] = topic_id
+        envelope["family"] = display_name
         return envelope
 
     def list_envelopes(self) -> list[dict[str, Any]]:
         try:
             with self._connect() as con:
                 rows = con.execute(
-                    "SELECT snapshot_id,envelope_payload FROM workflow.documents ORDER BY acquired_at,snapshot_id"
+                    "SELECT d.snapshot_id,d.topic_id,d.envelope_payload,t.display_name "
+                    "FROM workflow.documents d "
+                    "LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id "
+                    "ORDER BY d.acquired_at,d.snapshot_id"
                 ).fetchall()
                 return [self._envelope_from_row(con, row) for row in rows]
         except WorkflowDocumentStoreError:
@@ -105,7 +127,10 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         try:
             with self._connect() as con:
                 row = con.execute(
-                    "SELECT snapshot_id,envelope_payload FROM workflow.documents WHERE snapshot_id=%s",
+                    "SELECT d.snapshot_id,d.topic_id,d.envelope_payload,t.display_name "
+                    "FROM workflow.documents d "
+                    "LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id "
+                    "WHERE d.snapshot_id=%s",
                     (snapshot_id,),
                 ).fetchone()
                 return self._envelope_from_row(con, row) if row else None
@@ -157,8 +182,13 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         return self._revision(self.list_document_objects(snapshot_id))
 
     def _write_envelope_locked(self, con: Any, envelope: Mapping[str, Any]) -> None:
-        values = self._document_values(envelope)
-        snapshot_id = str(envelope["snapshot_id"])
+        topic = self._resolve_topic_locked(con, str(envelope.get("family") or ""))
+        stored_envelope = deepcopy(dict(envelope))
+        stored_envelope["topic_id"] = topic["topic_id"]
+        stored_envelope["family"] = topic["display_name"]
+        values = self._document_values(stored_envelope)
+        topic_values = (*values[:5], topic["topic_id"], *values[5:])
+        snapshot_id = str(stored_envelope["snapshot_id"])
         existing = con.execute(
             "SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
             (snapshot_id,),
@@ -166,29 +196,25 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         if existing is None:
             con.execute(
                 "INSERT INTO workflow.documents("
-                "snapshot_id,source_id,document_id,title,family,class,state,publication_eligibility,content_kind,"
+                "snapshot_id,source_id,document_id,title,family,topic_id,class,state,publication_eligibility,content_kind,"
                 "ingest_kind,source_version,source_date,source_sha256,source_locator,immutable_storage_locator,"
                 "live_url,uploader_account_id,replaces_snapshot_id,object_diff,clinical_rereview_required,"
                 "acquired_at,console_version,envelope_payload) VALUES("
-                "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s::jsonb)",
-                (*values, _json_text(dict(envelope))),
+                "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s::jsonb)",
+                (*topic_values, _json_text(stored_envelope)),
             )
         else:
             con.execute(
                 "UPDATE workflow.documents SET "
-                "source_id=%s,document_id=%s,title=%s,family=%s,class=%s,state=%s,publication_eligibility=%s,"
+                "source_id=%s,document_id=%s,title=%s,family=%s,topic_id=%s,class=%s,state=%s,publication_eligibility=%s,"
                 "content_kind=%s,ingest_kind=%s,source_version=%s,source_date=%s,source_sha256=%s,source_locator=%s,"
                 "immutable_storage_locator=%s,live_url=%s,uploader_account_id=%s,replaces_snapshot_id=%s,"
                 "object_diff=%s::jsonb,clinical_rereview_required=%s,acquired_at=%s,console_version=%s,"
                 "envelope_payload=%s::jsonb,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE snapshot_id=%s",
-                (
-                    values[1], values[2], values[3], values[4], values[5], values[6], values[7], values[8],
-                    values[9], values[10], values[11], values[12], values[13], values[14], values[15], values[16],
-                    values[17], values[18], values[19], values[20], values[21], _json_text(dict(envelope)), snapshot_id,
-                ),
+                (*topic_values[1:], _json_text(stored_envelope), snapshot_id),
             )
         con.execute("DELETE FROM workflow.document_reviewers WHERE snapshot_id=%s", (snapshot_id,))
-        for reviewer in sorted(set(str(x) for x in envelope.get("named_reviewers") or [])):
+        for reviewer in sorted(set(str(x) for x in stored_envelope.get("named_reviewers") or [])):
             con.execute(
                 "INSERT INTO workflow.document_reviewers(snapshot_id,account_id) VALUES(%s,%s)",
                 (snapshot_id, reviewer),
@@ -588,6 +614,10 @@ class _PostgresWorkflowDocumentsMixin:
                         objects=objects[1] if objects is not None else None,
                         expected_revision=pinned_revision if objects is not None else None,
                     )
+                    canonical_envelope = self.workflow_document_store.get_envelope(sid)
+                    if canonical_envelope is None:
+                        raise ConsoleError("workflow_document_write_failed")
+                    target_envelopes[sid] = canonical_envelope
                 except WorkflowDocumentStoreError as exc:
                     if str(exc) == SNAPSHOT_OBJECT_WRITE_CONFLICT:
                         raise ConsoleError(
