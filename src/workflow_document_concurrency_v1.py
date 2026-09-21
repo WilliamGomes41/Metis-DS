@@ -30,6 +30,7 @@ _DATABASE_MANAGED_LIFECYCLE_PROJECTION_FIELDS = frozenset(
         "source_version",
         "working_revision_id",
         "working_revision_number",
+        "topic_id",
     }
 )
 
@@ -279,6 +280,7 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         *,
         snapshot_id: str,
         envelope: Mapping[str, Any],
+        current_payload: Mapping[str, Any],
     ) -> None:
         """Update only rebuildable release projection fields after sealing.
 
@@ -286,12 +288,16 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         workflow state is copied from the already-validated historical projection
         instead of being hard-coded back to ``published``.
         """
+        stored = dict(envelope)
+        for field in _DATABASE_MANAGED_LIFECYCLE_PROJECTION_FIELDS:
+            if field not in stored and field in current_payload:
+                stored[field] = current_payload[field]
         con.execute(
             "UPDATE workflow.documents SET "
             "state=%s,envelope_payload=%s::jsonb,"
             "revision=revision+1,updated_at=CURRENT_TIMESTAMP "
             "WHERE snapshot_id=%s",
-            (str(envelope.get("state") or ""), _json_text(dict(envelope)), snapshot_id),
+            (str(envelope.get("state") or ""), _json_text(stored), snapshot_id),
         )
 
     def write_bundle(
@@ -308,8 +314,10 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
             with self._connect() as con:
                 with con.transaction():
                     existing = con.execute(
-                        "SELECT snapshot_id,envelope_payload FROM workflow.documents "
-                        "WHERE snapshot_id=%s FOR UPDATE",
+                        "SELECT d.snapshot_id,d.topic_id,d.envelope_payload,t.display_name "
+                        "FROM workflow.documents d "
+                        "LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id "
+                        "WHERE d.snapshot_id=%s FOR UPDATE OF d",
                         (snapshot_id,),
                     ).fetchone()
                     current_objects: list[dict[str, Any]] = []
@@ -320,6 +328,12 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                             if objects is not None:
                                 raise WorkflowDocumentStoreError(PUBLISHED_WORKING_REVISION_IMMUTABLE)
                             current_payload = self._payload(existing["envelope_payload"])
+                            topic_id = str(existing.get("topic_id") or "")
+                            display_name = str(existing.get("display_name") or "")
+                            if not topic_id or not display_name:
+                                raise WorkflowDocumentStoreError("workflow_topic_identity_not_prepared")
+                            current_payload["topic_id"] = topic_id
+                            current_payload["family"] = display_name
                             self._assert_release_projection_reconciliation(
                                 current_payload=current_payload,
                                 submitted=envelope,
@@ -329,6 +343,7 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                                 con,
                                 snapshot_id=snapshot_id,
                                 envelope=envelope,
+                                current_payload=current_payload,
                             )
                             return self._revision_token(current_objects)
                     elif expected_revision not in (None, ""):
