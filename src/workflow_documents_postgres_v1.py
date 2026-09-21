@@ -168,7 +168,7 @@ class PostgresWorkflowDocumentStore:
             raise WorkflowDocumentStoreError("workflow_topic_identity_required") from exc
         con.execute(
             "INSERT INTO workflow.topics(topic_id,identity_key,display_name) "
-            "VALUES(%s,%s,%s) ON CONFLICT(identity_key) DO NOTHING",
+            "VALUES(%s,%s,%s) ON CONFLICT DO NOTHING",
             (topic_id, identity_key, display_name),
         )
         row = con.execute(
