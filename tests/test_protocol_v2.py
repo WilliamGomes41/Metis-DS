@@ -1,4 +1,6 @@
 from __future__ import annotations
+# release-control-evidence: beschikbaarheid
+# release-control-evidence: kwaliteit
 import copy
 import json
 from pathlib import Path
