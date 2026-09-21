@@ -1435,7 +1435,9 @@ class OperationsConsole:
             raise ConsoleError("invalid_ingest_kind")
         if class_ not in ALLOWED_CLASSES:
             raise ConsoleError("invalid_class")
-        family_hook = self.resolve_family_label(family, required_code="ingest_fields_required")
+        with self._store_write_lock():
+            self._reload_store_locked()
+            family_hook = self.resolve_family_label(family, required_code="ingest_fields_required")
         if not title.strip():
             raise ConsoleError("ingest_fields_required")
         source_version = safe_path_token(
@@ -1991,9 +1993,9 @@ class OperationsConsole:
         account = self._account(actor_id)
         if "researcher" not in account["roles"] and "publisher" not in account["roles"]:
             raise ConsoleError("curator_role_required")
-        family = self.resolve_family_label(new_family)
         with self._store_write_lock():
             self._reload_store_locked()
+            family = self.resolve_family_label(new_family)
             envelope = self._envelope(snapshot_id)
             envelope["family"] = family
             envelope["clinical_rereview_required"] = False
