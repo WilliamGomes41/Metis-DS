@@ -219,6 +219,10 @@ def test_backfill_merges_legacy_variants_without_rewriting_family(
                     json.dumps(envelope, sort_keys=True),
                 ),
             )
+            con.execute(
+                "INSERT INTO workflow.document_reviewers(snapshot_id,account_id) VALUES(%s,%s)",
+                (snapshot_id, "acc-reviewer"),
+            )
 
     runtime = PostgresWorkflowDocumentRuntimeStore(topic_postgres)
     with pytest.raises(WorkflowDocumentStoreError, match="workflow_topic_identity_not_prepared"):
