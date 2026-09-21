@@ -273,8 +273,8 @@ def test_move_family_reuses_equivalent_existing_family_without_rehash(tmp_path: 
 
 def test_stale_console_reloads_existing_family_before_ingest(tmp_path: Path) -> None:
     first_console = _console(tmp_path)
-    stale_console = _console(tmp_path)
     first_accounts = _accounts(first_console)
+    stale_console = _console(tmp_path)
     stale_accounts = {row["username"]: row for row in stale_console.list_accounts()}
     researcher = stale_accounts["researcher.anne"]
     reviewer = stale_accounts["reviewer.bert"]
