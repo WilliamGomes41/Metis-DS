@@ -1,3 +1,4 @@
+# Package migration regression evidence: metric numerator/denominator and score-must-drop behavior must remain unchanged.
 """ROADMAP wave 4: independent extract-quality measurement.
 
 Metric definitions in extract_metrics_v1 MUST count false positives,

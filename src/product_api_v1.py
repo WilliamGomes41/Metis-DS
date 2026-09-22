@@ -22,17 +22,17 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from .abstain_catalog_v1 import sentence_for
-from .answerability_gate_v1 import AnswerabilityConfig
+from .retrieval.answerability_gate_v1 import AnswerabilityConfig
 from .canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
 from .g2_source_store import AzureBlobSourceStore
-from .hybrid_retrieval_v1 import HybridConfig
-from .lexical_retrieval_v1 import RetrievalConfig
+from .retrieval.hybrid_retrieval_v1 import HybridConfig
+from .retrieval.lexical_retrieval_v1 import RetrievalConfig
 from .object_taxonomy_v1 import serving_block_reason
 from .product_security_v1 import SlidingWindowRateLimiter, TenantPolicy, TenantRegistry
 from .product_source_authority_v1 import ProductSourceAuthorityError, verify_active_publication_sources
-from .retrieval_projection_v2 import build_projection
-from .safe_retrieval_v1 import SafeRetrievalIndex
-from .semantic_vector_retrieval_v1 import VectorConfig
+from .retrieval.retrieval_projection_v2 import build_projection
+from .retrieval.safe_retrieval_v1 import SafeRetrievalIndex
+from .retrieval.semantic_vector_retrieval_v1 import VectorConfig
 from .serving_relations_v1 import applies_if_targets, except_if_targets, historical_type_must_not_serve
 from .usage_ledger_v1 import UsageLedger
 

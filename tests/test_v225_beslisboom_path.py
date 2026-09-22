@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.answerability_gate_v1 import evaluate_answerability
+from src.retrieval.answerability_gate_v1 import evaluate_answerability
 from src.beslisboom_path_v1 import (
     CLOSED_BOOM_TYPES,
     CLOSED_KLASSEN,

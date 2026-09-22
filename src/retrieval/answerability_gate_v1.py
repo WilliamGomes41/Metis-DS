@@ -16,8 +16,8 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable
 
 try:
-    from .abstain_catalog_v1 import ABSTAIN_REASONS, sentence_for
-    from .object_taxonomy_v1 import (
+    from src.abstain_catalog_v1 import ABSTAIN_REASONS, sentence_for
+    from src.object_taxonomy_v1 import (
         CLASS_ORDER,
         is_advice_weight,
         locator_of,

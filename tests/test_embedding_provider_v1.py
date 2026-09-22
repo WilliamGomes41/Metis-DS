@@ -1,12 +1,13 @@
+# release-control-evidence: beschikbaarheid
 from __future__ import annotations
 import json
 from pathlib import Path
 
 import pytest
 
-from src.embedding_provider_v1 import build_provider
-from src.provider_vector_retrieval_v1 import ProviderVectorIndex, ProviderVectorConfig
-from src.semantic_vector_retrieval_v1 import LocalVectorIndex, VectorConfig, read_jsonl
+from src.retrieval.embedding_provider_v1 import build_provider
+from src.retrieval.provider_vector_retrieval_v1 import ProviderVectorIndex, ProviderVectorConfig
+from src.retrieval.semantic_vector_retrieval_v1 import LocalVectorIndex, VectorConfig, read_jsonl
 
 ROOT = Path(__file__).resolve().parents[1]
 RECORDS = ROOT / "data/fixtures/baseline_v0_1/baseline_fixture_records.jsonl"

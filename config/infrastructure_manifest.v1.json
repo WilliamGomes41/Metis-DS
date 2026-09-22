@@ -192,7 +192,7 @@
       "operational_owner": "developer",
       "decision_deadline_gate": "G6",
       "evidence": [
-        "src/embedding_provider_v1.py",
+        "src/retrieval/embedding_provider_v1.py",
         "config/embedding_provider_local_v1.json"
       ]
     },
@@ -409,7 +409,7 @@
       "operational_owner": "not_applicable",
       "decision_deadline_gate": "Only before any future C4 provider change",
       "evidence": [
-        "src/embedding_provider_v1.py",
+        "src/retrieval/embedding_provider_v1.py",
         "config/embedding_provider_local_v1.json"
       ]
     },

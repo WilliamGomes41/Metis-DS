@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.answerability_gate_v1 import evaluate_answerability
+from src.retrieval.answerability_gate_v1 import evaluate_answerability
 from src.four_eyes_v1 import requires_four_eyes
 from src.integrity_kernel import compute_canonical_object_hash
 from src.object_taxonomy_v1 import is_advice_weight, published_object_type

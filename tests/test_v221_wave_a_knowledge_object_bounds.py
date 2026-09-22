@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.answerability_gate_v1 import evaluate_answerability
+from src.retrieval.answerability_gate_v1 import evaluate_answerability
 from src.atomic_split_v1 import fusion_is_forbidden, split_meaning_units
 from src.context_aware_split_v1 import (
     KEEP_OFFICIAL_HEADING,

@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from src.answerability_gate_v1 import AnswerabilityConfig
-from src.hybrid_retrieval_v1 import HybridConfig
-from src.lexical_retrieval_v1 import RetrievalConfig
+from src.retrieval.answerability_gate_v1 import AnswerabilityConfig
+from src.retrieval.hybrid_retrieval_v1 import HybridConfig
+from src.retrieval.lexical_retrieval_v1 import RetrievalConfig
 from src.product_api_v1 import ProductPaths
-from src.safe_retrieval_v1 import SafeRetrievalIndex
-from src.semantic_vector_retrieval_v1 import VectorConfig
+from src.retrieval.safe_retrieval_v1 import SafeRetrievalIndex
+from src.retrieval.semantic_vector_retrieval_v1 import VectorConfig
 
 
 ROOT = Path(__file__).resolve().parents[1]

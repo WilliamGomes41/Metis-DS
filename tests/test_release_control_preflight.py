@@ -144,7 +144,7 @@ def test_beschikbaarheid_ingest_and_heavy_paths() -> None:
         "src/extract_html_v1.py",
         "src/extract_pdf_v2.py",
         "src/semantic_transform_generic_v1.py",
-        "src/embedding_provider_v1.py",
+        "src/retrieval/embedding_provider_v1.py",
     ):
         item = preflight.classify_paths([path])["beschikbaarheid"]
         assert item["status"] == "required", path
@@ -173,7 +173,7 @@ def test_kwaliteit_gate_paths_are_required() -> None:
     for path in (
         "src/admission_gate_v1.py",
         "src/prepublication_gate_v3.py",
-        "src/answerability_gate_v1.py",
+        "src/retrieval/answerability_gate_v1.py",
         "src/integrity_kernel.py",
     ):
         item = preflight.classify_paths([path])["kwaliteit"]

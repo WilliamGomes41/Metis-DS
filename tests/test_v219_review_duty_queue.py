@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.answerability_gate_v1 import evaluate_answerability
+from src.retrieval.answerability_gate_v1 import evaluate_answerability
 from src.atomic_split_v1 import fusion_is_forbidden, split_meaning_units
 from src.extract_html_v1 import extract as extract_html
 from src.four_eyes_v1 import requires_four_eyes

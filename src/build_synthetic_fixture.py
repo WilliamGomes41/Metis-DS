@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .retrieval_projection_v2 import build_projection, write_jsonl
+from .retrieval.retrieval_projection_v2 import build_projection, write_jsonl
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
