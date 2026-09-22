@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from .semantic_vector_retrieval_v1 import LocalVectorIndex, VectorConfig, read_jsonl
+    from .retrieval.semantic_vector_retrieval_v1 import LocalVectorIndex, VectorConfig, read_jsonl
 except ImportError:  # direct script execution
-    from semantic_vector_retrieval_v1 import LocalVectorIndex, VectorConfig, read_jsonl
+    from retrieval.semantic_vector_retrieval_v1 import LocalVectorIndex, VectorConfig, read_jsonl
 
 EVALUATOR_VERSION = "vector-retrieval-eval-v1.0.0"
 
