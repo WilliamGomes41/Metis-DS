@@ -20,11 +20,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
-from .answerability_gate_v1 import AnswerabilityConfig
-from .hybrid_retrieval_v1 import HybridConfig, HybridIndex
-from .lexical_retrieval_v1 import RetrievalConfig, read_jsonl as read_lexical_jsonl
-from .safe_retrieval_v1 import SafeRetrievalIndex
-from .semantic_vector_retrieval_v1 import VectorConfig
+from .retrieval.answerability_gate_v1 import AnswerabilityConfig
+from .retrieval.hybrid_retrieval_v1 import HybridConfig, HybridIndex
+from .retrieval.lexical_retrieval_v1 import RetrievalConfig, read_jsonl as read_lexical_jsonl
+from .retrieval.safe_retrieval_v1 import SafeRetrievalIndex
+from .retrieval.semantic_vector_retrieval_v1 import VectorConfig
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE_VERSION = "inspection-service-v1.0.0"
