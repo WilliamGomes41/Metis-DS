@@ -9,13 +9,13 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from .hybrid_retrieval_v1 import HybridIndex, HybridConfig
-    from .lexical_retrieval_v1 import RetrievalConfig
-    from .semantic_vector_retrieval_v1 import VectorConfig, read_jsonl
+    from .retrieval.hybrid_retrieval_v1 import HybridIndex, HybridConfig
+    from .retrieval.lexical_retrieval_v1 import RetrievalConfig
+    from .retrieval.semantic_vector_retrieval_v1 import VectorConfig, read_jsonl
 except ImportError:
-    from hybrid_retrieval_v1 import HybridIndex, HybridConfig
-    from lexical_retrieval_v1 import RetrievalConfig
-    from semantic_vector_retrieval_v1 import VectorConfig, read_jsonl
+    from retrieval.hybrid_retrieval_v1 import HybridIndex, HybridConfig
+    from retrieval.lexical_retrieval_v1 import RetrievalConfig
+    from retrieval.semantic_vector_retrieval_v1 import VectorConfig, read_jsonl
 
 EVALUATOR_VERSION = "hybrid-retrieval-eval-v1.0.0"
 
