@@ -49,7 +49,7 @@ from src.passage_register_v1 import (
     register_status_from_suitability,
 )
 from src.review_cockpit_v1 import SUITABILITY_VALUES
-from src.validate_golden_set import validate, validate_extract_gold
+from src.evaluation.validate_golden_set import validate, validate_extract_gold
 
 
 ROOT = Path(__file__).resolve().parents[1]
