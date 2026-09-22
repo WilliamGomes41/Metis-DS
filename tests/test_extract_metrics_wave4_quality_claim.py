@@ -26,7 +26,7 @@ from src.extract_metrics_v1 import (
     load_extract_gold,
     measure_admission_language_variation,
 )
-from src.validate_golden_set import validate_extract_gold
+from src.evaluation.validate_golden_set import validate_extract_gold
 
 
 ROOT = Path(__file__).resolve().parents[1]
