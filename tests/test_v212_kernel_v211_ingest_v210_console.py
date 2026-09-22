@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.answerability_gate_v1 import evaluate_answerability
+from src.retrieval.answerability_gate_v1 import evaluate_answerability
 from src.extract_html_v1 import extract as extract_html
 from src.integrity_kernel import compute_canonical_object_hash, sha256_bytes
 from src.operations_console_app import create_console_app
