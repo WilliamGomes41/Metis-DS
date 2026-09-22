@@ -82,7 +82,7 @@ from src.publish_authorization_v1 import invalidate_for_object, still_matches, t
 from src.review_ledger import append_event
 from src.review_workflow_v3 import apply_reviews
 from src.revision_workflow import bump_patch, create_revision
-from src.retrieval_projection_v2 import build_projection
+from src.retrieval.retrieval_projection_v2 import build_projection
 from src.published_projection_v1 import atomic_replace_projection
 from src.semantic_transform_generic_v1 import transform as transform_generic
 from src.serving_relations_v1 import (
