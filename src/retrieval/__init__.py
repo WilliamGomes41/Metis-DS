@@ -1,1 +1,1 @@
-"""Retrieval engines and derived retrieval projection logic."""
+"""Derived retrieval engines, evidence gates, and projection logic."""
