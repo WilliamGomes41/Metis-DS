@@ -2,7 +2,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-python3 src/evaluate_vector_retrieval.py \
+python3 -m src.evaluation.evaluate_vector_retrieval \
   --records output/v2/retrieval/baseline_fixture_records.jsonl \
   --golden data/golden/fractuurpreventie_page15_golden_v0.1.json \
   --config config/vector_retrieval_v1.json \
