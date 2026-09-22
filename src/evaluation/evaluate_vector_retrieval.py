@@ -8,10 +8,7 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
-try:
-    from src.retrieval.semantic_vector_retrieval_v1 import LocalVectorIndex, VectorConfig, read_jsonl
-except ImportError:  # direct script execution
-    from src.retrieval.semantic_vector_retrieval_v1 import LocalVectorIndex, VectorConfig, read_jsonl
+from src.retrieval.semantic_vector_retrieval_v1 import LocalVectorIndex, VectorConfig, read_jsonl
 
 EVALUATOR_VERSION = "vector-retrieval-eval-v1.0.0"
 
