@@ -10,6 +10,7 @@ here. publish() stays G2-BLOCKED. Wave 1 reviewopslag paths stay.
 # release-control-evidence: scope/belofte
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
+Package migration regression evidence: availability and access behavior must remain unchanged.
 """
 from __future__ import annotations
 
