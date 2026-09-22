@@ -2,7 +2,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from src.semantic_vector_retrieval_v1 import LocalVectorIndex, VectorConfig, read_jsonl
+from src.retrieval.semantic_vector_retrieval_v1 import LocalVectorIndex, VectorConfig, read_jsonl
 from src.evaluate_vector_retrieval import evaluate
 
 ROOT = Path(__file__).resolve().parents[1]
