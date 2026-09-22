@@ -155,9 +155,9 @@ def test_metrics_modules_require_teller_noemer_and_score_must_drop() -> None:
     preflight = _load()
     for path in (
         "src/extract_metrics_v1.py",
-        "src/evaluate_retrieval_baseline.py",
-        "src/evaluate_vector_retrieval.py",
-        "src/evaluate_hybrid_retrieval.py",
+        "src/evaluation/evaluate_retrieval_baseline.py",
+        "src/evaluation/evaluate_vector_retrieval.py",
+        "src/evaluation/evaluate_hybrid_retrieval.py",
     ):
         item = preflight.classify_paths([path])["metrics"]
         assert item["status"] == "required", path
