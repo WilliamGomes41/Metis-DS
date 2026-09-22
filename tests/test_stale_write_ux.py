@@ -6,6 +6,7 @@ flash or a next-object redirect. Concurrent stale rejection MUST keep
 the submitted input on the form so it can be retried against a fresh
 revision. PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 publish() stays G2-BLOCKED. Wave 2 ingest and wave 3 stay out of scope.
+Package migration regression evidence: storage concurrency and stale-write behavior must remain unchanged.
 
 # release-control-evidence: opslag concurrent stale
 # release-control-evidence: toegang
