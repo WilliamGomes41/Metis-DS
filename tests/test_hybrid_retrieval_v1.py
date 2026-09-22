@@ -5,7 +5,7 @@ from pathlib import Path
 from src.retrieval.hybrid_retrieval_v1 import HybridIndex, HybridConfig
 from src.retrieval.lexical_retrieval_v1 import RetrievalConfig
 from src.retrieval.semantic_vector_retrieval_v1 import VectorConfig, read_jsonl
-from src.evaluate_hybrid_retrieval import evaluate
+from src.evaluation.evaluate_hybrid_retrieval import evaluate
 
 ROOT = Path(__file__).resolve().parents[1]
 RECORDS = ROOT / "data/fixtures/baseline_v0_1/baseline_fixture_records.jsonl"
