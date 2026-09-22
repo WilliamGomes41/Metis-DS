@@ -13,7 +13,7 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
-from lexical_retrieval_v1 import LexicalIndex, RetrievalConfig, read_jsonl
+from retrieval.lexical_retrieval_v1 import LexicalIndex, RetrievalConfig, read_jsonl
 
 EVALUATOR_VERSION = "retrieval-eval-v1.0.0"
 
