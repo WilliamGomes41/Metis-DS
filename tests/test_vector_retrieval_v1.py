@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 from src.retrieval.semantic_vector_retrieval_v1 import LocalVectorIndex, VectorConfig, read_jsonl
-from src.evaluate_vector_retrieval import evaluate
+from src.evaluation.evaluate_vector_retrieval import evaluate
 
 ROOT = Path(__file__).resolve().parents[1]
 RECORDS = ROOT / "data/fixtures/baseline_v0_1/baseline_fixture_records.jsonl"
