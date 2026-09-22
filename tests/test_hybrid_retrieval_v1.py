@@ -2,9 +2,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from src.hybrid_retrieval_v1 import HybridIndex, HybridConfig
-from src.lexical_retrieval_v1 import RetrievalConfig
-from src.semantic_vector_retrieval_v1 import VectorConfig, read_jsonl
+from src.retrieval.hybrid_retrieval_v1 import HybridIndex, HybridConfig
+from src.retrieval.lexical_retrieval_v1 import RetrievalConfig
+from src.retrieval.semantic_vector_retrieval_v1 import VectorConfig, read_jsonl
 from src.evaluate_hybrid_retrieval import evaluate
 
 ROOT = Path(__file__).resolve().parents[1]
