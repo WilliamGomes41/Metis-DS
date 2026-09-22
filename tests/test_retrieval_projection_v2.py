@@ -1,3 +1,4 @@
+# Package migration regression evidence: retrieval quality and projection behavior must remain unchanged.
 import copy
 import json
 import sys
