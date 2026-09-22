@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from object_taxonomy_v1 import CLOSED_OBJECT_TYPES
 from src.retrieval.retrieval_projection_v2 import build_projection, canonical_hash
-from validate_golden_set import validate
+from src.evaluation.validate_golden_set import validate
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: kwaliteit
