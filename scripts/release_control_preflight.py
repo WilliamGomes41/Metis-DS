@@ -121,7 +121,7 @@ PATH_RULES: dict[str, tuple[str, ...]] = {
         "src/evaluation/evaluate_hybrid_retrieval.py",
         "src/usage_ledger_v1.py",
         "src/*metrics*.py",
-        "src/evaluate_*retrieval*.py",
+        "src/evaluation/evaluate_*retrieval*.py",
     ),
 }
 
