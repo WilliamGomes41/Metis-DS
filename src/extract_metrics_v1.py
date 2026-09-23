@@ -38,7 +38,7 @@ from src.admission_gate_v1 import (
 )
 from src.extract_coverage_v1 import coverage_by_section
 from src.passage_register_v1 import apply_passage_register, passage_register_of
-from src.review_cockpit_v1 import confirmable_proposed_type
+from src.review.review_cockpit_v1 import confirmable_proposed_type
 
 
 EXTRACT_QUALITY_METRICS = (
