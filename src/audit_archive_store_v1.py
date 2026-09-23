@@ -105,9 +105,18 @@ class AzureAuditArchiveStore:
         environ: Mapping[str, str] | None = None,
         blob_service_client: Any | None = None,
     ) -> None:
-        configured_account, configured_container = _archive_coordinates(environ)
-        self.account = str(account or configured_account).strip()
-        self.container = str(container or configured_container).strip()
+        env = environ if environ is not None else os.environ
+        self.account = str(
+            account
+            or env.get(ACCOUNT_ENV, "")
+            or env.get("G2_STORAGE_ACCOUNT", "")
+            or ""
+        ).strip()
+        self.container = str(
+            container
+            or env.get(CONTAINER_ENV, "")
+            or DEFAULT_CONTAINER
+        ).strip()
         if ACCOUNT_RE.fullmatch(self.account) is None:
             raise AuditArchiveStoreError("audit_archive_account_invalid")
         if CONTAINER_RE.fullmatch(self.container) is None:
