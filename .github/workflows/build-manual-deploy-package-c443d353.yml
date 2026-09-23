@@ -1,0 +1,56 @@
+name: build-manual-deploy-package-c443d353
+
+on:
+  push:
+    branches:
+      - ops/build-deploy-c443d353
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c443d353c6ca4cae1d19a3d9953751a8a39f3bf9
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build deploy ZIP
+        run: bash scripts/create_azure_deploy_package.sh "$RUNNER_TEMP/metis-console-c443d353.zip"
+      - name: Verify deploy ZIP
+        run: |
+          python - <<'PY'
+          import os, zipfile
+          p = os.path.join(os.environ["RUNNER_TEMP"], "metis-console-c443d353.zip")
+          with zipfile.ZipFile(p) as z:
+              names = set(z.namelist())
+              required = {
+                  "data/audit/semantic_passage_safety_v1.json",
+                  "config/deployed_commit.txt",
+                  "src/console_asgi.py",
+              }
+              missing = sorted(required - names)
+              if missing:
+                  raise SystemExit(f"missing required files: {missing}")
+              marker = z.read("config/deployed_commit.txt").decode().strip()
+              if marker != "c443d353c6ca4cae1d19a3d9953751a8a39f3bf9":
+                  raise SystemExit(f"wrong deploy marker: {marker}")
+              native = sorted(
+                  n for n in names
+                  if n.startswith(".python_packages/pydantic_core/_pydantic_core.")
+                  and n.endswith(".so")
+              )
+              if len(native) != 1 or "cpython-312-" not in native[0] or "cpython-313-" in native[0]:
+                  raise SystemExit(f"wrong pydantic_core native extension: {native}")
+          print("deploy zip verified")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: metis-console-c443d353
+          path: ${{ runner.temp }}/metis-console-c443d353.zip
+          if-no-files-found: error
+          retention-days: 3
