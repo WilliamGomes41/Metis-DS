@@ -28,7 +28,7 @@ from src.canonical_publication_postgres_v1 import (
 from src.document_status_ui_v1 import install_document_status_ui
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
-from src.review_workboard_v1 import install_review_workboard
+from src.review.review_workboard_v1 import install_review_workboard
 from src.workflows.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin
 from src.workflows.workflow_documents_postgres_v1 import PostgresWorkflowDocumentStore
 
