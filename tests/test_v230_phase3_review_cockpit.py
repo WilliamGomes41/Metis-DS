@@ -830,7 +830,7 @@ def test_review_and_correction_do_not_change_sibling_canonical_hash(tmp_path: Pa
 
 
 def test_merge_heading_parent_relations_keeps_semantic_edges() -> None:
-    from src.review_cockpit_v1 import merge_heading_parent_relations
+    from src.review.review_cockpit_v1 import merge_heading_parent_relations
 
     merged = merge_heading_parent_relations(
         [
@@ -1000,7 +1000,7 @@ def test_dit_klopt_reveals_sterkte_before_one_save(tmp_path: Path) -> None:
 
 
 def test_phase3_does_not_add_passage_register_or_gold_metrics() -> None:
-    cockpit = (ROOT / "src/review_cockpit_v1.py").read_text(encoding="utf-8")
+    cockpit = (ROOT / "src/review/review_cockpit_v1.py").read_text(encoding="utf-8")
     app = (ROOT / "src/operations_console_app.py").read_text(encoding="utf-8")
     for blob in (cockpit, app):
         assert "selected_as_candidate" not in blob
