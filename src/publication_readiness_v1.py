@@ -10,7 +10,7 @@ from typing import Any, Iterable
 
 from src.operations_console_v1 import review_lane
 from src.passage_register_v1 import passage_register_of
-from src.review_disposition_v1 import definitive_review_disposition
+from src.review.review_disposition_v1 import definitive_review_disposition
 
 REVIEW_WORK_INCOMPLETE = "review_work_incomplete"
 SOURCE_PASSAGE_REVIEW_INCOMPLETE = "source_passage_review_incomplete"
