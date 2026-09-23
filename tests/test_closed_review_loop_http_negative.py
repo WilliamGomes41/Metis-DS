@@ -8,11 +8,11 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from src.closed_review_loop_v1 import ClosedLoopReviewConsole, install_closed_review_routes
+from src.review.closed_review_loop_v1 import ClosedLoopReviewConsole, install_closed_review_routes
 from src.operations_console_app import create_console_app
-from src.proportionate_review_v1 import normal_risk_batch_queue
-from src.review_cockpit_v1 import broncontext_parts, confirmable_proposed_type
-from src.review_ledger import read_events
+from src.review.proportionate_review_v1 import normal_risk_batch_queue
+from src.review.review_cockpit_v1 import broncontext_parts, confirmable_proposed_type
+from src.review.review_ledger import read_events
 
 
 def test_wrong_role_repair_post_fails_closed_without_writes(tmp_path):
