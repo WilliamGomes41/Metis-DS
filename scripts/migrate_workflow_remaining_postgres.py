@@ -11,8 +11,8 @@ import argparse
 import json
 from pathlib import Path
 
-from src.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
-from src.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore, WorkflowRemainingStoreError
+from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
+from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore, WorkflowRemainingStoreError
 
 
 def _read_json(path: Path) -> dict:
