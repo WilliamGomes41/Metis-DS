@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 from src.atomic_split_v1 import fusion_is_forbidden, split_meaning_units
 from src.extract_html_v1 import extract as extract_html
-from src.four_eyes_v1 import requires_four_eyes
+from src.review.four_eyes_v1 import requires_four_eyes
 from src.object_taxonomy_v1 import (
     is_advice_weight,
     is_continuation_fragment,
@@ -39,7 +39,7 @@ from src.operations_console_v1 import (
     safe_store_filename,
     slow_review_duty,
 )
-from src.review_ledger import read_events
+from src.review.review_ledger import read_events
 
 
 ROOT = Path(__file__).resolve().parents[1]
