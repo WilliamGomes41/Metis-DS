@@ -16,7 +16,8 @@ Before making any change:
 4. Confirm the issue is open and has the `ready-for-agent` label.
 5. Read `docs/agents/continuous-development.md`, classify the issue as Class A, B, or C, and determine `Rewrite risk: none | high` before implementation.
 6. If the issue is Class A, read and apply `docs/agents/lifecycle-vsa.md` in full before implementation.
-7. If rewrite risk is high, verify every mandatory rewrite-mitigation field is explicit before implementation.
+7. If the issue is Class B and creates or mutates durable domain state, verify the stateful Class B domain-first overlay in `docs/agents/continuous-development.md` is explicit before implementation.
+8. If rewrite risk is high, verify every mandatory rewrite-mitigation field is explicit before implementation.
 
 Fail closed and do not implement when any of these is true:
 
@@ -31,6 +32,7 @@ Fail closed and do not implement when any of these is true:
 - Rewrite risk is high but the issue lacks the required authority/writer/reader map, runtime topologies, persisted-state impact, compatibility/migration, rollback/recovery, cutover, cleanup, failure-blast-radius, or adversarial-proof fields.
 - A big-bang rewrite is proposed without an explicit reason staged coexistence is technically unsafe or impossible and explicit human approval.
 - Class B or C work reveals that a lifecycle invariant or lifecycle authority must change; stop and reclassify instead of continuing locally.
+- A Class B change creates or mutates durable domain state but does not define its entity/aggregate, invariants, durable state before/after, transaction boundary, failure/recovery result, duplicate/idempotency result, concurrency result where relevant, and audit/evidence requirement.
 - Work marked `Rewrite risk: none` begins replacing or redefining an authority, persisted identity/schema semantics, or a shared mutation/read boundary; stop and rescope instead of continuing.
 - A Class A issue does not contain the mandatory transition fields required by `docs/agents/lifecycle-vsa.md`.
 - A Class A implementation would mutate published work in place, duplicate an authority, or rely on an undefined identity/lineage rule.
@@ -45,6 +47,7 @@ Execution contract:
 - Apply the lightest process that safely proves the promise, as defined in `docs/agents/continuous-development.md`.
 - Add or update only the tests needed to prove the promised behavior and relevant regression risk.
 - Implement product behavior as a vertical slice when the user promise crosses layers. Vertical slicing defines promise completeness, not mandatory PR size; small prerequisite PRs are allowed, but the promise is not complete until end-to-end evidence passes.
+- For Class B durable state mutations, establish the domain-first overlay before the slice: domain entity/aggregate, invariants, durable state before/after, transaction boundary, failure/recovery, duplicate/idempotency behavior, concurrency where relevant, and audit/evidence semantics. Do not add lifecycle-grade paperwork to stateless Class B work.
 - For Class A lifecycle changes, one slice means one exact lifecycle transition, not one technical component. The issue must define durable begin state, trigger, exact durable end state, serving effect, failure result, restart result, recovery result, legacy-data result where relevant, and a required black-box scenario before code changes.
 - Published work is immutable. New policy review or a new source version must create explicit successor work as defined in `docs/agents/lifecycle-vsa.md`; never reopen a published revision in place.
 - Current serving eligibility is decided only by the publication registry. UI, envelope state, review state, and release metadata must not become competing serving authorities.
