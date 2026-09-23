@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from src.audit_archive_store_v1 import AzureAuditArchiveStore
+from src.audit_archive_store_v1 import AuditArchiveStoreError, AzureAuditArchiveStore
 from src.audit_room_v1 import install_audit_routes
 from src.azure_authoritative_publication_console_v1 import AzureAuthoritativePublicationConsole
 from src.azure_postgres_credential_v1 import CachedAzurePostgresCredential
@@ -192,10 +192,15 @@ def _immutable_source_store() -> AzureBlobSourceStore | None:
 
 
 def _audit_archive_store() -> AzureAuditArchiveStore | None:
-    """Use the production managed identity for the dedicated Azure audit archive."""
+    """Use managed identity when audit archive coordinates are available."""
     if not _running_in_azure():
         return None
-    return AzureAuditArchiveStore()
+    try:
+        return AzureAuditArchiveStore()
+    except AuditArchiveStoreError as exc:
+        if exc.args and exc.args[0] == "audit_archive_account_invalid":
+            return None
+        raise
 
 
 def bootstrap_accounts(console: OperationsConsole) -> None:
