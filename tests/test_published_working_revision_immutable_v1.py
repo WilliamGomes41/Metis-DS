@@ -18,10 +18,10 @@ from typing import Any
 import pytest
 
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
-from src.closed_review_loop_v1 import ClosedLoopReviewConsole
+from src.review.closed_review_loop_v1 import ClosedLoopReviewConsole
 from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.operations_console_v1 import ConsoleError
-from src.review_closure_v1 import PUBLISHED_WORKING_REVISION_IMMUTABLE
+from src.review.review_closure_v1 import PUBLISHED_WORKING_REVISION_IMMUTABLE
 from src.workflows.workflow_document_concurrency_v1 import (
     PUBLISHED_WORKING_REVISION_IMMUTABLE as STORE_IMMUTABLE,
     PostgresConcurrentWorkflowDocumentStore,
