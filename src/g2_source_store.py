@@ -114,6 +114,8 @@ class ImmutableSourceStore(Protocol):
 
     def load_verified(self, locator: str) -> bytes: ...
 
+    def delete_verified(self, locator: str) -> bool: ...
+
 
 class AzureBlobSourceStore:
     """Content-addressed canonical source storage backed by Azure Blob."""
@@ -184,3 +186,20 @@ class AzureBlobSourceStore:
             raise G2SourceStoreError("canonical_source_download_failed") from exc
         self._verify(data, parsed["sha256"])
         return data
+
+    def delete_verified(self, locator: str) -> bool:
+        """Delete one canonical Blob addressed by a validated locator.
+
+        Missing is idempotent. Callers own reference-count / publication checks.
+        """
+        parsed = parse_g2_locator(locator)
+        if parsed is None:
+            raise G2SourceStoreError("canonical_source_locator_invalid")
+        blob = self._blob_client(sha256=parsed["sha256"], filename=parsed["filename"])
+        try:
+            blob.delete_blob(delete_snapshots="include")
+        except Exception as exc:
+            if exc.__class__.__name__ == "ResourceNotFoundError":
+                return False
+            raise G2SourceStoreError("canonical_source_delete_failed") from exc
+        return True

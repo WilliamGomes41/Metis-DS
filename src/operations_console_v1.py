@@ -1716,9 +1716,10 @@ class OperationsConsole:
         return False
 
     def _maybe_remove_unpublished_freeze_bytes(self, envelope: dict[str, Any]) -> bool:
-        """Remove freeze bytes of this unpublished source when no other snapshot uses them.
+        """Remove unshared unpublished source bytes from local cache and immutable storage.
 
         MUST NOT walk ``/home/data``. MUST NOT rmtree the source store.
+        Published snapshots never reach this path.
         """
         digest = safe_path_token(str(envelope["sha256"]), pattern=STORE_DIGEST_RE)
         still_used = any(
@@ -1727,19 +1728,33 @@ class OperationsConsole:
         )
         if still_used:
             return False
+
+        remote_removed = False
+        locator = str(envelope.get("immutable_storage_locator") or "").strip()
+        immutable = self.immutable_source_store
+        if locator and immutable is not None:
+            delete_verified = getattr(immutable, "delete_verified", None)
+            if callable(delete_verified):
+                try:
+                    remote_removed = bool(delete_verified(locator))
+                except G2SourceStoreError:
+                    # Snapshot deletion must not become half-applied because external
+                    # source cleanup failed. The orphan remains recoverable/operator-visible.
+                    remote_removed = False
+
         filename = safe_store_filename(Path(str(envelope.get("binary_path") or "")).name)
         stored = safe_path_under(self.source_store, digest, filename)
-        removed = False
+        local_removed = False
         if stored.is_file():
             stored.unlink()
-            removed = True
+            local_removed = True
         parent = stored.parent
         try:
             if parent.is_dir() and parent != self.source_store.resolve() and not any(parent.iterdir()):
                 parent.rmdir()
         except OSError:
             pass
-        return removed
+        return local_removed or remote_removed
 
     def _delete_unpublished_snapshot_authority(self, snapshot_id: str) -> None:
         """Delete the workflow-authoritative snapshot when a durable authority is configured."""
