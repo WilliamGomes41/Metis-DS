@@ -20,11 +20,11 @@ from urllib.parse import quote
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from src.closed_review_loop_v1 import ClosedLoopReviewConsole
+from src.review.closed_review_loop_v1 import ClosedLoopReviewConsole
 from src.integrity_kernel import schema_errors, sha256_bytes, stable_hash, stamp_canonical_hashes
 from src.operations_console_v1 import ConsoleError, OperationsConsole, SNAPSHOT_OBJECT_WRITE_CONFLICT
 from src.publish_authorization_v1 import invalidate_for_object
-from src.review_cockpit_v1 import map_eindoordeel
+from src.review.review_cockpit_v1 import map_eindoordeel
 from src.serving_relations_v1 import binding_relations
 
 
