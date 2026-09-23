@@ -11,8 +11,8 @@ from jsonschema import Draft202012Validator
 from src.extract_html_v1 import extract as extract_html
 from src.integrity_kernel import exact_review_snapshot_hash
 from src.prepublication_gate_v3 import evaluate as prepublish
-from src.review_workflow_v3 import apply_reviews
-from src.second_review_workflow_v3 import apply_second
+from src.review.review_workflow_v3 import apply_reviews
+from src.review.second_review_workflow_v3 import apply_second
 from src.semantic_transform_generic_v1 import transform as generic_transform
 
 ROOT=Path(__file__).resolve().parents[1]
