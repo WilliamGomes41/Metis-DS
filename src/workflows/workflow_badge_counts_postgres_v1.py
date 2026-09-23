@@ -13,8 +13,8 @@ from typing import Any
 from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError
 from src.document_status_v1 import derive_lifecycle_status
 from src.operations_console_v1 import CAPTURED, PRE_REVIEW_BLOCKED, ConsoleError
-from src.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
-from src.workflow_remaining_cutover_v1 import (
+from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+from src.workflows.workflow_remaining_cutover_v1 import (
     PostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
     PostgresCompleteWorkflowDurablePublicationConsole,
 )
