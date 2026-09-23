@@ -16,6 +16,7 @@ import pytest
 
 from src.azure_deploy_package import (
     AZURE_MANYLINUX_PLATFORM,
+    AZURE_NATIVE_WHEEL_PACKAGES,
     CONSOLE_REQUIREMENTS_NAME,
     DEPLOY_COMMIT_MARKER,
     RUNTIME_DATA_MARKERS,
@@ -89,6 +90,12 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
         cryptography_rust = archive.read(
             ".python_packages/cryptography/hazmat/bindings/_rust.abi3.so"
         )
+        pydantic_core_extensions = sorted(
+            name
+            for name in names
+            if name.startswith(".python_packages/pydantic_core/_pydantic_core.")
+            and name.endswith(".so")
+        )
         packaged_commit = archive.read(DEPLOY_COMMIT_MARKER).decode("ascii").strip()
         vendor_roots = {
             name.split("/", 2)[1]
@@ -123,6 +130,11 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
     assert not any(package_contains_runtime_data(name) for name in names)
     assert not any("git archive" in name for name in names)
     assert AZURE_MANYLINUX_PLATFORM == "manylinux2014_x86_64"
+    assert "pydantic-core" in AZURE_NATIVE_WHEEL_PACKAGES
+    assert "pydantic-core==2.46.5" in _read(ROOT / CONSOLE_REQUIREMENTS_NAME)
+    assert len(pydantic_core_extensions) == 1
+    assert "cpython-312-" in pydantic_core_extensions[0]
+    assert "cpython-313-" not in pydantic_core_extensions[0]
     assert b"GLIBC_2.33" not in cryptography_rust
     assert b"GLIBC_2.34" not in cryptography_rust
 
