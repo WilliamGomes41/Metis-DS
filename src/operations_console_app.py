@@ -36,7 +36,7 @@ from src.object_taxonomy_v1 import (
 )
 from src.admission_gate_v1 import admission_of, blocked_audit_lane
 from src.extract_coverage_v1 import coverage_panel_rows
-from src.review_cockpit_v1 import (
+from src.review.review_cockpit_v1 import (
     SUITABILITY_VALUES,
     broncontext_parts,
     confirmable_proposed_type,
@@ -68,7 +68,7 @@ from src.operations_console_v1 import (
     slow_review_duty,
 )
 from src.open_original_v1 import researcher_visible_prose
-from src.review_disposition_v1 import definitive_review_disposition
+from src.review.review_disposition_v1 import definitive_review_disposition
 from src.product_security_v1 import SlidingWindowRateLimiter
 from src.proportionate_review_v1 import (
     ProportionateReviewConsole,
