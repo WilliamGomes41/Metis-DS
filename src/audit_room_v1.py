@@ -21,7 +21,11 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from src.admission_gate_v1 import blocked_audit_lane
 from src.audit_archive_store_v1 import AuditArchiveStore
-from src.audit_retention_v1 import AuditRetentionService
+from src.audit_retention_v1 import (
+    ARCHIVE_REFERENCE_KIND,
+    AuditRetentionService,
+    is_archived_reference,
+)
 from src.audit_semantic_safety_v1 import (
     load_frozen_safety_suite,
     run_frozen_semantic_safety_suite,
@@ -92,6 +96,10 @@ class AuditRegistry:
                 row = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
                 raise ConsoleError("audit_record_corrupt") from exc
+            if row.get("record_kind") == ARCHIVE_REFERENCE_KIND:
+                if not is_archived_reference(row):
+                    raise ConsoleError("audit_archive_reference_corrupt")
+                continue
             if not self._valid_record(row):
                 raise ConsoleError("audit_record_corrupt")
             rows.append(row)
@@ -118,21 +126,37 @@ class AuditRegistry:
             row = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ConsoleError("audit_record_corrupt") from exc
+        if row.get("record_kind") == ARCHIVE_REFERENCE_KIND:
+            if not is_archived_reference(row):
+                raise ConsoleError("audit_archive_reference_corrupt")
+            return None
         if not self._valid_record(row):
             raise ConsoleError("audit_record_corrupt")
         return row
 
-    def remove_audit(self, audit_id: str) -> bool:
-        if not AUDIT_ID_RE.fullmatch(str(audit_id or "")):
+    def replace_with_archived_ref(
+        self,
+        audit_id: str,
+        reference: dict[str, Any],
+    ) -> None:
+        safe_id = str(audit_id or "").strip()
+        if not AUDIT_ID_RE.fullmatch(safe_id):
             raise ConsoleError("audit_id_invalid")
-        path = self.root / f"{audit_id}.json"
-        if not path.is_file():
-            return False
-        try:
-            path.unlink()
-        except OSError as exc:
-            raise ConsoleError("audit_record_delete_failed") from exc
-        return True
+        if not is_archived_reference(reference):
+            raise ConsoleError("audit_archive_reference_invalid")
+        if str(reference.get("audit_id") or "") != safe_id:
+            raise ConsoleError("audit_archive_record_mismatch")
+        path = self.root / f"{safe_id}.json"
+        with self._write_lock:
+            if not path.is_file():
+                raise ConsoleError("unknown_audit")
+            try:
+                current = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ConsoleError("audit_record_corrupt") from exc
+            if not self._valid_record(current):
+                raise ConsoleError("audit_not_live")
+            _atomic_write(path, reference)
 
     def create(
         self,
