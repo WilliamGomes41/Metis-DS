@@ -247,10 +247,9 @@ class AuditRetentionService:
                 raise ConsoleError("audit_purge_requires_archived")
 
             if reference is None:
-                try:
-                    self.archive_store.delete_audit(safe_id)
-                except AuditArchiveStoreError as exc:
-                    raise ConsoleError("audit_purge_archive_delete_failed") from exc
+                # Duplicate execution after a completed purge is an idempotent
+                # no-op. Do not blindly delete Azure by id without a local
+                # archived reference proving that this command owns that blob.
                 return {"audit_id": safe_id, "purged": True}
 
             if confirmation != str(reference.get("title") or ""):
