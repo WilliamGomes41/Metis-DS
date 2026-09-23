@@ -59,6 +59,7 @@ ALLOWED_CONSOLE_PACKAGES = frozenset(
         "rfc3987",
         "pymupdf",
         "fastapi",
+        "pydantic-core",
         "uvicorn",
         "python-multipart",
         "gunicorn",
@@ -120,9 +121,11 @@ def test_v224_console_requirements_exclude_sklearn_stack() -> None:
     assert default_console_requirements(ROOT) == console
 
 
-def test_v224_console_pins_azure_linux_compatible_cryptography() -> None:
+def test_v224_console_pins_azure_linux_compatible_native_packages() -> None:
     requirements = (ROOT / CONSOLE_REQUIREMENTS_NAME).read_text(encoding="utf-8")
-    assert "cryptography==44.0.3" in requirements.splitlines()
+    lines = requirements.splitlines()
+    assert "cryptography==44.0.3" in lines
+    assert "pydantic-core==2.46.5" in lines
 
 
 def test_v224_retrieval_extra_keeps_sklearn_stack() -> None:
