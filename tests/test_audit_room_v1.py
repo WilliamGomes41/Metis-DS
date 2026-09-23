@@ -160,11 +160,13 @@ def test_researcher_archives_audit_to_external_store_and_reads_it_back(tmp_path)
     assert response.headers["location"] == f'/audit/archive/{created["audit_id"]}'
     assert AuditRegistry(console.runtime).get_audit(created["audit_id"]) is None
 
-    index_path = console.runtime / "audits" / "archive-index" / f'{created["audit_id"]}.json'
-    index = json.loads(index_path.read_text(encoding="utf-8"))
-    assert "payload" not in index
-    assert index["audit_id"] == created["audit_id"]
-    assert index["archive_locator"] in archive_store.data
+    reference_path = console.runtime / "audits" / f'{created["audit_id"]}.json'
+    reference = json.loads(reference_path.read_text(encoding="utf-8"))
+    assert reference["record_kind"] == "archived_audit_ref"
+    assert "payload" not in reference
+    assert reference["audit_id"] == created["audit_id"]
+    assert reference["archive_locator"] in archive_store.data
+    assert not (console.runtime / "audits" / "archive-index").exists()
 
     archive = client.get("/audit/archive")
     assert archive.status_code == 200
