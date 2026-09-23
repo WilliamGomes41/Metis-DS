@@ -21,17 +21,17 @@ from src.operations_console_v1 import (
     _atomic_write,
     _objects_jsonl_bytes,
 )
-from src.workflow_documents_postgres_v1 import (
+from src.workflows.workflow_documents_postgres_v1 import (
     PostgresWorkflowDocumentStore,
     WorkflowDocumentStoreError,
     _json_text,
     _read_legacy_runtime,
 )
-from src.workflow_identity_postgres_v1 import (
+from src.workflows.workflow_identity_postgres_v1 import (
     PostgresIdentityAzureAuthoritativePublicationConsole,
     PostgresIdentityDurablePublicationConsole,
 )
-from src.workflow_transaction_v1 import bind_workflow_stores, workflow_transaction
+from src.workflows.workflow_transaction_v1 import bind_workflow_stores, workflow_transaction
 
 
 class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
