@@ -17,7 +17,7 @@ from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
 from src.operations_console_app import _broncontext_html
 from src.operations_console_v1 import PRE_REVIEW_BLOCKED, ConsoleError, OperationsConsole
 from src.passage_register_v1 import passage_register_of
-from src.review_cockpit_v1 import why_selected
+from src.review.review_cockpit_v1 import why_selected
 from src.pre_review_semantic_v1 import (
     DETERMINISTIC_MODE,
     OPENAI_RESPONSES_URL,

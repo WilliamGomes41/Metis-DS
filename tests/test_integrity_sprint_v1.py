@@ -9,8 +9,8 @@ from src.integrity_kernel import (
     compute_canonical_object_hash, exact_review_snapshot_hash, load_verified_source_registry,
     schema_errors, stamp_canonical_hashes, validate_source_fragments,
 )
-from src.review_ledger import append_event, verify_ledger
-from src.review_workflow_v3 import apply_reviews
+from src.review.review_ledger import append_event, verify_ledger
+from src.review.review_workflow_v3 import apply_reviews
 from src.revision_workflow import create_revision
 from src.second_review_workflow_v3 import apply_second
 

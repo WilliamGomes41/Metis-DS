@@ -22,7 +22,7 @@ from src.canonical_publication_postgres_v1 import (
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
 from src.operations_console_v1 import ConsoleError, review_lane
 from src.passage_register_v1 import passage_register_of
-from src.review_disposition_v1 import definitive_review_disposition
+from src.review.review_disposition_v1 import definitive_review_disposition
 from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
 from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
 from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
