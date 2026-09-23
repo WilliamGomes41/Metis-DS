@@ -6,7 +6,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 from src.integrity_kernel import exact_review_snapshot_hash
-from src.review_ledger import append_event
+from src.review.review_ledger import append_event
 
 
 def read_jsonl(p:Path)->list[dict[str,Any]]:

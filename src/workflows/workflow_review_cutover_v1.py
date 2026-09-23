@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from src.operations_console_v1 import ConsoleError, _atomic_replace_bytes, _atomic_write
-from src.review_ledger import buffer_events, register_backend
+from src.review.review_ledger import buffer_events, register_backend
 from src.workflows.workflow_documents_cutover_v1 import (
     PostgresWorkflowAzureAuthoritativePublicationConsole,
     PostgresWorkflowDurablePublicationConsole,
