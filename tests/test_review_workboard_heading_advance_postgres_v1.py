@@ -15,7 +15,7 @@ import pytest
 
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.operations_console_v1 import review_lane
-from src.review_workboard_v1 import review_workboard_items
+from src.review.review_workboard_v1 import review_workboard_items
 from src.workflows.workflow_badge_counts_postgres_v1 import (
     FastBadgePostgresCompleteWorkflowDurablePublicationConsole,
 )
