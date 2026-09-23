@@ -37,6 +37,8 @@ Before implementing a Class B change that alters shared extraction, review, retr
 
 The agent MUST map the requested behavior onto the existing program structure before editing production code. If the current mechanism, ownership boundary, or call path is not established, investigate first instead of patching. This gate is a lightweight design check for Class B work and MUST NOT be expanded into lifecycle-grade paperwork when lifecycle semantics are unchanged.
 
+For Class B work that creates or mutates durable domain state, apply the `Stateful Class B domain-first overlay` in `docs/agents/continuous-development.md` before VSA. That document owns the criteria and escalation rule.
+
 ### Lifecycle VSA contract
 
 Class A issues MUST also follow `docs/agents/lifecycle-vsa.md` in full. Class A includes changes to logical document/version lineage, source snapshot immutability, review closure required for publication, publication readiness semantics, canonical releases, serving authority/active serving set, supersession, withdrawal, published-state migration/reconciliation, or restart/recovery of lifecycle state.

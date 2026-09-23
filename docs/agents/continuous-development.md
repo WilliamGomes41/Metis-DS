@@ -52,6 +52,38 @@ Rules:
 - do not introduce a new durable authority, lifecycle state, architecture layer, or framework to solve a local product problem;
 - if implementation reveals that a Class A truth must change, STOP and reclassify before continuing.
 
+#### Stateful Class B domain-first overlay
+
+Apply this overlay only when a Class B change creates or mutates durable domain state. Do not apply it to stateless reads, presentation-only behavior, navigation, copy, or other work with no durable state transition.
+
+Before defining or implementing the vertical slice, the issue or implementation plan MUST state:
+
+```text
+Domain entity/aggregate:
+Invariant(s):
+Durable state before:
+Durable state after:
+Transaction boundary:
+Failure/recovery result:
+Duplicate execution / idempotency result:
+Concurrency result: <or N/A with reason>
+Audit/evidence requirement:
+```
+
+Rules:
+
+- model the domain state and invariants before choosing implementation mechanics;
+- keep the assessment lightweight and specific to the promised behavior;
+- the transaction boundary MUST identify which durable writes succeed or fail as one unit;
+- failure/recovery MUST not rely on destructive reset unless the domain contract explicitly permits data loss;
+- duplicate execution MUST have an explicit result when commands, retries, jobs, webhooks, uploads, or agent actions can repeat;
+- concurrency MUST be addressed when two actors or processes can mutate the same durable truth;
+- audit/evidence MUST record only what the domain or operational promise requires and MUST NOT become a second source of truth;
+- after this assessment, implement the user/system promise as a vertical slice where it crosses layers;
+- if the assessment reveals a required change to Class A lifecycle identity, lineage, authority, publication/serving semantics, migration/reconciliation, or restart/recovery rules, STOP and reclassify to Class A before implementation.
+
+This overlay is not a second lifecycle contract. Metis publication lifecycle truth remains exclusively defined by `docs/agents/lifecycle-vsa.md`.
+
 ### Class C — Cosmetic, copy, documentation, and non-semantic maintenance
 
 Use Class C only when runtime/domain behavior does not change.
@@ -193,7 +225,7 @@ For `Rewrite risk: high`, append every mandatory mitigation field from section 2
 
 For Class A, append the full mandatory lifecycle fields from `docs/agents/lifecycle-vsa.md`.
 
-For Class B, no additional lifecycle template is required unless the work is reclassified.
+For Class B, no additional lifecycle template is required unless the work is reclassified. When Class B creates or mutates durable domain state, the stateful Class B domain-first overlay in section 1 is mandatory.
 
 For Class C, `Proof` may be a focused artifact/contract check plus existing repository checks.
 
