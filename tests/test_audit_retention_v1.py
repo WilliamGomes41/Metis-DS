@@ -397,3 +397,32 @@ def test_purge_retry_completes_when_blob_was_already_deleted(
     assert result["purged"] is True
     assert service.list_archived() == []
     assert archive.data == {}
+
+
+
+def test_stale_archived_reference_cannot_overwrite_current_retention_state(
+    tmp_path: Path,
+) -> None:
+    runtime = tmp_path / "runtime"
+    registry = AuditRegistry(runtime)
+    original = _created(registry)
+    archive = _MemoryArchiveStore()
+    service = AuditRetentionService(
+        live_store=registry,
+        archive_store=archive,
+        runtime=runtime,
+    )
+    reference = service.archive(original["audit_id"], actor_id="acct-researcher")
+    stale_reference = dict(reference)
+    stale_reference["archived_at"] = "2026-09-24T00:00:00Z"
+
+    with pytest.raises(ConsoleError, match="audit_archive_reference_changed"):
+        registry.replace_archived_ref_with_live(
+            original["audit_id"],
+            stale_reference,
+            original,
+        )
+
+    assert registry.get_audit(original["audit_id"]) is None
+    assert service.get_archived_index(original["audit_id"]) == reference
+    assert service.load_archived(original["audit_id"]) == original
