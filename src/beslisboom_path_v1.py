@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 from typing import Any, Iterable
 
-from src.four_eyes_v1 import HIGH_RISK_FIELDS
+from src.review.four_eyes_v1 import HIGH_RISK_FIELDS
 from src.object_taxonomy_v1 import CLASS_ORDER, CLOSED_OBJECT_TYPES, source_class_of
 from src.serving_relations_v1 import binding_relations
 
