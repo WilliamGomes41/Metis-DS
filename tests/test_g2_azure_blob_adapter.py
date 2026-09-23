@@ -35,6 +35,12 @@ class _Blob:
     def download_blob(self) -> _Download:
         return _Download(self.service.data[self.name])
 
+    def delete_blob(self, **_kwargs: object) -> None:
+        if self.name not in self.service.data:
+            ResourceNotFoundError = type("ResourceNotFoundError", (RuntimeError,), {})
+            raise ResourceNotFoundError()
+        del self.service.data[self.name]
+
 
 class _BlobService:
     def __init__(self) -> None:
@@ -155,3 +161,60 @@ def test_console_fails_closed_before_creating_snapshot_when_upload_fails(tmp_pat
     with pytest.raises(ConsoleError, match="immutable_source_storage_failed"):
         _ingest(console, accounts)
     assert console._envelopes == {}
+
+
+def test_unpublished_delete_removes_unshared_azure_blob_source(tmp_path: Path) -> None:
+    service = _BlobService()
+    store = AzureBlobSourceStore(blob_service_client=service)
+    console, accounts = _console(tmp_path, store)
+    receipt = _ingest(console, accounts)
+    snapshot_id = str(receipt["snapshot_id"])
+    locator = str(receipt["immutable_storage_locator"])
+    blob_name = locator.split("/canonical-sources/", 1)[1]
+    assert blob_name in service.data
+
+    result = console.delete_unpublished_snapshot(
+        actor_id=accounts["researcher"],
+        snapshot_id=snapshot_id,
+        confirmed=True,
+        confirm_title="Canonical source",
+    )
+
+    assert result["deleted"] is True
+    assert result["freeze_bytes_removed"] is True
+    assert blob_name not in service.data
+
+
+def test_unpublished_delete_keeps_blob_when_same_digest_is_still_referenced(tmp_path: Path) -> None:
+    service = _BlobService()
+    store = AzureBlobSourceStore(blob_service_client=service)
+    console, accounts = _console(tmp_path, store)
+    first = _ingest(console, accounts)
+    second = console.ingest(
+        actor_id=accounts["researcher"],
+        filename="source.html",
+        data=HTML_FIXTURE.read_bytes(),
+        content_type="text/html",
+        ingest_kind="new",
+        title="Canonical source second",
+        version="1.1",
+        date="2026-09-02",
+        live_url="https://example.test/source-2",
+        class_="richtlijn",
+        family="test-family-2",
+        named_reviewers=[accounts["reviewer"]],
+    )
+    locator = str(first["immutable_storage_locator"])
+    blob_name = locator.split("/canonical-sources/", 1)[1]
+    assert str(second["sha256"]) == str(first["sha256"])
+
+    result = console.delete_unpublished_snapshot(
+        actor_id=accounts["researcher"],
+        snapshot_id=str(first["snapshot_id"]),
+        confirmed=True,
+        confirm_title="Canonical source",
+    )
+
+    assert result["deleted"] is True
+    assert result["freeze_bytes_removed"] is False
+    assert blob_name in service.data
