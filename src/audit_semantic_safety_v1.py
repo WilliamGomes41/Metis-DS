@@ -15,7 +15,7 @@ from typing import Any
 
 from src.context_aware_split_v1 import split_context_aware_units
 from src.operations_console_v1 import ConsoleError
-from src.pre_review_semantic_v1 import PostJson, semantic_units_before_review
+from src.review.pre_review_semantic_v1 import PostJson, semantic_units_before_review
 from src.semantic_passage_v1 import SELECTION_ORIGIN_COVERAGE, SELECTION_ORIGIN_PROPOSAL
 
 
