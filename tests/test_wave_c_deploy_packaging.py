@@ -22,6 +22,7 @@ from src.azure_deploy_package import (
     RUNTIME_DATA_MARKERS,
     DeployPackageError,
     default_console_requirements,
+    git_head_zip_datetime,
     package_contains_runtime_data,
     vendor_tree_forbidden_packages,
     write_deploy_zip,
@@ -97,6 +98,7 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
             and name.endswith(".so")
         )
         packaged_commit = archive.read(DEPLOY_COMMIT_MARKER).decode("ascii").strip()
+        packaged_timestamps = {info.date_time for info in archive.infolist()}
         vendor_roots = {
             name.split("/", 2)[1]
             for name in names
@@ -111,6 +113,8 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
     ).stdout.strip().lower()
     assert DEPLOY_COMMIT_MARKER in names
     assert packaged_commit == expected_commit
+    assert packaged_timestamps == {git_head_zip_datetime(ROOT)}
+    assert (2026, 1, 1, 0, 0, 0) not in packaged_timestamps
     assert len(packaged_commit) == 40
     assert all(char in "0123456789abcdef" for char in packaged_commit)
     assert any(name.startswith(".python_packages/") for name in names)
