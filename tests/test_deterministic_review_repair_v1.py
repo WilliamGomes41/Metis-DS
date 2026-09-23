@@ -12,8 +12,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from src.closed_review_loop_v1 import install_closed_review_routes
-from src.deterministic_review_repair_v1 import (
+from src.review.closed_review_loop_v1 import install_closed_review_routes
+from src.review.deterministic_review_repair_v1 import (
     DeterministicRepairReviewConsole,
     REPAIR_MERGE_OBJECTS,
     REPAIR_SOURCE_UNITS,
@@ -23,7 +23,7 @@ from src.deterministic_review_repair_v1 import (
 )
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
-from src.review_ledger import read_events
+from src.review.review_ledger import read_events
 from src.serving_relations_v1 import binding_relations
 
 
