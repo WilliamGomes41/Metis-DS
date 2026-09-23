@@ -48,6 +48,8 @@ class AuditArchiveStore(Protocol):
 
     def delete_verified(self, locator: str) -> bool: ...
 
+    def delete_audit(self, audit_id: str) -> bool: ...
+
 
 def _load_azure_blob_sdk() -> tuple[Any, Any]:
     try:
@@ -203,9 +205,11 @@ class AzureAuditArchiveStore:
         self._verify(data, expected_sha256)
         return data
 
-    def delete_verified(self, locator: str) -> bool:
-        parts = self._parse_locator(locator)
-        blob = self._blob_client(parts["audit_id"])
+    def delete_audit(self, audit_id: str) -> bool:
+        safe_id = str(audit_id or "").strip()
+        if AUDIT_ID_RE.fullmatch(safe_id) is None:
+            raise AuditArchiveStoreError("audit_archive_id_invalid")
+        blob = self._blob_client(safe_id)
         try:
             blob.delete_blob(delete_snapshots="include")
         except Exception as exc:
@@ -213,3 +217,7 @@ class AzureAuditArchiveStore:
                 return False
             raise AuditArchiveStoreError("audit_archive_delete_failed") from exc
         return True
+
+    def delete_verified(self, locator: str) -> bool:
+        parts = self._parse_locator(locator)
+        return self.delete_audit(parts["audit_id"])
