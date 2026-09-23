@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from src.workflow_postgres_migration_v1 import (
+from src.workflows.workflow_postgres_migration_v1 import (
     MIGRATION_NAMES,
     REQUIRED_COLUMNS,
     REQUIRED_TABLES,

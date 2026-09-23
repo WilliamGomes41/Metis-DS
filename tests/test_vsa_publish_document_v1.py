@@ -24,14 +24,14 @@ from src.operations_console_v1 import ConsoleError, review_lane
 from src.passage_register_v1 import passage_register_of
 from src.publish_readiness_ui_v1 import install_publish_readiness_ui
 from src.review_disposition_v1 import definitive_review_disposition
-from src.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-from src.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
-from src.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
-from src.workflow_remaining_cutover_v1 import (
+from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
+from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
+from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
+from src.workflows.workflow_remaining_cutover_v1 import (
     PostgresCompleteWorkflowDurablePublicationConsole,
     _PostgresRemainingWorkflowMixin,
 )
-from src.workflow_review_cutover_v1 import PostgresReviewWorkflowDurablePublicationConsole
+from src.workflows.workflow_review_cutover_v1 import PostgresReviewWorkflowDurablePublicationConsole
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"

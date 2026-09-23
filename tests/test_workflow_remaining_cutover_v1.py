@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.workflow_remaining_cutover_v1 import PostgresAuditRegistry
+from src.workflows.workflow_remaining_cutover_v1 import PostgresAuditRegistry
 
 ROOT = Path(__file__).resolve().parents[1]
 

@@ -22,8 +22,8 @@ from src.operations_console_v1 import (
     OperationsConsole,
     _objects_jsonl_bytes,
 )
-from src.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-from src.workflow_documents_cutover_v1 import (
+from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
+from src.workflows.workflow_documents_cutover_v1 import (
     PostgresWorkflowDocumentRuntimeStore,
     _PostgresWorkflowDocumentsMixin,
 )

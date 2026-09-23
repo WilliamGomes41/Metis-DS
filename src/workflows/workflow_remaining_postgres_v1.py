@@ -10,7 +10,7 @@ import json
 from copy import deepcopy
 from typing import Any, Mapping
 
-from src.workflow_documents_postgres_v1 import PostgresWorkflowDocumentStore, _json_text
+from src.workflows.workflow_documents_postgres_v1 import PostgresWorkflowDocumentStore, _json_text
 
 
 class WorkflowRemainingStoreError(RuntimeError):

@@ -10,7 +10,7 @@ import argparse
 import json
 from pathlib import Path
 
-from src.workflow_documents_postgres_v1 import PostgresWorkflowDocumentStore
+from src.workflows.workflow_documents_postgres_v1 import PostgresWorkflowDocumentStore
 
 
 def main() -> int:

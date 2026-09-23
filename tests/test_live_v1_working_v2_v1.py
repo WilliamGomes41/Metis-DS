@@ -23,10 +23,10 @@ from src.g2_source_store import G2SourceStoreError, build_g2_locator
 from src.operations_console_v1 import ConsoleError, review_lane
 from src.passage_register_v1 import passage_register_of
 from src.review_disposition_v1 import definitive_review_disposition
-from src.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-from src.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
-from src.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
-from src.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
+from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
+from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
+from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
+from src.workflows.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"

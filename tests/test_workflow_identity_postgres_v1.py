@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
-from src.workflow_identity_postgres_v1 import (
+from src.workflows.workflow_identity_postgres_v1 import (
     PostgresIdentityDurablePublicationConsole,
     _token_hash,
     migratable_legacy_sessions,
@@ -58,7 +58,7 @@ class SharedIdentityStore:
 
     def create_account(self, record: dict) -> None:
         if any(row["username"] == record["username"] for row in self.accounts.values()):
-            from src.workflow_identity_postgres_v1 import WorkflowIdentityStoreError
+            from src.workflows.workflow_identity_postgres_v1 import WorkflowIdentityStoreError
 
             raise WorkflowIdentityStoreError("username_already_exists")
         self.accounts[record["account_id"]] = deepcopy(record)

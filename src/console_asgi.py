@@ -33,30 +33,30 @@ from src.publish_readiness_ui_v1 import install_publish_readiness_ui
 from src.review_closure_v1 import harden_legacy_repair_routes
 from src.review_workboard_v1 import install_review_workboard
 from src.topology_bound_v1 import assert_supported_topology
-from src.workflow_badge_counts_postgres_v1 import (
+from src.workflows.workflow_badge_counts_postgres_v1 import (
     FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
     FastBadgePostgresCompleteWorkflowDurablePublicationConsole,
 )
-from src.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-from src.workflow_documents_cutover_v1 import (
+from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
+from src.workflows.workflow_documents_cutover_v1 import (
     PostgresWorkflowAzureAuthoritativePublicationConsole,
     PostgresWorkflowDocumentRuntimeStore,
     PostgresWorkflowDurablePublicationConsole,
 )
-from src.workflow_identity_cutover_v1 import CutoverPostgresWorkflowIdentityStore
-from src.workflow_identity_postgres_v1 import (
+from src.workflows.workflow_identity_cutover_v1 import CutoverPostgresWorkflowIdentityStore
+from src.workflows.workflow_identity_postgres_v1 import (
     PostgresIdentityAzureAuthoritativePublicationConsole,
     PostgresIdentityDurablePublicationConsole,
     PostgresWorkflowIdentityStore,
 )
-from src.workflow_remaining_cutover_v1 import bind_remaining_route_backends
-from src.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
-from src.workflow_review_cutover_v1 import (
+from src.workflows.workflow_remaining_cutover_v1 import bind_remaining_route_backends
+from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
+from src.workflows.workflow_review_cutover_v1 import (
     PostgresReviewWorkflowAzureAuthoritativePublicationConsole,
     PostgresReviewWorkflowDurablePublicationConsole,
 )
-from src.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
-from src.workflow_transaction_v1 import bind_workflow_stores
+from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+from src.workflows.workflow_transaction_v1 import bind_workflow_stores
 
 ROOT = Path(__file__).resolve().parents[1]
 AZURE_DATA_ROOT = Path("/home/data/metis-console")

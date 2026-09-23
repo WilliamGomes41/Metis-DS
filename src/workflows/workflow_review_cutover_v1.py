@@ -9,15 +9,15 @@ from typing import Any, Iterator
 
 from src.operations_console_v1 import ConsoleError, _atomic_replace_bytes, _atomic_write
 from src.review_ledger import buffer_events, register_backend
-from src.workflow_documents_cutover_v1 import (
+from src.workflows.workflow_documents_cutover_v1 import (
     PostgresWorkflowAzureAuthoritativePublicationConsole,
     PostgresWorkflowDurablePublicationConsole,
 )
-from src.workflow_review_postgres_v1 import (
+from src.workflows.workflow_review_postgres_v1 import (
     PostgresWorkflowReviewStore,
     WorkflowReviewStoreError,
 )
-from src.workflow_transaction_v1 import workflow_transaction
+from src.workflows.workflow_transaction_v1 from src.workflows import workflow_transaction
 
 
 class _PostgresWorkflowReviewMixin:

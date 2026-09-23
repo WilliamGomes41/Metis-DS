@@ -20,14 +20,14 @@ import pytest
 
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.operations_console_v1 import SNAPSHOT_OBJECT_WRITE_CONFLICT
-from src.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-from src.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
-from src.workflow_identity_postgres_v1 import (
+from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
+from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+from src.workflows.workflow_identity_postgres_v1 import (
     PostgresWorkflowIdentityStore,
     WorkflowIdentityStoreError,
 )
-from src.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
-from src.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
+from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = (

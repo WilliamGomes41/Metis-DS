@@ -18,12 +18,12 @@ from typing import Any
 import pytest
 
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
-from src.workflow_document_concurrency_v1 import (
+from src.workflows.workflow_document_concurrency_v1 import (
     PUBLISHED_WORKING_REVISION_IMMUTABLE,
     PostgresConcurrentWorkflowDocumentStore,
 )
-from src.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
-from src.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
+from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+from src.workflows.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
 
 
 ROOT = Path(__file__).resolve().parents[1]

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
+from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
 
 
 class CutoverPostgresWorkflowIdentityStore(PostgresWorkflowIdentityStore):

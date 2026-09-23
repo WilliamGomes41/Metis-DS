@@ -6,7 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
-from src.workflow_identity_postgres_v1 import (
+from src.workflows.workflow_identity_postgres_v1 import (
     PostgresWorkflowIdentityStore,
     migratable_legacy_sessions,
 )

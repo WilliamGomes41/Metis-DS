@@ -23,8 +23,8 @@ from src.review_ledger import (
     unregister_backend,
     verify_ledger,
 )
-from src.workflow_review_cutover_v1 import _PostgresWorkflowReviewMixin
-from src.workflow_review_postgres_v1 import PostgresWorkflowReviewStore, WorkflowReviewStoreError
+from src.workflows.workflow_review_cutover_v1 import _PostgresWorkflowReviewMixin
+from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore, WorkflowReviewStoreError
 
 ROOT = Path(__file__).resolve().parents[1]
 
