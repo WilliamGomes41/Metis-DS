@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.review_workboard_v1 import _workboard_card
+from src.review.review_workboard_v1 import _workboard_card
 
 pytestmark = [
     pytest.mark.release_control_scope_belofte,
