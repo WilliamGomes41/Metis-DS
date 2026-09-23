@@ -11,7 +11,7 @@ import argparse
 import json
 from pathlib import Path
 
-from src.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 
 
 def main() -> int:
