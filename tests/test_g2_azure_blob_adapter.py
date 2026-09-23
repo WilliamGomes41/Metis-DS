@@ -1,3 +1,10 @@
+"""Azure Blob source-store regressions.
+
+# release-control-evidence: scope/belofte
+# release-control-evidence: opslag concurrent stale
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+"""
 from __future__ import annotations
 
 import hashlib
