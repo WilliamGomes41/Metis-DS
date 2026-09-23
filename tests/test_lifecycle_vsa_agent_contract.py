@@ -233,7 +233,7 @@ def test_stateful_class_b_requires_domain_first_gate_before_vsa() -> None:
     model = _read("docs/agents/continuous-development.md")
     engineer = _read(".github/agents/metis-engineer.agent.md")
 
-    _assert_terms(agents, "Class B", "durable domain state", "domain-first", "before defining the vertical slice")
+    _assert_terms(agents, "Class B", "durable domain state", "Stateful Class B domain-first overlay", "before VSA")
     assert "#### Stateful Class B domain-first overlay" in model
 
     for field in (
@@ -256,15 +256,7 @@ def test_stateful_class_b_requires_domain_first_gate_before_vsa() -> None:
         "stateful Class B domain-first overlay",
         "before implementation",
     )
-    _assert_terms(
-        engineer,
-        "entity/aggregate",
-        "invariants",
-        "transaction boundary",
-        "failure/recovery",
-        "duplicate/idempotency",
-        "audit/evidence",
-    )
+    _assert_terms(engineer, "stateful Class B", "domain-first overlay", "continuous-development.md")
 
 
 def test_stateful_class_b_gate_is_lightweight_and_escalates_only_when_needed() -> None:
@@ -276,5 +268,5 @@ def test_stateful_class_b_gate_is_lightweight_and_escalates_only_when_needed() -
     _assert_terms(model, "Do not apply it to stateless reads", "presentation-only behavior", "no durable state transition")
     _assert_terms(model, "not a second lifecycle contract", "publication lifecycle truth", "lifecycle-vsa.md")
     _assert_terms(model, "STOP", "reclassify to Class A", "before implementation")
-    _assert_terms(agents, "Stateless Class B work does not require this overlay")
-    _assert_terms(engineer, "Do not add lifecycle-grade paperwork to stateless Class B work")
+    _assert_terms(agents, "document owns the criteria and escalation rule")
+    _assert_terms(engineer, "stateful Class B", "before VSA")
