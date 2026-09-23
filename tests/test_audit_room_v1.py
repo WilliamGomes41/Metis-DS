@@ -7,6 +7,7 @@
 # release-control-evidence: releasebewijs
 from __future__ import annotations
 
+import hashlib
 import json
 
 from fastapi.testclient import TestClient
@@ -16,12 +17,32 @@ from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
 
 
+class _MemoryArchiveStore:
+    def __init__(self) -> None:
+        self.data: dict[str, bytes] = {}
+
+    def store_verified(self, *, audit_id: str, data: bytes, sha256: str) -> str:
+        assert hashlib.sha256(data).hexdigest() == sha256
+        locator = f"memory-audit://{audit_id}"
+        self.data[locator] = bytes(data)
+        return locator
+
+    def load_verified(self, locator: str, *, expected_sha256: str) -> bytes:
+        data = self.data[locator]
+        assert hashlib.sha256(data).hexdigest() == expected_sha256
+        return data
+
+    def delete_verified(self, locator: str) -> bool:
+        return self.data.pop(locator, None) is not None
+
+
 def _system(
     tmp_path,
     *,
     with_document: bool = False,
     semantic_safety_post_json=None,
     deployed_commit_path=None,
+    archive_store=None,
 ):
     console = OperationsConsole(
         root=tmp_path,
@@ -62,6 +83,7 @@ def _system(
         console,
         semantic_safety_post_json=semantic_safety_post_json,
         deployed_commit_path=deployed_commit_path,
+        archive_store=archive_store,
     )
     client = TestClient(app)
     response = client.post(
@@ -93,20 +115,69 @@ def test_audit_room_exposes_two_real_types_without_generic_workflow_engine(tmp_p
     assert '/audit/new?type=publication' not in new.text
 
 
-def test_audit_is_shared_nav_room_and_separate_home_meta_tile(tmp_path):
+def test_audit_moves_out_of_primary_navigation_and_under_settings(tmp_path):
     _console, client, _researcher, _receipt = _system(tmp_path)
 
     home = client.get("/")
     assert home.status_code == 200
-    assert '<a href="/audit">Audit</a>' in home.text
+    assert '<a href="/audit">Audit</a>' not in home.text
     assert home.text.count('<a class="home-tile') == 4
-    assert "Onderzoeken &amp; controleren" in home.text
-    assert 'class="review-control-card" href="/audit"' in home.text
-    assert "Open Audit" in home.text
+    assert "Onderzoeken &amp; controleren" not in home.text
+    assert 'class="review-control-card" href="/audit"' not in home.text
+
+    settings = client.get("/settings")
+    assert settings.status_code == 200
+    assert 'href="/audit"' in settings.text
+    assert "Audit &amp; diagnostiek" in settings.text
 
     audit = client.get("/audit")
     assert audit.status_code == 200
-    assert '<a href="/audit" aria-current="page">Audit</a>' in audit.text
+    assert "Audit &amp; diagnostiek" in audit.text
+    assert '<a href="/settings" aria-current="page">Instellingen</a>' in audit.text
+
+
+def test_researcher_archives_audit_to_external_store_and_reads_it_back(tmp_path):
+    archive_store = _MemoryArchiveStore()
+    console, client, researcher, _receipt = _system(tmp_path, archive_store=archive_store)
+    before_envelopes = console.list_envelopes()
+
+    created = AuditRegistry(console.runtime).create(
+        audit_type="experiment",
+        title="Te archiveren audit",
+        actor_id=researcher["account_id"],
+        payload={"state": "setup", "question": "Bewaar dit bewijs."},
+    )
+
+    detail = client.get(f'/audit/{created["audit_id"]}')
+    assert detail.status_code == 200
+    assert "Archiveren" in detail.text
+
+    response = client.post(
+        f'/audit/{created["audit_id"]}/archive',
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == f'/audit/archive/{created["audit_id"]}'
+    assert AuditRegistry(console.runtime).get_audit(created["audit_id"]) is None
+
+    index_path = console.runtime / "audits" / "archive-index" / f'{created["audit_id"]}.json'
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    assert "payload" not in index
+    assert index["audit_id"] == created["audit_id"]
+    assert index["archive_locator"] in archive_store.data
+
+    archive = client.get("/audit/archive")
+    assert archive.status_code == 200
+    assert "Te archiveren audit" in archive.text
+
+    archived = client.get(response.headers["location"])
+    assert archived.status_code == 200
+    assert "Gearchiveerde audit" in archived.text
+    assert "alleen-lezen" in archived.text
+    assert "Bewaar dit bewijs." in archived.text
+    assert "Archiveren" not in archived.text
+    assert console.list_envelopes() == before_envelopes
+    assert not (console.runtime / "published_projection.jsonl").exists()
 
 
 def test_generic_registry_persists_opaque_type_payload(tmp_path):
