@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from src.workflow_documents_postgres_v1 import (
+from src.workflows.workflow_documents_postgres_v1 import (
     PostgresWorkflowDocumentStore,
     WorkflowDocumentStoreError,
     _read_legacy_runtime,
