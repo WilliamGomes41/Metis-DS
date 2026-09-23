@@ -1,9 +1,10 @@
 """Audit retention lifecycle for LIVE -> ARCHIVED.
 
-This module separates audit meaning from retention location. It moves complete
-audit records to a verified archive store and keeps only compact local index
-metadata. Restore and user-facing purge are intentionally out of scope for VSA
-A1.
+This module separates audit meaning from retention location. A successful
+archive first verifies the complete audit record in Azure and then performs one
+atomic local state flip: the full LIVE JSON file is replaced by a compact,
+payload-free archived reference at the same path. Restore and user-facing purge
+are intentionally out of scope for VSA A1.
 """
 from __future__ import annotations
 
@@ -16,19 +17,24 @@ from pathlib import Path
 from typing import Any, Callable, ContextManager, Protocol
 
 from src.audit_archive_store_v1 import AuditArchiveStore, AuditArchiveStoreError
-from src.operations_console_v1 import ConsoleError, _atomic_write
+from src.operations_console_v1 import ConsoleError
 
 
 AUDIT_ID_RE = re.compile(r"^audit-[0-9a-f]{16}$")
 AUDIT_TYPE_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-ARCHIVE_INDEX_SCHEMA_VERSION = 1
+ARCHIVE_REFERENCE_SCHEMA_VERSION = 1
+ARCHIVE_REFERENCE_KIND = "archived_audit_ref"
 
 
 class LiveAuditStore(Protocol):
     def get_audit(self, audit_id: str) -> dict[str, Any] | None: ...
 
-    def remove_audit(self, audit_id: str) -> bool: ...
+    def replace_with_archived_ref(
+        self,
+        audit_id: str,
+        reference: dict[str, Any],
+    ) -> None: ...
 
 
 def _now() -> str:
@@ -44,7 +50,7 @@ def canonical_audit_bytes(record: dict[str, Any]) -> bytes:
     ).encode("utf-8")
 
 
-def _valid_audit_record(record: Any) -> bool:
+def valid_audit_record(record: Any) -> bool:
     return (
         isinstance(record, dict)
         and AUDIT_ID_RE.fullmatch(str(record.get("audit_id") or "")) is not None
@@ -53,31 +59,33 @@ def _valid_audit_record(record: Any) -> bool:
         and bool(str(record.get("created_by") or "").strip())
         and bool(str(record.get("created_at") or "").strip())
         and isinstance(record.get("payload"), dict)
+        and record.get("record_kind") != ARCHIVE_REFERENCE_KIND
+    )
+
+
+def is_archived_reference(row: Any) -> bool:
+    return (
+        isinstance(row, dict)
+        and row.get("record_kind") == ARCHIVE_REFERENCE_KIND
+        and row.get("schema_version") == ARCHIVE_REFERENCE_SCHEMA_VERSION
+        and AUDIT_ID_RE.fullmatch(str(row.get("audit_id") or "")) is not None
+        and AUDIT_TYPE_RE.fullmatch(str(row.get("audit_type") or "")) is not None
+        and bool(str(row.get("title") or "").strip())
+        and bool(str(row.get("created_at") or "").strip())
+        and bool(str(row.get("archived_at") or "").strip())
+        and bool(str(row.get("archived_by") or "").strip())
+        and bool(str(row.get("archive_locator") or "").strip())
+        and SHA256_RE.fullmatch(str(row.get("checksum_sha256") or "")) is not None
+        and "payload" not in row
     )
 
 
 class AuditArchiveIndex:
-    """Small local projection for locating archived audits."""
+    """Read the compact archived-reference projection from audit record paths."""
 
     def __init__(self, runtime: Path) -> None:
-        self.root = Path(runtime) / "audits" / "archive-index"
+        self.root = Path(runtime) / "audits"
         self.root.mkdir(parents=True, exist_ok=True)
-
-    @staticmethod
-    def _valid(row: Any) -> bool:
-        return (
-            isinstance(row, dict)
-            and row.get("schema_version") == ARCHIVE_INDEX_SCHEMA_VERSION
-            and AUDIT_ID_RE.fullmatch(str(row.get("audit_id") or "")) is not None
-            and AUDIT_TYPE_RE.fullmatch(str(row.get("audit_type") or "")) is not None
-            and bool(str(row.get("title") or "").strip())
-            and bool(str(row.get("created_at") or "").strip())
-            and bool(str(row.get("archived_at") or "").strip())
-            and bool(str(row.get("archived_by") or "").strip())
-            and bool(str(row.get("archive_locator") or "").strip())
-            and SHA256_RE.fullmatch(str(row.get("checksum_sha256") or "")) is not None
-            and "payload" not in row
-        )
 
     def _path(self, audit_id: str) -> Path:
         safe_id = str(audit_id or "").strip()
@@ -92,10 +100,10 @@ class AuditArchiveIndex:
         try:
             row = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            raise ConsoleError("audit_archive_index_corrupt") from exc
-        if not self._valid(row):
-            raise ConsoleError("audit_archive_index_corrupt")
-        return row
+            raise ConsoleError("audit_archive_reference_corrupt") from exc
+        if is_archived_reference(row):
+            return row
+        return None
 
     def list(self) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
@@ -103,20 +111,16 @@ class AuditArchiveIndex:
             try:
                 row = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
-                raise ConsoleError("audit_archive_index_corrupt") from exc
-            if not self._valid(row):
-                raise ConsoleError("audit_archive_index_corrupt")
-            rows.append(row)
+                raise ConsoleError("audit_archive_reference_corrupt") from exc
+            if row.get("record_kind") == ARCHIVE_REFERENCE_KIND:
+                if not is_archived_reference(row):
+                    raise ConsoleError("audit_archive_reference_corrupt")
+                rows.append(row)
         return sorted(
             rows,
             key=lambda row: str(row.get("archived_at") or ""),
             reverse=True,
         )
-
-    def put(self, row: dict[str, Any]) -> None:
-        if not self._valid(row):
-            raise ConsoleError("audit_archive_index_invalid")
-        _atomic_write(self._path(str(row["audit_id"])), row)
 
 
 class AuditRetentionService:
@@ -156,7 +160,7 @@ class AuditRetentionService:
             record = json.loads(data.decode("utf-8"))
         except (UnicodeError, json.JSONDecodeError) as exc:
             raise ConsoleError("audit_archive_record_invalid") from exc
-        if not _valid_audit_record(record):
+        if not valid_audit_record(record):
             raise ConsoleError("audit_archive_record_invalid")
         if str(record["audit_id"]) != str(row["audit_id"]):
             raise ConsoleError("audit_archive_record_mismatch")
@@ -178,19 +182,10 @@ class AuditRetentionService:
                 if existing is not None:
                     return existing
                 raise ConsoleError("unknown_audit")
-
-            if not _valid_audit_record(active):
-                raise ConsoleError("audit_record_corrupt")
-
-            # Recovery path for a previously completed Azure+index write where
-            # local LIVE cleanup did not finish.
             if existing is not None:
-                archived = self.load_archived(safe_id)
-                if archived != active:
-                    raise ConsoleError("audit_archive_conflict")
-                if not self.live_store.remove_audit(safe_id):
-                    raise ConsoleError("audit_archive_live_delete_failed")
-                return existing
+                raise ConsoleError("audit_retention_state_ambiguous")
+            if not valid_audit_record(active):
+                raise ConsoleError("audit_record_corrupt")
 
             data = canonical_audit_bytes(active)
             checksum = hashlib.sha256(data).hexdigest()
@@ -209,8 +204,9 @@ class AuditRetentionService:
             if readback != data:
                 raise ConsoleError("audit_archive_readback_mismatch")
 
-            row = {
-                "schema_version": ARCHIVE_INDEX_SCHEMA_VERSION,
+            reference = {
+                "record_kind": ARCHIVE_REFERENCE_KIND,
+                "schema_version": ARCHIVE_REFERENCE_SCHEMA_VERSION,
                 "audit_id": safe_id,
                 "title": str(active["title"]),
                 "audit_type": str(active["audit_type"]),
@@ -220,18 +216,18 @@ class AuditRetentionService:
                 "archive_locator": locator,
                 "checksum_sha256": checksum,
             }
+            if not is_archived_reference(reference):
+                raise ConsoleError("audit_archive_reference_invalid")
 
             try:
-                self.index.put(row)
+                self.live_store.replace_with_archived_ref(safe_id, reference)
             except Exception:
+                # Before the atomic local replacement succeeds, LIVE remains
+                # authoritative. Remove the staged blob when possible; if a
+                # process crash prevented cleanup, a retry is idempotent.
                 try:
                     self.archive_store.delete_verified(locator)
                 except AuditArchiveStoreError:
                     pass
                 raise
-
-            if not self.live_store.remove_audit(safe_id):
-                # Keep Azure + index durable. A retry takes the recovery path
-                # above and completes the local cleanup without data loss.
-                raise ConsoleError("audit_archive_live_delete_failed")
-            return row
+            return reference
