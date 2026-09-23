@@ -112,7 +112,7 @@ def test_opslag_persistence_paths_require_concurrent_stale_checks() -> None:
     preflight = _load()
     for path in (
         "src/operations_console_v1.py",
-        "src/review_ledger.py",
+        "src/review/review_ledger.py",
         "src/canonical_store.py",
         "src/g2_source_store.py",
     ):
@@ -370,9 +370,9 @@ def test_diff_filter_includes_deletions() -> None:
 
 
 def test_deleted_product_paths_still_require_their_category() -> None:
-    item = _load().classify_paths(["src/review_ledger.py"])["opslag"]
+    item = _load().classify_paths(["src/review/review_ledger.py"])["opslag"]
     assert item["status"] == "required"
-    assert "src/review_ledger.py" in item["paths"]
+    assert "src/review/review_ledger.py" in item["paths"]
 
 
 def test_discover_includes_deleted_product_paths(tmp_path: Path) -> None:
@@ -384,11 +384,11 @@ def test_discover_includes_deleted_product_paths(tmp_path: Path) -> None:
     subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True, capture_output=True)
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
     subprocess.run(["git", "commit", "-m", "base"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(["git", "rm", "src/review_ledger.py"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "rm", "src/review/review_ledger.py"], cwd=repo, check=True, capture_output=True)
     subprocess.run(["git", "commit", "-m", "delete ledger"], cwd=repo, check=True, capture_output=True)
     preflight = _load()
     paths = preflight.discover_changed_paths(repo, "HEAD~1")
-    assert "src/review_ledger.py" in paths
+    assert "src/review/review_ledger.py" in paths
     assert preflight.classify_paths(paths)["opslag"]["status"] == "required"
 
 
