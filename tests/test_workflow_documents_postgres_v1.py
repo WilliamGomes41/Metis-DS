@@ -125,7 +125,7 @@ def test_exact_replay_normalizes_equivalent_utc_acquired_at_spellings() -> None:
 
 
 def test_document_store_keeps_atomic_and_exact_replay_contract() -> None:
-    text = (ROOT / "src" / "workflow_documents_postgres_v1.py").read_text(encoding="utf-8")
+    text = (ROOT / "src" / "workflows" / "workflow_documents_postgres_v1.py").read_text(encoding="utf-8")
     assert "with con.transaction()" in text
     assert "FOR UPDATE" in text
     assert "workflow_document_migration_conflict" in text
