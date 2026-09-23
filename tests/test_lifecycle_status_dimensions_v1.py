@@ -14,8 +14,8 @@ import pytest
 
 from src.document_status_v1 import derive_lifecycle_status
 from src.durable_publication_console_v1 import DurablePublicationConsole
-from src.proportionate_review_v1 import ProportionateReviewConsole
-from src.review_workboard_v1 import _workboard_card, review_work_item
+from src.review.proportionate_review_v1 import ProportionateReviewConsole
+from src.review.review_workboard_v1 import _workboard_card, review_work_item
 
 
 pytestmark = [
