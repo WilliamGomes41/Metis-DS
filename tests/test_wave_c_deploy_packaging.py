@@ -110,6 +110,7 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
     assert "db/migrations/002_workflow_schema.sql" in names
     assert "db/migrations/005_workflow_remaining_authority.sql" in names
     assert "db/migrations/006_workflow_authorization_payload.sql" in names
+    assert "data/audit/semantic_passage_safety_v1.json" in names
     assert "src/console_asgi.py" in names
     assert "requirements.txt" in names
     assert CONSOLE_REQUIREMENTS_NAME in names
