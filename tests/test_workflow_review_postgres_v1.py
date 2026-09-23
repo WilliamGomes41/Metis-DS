@@ -281,7 +281,7 @@ def test_review_cutover_is_explicit_and_prerequisite_bound() -> None:
 
 
 def test_review_runtime_buffers_events_and_keeps_local_files_as_mirrors() -> None:
-    source = (ROOT / "src" / "workflow_review_cutover_v1.py").read_text(encoding="utf-8")
+    source = (ROOT / "src" / "workflows" / "workflow_review_cutover_v1.py").read_text(encoding="utf-8")
     assert "buffer_events(self._ledger_path)" in source
     assert "workflow_review_store.replace_snapshot_bindings" in source
     assert "workflow_review_store.replace_bindings" not in source
