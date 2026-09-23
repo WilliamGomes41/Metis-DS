@@ -25,6 +25,7 @@ class _MemoryArchiveStore:
     def __init__(self) -> None:
         self.data: dict[str, bytes] = {}
         self.fail_store = False
+        self.fail_delete = False
 
     def _locator(self, audit_id: str) -> str:
         return f"memory-audit://{audit_id}"
@@ -46,7 +47,14 @@ class _MemoryArchiveStore:
             raise AuditArchiveStoreError("audit_archive_checksum_mismatch")
         return data
 
+    def delete_audit(self, audit_id: str) -> bool:
+        if self.fail_delete:
+            raise AuditArchiveStoreError("audit_archive_delete_failed")
+        return self.data.pop(self._locator(audit_id), None) is not None
+
     def delete_verified(self, locator: str) -> bool:
+        if self.fail_delete:
+            raise AuditArchiveStoreError("audit_archive_delete_failed")
         return self.data.pop(locator, None) is not None
 
 
@@ -210,3 +218,182 @@ def test_restart_preserves_archived_state_and_verified_content(tmp_path: Path) -
         original["audit_id"]
     ]
     assert restarted_service.load_archived(original["audit_id"]) == original
+
+
+
+def test_restore_returns_exact_archived_record_to_live_and_removes_blob(
+    tmp_path: Path,
+) -> None:
+    runtime = tmp_path / "runtime"
+    registry = AuditRegistry(runtime)
+    original = _created(registry)
+    archive = _MemoryArchiveStore()
+    service = AuditRetentionService(
+        live_store=registry,
+        archive_store=archive,
+        runtime=runtime,
+    )
+    service.archive(original["audit_id"], actor_id="acct-researcher")
+
+    restored = service.restore(
+        original["audit_id"],
+        actor_id="acct-researcher",
+    )
+
+    assert restored == original
+    assert registry.get_audit(original["audit_id"]) == original
+    assert service.list_archived() == []
+    assert archive.data == {}
+
+    restarted_registry = AuditRegistry(runtime)
+    assert restarted_registry.get_audit(original["audit_id"]) == original
+
+
+def test_restore_delete_failure_rolls_back_to_archived_without_data_loss(
+    tmp_path: Path,
+) -> None:
+    runtime = tmp_path / "runtime"
+    registry = AuditRegistry(runtime)
+    original = _created(registry)
+    archive = _MemoryArchiveStore()
+    service = AuditRetentionService(
+        live_store=registry,
+        archive_store=archive,
+        runtime=runtime,
+    )
+    service.archive(original["audit_id"], actor_id="acct-researcher")
+    archive.fail_delete = True
+
+    with pytest.raises(ConsoleError, match="audit_restore_archive_delete_failed"):
+        service.restore(original["audit_id"], actor_id="acct-researcher")
+
+    assert registry.get_audit(original["audit_id"]) is None
+    assert service.load_archived(original["audit_id"]) == original
+    assert len(service.list_archived()) == 1
+
+
+def test_restore_retry_cleans_orphan_blob_after_completed_local_flip(
+    tmp_path: Path,
+) -> None:
+    runtime = tmp_path / "runtime"
+    registry = AuditRegistry(runtime)
+    original = _created(registry)
+    archive = _MemoryArchiveStore()
+    service = AuditRetentionService(
+        live_store=registry,
+        archive_store=archive,
+        runtime=runtime,
+    )
+    reference = service.archive(original["audit_id"], actor_id="acct-researcher")
+
+    registry.replace_archived_ref_with_live(
+        original["audit_id"],
+        reference,
+        original,
+    )
+    assert archive.data
+
+    restored = service.restore(
+        original["audit_id"],
+        actor_id="acct-researcher",
+    )
+
+    assert restored == original
+    assert registry.get_audit(original["audit_id"]) == original
+    assert archive.data == {}
+
+
+def test_purge_requires_exact_title_and_removes_reference_and_blob(
+    tmp_path: Path,
+) -> None:
+    runtime = tmp_path / "runtime"
+    registry = AuditRegistry(runtime)
+    original = _created(registry)
+    archive = _MemoryArchiveStore()
+    service = AuditRetentionService(
+        live_store=registry,
+        archive_store=archive,
+        runtime=runtime,
+    )
+    service.archive(original["audit_id"], actor_id="acct-researcher")
+
+    with pytest.raises(ConsoleError, match="audit_purge_confirmation_mismatch"):
+        service.purge(
+            original["audit_id"],
+            actor_id="acct-researcher",
+            confirm_title="verkeerde naam",
+        )
+
+    assert service.load_archived(original["audit_id"]) == original
+    assert archive.data
+
+    result = service.purge(
+        original["audit_id"],
+        actor_id="acct-researcher",
+        confirm_title=original["title"],
+    )
+
+    assert result == {"audit_id": original["audit_id"], "purged": True}
+    assert registry.get_audit(original["audit_id"]) is None
+    assert service.list_archived() == []
+    assert archive.data == {}
+    assert not (runtime / "audits" / f'{original["audit_id"]}.json').exists()
+
+    assert service.purge(
+        original["audit_id"],
+        actor_id="acct-researcher",
+        confirm_title=original["title"],
+    ) == {"audit_id": original["audit_id"], "purged": True}
+
+
+def test_purge_azure_failure_keeps_archived_reference_and_content(
+    tmp_path: Path,
+) -> None:
+    runtime = tmp_path / "runtime"
+    registry = AuditRegistry(runtime)
+    original = _created(registry)
+    archive = _MemoryArchiveStore()
+    service = AuditRetentionService(
+        live_store=registry,
+        archive_store=archive,
+        runtime=runtime,
+    )
+    service.archive(original["audit_id"], actor_id="acct-researcher")
+    archive.fail_delete = True
+
+    with pytest.raises(ConsoleError, match="audit_purge_archive_delete_failed"):
+        service.purge(
+            original["audit_id"],
+            actor_id="acct-researcher",
+            confirm_title=original["title"],
+        )
+
+    assert registry.get_audit(original["audit_id"]) is None
+    assert service.load_archived(original["audit_id"]) == original
+    assert len(service.list_archived()) == 1
+
+
+def test_purge_retry_completes_when_blob_was_already_deleted(
+    tmp_path: Path,
+) -> None:
+    runtime = tmp_path / "runtime"
+    registry = AuditRegistry(runtime)
+    original = _created(registry)
+    archive = _MemoryArchiveStore()
+    service = AuditRetentionService(
+        live_store=registry,
+        archive_store=archive,
+        runtime=runtime,
+    )
+    service.archive(original["audit_id"], actor_id="acct-researcher")
+    assert archive.delete_audit(original["audit_id"]) is True
+
+    result = service.purge(
+        original["audit_id"],
+        actor_id="acct-researcher",
+        confirm_title=original["title"],
+    )
+
+    assert result["purged"] is True
+    assert service.list_archived() == []
+    assert archive.data == {}
