@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -58,23 +59,26 @@ def _created(registry: AuditRegistry) -> dict:
     )
 
 
-def test_archive_moves_complete_record_to_archive_and_leaves_payload_free_index(
+def test_archive_atomically_replaces_live_record_with_payload_free_reference(
     tmp_path: Path,
 ) -> None:
-    registry = AuditRegistry(tmp_path / "runtime")
+    runtime = tmp_path / "runtime"
+    registry = AuditRegistry(runtime)
     original = _created(registry)
     archive = _MemoryArchiveStore()
     service = AuditRetentionService(
         live_store=registry,
         archive_store=archive,
-        runtime=tmp_path / "runtime",
+        runtime=runtime,
     )
 
     row = service.archive(original["audit_id"], actor_id="acct-researcher")
 
     assert registry.get_audit(original["audit_id"]) is None
+    assert registry.list_audits() == []
     assert "payload" not in row
     assert set(row) == {
+        "record_kind",
         "schema_version",
         "audit_id",
         "title",
@@ -85,21 +89,27 @@ def test_archive_moves_complete_record_to_archive_and_leaves_payload_free_index(
         "archive_locator",
         "checksum_sha256",
     }
+    local_path = runtime / "audits" / f'{original["audit_id"]}.json'
+    local_record = json.loads(local_path.read_text(encoding="utf-8"))
+    assert local_record == row
+    assert "payload" not in local_record
+    assert not (runtime / "audits" / "archive-index").exists()
     assert service.load_archived(original["audit_id"]) == original
     assert archive.data[row["archive_locator"]] == canonical_audit_bytes(original)
 
 
-def test_archive_store_failure_preserves_live_audit_and_writes_no_index(
+def test_archive_store_failure_preserves_live_audit_and_no_archived_reference(
     tmp_path: Path,
 ) -> None:
-    registry = AuditRegistry(tmp_path / "runtime")
+    runtime = tmp_path / "runtime"
+    registry = AuditRegistry(runtime)
     original = _created(registry)
     archive = _MemoryArchiveStore()
     archive.fail_store = True
     service = AuditRetentionService(
         live_store=registry,
         archive_store=archive,
-        runtime=tmp_path / "runtime",
+        runtime=runtime,
     )
 
     with pytest.raises(ConsoleError, match="audit_archive_store_failed"):
@@ -107,63 +117,64 @@ def test_archive_store_failure_preserves_live_audit_and_writes_no_index(
 
     assert registry.get_audit(original["audit_id"]) == original
     assert service.list_archived() == []
+    stored = json.loads(
+        (runtime / "audits" / f'{original["audit_id"]}.json').read_text(encoding="utf-8")
+    )
+    assert stored["payload"] == original["payload"]
 
 
-class _DeleteFailsOnce:
-    def __init__(self, record: dict) -> None:
-        self.record = record
+class _ReplaceFailsOnce:
+    def __init__(self, registry: AuditRegistry) -> None:
+        self.registry = registry
         self.failures = 1
 
     def get_audit(self, audit_id: str) -> dict | None:
-        if self.record and self.record["audit_id"] == audit_id:
-            return self.record
-        return None
+        return self.registry.get_audit(audit_id)
 
-    def remove_audit(self, audit_id: str) -> bool:
-        if self.record is None or self.record["audit_id"] != audit_id:
-            return False
+    def replace_with_archived_ref(self, audit_id: str, reference: dict) -> None:
         if self.failures:
             self.failures -= 1
-            return False
-        self.record = None
-        return True
+            raise ConsoleError("simulated_atomic_replace_failure")
+        self.registry.replace_with_archived_ref(audit_id, reference)
 
 
-def test_retry_completes_cleanup_when_archive_and_index_already_exist(
+def test_failed_local_state_flip_keeps_live_and_retry_completes_transition(
     tmp_path: Path,
 ) -> None:
-    registry = AuditRegistry(tmp_path / "seed")
+    runtime = tmp_path / "runtime"
+    registry = AuditRegistry(runtime)
     original = _created(registry)
-    live = _DeleteFailsOnce(original)
+    live = _ReplaceFailsOnce(registry)
     archive = _MemoryArchiveStore()
     service = AuditRetentionService(
         live_store=live,
         archive_store=archive,
-        runtime=tmp_path / "runtime",
+        runtime=runtime,
     )
 
-    with pytest.raises(ConsoleError, match="audit_archive_live_delete_failed"):
+    with pytest.raises(ConsoleError, match="simulated_atomic_replace_failure"):
         service.archive(original["audit_id"], actor_id="acct-researcher")
 
-    index = service.get_archived_index(original["audit_id"])
-    assert index is not None
-    assert live.get_audit(original["audit_id"]) == original
+    assert registry.get_audit(original["audit_id"]) == original
+    assert service.list_archived() == []
+    assert archive.data == {}
 
     retried = service.archive(original["audit_id"], actor_id="acct-researcher")
 
-    assert retried == index
-    assert live.get_audit(original["audit_id"]) is None
+    assert retried["audit_id"] == original["audit_id"]
+    assert registry.get_audit(original["audit_id"]) is None
     assert service.load_archived(original["audit_id"]) == original
 
 
 def test_archiving_already_archived_audit_is_idempotent(tmp_path: Path) -> None:
-    registry = AuditRegistry(tmp_path / "runtime")
+    runtime = tmp_path / "runtime"
+    registry = AuditRegistry(runtime)
     original = _created(registry)
     archive = _MemoryArchiveStore()
     service = AuditRetentionService(
         live_store=registry,
         archive_store=archive,
-        runtime=tmp_path / "runtime",
+        runtime=runtime,
     )
 
     first = service.archive(original["audit_id"], actor_id="acct-researcher")
@@ -172,3 +183,30 @@ def test_archiving_already_archived_audit_is_idempotent(tmp_path: Path) -> None:
     assert second == first
     assert len(service.list_archived()) == 1
     assert service.load_archived(original["audit_id"]) == original
+
+
+def test_restart_preserves_archived_state_and_verified_content(tmp_path: Path) -> None:
+    runtime = tmp_path / "runtime"
+    first_registry = AuditRegistry(runtime)
+    original = _created(first_registry)
+    archive = _MemoryArchiveStore()
+    first_service = AuditRetentionService(
+        live_store=first_registry,
+        archive_store=archive,
+        runtime=runtime,
+    )
+    first_service.archive(original["audit_id"], actor_id="acct-researcher")
+
+    restarted_registry = AuditRegistry(runtime)
+    restarted_service = AuditRetentionService(
+        live_store=restarted_registry,
+        archive_store=archive,
+        runtime=runtime,
+    )
+
+    assert restarted_registry.list_audits() == []
+    assert restarted_registry.get_audit(original["audit_id"]) is None
+    assert [row["audit_id"] for row in restarted_service.list_archived()] == [
+        original["audit_id"]
+    ]
+    assert restarted_service.load_archived(original["audit_id"]) == original
