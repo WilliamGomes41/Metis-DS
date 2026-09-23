@@ -20,6 +20,12 @@ from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from src.admission_gate_v1 import blocked_audit_lane
+from src.audit_archive_store_v1 import AuditArchiveStore
+from src.audit_retention_v1 import (
+    ARCHIVE_REFERENCE_KIND,
+    AuditRetentionService,
+    is_archived_reference,
+)
 from src.audit_semantic_safety_v1 import (
     load_frozen_safety_suite,
     run_frozen_semantic_safety_suite,
@@ -90,6 +96,10 @@ class AuditRegistry:
                 row = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
                 raise ConsoleError("audit_record_corrupt") from exc
+            if row.get("record_kind") == ARCHIVE_REFERENCE_KIND:
+                if not is_archived_reference(row):
+                    raise ConsoleError("audit_archive_reference_corrupt")
+                continue
             if not self._valid_record(row):
                 raise ConsoleError("audit_record_corrupt")
             rows.append(row)
@@ -116,9 +126,37 @@ class AuditRegistry:
             row = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ConsoleError("audit_record_corrupt") from exc
+        if row.get("record_kind") == ARCHIVE_REFERENCE_KIND:
+            if not is_archived_reference(row):
+                raise ConsoleError("audit_archive_reference_corrupt")
+            return None
         if not self._valid_record(row):
             raise ConsoleError("audit_record_corrupt")
         return row
+
+    def replace_with_archived_ref(
+        self,
+        audit_id: str,
+        reference: dict[str, Any],
+    ) -> None:
+        safe_id = str(audit_id or "").strip()
+        if not AUDIT_ID_RE.fullmatch(safe_id):
+            raise ConsoleError("audit_id_invalid")
+        if not is_archived_reference(reference):
+            raise ConsoleError("audit_archive_reference_invalid")
+        if str(reference.get("audit_id") or "") != safe_id:
+            raise ConsoleError("audit_archive_record_mismatch")
+        path = self.root / f"{safe_id}.json"
+        with self._write_lock:
+            if not path.is_file():
+                raise ConsoleError("unknown_audit")
+            try:
+                current = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ConsoleError("audit_record_corrupt") from exc
+            if not self._valid_record(current):
+                raise ConsoleError("audit_not_live")
+            _atomic_write(path, reference)
 
     def create(
         self,
@@ -172,7 +210,7 @@ def _chrome(console: OperationsConsole, account: dict[str, Any], body: str) -> s
     counts = console.waiting_task_counts(account["account_id"])
     return _page(
         f"""
-        {_nav(account, "audit", counts)}
+        {_nav(account, "settings", counts)}
         <section class="room">
           {body}
         </section>
@@ -218,6 +256,26 @@ def _audit_rows(registry: AuditRegistry) -> str:
             """
         )
     return "".join(rows) or '<p class="muted">Nog geen audits aangemaakt.</p>'
+
+
+def _archive_rows(retention: AuditRetentionService | None) -> str:
+    if retention is None:
+        return '<p class="muted">Azure auditarchief is niet geconfigureerd.</p>'
+    rows = []
+    for audit in retention.list_archived():
+        audit_type = AUDIT_TYPES.get(str(audit.get("audit_type") or ""), {})
+        rows.append(
+            f"""
+            <article class="doc-card">
+              <p class="doc-title"><a href="/audit/archive/{_esc(audit["audit_id"])}">{_esc(audit["title"])}</a></p>
+              <p class="meta">
+                <span>type <b>{_esc(audit_type.get("label") or audit.get("audit_type"))}</b></span>
+                <span>gearchiveerd <b>{_esc(audit.get("archived_at"))}</b></span>
+              </p>
+            </article>
+            """
+        )
+    return "".join(rows) or '<p class="muted">Nog geen audits gearchiveerd.</p>'
 
 
 def _experiment_payload(question: str) -> dict[str, Any]:
@@ -417,10 +475,21 @@ def install_audit_routes(
     *,
     semantic_safety_post_json: Any | None = None,
     deployed_commit_path: Path | None = None,
+    archive_store: AuditArchiveStore | None = None,
 ) -> None:
     """Install the bounded Audit room on the existing console app."""
 
     registry = AuditRegistry(console.runtime)
+    retention = (
+        AuditRetentionService(
+            live_store=registry,
+            archive_store=archive_store,
+            runtime=console.runtime,
+            write_lock=console._store_write_lock,
+        )
+        if archive_store is not None
+        else None
+    )
     suite_path = Path(__file__).resolve().parents[1] / "data" / "audit" / "semantic_passage_safety_v1.json"
     deploy_commit_path = Path(deployed_commit_path or DEFAULT_DEPLOY_COMMIT_MARKER)
 
@@ -437,10 +506,12 @@ def install_audit_routes(
     def audit_home(request: Request) -> HTMLResponse:
         account = account_for(request)
         body = f"""
-          <h1>Audit</h1>
+          <p><a class="btn-secondary" href="/settings">← Terug naar Instellingen</a></p>
+          <p class="eyebrow">Instellingen · Audit</p>
+          <h1>Audit &amp; diagnostiek</h1>
           <p class="lead">Controleer hoe Metis werkt en leg bewijs vast. Audits veranderen geen canonieke kennis en publiceren niets.</p>
-          <p><a class="btn-primary" href="/audit/new">Nieuwe audit</a> <a class="btn-secondary" href="/audit/semantic-safety">Frozen semantic safety</a></p>
-          <h2>Audits</h2>
+          <p><a class="btn-primary" href="/audit/new">Nieuwe audit</a> <a class="btn-secondary" href="/audit/semantic-safety">Frozen semantic safety</a> <a class="btn-secondary" href="/audit/archive">Archief</a></p>
+          <h2>Actieve audits</h2>
           <div class="doc-list">{_audit_rows(registry)}</div>
           <h2>Auditvormen</h2>
           <div class="doc-list">{_audit_type_cards()}</div>
@@ -516,27 +587,94 @@ def install_audit_routes(
             return HTMLResponse(_chrome(console, account, form), status_code=400)
         return RedirectResponse(f'/audit/{audit["audit_id"]}', status_code=303)
 
+    def render_audit(audit: dict[str, Any]) -> str:
+        if audit["audit_type"] == "experiment":
+            if (audit.get("payload") or {}).get("state") == "semantic_safety_completed":
+                return _render_semantic_safety_experiment(audit)
+            return _render_experiment(audit)
+        if audit["audit_type"] == "document_quality":
+            return _render_document_quality(audit)
+        return '<h1>Auditvorm niet ondersteund</h1>'
+
     def audit_detail(request: Request, audit_id: str) -> HTMLResponse:
         account = account_for(request)
         audit = registry.get_audit(audit_id)
         if audit is None:
             return HTMLResponse(_chrome(console, account, '<h1>Audit niet gevonden</h1><p><a href="/audit">Terug naar Audit</a></p>'), status_code=404)
-        if audit["audit_type"] == "experiment":
-            if (audit.get("payload") or {}).get("state") == "semantic_safety_completed":
-                detail = _render_semantic_safety_experiment(audit)
-            else:
-                detail = _render_experiment(audit)
-        elif audit["audit_type"] == "document_quality":
-            detail = _render_document_quality(audit)
-        else:
-            detail = '<h1>Auditvorm niet ondersteund</h1>'
+        detail = render_audit(audit)
+        archive_action = ""
+        if retention is not None and "researcher" in set(account.get("roles") or []):
+            archive_action = f"""
+              <form method="post" action="/audit/{_esc(audit_id)}/archive" onsubmit="return confirm('Deze audit archiveren naar Azure?');">
+                <button class="btn-secondary" type="submit">Archiveren</button>
+              </form>
+            """
         return HTMLResponse(
             _chrome(
                 console,
                 account,
-                f'<p><a class="btn-secondary" href="/audit">← Terug naar Audit</a></p>{detail}',
+                f'<p><a class="btn-secondary" href="/audit">← Terug naar Audit</a></p>{detail}{archive_action}',
             )
         )
+
+    def audit_archive_home(request: Request) -> HTMLResponse:
+        account = account_for(request)
+        body = f"""
+          <p><a class="btn-secondary" href="/audit">← Terug naar Audit &amp; diagnostiek</a></p>
+          <p class="eyebrow">Audit · Archief</p>
+          <h1>Archief</h1>
+          <p class="lead">Gearchiveerde audits staan autoritatief in Azure en worden hier alleen op aanvraag gelezen.</p>
+          <div class="doc-list">{_archive_rows(retention)}</div>
+        """
+        return HTMLResponse(_chrome(console, account, body))
+
+    def audit_archive_detail(request: Request, audit_id: str) -> HTMLResponse:
+        account = account_for(request)
+        if retention is None:
+            return HTMLResponse(
+                _chrome(console, account, '<h1>Archief niet beschikbaar</h1><p>Azure auditarchief is niet geconfigureerd.</p>'),
+                status_code=503,
+            )
+        try:
+            audit = retention.load_archived(audit_id)
+        except ConsoleError as exc:
+            return HTMLResponse(
+                _chrome(console, account, f'<h1>Archief niet beschikbaar</h1><p>{_esc(exc.code)}</p>'),
+                status_code=503,
+            )
+        if audit is None:
+            return HTMLResponse(
+                _chrome(console, account, '<h1>Audit niet gevonden</h1><p><a href="/audit/archive">Terug naar Archief</a></p>'),
+                status_code=404,
+            )
+        index = retention.get_archived_index(audit_id) or {}
+        detail = render_audit(audit)
+        body = f"""
+          <p><a class="btn-secondary" href="/audit/archive">← Terug naar Archief</a></p>
+          <div class="banner warn">Gearchiveerde audit · alleen-lezen · opgeslagen in Azure</div>
+          <p class="muted">Gearchiveerd {_esc(index.get("archived_at"))} door {_esc(index.get("archived_by"))}.</p>
+          {detail}
+        """
+        return HTMLResponse(_chrome(console, account, body))
+
+    def audit_archive(request: Request, audit_id: str) -> HTMLResponse:
+        account = account_for(request)
+        if "researcher" not in set(account.get("roles") or []):
+            raise ConsoleError("researcher_role_required")
+        if retention is None:
+            return HTMLResponse(
+                _chrome(console, account, '<h1>Archiveren niet beschikbaar</h1><p>Azure auditarchief is niet geconfigureerd.</p>'),
+                status_code=503,
+            )
+        try:
+            row = retention.archive(audit_id, actor_id=account["account_id"])
+        except ConsoleError as exc:
+            status = 503 if exc.code in {"audit_archive_store_failed", "audit_archive_unavailable"} else 409
+            return HTMLResponse(
+                _chrome(console, account, f'<h1>Archiveren mislukt</h1><p>{_esc(exc.code)}</p><p><a href="/audit/{_esc(audit_id)}">Terug naar audit</a></p>'),
+                status_code=status,
+            )
+        return RedirectResponse(f'/audit/archive/{row["audit_id"]}', status_code=303)
 
     def semantic_safety(request: Request, error: str = "") -> HTMLResponse:
         account = account_for(request)
@@ -621,5 +759,8 @@ def install_audit_routes(
     app.add_api_route("/audit/new", audit_new, methods=["GET"], response_class=HTMLResponse, name="audit_new")
     app.add_api_route("/audit/semantic-safety", semantic_safety, methods=["GET"], response_class=HTMLResponse, name="audit_semantic_safety")
     app.add_api_route("/audit/semantic-safety/run", semantic_safety_run, methods=["POST"], response_class=HTMLResponse, name="audit_semantic_safety_run")
+    app.add_api_route("/audit/archive", audit_archive_home, methods=["GET"], response_class=HTMLResponse, name="audit_archive_home")
+    app.add_api_route("/audit/archive/{audit_id}", audit_archive_detail, methods=["GET"], response_class=HTMLResponse, name="audit_archive_detail")
+    app.add_api_route("/audit/{audit_id}/archive", audit_archive, methods=["POST"], response_class=HTMLResponse, name="audit_archive")
     app.add_api_route("/audit", audit_create, methods=["POST"], response_class=HTMLResponse, name="audit_create")
     app.add_api_route("/audit/{audit_id}", audit_detail, methods=["GET"], response_class=HTMLResponse, name="audit_detail")
