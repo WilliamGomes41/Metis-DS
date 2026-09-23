@@ -6,7 +6,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 from src.integrity_kernel import stable_hash, stamp_canonical_hashes, schema_errors
-from src.review_ledger import append_event
+from src.review.review_ledger import append_event
 
 ALLOWED_ROOTS={'content','logic','relations','risk','uncertainty','structure','decision_graph'}
 

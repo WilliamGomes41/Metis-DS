@@ -32,7 +32,7 @@ from src.admission_gate_v1 import (
     is_admission_blocked,
 )
 from src.passage_register_v1 import apply_passage_register, apply_register_from_review
-from src.review_cockpit_v1 import (
+from src.review.review_cockpit_v1 import (
     SUITABILITY_VALUES,
     confirmable_proposed_type,
     found_under_path,
@@ -79,8 +79,8 @@ from src.object_taxonomy_v1 import (
 )
 from src.open_original_v1 import OpenOriginalError, open_source_passage, researcher_visible_prose
 from src.publish_authorization_v1 import invalidate_for_object, still_matches, tuple_record
-from src.review_ledger import append_event
-from src.review_workflow_v3 import apply_reviews
+from src.review.review_ledger import append_event
+from src.review.review_workflow_v3 import apply_reviews
 from src.revision_workflow import bump_patch, create_revision
 from src.retrieval.retrieval_projection_v2 import build_projection
 from src.published_projection_v1 import atomic_replace_projection

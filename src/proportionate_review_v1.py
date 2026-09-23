@@ -23,7 +23,7 @@ from src.operations_console_v1 import (
     is_slow_review_duty,
     review_lane,
 )
-from src.review_cockpit_v1 import confirmable_proposed_type
+from src.review.review_cockpit_v1 import confirmable_proposed_type
 
 
 NORMAL_RISK_BATCH_TYPES = frozenset({"definition", "explanation"})

@@ -18,7 +18,7 @@ from src.admission_gate_v1 import (
     is_inhoudelijk_candidate,
 )
 from src.object_taxonomy_v1 import section_role_for_path
-from src.review_cockpit_v1 import SUITABILITY_VALUES
+from src.review.review_cockpit_v1 import SUITABILITY_VALUES
 
 
 PASSAGE_REGISTER_STATUSES = (
