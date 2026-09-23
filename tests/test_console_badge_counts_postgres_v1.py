@@ -17,9 +17,9 @@ from typing import Any
 import pytest
 
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
-from src.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin
-from src.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
-from src.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
+from src.workflows.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin
+from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
+from src.workflows.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
 
 
 ROOT = Path(__file__).resolve().parents[1]
