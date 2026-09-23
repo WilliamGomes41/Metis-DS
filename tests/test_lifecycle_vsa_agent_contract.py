@@ -226,3 +226,47 @@ def test_lifecycle_slice_requires_exact_transition_and_black_box_proof() -> None
     assert "A relevant item with `FAIL`, `UNKNOWN`, or `NOT TESTED` means the slice is NOT DONE." in contract
     assert "The agent MUST NOT fill these gaps with a reasonable assumption." in contract
     assert "one black-box lifecycle closure scenario passes" in contract
+
+
+def test_stateful_class_b_requires_domain_first_gate_before_vsa() -> None:
+    agents = _read("AGENTS.md")
+    model = _read("docs/agents/continuous-development.md")
+    engineer = _read(".github/agents/metis-engineer.agent.md")
+
+    _assert_terms(agents, "Class B", "durable domain state", "Stateful Class B domain-first overlay", "before VSA")
+    assert "#### Stateful Class B domain-first overlay" in model
+
+    for field in (
+        "Domain entity/aggregate:",
+        "Invariant(s):",
+        "Durable state before:",
+        "Durable state after:",
+        "Transaction boundary:",
+        "Failure/recovery result:",
+        "Duplicate execution / idempotency result:",
+        "Concurrency result:",
+        "Audit/evidence requirement:",
+    ):
+        assert field in model
+
+    _assert_terms(
+        engineer,
+        "Class B",
+        "creates or mutates durable domain state",
+        "stateful Class B domain-first overlay",
+        "before implementation",
+    )
+    _assert_terms(engineer, "stateful Class B", "domain-first overlay", "continuous-development.md")
+
+
+def test_stateful_class_b_gate_is_lightweight_and_escalates_only_when_needed() -> None:
+    agents = _read("AGENTS.md")
+    model = _read("docs/agents/continuous-development.md")
+    engineer = _read(".github/agents/metis-engineer.agent.md")
+
+    _assert_terms(model, "Apply this overlay only when a Class B change creates or mutates durable domain state")
+    _assert_terms(model, "Do not apply it to stateless reads", "presentation-only behavior", "no durable state transition")
+    _assert_terms(model, "not a second lifecycle contract", "publication lifecycle truth", "lifecycle-vsa.md")
+    _assert_terms(model, "STOP", "reclassify to Class A", "before implementation")
+    _assert_terms(agents, "document owns the criteria and escalation rule")
+    _assert_terms(engineer, "stateful Class B", "before VSA")
