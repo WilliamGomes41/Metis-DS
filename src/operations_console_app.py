@@ -407,12 +407,11 @@ def _nav(account: dict[str, Any] | None, current: str = "", counts: dict[str, in
         ("review", "/review", "Review", counts.get("review", 0)),
         ("publish", "/publish", "Publiceren", counts.get("publish", 0)),
         ("tree", "/tree", "Documenten", counts.get("tree", 0)),
-        ("audit", "/audit", "Audit", 0),
         ("settings", "/settings", "Instellingen", 0),
     ]
     links = []
     for key, href, label, count in rooms:
-        current_key = "settings" if current in {"settings", "accounts", "llm-settings", "about"} else current
+        current_key = "settings" if current in {"settings", "accounts", "llm-settings", "about", "audit"} else current
         current_attr = ' aria-current="page"' if current_key == key else ""
         badge = f'<span class="badge">{count}</span>' if count else ""
         links.append(f'<a href="{href}"{current_attr}>{label}{badge}</a>')
@@ -2015,21 +2014,6 @@ def create_console_app(
                 ),
             )
         )
-        audit_tile = """
-          <section aria-labelledby="home-audit-title" style="margin-top:2.5rem;">
-            <p class="eyebrow">Onderzoeken &amp; controleren</p>
-            <a class="review-control-card" href="/audit" style="border:2px solid var(--paars);background:var(--wit);">
-              <span class="review-control-card-body">
-                <span id="home-audit-title" class="review-control-card-title">Audit</span>
-                <span class="review-control-card-copy">Controleer Metis en onderzoek verbeteringen buiten de publicatiestroom.</span>
-              </span>
-              <span class="review-control-card-meta">
-                <span class="review-control-card-status">Inspectie &amp; onderzoek</span>
-                <span class="review-control-card-action">Open Audit <span aria-hidden="true">→</span></span>
-              </span>
-            </a>
-          </section>
-        """
         return _page(
             f"""
             {_nav(account, "home", counts)}
@@ -2037,7 +2021,6 @@ def create_console_app(
               <h1>Mijn werk</h1>
               <p class="lead">Kies de volgende stap in het proces.</p>
               <div class="home-tiles">{tiles}</div>
-              {audit_tile}
             </section>
             """
         )
@@ -2055,6 +2038,10 @@ def create_console_app(
               <p class="doc-title">LLM-instellingen</p>
               <p>Bekijk de gedeelde provider- en modelconfiguratie van Metis.</p>
             </a>
+            <a class="doc-card" href="/audit" style="text-decoration:none;">
+              <p class="doc-title">Audit &amp; diagnostiek</p>
+              <p>Voer controles uit en beheer actieve en gearchiveerde auditbewijzen.</p>
+            </a>
             <a class="doc-card" href="/over-console" style="text-decoration:none;">
               <p class="doc-title">Over Metis</p>
               <p>Lees hoe Metis werkt, welke begrippen het gebruikt en waar de grenzen liggen.</p>
@@ -2067,7 +2054,7 @@ def create_console_app(
             <section class="room">
               <p class="eyebrow">Beheer</p>
               <h1>Instellingen</h1>
-              <p class="lead">Accounts, gedeelde LLM-configuratie en informatie over Metis op één plek.</p>
+              <p class="lead">Accounts, gedeelde LLM-configuratie, auditdiagnostiek en informatie over Metis op één plek.</p>
               {cards}
             </section>
             """,
