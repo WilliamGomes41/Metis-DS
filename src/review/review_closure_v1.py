@@ -15,11 +15,11 @@ from typing import Any, Iterator
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 
-from src.closed_review_loop_v1 import (
+from src.review.closed_review_loop_v1 import (
     REVIEW_AUDIT_EVIDENCE_EVENT,
     _source_locator,
 )
-from src.deterministic_review_repair_v1 import (
+from src.review.deterministic_review_repair_v1 import (
     REPAIR_CLASSIFICATION,
     REPAIR_MERGE_OBJECTS,
     REPAIR_SOURCE_UNITS,
@@ -29,7 +29,7 @@ from src.deterministic_review_repair_v1 import (
 from src.integrity_kernel import compute_canonical_object_hash, schema_errors, stamp_canonical_hashes
 from src.operations_console_v1 import ConsoleError
 from src.publication_readiness_v1 import PublicationReadinessMixin
-from src.review_ledger import append_event
+from src.review.review_ledger import append_event
 
 LEGACY_REVISE_REOPENED_EVENT = "legacy_revise_reopened"
 PUBLISHED_WORKING_REVISION_IMMUTABLE = "published_working_revision_immutable"
