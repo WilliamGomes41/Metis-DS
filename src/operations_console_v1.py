@@ -32,7 +32,7 @@ from src.admission_gate_v1 import (
     is_admission_blocked,
 )
 from src.passage_register_v1 import apply_passage_register, apply_register_from_review
-from src.review_cockpit_v1 import (
+from src.review.review_cockpit_v1 import (
     SUITABILITY_VALUES,
     confirmable_proposed_type,
     found_under_path,
@@ -62,7 +62,7 @@ from src.beslisboom_path_v1 import (
 from src.context_aware_split_v1 import split_context_aware_units
 from src.extract_html_v1 import extract as extract_html
 from src.extract_pdf_v2 import extract as extract_pdf
-from src.four_eyes_v1 import (
+from src.review.four_eyes_v1 import (
     mark_four_eyes_on_object,
     publish_authorization_contract,
     requires_four_eyes,
@@ -79,9 +79,9 @@ from src.object_taxonomy_v1 import (
 )
 from src.open_original_v1 import OpenOriginalError, open_source_passage, researcher_visible_prose
 from src.publish_authorization_v1 import invalidate_for_object, still_matches, tuple_record
-from src.review_ledger import append_event
-from src.review_workflow_v3 import apply_reviews
-from src.revision_workflow import bump_patch, create_revision
+from src.review.review_ledger import append_event
+from src.review.review_workflow_v3 import apply_reviews
+from src.review.revision_workflow import bump_patch, create_revision
 from src.retrieval.retrieval_projection_v2 import build_projection
 from src.published_projection_v1 import atomic_replace_projection
 from src.semantic_transform_generic_v1 import transform as transform_generic
