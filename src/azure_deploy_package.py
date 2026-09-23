@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -219,6 +220,27 @@ def git_head_commit(root: Path) -> str:
     return commit
 
 
+
+def git_head_zip_datetime(root: Path) -> tuple[int, int, int, int, int, int]:
+    """Stable ZIP timestamp derived from HEAD, so successive releases are distinguishable."""
+    try:
+        result = subprocess.run(
+            ["git", "show", "-s", "--format=%ct", "HEAD"],
+            check=True,
+            cwd=root,
+            capture_output=True,
+            text=True,
+        )
+        stamp = int(result.stdout.strip())
+    except (OSError, ValueError, subprocess.CalledProcessError) as exc:
+        raise DeployPackageError("deploy_commit_timestamp_unavailable") from exc
+    value = datetime.fromtimestamp(stamp, tz=timezone.utc)
+    if value.year < 1980:
+        raise DeployPackageError("deploy_commit_timestamp_invalid")
+    # ZIP stores seconds with 2-second granularity.
+    return (value.year, value.month, value.day, value.hour, value.minute, value.second - value.second % 2)
+
+
 def write_deploy_zip(
     output: Path,
     *,
@@ -307,6 +329,7 @@ def write_deploy_zip(
         if not any(vendor.iterdir()):
             raise DeployPackageError("dependencies_missing")
         _refuse_fat_vendor_tree(vendor)
+        zip_datetime = git_head_zip_datetime(root)
         with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             for item in stage.rglob("*"):
                 if not item.is_file():
@@ -315,7 +338,7 @@ def write_deploy_zip(
                 if package_contains_runtime_data(rel):
                     raise DeployPackageError("runtime_data_in_package")
                 info = zipfile.ZipInfo(rel)
-                info.date_time = (2026, 1, 1, 0, 0, 0)
+                info.date_time = zip_datetime
                 info.compress_type = zipfile.ZIP_DEFLATED
                 archive.writestr(info, item.read_bytes())
     return output
