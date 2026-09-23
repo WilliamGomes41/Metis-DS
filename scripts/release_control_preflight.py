@@ -59,7 +59,7 @@ PR_REPORT_FIELDS = (
 PATH_RULES: dict[str, tuple[str, ...]] = {
     "opslag": (
         "src/operations_console_v1.py",
-        "src/review_ledger.py",
+        "src/review/review_ledger.py",
         "src/canonical_store.py",
         "src/g2_source_store.py",
         "src/published_projection_v1.py",
@@ -107,7 +107,7 @@ PATH_RULES: dict[str, tuple[str, ...]] = {
         "src/evaluation/validate_golden_set.py",
         "src/extract_coverage_v1.py",
         "src/audit_pdf_text_completeness.py",
-        "src/four_eyes_v1.py",
+        "src/review/four_eyes_v1.py",
         "src/*_gate_v1.py",
         "src/*_gate_v2.py",
         "src/*_gate_v3.py",
