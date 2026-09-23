@@ -28,7 +28,7 @@ from src.operations_console_app import (
     _review_is_final,
 )
 from src.operations_console_v1 import PRE_REVIEW_BLOCKED, ConsoleError, OperationsConsole, review_stacks, slow_review_duty
-from src.proportionate_review_v1 import (
+from src.review.proportionate_review_v1 import (
     ProportionateReviewConsole,
     normal_risk_batch_counts,
     normal_risk_batch_queue,
