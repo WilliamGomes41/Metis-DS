@@ -48,7 +48,7 @@ from src.passage_register_v1 import (
     passage_register_of,
     register_status_from_suitability,
 )
-from src.review_cockpit_v1 import SUITABILITY_VALUES
+from src.review.review_cockpit_v1 import SUITABILITY_VALUES
 from src.evaluation.validate_golden_set import validate, validate_extract_gold
 
 
