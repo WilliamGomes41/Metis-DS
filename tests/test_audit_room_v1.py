@@ -237,11 +237,12 @@ def test_frozen_semantic_safety_run_uses_shared_provider_and_persists_only_audit
     tmp_path,
     monkeypatch,
 ):
-    evaluated_commit = "79b35616725da3a1f42a938c2f5a874ca16cfad0"
+    baseline_commit = "79b35616725da3a1f42a938c2f5a874ca16cfad0"
+    deployed_commit = "47e7652574ee37f91fbd58e5ffa16b2dfd44b378"
     monkeypatch.setenv("METIS_LLM_MODEL", "test-model")
     monkeypatch.setenv("METIS_LLM_API_KEY", "shared-provider-secret")
     marker = tmp_path / "deployed_commit.txt"
-    marker.write_text(evaluated_commit + "\n", encoding="utf-8")
+    marker.write_text(deployed_commit + "\n", encoding="utf-8")
 
     def full_source_model(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
         block = json.loads(payload["input"][1]["content"])["source_blocks"][0]
@@ -286,7 +287,8 @@ def test_frozen_semantic_safety_run_uses_shared_provider_and_persists_only_audit
     assert page.status_code == 200
     assert "Frozen semantic safety" in page.text
     assert "Frozen audit uitvoeren" in page.text
-    assert "79b35616725da3a1f42a938c2f5a874ca16cfad0" in page.text
+    assert baseline_commit in page.text
+    assert deployed_commit in page.text
 
     response = client.post("/audit/semantic-safety/run", follow_redirects=False)
     assert response.status_code == 303
@@ -303,7 +305,8 @@ def test_frozen_semantic_safety_run_uses_shared_provider_and_persists_only_audit
     assert report["candidate_pass_count"] == 5
     assert report["requires_human_review"] is True
     assert report["model"] == "test-model"
-    assert report["evaluated_commit"] == evaluated_commit
+    assert report["suite_baseline_commit"] == baseline_commit
+    assert report["deployed_commit"] == deployed_commit
     assert "shared-provider-secret" not in json.dumps(row, ensure_ascii=False)
 
     detail = client.get(response.headers["location"])
@@ -315,18 +318,64 @@ def test_frozen_semantic_safety_run_uses_shared_provider_and_persists_only_audit
     assert not (console.runtime / "release_manifests").exists()
 
 
-def test_frozen_semantic_safety_run_fails_closed_on_commit_mismatch(
+def test_frozen_semantic_safety_run_accepts_later_valid_deployment_commit(
     tmp_path,
     monkeypatch,
 ):
     monkeypatch.setenv("METIS_LLM_MODEL", "test-model")
     monkeypatch.setenv("METIS_LLM_API_KEY", "shared-provider-secret")
-    monkeypatch.setenv(
-        "METIS_AUDIT_EVALUATED_COMMIT",
-        "79b35616725da3a1f42a938c2f5a874ca16cfad0",
-    )
     marker = tmp_path / "deployed_commit.txt"
-    marker.write_text("a" * 40 + "\n", encoding="utf-8")
+    later_commit = "a" * 40
+    marker.write_text(later_commit + "\n", encoding="utf-8")
+
+    def full_source_model(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
+        block = json.loads(payload["input"][1]["content"])["source_blocks"][0]
+        return {
+            "output": [{
+                "type": "message",
+                "content": [{
+                    "type": "output_text",
+                    "text": json.dumps({
+                        "objects": [{
+                            "spans": [{
+                                "block_id": block["block_id"],
+                                "start": 0,
+                                "end": len(block["text"]),
+                            }],
+                            "proposed_object_type": "unclassified",
+                        }],
+                        "abstain_reason": None,
+                    }),
+                }],
+            }]
+        }
+
+    console, client, _researcher, _receipt = _system(
+        tmp_path,
+        semantic_safety_post_json=full_source_model,
+        deployed_commit_path=marker,
+    )
+
+    page = client.get("/audit/semantic-safety")
+    assert "Frozen audit uitvoeren" in page.text
+    assert later_commit in page.text
+    assert "79b35616725da3a1f42a938c2f5a874ca16cfad0" in page.text
+
+    response = client.post("/audit/semantic-safety/run", follow_redirects=False)
+    assert response.status_code == 303
+    report = AuditRegistry(console.runtime).list_audits()[0]["payload"]["safety_report"]
+    assert report["suite_baseline_commit"] == "79b35616725da3a1f42a938c2f5a874ca16cfad0"
+    assert report["deployed_commit"] == later_commit
+
+
+def test_frozen_semantic_safety_run_fails_closed_on_invalid_packaged_commit(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setenv("METIS_LLM_MODEL", "test-model")
+    monkeypatch.setenv("METIS_LLM_API_KEY", "shared-provider-secret")
+    marker = tmp_path / "deployed_commit.txt"
+    marker.write_text("not-a-commit\n", encoding="utf-8")
 
     console, client, _researcher, _receipt = _system(
         tmp_path,
@@ -335,13 +384,13 @@ def test_frozen_semantic_safety_run_fails_closed_on_commit_mismatch(
 
     page = client.get("/audit/semantic-safety")
     assert "Run geblokkeerd" in page.text
+    assert "geldige packaged deployment-commit ontbreekt" in page.text
     assert "Frozen audit uitvoeren" not in page.text
 
     response = client.post("/audit/semantic-safety/run")
     assert response.status_code == 200
-    assert "deployment-commit komt niet overeen" in response.text
+    assert "Geen geldige packaged deployment-commit beschikbaar" in response.text
     assert AuditRegistry(console.runtime).list_audits() == []
-
 
 
 def test_frozen_semantic_safety_run_fails_closed_without_packaged_commit(
@@ -350,11 +399,6 @@ def test_frozen_semantic_safety_run_fails_closed_without_packaged_commit(
 ):
     monkeypatch.setenv("METIS_LLM_MODEL", "test-model")
     monkeypatch.setenv("METIS_LLM_API_KEY", "shared-provider-secret")
-    monkeypatch.setenv(
-        "METIS_AUDIT_EVALUATED_COMMIT",
-        "79b35616725da3a1f42a938c2f5a874ca16cfad0",
-    )
-
     console, client, _researcher, _receipt = _system(
         tmp_path,
         deployed_commit_path=tmp_path / "missing-deployed-commit.txt",
@@ -366,5 +410,5 @@ def test_frozen_semantic_safety_run_fails_closed_without_packaged_commit(
 
     response = client.post("/audit/semantic-safety/run")
     assert response.status_code == 200
-    assert "deployment-commit komt niet overeen" in response.text
+    assert "Geen geldige packaged deployment-commit beschikbaar" in response.text
     assert AuditRegistry(console.runtime).list_audits() == []
