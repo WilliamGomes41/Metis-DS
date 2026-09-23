@@ -68,7 +68,7 @@ def test_full_source_semantic_candidate_passes_frozen_machine_safety_checks() ->
         suite,
         api_key="audit-secret",
         model="test-model",
-        evaluated_commit=EVALUATED_COMMIT,
+        deployed_commit="47e7652574ee37f91fbd58e5ffa16b2dfd44b378",
         post_json=_full_source_model,
     )
 
@@ -76,6 +76,8 @@ def test_full_source_semantic_candidate_passes_frozen_machine_safety_checks() ->
     assert report["candidate_pass_count"] == 5
     assert report["kernel_reject_count"] == 0
     assert report["requires_human_review"] is True
+    assert report["suite_baseline_commit"] == EVALUATED_COMMIT
+    assert report["deployed_commit"] == "47e7652574ee37f91fbd58e5ffa16b2dfd44b378"
     assert "audit-secret" not in json.dumps(report, ensure_ascii=False)
 
 
@@ -113,7 +115,7 @@ def test_source_bound_candidate_still_fails_audit_when_condition_is_omitted() ->
         suite,
         api_key="audit-secret",
         model="test-model",
-        evaluated_commit=EVALUATED_COMMIT,
+        deployed_commit="47e7652574ee37f91fbd58e5ffa16b2dfd44b378",
         post_json=omit_condition,
     )
 
@@ -158,7 +160,7 @@ def test_kernel_reject_is_reported_as_failure_not_as_safety_pass() -> None:
         suite,
         api_key="audit-secret",
         model="test-model",
-        evaluated_commit=EVALUATED_COMMIT,
+        deployed_commit="47e7652574ee37f91fbd58e5ffa16b2dfd44b378",
         post_json=invalid_model,
     )
 

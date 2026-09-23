@@ -193,12 +193,12 @@ def run_frozen_semantic_safety_suite(
     *,
     api_key: str,
     model: str,
-    evaluated_commit: str,
+    deployed_commit: str,
     post_json: PostJson | None = None,
 ) -> dict[str, Any]:
-    safe_commit = str(evaluated_commit or "").strip().lower()
-    if _COMMIT_RE.fullmatch(safe_commit) is None:
-        raise ConsoleError("semantic_safety_evaluated_commit_invalid")
+    safe_deployed_commit = str(deployed_commit or "").strip().lower()
+    if _COMMIT_RE.fullmatch(safe_deployed_commit) is None:
+        raise ConsoleError("semantic_safety_deployed_commit_invalid")
     safe_model = str(model or "").strip()
     if not safe_model:
         raise ConsoleError("semantic_safety_model_required")
@@ -259,7 +259,7 @@ def run_frozen_semantic_safety_suite(
         "suite_id": suite["suite_id"],
         "suite_hash": suite["suite_hash"],
         "suite_baseline_commit": suite["evaluated_baseline_commit"],
-        "evaluated_commit": safe_commit,
+        "deployed_commit": safe_deployed_commit,
         "model": safe_model,
         "case_count": len(results),
         "candidate_pass_count": passed,

@@ -369,7 +369,8 @@ def _render_semantic_safety_experiment(audit: dict[str, Any]) -> str:
         <div class="section">
           <h3>Uitvoering</h3>
           <p>model <b>{_esc(report.get("model"))}</b></p>
-          <p>commit <b>{_esc(report.get("evaluated_commit"))}</b></p>
+          <p>baseline <b>{_esc(report.get("suite_baseline_commit"))}</b></p>
+          <p>deployment <b>{_esc(report.get("deployed_commit"))}</b></p>
           <p><b>{"Machinecheck PASS" if report.get("machine_safety_pass") else "Menselijke beoordeling vereist"}</b></p>
         </div>
       </div>
@@ -545,12 +546,19 @@ def install_audit_routes(
         provider = load_llm_provider_config()
         model = provider.model
         commit = deployed_commit()
-        ready = bool(provider.configured and commit == suite["evaluated_baseline_commit"])
+        ready = bool(provider.configured and commit)
         error_html = f'<div class="banner err">{_esc(error)}</div>' if error else ""
+        blockers: list[str] = []
+        if not provider.api_key:
+            blockers.append("METIS_LLM_API_KEY ontbreekt")
+        if not model:
+            blockers.append("METIS_LLM_MODEL ontbreekt")
+        if not commit:
+            blockers.append("geldige packaged deployment-commit ontbreekt")
         readiness = (
             '<button class="btn-primary" type="submit">Frozen audit uitvoeren</button>'
             if ready
-            else '<p class="muted">Run geblokkeerd: configureer METIS_LLM_API_KEY en METIS_LLM_MODEL en deploy exact de frozen commit.</p>'
+            else f'<p class="muted">Run geblokkeerd: {_esc("; ".join(blockers))}.</p>'
         )
         body = f"""
           <p><a class="btn-secondary" href="/audit">← Terug naar Audit</a></p>
@@ -560,7 +568,8 @@ def install_audit_routes(
           {error_html}
           <article class="doc-card">
             <p><b>Suite</b> {_esc(suite["suite_id"])}</p>
-            <p><b>Frozen commit</b> {_esc(suite["evaluated_baseline_commit"])}</p>
+            <p><b>Frozen baseline</b> {_esc(suite["evaluated_baseline_commit"])}</p>
+            <p><b>Deployment</b> {_esc(commit or "Niet beschikbaar")}</p>
             <p><b>Model</b> {_esc(model or "Niet geconfigureerd")}</p>
             <p><b>Cases</b> {len(suite["cases"])}</p>
           </article>
@@ -581,14 +590,14 @@ def install_audit_routes(
             return semantic_safety(request, error="METIS_LLM_API_KEY is niet geconfigureerd.")
         if not model:
             return semantic_safety(request, error="METIS_LLM_MODEL is niet geconfigureerd.")
-        if commit != suite["evaluated_baseline_commit"]:
-            return semantic_safety(request, error="De deployment-commit komt niet overeen met de frozen auditcommit.")
+        if not commit:
+            return semantic_safety(request, error="Geen geldige packaged deployment-commit beschikbaar.")
         try:
             report = run_frozen_semantic_safety_suite(
                 suite,
                 api_key=provider.api_key,
                 model=model,
-                evaluated_commit=commit,
+                deployed_commit=commit,
                 post_json=semantic_safety_post_json,
             )
         except ConsoleError as exc:
