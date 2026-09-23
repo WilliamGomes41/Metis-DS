@@ -155,7 +155,7 @@ class AuditRetentionService:
                 expected_sha256=str(row["checksum_sha256"]),
             )
         except AuditArchiveStoreError as exc:
-            raise ConsoleError("audit_archive_unavailable", str(exc)) from exc
+            raise ConsoleError("audit_archive_unavailable") from exc
         try:
             record = json.loads(data.decode("utf-8"))
         except (UnicodeError, json.JSONDecodeError) as exc:
@@ -200,7 +200,7 @@ class AuditRetentionService:
                     expected_sha256=checksum,
                 )
             except AuditArchiveStoreError as exc:
-                raise ConsoleError("audit_archive_store_failed", str(exc)) from exc
+                raise ConsoleError("audit_archive_store_failed") from exc
             if readback != data:
                 raise ConsoleError("audit_archive_readback_mismatch")
 
