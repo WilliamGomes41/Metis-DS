@@ -51,7 +51,7 @@ def test_active_llm_runtime_has_no_capability_specific_provider_keys_or_models()
             "src/audit_semantic_safety_v1.py",
             "src/pre_review_semantic_v1.py",
             "src/console_asgi.py",
-            "src/workflow_remaining_cutover_v1.py",
+            "src/workflows/workflow_remaining_cutover_v1.py",
             "src/compiled_knowledge_v1.py",
         )
     )

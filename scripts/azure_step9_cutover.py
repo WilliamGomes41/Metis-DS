@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.azure_step9_cutover_v1 import AzureCli, Step9Error, activate_phase, observe_production
-from src.workflow_postgres_migration_v1 import (
+from src.workflows.workflow_postgres_migration_v1 import (
     WorkflowMigrationError,
     connect_entra,
     migration_digest,

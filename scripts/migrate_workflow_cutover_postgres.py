@@ -18,14 +18,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
-from src.workflow_documents_postgres_v1 import PostgresWorkflowDocumentStore
-from src.workflow_identity_postgres_v1 import (
+from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
+from src.workflows.workflow_documents_postgres_v1 import PostgresWorkflowDocumentStore
+from src.workflows.workflow_identity_postgres_v1 import (
     PostgresWorkflowIdentityStore,
     migratable_legacy_sessions,
 )
-from src.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
-from src.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
+from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 
 # Reuse the exact migration helpers rather than introducing a second migration engine.
 from scripts.migrate_workflow_identity_postgres import _read_map

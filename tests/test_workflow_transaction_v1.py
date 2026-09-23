@@ -15,12 +15,12 @@ from typing import Any
 import pytest
 
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
-from src.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-from src.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
+from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
+from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
 from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
-from src.workflow_review_cutover_v1 import PostgresReviewWorkflowDurablePublicationConsole
-from src.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
-from src.workflow_transaction_v1 import bind_workflow_stores, workflow_transaction
+from src.workflows.workflow_review_cutover_v1 import PostgresReviewWorkflowDurablePublicationConsole
+from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+from src.workflows.workflow_transaction_v1 import bind_workflow_stores, workflow_transaction
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
@@ -205,7 +205,7 @@ def test_cross_store_success_commits_all_workflow_state_together(
 
 
 def test_runtime_review_cutover_uses_shared_workflow_transaction() -> None:
-    review_source = (ROOT / "src" / "workflow_review_cutover_v1.py").read_text(encoding="utf-8")
+    review_source = (ROOT / "src" / "workflows" / "workflow_review_cutover_v1.py").read_text(encoding="utf-8")
     asgi_source = (ROOT / "src" / "console_asgi.py").read_text(encoding="utf-8")
     assert review_source.count("with workflow_transaction(self.workflow_review_store):") >= 2
     assert "bind_workflow_stores(" in asgi_source

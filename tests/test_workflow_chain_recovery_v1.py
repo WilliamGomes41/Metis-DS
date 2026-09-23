@@ -23,14 +23,14 @@ from src.canonical_publication_postgres_v1 import (
     PostgresCanonicalPublicationStore,
 )
 from src.integrity_kernel import stable_hash
-from src.workflow_chain_recovery_v1 import (
+from src.workflows.workflow_chain_recovery_v1 import (
     PostgresWorkflowRecoveryAdapter,
     backup_workflow_chain,
     check_workflow_integrity,
     restore_workflow_chain,
     verify_workflow_chain_backup,
 )
-from src.workflow_identity_cutover_v1 import CutoverPostgresWorkflowIdentityStore
+from src.workflows.workflow_identity_cutover_v1 import CutoverPostgresWorkflowIdentityStore
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_MIGRATIONS = (

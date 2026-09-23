@@ -22,8 +22,8 @@ from src.operations_console_v1 import (
     OperationsConsole,
     _objects_jsonl_bytes,
 )
-from src.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-from src.workflow_documents_cutover_v1 import (
+from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
+from src.workflows.workflow_documents_cutover_v1 import (
     PostgresWorkflowDocumentRuntimeStore,
     _PostgresWorkflowDocumentsMixin,
 )
@@ -143,7 +143,7 @@ def test_cutover_is_explicit_and_never_runs_legacy_migration_on_startup() -> Non
 
 
 def test_cutover_runtime_reads_objects_by_migrated_position() -> None:
-    source = (ROOT / "src" / "workflow_documents_cutover_v1.py").read_text(encoding="utf-8")
+    source = (ROOT / "src" / "workflows" / "workflow_documents_cutover_v1.py").read_text(encoding="utf-8")
     assert "ORDER BY position" in source
     assert "workflow_document_cutover_not_prepared" in source
     assert "expected_revision" in source
@@ -151,7 +151,7 @@ def test_cutover_runtime_reads_objects_by_migrated_position() -> None:
 
 
 def test_local_files_are_declared_compatibility_mirrors_not_authority() -> None:
-    source = (ROOT / "src" / "workflow_documents_cutover_v1.py").read_text(encoding="utf-8")
+    source = (ROOT / "src" / "workflows" / "workflow_documents_cutover_v1.py").read_text(encoding="utf-8")
     assert "compatibility mirror" in source
     assert "authoritative in PostgreSQL" in source
 

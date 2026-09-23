@@ -87,7 +87,7 @@ PostgreSQL wordt dus pas authoritative nadat de bronbytes aanwezig en gecontrole
 
 ## Workflow-integriteitsbewijs
 
-`src/workflow_chain_recovery_v1.py` controleert aanvullend:
+`src/workflows/workflow_chain_recovery_v1.py` controleert aanvullend:
 
 - referentiële identiteit van accounts, sessies, documenten en reviewers;
 - dat ieder document een volledige `envelope_payload` heeft;

@@ -8,8 +8,8 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from src.operations_console_v1 import PUBLISHED_ENVELOPE_STATES, SNAPSHOT_OBJECT_WRITE_CONFLICT
-from src.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
-from src.workflow_documents_postgres_v1 import WorkflowDocumentStoreError, _json_text
+from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
+from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError, _json_text
 
 
 PUBLISHED_WORKING_REVISION_IMMUTABLE = "published_working_revision_immutable"

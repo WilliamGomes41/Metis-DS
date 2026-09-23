@@ -16,7 +16,7 @@ from typing import Any, Iterator, Mapping
 
 from src.integrity_kernel import stable_hash
 from src.review_ledger import verify_ledger
-from src.workflow_documents_postgres_v1 import (
+from src.workflows.workflow_documents_postgres_v1 import (
     PostgresWorkflowDocumentStore,
     WorkflowDocumentStoreError,
     _json_text,

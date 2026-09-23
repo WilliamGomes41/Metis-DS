@@ -26,7 +26,7 @@ from src.operations_console_v1 import ConsoleError, review_lane
 from src.passage_register_v1 import passage_register_of
 from src.publish_readiness_ui_v1 import install_publish_readiness_ui
 from src.review_disposition_v1 import definitive_review_disposition
-from src.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
+from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
