@@ -11,7 +11,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 from src.integrity_kernel import exact_review_snapshot_hash, schema_errors, stamp_canonical_hashes
-from src.review_ledger import append_event
+from src.review.review_ledger import append_event
 
 ALLOWED={"approve","revise","reject"}
 
