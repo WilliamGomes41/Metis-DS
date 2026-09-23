@@ -37,7 +37,7 @@ Before implementing a Class B change that alters shared extraction, review, retr
 
 The agent MUST map the requested behavior onto the existing program structure before editing production code. If the current mechanism, ownership boundary, or call path is not established, investigate first instead of patching. This gate is a lightweight design check for Class B work and MUST NOT be expanded into lifecycle-grade paperwork when lifecycle semantics are unchanged.
 
-For any Class B change that creates or mutates durable domain state, also apply the stateful Class B domain-first overlay in `docs/agents/continuous-development.md` before defining the vertical slice. Stateless Class B work does not require this overlay. If the overlay reveals that lifecycle identity, authority, lineage, migration, restart/recovery, or another Class A truth must change, STOP and reclassify to Class A before implementation.
+For Class B work that creates or mutates durable domain state, apply the `Stateful Class B domain-first overlay` in `docs/agents/continuous-development.md` before VSA. That document owns the criteria and escalation rule.
 
 ### Lifecycle VSA contract
 
