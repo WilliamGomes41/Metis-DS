@@ -1,10 +1,8 @@
-"""Audit retention lifecycle for LIVE -> ARCHIVED.
+"""Audit retention lifecycle for LIVE, ARCHIVED and successful PURGE.
 
-This module separates audit meaning from retention location. A successful
-archive first verifies the complete audit record in Azure and then performs one
-atomic local state flip: the full LIVE JSON file is replaced by a compact,
-payload-free archived reference at the same path. Restore and user-facing purge
-are intentionally out of scope for VSA A1.
+Audit meaning remains orthogonal to retention location. Archive and restore
+preserve the complete audit record byte-semantically; purge is allowed only from
+ARCHIVED and removes both the Azure record and compact local reference.
 """
 from __future__ import annotations
 
@@ -35,6 +33,19 @@ class LiveAuditStore(Protocol):
         audit_id: str,
         reference: dict[str, Any],
     ) -> None: ...
+
+    def replace_archived_ref_with_live(
+        self,
+        audit_id: str,
+        reference: dict[str, Any],
+        record: dict[str, Any],
+    ) -> None: ...
+
+    def remove_archived_ref(
+        self,
+        audit_id: str,
+        reference: dict[str, Any],
+    ) -> bool: ...
 
 
 def _now() -> str:
@@ -124,7 +135,7 @@ class AuditArchiveIndex:
 
 
 class AuditRetentionService:
-    """Own the fail-closed LIVE -> ARCHIVED transition."""
+    """Own fail-closed audit retention transitions."""
 
     def __init__(
         self,
@@ -165,6 +176,99 @@ class AuditRetentionService:
         if str(record["audit_id"]) != str(row["audit_id"]):
             raise ConsoleError("audit_archive_record_mismatch")
         return record
+
+    def restore(self, audit_id: str, *, actor_id: str) -> dict[str, Any]:
+        safe_id = str(audit_id or "").strip()
+        safe_actor = str(actor_id or "").strip()
+        if AUDIT_ID_RE.fullmatch(safe_id) is None:
+            raise ConsoleError("audit_archive_id_invalid")
+        if not safe_actor:
+            raise ConsoleError("audit_actor_required")
+
+        with self._write_lock():
+            active = self.live_store.get_audit(safe_id)
+            reference = self.index.get(safe_id)
+
+            if active is not None:
+                if reference is not None:
+                    raise ConsoleError("audit_retention_state_ambiguous")
+                try:
+                    self.archive_store.delete_audit(safe_id)
+                except AuditArchiveStoreError as exc:
+                    raise ConsoleError("audit_restore_cleanup_failed") from exc
+                return active
+
+            if reference is None:
+                raise ConsoleError("unknown_audit")
+
+            record = self.load_archived(safe_id)
+            if record is None:
+                raise ConsoleError("audit_archive_record_missing")
+
+            self.live_store.replace_archived_ref_with_live(
+                safe_id,
+                reference,
+                record,
+            )
+
+            try:
+                self.archive_store.delete_audit(safe_id)
+            except AuditArchiveStoreError as exc:
+                try:
+                    self.live_store.replace_with_archived_ref(
+                        safe_id,
+                        reference,
+                    )
+                except Exception as rollback_exc:
+                    raise ConsoleError("audit_restore_recovery_required") from rollback_exc
+                raise ConsoleError("audit_restore_archive_delete_failed") from exc
+            return record
+
+    def purge(
+        self,
+        audit_id: str,
+        *,
+        actor_id: str,
+        confirm_title: str,
+    ) -> dict[str, Any]:
+        safe_id = str(audit_id or "").strip()
+        safe_actor = str(actor_id or "").strip()
+        confirmation = str(confirm_title or "").strip()
+        if AUDIT_ID_RE.fullmatch(safe_id) is None:
+            raise ConsoleError("audit_archive_id_invalid")
+        if not safe_actor:
+            raise ConsoleError("audit_actor_required")
+
+        with self._write_lock():
+            active = self.live_store.get_audit(safe_id)
+            reference = self.index.get(safe_id)
+
+            if active is not None:
+                raise ConsoleError("audit_purge_requires_archived")
+
+            if reference is None:
+                try:
+                    self.archive_store.delete_audit(safe_id)
+                except AuditArchiveStoreError as exc:
+                    raise ConsoleError("audit_purge_archive_delete_failed") from exc
+                return {"audit_id": safe_id, "purged": True}
+
+            if confirmation != str(reference.get("title") or ""):
+                raise ConsoleError("audit_purge_confirmation_mismatch")
+
+            try:
+                self.archive_store.delete_audit(safe_id)
+            except AuditArchiveStoreError as exc:
+                raise ConsoleError("audit_purge_archive_delete_failed") from exc
+
+            try:
+                self.live_store.remove_archived_ref(safe_id, reference)
+            except ConsoleError:
+                raise
+            except Exception as exc:
+                raise ConsoleError("audit_purge_local_delete_failed") from exc
+
+            return {"audit_id": safe_id, "purged": True}
 
     def archive(self, audit_id: str, *, actor_id: str) -> dict[str, Any]:
         safe_id = str(audit_id or "").strip()
