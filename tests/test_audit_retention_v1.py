@@ -426,3 +426,27 @@ def test_stale_archived_reference_cannot_overwrite_current_retention_state(
     assert registry.get_audit(original["audit_id"]) is None
     assert service.get_archived_index(original["audit_id"]) == reference
     assert service.load_archived(original["audit_id"]) == original
+
+
+
+def test_purge_refuses_live_audit(tmp_path: Path) -> None:
+    runtime = tmp_path / "runtime"
+    registry = AuditRegistry(runtime)
+    original = _created(registry)
+    archive = _MemoryArchiveStore()
+    service = AuditRetentionService(
+        live_store=registry,
+        archive_store=archive,
+        runtime=runtime,
+    )
+
+    with pytest.raises(ConsoleError, match="audit_purge_requires_archived"):
+        service.purge(
+            original["audit_id"],
+            actor_id="acct-researcher",
+            confirm_title=original["title"],
+        )
+
+    assert registry.get_audit(original["audit_id"]) == original
+    assert service.list_archived() == []
+    assert archive.data == {}
