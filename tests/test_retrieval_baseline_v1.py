@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from src.retrieval.lexical_retrieval_v1 import LexicalIndex, RetrievalConfig, tokenize
-from evaluate_retrieval_baseline import evaluate
+from src.evaluation.evaluate_retrieval_baseline import evaluate
 from object_taxonomy_v1 import CLOSED_OBJECT_TYPES
 from src.retrieval.retrieval_projection_v2 import build_projection
 

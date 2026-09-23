@@ -21,7 +21,7 @@ import pytest
 from src.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, admit_candidate, admission_of
 from src.extract_metrics_v1 import measure_admission_language_variation
 from src.operations_console_v1 import OperationsConsole
-from src.validate_golden_set import validate_extract_gold
+from src.evaluation.validate_golden_set import validate_extract_gold
 
 
 ROOT = Path(__file__).resolve().parents[1]

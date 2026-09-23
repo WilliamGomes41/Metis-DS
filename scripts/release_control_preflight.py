@@ -104,7 +104,7 @@ PATH_RULES: dict[str, tuple[str, ...]] = {
         "src/prepublication_gate_v3.py",
         "src/integrity_kernel.py",
         "src/retrieval/answerability_gate_v1.py",
-        "src/validate_golden_set.py",
+        "src/evaluation/validate_golden_set.py",
         "src/extract_coverage_v1.py",
         "src/audit_pdf_text_completeness.py",
         "src/four_eyes_v1.py",
@@ -116,12 +116,12 @@ PATH_RULES: dict[str, tuple[str, ...]] = {
     ),
     "metrics": (
         "src/extract_metrics_v1.py",
-        "src/evaluate_retrieval_baseline.py",
-        "src/evaluate_vector_retrieval.py",
-        "src/evaluate_hybrid_retrieval.py",
+        "src/evaluation/evaluate_retrieval_baseline.py",
+        "src/evaluation/evaluate_vector_retrieval.py",
+        "src/evaluation/evaluate_hybrid_retrieval.py",
         "src/usage_ledger_v1.py",
         "src/*metrics*.py",
-        "src/evaluate_*retrieval*.py",
+        "src/evaluation/evaluate_*retrieval*.py",
     ),
 }
 

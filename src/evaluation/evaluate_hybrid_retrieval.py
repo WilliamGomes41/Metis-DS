@@ -8,14 +8,9 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
-try:
-    from .retrieval.hybrid_retrieval_v1 import HybridIndex, HybridConfig
-    from .retrieval.lexical_retrieval_v1 import RetrievalConfig
-    from .retrieval.semantic_vector_retrieval_v1 import VectorConfig, read_jsonl
-except ImportError:
-    from retrieval.hybrid_retrieval_v1 import HybridIndex, HybridConfig
-    from retrieval.lexical_retrieval_v1 import RetrievalConfig
-    from retrieval.semantic_vector_retrieval_v1 import VectorConfig, read_jsonl
+from src.retrieval.hybrid_retrieval_v1 import HybridIndex, HybridConfig
+from src.retrieval.lexical_retrieval_v1 import RetrievalConfig
+from src.retrieval.semantic_vector_retrieval_v1 import VectorConfig, read_jsonl
 
 EVALUATOR_VERSION = "hybrid-retrieval-eval-v1.0.0"
 
