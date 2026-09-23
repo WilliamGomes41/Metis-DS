@@ -21,8 +21,8 @@ from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
 from src.passage_register_v1 import passage_register_of
 from src.proportionate_review_v1 import normal_risk_batch_queue
-from src.review_cockpit_v1 import broncontext_parts, confirmable_proposed_type
-from src.review_ledger import read_events
+from src.review.review_cockpit_v1 import broncontext_parts, confirmable_proposed_type
+from src.review.review_ledger import read_events
 from src.serving_relations_v1 import binding_relations
 
 

@@ -23,7 +23,7 @@ from src.deterministic_review_repair_v1 import (
 )
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
-from src.review_ledger import read_events
+from src.review.review_ledger import read_events
 from src.serving_relations_v1 import binding_relations
 
 
