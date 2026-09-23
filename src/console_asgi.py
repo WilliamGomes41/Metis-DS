@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from src.audit_archive_store_v1 import AzureAuditArchiveStore
 from src.audit_room_v1 import install_audit_routes
 from src.azure_authoritative_publication_console_v1 import AzureAuthoritativePublicationConsole
 from src.azure_postgres_credential_v1 import CachedAzurePostgresCredential
@@ -190,6 +191,13 @@ def _immutable_source_store() -> AzureBlobSourceStore | None:
     return AzureBlobSourceStore()
 
 
+def _audit_archive_store() -> AzureAuditArchiveStore | None:
+    """Use the production managed identity for the dedicated Azure audit archive."""
+    if not _running_in_azure():
+        return None
+    return AzureAuditArchiveStore()
+
+
 def bootstrap_accounts(console: OperationsConsole) -> None:
     username = os.environ.get("CONSOLE_BOOTSTRAP_USERNAME", "").strip()
     password = os.environ.get("CONSOLE_BOOTSTRAP_PASSWORD", "")
@@ -223,6 +231,7 @@ def build_app() -> object:
     topology = assert_supported_topology()
     data_root = _env_path("CONSOLE_DATA_ROOT", _default_data_root())
     immutable_store = _immutable_source_store()
+    audit_archive_store = _audit_archive_store()
     postgres_credential = _postgres_credential()
     canonical_store = _canonical_store(credential=postgres_credential)
     workflow_identity_store = _workflow_identity_store(credential=postgres_credential)
@@ -326,7 +335,7 @@ def build_app() -> object:
     install_deterministic_review_repair_routes(app, console)
     install_closed_review_routes(app, console)
     harden_legacy_repair_routes(app, console)
-    install_audit_routes(app, console)
+    install_audit_routes(app, console, archive_store=audit_archive_store)
     install_navigation_simplification(app)
     app.state.console_topology = topology
     return app
