@@ -6,7 +6,7 @@ from pathlib import Path
 
 import os
 
-from src.build_review_queue_v3 import build as build_review_queue, read_jsonl
+from src.review.build_review_queue_v3 import build as build_review_queue, read_jsonl
 from src.prepublication_gate_v3 import evaluate as evaluate_prepublication
 from src.source_registry import register_source
 from src.bind_source_manifest import bind as bind_source_manifest
@@ -102,7 +102,7 @@ def cmd_serve_console(a: argparse.Namespace) -> dict:
     import uvicorn
     from src.operations_console_app import create_console_app
     from src.operations_console_v1 import OperationsConsole
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.review.pre_review_semantic_v1 import bind_pre_review_semantic_processing
     from src.topology_bound_v1 import assert_supported_topology
 
     assert_supported_topology()
