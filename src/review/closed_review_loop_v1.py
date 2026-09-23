@@ -21,10 +21,10 @@ from src.passage_register_v1 import (
     passage_register_of,
     register_status_from_suitability,
 )
-from src.proportionate_review_v1 import ProportionateReviewConsole
+from src.review.proportionate_review_v1 import ProportionateReviewConsole
 from src.publish_authorization_v1 import invalidate_for_object
-from src.review_cockpit_v1 import broncontext_parts, map_eindoordeel
-from src.review_ledger import append_event, read_events
+from src.review.review_cockpit_v1 import broncontext_parts, map_eindoordeel
+from src.review.review_ledger import append_event, read_events
 from src.serving_relations_v1 import binding_relations
 
 REVIEW_AUDIT_EVIDENCE_EVENT = "review_audit_evidence"
