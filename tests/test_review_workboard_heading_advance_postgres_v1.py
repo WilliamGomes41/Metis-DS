@@ -16,15 +16,15 @@ import pytest
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.operations_console_v1 import review_lane
 from src.review_workboard_v1 import review_workboard_items
-from src.workflow_badge_counts_postgres_v1 import (
+from src.workflows.workflow_badge_counts_postgres_v1 import (
     FastBadgePostgresCompleteWorkflowDurablePublicationConsole,
 )
-from src.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-from src.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
-from src.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
-from src.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
-from src.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
-from src.workflow_transaction_v1 import bind_workflow_stores
+from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
+from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
+from src.workflows.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
+from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
+from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+from src.workflows.workflow_transaction_v1 import bind_workflow_stores
 
 
 ROOT = Path(__file__).resolve().parents[1]
