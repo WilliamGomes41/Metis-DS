@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
-from src.review_ledger import read_events
+from src.review.review_ledger import read_events
 
 
 ROOT = Path(__file__).resolve().parents[1]
