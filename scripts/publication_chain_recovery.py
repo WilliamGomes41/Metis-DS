@@ -18,15 +18,15 @@ from src.legacy_canonical_recovery_v1 import (
     recover_legacy_canonical_release,
 )
 from src.runtime_data_inventory_v1 import DEFAULT_DATA_ROOT
-from src.workflow_chain_recovery_v1 import (
+from src.workflows.workflow_chain_recovery_v1 import (
     PostgresWorkflowRecoveryAdapter,
     backup_workflow_chain,
     live_workflow_chain_integrity,
     restore_workflow_chain,
     verify_workflow_chain_backup,
 )
-from src.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
-from src.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
+from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 
 
 def _live_dependencies():
