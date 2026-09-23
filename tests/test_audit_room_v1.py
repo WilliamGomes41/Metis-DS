@@ -32,6 +32,9 @@ class _MemoryArchiveStore:
         assert hashlib.sha256(data).hexdigest() == expected_sha256
         return data
 
+    def delete_audit(self, audit_id: str) -> bool:
+        return self.data.pop(f"memory-audit://{audit_id}", None) is not None
+
     def delete_verified(self, locator: str) -> bool:
         return self.data.pop(locator, None) is not None
 
@@ -178,8 +181,78 @@ def test_researcher_archives_audit_to_external_store_and_reads_it_back(tmp_path)
     assert "alleen-lezen" in archived.text
     assert "Bewaar dit bewijs." in archived.text
     assert "Archiveren" not in archived.text
+    assert "Herstellen" in archived.text
+    assert "Definitief verwijderen" in archived.text
     assert console.list_envelopes() == before_envelopes
     assert not (console.runtime / "published_projection.jsonl").exists()
+
+
+def test_researcher_can_restore_and_then_purge_archived_audit(tmp_path):
+    archive_store = _MemoryArchiveStore()
+    console, client, researcher, _receipt = _system(
+        tmp_path,
+        archive_store=archive_store,
+    )
+    registry = AuditRegistry(console.runtime)
+    original = registry.create(
+        audit_type="experiment",
+        title="Lifecycle audit",
+        actor_id=researcher["account_id"],
+        payload={"state": "setup", "question": "Blijft dit bewijs exact gelijk?"},
+    )
+
+    archived = client.post(
+        f'/audit/{original["audit_id"]}/archive',
+        follow_redirects=False,
+    )
+    assert archived.status_code == 303
+
+    restored = client.post(
+        f'/audit/archive/{original["audit_id"]}/restore',
+        follow_redirects=False,
+    )
+    assert restored.status_code == 303
+    assert restored.headers["location"] == f'/audit/{original["audit_id"]}'
+    assert AuditRegistry(console.runtime).get_audit(original["audit_id"]) == original
+    assert archive_store.data == {}
+
+    active_page = client.get("/audit")
+    assert "Lifecycle audit" in active_page.text
+    archive_page = client.get("/audit/archive")
+    assert "Lifecycle audit" not in archive_page.text
+
+    rearchived = client.post(
+        f'/audit/{original["audit_id"]}/archive',
+        follow_redirects=False,
+    )
+    assert rearchived.status_code == 303
+
+    wrong = client.post(
+        f'/audit/archive/{original["audit_id"]}/purge',
+        data={"confirm_title": "niet de juiste titel"},
+        follow_redirects=False,
+    )
+    assert wrong.status_code == 400
+    assert "Bevestiging klopt niet" in wrong.text
+    assert archive_store.data
+
+    purged = client.post(
+        f'/audit/archive/{original["audit_id"]}/purge',
+        data={"confirm_title": original["title"]},
+        follow_redirects=False,
+    )
+    assert purged.status_code == 303
+    assert purged.headers["location"] == "/audit/archive"
+    assert AuditRegistry(console.runtime).get_audit(original["audit_id"]) is None
+    assert not (
+        console.runtime / "audits" / f'{original["audit_id"]}.json'
+    ).exists()
+    assert archive_store.data == {}
+
+    archive_page = client.get("/audit/archive")
+    assert "Lifecycle audit" not in archive_page.text
+    active_page = client.get("/audit")
+    assert "Lifecycle audit" not in active_page.text
 
 
 def test_generic_registry_persists_opaque_type_payload(tmp_path):
