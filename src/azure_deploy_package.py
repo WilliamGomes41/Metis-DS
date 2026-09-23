@@ -25,7 +25,7 @@ DEPLOY_COMMIT_MARKER = "config/deployed_commit.txt"
 AZURE_MANYLINUX_PLATFORM = "manylinux2014_x86_64"
 AZURE_PYTHON_VERSION = "3.12"
 AZURE_PYTHON_ABI = "cp312"
-AZURE_NATIVE_WHEEL_PACKAGES = ("cryptography",)
+AZURE_NATIVE_WHEEL_PACKAGES = ("cryptography", "pydantic-core")
 INCLUDE_DIRS = (
     "src",
     "scripts",
