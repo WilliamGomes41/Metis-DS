@@ -56,8 +56,8 @@ def test_remaining_store_is_explicit_and_requires_previous_cutovers() -> None:
 
 
 def test_class_history_and_publication_state_no_longer_depend_on_local_files() -> None:
-    remaining_source = (ROOT / "src" / "workflow_remaining_cutover_v1.py").read_text(encoding="utf-8")
-    document_source = (ROOT / "src" / "workflow_documents_cutover_v1.py").read_text(encoding="utf-8")
+    remaining_source = (ROOT / "src" / "workflows" / "workflow_remaining_cutover_v1.py").read_text(encoding="utf-8")
+    document_source = (ROOT / "src" / "workflows" / "workflow_documents_cutover_v1.py").read_text(encoding="utf-8")
     assert '"objects": deepcopy(rows)' in remaining_source
     assert "workflow_class_history_cutover_not_prepared" in remaining_source
     assert "workflow_document_store.write_bundle(envelope=current)" in document_source
