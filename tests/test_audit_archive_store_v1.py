@@ -106,4 +106,16 @@ def test_archive_store_delete_is_idempotent_for_missing_blob() -> None:
     locator = store.store_verified(audit_id=audit_id, data=data, sha256=digest)
 
     assert store.delete_verified(locator) is True
-    assert store.delete_verified(locator) is False
+    assert store.delete_audit(audit_id) is False
+
+
+def test_archive_store_can_delete_deterministically_by_audit_id() -> None:
+    service = _BlobService()
+    store = _store(service)
+    audit_id = "audit-0123456789abcdef"
+    data = b"archive"
+    digest = hashlib.sha256(data).hexdigest()
+    store.store_verified(audit_id=audit_id, data=data, sha256=digest)
+
+    assert store.delete_audit(audit_id) is True
+    assert service.data == {}
