@@ -706,13 +706,100 @@ def install_audit_routes(
             )
         index = retention.get_archived_index(audit_id) or {}
         detail = render_audit(audit)
+        actions = ""
+        if "researcher" in set(account.get("roles") or []):
+            actions = f"""
+              <section class="section" aria-labelledby="archive-actions-title">
+                <h2 id="archive-actions-title">Beheer</h2>
+                <form method="post" action="/audit/archive/{_esc(audit_id)}/restore">
+                  <button class="btn-primary" type="submit">Herstellen</button>
+                </form>
+                <hr>
+                <h3>Definitief verwijderen</h3>
+                <p class="muted">Dit verwijdert het auditbewijs uit Azure en kan niet ongedaan worden gemaakt.</p>
+                <form method="post" action="/audit/archive/{_esc(audit_id)}/purge" onsubmit="return confirm('Deze gearchiveerde audit definitief verwijderen?');">
+                  <label for="purge-title">Typ de auditnaam exact ter bevestiging</label>
+                  <input id="purge-title" name="confirm_title" autocomplete="off" required>
+                  <button class="btn-secondary" type="submit">Definitief verwijderen</button>
+                </form>
+              </section>
+            """
         body = f"""
           <p><a class="btn-secondary" href="/audit/archive">← Terug naar Archief</a></p>
           <div class="banner warn">Gearchiveerde audit · alleen-lezen · opgeslagen in Azure</div>
           <p class="muted">Gearchiveerd {_esc(index.get("archived_at"))} door {_esc(index.get("archived_by"))}.</p>
           {detail}
+          {actions}
         """
         return HTMLResponse(_chrome(console, account, body))
+
+    def audit_restore(request: Request, audit_id: str) -> HTMLResponse:
+        account = account_for(request)
+        if "researcher" not in set(account.get("roles") or []):
+            raise ConsoleError("researcher_role_required")
+        if retention is None:
+            return HTMLResponse(
+                _chrome(console, account, '<h1>Herstellen niet beschikbaar</h1><p>Azure auditarchief is niet geconfigureerd.</p>'),
+                status_code=503,
+            )
+        try:
+            audit = retention.restore(audit_id, actor_id=account["account_id"])
+        except ConsoleError as exc:
+            status = 503 if exc.code in {
+                "audit_archive_unavailable",
+                "audit_restore_cleanup_failed",
+                "audit_restore_archive_delete_failed",
+                "audit_restore_recovery_required",
+            } else 409
+            return HTMLResponse(
+                _chrome(
+                    console,
+                    account,
+                    f'<h1>Herstellen mislukt</h1><p>{_esc(exc.code)}</p><p><a href="/audit/archive/{_esc(audit_id)}">Terug naar audit</a></p>',
+                ),
+                status_code=status,
+            )
+        return RedirectResponse(f'/audit/{audit["audit_id"]}', status_code=303)
+
+    def audit_purge(
+        request: Request,
+        audit_id: str,
+        confirm_title: str = Form(...),
+    ) -> HTMLResponse:
+        account = account_for(request)
+        if "researcher" not in set(account.get("roles") or []):
+            raise ConsoleError("researcher_role_required")
+        if retention is None:
+            return HTMLResponse(
+                _chrome(console, account, '<h1>Verwijderen niet beschikbaar</h1><p>Azure auditarchief is niet geconfigureerd.</p>'),
+                status_code=503,
+            )
+        try:
+            retention.purge(
+                audit_id,
+                actor_id=account["account_id"],
+                confirm_title=confirm_title,
+            )
+        except ConsoleError as exc:
+            if exc.code == "audit_purge_confirmation_mismatch":
+                return HTMLResponse(
+                    _chrome(
+                        console,
+                        account,
+                        f'<h1>Bevestiging klopt niet</h1><p>Typ de auditnaam exact om definitief te verwijderen.</p><p><a href="/audit/archive/{_esc(audit_id)}">Terug naar audit</a></p>',
+                    ),
+                    status_code=400,
+                )
+            status = 503 if exc.code == "audit_purge_archive_delete_failed" else 409
+            return HTMLResponse(
+                _chrome(
+                    console,
+                    account,
+                    f'<h1>Verwijderen mislukt</h1><p>{_esc(exc.code)}</p><p><a href="/audit/archive/{_esc(audit_id)}">Terug naar audit</a></p>',
+                ),
+                status_code=status,
+            )
+        return RedirectResponse("/audit/archive", status_code=303)
 
     def audit_archive(request: Request, audit_id: str) -> HTMLResponse:
         account = account_for(request)
@@ -818,6 +905,8 @@ def install_audit_routes(
     app.add_api_route("/audit/semantic-safety/run", semantic_safety_run, methods=["POST"], response_class=HTMLResponse, name="audit_semantic_safety_run")
     app.add_api_route("/audit/archive", audit_archive_home, methods=["GET"], response_class=HTMLResponse, name="audit_archive_home")
     app.add_api_route("/audit/archive/{audit_id}", audit_archive_detail, methods=["GET"], response_class=HTMLResponse, name="audit_archive_detail")
+    app.add_api_route("/audit/archive/{audit_id}/restore", audit_restore, methods=["POST"], response_class=HTMLResponse, name="audit_restore")
+    app.add_api_route("/audit/archive/{audit_id}/purge", audit_purge, methods=["POST"], response_class=HTMLResponse, name="audit_purge")
     app.add_api_route("/audit/{audit_id}/archive", audit_archive, methods=["POST"], response_class=HTMLResponse, name="audit_archive")
     app.add_api_route("/audit", audit_create, methods=["POST"], response_class=HTMLResponse, name="audit_create")
     app.add_api_route("/audit/{audit_id}", audit_detail, methods=["GET"], response_class=HTMLResponse, name="audit_detail")
