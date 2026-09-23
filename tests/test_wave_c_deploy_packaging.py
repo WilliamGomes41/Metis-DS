@@ -1,4 +1,9 @@
-"""Protocol v2.22 wave C: finish PR #82 faults; do not activate deploy."""
+"""Protocol v2.22 wave C: finish PR #82 faults; do not activate deploy.
+
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+"""
 from __future__ import annotations
 
 import os
