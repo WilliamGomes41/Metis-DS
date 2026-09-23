@@ -39,6 +39,9 @@ INCLUDE_FILES = (
     "requirements.txt",
     "pyproject.toml",
 )
+INCLUDE_STATIC_FILES = (
+    "data/audit/semantic_passage_safety_v1.json",
+)
 FORBIDDEN_CONSOLE_PACKAGES = frozenset({"numpy", "sklearn", "scipy", "scikit-learn"})
 _REQ_NAME_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9_.-]*)")
 _INCLUDE_RE = re.compile(r"^(?:-r|--requirement)\s+(\S+)")
@@ -244,6 +247,15 @@ def write_deploy_zip(
             src = root / filename
             if src.is_file() and not package_contains_runtime_data(filename):
                 shutil.copy2(src, stage / filename)
+        for filename in INCLUDE_STATIC_FILES:
+            src = root / filename
+            if not src.is_file():
+                raise DeployPackageError(f"required_static_file_missing:{filename}")
+            if package_contains_runtime_data(filename):
+                raise DeployPackageError(f"required_static_file_is_runtime_data:{filename}")
+            dest = stage / filename
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
         marker = stage / DEPLOY_COMMIT_MARKER
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text(git_head_commit(root) + "\n", encoding="utf-8")
