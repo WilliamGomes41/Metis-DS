@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from src.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, admission_of
 from src.beslisboom_path_v1 import review_path_for_klasse
-from src.four_eyes_v1 import requires_four_eyes
+from src.review.four_eyes_v1 import requires_four_eyes
 from src.operations_console_v1 import (
     ConsoleError,
     OperationsConsole,
@@ -23,7 +23,7 @@ from src.operations_console_v1 import (
     is_slow_review_duty,
     review_lane,
 )
-from src.review_cockpit_v1 import confirmable_proposed_type
+from src.review.review_cockpit_v1 import confirmable_proposed_type
 
 
 NORMAL_RISK_BATCH_TYPES = frozenset({"definition", "explanation"})
