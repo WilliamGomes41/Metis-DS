@@ -78,11 +78,13 @@ def _apply_candidate_semantics(
     if donor is principal:
         return principal
     row = deepcopy(principal)
-    for key in ("semantic_passage", "proposed_object_type"):
+    for key in (
+        "semantic_passage",
+        "proposed_object_type",
+        "proposed_recommendation_strength",
+    ):
         if key in donor:
             row[key] = deepcopy(donor[key])
-        else:
-            row.pop(key, None)
     return row
 
 
@@ -111,10 +113,11 @@ def prefer_authoritative_exact_occurrences(
 
     Groups are keyed only by normalized exact visible text. The selected
     principal occurrence determines object identity, section path and heading.
-    All alternate fragment ids remain in source_fragment_ids after the
-    principal ids so the existing transform persists every exact locator.
-    Output order follows the selected principal occurrence, not the first
-    duplicate encountered.
+    Principal source_fragment_ids remain principal-only so existing source
+    reconstruction and Review UI never treat duplicate occurrences as one
+    composite passage. Alternate exact occurrences are preserved separately in
+    source_occurrence_authority metadata. Output order follows the selected
+    principal occurrence, not the first duplicate encountered.
     """
 
     groups: dict[str, dict[str, Any]] = {}
@@ -165,17 +168,6 @@ def prefer_authoritative_exact_occurrences(
             ]
 
         if remaining:
-            principal_ids = _source_ids(principal)
-            alternate_ids = [
-                fragment_id
-                for occurrence in remaining
-                for fragment_id in occurrence["source_fragment_ids"]
-                if fragment_id not in principal_ids
-            ]
-            principal = deepcopy(principal)
-            principal["source_fragment_ids"] = list(
-                dict.fromkeys(principal_ids + alternate_ids)
-            )
             reason = (
                 REASON_AUTHORITATIVE_SECTION
                 if any(
