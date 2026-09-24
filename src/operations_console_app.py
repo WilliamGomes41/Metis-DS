@@ -99,16 +99,16 @@ def _passage_formation_mode_banner() -> str:
             '<div class="banner" data-passage-formation-mode="deterministic">'
             '<b>Actieve verwerkingsmodus: Deterministisch</b>'
             '<p>Nieuwe en opnieuw verwerkte passages worden momenteel zonder taalmodel gevormd. '
-            'Review blijft verplicht.</p>'
+            'Beslisbomen blijven deterministisch. Review blijft verplicht.</p>'
             '</div>'
         )
     if mode == SEMANTIC_MODE:
         return (
             '<div class="banner" data-passage-formation-mode="semantic">'
             '<b>Actieve verwerkingsmodus: Semantisch</b>'
-            '<p>Nieuwe en opnieuw verwerkte passages worden brongebonden semantisch gevormd. '
+            '<p>Nieuwe en opnieuw verwerkte HTML- en PDF-passages worden brongebonden semantisch gevormd. '
             'Exacte replay wordt hergebruikt wanneer mogelijk; anders gebruikt Metis de geconfigureerde taalmodelroute. '
-            'Review blijft verplicht.</p>'
+            'Beslisbomen blijven deterministisch. Review blijft verplicht.</p>'
             '</div>'
         )
     return (
