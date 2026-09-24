@@ -96,6 +96,12 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
             if name.startswith(".python_packages/pydantic_core/_pydantic_core.")
             and name.endswith(".so")
         )
+        cryptography_dist_infos = sorted(
+            name
+            for name in names
+            if name.startswith(".python_packages/cryptography-")
+            and ".dist-info/" in name
+        )
         native_extensions = sorted(
             name
             for name in names
@@ -124,6 +130,9 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
     assert any(name.startswith(".python_packages/") for name in names)
     assert any(name.endswith("gunicorn/__init__.py") or "/gunicorn/" in name for name in names)
     assert any("fastapi" in name for name in names)
+    assert ".python_packages/azure/identity/__init__.py" in names
+    assert ".python_packages/azure/core/__init__.py" in names
+    assert ".python_packages/azure/storage/blob/__init__.py" in names
     assert "scripts/azure_console_startup.sh" in names
     assert "scripts/azure_step9_cutover.py" in names
     assert "scripts/migrate_workflow_cutover_postgres.py" in names
@@ -149,6 +158,14 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
     assert "cpython-312-" in pydantic_core_extensions[0]
     assert b"GLIBC_2.33" not in cryptography_rust
     assert b"GLIBC_2.34" not in cryptography_rust
+    assert any(
+        name.startswith(".python_packages/cryptography-44.0.3.dist-info/")
+        for name in cryptography_dist_infos
+    )
+    assert not any(
+        name.startswith(".python_packages/cryptography-50.")
+        for name in cryptography_dist_infos
+    )
 
     # Only top-level installed packages define the package boundary. A dependency
     # may legitimately contain an optional module named numpy.py without vendoring
@@ -176,6 +193,19 @@ def test_packaging_targets_azure_runtime_for_entire_dependency_graph() -> None:
     assert "AZURE_ABI3_PLATFORM" in source
     assert "force-reinstall" not in source
     assert "for package in AZURE_NATIVE_WHEEL_PACKAGES" not in source
+
+
+
+def test_packaging_source_resolves_wheels_before_namespace_merge() -> None:
+    source = _read(ROOT / "src" / "azure_deploy_package.py")
+    assert '"download"' in source
+    assert "_merge_resolved_wheels" in source
+    assert "_validate_vendor_record_completeness" in source
+    assert "_validate_vendor_distribution_versions" in source
+    assert "duplicate_vendor_distribution" in source
+    assert "vendor_record_missing" in source
+    assert "pip\",\n        \"install" in source
+    assert "pip\",\n        \"download" in source
 
 def test_packaging_excludes_runtime_data_and_does_not_overwrite_home_data(tmp_path: Path) -> None:
     home_data = tmp_path / "home" / "data" / "metis-console"
