@@ -25,7 +25,7 @@ from src.admission_gate_v1 import (
     build_candidate_record,
 )
 from src.context_scan_v1 import propose_expand_merge
-from src.integrity_kernel import stamp_canonical_hashes
+from src.integrity_kernel import compute_canonical_object_hash, stamp_canonical_hashes
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
 from src.object_taxonomy_v1 import has_terminal_sentence_boundary, is_truncated_sentence
@@ -252,3 +252,185 @@ def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: P
     assert revised["governance"]["publication_status"] == "unpublished"
     assert len(revised["provenance"]["source_fragments"]) == 2
     assert revised["provenance"]["previous_object_version"] == target["object_version"]
+
+
+def test_source_bound_repair_reopens_only_changed_candidate_and_survives_restart(tmp_path: Path) -> None:
+    console, researcher, reviewer = _console(tmp_path)
+    stable_text = "Eenzaamheid is een gevoel van gemis."
+    source = (
+        f"<html><body><h1>Eenzaamheid</h1><p>{FIRST}</p>"
+        f"<p>{CONTINUATION}</p><p>{stable_text}</p></body></html>"
+    )
+    receipt = console.ingest(
+        actor_id=researcher["account_id"],
+        filename="eenzaamheid-selectief.html",
+        data=source.encode("utf-8"),
+        content_type="text/html",
+        ingest_kind="new",
+        title="Eenzaamheid selectief",
+        version="1.0",
+        date="2026-09-24",
+        live_url="",
+        class_="richtlijn",
+        family="eenzaamheid",
+        named_reviewers=[reviewer["account_id"]],
+    )
+    snapshot_id = receipt["snapshot_id"]
+    repaired_object_id = _split_existing_object(console, snapshot_id)
+
+    stable = next(
+        row
+        for row in console.snapshot_objects(snapshot_id)
+        if stable_text in str((row.get("content") or {}).get("clean_text") or "")
+    )
+    assert admission_of(stable)["gate_result"] == GATE_ALLOWED
+
+    console.review_object(
+        actor_id=reviewer["account_id"],
+        snapshot_id=snapshot_id,
+        object_id=str(stable["object_id"]),
+        decision="approve",
+        confirmed_object_type="definition",
+        expected_revision=console.objects_revision(snapshot_id),
+    )
+    stable_before = next(
+        row
+        for row in console.snapshot_objects(snapshot_id)
+        if row["object_id"] == stable["object_id"]
+    )
+    stable_version = stable_before["object_version"]
+    stable_hash = compute_canonical_object_hash(stable_before)
+    bindings_before = {
+        row["object_id"]: row
+        for row in console.object_review_bindings(snapshot_id)
+        if row.get("valid")
+    }
+    assert stable["object_id"] in bindings_before
+    envelope_review_passes = deepcopy(console._envelope(snapshot_id).get("review_passes") or {})
+    envelope_rereview = console._envelope(snapshot_id).get("clinical_rereview_required")
+
+    target_before = next(
+        row
+        for row in console.snapshot_objects(snapshot_id)
+        if row["object_id"] == repaired_object_id
+    )
+    repaired = console.accept_source_continuation(
+        actor_id=reviewer["account_id"],
+        snapshot_id=snapshot_id,
+        object_id=repaired_object_id,
+        expected_revision=console.objects_revision(snapshot_id),
+    )
+
+    assert repaired["object_version"] != target_before["object_version"]
+    assert repaired["governance"]["validation_status"] == "needs_review"
+    assert repaired["provenance"]["previous_object_version"] == target_before["object_version"]
+
+    stable_after = next(
+        row
+        for row in console.snapshot_objects(snapshot_id)
+        if row["object_id"] == stable["object_id"]
+    )
+    assert stable_after["object_version"] == stable_version
+    assert compute_canonical_object_hash(stable_after) == stable_hash
+    assert stable_after["governance"]["validation_status"] == "approved"
+
+    bindings_after = {
+        row["object_id"]: row
+        for row in console.object_review_bindings(snapshot_id)
+        if row.get("valid")
+    }
+    assert stable["object_id"] in bindings_after
+    assert bindings_after[stable["object_id"]] == bindings_before[stable["object_id"]]
+    assert repaired_object_id not in bindings_after
+    assert (console._envelope(snapshot_id).get("review_passes") or {}) == envelope_review_passes
+    assert console._envelope(snapshot_id).get("clinical_rereview_required") == envelope_rereview
+
+    restarted = OperationsConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / "output" / "runtime" / "operations-console",
+    )
+    restarted_target = next(
+        row
+        for row in restarted.snapshot_objects(snapshot_id)
+        if row["object_id"] == repaired_object_id
+    )
+    restarted_stable = next(
+        row
+        for row in restarted.snapshot_objects(snapshot_id)
+        if row["object_id"] == stable["object_id"]
+    )
+    assert restarted_target["object_version"] == repaired["object_version"]
+    assert restarted_target["governance"]["validation_status"] == "needs_review"
+    assert restarted_stable["object_version"] == stable_version
+    assert restarted_stable["governance"]["validation_status"] == "approved"
+    restarted_bindings = {
+        row["object_id"]: row
+        for row in restarted.object_review_bindings(snapshot_id)
+        if row.get("valid")
+    }
+    assert stable["object_id"] in restarted_bindings
+    assert repaired_object_id not in restarted_bindings
+
+
+def test_legacy_generic_correction_keeps_document_scoped_rereview_default(tmp_path: Path) -> None:
+    console, researcher, reviewer = _console(tmp_path)
+    source = (
+        "<html><body><h1>Richtlijn</h1>"
+        "<p>Eenzaamheid is een gevoel van gemis.</p>"
+        "</body></html>"
+    )
+    receipt = console.ingest(
+        actor_id=researcher["account_id"],
+        filename="legacy-correction.html",
+        data=source.encode("utf-8"),
+        content_type="text/html",
+        ingest_kind="new",
+        title="Legacy correctie",
+        version="1.0",
+        date="2026-09-24",
+        live_url="",
+        class_="richtlijn",
+        family="eenzaamheid",
+        named_reviewers=[reviewer["account_id"]],
+    )
+    snapshot_id = receipt["snapshot_id"]
+    target = next(
+        row
+        for row in console.snapshot_objects(snapshot_id)
+        if "gevoel van gemis" in str((row.get("content") or {}).get("clean_text") or "")
+    )
+    console.review_object(
+        actor_id=reviewer["account_id"],
+        snapshot_id=snapshot_id,
+        object_id=str(target["object_id"]),
+        decision="revise",
+        comment="Legacy correctie blijft document-scoped.",
+        expected_revision=console.objects_revision(snapshot_id),
+    )
+
+    envelope = console._envelope(snapshot_id)
+    envelope["review_passes"] = {
+        reviewer["account_id"]: {"passed": True, "at": "2026-09-24T20:00:00Z"}
+    }
+    envelope["clinical_rereview_required"] = False
+    console._save_envelopes()
+
+    console.correct_object(
+        actor_id=researcher["account_id"],
+        snapshot_id=snapshot_id,
+        object_id=str(target["object_id"]),
+        patch={
+            "reason": "Legacy correctie",
+            "operations": [
+                {
+                    "op": "set",
+                    "path": "content.clean_text",
+                    "value": "Eenzaamheid is een ervaren gevoel van gemis.",
+                }
+            ],
+        },
+    )
+
+    assert console._envelope(snapshot_id)["review_passes"] == {}
+    assert console._envelope(snapshot_id)["clinical_rereview_required"] is True

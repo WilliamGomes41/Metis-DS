@@ -2675,10 +2675,13 @@ class OperationsConsole:
         object_id: str,
         patch: dict[str, Any],
         additional_source_fragments: list[dict[str, Any]] | None = None,
+        rereview_scope: str = "document",
     ) -> dict[str, Any]:
         account = self._account(actor_id)
         if "researcher" not in account["roles"] and "reviewer" not in account["roles"]:
             raise ConsoleError("correction_role_required")
+        if rereview_scope not in {"document", "object"}:
+            raise ConsoleError("unknown_rereview_scope")
         current = self.snapshot_objects(snapshot_id, for_update=True)
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
@@ -2724,11 +2727,13 @@ class OperationsConsole:
             revised = apply_passage_register([revised])[0]
         history = self._load_objects(snapshot_id)
         history.append(revised)
-        new_envelopes = deepcopy(self._envelopes)
-        new_envelope = deepcopy(envelope)
-        new_envelope["review_passes"] = {}
-        new_envelope["clinical_rereview_required"] = True
-        new_envelopes[snapshot_id] = new_envelope
+        new_envelopes: dict[str, Any] | None = None
+        if rereview_scope == "document":
+            new_envelopes = deepcopy(self._envelopes)
+            new_envelope = deepcopy(envelope)
+            new_envelope["review_passes"] = {}
+            new_envelope["clinical_rereview_required"] = True
+            new_envelopes[snapshot_id] = new_envelope
         new_bindings = deepcopy(self._bindings)
         new_bindings[snapshot_id] = invalidate_for_object(new_bindings.get(snapshot_id, []), object_id)
         self._commit_prepared_store(
@@ -2808,6 +2813,7 @@ class OperationsConsole:
                 ],
             },
             additional_source_fragments=list((neighbor.get("provenance") or {}).get("source_fragments") or []),
+            rereview_scope="object",
         )
 
     def silently_edit_object(self, snapshot_id: str, object_id: str, _patch: dict[str, Any]) -> None:

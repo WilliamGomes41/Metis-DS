@@ -364,6 +364,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
                 ],
             },
             additional_source_fragments=source_refs,
+            rereview_scope="object",
         )
         revised = self._finalize_source_provenance(
             snapshot_id=snapshot_id,
@@ -545,6 +546,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             object_id=object_id,
             patch={"reason": comment, "operations": operations},
             additional_source_fragments=source_refs,
+            rereview_scope="object",
         )
         repaired = self._finalize_source_provenance(
             snapshot_id=snapshot_id,
