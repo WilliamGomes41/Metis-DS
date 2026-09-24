@@ -43,9 +43,20 @@ STRUCTURAL_HEADING_LABELS = frozenset(
 )
 
 SUMMARY_SECTION_LABELS = frozenset({"samenvatting", "kernpunten", "kernboodschappen"})
+FOCUS_SECTION_LABELS = frozenset({"aanbeveling", "aanbevelingen", "conclusie", "conclusies"})
+REVIEW_PRIORITY_FOCUS = "focus"
+REVIEW_PRIORITY_REGULAR = "regular"
+REVIEW_PRIORITY_SECONDARY = "secondary"
+_REVIEW_PRIORITY_ORDER = {
+    REVIEW_PRIORITY_FOCUS: 0,
+    REVIEW_PRIORITY_REGULAR: 1,
+    REVIEW_PRIORITY_SECONDARY: 2,
+}
 SECTION_ROLE_BY_LABEL = {
     "aanbeveling": "primary",
     "aanbevelingen": "primary",
+    "conclusie": "primary",
+    "conclusies": "primary",
     "behandeling": "primary",
     "diagnostiek": "primary",
     "doorverwijzen": "primary",
@@ -208,6 +219,16 @@ def normalize_visible_prose(text: str) -> str:
     return re.sub(r"\s+", " ", text or "").strip()
 
 
+def _normalized_section_labels(section_path: Iterable[Any] | None) -> list[str]:
+    labels: list[str] = []
+    for value in section_path or ():
+        blob = normalize_visible_prose(str(value)).casefold().rstrip(":")
+        blob = re.sub(r"^\d+(?:\.\d+)*\.?\s+", "", blob)
+        if blob:
+            labels.append(blob)
+    return labels
+
+
 def section_role_for_path(section_path: Iterable[Any] | None) -> str:
     """Return a deterministic document role from the existing section path.
 
@@ -216,13 +237,7 @@ def section_role_for_path(section_path: Iterable[Any] | None) -> str:
     repeated summary recommendation is not mistaken for its primary source.
     """
 
-    labels: list[str] = []
-    for value in section_path or ():
-        blob = normalize_visible_prose(str(value)).casefold().rstrip(":")
-        blob = re.sub(r"^\d+(?:\.\d+)*\.?\s+", "", blob)
-        if blob:
-            labels.append(blob)
-
+    labels = _normalized_section_labels(section_path)
     if any(label in SUMMARY_SECTION_LABELS for label in labels):
         return "summary"
     for label in reversed(labels):
@@ -230,6 +245,35 @@ def section_role_for_path(section_path: Iterable[Any] | None) -> str:
         if role:
             return role
     return "primary"
+
+
+def review_priority_for_path(section_path: Iterable[Any] | None) -> str:
+    """Derive review presentation priority without changing knowledge status.
+
+    Summary-like containers remain secondary even when they contain a nested
+    focus label such as Aanbevelingen. Other focus labels are presented first;
+    all remaining content stays regular.
+    """
+
+    labels = _normalized_section_labels(section_path)
+    if any(label in SUMMARY_SECTION_LABELS for label in labels):
+        return REVIEW_PRIORITY_SECONDARY
+    if any(label in FOCUS_SECTION_LABELS for label in labels):
+        return REVIEW_PRIORITY_FOCUS
+    return REVIEW_PRIORITY_REGULAR
+
+
+def review_priority_rank(obj: dict[str, Any]) -> int:
+    """Stable-sort key derived only from already-persisted section context."""
+
+    structure = obj.get("structure") if isinstance(obj.get("structure"), dict) else {}
+    section_path = structure.get("section_path") or []
+    if not section_path:
+        metadata = obj.get("metadata") if isinstance(obj.get("metadata"), dict) else {}
+        admission = metadata.get("admission") if isinstance(metadata.get("admission"), dict) else {}
+        section_path = admission.get("section_path") or []
+    priority = review_priority_for_path(section_path)
+    return _REVIEW_PRIORITY_ORDER[priority]
 
 
 def is_tiny_confirmable_text(text: str) -> bool:
