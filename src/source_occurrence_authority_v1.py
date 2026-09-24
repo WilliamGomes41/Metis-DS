@@ -58,8 +58,13 @@ def _occurrence(unit: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _rank(unit: dict[str, Any]) -> int:
-    return _ROLE_RANK.get(_section_role(unit), _ROLE_RANK["primary"])
+def _rank(unit: dict[str, Any]) -> tuple[int, int]:
+    """Prefer authoritative section role, then the most direct exact occurrence."""
+
+    return (
+        _ROLE_RANK.get(_section_role(unit), _ROLE_RANK["primary"]),
+        -len(_source_ids(unit)),
+    )
 
 
 def _proposal_rank(unit: dict[str, Any]) -> int:
@@ -115,7 +120,9 @@ def prefer_authoritative_exact_occurrences(
     principal occurrence determines object identity, section path and heading.
     Principal source_fragment_ids remain principal-only so existing source
     reconstruction and Review UI never treat duplicate occurrences as one
-    composite passage. Alternate exact occurrences are preserved separately in
+    composite passage. Within the same section role, a source occurrence carried
+    by fewer source fragments wins over an equivalent reconstructed occurrence.
+    Alternate exact occurrences are preserved separately in
     source_occurrence_authority metadata. Output order follows the selected
     principal occurrence, not the first duplicate encountered.
     """
