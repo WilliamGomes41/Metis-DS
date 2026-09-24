@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pytest
 
+from src.context_aware_split_v1 import split_context_aware_units
 from src.passage_formation_policy_v1 import (
     DETERMINISTIC_MODE,
     REASON_AUTHORITATIVE_TREE,
@@ -21,6 +22,26 @@ from src.source_occurrence_authority_v1 import (
 
 
 PASSAGE = "Gebruik de afgesproken interventie."
+
+
+def _fragment(
+    fragment_id: str,
+    section_path: list[str],
+    *,
+    text: str = PASSAGE,
+    ordinal: int = 1,
+) -> dict:
+    return {
+        "fragment_id": fragment_id,
+        "clean_text": text,
+        "raw_text": text,
+        "heading": None,
+        "section_path": section_path,
+        "source_locator": {
+            "locator_type": "web_line_range",
+            "locator_value": f"lines:{ordinal}-{ordinal};p:{ordinal}",
+        },
+    }
 
 
 def _unit(
@@ -146,3 +167,33 @@ def test_exact_primary_duplicates_collapse_without_fuzzy_matching() -> None:
     assert rows[0]["object_id"] == "doc-a"
     assert rows[0]["source_fragment_ids"] == ["fragment-a", "fragment-b"]
     assert rows[1]["object_id"] == "doc-c"
+
+
+def test_deterministic_splitter_routes_exact_duplicates_through_source_authority() -> None:
+    summary = _fragment(
+        "summary-fragment",
+        ["Richtlijn", "Samenvatting", "Aanbevelingen"],
+        ordinal=1,
+    )
+    primary = _fragment(
+        "primary-fragment",
+        ["Richtlijn", "2 Aanbevelingen"],
+        ordinal=2,
+    )
+
+    rows = split_context_aware_units(
+        [summary, primary],
+        document_id="doc-authority",
+    )
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["object_id"] == "doc-authority-primary-fragment"
+    assert row["section_path"] == ["Richtlijn", "2 Aanbevelingen"]
+    assert row["source_fragment_ids"] == [
+        "primary-fragment",
+        "summary-fragment",
+    ]
+    authority = row["metadata"]["source_occurrence_authority"]
+    assert authority["principal_section_role"] == "primary"
+    assert authority["alternate_occurrences"][0]["section_role"] == "summary"
