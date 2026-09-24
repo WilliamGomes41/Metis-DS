@@ -1043,3 +1043,102 @@ def test_boom_route_is_deterministic_under_semantic_deployment_mode(tmp_path: Pa
         }
         for obj in content
     )
+
+
+
+def test_f1_end_to_end_primary_authority_survives_restart(tmp_path: Path) -> None:
+    text = (
+        "De werkgroep adviseert de verpleegkundige de risicofactoren "
+        "scorelijst te gebruiken bij iedere intake."
+    )
+    fragments = [
+        {
+            **_fragment("summary-e2e", text),
+            "section_path": ["Richtlijn", "Samenvatting", "Aanbevelingen"],
+        },
+        {
+            **_fragment("primary-e2e", text),
+            "section_path": ["Richtlijn", "2 Aanbevelingen"],
+        },
+    ]
+    env = {
+        PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
+        LLM_API_KEY_ENV: "product-key",
+        LLM_MODEL_ENV: "test-model",
+    }
+
+    def fake_post(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
+        return _response(_full_span_proposal(payload))
+
+    root = tmp_path / "root"
+    source_store = tmp_path / "sources"
+    runtime = tmp_path / "runtime"
+    console = OperationsConsole(
+        root=root,
+        source_store=source_store,
+        runtime=runtime,
+    )
+    researcher = console.create_account(
+        username="researcher-f1",
+        password="researcher-secret",
+        roles=("researcher",),
+        display_name="Researcher F1",
+    )
+    reviewer = console.create_account(
+        username="reviewer-f1",
+        password="reviewer-secret",
+        roles=("reviewer",),
+        display_name="Reviewer F1",
+    )
+    console._extract = lambda *_args, **_kwargs: fragments
+    bind_pre_review_semantic_processing(
+        console,
+        environ=env,
+        post_json=fake_post,
+    )
+
+    receipt = console.ingest(
+        actor_id=researcher["account_id"],
+        filename="authority.html",
+        data=b"<html><body>authority</body></html>",
+        content_type="text/html",
+        ingest_kind="new",
+        title="Authority",
+        version="1.0",
+        date="2026-09-24",
+        live_url="",
+        class_="richtlijn",
+        family="kwaliteit",
+        named_reviewers=[reviewer["account_id"]],
+    )
+
+    snapshot_id = receipt["snapshot_id"]
+    current = [
+        row
+        for row in console.snapshot_objects(snapshot_id)
+        if row.get("object_type") != "document"
+    ]
+    assert len(current) == 1
+    candidate = current[0]
+    assert candidate["structure"]["section_path"] == ["Richtlijn", "2 Aanbevelingen"]
+    assert [
+        ref["raw_object_id"]
+        for ref in candidate["provenance"]["source_fragments"]
+    ] == ["primary-e2e", "summary-e2e"]
+    assert candidate["metadata"]["source_occurrence_authority"]["principal_section_role"] == "primary"
+    assert candidate["metadata"]["passage_formation"]["strategy"] == "semantic"
+    assert passage_register_of(candidate)["status"] == "selected_as_candidate"
+    assert console.waiting_task_counts(reviewer["account_id"])["review"] >= 1
+
+    restarted = OperationsConsole(
+        root=root,
+        source_store=source_store,
+        runtime=runtime,
+    )
+    durable = [
+        row
+        for row in restarted.snapshot_objects(snapshot_id)
+        if row.get("object_type") != "document"
+    ]
+    assert durable == current
+    assert restarted.waiting_task_counts(reviewer["account_id"])["review"] >= 1
