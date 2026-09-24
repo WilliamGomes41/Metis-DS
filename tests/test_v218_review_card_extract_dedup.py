@@ -338,6 +338,7 @@ def test_review_card_shows_freeze_sentence_once_not_h3_and_body(tmp_path: Path) 
     assert body == "" or re.sub(r"\s+", " ", body) != re.sub(r"\s+", " ", heading)
     assert left.count(EVENTUEEL) == 1
     assert left.count(OVERWEEG) == 1
+    assert 'class="object-expand-merge"' not in left
     assert "status" in left
     assert "wacht" in left or "geclassificeerd" in left or "bevestigd" in left
     assert review_card_sentence(rec) == _text_of(rec)
