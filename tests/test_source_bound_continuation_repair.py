@@ -25,7 +25,7 @@ from src.admission_gate_v1 import (
     build_candidate_record,
 )
 from src.context_scan_v1 import propose_expand_merge
-from src.integrity_kernel import stamp_canonical_hashes
+from src.integrity_kernel import compute_canonical_object_hash, stamp_canonical_hashes
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
 from src.object_taxonomy_v1 import has_terminal_sentence_boundary, is_truncated_sentence
@@ -299,7 +299,7 @@ def test_source_bound_repair_reopens_only_changed_candidate_and_survives_restart
         if row["object_id"] == stable["object_id"]
     )
     stable_version = stable_before["object_version"]
-    stable_hash = stable_before["canonical_object_hash"]
+    stable_hash = compute_canonical_object_hash(stable_before)
     bindings_before = {
         row["object_id"]: row
         for row in console.object_review_bindings(snapshot_id)
@@ -331,7 +331,7 @@ def test_source_bound_repair_reopens_only_changed_candidate_and_survives_restart
         if row["object_id"] == stable["object_id"]
     )
     assert stable_after["object_version"] == stable_version
-    assert stable_after["canonical_object_hash"] == stable_hash
+    assert compute_canonical_object_hash(stable_after) == stable_hash
     assert stable_after["governance"]["validation_status"] == "approved"
 
     bindings_after = {
