@@ -26,7 +26,7 @@ DEPLOY_COMMIT_MARKER = "config/deployed_commit.txt"
 AZURE_MANYLINUX_PLATFORM = "manylinux2014_x86_64"
 AZURE_PYTHON_VERSION = "3.12"
 AZURE_PYTHON_ABI = "cp312"
-AZURE_NATIVE_WHEEL_PACKAGES = ("cryptography", "pydantic-core")
+AZURE_NATIVE_WHEEL_PACKAGES: tuple[str, ...] = ()
 INCLUDE_DIRS = (
     "src",
     "scripts",
@@ -283,6 +283,9 @@ def write_deploy_zip(
         marker.write_text(git_head_commit(root) + "\n", encoding="utf-8")
         vendor = stage / ".python_packages"
         vendor.mkdir(parents=True, exist_ok=True)
+        # Resolve the entire deploy dependency graph for the Azure runtime.
+        # The build runner may use a newer Python version than App Service; using
+        # the runner ABI here would silently vendor incompatible native modules.
         command = [
             os.environ.get("PYTHON") or shutil.which("python") or shutil.which("python3") or "python3",
             "-m",
@@ -290,42 +293,21 @@ def write_deploy_zip(
             "install",
             "--upgrade",
             "--no-compile",
+            "--only-binary=:all:",
+            "--platform",
+            AZURE_MANYLINUX_PLATFORM,
+            "--implementation",
+            "cp",
+            "--python-version",
+            AZURE_PYTHON_VERSION,
+            "--abi",
+            AZURE_PYTHON_ABI,
             "-r",
             str(requirements),
             "-t",
             str(vendor),
         ]
         subprocess.run(command, check=True, cwd=root)
-        # The package may be built on a newer Linux host than Azure App Service.
-        # Re-resolve native security wheels against Azure's glibc-compatible
-        # manylinux2014 baseline instead of shipping host-specific binaries.
-        declared_packages = requirement_package_names(requirements)
-        for package in AZURE_NATIVE_WHEEL_PACKAGES:
-            if package not in declared_packages:
-                continue
-            native_command = [
-                command[0],
-                "-m",
-                "pip",
-                "install",
-                "--upgrade",
-                "--force-reinstall",
-                "--no-compile",
-                "--no-deps",
-                "--only-binary=:all:",
-                "--platform",
-                AZURE_MANYLINUX_PLATFORM,
-                "--implementation",
-                "cp",
-                "--python-version",
-                AZURE_PYTHON_VERSION,
-                "--abi",
-                AZURE_PYTHON_ABI,
-                pinned_requirement(requirements, package),
-                "-t",
-                str(vendor),
-            ]
-            subprocess.run(native_command, check=True, cwd=root)
         if not any(vendor.iterdir()):
             raise DeployPackageError("dependencies_missing")
         _refuse_fat_vendor_tree(vendor)
