@@ -29,6 +29,7 @@ from src.passage_formation_policy_v1 import (
     SEMANTIC_MODE,
     STRATEGY_DETERMINISTIC,
     STRATEGY_SEMANTIC,
+    PASSAGE_FORMATION_POLICY_VERSION,
     PassageFormationDecision,
     PassageFormationPolicyError,
     deterministic_heading_decision,
@@ -37,15 +38,42 @@ from src.passage_formation_policy_v1 import (
 from src.semantic_passage_v1 import (
     ALLOWED_PROPOSED_TYPES,
     SELECTION_ORIGIN_PROPOSAL,
+    SEMANTIC_PASSAGE_VERSION,
     SemanticPassageError,
     semantic_source_blocks,
     semantic_units_from_proposal,
 )
+from src.semantic_replay_v1 import (
+    EXECUTION_INFERENCE,
+    EXECUTION_REPLAY,
+    LOOKUP_HIT,
+    LOOKUP_REJECTED,
+    SEMANTIC_REPLAY_SPEC_KEY,
+    build_replay_identity,
+    exact_replay_lookup,
+    replayed_record,
+    validated_inference_record,
+)
 from src.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
+from src.source_reconstruction_v1 import RECONSTRUCTION_VERSION
 
 
 PASSAGE_FORMATION_MODE_ENV = "METIS_PASSAGE_FORMATION_MODE"
 DEFAULT_TIMEOUT_SECONDS = 60
+SEMANTIC_PROVIDER_ID = "openai-responses-v1"
+SEMANTIC_DEVELOPER_PROMPT = (
+    "Form meaning units for human review by selecting only exact source spans. "
+    "Do not write, rewrite or paraphrase candidate knowledge text. "
+    "Group spans only when they form one independently understandable unit. "
+    "Keep target group, conditions, exceptions and modality with the statement "
+    "they qualify. Preserve source order. If no safe source-bound proposal is "
+    "possible, return zero objects and a short abstain_reason."
+)
+SEMANTIC_MODEL_CONFIG = {
+    "api": "responses",
+    "structured_output": "json_schema",
+    "strict": True,
+}
 
 PostJson = Callable[[str, dict[str, str], dict[str, Any], int], dict[str, Any]]
 
@@ -174,14 +202,7 @@ def _request_payload(*, model: str, blocks: list[dict[str, Any]]) -> dict[str, A
         "input": [
             {
                 "role": "developer",
-                "content": (
-                    "Form meaning units for human review by selecting only exact source spans. "
-                    "Do not write, rewrite or paraphrase candidate knowledge text. "
-                    "Group spans only when they form one independently understandable unit. "
-                    "Keep target group, conditions, exceptions and modality with the statement "
-                    "they qualify. Preserve source order. If no safe source-bound proposal is "
-                    "possible, return zero objects and a short abstain_reason."
-                ),
+                "content": SEMANTIC_DEVELOPER_PROMPT,
             },
             {
                 "role": "user",
@@ -258,46 +279,149 @@ def _source_ordered_units(
     ]
 
 
-def semantic_units_before_review(
+def _extractor_contract(fragments: list[dict[str, Any]]) -> str:
+    versions = sorted(
+        {
+            str(fragment.get("parser_version") or "").strip()
+            for fragment in fragments
+            if str(fragment.get("parser_version") or "").strip()
+        }
+    )
+    return "|".join(versions) if versions else "parser-version-unspecified"
+
+
+def _replay_identity(
+    *,
+    document_id: str,
+    model: str,
+    blocks: list[dict[str, Any]],
+    content_fragments: list[dict[str, Any]],
+    formation_context: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not formation_context:
+        return None
+    snapshot_id = str(formation_context.get("snapshot_id") or "").strip()
+    source_sha256 = str(formation_context.get("source_sha256") or "").strip()
+    if not snapshot_id or not source_sha256:
+        return None
+    return build_replay_identity(
+        snapshot_id=snapshot_id,
+        source_sha256=source_sha256,
+        document_id=document_id,
+        source_blocks_hash=_stable_json_hash(blocks),
+        extractor_version=_extractor_contract(content_fragments),
+        reconstruction_version=RECONSTRUCTION_VERSION,
+        formation_policy_version=PASSAGE_FORMATION_POLICY_VERSION,
+        semantic_contract_version=SEMANTIC_PASSAGE_VERSION,
+        prompt_hash=_stable_json_hash(SEMANTIC_DEVELOPER_PROMPT),
+        schema_hash=_stable_json_hash(_proposal_schema()),
+        provider_id=SEMANTIC_PROVIDER_ID,
+        model_id=model,
+        model_config_hash=_stable_json_hash(SEMANTIC_MODEL_CONFIG),
+    )
+
+
+def _provider_proposal(
+    *,
+    api_key: str,
+    model: str,
+    blocks: list[dict[str, Any]],
+    post_json: PostJson | None,
+) -> dict[str, Any]:
+    safe_key = str(api_key or "").strip()
+    if not safe_key:
+        raise ConsoleError("pre_review_llm_api_key_required")
+    response = (post_json or _post_json)(
+        OPENAI_RESPONSES_URL,
+        {
+            "Authorization": f"Bearer {safe_key}",
+            "Content-Type": "application/json",
+        },
+        _request_payload(model=model, blocks=blocks),
+        DEFAULT_TIMEOUT_SECONDS,
+    )
+    if not isinstance(response, dict):
+        raise ConsoleError("pre_review_llm_response_invalid")
+    try:
+        proposal = json.loads(_extract_output_text(response))
+    except json.JSONDecodeError as exc:
+        raise ConsoleError("pre_review_llm_response_invalid") from exc
+    if not isinstance(proposal, dict):
+        raise ConsoleError("pre_review_llm_response_invalid")
+    if str(proposal.get("abstain_reason") or "").strip():
+        raise ConsoleError("pre_review_llm_abstained")
+    return proposal
+
+
+def _semantic_execution_before_review(
     fragments: list[dict[str, Any]],
     *,
     document_id: str,
     api_key: str,
     model: str,
+    formation_context: Mapping[str, Any] | None = None,
     post_json: PostJson | None = None,
-) -> list[dict[str, Any]]:
-    """Return deterministic headings plus source-reconstructed LLM candidates."""
-
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     safe_key = str(api_key or "").strip()
     safe_model = str(model or "").strip()
-    if not safe_key:
-        raise ConsoleError("pre_review_llm_api_key_required")
     if not safe_model:
+        if not safe_key:
+            raise ConsoleError("pre_review_llm_api_key_required")
         raise ConsoleError("pre_review_llm_model_required")
 
     content_fragments = _content_fragments(fragments)
     blocks = semantic_source_blocks(content_fragments)
     content_units: list[dict[str, Any]] = []
-    if blocks:
-        response = (post_json or _post_json)(
-            OPENAI_RESPONSES_URL,
-            {
-                "Authorization": f"Bearer {safe_key}",
-                "Content-Type": "application/json",
-            },
-            _request_payload(model=safe_model, blocks=blocks),
-            DEFAULT_TIMEOUT_SECONDS,
+    replay_record: dict[str, Any] | None = None
+    proposal: dict[str, Any] | None = None
+    execution = EXECUTION_INFERENCE
+    replay_rejection_reason: str | None = None
+
+    identity = _replay_identity(
+        document_id=document_id,
+        model=safe_model,
+        blocks=blocks,
+        content_fragments=content_fragments,
+        formation_context=formation_context,
+    )
+    existing_replay = (
+        formation_context.get("semantic_replay")
+        if formation_context
+        else None
+    )
+
+    if blocks and identity is not None:
+        lookup = exact_replay_lookup(
+            existing_replay,
+            expected_identity=identity,
         )
-        if not isinstance(response, dict):
-            raise ConsoleError("pre_review_llm_response_invalid")
-        try:
-            proposal = json.loads(_extract_output_text(response))
-        except json.JSONDecodeError as exc:
-            raise ConsoleError("pre_review_llm_response_invalid") from exc
-        if not isinstance(proposal, dict):
-            raise ConsoleError("pre_review_llm_response_invalid")
-        if str(proposal.get("abstain_reason") or "").strip():
-            raise ConsoleError("pre_review_llm_abstained")
+        if lookup.status == LOOKUP_HIT and lookup.proposal is not None:
+            try:
+                replay_units = semantic_units_from_proposal(
+                    content_fragments,
+                    document_id=document_id,
+                    proposal=lookup.proposal,
+                )
+            except SemanticPassageError as exc:
+                replay_rejection_reason = exc.code
+            else:
+                if replay_units:
+                    proposal = lookup.proposal
+                    content_units = replay_units
+                    execution = EXECUTION_REPLAY
+                    replay_record = replayed_record(existing_replay)
+                else:
+                    replay_rejection_reason = "semantic_replay_abstention_not_reusable"
+        elif lookup.status == LOOKUP_REJECTED:
+            replay_rejection_reason = lookup.reason or "semantic_replay_record_rejected"
+
+    if blocks and proposal is None:
+        proposal = _provider_proposal(
+            api_key=api_key,
+            model=safe_model,
+            blocks=blocks,
+            post_json=post_json,
+        )
         try:
             content_units = semantic_units_from_proposal(
                 content_fragments,
@@ -306,7 +430,19 @@ def semantic_units_before_review(
             )
         except SemanticPassageError as exc:
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
+        execution = EXECUTION_INFERENCE
+        if identity is not None:
+            replay_record = validated_inference_record(
+                identity=identity,
+                proposal=proposal,
+                replay_rejection_reason=replay_rejection_reason,
+            )
+    elif not blocks and not safe_key:
+        # Preserve the pre-F2 configuration contract for semantic mode even
+        # when a document contains only deterministic headings.
+        raise ConsoleError("pre_review_llm_api_key_required")
 
+    if proposal is not None:
         source_blocks_hash = _stable_json_hash(blocks)
         proposal_hash = _stable_json_hash(proposal)
         for unit in content_units:
@@ -332,6 +468,28 @@ def semantic_units_before_review(
         )
     )
     proposed_relations_for_units(units)
+    return units, replay_record
+
+
+def semantic_units_before_review(
+    fragments: list[dict[str, Any]],
+    *,
+    document_id: str,
+    api_key: str,
+    model: str,
+    formation_context: Mapping[str, Any] | None = None,
+    post_json: PostJson | None = None,
+) -> list[dict[str, Any]]:
+    """Return deterministic headings plus source-reconstructed semantic candidates."""
+
+    units, _replay_record = _semantic_execution_before_review(
+        fragments,
+        document_id=document_id,
+        api_key=api_key,
+        model=model,
+        formation_context=formation_context,
+        post_json=post_json,
+    )
     return units
 
 
@@ -345,8 +503,17 @@ def semantic_spec_from_fragments(
     content_kind: str,
     api_key: str,
     model: str,
+    formation_context: Mapping[str, Any] | None = None,
     post_json: PostJson | None = None,
 ) -> dict[str, Any]:
+    units, replay_record = _semantic_execution_before_review(
+        fragments,
+        document_id=document_id,
+        api_key=api_key,
+        model=model,
+        formation_context=formation_context,
+        post_json=post_json,
+    )
     objects: list[dict[str, Any]] = [
         {
             "object_id": f"{document_id}-document",
@@ -355,16 +522,8 @@ def semantic_spec_from_fragments(
             "review_track": "technical",
         }
     ]
-    objects.extend(
-        semantic_units_before_review(
-            fragments,
-            document_id=document_id,
-            api_key=api_key,
-            model=model,
-            post_json=post_json,
-        )
-    )
-    return {
+    objects.extend(units)
+    spec = {
         "spec_version": "console-ingest-1.0",
         "document_id": document_id,
         "object_version": "1.0",
@@ -373,6 +532,9 @@ def semantic_spec_from_fragments(
         "topic": [family, f"class:{class_}", f"source-kind:{content_kind}"],
         "objects": objects,
     }
+    if replay_record is not None:
+        spec[SEMANTIC_REPLAY_SPEC_KEY] = replay_record
+    return spec
 
 
 def bind_pre_review_semantic_processing(
@@ -409,6 +571,7 @@ def bind_pre_review_semantic_processing(
         title: str,
         family: str,
         class_: str,
+        formation_context: Mapping[str, Any] | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         if semantic_suppressed.get():
             return original_fragments_and_spec(
@@ -420,6 +583,7 @@ def bind_pre_review_semantic_processing(
                 title=title,
                 family=family,
                 class_=class_,
+                formation_context=formation_context,
             )
 
         mode = str(env.get(PASSAGE_FORMATION_MODE_ENV, "") or "").strip() or DETERMINISTIC_MODE
@@ -441,6 +605,7 @@ def bind_pre_review_semantic_processing(
                 title=title,
                 family=family,
                 class_=class_,
+                formation_context=formation_context,
             )
             return fragments, _stamp_passage_formation(spec, decision)
 
@@ -460,6 +625,7 @@ def bind_pre_review_semantic_processing(
             content_kind=kind,
             api_key=provider.api_key,
             model=provider.model,
+            formation_context=formation_context,
             post_json=post_json,
         )
         return fragments, _stamp_passage_formation(spec, decision)

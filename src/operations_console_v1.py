@@ -84,6 +84,7 @@ from src.review_workflow_v3 import apply_reviews
 from src.revision_workflow import bump_patch, create_revision
 from src.retrieval.retrieval_projection_v2 import build_projection
 from src.published_projection_v1 import atomic_replace_projection
+from src.semantic_replay_v1 import SEMANTIC_REPLAY_SPEC_KEY
 from src.semantic_transform_generic_v1 import transform as transform_generic
 from src.serving_relations_v1 import (
     binding_relations,
@@ -1551,6 +1552,11 @@ class OperationsConsole:
                 title=title.strip(),
                 family=family_hook,
                 class_=class_,
+                formation_context={
+                    "snapshot_id": snapshot_id,
+                    "source_sha256": digest,
+                    "semantic_replay": None,
+                },
             )
         except ConsoleError as exc:
             if not exc.code.startswith("pre_review_llm_"):
@@ -1563,6 +1569,10 @@ class OperationsConsole:
                 snapshot_id=snapshot_id,
             )
             return self._receipt(blocked_envelope)
+
+        replay_record = spec.pop(SEMANTIC_REPLAY_SPEC_KEY, None)
+        if isinstance(replay_record, dict):
+            envelope["semantic_replay"] = deepcopy(replay_record)
 
         manifest = {
             "canonical_source": {
@@ -1633,7 +1643,13 @@ class OperationsConsole:
             title=envelope["title"],
             family=envelope["family"],
             class_=envelope["class"],
+            formation_context={
+                "snapshot_id": snapshot_id,
+                "source_sha256": envelope["sha256"],
+                "semantic_replay": deepcopy(envelope.get("semantic_replay")),
+            },
         )
+        replay_record = spec.pop(SEMANTIC_REPLAY_SPEC_KEY, None)
         manifest = {
             "canonical_source": {
                 "source_id": envelope["source_id"],
@@ -1663,6 +1679,8 @@ class OperationsConsole:
             )
         objects = apply_passage_register(objects)
         prepared_envelope = deepcopy(envelope)
+        if isinstance(replay_record, dict):
+            prepared_envelope["semantic_replay"] = deepcopy(replay_record)
         prepared_envelope["review_passes"] = {}
         prepared_envelope["state"] = CAPTURED
         prepared_envelope["publication_eligibility"] = (
@@ -1864,7 +1882,9 @@ class OperationsConsole:
         title: str,
         family: str,
         class_: str,
+        formation_context: dict[str, Any] | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        del formation_context
         if kind == "boom":
             try:
                 fragments = extract_boom_fragments(data, document_id=document_id, source_id=source_id)
@@ -1903,7 +1923,9 @@ class OperationsConsole:
         }
 
     def _receipt(self, envelope: dict[str, Any]) -> dict[str, Any]:
-        return deepcopy(envelope)
+        receipt = deepcopy(envelope)
+        receipt.pop("semantic_replay", None)
+        return receipt
 
     def snapshot_objects(
         self,
