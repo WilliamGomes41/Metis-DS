@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import html
+import os
 import re
 from typing import Any
 from urllib.parse import quote, urlsplit
@@ -52,6 +53,8 @@ from src.ingest_limits_v1 import (
     read_upload_limited,
 )
 from src.llm_provider_v1 import load_llm_provider_config
+from src.passage_formation_policy_v1 import DETERMINISTIC_MODE, SEMANTIC_MODE
+from src.pre_review_semantic_v1 import PASSAGE_FORMATION_MODE_ENV
 from src.operations_console_v1 import (
     ALLOWED_CLASSES,
     ALLOWED_DELETE_NEXT,
@@ -86,6 +89,35 @@ FILENAME_HINT = (
     "Spaties en accenten worden automatisch aangepast. "
     "De titel hieronder mag wél spaties bevatten."
 )
+
+def _passage_formation_mode_banner() -> str:
+    """Project the active runtime formation configuration without changing it."""
+
+    mode = str(os.environ.get(PASSAGE_FORMATION_MODE_ENV, "") or "").strip() or DETERMINISTIC_MODE
+    if mode == DETERMINISTIC_MODE:
+        return (
+            '<div class="banner" data-passage-formation-mode="deterministic">'
+            '<b>Actieve verwerkingsmodus: Deterministisch</b>'
+            '<p>Nieuwe en opnieuw verwerkte passages worden momenteel zonder taalmodel gevormd. '
+            'Review blijft verplicht.</p>'
+            '</div>'
+        )
+    if mode == SEMANTIC_MODE:
+        return (
+            '<div class="banner" data-passage-formation-mode="semantic">'
+            '<b>Actieve verwerkingsmodus: Semantisch</b>'
+            '<p>Nieuwe en opnieuw verwerkte passages worden brongebonden semantisch gevormd. '
+            'Exacte replay wordt hergebruikt wanneer mogelijk; anders gebruikt Metis de geconfigureerde taalmodelroute. '
+            'Review blijft verplicht.</p>'
+            '</div>'
+        )
+    return (
+        '<div class="banner err" data-passage-formation-mode="invalid">'
+        '<b>Actieve verwerkingsmodus: Configuratiefout</b>'
+        '<p>Nieuwe passagevorming is geblokkeerd totdat de deploymentconfiguratie is hersteld.</p>'
+        '</div>'
+    )
+
 BRAND_DIR = REPO_ROOT / "assets" / "brand"
 REVIEW_TASKS = frozenset({"individual", "together", "headings", "control", "decisions"})
 STATUS_LABELS = {
@@ -2181,6 +2213,7 @@ def create_console_app(
             <section class="room">
               <h1>Document inleveren</h1>
               <p class="lead">Lever HTML, PDF of een gehashte beslisboom-freeze in. Klasse bepaalt het reviewpad.</p>
+              {_passage_formation_mode_banner()}
               <form method="post" action="/ingest" enctype="multipart/form-data">
                 <div class="sections">
                   <div class="section">
