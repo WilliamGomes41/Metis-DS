@@ -913,7 +913,7 @@ def test_semantic_source_authority_prefers_primary_duplicate_over_summary() -> N
     assert len(units) == 1
     row = units[0]
     assert row["section_path"] == ["Richtlijn", "2 Aanbevelingen"]
-    assert row["source_fragment_ids"] == ["primary", "summary"]
+    assert row["source_fragment_ids"] == ["primary"]
     authority = row["metadata"]["source_occurrence_authority"]
     assert authority["principal_section_role"] == "primary"
     assert authority["alternate_occurrences"] == [
@@ -970,7 +970,7 @@ def test_source_authority_does_not_erase_selected_semantics_when_primary_is_cove
     assert len(units) == 1
     row = units[0]
     assert row["section_path"] == ["Richtlijn", "2 Aanbevelingen"]
-    assert row["source_fragment_ids"] == ["primary-coverage", "summary-selected"]
+    assert row["source_fragment_ids"] == ["primary-coverage"]
     assert row["proposed_object_type"] == "recommendation"
     assert row["semantic_passage"]["selection_origin"] == "proposal_selected"
     authority = row["metadata"]["source_occurrence_authority"]
@@ -1124,7 +1124,7 @@ def test_f1_end_to_end_primary_authority_survives_restart(tmp_path: Path) -> Non
     assert [
         ref["raw_object_id"]
         for ref in candidate["provenance"]["source_fragments"]
-    ] == ["primary-e2e", "summary-e2e"]
+    ] == ["primary-e2e"]
     assert candidate["metadata"]["source_occurrence_authority"]["principal_section_role"] == "primary"
     assert candidate["metadata"]["passage_formation"]["strategy"] == "semantic"
     assert passage_register_of(candidate)["status"] == "selected_as_candidate"
