@@ -262,7 +262,8 @@ def test_exact_replay_survives_restart_and_makes_zero_provider_calls(tmp_path: P
     snapshot_id = receipt["snapshot_id"]
     first = console.snapshot_objects(snapshot_id)
     inference_record = console._envelope(snapshot_id)["semantic_replay"]
-    assert inference_record["last_execution"] == EXECUTION_INFERENCE
+    assert inference_record["formation_method"] == "semantic"
+    assert inference_record["semantic_execution"] == EXECUTION_INFERENCE
     assert inference_record["origin_execution"] == EXECUTION_INFERENCE
     assert inference_record["identity"]["components"]["source_sha256"] == receipt["sha256"]
     candidate = next(row for row in first if row.get("object_type") != "document")
@@ -292,7 +293,7 @@ def test_exact_replay_survives_restart_and_makes_zero_provider_calls(tmp_path: P
     after = restarted.snapshot_objects(snapshot_id)
     assert after == first
     replay_record = restarted._envelope(snapshot_id)["semantic_replay"]
-    assert replay_record["last_execution"] == EXECUTION_REPLAY
+    assert replay_record["semantic_execution"] == EXECUTION_REPLAY
     assert replay_record["origin_execution"] == EXECUTION_INFERENCE
     assert replay_record["replay_from_proposal_hash"] == replay_record["proposal_hash"]
     assert calls == 1
@@ -336,7 +337,7 @@ def test_model_identity_change_forces_inference_not_replay(tmp_path: Path) -> No
 
     assert calls == 2
     record = restarted._envelope(receipt["snapshot_id"])["semantic_replay"]
-    assert record["last_execution"] == EXECUTION_INFERENCE
+    assert record["semantic_execution"] == EXECUTION_INFERENCE
     assert record["identity"]["components"]["model_id"] == "changed-model"
 
 
@@ -387,7 +388,7 @@ def test_corrupt_replay_is_revalidated_then_replaced_by_inference(tmp_path: Path
 
     assert calls == 2
     repaired = restarted._envelope(receipt["snapshot_id"])["semantic_replay"]
-    assert repaired["last_execution"] == EXECUTION_INFERENCE
+    assert repaired["semantic_execution"] == EXECUTION_INFERENCE
     assert repaired["replay_rejection_reason"] == "semantic_span_unknown_block"
 
 
