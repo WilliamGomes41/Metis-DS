@@ -35,7 +35,9 @@ from src.object_taxonomy_v1 import (
     recommendation_strength_ui_applies,
     review_priority_rank,
 )
-from src.admission_gate_v1 import admission_of, blocked_audit_lane
+from src.admission_gate_v1 import admission_of
+from src.domain_dimensions_v1 import processing_issue_objects
+from src.processing_diagnostics_v1 import processing_diagnostics
 from src.extract_coverage_v1 import coverage_panel_rows
 from src.review_cockpit_v1 import (
     SUITABILITY_VALUES,
@@ -1547,6 +1549,112 @@ def _review_task_header(snapshot_id: str, title: str, description: str) -> str:
     '''
 
 
+_PROCESSING_FAMILY_LABELS = {
+    "source_binding": "Bronkoppeling",
+    "unit_completeness": "Zelfstandigheid van passage",
+    "semantic_contract": "Semantisch contract",
+    "dependency_resolution": "Ontbrekende afhankelijkheid of context",
+    "processing_completeness": "Verwerking niet volledig",
+    "unclassified": "Nog niet ingedeeld",
+}
+
+
+def _diagnostic_count_list(rows: dict[str, int]) -> str:
+    if not rows:
+        return '<p class="muted">Geen gegevens.</p>'
+    return (
+        '<ul class="processing-diagnostic-list">'
+        + "".join(
+            f'<li><code>{_esc(name)}</code>: <b>{int(count)}</b></li>'
+            for name, count in rows.items()
+        )
+        + "</ul>"
+    )
+
+
+def _processing_diagnostics_html(
+    snapshot_objects: list[dict[str, Any]],
+) -> str:
+    diagnostics = processing_diagnostics(snapshot_objects)
+    blocked_count = int(diagnostics["blocked_candidate_count"])
+    if not blocked_count:
+        return ""
+
+    issue_count = int(diagnostics["issue_occurrence_count"])
+    without_reason = int(diagnostics["blocked_without_reason_count"])
+    families = diagnostics["by_family"]
+    family_rows = "".join(
+        (
+            "<tr>"
+            f"<td>{_esc(_PROCESSING_FAMILY_LABELS.get(family, family))}</td>"
+            f"<td>{int(values['candidate_count'])}</td>"
+            f"<td>{int(values['issue_occurrence_count'])}</td>"
+            "</tr>"
+        )
+        for family, values in families.items()
+    )
+    reason_rows = "".join(
+        (
+            "<tr>"
+            f"<td><code>{_esc(code)}</code></td>"
+            f"<td>{int(values['candidate_count'])}</td>"
+            f"<td>{int(values['issue_occurrence_count'])}</td>"
+            "</tr>"
+        )
+        for code, values in diagnostics["by_reason_code"].items()
+    )
+    anomaly = (
+        f'<p class="banner-error"><b>{without_reason}</b> geblokkeerde '
+        "passage(s) hebben geen reason code. Dit is een diagnostische anomalie.</p>"
+        if without_reason
+        else ""
+    )
+    unknown = diagnostics["unknown_reason_codes"]
+    unknown_html = (
+        '<p class="field-help">Niet ingedeelde reason codes: '
+        + ", ".join(f"<code>{_esc(code)}</code>" for code in unknown)
+        + ".</p>"
+        if unknown
+        else ""
+    )
+    return f"""
+      <section class="processing-diagnostics" aria-labelledby="processing-diagnostics-title">
+        <h3 id="processing-diagnostics-title">Waarom passages technisch geblokkeerd zijn</h3>
+        <p class="lead">
+          <b>{blocked_count}</b> passages hebben samen <b>{issue_count}</b> technische signalen.
+          Een passage kan meerdere signalen hebben. Deze signalen tonen welk admission-contract niet is gehaald; ze bewijzen niet automatisch de onderliggende root cause en zijn geen inhoudelijke afwijzing door een reviewer.
+        </p>
+        {anomaly}
+        <h4>Signalen per diagnostische familie</h4>
+        <table>
+          <thead><tr><th>Familie</th><th>Passages</th><th>Signalen</th></tr></thead>
+          <tbody>{family_rows}</tbody>
+        </table>
+        {unknown_html}
+        <details>
+          <summary>Bekijk exacte reason codes</summary>
+          <table>
+            <thead><tr><th>Reason code</th><th>Passages</th><th>Voorkomens</th></tr></thead>
+            <tbody>{reason_rows}</tbody>
+          </table>
+        </details>
+        <details>
+          <summary>Bekijk diagnostische uitsplitsing</summary>
+          <div class="review-diagnostic-breakdowns">
+            <h4>Voorgesteld type</h4>
+            {_diagnostic_count_list(diagnostics["by_proposed_type"])}
+            <h4>Brononderdeel</h4>
+            {_diagnostic_count_list(diagnostics["by_section_role"])}
+            <h4>Passagevorming</h4>
+            {_diagnostic_count_list(diagnostics["by_formation_strategy"])}
+            <h4>Selectie-oorsprong</h4>
+            {_diagnostic_count_list(diagnostics["by_selection_origin"])}
+          </div>
+        </details>
+      </section>
+    """
+
+
 def _render_review_index(
     snapshot_id: str,
     snapshot_objects: list[dict[str, Any]],
@@ -1563,7 +1671,7 @@ def _render_review_index(
         snapshot_objects, review_path=review_path
     ) if review_path != "boom" else []
     individual = sorted([*duty, *regular_individual], key=review_priority_rank)
-    blocked = blocked_audit_lane(snapshot_objects) if review_path != "boom" else []
+    blocked = processing_issue_objects(snapshot_objects) if review_path != "boom" else []
     normal_passages, normal_batches = (0, 0)
     if normal_review_enabled:
         normal_passages, normal_batches = normal_risk_batch_counts(
@@ -1624,6 +1732,7 @@ def _render_review_index(
     if task == "control":
         return f'''
           {_review_task_header(snapshot_id, "Dekking en technische controle", "Controleer hier de volledigheid en technische blokkades; dit is geen extra inhoudelijke reviewtaak")}
+          {_processing_diagnostics_html(snapshot_objects)}
           {blocked_html}
           {_coverage_panel(snapshot_objects)}
         '''
