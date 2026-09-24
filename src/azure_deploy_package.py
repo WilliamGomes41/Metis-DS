@@ -17,6 +17,7 @@ import subprocess
 import tempfile
 import zipfile
 from datetime import datetime, timezone
+from email.parser import Parser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -109,21 +110,20 @@ def _python_executable() -> str:
     return os.environ.get("PYTHON") or shutil.which("python") or shutil.which("python3") or "python3"
 
 
-def _pip_install_target(
+def _pip_download_target(
     *,
     python: str,
-    vendor: Path,
+    wheelhouse: Path,
     specs: list[str],
     platform: str,
-    upgrade: bool,
     cwd: Path,
-) -> subprocess.CompletedProcess[str]:
+    no_deps: bool = False,
+) -> None:
     command = [
         python,
         "-m",
         "pip",
-        "install",
-        "--no-compile",
+        "download",
         "--only-binary=:all:",
         "--platform",
         platform,
@@ -135,46 +135,149 @@ def _pip_install_target(
         AZURE_PYTHON_ABI,
         "--abi",
         "abi3",
-        "-t",
-        str(vendor),
-        *specs,
+        "--dest",
+        str(wheelhouse),
     ]
-    if upgrade:
-        command.insert(4, "--upgrade")
-    return subprocess.run(command, cwd=cwd, check=False, capture_output=True, text=True)
+    if no_deps:
+        command.append("--no-deps")
+    command.extend(specs)
+    result = subprocess.run(command, cwd=cwd, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise DeployPackageError(
+            "azure_target_download_failed:"
+            + ",".join(specs)
+            + "\n"
+            + result.stderr[-2000:]
+        )
 
 
-def _azure_wheel_available(*, python: str, spec: str, platform: str, cwd: Path) -> bool:
-    with tempfile.TemporaryDirectory(prefix="metis-wheel-probe-") as dest:
-        command = [
-            python,
-            "-m",
-            "pip",
-            "download",
-            "--no-deps",
-            "--only-binary=:all:",
-            "--platform",
-            platform,
-            "--implementation",
-            "cp",
-            "--python-version",
-            AZURE_PYTHON_VERSION,
-            "--abi",
-            AZURE_PYTHON_ABI,
-            "--abi",
-            "abi3",
-            "-d",
-            dest,
-            spec,
+def _wheel_distribution_identity(wheel: Path) -> tuple[str, str]:
+    with zipfile.ZipFile(wheel) as archive:
+        metadata_names = [
+            name
+            for name in archive.namelist()
+            if name.endswith(".dist-info/METADATA")
         ]
-        result = subprocess.run(command, cwd=cwd, check=False, capture_output=True, text=True)
+        if len(metadata_names) != 1:
+            raise DeployPackageError(f"wheel_metadata_invalid:{wheel.name}")
+        payload = archive.read(metadata_names[0]).decode("utf-8")
+    parsed = Parser().parsestr(payload)
+    name = str(parsed.get("Name") or "").strip().lower().replace("_", "-")
+    version = str(parsed.get("Version") or "").strip()
+    if not name or not version:
+        raise DeployPackageError(f"wheel_metadata_incomplete:{wheel.name}")
+    return name, version
+
+
+def _validate_unique_wheel_versions(wheelhouse: Path) -> None:
+    seen: dict[str, tuple[str, str]] = {}
+    for wheel in sorted(wheelhouse.glob("*.whl")):
+        name, version = _wheel_distribution_identity(wheel)
+        prior = seen.get(name)
+        if prior is not None and prior[0] != version:
+            raise DeployPackageError(
+                f"duplicate_distribution_versions:{name}:{prior[0]}:{version}"
+            )
+        seen[name] = (version, wheel.name)
+
+
+def _pip_install_one_wheel(
+    *,
+    python: str,
+    wheel: Path,
+    target: Path,
+    cwd: Path,
+) -> None:
+    command = [
+        python,
+        "-m",
+        "pip",
+        "install",
+        "--no-compile",
+        "--no-deps",
+        "--only-binary=:all:",
+        "--platform",
+        AZURE_MANYLINUX_PLATFORM,
+        "--implementation",
+        "cp",
+        "--python-version",
+        AZURE_PYTHON_VERSION,
+        "--abi",
+        AZURE_PYTHON_ABI,
+        "--abi",
+        "abi3",
+        "-t",
+        str(target),
+        str(wheel),
+    ]
+    result = subprocess.run(command, cwd=cwd, check=False, capture_output=True, text=True)
     if result.returncode == 0:
-        return True
-    if "No matching distribution" in f"{result.stderr}\n{result.stdout}":
-        return False
-    raise DeployPackageError(
-        f"azure_target_probe_failed:{spec}\n{result.stderr[-2000:]}"
-    )
+        return
+
+    # PyMuPDF currently ships an abi3 wheel at manylinux_2_28 rather than
+    # manylinux2014. The wheel was already resolved against the allowed fallback
+    # platform, so retry only the isolated wheel install against that platform.
+    command[command.index(AZURE_MANYLINUX_PLATFORM)] = AZURE_ABI3_PLATFORM
+    fallback = subprocess.run(command, cwd=cwd, check=False, capture_output=True, text=True)
+    if fallback.returncode != 0:
+        raise DeployPackageError(
+            f"azure_target_wheel_install_failed:{wheel.name}\n{fallback.stderr[-2000:]}"
+        )
+
+
+def _merge_resolved_wheels(
+    *,
+    python: str,
+    wheelhouse: Path,
+    vendor: Path,
+    cwd: Path,
+) -> None:
+    wheels = sorted(wheelhouse.glob("*.whl"))
+    if not wheels:
+        raise DeployPackageError("azure_target_wheels_missing")
+    for index, wheel in enumerate(wheels):
+        with tempfile.TemporaryDirectory(prefix=f"metis-wheel-{index}-") as raw_target:
+            isolated = Path(raw_target)
+            _pip_install_one_wheel(
+                python=python,
+                wheel=wheel,
+                target=isolated,
+                cwd=cwd,
+            )
+            _copy_tree(isolated, vendor)
+
+
+def _validate_vendor_record_completeness(vendor: Path) -> None:
+    import csv
+
+    for record in sorted(vendor.glob("*.dist-info/RECORD")):
+        with record.open("r", encoding="utf-8", newline="") as handle:
+            for row in csv.reader(handle):
+                if not row:
+                    continue
+                rel = str(row[0]).replace("\\", "/")
+                if not rel or rel.startswith("../") or rel.startswith("/"):
+                    continue
+                if not (vendor / rel).is_file():
+                    raise DeployPackageError(
+                        f"vendor_record_missing:{record.parent.name}:{rel}"
+                    )
+
+
+def _validate_vendor_distribution_versions(vendor: Path) -> None:
+    seen: dict[str, tuple[str, str]] = {}
+    for metadata in sorted(vendor.glob("*.dist-info/METADATA")):
+        parsed = Parser().parsestr(metadata.read_text(encoding="utf-8"))
+        name = str(parsed.get("Name") or "").strip().lower().replace("_", "-")
+        version = str(parsed.get("Version") or "").strip()
+        if not name or not version:
+            raise DeployPackageError(f"vendor_metadata_incomplete:{metadata.parent.name}")
+        prior = seen.get(name)
+        if prior is not None:
+            raise DeployPackageError(
+                f"duplicate_vendor_distribution:{name}:{prior[0]}:{version}"
+            )
+        seen[name] = (version, metadata.parent.name)
 
 
 def _install_azure_dependency_graph(
@@ -184,53 +287,52 @@ def _install_azure_dependency_graph(
     requirements: Path,
     cwd: Path,
 ) -> None:
-    """Vendor the console graph for CPython 3.12, not the build-runner ABI.
+    """Resolve once, then merge wheels without clobbering namespace siblings.
 
-    Compatible pins share one pip install. Separate ``--upgrade`` installs of
-    azure-identity and azure-storage-blob delete each other's namespace files
-    and leave only dist-info. A pin with no manylinux2014 wheel, currently
-    PyMuPDF's abi3 manylinux_2_28 build, is installed afterwards without
-    upgrade so it cannot replace that graph.
+    Directly installing multiple target wheels into one --target directory can
+    leave dist-info metadata behind while replacing package subdirectories such
+    as azure.identity. Resolve the graph first, then install every wheel in an
+    isolated target and merge files recursively into the final vendor tree.
     """
 
-    primary: list[str] = []
-    deferred: list[str] = []
-    for spec in requirement_specs(requirements):
-        if _azure_wheel_available(
+    specs = requirement_specs(requirements)
+    pymupdf_specs = [
+        spec
+        for spec in specs
+        if _REQ_NAME_RE.match(spec)
+        and _REQ_NAME_RE.match(spec).group(1).lower().replace("_", "-") == "pymupdf"
+    ]
+    primary_specs = [spec for spec in specs if spec not in pymupdf_specs]
+
+    with tempfile.TemporaryDirectory(prefix="metis-wheelhouse-") as raw_wheelhouse:
+        wheelhouse = Path(raw_wheelhouse)
+        if primary_specs:
+            _pip_download_target(
+                python=python,
+                wheelhouse=wheelhouse,
+                specs=primary_specs,
+                platform=AZURE_MANYLINUX_PLATFORM,
+                cwd=cwd,
+            )
+        if pymupdf_specs:
+            _pip_download_target(
+                python=python,
+                wheelhouse=wheelhouse,
+                specs=pymupdf_specs,
+                platform=AZURE_ABI3_PLATFORM,
+                cwd=cwd,
+                no_deps=True,
+            )
+        _validate_unique_wheel_versions(wheelhouse)
+        _merge_resolved_wheels(
             python=python,
-            spec=spec,
-            platform=AZURE_MANYLINUX_PLATFORM,
-            cwd=cwd,
-        ):
-            primary.append(spec)
-        else:
-            deferred.append(spec)
-    if primary:
-        installed = _pip_install_target(
-            python=python,
+            wheelhouse=wheelhouse,
             vendor=vendor,
-            specs=primary,
-            platform=AZURE_MANYLINUX_PLATFORM,
-            upgrade=True,
             cwd=cwd,
         )
-        if installed.returncode != 0:
-            raise DeployPackageError(
-                f"azure_target_install_failed\n{installed.stderr[-2000:]}"
-            )
-    for spec in deferred:
-        fallback = _pip_install_target(
-            python=python,
-            vendor=vendor,
-            specs=[spec],
-            platform=AZURE_ABI3_PLATFORM,
-            upgrade=False,
-            cwd=cwd,
-        )
-        if fallback.returncode != 0:
-            raise DeployPackageError(
-                f"azure_target_wheel_missing:{spec}\n{fallback.stderr[-2000:]}"
-            )
+
+    _validate_vendor_distribution_versions(vendor)
+    _validate_vendor_record_completeness(vendor)
 
 
 def requirement_package_names(path: Path, *, _seen: set[Path] | None = None) -> set[str]:
