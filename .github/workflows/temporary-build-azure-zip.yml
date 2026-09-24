@@ -1,0 +1,34 @@
+name: temporary-build-azure-zip
+
+on:
+  push:
+    branches:
+      - artifact-build-0c467cda
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 0c467cda4d20e683ad26d0f824e92340bd5fc6de
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify exact main SHA
+        run: test "$(git rev-parse HEAD)" = "0c467cda4d20e683ad26d0f824e92340bd5fc6de"
+      - name: Build deploy ZIP
+        run: bash scripts/create_azure_deploy_package.sh "$RUNNER_TEMP/metis-console-0c467cda-azure.zip"
+      - name: Show checksum
+        run: sha256sum "$RUNNER_TEMP/metis-console-0c467cda-azure.zip"
+      - name: Upload deploy ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: metis-console-0c467cda-azure
+          path: ${{ runner.temp }}/metis-console-0c467cda-azure.zip
+          if-no-files-found: error
+          retention-days: 1
