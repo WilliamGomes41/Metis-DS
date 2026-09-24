@@ -319,3 +319,50 @@ def test_equal_primary_authority_prefers_direct_occurrence_over_reconstructed_du
             "section_path": ["Richtlijn", "2 Aanbevelingen"],
         }
     ]
+
+
+
+def test_admission_paragraph_context_stops_at_heading_boundary() -> None:
+    from src.admission_gate_v1 import candidate_from_object
+
+    heading_a = {
+        "object_id": "h-a",
+        "object_type": "heading",
+        "content": {"clean_text": "1 Context"},
+        "structure": {"section_path": ["Richtlijn", "1 Context"]},
+        "provenance": {"source_fragments": []},
+    }
+    previous = {
+        "object_id": "p-a",
+        "object_type": "unclassified",
+        "content": {"clean_text": "Wanneer de cliënt ouder is, geldt extra aandacht."},
+        "structure": {"section_path": ["Richtlijn", "1 Context"]},
+        "proposed_object_type": "condition",
+        "provenance": {"source_fragments": []},
+    }
+    heading_b = {
+        "object_id": "h-b",
+        "object_type": "heading",
+        "content": {"clean_text": "2 Aanbevelingen"},
+        "structure": {"section_path": ["Richtlijn", "2 Aanbevelingen"]},
+        "provenance": {"source_fragments": []},
+    }
+    candidate = {
+        "object_id": "rec-b",
+        "object_type": "unclassified",
+        "content": {"clean_text": "De werkgroep adviseert de verpleegkundige dit te gebruiken."},
+        "structure": {"section_path": ["Richtlijn", "2 Aanbevelingen"]},
+        "proposed_object_type": "recommendation",
+        "provenance": {"source_fragments": []},
+    }
+
+    record = candidate_from_object(
+        candidate,
+        objects=[heading_a, previous, heading_b, candidate],
+        index=3,
+        document_version="1.0",
+        source_hash="a" * 64,
+    )
+
+    assert record["context_before"] == ""
+    assert record["previous_paragraph"] == ""
