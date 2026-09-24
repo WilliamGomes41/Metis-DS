@@ -976,3 +976,70 @@ def test_source_authority_does_not_erase_selected_semantics_when_primary_is_cove
     authority = row["metadata"]["source_occurrence_authority"]
     assert authority["principal_section_role"] == "primary"
     assert authority["alternate_occurrences"][0]["section_role"] == "summary"
+
+
+
+def test_boom_route_is_deterministic_under_semantic_deployment_mode(tmp_path: Path) -> None:
+    env = {
+        PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
+        LLM_API_KEY_ENV: "product-key",
+        LLM_MODEL_ENV: "test-model",
+    }
+    calls = 0
+
+    def must_not_call_model(*_args):
+        nonlocal calls
+        calls += 1
+        raise AssertionError("boom passage formation must stay deterministic")
+
+    console = OperationsConsole(
+        root=tmp_path / "boom",
+        source_store=tmp_path / "boom-sources",
+        runtime=tmp_path / "boom-runtime",
+    )
+    bind_pre_review_semantic_processing(
+        console,
+        environ=env,
+        post_json=must_not_call_model,
+    )
+    payload = {
+        "kind": "beslisboom-freeze",
+        "paths": [{"id": "path-screening", "text": "Screening op valrisico"}],
+        "nodes": [
+            {
+                "id": "node-vraag",
+                "text": "Is er een verhoogd valrisico?",
+                "scorelist": False,
+            }
+        ],
+        "outcomes": [
+            {
+                "id": "out-verwijs",
+                "text": "Verwijs naar de valpoli.",
+                "applies_if": ["node-vraag"],
+            }
+        ],
+    }
+
+    _fragments, spec = console._fragments_and_spec(
+        "boom",
+        tmp_path / "boom.json",
+        data=(json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8"),
+        document_id="doc-boom",
+        source_id="src-boom",
+        title="Valrisico",
+        family="valrisico",
+        class_="beslisboom",
+    )
+
+    assert calls == 0
+    content = [obj for obj in spec["objects"] if obj.get("object_type") != "document"]
+    assert content
+    assert all(
+        obj["metadata"]["passage_formation"] == {
+            "policy_version": "passage-formation-policy-v1.0.0",
+            "strategy": "deterministic",
+            "reason": "authoritative_tree_structure",
+        }
+        for obj in content
+    )
