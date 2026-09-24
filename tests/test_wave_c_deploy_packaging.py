@@ -173,6 +173,7 @@ def test_packaging_targets_azure_runtime_for_entire_dependency_graph() -> None:
     assert "AZURE_PYTHON_VERSION" in source
     assert '"--abi"' in source
     assert "AZURE_PYTHON_ABI" in source
+    assert "AZURE_ABI3_PLATFORM" in source
     assert "force-reinstall" not in source
     assert "for package in AZURE_NATIVE_WHEEL_PACKAGES" not in source
 
