@@ -38,6 +38,7 @@ from src.object_taxonomy_v1 import (
     normalize_visible_prose,
     stamp_value,
 )
+from src.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
 from src.source_reconstruction_v1 import (
     reconstruct_source_fragments,
     source_fragment_ids_for_text,
@@ -200,15 +201,7 @@ def _merge_text(left: str, right: str) -> str:
 
 
 def _unique_meaning_units(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    seen: set[str] = set()
-    unique: list[dict[str, Any]] = []
-    for item in rows:
-        key = normalize_visible_prose(item.get("clean_text") or item.get("text") or "")
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        unique.append(item)
-    return unique
+    return prefer_authoritative_exact_occurrences(rows)
 
 
 def split_context_aware_units(
@@ -295,15 +288,10 @@ def split_context_aware_units(
                 start=unit_start,
                 end=unit_end,
             )
-            seen = {
-                normalize_visible_prose(item.get("clean_text") or item.get("text") or "")
-                for item in meaning_units
-            }
             previous = (pending_truncated or last_content or {}).get("text")
             decision = reject_candidate(
                 unit,
                 previous_text=previous,
-                seen_clean_texts=seen,
                 is_heading=is_heading,
             )
             if decision.rejected and decision.reason == REJECT_NAV_ONLY:
