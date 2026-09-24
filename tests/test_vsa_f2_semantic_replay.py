@@ -259,6 +259,7 @@ def test_exact_replay_survives_restart_and_makes_zero_provider_calls(tmp_path: P
     )
 
     assert calls == 1
+    assert "semantic_replay" not in receipt
     snapshot_id = receipt["snapshot_id"]
     first = console.snapshot_objects(snapshot_id)
     inference_record = console._envelope(snapshot_id)["semantic_replay"]
