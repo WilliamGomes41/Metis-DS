@@ -923,3 +923,56 @@ def test_semantic_source_authority_prefers_primary_duplicate_over_summary() -> N
             "section_path": ["Richtlijn", "Samenvatting", "Aanbevelingen"],
         }
     ]
+
+
+
+def test_source_authority_does_not_erase_selected_semantics_when_primary_is_coverage() -> None:
+    fragments = [
+        {
+            **_fragment("summary-selected", "Gebruik de afgesproken interventie."),
+            "section_path": ["Richtlijn", "Samenvatting", "Aanbevelingen"],
+        },
+        {
+            **_fragment("primary-coverage", "Gebruik de afgesproken interventie."),
+            "section_path": ["Richtlijn", "2 Aanbevelingen"],
+        },
+    ]
+
+    def select_summary_only(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
+        blocks = json.loads(payload["input"][1]["content"])["source_blocks"]
+        summary = blocks[0]
+        return _response(
+            {
+                "objects": [
+                    {
+                        "spans": [
+                            {
+                                "block_id": summary["block_id"],
+                                "start": 0,
+                                "end": len(summary["text"]),
+                            }
+                        ],
+                        "proposed_object_type": "recommendation",
+                    }
+                ],
+                "abstain_reason": None,
+            }
+        )
+
+    units = semantic_units_before_review(
+        fragments,
+        document_id="doc-authority-selected",
+        api_key="product-key",
+        model="test-model",
+        post_json=select_summary_only,
+    )
+
+    assert len(units) == 1
+    row = units[0]
+    assert row["section_path"] == ["Richtlijn", "2 Aanbevelingen"]
+    assert row["source_fragment_ids"] == ["primary-coverage", "summary-selected"]
+    assert row["proposed_object_type"] == "recommendation"
+    assert row["semantic_passage"]["selection_origin"] == "proposal_selected"
+    authority = row["metadata"]["source_occurrence_authority"]
+    assert authority["principal_section_role"] == "primary"
+    assert authority["alternate_occurrences"][0]["section_role"] == "summary"
