@@ -3,6 +3,7 @@
 # release-control-evidence: scope/belofte
 # release-control-evidence: opslag concurrent stale
 # release-control-evidence: kwaliteit
+# release-control-evidence: toegang
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
@@ -17,6 +18,7 @@ from src.object_taxonomy_v1 import (
     REVIEW_PRIORITY_SECONDARY,
     review_priority_for_path,
 )
+from src.operations_console_app import _render_review_index
 from src.operations_console_v1 import slow_review_duty
 from src.proportionate_review_v1 import (
     normal_risk_batch_queue,
@@ -175,3 +177,26 @@ def test_exact_duplicate_source_authority_is_unchanged_by_review_priority() -> N
     assert rows[0]["object_id"] == "primary"
     assert rows[0]["source_fragment_ids"] == ["primary-fragment"]
     assert rows[0]["metadata"]["source_occurrence_authority"]["principal_section_role"] == "primary"
+
+
+def test_individual_review_surface_orders_focus_before_secondary_across_duty_lanes() -> None:
+    summary_recommendation = _obj(
+        "summary-rec",
+        ["Richtlijn", "Samenvatting", "Aanbevelingen"],
+        proposed_type="recommendation",
+    )
+    focus_unclassified = _obj(
+        "focus-other",
+        ["Richtlijn", "Conclusies"],
+        proposed_type="unclassified",
+    )
+
+    html = _render_review_index(
+        "snap-priority",
+        [summary_recommendation, focus_unclassified],
+        "richtlijn",
+        task="individual",
+        normal_review_enabled=False,
+    )
+
+    assert html.index("Conclusies") < html.index("Samenvatting")
