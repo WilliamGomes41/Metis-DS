@@ -1,0 +1,49 @@
+name: temporary-build-azure-zip
+
+on:
+  push:
+    branches:
+      - artifact-build-33e9c0bf
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 33e9c0bfab489db084ce7d6319843519769889e4
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify exact main SHA
+        run: test "$(git rev-parse HEAD)" = "33e9c0bfab489db084ce7d6319843519769889e4"
+      - name: Build deploy ZIP
+        run: bash scripts/create_azure_deploy_package.sh "$RUNNER_TEMP/metis-console-33e9c0bf-azure.zip"
+      - name: Verify no CPython 3.13 native extensions
+        run: |
+          python - <<'PY'
+          import zipfile
+          p = '/home/runner/work/_temp/metis-console-33e9c0bf-azure.zip'
+          with zipfile.ZipFile(p) as z:
+              native = [n for n in z.namelist() if n.endswith('.so')]
+              bad = [n for n in native if 'cpython-313-' in n]
+              wrong = [n for n in native if 'cpython-' in n and 'cpython-312-' not in n]
+              print('native_extensions', len(native))
+              print('bad_313', bad)
+              print('wrong_cpython', wrong)
+              assert not bad
+              assert not wrong
+          PY
+      - name: Show checksum
+        run: sha256sum "$RUNNER_TEMP/metis-console-33e9c0bf-azure.zip"
+      - name: Upload deploy ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: metis-console-33e9c0bf-azure
+          path: ${{ runner.temp }}/metis-console-33e9c0bf-azure.zip
+          if-no-files-found: error
+          retention-days: 1
