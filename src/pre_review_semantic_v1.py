@@ -24,6 +24,15 @@ from src.context_aware_split_v1 import split_context_aware_units
 from src.llm_provider_v1 import OPENAI_RESPONSES_URL, load_llm_provider_config
 from src.object_taxonomy_v1 import extract_object_type
 from src.operations_console_v1 import ConsoleError
+from src.passage_formation_policy_v1 import (
+    DETERMINISTIC_MODE,
+    SEMANTIC_MODE,
+    STRATEGY_DETERMINISTIC,
+    PassageFormationDecision,
+    PassageFormationPolicyError,
+    deterministic_heading_decision,
+    resolve_passage_formation_strategy,
+)
 from src.semantic_passage_v1 import (
     ALLOWED_PROPOSED_TYPES,
     SELECTION_ORIGIN_PROPOSAL,
@@ -291,10 +300,12 @@ def semantic_units_before_review(
                     }
                 )
 
-    units = _source_ordered_units(
-        fragments,
-        headings=_heading_units(fragments, document_id=document_id),
-        content=content_units,
+    units = prefer_authoritative_exact_occurrences(
+        _source_ordered_units(
+            fragments,
+            headings=_heading_units(fragments, document_id=document_id),
+            content=content_units,
+        )
     )
     proposed_relations_for_units(units)
     return units
