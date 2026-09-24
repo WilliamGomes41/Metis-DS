@@ -10,9 +10,9 @@ truth:
 - human review decision/evidence;
 - processing issues.
 
-The functions in this module are pure projections. They MUST NOT persist
-state, reinterpret publication authority, or turn review batching into a
-semantic relation.
+The functions in this module are deterministic, pure projections. They MUST NOT
+persist state, reinterpret publication authority, or turn review batching into
+a semantic relation.
 """
 from __future__ import annotations
 
