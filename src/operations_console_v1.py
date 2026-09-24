@@ -1923,7 +1923,9 @@ class OperationsConsole:
         }
 
     def _receipt(self, envelope: dict[str, Any]) -> dict[str, Any]:
-        return deepcopy(envelope)
+        receipt = deepcopy(envelope)
+        receipt.pop("semantic_replay", None)
+        return receipt
 
     def snapshot_objects(
         self,
