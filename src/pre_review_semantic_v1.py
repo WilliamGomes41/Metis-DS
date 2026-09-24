@@ -28,6 +28,7 @@ from src.passage_formation_policy_v1 import (
     DETERMINISTIC_MODE,
     SEMANTIC_MODE,
     STRATEGY_DETERMINISTIC,
+    STRATEGY_SEMANTIC,
     PassageFormationDecision,
     PassageFormationPolicyError,
     deterministic_heading_decision,
@@ -40,14 +41,37 @@ from src.semantic_passage_v1 import (
     semantic_source_blocks,
     semantic_units_from_proposal,
 )
+from src.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
 
 
 PASSAGE_FORMATION_MODE_ENV = "METIS_PASSAGE_FORMATION_MODE"
-DETERMINISTIC_MODE = "deterministic-v1"
-SEMANTIC_MODE = "semantic-source-bound-v1"
 DEFAULT_TIMEOUT_SECONDS = 60
 
 PostJson = Callable[[str, dict[str, str], dict[str, Any], int], dict[str, Any]]
+
+
+def _stamp_passage_formation(
+    spec: dict[str, Any],
+    decision: PassageFormationDecision,
+) -> dict[str, Any]:
+    """Persist the strategy decision as candidate evidence, not workflow authority."""
+
+    for obj in spec.get("objects") or []:
+        if obj.get("object_type") == "document":
+            continue
+        object_decision = decision
+        if (
+            decision.strategy == STRATEGY_SEMANTIC
+            and (
+                obj.get("object_type") == "heading"
+                or obj.get("proposed_object_type") == "heading"
+            )
+        ):
+            object_decision = deterministic_heading_decision()
+        metadata = dict(obj.get("metadata") or {})
+        metadata["passage_formation"] = object_decision.as_metadata()
+        obj["metadata"] = metadata
+    return spec
 
 
 def _stable_json_hash(value: Any) -> str:
@@ -386,7 +410,7 @@ def bind_pre_review_semantic_processing(
         family: str,
         class_: str,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        if semantic_suppressed.get() or kind == "boom":
+        if semantic_suppressed.get():
             return original_fragments_and_spec(
                 kind,
                 path,
@@ -399,8 +423,16 @@ def bind_pre_review_semantic_processing(
             )
 
         mode = str(env.get(PASSAGE_FORMATION_MODE_ENV, "") or "").strip() or DETERMINISTIC_MODE
-        if mode == DETERMINISTIC_MODE:
-            return original_fragments_and_spec(
+        try:
+            decision = resolve_passage_formation_strategy(
+                content_kind=kind,
+                deployment_mode=mode,
+            )
+        except PassageFormationPolicyError as exc:
+            raise ConsoleError(exc.code) from exc
+
+        if decision.strategy == STRATEGY_DETERMINISTIC:
+            fragments, spec = original_fragments_and_spec(
                 kind,
                 path,
                 data=data,
@@ -410,8 +442,7 @@ def bind_pre_review_semantic_processing(
                 family=family,
                 class_=class_,
             )
-        if mode != SEMANTIC_MODE:
-            raise ConsoleError("passage_formation_mode_invalid")
+            return fragments, _stamp_passage_formation(spec, decision)
 
         fragments = console._extract(
             kind,
@@ -431,7 +462,7 @@ def bind_pre_review_semantic_processing(
             model=provider.model,
             post_json=post_json,
         )
-        return fragments, spec
+        return fragments, _stamp_passage_formation(spec, decision)
 
     console._fragments_and_spec = configured_fragments_and_spec
 
