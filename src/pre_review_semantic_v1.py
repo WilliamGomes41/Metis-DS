@@ -78,6 +78,10 @@ SEMANTIC_MODEL_CONFIG = {
 PostJson = Callable[[str, dict[str, str], dict[str, Any], int], dict[str, Any]]
 
 
+def _configured_passage_formation_mode(environ: Mapping[str, str]) -> str:
+    return str(environ.get(PASSAGE_FORMATION_MODE_ENV, "") or "").strip() or DETERMINISTIC_MODE
+
+
 def _stamp_passage_formation(
     spec: dict[str, Any],
     decision: PassageFormationDecision,
@@ -555,6 +559,13 @@ def bind_pre_review_semantic_processing(
         return
 
     env = environ if environ is not None else os.environ
+
+    def active_passage_formation_mode() -> str:
+        return _configured_passage_formation_mode(env)
+
+    # Runtime-only projection for UI/status surfaces. This is not document state
+    # and is deliberately the same reader used by the processing router below.
+    console._passage_formation_mode_reader = active_passage_formation_mode
     original_fragments_and_spec = console._fragments_and_spec
     semantic_suppressed: ContextVar[bool] = ContextVar(
         f"metis_pre_review_semantic_suppressed_{id(console)}",
@@ -586,7 +597,7 @@ def bind_pre_review_semantic_processing(
                 formation_context=formation_context,
             )
 
-        mode = str(env.get(PASSAGE_FORMATION_MODE_ENV, "") or "").strip() or DETERMINISTIC_MODE
+        mode = active_passage_formation_mode()
         try:
             decision = resolve_passage_formation_strategy(
                 content_kind=kind,

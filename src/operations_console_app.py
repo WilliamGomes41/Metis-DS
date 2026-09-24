@@ -52,6 +52,7 @@ from src.ingest_limits_v1 import (
     read_upload_limited,
 )
 from src.llm_provider_v1 import load_llm_provider_config
+from src.passage_formation_policy_v1 import DETERMINISTIC_MODE, SEMANTIC_MODE
 from src.operations_console_v1 import (
     ALLOWED_CLASSES,
     ALLOWED_DELETE_NEXT,
@@ -88,6 +89,35 @@ FILENAME_HINT = (
 )
 BRAND_DIR = REPO_ROOT / "assets" / "brand"
 REVIEW_TASKS = frozenset({"individual", "together", "headings", "control", "decisions"})
+
+
+def _passage_formation_status_html(state: OperationsConsole) -> str:
+    reader = getattr(state, "_passage_formation_mode_reader", None)
+    mode = reader() if callable(reader) else DETERMINISTIC_MODE
+    if mode == SEMANTIC_MODE:
+        label = "Semantisch"
+        detail = (
+            "Nieuwe en opnieuw verwerkte passages worden momenteel brongebonden "
+            "semantisch gevormd. Review blijft verplicht."
+        )
+    elif mode == DETERMINISTIC_MODE:
+        label = "Deterministisch"
+        detail = (
+            "Nieuwe en opnieuw verwerkte passages worden momenteel zonder taalmodel "
+            "gevormd. Review blijft verplicht."
+        )
+    else:
+        label = "Configuratiefout"
+        detail = (
+            "De passage-formation configuratie is ongeldig. Nieuwe verwerking wordt "
+            "fail-closed geblokkeerd."
+        )
+    return (
+        '<div class="banner formation-mode-status" role="status">' 
+        f'<strong>Actieve verwerkingsmodus: {_esc(label)}</strong>'
+        f'<p class="field-help">{_esc(detail)}</p>'
+        "</div>"
+    )
 STATUS_LABELS = {
     "captured_not_published": "ingevoerd, niet gepubliceerd",
     "needs_review": "wacht op beoordeling",
@@ -2181,6 +2211,7 @@ def create_console_app(
             <section class="room">
               <h1>Document inleveren</h1>
               <p class="lead">Lever HTML, PDF of een gehashte beslisboom-freeze in. Klasse bepaalt het reviewpad.</p>
+              {_passage_formation_status_html(state)}
               <form method="post" action="/ingest" enctype="multipart/form-data">
                 <div class="sections">
                   <div class="section">
