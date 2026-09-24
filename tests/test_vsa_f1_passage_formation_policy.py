@@ -15,6 +15,7 @@ from src.passage_formation_policy_v1 import (
     PassageFormationPolicyError,
     resolve_passage_formation_strategy,
 )
+from src.semantic_transform_generic_v1 import transform
 from src.source_occurrence_authority_v1 import (
     REASON_AUTHORITATIVE_SECTION,
     prefer_authoritative_exact_occurrences,
@@ -197,3 +198,102 @@ def test_deterministic_splitter_routes_exact_duplicates_through_source_authority
     authority = row["metadata"]["source_occurrence_authority"]
     assert authority["principal_section_role"] == "primary"
     assert authority["alternate_occurrences"][0]["section_role"] == "summary"
+
+
+def test_transform_persists_only_closed_f1_system_evidence() -> None:
+    raw = [
+        {
+            "fragment_id": "primary-fragment",
+            "fragment_hash": "a" * 64,
+            "raw_text": PASSAGE,
+            "clean_text": PASSAGE,
+            "source_page": None,
+            "bbox": None,
+            "source_locator": {
+                "locator_type": "web_line_range",
+                "locator_value": "lines:2-2;p:2",
+            },
+        },
+        {
+            "fragment_id": "summary-fragment",
+            "fragment_hash": "b" * 64,
+            "raw_text": PASSAGE,
+            "clean_text": PASSAGE,
+            "source_page": None,
+            "bbox": None,
+            "source_locator": {
+                "locator_type": "web_line_range",
+                "locator_value": "lines:1-1;p:1",
+            },
+        },
+    ]
+    manifest = {
+        "canonical_source": {
+            "source_id": "source-test",
+            "title": "Test source",
+            "publisher": "V&VN",
+            "source_url": "https://example.org/test",
+            "source_type": "html",
+            "source_level": 1,
+            "canonicality": "canonical",
+            "source_checksum": None,
+            "checksum_algorithm": "sha256",
+            "integrity_status": "binary_unavailable",
+            "publication_date": "2026-09-24",
+            "version": "1.0",
+        }
+    }
+    formation = {
+        "policy_version": "passage-formation-policy-v1.0.0",
+        "strategy": "deterministic",
+        "reason": "explicit_operational_rollback",
+    }
+    authority = {
+        "version": "source-occurrence-authority-v1.0.0",
+        "principal_section_role": "primary",
+        "reason": "authoritative_section_preferred",
+        "alternate_occurrences": [
+            {
+                "source_fragment_ids": ["summary-fragment"],
+                "section_role": "summary",
+                "section_path": ["Richtlijn", "Samenvatting", "Aanbevelingen"],
+            }
+        ],
+    }
+    spec = {
+        "spec_version": "console-ingest-1.0",
+        "document_id": "doc-test",
+        "object_version": "1.0",
+        "target_group": [],
+        "care_setting": [],
+        "topic": ["test"],
+        "objects": [
+            {
+                "object_id": "doc-test-primary",
+                "object_type": "unclassified",
+                "text": PASSAGE,
+                "clean_text": PASSAGE,
+                "source_fragment_ids": [
+                    "primary-fragment",
+                    "summary-fragment",
+                ],
+                "section_path": ["Richtlijn", "2 Aanbevelingen"],
+                "review_track": "clinical",
+                "metadata": {
+                    "passage_formation": formation,
+                    "source_occurrence_authority": authority,
+                    "untrusted_extra": {"must": "not persist"},
+                },
+            }
+        ],
+    }
+
+    row = transform(spec, manifest, raw)[0]
+
+    assert row["metadata"]["passage_formation"] == formation
+    assert row["metadata"]["source_occurrence_authority"] == authority
+    assert "untrusted_extra" not in row["metadata"]
+    assert [
+        ref["raw_object_id"]
+        for ref in row["provenance"]["source_fragments"]
+    ] == ["primary-fragment", "summary-fragment"]
