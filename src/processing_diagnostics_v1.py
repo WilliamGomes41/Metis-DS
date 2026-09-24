@@ -81,26 +81,46 @@ def _proposed_type(obj: dict[str, Any]) -> str:
     ).strip() or "unknown"
 
 
+def _section_path(obj: dict[str, Any]) -> list[str]:
+    admission = admission_of(obj)
+    raw_path = (
+        admission.get("section_path")
+        or (obj.get("structure") or {}).get("section_path")
+        or []
+    )
+    return [
+        str(part).strip()
+        for part in raw_path
+        if str(part).strip()
+    ]
+
+
 def _section_role(obj: dict[str, Any]) -> str:
     admission = admission_of(obj)
     role = str(admission.get("section_role") or "").strip()
     if role:
         return role
-    path = [
-        str(part).strip()
-        for part in (
-            admission.get("section_path")
-            or (obj.get("structure") or {}).get("section_path")
-            or []
-        )
-        if str(part).strip()
-    ]
+    path = _section_path(obj)
     return section_role_for_path(path) if path else "unknown"
 
 
 def _formation_strategy(obj: dict[str, Any]) -> str:
     value = str(_metadata(obj, "passage_formation").get("strategy") or "").strip()
     return value or "unknown"
+
+
+def _formation_reason(obj: dict[str, Any]) -> str:
+    value = str(_metadata(obj, "passage_formation").get("reason") or "").strip()
+    return value or "unknown"
+
+
+def _candidate_text(obj: dict[str, Any]) -> str:
+    admission = admission_of(obj)
+    text = str(admission.get("candidate_text") or "").strip()
+    if text:
+        return text
+    content = obj.get("content") if isinstance(obj.get("content"), dict) else {}
+    return str(content.get("clean_text") or obj.get("text") or "").strip()
 
 
 def _selection_origin(obj: dict[str, Any]) -> str:
@@ -116,6 +136,47 @@ def _selection_origin(obj: dict[str, Any]) -> str:
 
 def _increment(counter: Counter[str], key: str) -> None:
     counter[str(key or "unknown").strip() or "unknown"] += 1
+
+
+def processing_diagnostic_rows(
+    objects: Iterable[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return one read-only diagnostic row per admission-blocked candidate.
+
+    This is evidence for diagnosis only. It deliberately preserves raw
+    admission reason codes and does not nominate a root cause or repair.
+    """
+
+    rows: list[dict[str, Any]] = []
+    for index, obj in enumerate(processing_issue_objects(objects)):
+        admission = admission_of(obj)
+        reason_codes = [
+            str(code).strip()
+            for code in (admission.get("reason_codes") or [])
+            if str(code).strip()
+        ]
+        families: list[str] = []
+        for code in reason_codes:
+            family = processing_issue_family(code)
+            if family not in families:
+                families.append(family)
+
+        rows.append(
+            {
+                "object_id": str(obj.get("object_id") or f"blocked-{index}"),
+                "object_version": str(obj.get("object_version") or ""),
+                "candidate_text": _candidate_text(obj),
+                "reason_codes": reason_codes,
+                "families": families,
+                "proposed_type": _proposed_type(obj),
+                "section_role": _section_role(obj),
+                "section_path": _section_path(obj),
+                "formation_strategy": _formation_strategy(obj),
+                "formation_reason": _formation_reason(obj),
+                "selection_origin": _selection_origin(obj),
+            }
+        )
+    return rows
 
 
 def processing_diagnostics(
