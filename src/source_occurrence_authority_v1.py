@@ -62,6 +62,30 @@ def _rank(unit: dict[str, Any]) -> int:
     return _ROLE_RANK.get(_section_role(unit), _ROLE_RANK["primary"])
 
 
+def _proposal_rank(unit: dict[str, Any]) -> int:
+    semantic = unit.get("semantic_passage")
+    if not isinstance(semantic, dict):
+        return 0
+    return 1 if semantic.get("selection_origin") == "proposal_selected" else 0
+
+
+def _apply_candidate_semantics(
+    principal: dict[str, Any],
+    donor: dict[str, Any],
+) -> dict[str, Any]:
+    """Keep candidate semantics independent from source-location authority."""
+
+    if donor is principal:
+        return principal
+    row = deepcopy(principal)
+    for key in ("semantic_passage", "proposed_object_type"):
+        if key in donor:
+            row[key] = deepcopy(donor[key])
+        else:
+            row.pop(key, None)
+    return row
+
+
 def _with_authority_metadata(
     principal: dict[str, Any],
     *,
@@ -108,6 +132,7 @@ def prefer_authoritative_exact_occurrences(
             groups[key] = {
                 "principal": unit,
                 "principal_position": position,
+                "semantic_donor": unit,
                 "occurrences": [_occurrence(unit)],
             }
             continue
@@ -117,10 +142,15 @@ def prefer_authoritative_exact_occurrences(
         if _rank(unit) > _rank(principal):
             current["principal"] = unit
             current["principal_position"] = position
+        if _proposal_rank(unit) > _proposal_rank(current["semantic_donor"]):
+            current["semantic_donor"] = unit
 
     out: list[tuple[int, dict[str, Any]]] = list(passthrough)
     for group in groups.values():
-        principal = group["principal"]
+        principal = _apply_candidate_semantics(
+            group["principal"],
+            group["semantic_donor"],
+        )
         occurrences = list(group["occurrences"])
         principal_occurrence = _occurrence(principal)
 
