@@ -33,6 +33,7 @@ from src.object_taxonomy_v1 import (
     STRENGTH_STAMP_LABELS,
     recommendation_strength_sentence,
     recommendation_strength_ui_applies,
+    review_priority_rank,
 )
 from src.admission_gate_v1 import admission_of, blocked_audit_lane
 from src.extract_coverage_v1 import coverage_panel_rows
@@ -1561,7 +1562,7 @@ def _render_review_index(
     regular_individual = regular_individual_review_queue(
         snapshot_objects, review_path=review_path
     ) if review_path != "boom" else []
-    individual = [*duty, *regular_individual]
+    individual = sorted([*duty, *regular_individual], key=review_priority_rank)
     blocked = blocked_audit_lane(snapshot_objects) if review_path != "boom" else []
     normal_passages, normal_batches = (0, 0)
     if normal_review_enabled:
@@ -2702,10 +2703,13 @@ def create_console_app(
         if safe_task == "individual":
             current = state.snapshot_objects(snapshot_id)
             path = review_path_for_klasse(state._envelope(snapshot_id)["class"])
-            queue = [
-                *slow_review_duty(current, review_path=path),
-                *regular_individual_review_queue(current, review_path=path),
-            ]
+            queue = sorted(
+                [
+                    *slow_review_duty(current, review_path=path),
+                    *regular_individual_review_queue(current, review_path=path),
+                ],
+                key=review_priority_rank,
+            )
             nxt = next(
                 (
                     str(row["object_id"])

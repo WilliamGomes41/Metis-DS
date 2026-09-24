@@ -76,6 +76,7 @@ from src.klasse_wijzigen_v1 import (
 )
 from src.object_taxonomy_v1 import (
     is_closed_recommendation_strength,
+    review_priority_rank,
 )
 from src.open_original_v1 import OpenOriginalError, open_source_passage, researcher_visible_prose
 from src.publish_authorization_v1 import invalidate_for_object, still_matches, tuple_record
@@ -438,7 +439,8 @@ def slow_review_duty(
     review_path: str | None = None,
 ) -> list[dict[str, Any]]:
     """Presented Inhoud cards: recommendation + condition/exception/high-risk."""
-    return [obj for obj in objects if is_slow_review_duty(obj, review_path=review_path)]
+    rows = [obj for obj in objects if is_slow_review_duty(obj, review_path=review_path)]
+    return rows if review_path == "boom" else sorted(rows, key=review_priority_rank)
 
 
 def remaining_unclassified(objects: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:

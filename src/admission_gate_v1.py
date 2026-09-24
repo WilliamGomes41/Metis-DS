@@ -11,7 +11,12 @@ import re
 from typing import Any, Iterable
 
 from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES, review_path_for_klasse
-from src.object_taxonomy_v1 import has_terminal_sentence_boundary, locator_of, section_role_for_path
+from src.object_taxonomy_v1 import (
+    has_terminal_sentence_boundary,
+    locator_of,
+    review_priority_rank,
+    section_role_for_path,
+)
 
 
 GATE_ALLOWED = "allowed"
@@ -776,9 +781,10 @@ def ordinary_review_queue(
 ) -> list[dict[str, Any]]:
     from src.operations_console_v1 import is_slow_review_duty
 
-    return [
+    rows = [
         obj
         for obj in objects
         if is_slow_review_duty(obj, review_path=review_path)
         and admission_of(obj).get("gate_result") != GATE_BLOCKED
     ]
+    return rows if review_path == "boom" else sorted(rows, key=review_priority_rank)
