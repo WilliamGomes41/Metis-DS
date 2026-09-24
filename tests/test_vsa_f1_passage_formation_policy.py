@@ -288,3 +288,34 @@ def test_transform_persists_only_closed_f1_system_evidence() -> None:
         ref["raw_object_id"]
         for ref in row["provenance"]["source_fragments"]
     ] == ["primary-fragment"]
+
+
+
+def test_equal_primary_authority_prefers_direct_occurrence_over_reconstructed_duplicate() -> None:
+    reconstructed = _unit(
+        "doc-reconstructed",
+        "fragment-a",
+        ["Richtlijn", "2 Aanbevelingen"],
+    )
+    reconstructed["source_fragment_ids"] = ["fragment-a", "fragment-b"]
+    direct = _unit(
+        "doc-direct",
+        "fragment-c",
+        ["Richtlijn", "2 Aanbevelingen"],
+    )
+
+    rows = prefer_authoritative_exact_occurrences([reconstructed, direct])
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["object_id"] == "doc-direct"
+    assert row["source_fragment_ids"] == ["fragment-c"]
+    authority = row["metadata"]["source_occurrence_authority"]
+    assert authority["principal_section_role"] == "primary"
+    assert authority["alternate_occurrences"] == [
+        {
+            "source_fragment_ids": ["fragment-a", "fragment-b"],
+            "section_role": "primary",
+            "section_path": ["Richtlijn", "2 Aanbevelingen"],
+        }
+    ]
