@@ -279,11 +279,23 @@ def _source_ordered_units(
     ]
 
 
+def _extractor_contract(fragments: list[dict[str, Any]]) -> str:
+    versions = sorted(
+        {
+            str(fragment.get("parser_version") or "").strip()
+            for fragment in fragments
+            if str(fragment.get("parser_version") or "").strip()
+        }
+    )
+    return "|".join(versions) if versions else "parser-version-unspecified"
+
+
 def _replay_identity(
     *,
     document_id: str,
     model: str,
     blocks: list[dict[str, Any]],
+    content_fragments: list[dict[str, Any]],
     formation_context: Mapping[str, Any] | None,
 ) -> dict[str, Any] | None:
     if not formation_context:
@@ -297,6 +309,7 @@ def _replay_identity(
         source_sha256=source_sha256,
         document_id=document_id,
         source_blocks_hash=_stable_json_hash(blocks),
+        extractor_version=_extractor_contract(content_fragments),
         reconstruction_version=RECONSTRUCTION_VERSION,
         formation_policy_version=PASSAGE_FORMATION_POLICY_VERSION,
         semantic_contract_version=SEMANTIC_PASSAGE_VERSION,
@@ -365,6 +378,7 @@ def _semantic_execution_before_review(
         document_id=document_id,
         model=safe_model,
         blocks=blocks,
+        content_fragments=content_fragments,
         formation_context=formation_context,
     )
     existing_replay = (
