@@ -14,7 +14,7 @@ from typing import Any
 from urllib.parse import quote, urlsplit
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.four_eyes_v1 import requires_four_eyes
@@ -1733,6 +1733,7 @@ def _render_review_index(
         return f'''
           {_review_task_header(snapshot_id, "Dekking en technische controle", "Controleer hier de volledigheid en technische blokkades; dit is geen extra inhoudelijke reviewtaak")}
           {_processing_diagnostics_html(snapshot_objects)}
+          <p><a class="btn-secondary" href="/review/processing-diagnostics?document={_esc(snapshot_id)}">Exporteer diagnostiek als JSON</a></p>
           {blocked_html}
           {_coverage_panel(snapshot_objects)}
         '''
@@ -2691,6 +2692,29 @@ def create_console_app(
             task=html.escape(task, quote=True),
             counts=_counts(account),
         )
+
+    @app.get("/review/processing-diagnostics", response_class=JSONResponse)
+    def review_processing_diagnostics(request: Request, document: str = "") -> JSONResponse:
+        account = _require(request)
+        if "reviewer" not in set(account.get("roles") or []):
+            raise ConsoleError("reviewer_role_required")
+        snapshot_id = document.strip()
+        if not snapshot_id:
+            raise ConsoleError("unknown_snapshot")
+        envelope = state._envelope(snapshot_id)
+        if account["account_id"] not in (envelope.get("named_reviewers") or []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        objects = state.snapshot_objects(snapshot_id)
+        payload = {
+            "snapshot_id": snapshot_id,
+            "document_id": str(envelope.get("document_id") or ""),
+            "title": str(envelope.get("title") or ""),
+            "version": str(envelope.get("version") or ""),
+            "objects_revision": state.objects_revision(snapshot_id),
+            "diagnostics": processing_diagnostics(objects),
+        }
+        return JSONResponse(payload)
+
 
     @app.get("/review/bronpassage", response_class=HTMLResponse)
     def review_bronpassage(request: Request, document: str = "", object: str = "", task: str = "") -> str:
