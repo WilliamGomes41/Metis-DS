@@ -1,4 +1,6 @@
 """VSA F1 contract tests: passage-formation policy + source authority."""
+
+# release-control-evidence: kwaliteit
 from __future__ import annotations
 
 import pytest
