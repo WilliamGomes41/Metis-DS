@@ -278,6 +278,11 @@ def test_runtime_policy_is_instance_bound_and_keeps_explicit_rollback_mode(tmp_p
     )[1]
 
     assert semantic_spec["objects"][1]["semantic_passage"]["source_bound"] is True
+    assert semantic_spec["objects"][1]["metadata"]["passage_formation"] == {
+        "policy_version": "passage-formation-policy-v1.0.0",
+        "strategy": "semantic",
+        "reason": "semantic_free_text_required",
+    }
     assert "semantic_passage" not in untouched_spec["objects"][1]
 
     env[PASSAGE_FORMATION_MODE_ENV] = DETERMINISTIC_MODE
@@ -292,6 +297,11 @@ def test_runtime_policy_is_instance_bound_and_keeps_explicit_rollback_mode(tmp_p
         class_="richtlijn",
     )[1]
     assert "semantic_passage" not in rollback_spec["objects"][1]
+    assert rollback_spec["objects"][1]["metadata"]["passage_formation"] == {
+        "policy_version": "passage-formation-policy-v1.0.0",
+        "strategy": "deterministic",
+        "reason": "explicit_operational_rollback",
+    }
 
 
 
@@ -874,3 +884,42 @@ def test_semantic_review_does_not_guess_when_selection_is_ambiguous() -> None:
     assert "Herhaal. Midden. Herhaal." in html
     assert "kon niet eenduidig" in html
 
+
+
+
+def test_semantic_source_authority_prefers_primary_duplicate_over_summary() -> None:
+    fragments = [
+        {
+            **_fragment("summary", "Gebruik de afgesproken interventie."),
+            "section_path": ["Richtlijn", "Samenvatting", "Aanbevelingen"],
+        },
+        {
+            **_fragment("primary", "Gebruik de afgesproken interventie."),
+            "section_path": ["Richtlijn", "2 Aanbevelingen"],
+        },
+    ]
+
+    def fake_post(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
+        return _response(_full_span_proposal(payload))
+
+    units = semantic_units_before_review(
+        fragments,
+        document_id="doc-authority",
+        api_key="product-key",
+        model="test-model",
+        post_json=fake_post,
+    )
+
+    assert len(units) == 1
+    row = units[0]
+    assert row["section_path"] == ["Richtlijn", "2 Aanbevelingen"]
+    assert row["source_fragment_ids"] == ["primary", "summary"]
+    authority = row["metadata"]["source_occurrence_authority"]
+    assert authority["principal_section_role"] == "primary"
+    assert authority["alternate_occurrences"] == [
+        {
+            "source_fragment_ids": ["summary"],
+            "section_role": "summary",
+            "section_path": ["Richtlijn", "Samenvatting", "Aanbevelingen"],
+        }
+    ]
