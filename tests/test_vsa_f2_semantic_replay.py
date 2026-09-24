@@ -126,6 +126,8 @@ def _proposal() -> dict:
 @pytest.mark.parametrize(
     ("field", "value"),
     [
+        ("snapshot_id", "snap-cccccccccccccccc-dddddddd"),
+        ("document_id", "doc-2"),
         ("source_sha256", "f" * 64),
         ("source_blocks_hash", "f" * 64),
         ("extractor_version", "html-visible-text-v2"),
@@ -297,6 +299,9 @@ def test_exact_replay_survives_restart_and_makes_zero_provider_calls(tmp_path: P
     assert replay_candidate["content"] == first_candidate["content"]
     assert replay_candidate.get("proposed_object_type") == first_candidate.get("proposed_object_type")
     assert replay_candidate["metadata"]["semantic_passage"] == first_candidate["metadata"]["semantic_passage"]
+    assert replay_candidate["metadata"]["admission"] == first_candidate["metadata"]["admission"]
+    assert replay_candidate["metadata"]["passage_register"] == first_candidate["metadata"]["passage_register"]
+    assert replay_candidate["governance"] == first_candidate["governance"]
     assert (
         replay_candidate["metadata"]["source_occurrence_authority"]
         == first_candidate["metadata"]["source_occurrence_authority"]
