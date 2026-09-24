@@ -50,6 +50,7 @@ def test_ingest_shows_deterministic_as_runtime_default_without_control(
     assert 'data-passage-formation-mode="deterministic"' in page.text
     assert "Actieve verwerkingsmodus: Deterministisch" in page.text
     assert "Nieuwe en opnieuw verwerkte passages worden momenteel zonder taalmodel gevormd." in page.text
+    assert "Beslisbomen blijven deterministisch." in page.text
     assert "Review blijft verplicht." in page.text
     assert f'name="{PASSAGE_FORMATION_MODE_ENV}"' not in page.text
     assert 'name="passage_formation_mode"' not in page.text
@@ -78,8 +79,9 @@ def test_ingest_projects_semantic_runtime_mode_and_replay_behavior(
     assert page.status_code == 200
     assert 'data-passage-formation-mode="semantic"' in page.text
     assert "Actieve verwerkingsmodus: Semantisch" in page.text
-    assert "Nieuwe en opnieuw verwerkte passages worden brongebonden semantisch gevormd." in page.text
+    assert "Nieuwe en opnieuw verwerkte HTML- en PDF-passages worden brongebonden semantisch gevormd." in page.text
     assert "Exacte replay wordt hergebruikt wanneer mogelijk" in page.text
+    assert "Beslisbomen blijven deterministisch." in page.text
     assert "Review blijft verplicht." in page.text
 
 
