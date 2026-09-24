@@ -1,6 +1,7 @@
 """D2a processing-diagnostics contract.
 
 # release-control-evidence: scope/belofte
+# release-control-evidence: toegang
 # release-control-evidence: kwaliteit
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
@@ -10,7 +11,10 @@ from __future__ import annotations
 from copy import deepcopy
 
 from src.domain_dimensions_v1 import processing_issue_objects
-from src.operations_console_app import _processing_diagnostics_html
+from src.operations_console_app import (
+    _processing_diagnostics_html,
+    _render_review_index,
+)
 from src.processing_diagnostics_v1 import (
     DEPENDENCY_RESOLUTION,
     SEMANTIC_CONTRACT,
@@ -249,3 +253,32 @@ def test_technical_control_copy_distinguishes_passages_signals_and_root_cause() 
     assert "source_fidelity_failure" in html
     assert "future_parser_reason_v2" in html
     assert "Niet ingedeelde reason codes" in html
+
+
+def test_control_diagnostics_stay_on_the_existing_read_path() -> None:
+    """Toegang: the panel is a projection on the existing control task.
+
+    Touching operations_console_app makes route/auth evidence required.
+    The diagnostic section must not add a form, a POST, or a new authority.
+    """
+
+    objects = [
+        _obj("a", reasons=["incomplete_sentence", "source_fidelity_failure"]),
+        _obj("allowed", gate_result="allowed", reasons=["incomplete_sentence"]),
+    ]
+    before = deepcopy(objects)
+
+    html = _render_review_index("snap-1", objects, "richtlijn", task="control")
+
+    assert objects == before
+    start = html.find('class="processing-diagnostics"')
+    end = html.find("</section>", start)
+    panel = html[start:end]
+    assert start != -1 and end != -1
+    assert "<form" not in panel.lower()
+    assert 'method="post"' not in panel.lower()
+    assert "Passage allowed." not in panel
+    assert "Waarom passages technisch geblokkeerd zijn" in panel
+    assert "Technisch herstel nodig (1)" in html
+    assert 'action="/review' not in panel
+

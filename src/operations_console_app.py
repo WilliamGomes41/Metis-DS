@@ -1622,9 +1622,7 @@ def _processing_diagnostics_html(
         <h3 id="processing-diagnostics-title">Waarom passages technisch geblokkeerd zijn</h3>
         <p class="lead">
           <b>{blocked_count}</b> passages hebben samen <b>{issue_count}</b> technische signalen.
-          Een passage kan meerdere signalen hebben. Deze signalen tonen welk admission-contract
-          niet is gehaald; ze bewijzen niet automatisch de onderliggende root cause en zijn geen
-          inhoudelijke afwijzing door een reviewer.
+          Een passage kan meerdere signalen hebben. Deze signalen tonen welk admission-contract niet is gehaald; ze bewijzen niet automatisch de onderliggende root cause en zijn geen inhoudelijke afwijzing door een reviewer.
         </p>
         {anomaly}
         <h4>Signalen per diagnostische familie</h4>
