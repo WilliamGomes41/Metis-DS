@@ -24,9 +24,9 @@ ROOT = Path(__file__).resolve().parents[1]
 CONSOLE_REQUIREMENTS_NAME = "requirements-console.txt"
 DEPLOY_COMMIT_MARKER = "config/deployed_commit.txt"
 AZURE_MANYLINUX_PLATFORM = "manylinux2014_x86_64"
+AZURE_ABI3_PLATFORM = "manylinux_2_28_x86_64"
 AZURE_PYTHON_VERSION = "3.12"
 AZURE_PYTHON_ABI = "cp312"
-AZURE_NATIVE_WHEEL_PACKAGES = ("cryptography", "pydantic-core")
 INCLUDE_DIRS = (
     "src",
     "scripts",
@@ -80,6 +80,114 @@ class DeployPackageError(RuntimeError):
 
 def default_console_requirements(root: Path) -> Path:
     return Path(root) / CONSOLE_REQUIREMENTS_NAME
+
+
+def requirement_specs(path: Path, *, _seen: set[Path] | None = None) -> list[str]:
+    """Return installable requirement lines, following ``-r`` includes."""
+
+    resolved = Path(path).resolve()
+    seen = _seen if _seen is not None else set()
+    if resolved in seen or not resolved.is_file():
+        return []
+    seen.add(resolved)
+    specs: list[str] = []
+    for raw in resolved.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        include = _INCLUDE_RE.match(line)
+        if include:
+            specs.extend(requirement_specs(resolved.parent / include.group(1), _seen=seen))
+            continue
+        if line.startswith("-"):
+            continue
+        specs.append(line)
+    return specs
+
+
+def _python_executable() -> str:
+    return os.environ.get("PYTHON") or shutil.which("python") or shutil.which("python3") or "python3"
+
+
+def _pip_install_target(
+    *,
+    python: str,
+    vendor: Path,
+    specs: list[str],
+    platform: str,
+    upgrade: bool,
+    cwd: Path,
+) -> subprocess.CompletedProcess[str]:
+    command = [
+        python,
+        "-m",
+        "pip",
+        "install",
+        "--no-compile",
+        "--only-binary=:all:",
+        "--platform",
+        platform,
+        "--implementation",
+        "cp",
+        "--python-version",
+        AZURE_PYTHON_VERSION,
+        "--abi",
+        AZURE_PYTHON_ABI,
+        "--abi",
+        "abi3",
+        "-t",
+        str(vendor),
+        *specs,
+    ]
+    if upgrade:
+        command.insert(4, "--upgrade")
+    return subprocess.run(command, cwd=cwd, check=False, capture_output=True, text=True)
+
+
+def _install_azure_dependency_graph(
+    *,
+    python: str,
+    vendor: Path,
+    requirements: Path,
+    cwd: Path,
+) -> None:
+    """Vendor the console graph for CPython 3.12, not the build-runner ABI.
+
+    manylinux2014 + cp312/abi3 is the Azure floor. A pin with no such wheel,
+    currently PyMuPDF's abi3 manylinux_2_28 build, is installed alone so it
+    cannot replace the manylinux2014 wheels already chosen for the rest.
+    """
+
+    unresolved: list[str] = []
+    for spec in requirement_specs(requirements):
+        primary = _pip_install_target(
+            python=python,
+            vendor=vendor,
+            specs=[spec],
+            platform=AZURE_MANYLINUX_PLATFORM,
+            upgrade=True,
+            cwd=cwd,
+        )
+        if primary.returncode == 0:
+            continue
+        if "No matching distribution" not in f"{primary.stderr}\n{primary.stdout}":
+            raise DeployPackageError(
+                f"azure_target_install_failed:{spec}\n{primary.stderr[-2000:]}"
+            )
+        unresolved.append(spec)
+    for spec in unresolved:
+        fallback = _pip_install_target(
+            python=python,
+            vendor=vendor,
+            specs=[spec],
+            platform=AZURE_ABI3_PLATFORM,
+            upgrade=False,
+            cwd=cwd,
+        )
+        if fallback.returncode != 0:
+            raise DeployPackageError(
+                f"azure_target_wheel_missing:{spec}\n{fallback.stderr[-2000:]}"
+            )
 
 
 def requirement_package_names(path: Path, *, _seen: set[Path] | None = None) -> set[str]:
@@ -283,49 +391,12 @@ def write_deploy_zip(
         marker.write_text(git_head_commit(root) + "\n", encoding="utf-8")
         vendor = stage / ".python_packages"
         vendor.mkdir(parents=True, exist_ok=True)
-        command = [
-            os.environ.get("PYTHON") or shutil.which("python") or shutil.which("python3") or "python3",
-            "-m",
-            "pip",
-            "install",
-            "--upgrade",
-            "--no-compile",
-            "-r",
-            str(requirements),
-            "-t",
-            str(vendor),
-        ]
-        subprocess.run(command, check=True, cwd=root)
-        # The package may be built on a newer Linux host than Azure App Service.
-        # Re-resolve native security wheels against Azure's glibc-compatible
-        # manylinux2014 baseline instead of shipping host-specific binaries.
-        declared_packages = requirement_package_names(requirements)
-        for package in AZURE_NATIVE_WHEEL_PACKAGES:
-            if package not in declared_packages:
-                continue
-            native_command = [
-                command[0],
-                "-m",
-                "pip",
-                "install",
-                "--upgrade",
-                "--force-reinstall",
-                "--no-compile",
-                "--no-deps",
-                "--only-binary=:all:",
-                "--platform",
-                AZURE_MANYLINUX_PLATFORM,
-                "--implementation",
-                "cp",
-                "--python-version",
-                AZURE_PYTHON_VERSION,
-                "--abi",
-                AZURE_PYTHON_ABI,
-                pinned_requirement(requirements, package),
-                "-t",
-                str(vendor),
-            ]
-            subprocess.run(native_command, check=True, cwd=root)
+        _install_azure_dependency_graph(
+            python=_python_executable(),
+            vendor=vendor,
+            requirements=requirements,
+            cwd=root,
+        )
         if not any(vendor.iterdir()):
             raise DeployPackageError("dependencies_missing")
         _refuse_fat_vendor_tree(vendor)
