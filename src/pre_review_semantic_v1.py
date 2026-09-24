@@ -362,8 +362,11 @@ def _semantic_execution_before_review(
     formation_context: Mapping[str, Any] | None = None,
     post_json: PostJson | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    safe_key = str(api_key or "").strip()
     safe_model = str(model or "").strip()
     if not safe_model:
+        if not safe_key:
+            raise ConsoleError("pre_review_llm_api_key_required")
         raise ConsoleError("pre_review_llm_model_required")
 
     content_fragments = _content_fragments(fragments)
@@ -434,7 +437,7 @@ def _semantic_execution_before_review(
                 proposal=proposal,
                 replay_rejection_reason=replay_rejection_reason,
             )
-    elif not blocks and not str(api_key or "").strip():
+    elif not blocks and not safe_key:
         # Preserve the pre-F2 configuration contract for semantic mode even
         # when a document contains only deterministic headings.
         raise ConsoleError("pre_review_llm_api_key_required")
