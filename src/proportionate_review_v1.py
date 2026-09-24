@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from src.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, admission_of
 from src.beslisboom_path_v1 import review_path_for_klasse
 from src.four_eyes_v1 import requires_four_eyes
+from src.object_taxonomy_v1 import review_priority_rank
 from src.operations_console_v1 import (
     ConsoleError,
     OperationsConsole,
@@ -65,13 +66,16 @@ def regular_review_queue(
     rows = list(objects)
     if review_path == "boom":
         return [obj for obj in rows if is_slow_review_duty(obj, review_path=review_path)]
-    return [
-        obj
-        for obj in rows
-        if obj.get("object_type") != "document"
-        and review_lane(obj, review_path=review_path) != "fast"
-        and admission_of(obj).get("gate_result") == GATE_ALLOWED
-    ]
+    return sorted(
+        [
+            obj
+            for obj in rows
+            if obj.get("object_type") != "document"
+            and review_lane(obj, review_path=review_path) != "fast"
+            and admission_of(obj).get("gate_result") == GATE_ALLOWED
+        ],
+        key=review_priority_rank,
+    )
 
 
 def normal_risk_batch_eligible(obj: dict[str, Any], *, review_path: str) -> bool:
@@ -107,7 +111,10 @@ def normal_risk_batch_queue(
     *,
     review_path: str,
 ) -> list[dict[str, Any]]:
-    return [obj for obj in objects if normal_risk_batch_eligible(obj, review_path=review_path)]
+    return sorted(
+        [obj for obj in objects if normal_risk_batch_eligible(obj, review_path=review_path)],
+        key=review_priority_rank,
+    )
 
 
 def normal_risk_batch_counts(
@@ -135,15 +142,20 @@ def regular_individual_review_queue(
         str(obj.get("object_id") or "")
         for obj in normal_risk_batch_queue(rows, review_path=review_path)
     }
-    return [
-        obj
-        for obj in rows
-        if obj.get("object_type") != "document"
-        and review_lane(obj, review_path=review_path) != "fast"
-        and not is_slow_review_duty(obj, review_path=review_path)
-        and admission_of(obj).get("gate_result") == GATE_ALLOWED
-        and str(obj.get("object_id") or "") not in batch_ids
-    ] if review_path != "boom" else []
+    if review_path == "boom":
+        return []
+    return sorted(
+        [
+            obj
+            for obj in rows
+            if obj.get("object_type") != "document"
+            and review_lane(obj, review_path=review_path) != "fast"
+            and not is_slow_review_duty(obj, review_path=review_path)
+            and admission_of(obj).get("gate_result") == GATE_ALLOWED
+            and str(obj.get("object_id") or "") not in batch_ids
+        ],
+        key=review_priority_rank,
+    )
 
 
 def render_normal_risk_batch_panel(
