@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import re
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -97,6 +98,20 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
     return result
 
 
+def _system_candidate_metadata(item: dict[str, Any]) -> dict[str, Any]:
+    """Persist only closed system-generated F1 evidence from the semantic spec."""
+
+    source = item.get("metadata")
+    if not isinstance(source, dict):
+        return {}
+    out: dict[str, Any] = {}
+    for key in ("passage_formation", "source_occurrence_authority"):
+        value = source.get(key)
+        if isinstance(value, dict):
+            out[key] = deepcopy(value)
+    return out
+
+
 def load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -173,6 +188,9 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
         high = bool(risk_fields)
         page = next((r.get("source_page") for r in (raw_by_id[x] for x in item.get("source_fragment_ids", [])) if r.get("source_page")), None)
         semantic_passage = _semantic_passage_metadata(item)
+        system_metadata = _system_candidate_metadata(item)
+        if semantic_passage is not None:
+            system_metadata["semantic_passage"] = semantic_passage
         obj = {
             "object_id": item["object_id"],
             "document_id": spec["document_id"],
@@ -228,11 +246,7 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
                 "has_uncertainty": bool(item.get("uncertainty_items")),
                 "items": item.get("uncertainty_items", []),
             },
-            **(
-                {"metadata": {"semantic_passage": semantic_passage}}
-                if semantic_passage is not None
-                else {}
-            ),
+            **({"metadata": system_metadata} if system_metadata else {}),
             "governance": _governance(item.get("review_track", "clinical"), high),
             "provenance": {
                 "transformation_mode": "deterministic",

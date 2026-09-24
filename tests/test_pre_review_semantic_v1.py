@@ -278,6 +278,11 @@ def test_runtime_policy_is_instance_bound_and_keeps_explicit_rollback_mode(tmp_p
     )[1]
 
     assert semantic_spec["objects"][1]["semantic_passage"]["source_bound"] is True
+    assert semantic_spec["objects"][1]["metadata"]["passage_formation"] == {
+        "policy_version": "passage-formation-policy-v1.0.0",
+        "strategy": "semantic",
+        "reason": "semantic_free_text_required",
+    }
     assert "semantic_passage" not in untouched_spec["objects"][1]
 
     env[PASSAGE_FORMATION_MODE_ENV] = DETERMINISTIC_MODE
@@ -292,6 +297,11 @@ def test_runtime_policy_is_instance_bound_and_keeps_explicit_rollback_mode(tmp_p
         class_="richtlijn",
     )[1]
     assert "semantic_passage" not in rollback_spec["objects"][1]
+    assert rollback_spec["objects"][1]["metadata"]["passage_formation"] == {
+        "policy_version": "passage-formation-policy-v1.0.0",
+        "strategy": "deterministic",
+        "reason": "explicit_operational_rollback",
+    }
 
 
 
@@ -874,3 +884,261 @@ def test_semantic_review_does_not_guess_when_selection_is_ambiguous() -> None:
     assert "Herhaal. Midden. Herhaal." in html
     assert "kon niet eenduidig" in html
 
+
+
+
+def test_semantic_source_authority_prefers_primary_duplicate_over_summary() -> None:
+    fragments = [
+        {
+            **_fragment("summary", "Gebruik de afgesproken interventie."),
+            "section_path": ["Richtlijn", "Samenvatting", "Aanbevelingen"],
+        },
+        {
+            **_fragment("primary", "Gebruik de afgesproken interventie."),
+            "section_path": ["Richtlijn", "2 Aanbevelingen"],
+        },
+    ]
+
+    def fake_post(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
+        return _response(_full_span_proposal(payload))
+
+    units = semantic_units_before_review(
+        fragments,
+        document_id="doc-authority",
+        api_key="product-key",
+        model="test-model",
+        post_json=fake_post,
+    )
+
+    assert len(units) == 1
+    row = units[0]
+    assert row["section_path"] == ["Richtlijn", "2 Aanbevelingen"]
+    assert row["source_fragment_ids"] == ["primary"]
+    authority = row["metadata"]["source_occurrence_authority"]
+    assert authority["principal_section_role"] == "primary"
+    assert authority["alternate_occurrences"] == [
+        {
+            "source_fragment_ids": ["summary"],
+            "section_role": "summary",
+            "section_path": ["Richtlijn", "Samenvatting", "Aanbevelingen"],
+        }
+    ]
+
+
+
+def test_source_authority_does_not_erase_selected_semantics_when_primary_is_coverage() -> None:
+    fragments = [
+        {
+            **_fragment("summary-selected", "Gebruik de afgesproken interventie."),
+            "section_path": ["Richtlijn", "Samenvatting", "Aanbevelingen"],
+        },
+        {
+            **_fragment("primary-coverage", "Gebruik de afgesproken interventie."),
+            "section_path": ["Richtlijn", "2 Aanbevelingen"],
+        },
+    ]
+
+    def select_summary_only(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
+        blocks = json.loads(payload["input"][1]["content"])["source_blocks"]
+        summary = blocks[0]
+        return _response(
+            {
+                "objects": [
+                    {
+                        "spans": [
+                            {
+                                "block_id": summary["block_id"],
+                                "start": 0,
+                                "end": len(summary["text"]),
+                            }
+                        ],
+                        "proposed_object_type": "recommendation",
+                    }
+                ],
+                "abstain_reason": None,
+            }
+        )
+
+    units = semantic_units_before_review(
+        fragments,
+        document_id="doc-authority-selected",
+        api_key="product-key",
+        model="test-model",
+        post_json=select_summary_only,
+    )
+
+    assert len(units) == 1
+    row = units[0]
+    assert row["section_path"] == ["Richtlijn", "2 Aanbevelingen"]
+    assert row["source_fragment_ids"] == ["primary-coverage"]
+    assert row["proposed_object_type"] == "recommendation"
+    assert row["semantic_passage"]["selection_origin"] == "proposal_selected"
+    authority = row["metadata"]["source_occurrence_authority"]
+    assert authority["principal_section_role"] == "primary"
+    assert authority["alternate_occurrences"][0]["section_role"] == "summary"
+
+
+
+def test_boom_route_is_deterministic_under_semantic_deployment_mode(tmp_path: Path) -> None:
+    env = {
+        PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
+        LLM_API_KEY_ENV: "product-key",
+        LLM_MODEL_ENV: "test-model",
+    }
+    calls = 0
+
+    def must_not_call_model(*_args):
+        nonlocal calls
+        calls += 1
+        raise AssertionError("boom passage formation must stay deterministic")
+
+    console = OperationsConsole(
+        root=tmp_path / "boom",
+        source_store=tmp_path / "boom-sources",
+        runtime=tmp_path / "boom-runtime",
+    )
+    bind_pre_review_semantic_processing(
+        console,
+        environ=env,
+        post_json=must_not_call_model,
+    )
+    payload = {
+        "kind": "beslisboom-freeze",
+        "paths": [{"id": "path-screening", "text": "Screening op valrisico"}],
+        "nodes": [
+            {
+                "id": "node-vraag",
+                "text": "Is er een verhoogd valrisico?",
+                "scorelist": False,
+            }
+        ],
+        "outcomes": [
+            {
+                "id": "out-verwijs",
+                "text": "Verwijs naar de valpoli.",
+                "applies_if": ["node-vraag"],
+            }
+        ],
+    }
+
+    _fragments, spec = console._fragments_and_spec(
+        "boom",
+        tmp_path / "boom.json",
+        data=(json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8"),
+        document_id="doc-boom",
+        source_id="src-boom",
+        title="Valrisico",
+        family="valrisico",
+        class_="beslisboom",
+    )
+
+    assert calls == 0
+    content = [obj for obj in spec["objects"] if obj.get("object_type") != "document"]
+    assert content
+    assert all(
+        obj["metadata"]["passage_formation"] == {
+            "policy_version": "passage-formation-policy-v1.0.0",
+            "strategy": "deterministic",
+            "reason": "authoritative_tree_structure",
+        }
+        for obj in content
+    )
+
+
+
+def test_f1_end_to_end_primary_authority_survives_restart(tmp_path: Path) -> None:
+    text = (
+        "De werkgroep adviseert de verpleegkundige de risicofactoren "
+        "scorelijst te gebruiken bij iedere intake."
+    )
+    fragments = [
+        {
+            **_fragment("summary-e2e", text),
+            "section_path": ["Richtlijn", "Samenvatting", "Aanbevelingen"],
+        },
+        {
+            **_fragment("primary-e2e", text),
+            "section_path": ["Richtlijn", "2 Aanbevelingen"],
+        },
+    ]
+    env = {
+        PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
+        LLM_API_KEY_ENV: "product-key",
+        LLM_MODEL_ENV: "test-model",
+    }
+
+    def fake_post(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
+        return _response(_full_span_proposal(payload))
+
+    root = tmp_path / "root"
+    source_store = tmp_path / "sources"
+    runtime = tmp_path / "runtime"
+    console = OperationsConsole(
+        root=root,
+        source_store=source_store,
+        runtime=runtime,
+    )
+    researcher = console.create_account(
+        username="researcher-f1",
+        password="researcher-secret",
+        roles=("researcher",),
+        display_name="Researcher F1",
+    )
+    reviewer = console.create_account(
+        username="reviewer-f1",
+        password="reviewer-secret",
+        roles=("reviewer",),
+        display_name="Reviewer F1",
+    )
+    console._extract = lambda *_args, **_kwargs: fragments
+    bind_pre_review_semantic_processing(
+        console,
+        environ=env,
+        post_json=fake_post,
+    )
+
+    receipt = console.ingest(
+        actor_id=researcher["account_id"],
+        filename="authority.html",
+        data=b"<html><body>authority</body></html>",
+        content_type="text/html",
+        ingest_kind="new",
+        title="Authority",
+        version="1.0",
+        date="2026-09-24",
+        live_url="",
+        class_="richtlijn",
+        family="kwaliteit",
+        named_reviewers=[reviewer["account_id"]],
+    )
+
+    snapshot_id = receipt["snapshot_id"]
+    current = [
+        row
+        for row in console.snapshot_objects(snapshot_id)
+        if row.get("object_type") != "document"
+    ]
+    assert len(current) == 1
+    candidate = current[0]
+    assert candidate["structure"]["section_path"] == ["Richtlijn", "2 Aanbevelingen"]
+    assert [
+        ref["raw_object_id"]
+        for ref in candidate["provenance"]["source_fragments"]
+    ] == ["primary-e2e"]
+    assert candidate["metadata"]["source_occurrence_authority"]["principal_section_role"] == "primary"
+    assert candidate["metadata"]["passage_formation"]["strategy"] == "semantic"
+    assert passage_register_of(candidate)["status"] == "selected_as_candidate"
+    assert console.waiting_task_counts(reviewer["account_id"])["review"] >= 1
+
+    restarted = OperationsConsole(
+        root=root,
+        source_store=source_store,
+        runtime=runtime,
+    )
+    durable = [
+        row
+        for row in restarted.snapshot_objects(snapshot_id)
+        if row.get("object_type") != "document"
+    ]
+    assert durable == current
+    assert restarted.waiting_task_counts(reviewer["account_id"])["review"] >= 1

@@ -629,24 +629,17 @@ def _is_heading_object(obj: dict[str, Any]) -> bool:
     return obj.get("object_type") == "heading" or obj.get("proposed_object_type") == "heading"
 
 
-def _neighbor_text(objects: list[dict[str, Any]], index: int, step: int) -> str:
+def _paragraph_neighbor_text(objects: list[dict[str, Any]], index: int, step: int) -> str:
+    """Return the adjacent paragraph inside the current heading section."""
+
     cursor = index + step
     while 0 <= cursor < len(objects):
         row = objects[cursor]
         if row.get("object_type") == "document":
             cursor += step
             continue
-        return _object_text(row)
-    return ""
-
-
-def _paragraph_neighbor_text(objects: list[dict[str, Any]], index: int, step: int) -> str:
-    cursor = index + step
-    while 0 <= cursor < len(objects):
-        row = objects[cursor]
-        if row.get("object_type") == "document" or _is_heading_object(row):
-            cursor += step
-            continue
+        if _is_heading_object(row):
+            return ""
         return _object_text(row)
     return ""
 
@@ -716,8 +709,8 @@ def candidate_from_object(
         "source_text_exact": source_exact,
         "candidate_text": text,
         "proposed_type": proposed,
-        "context_before": previous_paragraph or _neighbor_text(objects, index, -1),
-        "context_after": next_paragraph or _neighbor_text(objects, index, 1),
+        "context_before": previous_paragraph,
+        "context_after": next_paragraph,
         "previous_paragraph": previous_paragraph,
         "next_paragraph": next_paragraph,
         "current_heading": current_heading,
