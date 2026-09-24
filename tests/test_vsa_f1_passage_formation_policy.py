@@ -118,10 +118,7 @@ def test_summary_first_primary_later_prefers_primary_and_keeps_alternate() -> No
     row = rows[0]
     assert row["object_id"] == "doc-primary"
     assert row["section_path"] == ["Richtlijn", "2 Aanbevelingen"]
-    assert row["source_fragment_ids"] == [
-        "primary-fragment",
-        "summary-fragment",
-    ]
+    assert row["source_fragment_ids"] == ["primary-fragment"]
     authority = row["metadata"]["source_occurrence_authority"]
     assert authority["principal_section_role"] == "primary"
     assert authority["reason"] == REASON_AUTHORITATIVE_SECTION
@@ -166,7 +163,7 @@ def test_exact_primary_duplicates_collapse_without_fuzzy_matching() -> None:
 
     assert len(rows) == 2
     assert rows[0]["object_id"] == "doc-a"
-    assert rows[0]["source_fragment_ids"] == ["fragment-a", "fragment-b"]
+    assert rows[0]["source_fragment_ids"] == ["fragment-a"]
     assert rows[1]["object_id"] == "doc-c"
 
 
@@ -191,10 +188,7 @@ def test_deterministic_splitter_routes_exact_duplicates_through_source_authority
     row = rows[0]
     assert row["object_id"] == "doc-authority-primary-fragment"
     assert row["section_path"] == ["Richtlijn", "2 Aanbevelingen"]
-    assert row["source_fragment_ids"] == [
-        "primary-fragment",
-        "summary-fragment",
-    ]
+    assert row["source_fragment_ids"] == ["primary-fragment"]
     authority = row["metadata"]["source_occurrence_authority"]
     assert authority["principal_section_role"] == "primary"
     assert authority["alternate_occurrences"][0]["section_role"] == "summary"
@@ -273,10 +267,7 @@ def test_transform_persists_only_closed_f1_system_evidence() -> None:
                 "object_type": "unclassified",
                 "text": PASSAGE,
                 "clean_text": PASSAGE,
-                "source_fragment_ids": [
-                    "primary-fragment",
-                    "summary-fragment",
-                ],
+                "source_fragment_ids": ["primary-fragment"],
                 "section_path": ["Richtlijn", "2 Aanbevelingen"],
                 "review_track": "clinical",
                 "metadata": {
@@ -296,4 +287,4 @@ def test_transform_persists_only_closed_f1_system_evidence() -> None:
     assert [
         ref["raw_object_id"]
         for ref in row["provenance"]["source_fragments"]
-    ] == ["primary-fragment", "summary-fragment"]
+    ] == ["primary-fragment"]
