@@ -37,7 +37,10 @@ from src.object_taxonomy_v1 import (
 )
 from src.admission_gate_v1 import admission_of
 from src.domain_dimensions_v1 import processing_issue_objects
-from src.processing_diagnostics_v1 import processing_diagnostics
+from src.processing_diagnostics_v1 import (
+    processing_diagnostic_rows,
+    processing_diagnostics,
+)
 from src.extract_coverage_v1 import coverage_panel_rows
 from src.review_cockpit_v1 import (
     SUITABILITY_VALUES,
@@ -1733,7 +1736,10 @@ def _render_review_index(
         return f'''
           {_review_task_header(snapshot_id, "Dekking en technische controle", "Controleer hier de volledigheid en technische blokkades; dit is geen extra inhoudelijke reviewtaak")}
           {_processing_diagnostics_html(snapshot_objects)}
-          <p><a class="btn-secondary" href="/review/processing-diagnostics?document={_esc(snapshot_id)}">Exporteer diagnostiek als JSON</a></p>
+          <p>
+            <a class="btn-secondary" href="/review/processing-diagnostics?document={_esc(snapshot_id)}">Exporteer diagnostiek als JSON</a>
+            <a class="btn-secondary" href="/review/processing-diagnostics-detail?document={_esc(snapshot_id)}">Exporteer detaildiagnostiek als JSON</a>
+          </p>
           {blocked_html}
           {_coverage_panel(snapshot_objects)}
         '''
@@ -2712,6 +2718,29 @@ def create_console_app(
             "version": str(envelope.get("version") or ""),
             "objects_revision": state.objects_revision(snapshot_id),
             "diagnostics": processing_diagnostics(objects),
+        }
+        return JSONResponse(payload)
+
+
+    @app.get("/review/processing-diagnostics-detail", response_class=JSONResponse)
+    def review_processing_diagnostics_detail(request: Request, document: str = "") -> JSONResponse:
+        account = _require(request)
+        if "reviewer" not in set(account.get("roles") or []):
+            raise ConsoleError("reviewer_role_required")
+        snapshot_id = document.strip()
+        if not snapshot_id:
+            raise ConsoleError("unknown_snapshot")
+        envelope = state._envelope(snapshot_id)
+        if account["account_id"] not in (envelope.get("named_reviewers") or []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        objects = state.snapshot_objects(snapshot_id)
+        payload = {
+            "snapshot_id": snapshot_id,
+            "document_id": str(envelope.get("document_id") or ""),
+            "title": str(envelope.get("title") or ""),
+            "version": str(envelope.get("version") or ""),
+            "objects_revision": state.objects_revision(snapshot_id),
+            "rows": processing_diagnostic_rows(objects),
         }
         return JSONResponse(payload)
 
