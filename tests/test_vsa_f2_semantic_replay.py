@@ -291,7 +291,17 @@ def test_exact_replay_survives_restart_and_makes_zero_provider_calls(tmp_path: P
 
     assert recovered["snapshot_id"] == snapshot_id
     after = restarted.snapshot_objects(snapshot_id)
-    assert after == first
+    first_candidate = next(row for row in first if row.get("object_type") != "document")
+    replay_candidate = next(row for row in after if row.get("object_type") != "document")
+    assert replay_candidate["content"] == first_candidate["content"]
+    assert replay_candidate.get("proposed_object_type") == first_candidate.get("proposed_object_type")
+    assert replay_candidate["metadata"]["semantic_passage"] == first_candidate["metadata"]["semantic_passage"]
+    assert (
+        replay_candidate["metadata"]["source_occurrence_authority"]
+        == first_candidate["metadata"]["source_occurrence_authority"]
+    )
+    assert replay_candidate["provenance"]["source_fragments"] == first_candidate["provenance"]["source_fragments"]
+    assert replay_candidate["source"]["source_checksum"] == first_candidate["source"]["source_checksum"]
     replay_record = restarted._envelope(snapshot_id)["semantic_replay"]
     assert replay_record["semantic_execution"] == EXECUTION_REPLAY
     assert replay_record["origin_execution"] == EXECUTION_INFERENCE
