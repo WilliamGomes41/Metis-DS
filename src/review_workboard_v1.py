@@ -15,7 +15,7 @@ from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 import src.operations_console_app as console_ui
-from src.admission_gate_v1 import blocked_audit_lane
+from src.domain_dimensions_v1 import processing_issue_objects
 from src.beslisboom_path_v1 import review_path_for_klasse
 from src.document_status_ui_v1 import current_document_lifecycle_status
 from src.operations_console_app import (
@@ -224,7 +224,7 @@ def review_work_item(
     blocked = (
         [
             row
-            for row in blocked_audit_lane(objects)
+            for row in processing_issue_objects(objects)
             if str(row.get("object_id") or "") in unresolved_closure_set
         ]
         if review_path != "boom"
