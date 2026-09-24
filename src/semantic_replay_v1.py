@@ -97,8 +97,9 @@ def validated_inference_record(
         "proposal": deepcopy(dict(proposal)),
         "proposal_hash": stable_json_hash(proposal),
         "validation": "passed",
+        "formation_method": "semantic",
         "origin_execution": EXECUTION_INFERENCE,
-        "last_execution": EXECUTION_INFERENCE,
+        "semantic_execution": EXECUTION_INFERENCE,
         "replay_from_proposal_hash": None,
     }
     if replay_rejection_reason:
@@ -125,6 +126,7 @@ def exact_replay_lookup(
     if (
         record.get("version") != SEMANTIC_REPLAY_VERSION
         or record.get("validation") != "passed"
+        or record.get("formation_method") != "semantic"
         or record.get("origin_execution") != EXECUTION_INFERENCE
     ):
         return ReplayLookup(LOOKUP_REJECTED, reason=REASON_RECORD_INVALID)
@@ -141,7 +143,7 @@ def exact_replay_lookup(
 
 def replayed_record(record: Mapping[str, Any]) -> dict[str, Any]:
     row = deepcopy(dict(record))
-    row["last_execution"] = EXECUTION_REPLAY
+    row["semantic_execution"] = EXECUTION_REPLAY
     row["replay_from_proposal_hash"] = str(row.get("proposal_hash") or "")
     row.pop("replay_rejection_reason", None)
     return row
