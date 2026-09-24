@@ -95,6 +95,7 @@ def _identity(**overrides) -> dict:
         "source_sha256": "a" * 64,
         "document_id": "doc-1",
         "source_blocks_hash": "b" * 64,
+        "extractor_version": "html-visible-text-v1.1.0",
         "reconstruction_version": "source-reconstruction-v1.0.0",
         "formation_policy_version": "passage-formation-policy-v1.0.0",
         "semantic_contract_version": "semantic-passage-v1.0.0",
@@ -127,6 +128,7 @@ def _proposal() -> dict:
     [
         ("source_sha256", "f" * 64),
         ("source_blocks_hash", "f" * 64),
+        ("extractor_version", "html-visible-text-v2"),
         ("reconstruction_version", "source-reconstruction-v2"),
         ("formation_policy_version", "passage-formation-policy-v2"),
         ("semantic_contract_version", "semantic-passage-v2"),
