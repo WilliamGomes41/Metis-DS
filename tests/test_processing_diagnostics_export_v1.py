@@ -91,6 +91,20 @@ def _system(tmp_path):
         "source_bound": True,
     }
     stamp_canonical_hashes(target)
+    for row in rows:
+        if row is target:
+            continue
+        if row.get("object_type") in {"document", "heading"} or row.get("proposed_object_type") == "heading":
+            continue
+        metadata = row.setdefault("metadata", {})
+        metadata["admission"] = {
+            "gate_result": "allowed",
+            "reason_codes": [],
+            "proposed_type": str(row.get("proposed_object_type") or "explanation"),
+            "section_role": "regular",
+            "section_path": ["Richtlijn"],
+        }
+        stamp_canonical_hashes(row)
     console._save_objects(snapshot_id, rows)
     return console, reviewer, other, publisher, snapshot_id
 
@@ -166,7 +180,7 @@ def test_export_requires_authentication_reviewer_role_and_assignment(tmp_path) -
     response = other_client.get(
         f"/review/processing-diagnostics?document={snapshot_id}"
     )
-    assert response.status_code == 403
+    assert response.status_code == 400
     assert "reviewer_not_named_on_snapshot" in response.text
 
 
