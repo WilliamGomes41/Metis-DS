@@ -16,7 +16,6 @@ import pytest
 
 from src.azure_deploy_package import (
     AZURE_MANYLINUX_PLATFORM,
-    AZURE_NATIVE_WHEEL_PACKAGES,
     CONSOLE_REQUIREMENTS_NAME,
     DEPLOY_COMMIT_MARKER,
     RUNTIME_DATA_MARKERS,
@@ -97,6 +96,11 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
             if name.startswith(".python_packages/pydantic_core/_pydantic_core.")
             and name.endswith(".so")
         )
+        native_extensions = sorted(
+            name
+            for name in names
+            if name.startswith(".python_packages/") and name.endswith(".so")
+        )
         packaged_commit = archive.read(DEPLOY_COMMIT_MARKER).decode("ascii").strip()
         packaged_timestamps = {info.date_time for info in archive.infolist()}
         vendor_roots = {
@@ -134,11 +138,15 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
     assert not any(package_contains_runtime_data(name) for name in names)
     assert not any("git archive" in name for name in names)
     assert AZURE_MANYLINUX_PLATFORM == "manylinux2014_x86_64"
-    assert "pydantic-core" in AZURE_NATIVE_WHEEL_PACKAGES
     assert "pydantic-core==2.46.5" in _read(ROOT / CONSOLE_REQUIREMENTS_NAME)
     assert len(pydantic_core_extensions) == 1
+    assert native_extensions
+    assert all("cpython-313-" not in name for name in native_extensions)
+    assert all(
+        "cpython-" not in name or "cpython-312-" in name
+        for name in native_extensions
+    )
     assert "cpython-312-" in pydantic_core_extensions[0]
-    assert "cpython-313-" not in pydantic_core_extensions[0]
     assert b"GLIBC_2.33" not in cryptography_rust
     assert b"GLIBC_2.34" not in cryptography_rust
 
@@ -151,6 +159,22 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
         (vendor_probe / root).mkdir(exist_ok=True)
     assert vendor_tree_forbidden_packages(vendor_probe) == frozenset()
 
+
+
+
+def test_packaging_targets_azure_runtime_for_entire_dependency_graph() -> None:
+    source = _read(ROOT / "src" / "azure_deploy_package.py")
+    assert '"--only-binary=:all:"' in source
+    assert '"--platform"' in source
+    assert "AZURE_MANYLINUX_PLATFORM" in source
+    assert '"--implementation"' in source
+    assert '"cp"' in source
+    assert '"--python-version"' in source
+    assert "AZURE_PYTHON_VERSION" in source
+    assert '"--abi"' in source
+    assert "AZURE_PYTHON_ABI" in source
+    assert "force-reinstall" not in source
+    assert "for package in AZURE_NATIVE_WHEEL_PACKAGES" not in source
 
 def test_packaging_excludes_runtime_data_and_does_not_overwrite_home_data(tmp_path: Path) -> None:
     home_data = tmp_path / "home" / "data" / "metis-console"
