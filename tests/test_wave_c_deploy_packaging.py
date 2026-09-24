@@ -147,6 +147,8 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
         for name in native_extensions
     )
     assert "cpython-312-" in pydantic_core_extensions[0]
+    assert ".python_packages/azure/identity/__init__.py" in names
+    assert ".python_packages/azure/storage/blob/__init__.py" in names
     assert b"GLIBC_2.33" not in cryptography_rust
     assert b"GLIBC_2.34" not in cryptography_rust
 

@@ -144,6 +144,39 @@ def _pip_install_target(
     return subprocess.run(command, cwd=cwd, check=False, capture_output=True, text=True)
 
 
+def _azure_wheel_available(*, python: str, spec: str, platform: str, cwd: Path) -> bool:
+    with tempfile.TemporaryDirectory(prefix="metis-wheel-probe-") as dest:
+        command = [
+            python,
+            "-m",
+            "pip",
+            "download",
+            "--no-deps",
+            "--only-binary=:all:",
+            "--platform",
+            platform,
+            "--implementation",
+            "cp",
+            "--python-version",
+            AZURE_PYTHON_VERSION,
+            "--abi",
+            AZURE_PYTHON_ABI,
+            "--abi",
+            "abi3",
+            "-d",
+            dest,
+            spec,
+        ]
+        result = subprocess.run(command, cwd=cwd, check=False, capture_output=True, text=True)
+    if result.returncode == 0:
+        return True
+    if "No matching distribution" in f"{result.stderr}\n{result.stdout}":
+        return False
+    raise DeployPackageError(
+        f"azure_target_probe_failed:{spec}\n{result.stderr[-2000:]}"
+    )
+
+
 def _install_azure_dependency_graph(
     *,
     python: str,
@@ -153,29 +186,39 @@ def _install_azure_dependency_graph(
 ) -> None:
     """Vendor the console graph for CPython 3.12, not the build-runner ABI.
 
-    manylinux2014 + cp312/abi3 is the Azure floor. A pin with no such wheel,
-    currently PyMuPDF's abi3 manylinux_2_28 build, is installed alone so it
-    cannot replace the manylinux2014 wheels already chosen for the rest.
+    Compatible pins share one pip install. Separate ``--upgrade`` installs of
+    azure-identity and azure-storage-blob delete each other's namespace files
+    and leave only dist-info. A pin with no manylinux2014 wheel, currently
+    PyMuPDF's abi3 manylinux_2_28 build, is installed afterwards without
+    upgrade so it cannot replace that graph.
     """
 
-    unresolved: list[str] = []
+    primary: list[str] = []
+    deferred: list[str] = []
     for spec in requirement_specs(requirements):
-        primary = _pip_install_target(
+        if _azure_wheel_available(
+            python=python,
+            spec=spec,
+            platform=AZURE_MANYLINUX_PLATFORM,
+            cwd=cwd,
+        ):
+            primary.append(spec)
+        else:
+            deferred.append(spec)
+    if primary:
+        installed = _pip_install_target(
             python=python,
             vendor=vendor,
-            specs=[spec],
+            specs=primary,
             platform=AZURE_MANYLINUX_PLATFORM,
             upgrade=True,
             cwd=cwd,
         )
-        if primary.returncode == 0:
-            continue
-        if "No matching distribution" not in f"{primary.stderr}\n{primary.stdout}":
+        if installed.returncode != 0:
             raise DeployPackageError(
-                f"azure_target_install_failed:{spec}\n{primary.stderr[-2000:]}"
+                f"azure_target_install_failed\n{installed.stderr[-2000:]}"
             )
-        unresolved.append(spec)
-    for spec in unresolved:
+    for spec in deferred:
         fallback = _pip_install_target(
             python=python,
             vendor=vendor,
