@@ -267,7 +267,7 @@ def test_ingest_stamps_every_passage_and_does_not_silently_drop(tmp_path: Path) 
     assert all(passage_register_of(obj).get("status") != "dropped_silently" for obj in passages)
 
 
-def test_allowed_candidate_is_selected_and_blocked_djg_remains_open_with_reason(tmp_path: Path) -> None:
+def test_allowed_candidate_is_selected_and_djg_remains_unassessed_coverage(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
@@ -276,15 +276,18 @@ def test_allowed_candidate_is_selected_and_blocked_djg_remains_open_with_reason(
     djg = _find_by_text(objects, DJG)
     assert _admission(adviseert).get("gate_result") == GATE_ALLOWED
     assert passage_register_of(adviseert).get("status") == "selected_as_candidate"
-    assert _admission(djg).get("gate_result") == GATE_BLOCKED
+
+    assert _admission(djg) == {}
+    eligibility = (djg.get("metadata") or {}).get("candidate_eligibility") or {}
+    assert eligibility.get("eligible") is False
     assert passage_register_of(djg).get("status") == "not_yet_assessed"
-    reasons = passage_register_of(djg).get("reason_codes") or _admission(djg).get("reason_codes") or []
-    assert "recommendation_evidence_missing" in reasons
+    assert passage_register_of(djg).get("reason_codes") == []
+
     ordinary = ordinary_review_queue(_passages(objects))
     assert adviseert["object_id"] in {obj["object_id"] for obj in ordinary}
     assert djg["object_id"] not in {obj["object_id"] for obj in ordinary}
-    assert djg in blocked_audit_lane(objects) or djg in blocked_audit_lane(_passages(objects))
-
+    assert djg not in blocked_audit_lane(objects)
+    assert djg not in blocked_audit_lane(_passages(objects))
 
 def test_context_and_heading_passages_are_registered_not_dropped(tmp_path: Path) -> None:
     console = _console(tmp_path)
@@ -383,13 +386,15 @@ def test_missing_register_does_not_block_phase1_admission(tmp_path: Path) -> Non
     assert passage_register_of(adviseert).get("status") == "selected_as_candidate"
 
 
-def test_register_does_not_open_the_hard_gate(tmp_path: Path) -> None:
+def test_register_does_not_turn_source_passage_into_admitted_candidate(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     djg = _find_by_text(console.snapshot_objects(receipt["snapshot_id"]), DJG)
-    assert _admission(djg).get("gate_result") == GATE_BLOCKED
-    with pytest.raises(ConsoleError, match="blocked_candidate_not_reviewable"):
+    assert _admission(djg) == {}
+    assert passage_register_of(djg).get("status") == "not_yet_assessed"
+
+    with pytest.raises(ConsoleError, match="candidate_not_admitted"):
         console.review_object(
             actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=receipt["snapshot_id"],
@@ -399,12 +404,6 @@ def test_register_does_not_open_the_hard_gate(tmp_path: Path) -> None:
             suitability="ja",
             eindoordeel="goedkeuren",
         )
-
-
-# ---------------------------------------------------------------------------
-# Coverage per section
-# ---------------------------------------------------------------------------
-
 
 def test_coverage_is_reported_per_section_without_objectifying_every_sentence(tmp_path: Path) -> None:
     console = _console(tmp_path)
@@ -659,12 +658,14 @@ def test_initial_register_disposition_uses_section_role_without_new_statuses() -
     } <= set(PASSAGE_REGISTER_STATUSES)
 
 
-def test_djg_still_cannot_enter_ordinary_queue_as_aanbeveling(tmp_path: Path) -> None:
+def test_djg_source_passage_does_not_enter_ordinary_queue_as_aanbeveling(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = _passages(console.snapshot_objects(receipt["snapshot_id"]))
     djg = _find_by_text(objects, DJG)
-    assert _admission(djg).get("gate_result") == GATE_BLOCKED
+    assert _admission(djg) == {}
+    assert ((djg.get("metadata") or {}).get("candidate_eligibility") or {}).get("eligible") is False
     assert is_slow_review_duty(djg) is False
     assert djg not in ordinary_review_queue(objects)
+
