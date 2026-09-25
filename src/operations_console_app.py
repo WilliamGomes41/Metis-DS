@@ -681,8 +681,15 @@ def _review_context_block(
         text = str(related.get("text") or related.get("object_id") or "")
         object_id = str(related.get("object_id") or "")
         object_type = _object_type_label(str(related.get("object_type") or ""))
-        resolution = str(related.get("resolution") or "")
-        resolution_copy = _context_resolution_copy(related)
+        resolution = str(link.get("resolution") or RESOLUTION_CURRENT)
+        stale_endpoint = (
+            link.get("stale_endpoint")
+            if isinstance(link.get("stale_endpoint"), dict)
+            else None
+        )
+        resolution_copy = _context_resolution_copy(
+            stale_endpoint if stale_endpoint is not None else related
+        )
         stale_class = " relation-context-stale" if resolution != RESOLUTION_CURRENT else ""
         warning = ""
         if resolution != RESOLUTION_CURRENT:
