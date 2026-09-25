@@ -106,9 +106,9 @@ def test_unresolved_closure_gap_is_reachable_instead_of_looking_complete() -> No
     assert item["source_passage_review_complete"] is False
     assert item["closure_gap_ids"] == ["legacy-open"]
     assert item["closure_gap_count"] == 1
-    assert item["remaining_review_items"] == 1
-    assert item["work_state"] == "review"
-    assert item["next_task"] == "closure"
+    assert item["remaining_review_items"] == 0
+    assert item["work_state"] == "disposition"
+    assert item["next_task"] == "disposition"
     assert item["next_href"] == "/review?document=snap-test&object=legacy-open"
     assert console._test_objects == before
 
