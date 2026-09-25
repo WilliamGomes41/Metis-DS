@@ -2697,9 +2697,32 @@ class OperationsConsole:
                         ):
                             raise ConsoleError("knowledge_relation_target_stale")
                         structural.append(row)
+                if not structural and target.get("parent_object_id"):
+                    existing_parent_id = str(target.get("parent_object_id") or "")
+                    peer = next(
+                        (
+                            item
+                            for item in current
+                            if item.get("object_id") == existing_parent_id
+                        ),
+                        None,
+                    )
+                    if peer is None:
+                        raise ConsoleError("knowledge_relation_target_missing")
+                    structural.append(
+                        {
+                            "relation_type": "child",
+                            "target_object_id": existing_parent_id,
+                            "target_object_version": str(peer.get("object_version") or ""),
+                        }
+                    )
 
             relation_state_change = bool(relation_plan.get("state_change_required"))
-            desired_parent = parent_id or None
+            desired_parent = (
+                parent_id
+                if parent_id
+                else str(target.get("parent_object_id") or "") or None
+            )
             parent_state_change = target.get("parent_object_id") != desired_parent
             relation_mutation = relation_state_change or parent_state_change
             if (
