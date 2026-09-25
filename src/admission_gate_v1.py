@@ -223,6 +223,11 @@ def is_inhoudelijk_candidate(obj: dict[str, Any]) -> bool:
     if is_boom_object(obj):
         return False
 
+    confirmed = str(obj.get("confirmed_object_type") or "").strip()
+    stored = str(obj.get("object_type") or "").strip()
+    if confirmed or stored not in {"", "unclassified", "document", "heading"}:
+        return True
+
     eligibility = candidate_eligibility_of(obj)
     if isinstance(eligibility.get("eligible"), bool):
         return bool(eligibility["eligible"])
@@ -230,15 +235,7 @@ def is_inhoudelijk_candidate(obj: dict[str, Any]) -> bool:
     if admission_of(obj):
         return True
 
-    if assess_candidate_eligibility(obj).eligible:
-        return True
-
-    confirmed = str(obj.get("confirmed_object_type") or "").strip()
-    stored = str(obj.get("object_type") or "").strip()
-    return bool(
-        confirmed
-        or stored not in {"", "unclassified", "document", "heading"}
-    )
+    return assess_candidate_eligibility(obj).eligible
 
 
 def build_candidate_record(**fields: Any) -> dict[str, Any]:
