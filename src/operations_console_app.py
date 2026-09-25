@@ -1862,8 +1862,8 @@ def _review_task_dashboard(
         ),
         (
             "contextual",
-            "Belangrijke passages beoordelen",
-            "Beoordeel advies, voorwaarden, uitzonderingen en passages die extra aandacht vragen",
+            "In samenhang beoordelen",
+            "Beoordeel advies, voorwaarden, uitzonderingen en relationele context",
             f"{individual_pending} te beoordelen · {individual_done} afgerond",
             individual_pending,
         ),
