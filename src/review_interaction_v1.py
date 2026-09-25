@@ -194,7 +194,8 @@ def review_burden_projection(
             continue
         evidence = details.get("review_interaction")
         if not isinstance(evidence, dict):
-            legacy_unmeasured += 1
+            if not snapshot_id or event_snapshot == snapshot_id:
+                legacy_unmeasured += 1
             continue
         if str(evidence.get("version") or "") != REVIEW_INTERACTION_VERSION:
             continue
