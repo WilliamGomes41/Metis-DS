@@ -2927,6 +2927,7 @@ class OperationsConsole:
             raise ConsoleError("first_review_required")
         if actor_id in set(approvers):
             raise ConsoleError("independent_second_reviewer_required")
+        self._require_open_original(snapshot_id, object_id)
 
         canonical_hash = compute_canonical_object_hash(target)
         binding = tuple_record(
