@@ -527,12 +527,13 @@ def admit_candidate(
         codes.append(_ABSENT_FIELD_CODES.get(field, "type_contract_incomplete"))
     _require_literal(row.get("subject_span"), corpus, "subject_missing", codes)
     _require_literal(row.get("predicate_span"), corpus, "predicate_missing", codes)
-    if _word_count(text) < 3 or not _VERB_RE.search(text):
+    if _word_count(text) < 3:
         codes.append("incomplete_sentence")
-        if _word_count(text) < 3:
-            codes.append("no_independent_claim")
-    codes += ["incomplete_sentence"] * int(not has_terminal_sentence_boundary(text))
-    codes += ["incomplete_sentence"] * int(_has_sentence_continuation(row))
+        codes.append("no_independent_claim")
+    if not has_terminal_sentence_boundary(text):
+        codes.append("incomplete_sentence")
+    if _has_sentence_continuation(row):
+        codes.append("incomplete_sentence")
     if not str(row.get("source_locator_start") or "").strip() or not str(row.get("source_locator_end") or "").strip():
         codes.append("locator_invalid")
     evidence = [span for span in (row.get("type_evidence_spans") or []) if str(span or "").strip()]
