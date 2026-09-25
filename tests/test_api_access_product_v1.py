@@ -161,14 +161,7 @@ def test_entitlement_covers_context_embedded_in_derived_retrieval_text():
         "metadata": {
             "document_id": DOC,
             "topic": [],
-            "context_relations": [
-                {
-                    "object_id": "context-from-other-document",
-                    "document_id": "not-entitled-document",
-                    "relation_type": "applies_if",
-                    "text": "restricted context",
-                }
-            ],
+            "context_object_ids": ["context-from-other-document"],
         }
     }
     from src.product_api_v1 import ProductState
