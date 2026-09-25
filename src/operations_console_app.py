@@ -209,6 +209,7 @@ ERROR_COPY = {
     "recommendation_strength_confirmation_required": "Kies sterk, zwak of niet vermeld in de bron.",
     "recommendation_direction_evidence_missing": "De brongebonden onderbouwing voor de richting ontbreekt.",
     "recommendation_strength_evidence_required": "Deze sterkte kan alleen worden bevestigd met een expliciete sterke of zwakke bronaanduiding.",
+    "recommendation_strength_not_stated_conflict": "De bron bevat wel een expliciete sterkteaanduiding; kies sterk of zwak, of corrigeer de bronbinding.",
     "recommendation_semantics_confirmation_invalid": "De bevestigde richting en sterkte vormen geen geldig aanbevelingscontract.",
     "legacy_recommendation_strength_not_allowed": "DOEN, OVERWEEG en NIET DOEN zijn voor nieuwe richtlijnaanbevelingen vervangen door aparte richting en sterkte.",
     "published_objects_must_not_be_rewritten": "Gepubliceerde objecten worden niet herschreven.",
