@@ -60,22 +60,31 @@ def _response(proposal: dict) -> dict:
 
 def _full_span_proposal(payload: dict, *, proposed_type: str = "recommendation") -> dict:
     blocks = json.loads(payload["input"][1]["content"])["source_blocks"]
-    return {
-        "objects": [
+    objects = []
+    for block in blocks:
+        span = {
+            "block_id": block["block_id"],
+            "start": 0,
+            "end": len(block["text"]),
+        }
+        objects.append(
             {
-                "spans": [
-                    {
-                        "block_id": block["block_id"],
-                        "start": 0,
-                        "end": len(block["text"]),
-                    }
-                ],
+                "spans": [span],
                 "proposed_object_type": proposed_type,
+                "recommendation_semantics": (
+                    {
+                        "direction": "for",
+                        "direction_evidence": dict(span),
+                        "strength": None,
+                        "strength_status": "not_stated",
+                        "strength_evidence": None,
+                    }
+                    if proposed_type == "recommendation"
+                    else None
+                ),
             }
-            for block in blocks
-        ],
-        "abstain_reason": None,
-    }
+        )
+    return {"objects": objects, "abstain_reason": None}
 
 
 def test_semantic_processing_runs_before_review_and_reconstructs_source_only() -> None:
