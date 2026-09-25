@@ -129,7 +129,7 @@ def build_knowledge_relation(
     therefore not duplicated inside the embedded relation value.
     """
 
-    served = serving_relation_type(relation_type)
+    served = str(relation_type or "").strip()
     if served not in CLOSED_RELATION_SET:
         raise ValueError("knowledge_relation_type_invalid")
     if not _nonempty_string(source_object_id):
@@ -180,7 +180,7 @@ def validate_knowledge_relation(
     if value.get("version") != KNOWLEDGE_RELATION_VERSION:
         errors.append("knowledge_relation_version_invalid")
 
-    relation_type = serving_relation_type(value.get("relation_type"))
+    relation_type = str(value.get("relation_type") or "").strip()
     if relation_type not in CLOSED_RELATION_SET:
         errors.append("knowledge_relation_type_invalid")
 
