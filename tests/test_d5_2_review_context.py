@@ -145,6 +145,27 @@ def test_incoming_context_shows_multiple_sources_without_reversing_edges() -> No
     assert all(row["relation_type"] == "applies_if" for row in incoming)
 
 
+def test_incoming_relation_marks_stale_focal_target_version() -> None:
+    condition_v1 = _obj("condition", "condition", version="1.0")
+    condition_v2 = _obj("condition", "condition", version="2.0")
+    rec = _obj("rec", "recommendation")
+    rec["confirmed_knowledge_relations"] = [_edge(rec, "applies_if", condition_v1)]
+
+    context = review_context(
+        condition_v2,
+        objects=[condition_v2, rec],
+        review_path="richtlijn",
+    )
+
+    [link] = context["links"]
+    assert link["direction"] == DIRECTION_INCOMING
+    assert link["source"]["resolution"] == RESOLUTION_CURRENT
+    assert link["target"]["resolution"] == RESOLUTION_VERSION_MISMATCH
+    assert link["resolution"] == RESOLUTION_VERSION_MISMATCH
+    assert link["stale_endpoint"]["object_id"] == "condition"
+    assert context["issues"][0]["endpoint_object_id"] == "condition"
+
+
 def test_exact_duplicate_confirmed_edge_suppresses_proposed_duplicate() -> None:
     rec = _obj("rec", "recommendation")
     condition = _obj("condition", "condition")
