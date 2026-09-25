@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from src.integrity_kernel import stamp_canonical_hashes
+from src.integrity_kernel import stable_hash, stamp_canonical_hashes
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.publish_authorization_v1 import tuple_record
 from src.review_interaction_v1 import (
@@ -112,6 +112,7 @@ def _system(tmp_path: Path) -> tuple[OperationsConsole, dict[str, dict], str, st
 
 
 def test_burden_groups_batch_members_into_one_human_interaction() -> None:
+    manifest = {"members": []}
     evidence = {
         "version": "review-interaction-v1",
         "interaction_id": "ri_batch1",
@@ -121,8 +122,8 @@ def test_burden_groups_batch_members_into_one_human_interaction() -> None:
         "reviewer_account_id": "reviewer-a",
         "review_stage": "first_review",
         "requested_count": 3,
-        "context_manifest": {"members": []},
-        "context_manifest_hash": "hash",
+        "context_manifest": manifest,
+        "context_manifest_hash": stable_hash(manifest),
     }
     events = [
         {
@@ -146,6 +147,35 @@ def test_burden_groups_batch_members_into_one_human_interaction() -> None:
     assert result["partial_batch_interactions"] == 1
     assert result["interactions"][0]["requested_count"] == 3
     assert result["interactions"][0]["committed_decisions"] == 2
+
+
+def test_invalid_manifest_hash_is_not_counted_as_measured_interaction() -> None:
+    result = review_burden_projection(
+        [
+            {
+                "event_type": "clinical_review_approve",
+                "object_id": "bad",
+                "object_version": "1.0",
+                "details": {
+                    "snapshot_id": "snap-1",
+                    "review_interaction": {
+                        "version": "review-interaction-v1",
+                        "interaction_id": "ri_bad",
+                        "interaction_kind": "contextual",
+                        "canonical_task": "contextual",
+                        "snapshot_id": "snap-1",
+                        "reviewer_account_id": "reviewer-a",
+                        "requested_count": 1,
+                        "context_manifest": {"focal": {}},
+                        "context_manifest_hash": "wrong",
+                    },
+                },
+            }
+        ],
+        snapshot_id="snap-1",
+    )
+    assert result["review_interactions"] == 0
+    assert result["invalid_evidence_events"] == 1
 
 
 def test_legacy_decision_is_unmeasured_not_invented_as_interaction() -> None:
