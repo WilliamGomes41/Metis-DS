@@ -36,6 +36,10 @@ from src.object_taxonomy_v1 import (
     review_priority_rank,
 )
 from src.admission_gate_v1 import admission_of
+from src.recommendation_semantics_v1 import (
+    confirmed_recommendation_semantics_of,
+    proposed_recommendation_semantics_of,
+)
 from src.domain_dimensions_v1 import processing_issue_objects
 from src.processing_diagnostics_v1 import (
     processing_diagnostic_rows,
@@ -201,6 +205,12 @@ ERROR_COPY = {
     "recommendation_strength_requires_recommendation": "Sterkte hoort alleen bij een aanbeveling.",
     "invalid_parent_structure": "Deze ouder is niet structureel geldig. Kies een kop die hiërarchisch boven dit object staat.",
     "unknown_recommendation_strength": "Kies DOEN, OVERWEEG of NIET DOEN.",
+    "recommendation_direction_required": "Kies of de aanbeveling iets aanraadt of afraadt.",
+    "recommendation_strength_confirmation_required": "Kies sterk, zwak of niet vermeld in de bron.",
+    "recommendation_direction_evidence_missing": "De brongebonden onderbouwing voor de richting ontbreekt.",
+    "recommendation_strength_evidence_required": "Deze sterkte kan alleen worden bevestigd met een expliciete sterke of zwakke bronaanduiding.",
+    "recommendation_semantics_confirmation_invalid": "De bevestigde richting en sterkte vormen geen geldig aanbevelingscontract.",
+    "legacy_recommendation_strength_not_allowed": "DOEN, OVERWEEG en NIET DOEN zijn voor nieuwe richtlijnaanbevelingen vervangen door aparte richting en sterkte.",
     "published_objects_must_not_be_rewritten": "Gepubliceerde objecten worden niet herschreven.",
     "unknown_snapshot": "Dit document is niet gevonden.",
     "delete_confirmation_required": "Bevestig eerst dat je dit unpublished document wilt verwijderen.",
@@ -334,7 +344,10 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
   const hint = form.querySelector('[data-decision-hint]');
   const submit = form.querySelector('[data-submit-review]');
   const stamp = form.querySelector('[data-stamp-block]');
-  const strength = form.querySelector('[name="recommendation_strength"]');
+  const strength = stamp ? stamp.querySelector('[name="recommendation_strength"]') : null;
+  const semantics = form.querySelector('[data-recommendation-semantics-block]');
+  const direction = form.querySelectorAll('[name="recommendation_direction"]');
+  const strengthLevel = form.querySelectorAll('[name="recommendation_strength_level"]');
   const chooser = form.querySelector('[data-heading-chooser]');
   const search = form.querySelector('[data-heading-search]');
   const posAction = form.querySelectorAll('[name="documentpositie_action"]');
@@ -354,14 +367,27 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
     const confirmedType = card ? (card.getAttribute('data-confirmed-type') || '') : '';
     const changingType = selected(typeAction) === 'type_wijzigen';
     const confirmingProposal = selected(typeAction) === 'dit_klopt';
-    const show = strengthTypes.has(liveType()) && (
-      strengthTypes.has(confirmedType) || changingType || confirmingProposal
+    const live = liveType();
+    const showLegacy = Boolean(stamp) && live === 'outcome' && (
+      confirmedType === 'outcome' || changingType || confirmingProposal
     );
-    if (stamp) stamp.hidden = !show;
+    const showSemantics = Boolean(semantics) && live === 'recommendation' && (
+      confirmedType === 'recommendation' || changingType || confirmingProposal
+    );
+    if (stamp) stamp.hidden = !showLegacy;
     if (strength) {{
-      strength.disabled = !show;
-      if (!show) strength.value = '';
+      strength.disabled = !showLegacy;
+      if (!showLegacy) strength.value = '';
     }}
+    if (semantics) semantics.hidden = !showSemantics;
+    direction.forEach((node) => {{
+      node.disabled = !showSemantics;
+      if (!showSemantics) node.checked = false;
+    }});
+    strengthLevel.forEach((node) => {{
+      node.disabled = !showSemantics;
+      if (!showSemantics) node.checked = false;
+    }});
   }};
   const updateChooser = () => {{
     if (chooser) chooser.hidden = selected(posAction) !== 'andere_kop';
@@ -392,14 +418,20 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
     const hasType = !needsType || liveType();
     const hasComment = !needsComment || (comment && comment.value.trim());
     const hasSuitability = Boolean(selected(suitability));
+    const needsRecommendationSemantics = needsType && liveType() === 'recommendation' && Boolean(semantics);
+    const hasRecommendationSemantics = (
+      !needsRecommendationSemantics
+      || (Boolean(selected(direction)) && Boolean(selected(strengthLevel)))
+    );
     if (submit) {{
-      submit.disabled = !value || !hasType || !hasComment || !hasSuitability;
+      submit.disabled = !value || !hasType || !hasComment || !hasSuitability || !hasRecommendationSemantics;
       submit.textContent = 'Review opslaan en volgende';
     }}
     if (hint) {{
       if (!value) hint.textContent = 'Kies een eindoordeel.';
       else if (!hasSuitability) hint.textContent = 'Kies of de passage geschikt is.';
       else if (needsType && !liveType()) hint.textContent = 'Bevestig eerst het type.';
+      else if (needsRecommendationSemantics && !hasRecommendationSemantics) hint.textContent = 'Bevestig richting en sterkte van de aanbeveling.';
       else hint.textContent = '';
     }}
     updateChooser();
@@ -410,6 +442,8 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
   posAction.forEach((node) => node.addEventListener('change', update));
   suitability.forEach((node) => node.addEventListener('change', update));
   if (type) type.addEventListener('change', update);
+  direction.forEach((node) => node.addEventListener('change', update));
+  strengthLevel.forEach((node) => node.addEventListener('change', update));
   if (comment) comment.addEventListener('input', update);
   if (decision) decision.addEventListener('change', update);
   if (search && chooser) {{
@@ -730,6 +764,79 @@ def _stamp_block(obj: dict[str, Any], *, hidden: bool = False) -> str:
     """
 
 
+def _recommendation_semantics_block(
+    obj: dict[str, Any],
+    draft: dict[str, str],
+    *,
+    hidden: bool = False,
+) -> str:
+    proposed = proposed_recommendation_semantics_of(obj)
+    confirmed = confirmed_recommendation_semantics_of(obj)
+    direction = str(draft.get("recommendation_direction") or confirmed.get("direction") or "")
+    strength_level = str(draft.get("recommendation_strength_level") or "")
+    if not strength_level and confirmed:
+        strength_level = (
+            "not_stated"
+            if confirmed.get("strength_status") == "not_stated"
+            else str(confirmed.get("strength") or "")
+        )
+
+    proposed_direction = str(proposed.get("direction") or "")
+    if proposed.get("strength_status") == "not_stated":
+        proposed_strength = "niet vermeld in de bron"
+    elif proposed.get("strength_status") == "unmapped":
+        proposed_strength = "expliciete bronterm nog niet gemapt"
+    else:
+        proposed_strength = {
+            "strong": "sterk",
+            "weak": "zwak",
+        }.get(str(proposed.get("strength") or ""), "niet voorgesteld")
+    direction_label = {"for": "aanraden", "against": "afraden"}.get(
+        proposed_direction,
+        "niet voorgesteld",
+    )
+    direction_evidence = str(proposed.get("direction_evidence_span") or "")
+    strength_evidence = str(proposed.get("strength_evidence_span") or "")
+    evidence_html = (
+        '<div class="recommendation-semantics-evidence">'
+        f'<p><b>Metis stelt voor:</b> richting {_esc(direction_label)}; sterkte {_esc(proposed_strength)}.</p>'
+        + (
+            f'<p><b>Richting uit de bron:</b> {_esc(direction_evidence)}</p>'
+            if direction_evidence
+            else ""
+        )
+        + (
+            f'<p><b>Sterkte uit de bron:</b> {_esc(strength_evidence)}</p>'
+            if strength_evidence
+            else ""
+        )
+        + "</div>"
+    )
+    hidden_attr = " hidden" if hidden else ""
+    disabled_attr = " disabled" if hidden else ""
+    return f"""
+                    <section class="review-step review-recommendation-semantics" data-recommendation-semantics-block{hidden_attr}>
+                      <h4>Sterkte van de aanbeveling</h4>
+                      <p class="field-help">Bevestig richting en sterkte afzonderlijk. Een klinische voorwaarde maakt een aanbeveling niet automatisch zwak.</p>
+                      {evidence_html}
+                      <fieldset>
+                        <legend>Richting</legend>
+                        <label class="check"><input type="radio" name="recommendation_direction" value="for"{disabled_attr}{_checked(direction, "for")}> Aanraden</label>
+                        <label class="check"><input type="radio" name="recommendation_direction" value="against"{disabled_attr}{_checked(direction, "against")}> Afraden</label>
+                      </fieldset>
+                      <fieldset>
+                        <legend>Sterkte</legend>
+                        <label class="check"><input type="radio" name="recommendation_strength_level" value="strong"{disabled_attr}{_checked(strength_level, "strong")}> Sterk</label>
+                        <label class="check"><input type="radio" name="recommendation_strength_level" value="weak"{disabled_attr}{_checked(strength_level, "weak")}> Zwak</label>
+                        <label class="check"><input type="radio" name="recommendation_strength_level" value="not_stated"{disabled_attr}{_checked(strength_level, "not_stated")}> Niet vermeld in de bron</label>
+                      </fieldset>
+                      <select name="recommendation_strength" hidden disabled data-legacy-recommendation-strength-compat aria-hidden="true">
+                        {_strength_options(None)}
+                      </select>
+                    </section>
+    """
+
+
 def _heading_chooser(
     obj: dict[str, Any],
     objects: list[dict[str, Any]],
@@ -871,6 +978,8 @@ _REVIEW_DRAFT_DEFAULTS = {
     "documentpositie_action": "dit_klopt",
     "type_action": "dit_klopt",
 }
+_RECOMMENDATION_DIRECTION_VALUES = frozenset({"for", "against"})
+_RECOMMENDATION_STRENGTH_LEVEL_VALUES = frozenset({"strong", "weak", "not_stated"})
 def _sanitize_review_draft(draft: dict[str, str] | None) -> dict[str, str]:
     sanitized = {
         key: str(value or "")
@@ -883,6 +992,14 @@ def _sanitize_review_draft(draft: dict[str, str] | None) -> dict[str, str]:
         sanitized[key] = value if value in allowed else default
     confirmed = sanitized.get("confirmed_object_type", "")
     sanitized["confirmed_object_type"] = confirmed if confirmed in closed_types else ""
+    direction = sanitized.get("recommendation_direction", "")
+    sanitized["recommendation_direction"] = (
+        direction if direction in _RECOMMENDATION_DIRECTION_VALUES else ""
+    )
+    strength_level = sanitized.get("recommendation_strength_level", "")
+    sanitized["recommendation_strength_level"] = (
+        strength_level if strength_level in _RECOMMENDATION_STRENGTH_LEVEL_VALUES else ""
+    )
     return sanitized
 
 
@@ -1871,7 +1988,18 @@ def _render_review_card(
                         <select id="type-{_esc(obj["object_id"])}" name="confirmed_object_type" hidden{disabled}>{type_options}</select>
                       </div>
                     </section>
-                    {_stamp_block(obj, hidden=not recommendation_strength_ui_applies(obj))}
+                    {(
+                        _stamp_block(obj, hidden=not recommendation_strength_ui_applies(obj))
+                        if review_path == "boom"
+                        else _recommendation_semantics_block(
+                            obj,
+                            draft,
+                            hidden=not (
+                                (obj.get("confirmed_object_type") or obj.get("object_type"))
+                                == "recommendation"
+                            ),
+                        )
+                    )}
                     <section class="review-step" data-review-step="f">
                       <h4>Wat is je besluit?</h4>
                       <fieldset id="decision-{_esc(obj["object_id"])}">
@@ -2778,6 +2906,8 @@ def create_console_app(
         proposed_correction: str = Form(""),
         confirmed_object_type: str = Form(""),
         recommendation_strength: str = Form(""),
+        recommendation_direction: str = Form(""),
+        recommendation_strength_level: str = Form(""),
         suitability: str = Form(""),
         eindoordeel: str = Form(""),
         documentpositie_action: str = Form(""),
@@ -2810,6 +2940,8 @@ def create_console_app(
                 proposed_correction=proposed_correction,
                 confirmed_object_type=confirmed_object_type.strip() or None,
                 recommendation_strength=recommendation_strength.strip() or None,
+                recommendation_direction=recommendation_direction.strip() or None,
+                recommendation_strength_level=recommendation_strength_level.strip() or None,
                 suitability=suitability.strip() or None,
                 eindoordeel=eindoordeel.strip() or None,
                 documentpositie_action=documentpositie_action.strip() or None,
@@ -2841,6 +2973,8 @@ def create_console_app(
                         "type_action": type_action,
                         "confirmed_object_type": confirmed_object_type,
                         "recommendation_strength": recommendation_strength,
+                        "recommendation_direction": recommendation_direction,
+                        "recommendation_strength_level": recommendation_strength_level,
                         "eindoordeel": eindoordeel,
                         "decision": decision,
                         "comment": comment,
