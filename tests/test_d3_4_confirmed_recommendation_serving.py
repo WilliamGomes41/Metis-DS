@@ -418,3 +418,22 @@ def test_retrieve_surface_exposes_the_same_confirmed_semantics(tmp_path: Path) -
     assert data["status"] == "retrieve"
     assert data["results"][0]["knowledge_object_id"] == object_id
     assert data["results"][0]["recommendation_semantics"] == expected
+
+
+def test_malformed_confirmed_semantics_blocks_projection(tmp_path: Path) -> None:
+    objects, object_id = _reviewed_source_objects(
+        tmp_path,
+        direction="for",
+        strength_choice="strong",
+        label="Sterke aanbeveling",
+    )
+    live = next(row for row in objects if row["object_id"] == object_id)
+    live[CONFIRMED_FIELD]["direction"] = "sideways"
+
+    records, blocked = build_projection(_published_envelopes(objects))
+    assert all(row["metadata"]["object_id"] != object_id for row in records)
+    error_row = next(row for row in blocked if row["object_id"] == object_id)
+    assert any(
+        "confirmed:recommendation_direction_invalid" in error
+        for error in error_row["errors"]
+    )
