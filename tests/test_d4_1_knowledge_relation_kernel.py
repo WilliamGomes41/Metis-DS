@@ -294,7 +294,7 @@ def test_exact_legacy_compatibility_mirror_may_coexist_during_staged_cutover() -
         "target_object_version": "1.0",
         "confirmed": True,
     }
-    assert legacy_relation_mirror_matches([new_row], [legacy_row])
+    assert legacy_relation_mirror_matches([new_row], [legacy_row], confirmed=True)
 
     obj = _base_object()
     obj[CONFIRMED_FIELD] = [new_row]
@@ -316,8 +316,20 @@ def test_divergent_or_unversioned_legacy_relation_is_not_a_valid_mirror() -> Non
         "target_object_id": "condition-a",
         "confirmed": True,
     }
-    assert not legacy_relation_mirror_matches([new_row], [divergent])
-    assert not legacy_relation_mirror_matches([new_row], [unversioned])
+    assert not legacy_relation_mirror_matches([new_row], [divergent], confirmed=True)
+    assert not legacy_relation_mirror_matches([new_row], [unversioned], confirmed=True)
+
+    wrong_confirmation = {
+        "relation_type": "applies_if",
+        "target_object_id": "condition-a",
+        "target_object_version": "1.0",
+        "confirmed": False,
+    }
+    assert not legacy_relation_mirror_matches(
+        [new_row],
+        [wrong_confirmation],
+        confirmed=True,
+    )
 
     obj = _base_object()
     obj[CONFIRMED_FIELD] = [new_row]
