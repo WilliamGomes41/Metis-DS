@@ -48,7 +48,7 @@ from src.knowledge_relation_review_v1 import (
     has_semantic_relation_review,
     relation_choice_value,
 )
-from src.review_duty_v1 import reviewer_route_for
+from src.review_duty_v1 import review_duty_for, reviewer_route_for
 from src.review_context_v1 import (
     AUTHORITY_CONFIRMED,
     DIRECTION_INCOMING,
