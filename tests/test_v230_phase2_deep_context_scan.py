@@ -702,13 +702,21 @@ def test_phase2_ingest_records_deep_window_and_wires_scan(tmp_path: Path) -> Non
 
     # D2b2-C: source-only passages do not acquire Admission failures merely
     # because no type proposal exists.
-    for snippet in ("tabel 4", "vaker effectief.", DJG):
-        passage = _find_by_text(objects, snippet)
+    unresolved = _find_by_text(objects, "tabel 4")
+    comparison = _find_by_text(objects, "vaker effectief.")
+    djg = _find_by_text(objects, DJG)
+    for passage in (unresolved, comparison, djg):
         assert _admission(passage) == {}
         eligibility = (passage.get("metadata") or {}).get("candidate_eligibility") or {}
         assert eligibility.get("eligible") is False
-        assert eligibility.get("reason") == "deterministic_no_type_proposal"
         assert ordinary_review_queue([passage]) == []
+    assert ((djg.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
+        "deterministic_proposal_not_evidenced"
+    )
+    for passage in (unresolved, comparison):
+        assert ((passage.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
+            "deterministic_no_type_proposal"
+        )
 
     calcium = _find_by_text(objects, "adviseert calcium te geven")
     calcium_scan = _scan_of(calcium)
