@@ -35,7 +35,7 @@ from src.proportionate_review_v1 import (
     regular_individual_review_queue,
 )
 from src.publication_readiness_v1 import source_passage_closure
-from src.review_duty_v1 import review_duty_counts
+from src.review_duty_v1 import review_duty_counts, reviewer_route_counts
 
 
 _TASK_COPY = {
@@ -116,6 +116,12 @@ def _work_item_from_counts(
     structure_review_duties: int,
     contextual_review_duties: int,
     batch_review_duties: int,
+    actionable_review_duties: int | None = None,
+    waiting_for_reviewer_duties: int = 0,
+    actionable_structure_duties: int | None = None,
+    actionable_contextual_duties: int | None = None,
+    actionable_batch_duties: int | None = None,
+    actionable_second_review_duties: int = 0,
 ) -> dict[str, Any]:
     remaining = heading_pending + individual_pending + normal_passages + closure_gap_count
 
@@ -172,6 +178,28 @@ def _work_item_from_counts(
         "structure_review_duties": structure_review_duties,
         "contextual_review_duties": contextual_review_duties,
         "batch_review_duties": batch_review_duties,
+        "actionable_review_duties": (
+            review_duties
+            if actionable_review_duties is None
+            else actionable_review_duties
+        ),
+        "waiting_for_reviewer_duties": waiting_for_reviewer_duties,
+        "actionable_structure_duties": (
+            structure_review_duties
+            if actionable_structure_duties is None
+            else actionable_structure_duties
+        ),
+        "actionable_contextual_duties": (
+            contextual_review_duties
+            if actionable_contextual_duties is None
+            else actionable_contextual_duties
+        ),
+        "actionable_batch_duties": (
+            batch_review_duties
+            if actionable_batch_duties is None
+            else actionable_batch_duties
+        ),
+        "actionable_second_review_duties": actionable_second_review_duties,
         "disposition_duties": closure_gap_count,
         "repair_duties": blocked_count,
         "heading_pending": heading_pending,
@@ -258,7 +286,18 @@ def review_work_item(
         if object_id not in represented_ids
     ]
 
-    duty_counts = review_duty_counts(objects, review_path=review_path)
+    bindings = console.object_review_bindings(snapshot_id)
+    duty_counts = review_duty_counts(
+        objects,
+        review_path=review_path,
+        bindings=bindings,
+    )
+    route_counts = reviewer_route_counts(
+        objects,
+        review_path=review_path,
+        reviewer_id=account_id,
+        bindings=bindings,
+    )
 
     return _work_item_from_counts(
         envelope=envelope,
@@ -273,6 +312,7 @@ def review_work_item(
         closure_gap_count=len(closure_gap_ids),
         source_passage_review_complete=bool(closure["source_passage_review_complete"]),
         **duty_counts,
+        **route_counts,
     )
 
 
@@ -338,6 +378,32 @@ def review_workboard_items(
                         int(summary.get("batch_review_duties") or 0)
                         if "batch_review_duties" in summary
                         else int(summary.get("normal_passages") or 0)
+                    ),
+                    actionable_review_duties=(
+                        int(summary.get("actionable_review_duties") or 0)
+                        if "actionable_review_duties" in summary
+                        else None
+                    ),
+                    waiting_for_reviewer_duties=int(
+                        summary.get("waiting_for_reviewer_duties") or 0
+                    ),
+                    actionable_structure_duties=(
+                        int(summary.get("actionable_structure_duties") or 0)
+                        if "actionable_structure_duties" in summary
+                        else None
+                    ),
+                    actionable_contextual_duties=(
+                        int(summary.get("actionable_contextual_duties") or 0)
+                        if "actionable_contextual_duties" in summary
+                        else None
+                    ),
+                    actionable_batch_duties=(
+                        int(summary.get("actionable_batch_duties") or 0)
+                        if "actionable_batch_duties" in summary
+                        else None
+                    ),
+                    actionable_second_review_duties=int(
+                        summary.get("actionable_second_review_duties") or 0
                     ),
                 )
             )

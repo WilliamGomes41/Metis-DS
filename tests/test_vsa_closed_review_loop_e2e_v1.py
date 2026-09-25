@@ -37,6 +37,10 @@ class _QueueConsole(ProportionateReviewConsole):
     def snapshot_objects(self, _snapshot_id: str) -> list[dict[str, Any]]:
         return deepcopy(self._test_objects)
 
+    def object_review_bindings(self, _snapshot_id: str) -> list[dict[str, Any]]:
+        return []
+
+
     def document_status(self, _snapshot_id: str) -> str:
         return self._test_status
 
