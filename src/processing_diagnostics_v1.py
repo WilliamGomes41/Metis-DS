@@ -56,6 +56,7 @@ _REASON_FAMILY = {
     "relation_type_invalid": SEMANTIC_CONTRACT,
     "relation_endpoint_type_invalid": SEMANTIC_CONTRACT,
     "relation_self_reference": SEMANTIC_CONTRACT,
+    "relation_legacy_mirror_conflict": SEMANTIC_CONTRACT,
     "relation_target_missing": DEPENDENCY_RESOLUTION,
     "relation_target_version_missing": DEPENDENCY_RESOLUTION,
     "relation_target_version_mismatch": DEPENDENCY_RESOLUTION,
