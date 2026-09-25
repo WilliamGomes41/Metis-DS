@@ -80,6 +80,7 @@ def canonical_object_payload(obj: dict[str, Any]) -> dict[str, Any]:
             md = deepcopy(obj.get(extra) or {})
             md.pop("admission", None)
             md.pop("passage_register", None)
+            md.pop("candidate_eligibility", None)
             if md:
                 payload[extra] = md
             continue
