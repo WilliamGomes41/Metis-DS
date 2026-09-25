@@ -777,7 +777,8 @@ class _PostgresBadgeCountsMixin:
                     batch_groups AS (
                         SELECT snapshot_id,section_path,batch_type,COUNT(*) AS n
                         FROM duty_rows
-                        WHERE batch_eligible
+                        WHERE batch_review_duty
+                          AND actionable_review_duty
                         GROUP BY snapshot_id,section_path,batch_type
                     ),
                     batch_counts AS (
