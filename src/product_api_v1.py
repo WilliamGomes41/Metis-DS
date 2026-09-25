@@ -38,7 +38,7 @@ from .usage_ledger_v1 import UsageLedger
 
 ROOT = Path(__file__).resolve().parents[1]
 API_VERSION = "v1"
-SERVICE_VERSION = "product-api-v1.3.0"
+SERVICE_VERSION = "product-api-v1.4.0"
 
 
 class ProductCorpusError(RuntimeError):
