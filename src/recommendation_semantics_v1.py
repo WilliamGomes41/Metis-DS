@@ -185,6 +185,90 @@ def has_source_literal_strength(text: str) -> bool:
     return source_literal_strength(text) is not None
 
 
+def _review_direction_evidence(obj: dict[str, Any]) -> str:
+    proposed = proposed_recommendation_semantics_of(obj)
+    evidence = str(proposed.get("direction_evidence_span") or "").strip()
+    if evidence:
+        return evidence
+    content = obj.get("content") if isinstance(obj.get("content"), dict) else {}
+    return str(content.get("clean_text") or content.get("raw_text") or "").strip()
+
+
+def _review_strength_evidence(obj: dict[str, Any], strength: str) -> str | None:
+    proposed = proposed_recommendation_semantics_of(obj)
+    candidates = [
+        proposed.get("strength_evidence_span"),
+        proposed.get("source_label"),
+    ]
+    structure = obj.get("structure") if isinstance(obj.get("structure"), dict) else {}
+    candidates.extend(structure.get("section_path") or [])
+    content = obj.get("content") if isinstance(obj.get("content"), dict) else {}
+    candidates.append(content.get("clean_text"))
+    for raw in candidates:
+        text = str(raw or "").strip()
+        if text and source_literal_strength(text) == strength:
+            return text
+    return None
+
+
+def confirmed_recommendation_semantics_from_review(
+    obj: dict[str, Any],
+    *,
+    direction: str,
+    strength_choice: str,
+) -> dict[str, Any]:
+    """Build confirmed semantics from explicit human choices + source-bound evidence.
+
+    The reviewer owns the interpretation. Metis owns only the closed contract and
+    evidence binding. Explicit strength cannot be confirmed without a matching
+    source-literal strong/weak cue; not_stated carries no strength evidence.
+    """
+
+    safe_direction = str(direction or "").strip()
+    safe_strength = str(strength_choice or "").strip()
+    if safe_direction not in DIRECTIONS:
+        raise ValueError("recommendation_direction_required")
+    if safe_strength not in {"strong", "weak", "not_stated"}:
+        raise ValueError("recommendation_strength_confirmation_required")
+
+    direction_evidence = _review_direction_evidence(obj)
+    if not direction_evidence:
+        raise ValueError("recommendation_direction_evidence_missing")
+
+    if safe_strength == "not_stated":
+        if _review_strength_evidence(obj, "strong") or _review_strength_evidence(obj, "weak"):
+            raise ValueError("recommendation_strength_not_stated_conflict")
+        value = {
+            "version": RECOMMENDATION_SEMANTICS_VERSION,
+            "direction": safe_direction,
+            "strength": None,
+            "strength_status": "not_stated",
+            "direction_evidence_span": direction_evidence,
+            "strength_evidence_span": None,
+            "source_label": None,
+            "normalization_scheme": "source_literal_v1",
+        }
+    else:
+        evidence = _review_strength_evidence(obj, safe_strength)
+        if not evidence:
+            raise ValueError("recommendation_strength_evidence_required")
+        value = {
+            "version": RECOMMENDATION_SEMANTICS_VERSION,
+            "direction": safe_direction,
+            "strength": safe_strength,
+            "strength_status": "explicit",
+            "direction_evidence_span": direction_evidence,
+            "strength_evidence_span": evidence,
+            "source_label": evidence,
+            "normalization_scheme": "source_literal_v1",
+        }
+
+    errors = validate_recommendation_semantics(value, confirmed=True)
+    if errors:
+        raise ValueError("recommendation_semantics_confirmation_invalid")
+    return value
+
+
 def legacy_recommendation_semantics_view(
     obj: dict[str, Any],
     *,
