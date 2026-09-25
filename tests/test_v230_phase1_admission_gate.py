@@ -598,18 +598,25 @@ def test_ingest_fixture_gates_named_regressions_and_keeps_adviseert(tmp_path: Pa
     lone_exc = _find_by_text(objects, "recente fractuur")
     rec_exc = _find_by_text(objects, "hypercalciëmie")
 
-    assert _admission(djg)["gate_result"] == GATE_BLOCKED
-    for code in (
-        "recommendation_evidence_missing",
-        "comparison_target_missing",
-        "abbreviation_unresolved",
-    ):
-        assert code in _admission(djg)["reason_codes"], code
+    # D2b2-C: ordinary source passages without a type proposal are coverage,
+    # not failed candidates. Direct admit_candidate tests above still prove
+    # the hard gate for an explicitly constructed candidate.
+    for passage in (djg, one_word, unresolved, comparison, false_rec):
+        assert _admission(passage) == {}
+        eligibility = (passage.get("metadata") or {}).get("candidate_eligibility") or {}
+        assert eligibility.get("eligible") is False
+    assert ((djg.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
+        "deterministic_proposal_not_evidenced"
+    )
+    assert ((false_rec.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
+        "deterministic_proposal_not_evidenced"
+    )
+    for passage in (one_word, unresolved, comparison):
+        assert ((passage.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
+            "deterministic_no_type_proposal"
+        )
+
     assert _admission(adviseert)["gate_result"] == GATE_ALLOWED
-    assert _admission(one_word)["gate_result"] == GATE_BLOCKED
-    assert "unresolved_reference" in _admission(unresolved)["reason_codes"]
-    assert "comparison_target_missing" in _admission(comparison)["reason_codes"]
-    assert "recommendation_evidence_missing" in _admission(false_rec)["reason_codes"]
     assert any(
         code in _admission(lone_exc)["reason_codes"]
         for code in ("exception_target_missing", "no_independent_claim")
@@ -636,8 +643,9 @@ def test_ingest_fixture_gates_named_regressions_and_keeps_adviseert(tmp_path: Pa
 
     blocked = blocked_audit_lane(objects)
     blocked_texts = [_text_of(obj) for obj in blocked]
-    assert DJG in blocked_texts
-    assert any("scorelijst" in text for text in blocked_texts)
+    assert DJG not in blocked_texts
+    assert not any("nieuwe scorelijst" in text for text in blocked_texts)
+    assert any("recente fractuur" in text for text in blocked_texts)
     assert not any(obj in ordinary for obj in blocked)
 
     client = TestClient(create_console_app(console))
@@ -652,8 +660,7 @@ def test_ingest_fixture_gates_named_regressions_and_keeps_adviseert(tmp_path: Pa
     assert DJG not in slow
     assert "adviseert de verpleegkundige" in review
     assert "review-blocked-audit" in control
-    assert DJG in control.split("review-blocked-audit", 1)[-1]
-
+    assert DJG not in control.split("review-blocked-audit", 1)[-1]
 
 def test_boom_ingest_does_not_apply_richtlijn_contracts(tmp_path: Path) -> None:
     console = _console(tmp_path)
@@ -769,33 +776,37 @@ def test_blocked_candidate_cannot_be_confirmed_or_approved(tmp_path: Path) -> No
     console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
-    djg = _find_by_text(console.snapshot_objects(receipt["snapshot_id"]), DJG)
+    blocked = _find_by_text(
+        console.snapshot_objects(receipt["snapshot_id"]),
+        "recente fractuur",
+    )
+    assert _admission(blocked).get("gate_result") == GATE_BLOCKED
+
     with pytest.raises(ConsoleError, match="blocked_candidate_not_reviewable"):
         console.confirm_object_type(
             actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=receipt["snapshot_id"],
-            object_id=djg["object_id"],
-            confirmed_object_type="recommendation",
+            object_id=blocked["object_id"],
+            confirmed_object_type="exception",
         )
     with pytest.raises(ConsoleError, match="blocked_candidate_not_reviewable"):
         console.review_object(
             actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=receipt["snapshot_id"],
-            object_id=djg["object_id"],
+            object_id=blocked["object_id"],
             decision="approve",
-            confirmed_object_type="recommendation",
+            confirmed_object_type="exception",
         )
     rejected = console.review_object(
         actor_id=accounts["reviewer"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
-        object_id=djg["object_id"],
+        object_id=blocked["object_id"],
         decision="reject",
-        comment="Geblokkeerde kandidaat; geen aanbeveling.",
+        comment="Geblokkeerde kandidaat; target ontbreekt.",
     )
-    row = next(obj for obj in rejected if obj["object_id"] == djg["object_id"])
-    assert row.get("confirmed_object_type") != "recommendation"
+    row = next(obj for obj in rejected if obj["object_id"] == blocked["object_id"])
+    assert row.get("confirmed_object_type") != "exception"
     assert _admission(row).get("gate_result") == GATE_BLOCKED
-
 
 def test_correct_object_reruns_admission_gate(tmp_path: Path) -> None:
     console = _console(tmp_path)
@@ -834,22 +845,48 @@ def test_correct_object_can_readmit_a_blocked_candidate(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
-    djg = _find_by_text(console.snapshot_objects(receipt["snapshot_id"]), DJG)
-    assert _admission(djg)["gate_result"] == GATE_BLOCKED
+    adviseert = _find_by_text(
+        console.snapshot_objects(receipt["snapshot_id"]),
+        "adviseert de verpleegkundige",
+    )
+    assert _admission(adviseert)["gate_result"] == GATE_ALLOWED
+
     console.review_object(
         actor_id=accounts["reviewer"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
-        object_id=djg["object_id"],
+        object_id=adviseert["object_id"],
         decision="revise",
-        comment="Zet de bronzin om naar een volledige aanbeveling.",
+        comment="Maak deze kandidaat tijdelijk ongeldig.",
+        proposed_correction=ONE_WORD,
+    )
+    blocked = console.correct_object(
+        actor_id=accounts["researcher"]["account_id"],
+        snapshot_id=receipt["snapshot_id"],
+        object_id=adviseert["object_id"],
+        patch={
+            "reason": "temporary blocked revision",
+            "operations": [
+                {"op": "set", "path": "content.clean_text", "value": ONE_WORD},
+                {"op": "set", "path": "content.raw_text", "value": ONE_WORD},
+            ],
+        },
+    )
+    assert _admission(blocked)["gate_result"] == GATE_BLOCKED
+
+    console.review_object(
+        actor_id=accounts["reviewer"]["account_id"],
+        snapshot_id=receipt["snapshot_id"],
+        object_id=blocked["object_id"],
+        decision="revise",
+        comment="Herstel de bronletterlijke aanbeveling.",
         proposed_correction=ADVISEERT,
     )
     revised = console.correct_object(
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
-        object_id=djg["object_id"],
+        object_id=blocked["object_id"],
         patch={
-            "reason": "reviewer correction",
+            "reason": "restore source-bound recommendation",
             "operations": [
                 {"op": "set", "path": "content.clean_text", "value": ADVISEERT},
                 {"op": "set", "path": "content.raw_text", "value": ADVISEERT},
@@ -858,7 +895,6 @@ def test_correct_object_can_readmit_a_blocked_candidate(tmp_path: Path) -> None:
     )
     assert _admission(revised)["gate_result"] == GATE_ALLOWED
     assert is_slow_review_duty(revised) is True
-
 
 def test_admission_carries_section_role_from_existing_section_path(tmp_path: Path) -> None:
     html = (

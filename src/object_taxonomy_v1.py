@@ -98,6 +98,16 @@ _RECOMMENDATION_RE = re.compile(
     r"\b(?:adviseer|aanbevel|gebruik|verwijs|bespreek|overleg|controleer|start)\w*\b",
     re.I,
 )
+_RECOMMENDATION_EVIDENCE_RE = re.compile(
+    r"\b(?:adviseert?|aanbeveelt?|overweeg(?:t)?)\b|"
+    r"^(?:bespreek|gebruik|verwijs|overleg|controleer|start|overweeg)\b",
+    re.I,
+)
+_PREVALENCE_STATEMENT_RE = re.compile(
+    r"\bwordt\b.+\bgebruikt\b|\bkomt\b.+\bvoor\b|\bvaker gebruikt\b|"
+    r"\bvaak voor\b",
+    re.I,
+)
 CLOSED_RECOMMENDATION_STRENGTHS = ("doen", "overweeg", "niet_doen")
 STRENGTH_STAMP_LABELS = {
     "doen": "DOEN",
@@ -387,6 +397,31 @@ def propose_object_type(text: str, *, is_heading: bool = False) -> str | None:
     if _RECOMMENDATION_RE.search(blob):
         return "recommendation"
     return None
+
+
+def has_candidate_type_evidence(text: str, proposed_type: str | None) -> bool:
+    """Whether a deterministic type proposal has enough evidence to enter Admission.
+
+    This does not confirm the type. It only prevents broad proposal heuristics
+    from turning ordinary source prose into a KnowledgeCandidate. Admission
+    remains the authority for the full candidate contract.
+    """
+
+    blob = text or ""
+    proposed = str(proposed_type or "").strip()
+    if proposed == "recommendation":
+        if _PREVALENCE_STATEMENT_RE.search(blob):
+            return False
+        return bool(_RECOMMENDATION_EVIDENCE_RE.search(blob))
+    if proposed == "definition":
+        return bool(_DEFINITION_RE.search(blob))
+    if proposed == "condition":
+        return bool(_CONDITION_RE.search(blob))
+    if proposed == "exception":
+        return bool(_EXCEPTION_RE.search(blob))
+    if proposed == "explanation":
+        return bool(_EXPLANATION_RE.search(blob))
+    return False
 
 
 def extract_object_type(fragment: dict[str, Any]) -> tuple[str, str | None]:

@@ -623,7 +623,8 @@ def test_ui_must_not_hide_stored_fragments_without_extract(tmp_path: Path) -> No
     html = _client(console).get(
         f"/review?document={receipt['snapshot_id']}&task=control"
     ).text
-    assert "Technisch herstel nodig" in html
+    assert "Controleoverzicht per kop" in html
+    assert "Nog niet beoordeeld" in html
     card = _client(console).get(
         f"/review?document={receipt['snapshot_id']}&object={planted['object_id']}"
     ).text

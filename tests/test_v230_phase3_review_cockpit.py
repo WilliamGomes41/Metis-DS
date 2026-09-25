@@ -625,44 +625,17 @@ def test_save_redirects_to_next_ordinary_object(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_blocked_candidate_still_cannot_be_approved_or_type_confirmed(tmp_path: Path) -> None:
+def test_ineligible_source_passage_stays_out_of_candidate_lanes(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
-    djg = _find_by_text(console.snapshot_objects(receipt["snapshot_id"]), DJG)
-    assert _admission(djg)["gate_result"] == GATE_BLOCKED
-    with pytest.raises(ConsoleError, match="blocked_candidate_not_reviewable"):
-        console.review_object(
-            actor_id=accounts["reviewer"]["account_id"],
-            snapshot_id=receipt["snapshot_id"],
-            object_id=djg["object_id"],
-            decision="approve",
-            confirmed_object_type="recommendation",
-            suitability="ja",
-            eindoordeel="goedkeuren",
-        )
-    client = _client(console)
-    posted = client.post(
-        "/review",
-        data={
-            "snapshot_id": receipt["snapshot_id"],
-            "object_id": djg["object_id"],
-            "suitability": "ja",
-            "type_action": "dit_klopt",
-            "confirmed_object_type": "recommendation",
-            "eindoordeel": "goedkeuren",
-            "decision": "approve",
-        },
-    )
-    assert posted.status_code in {400, 403}
-    live = next(
-        obj
-        for obj in console.snapshot_objects(receipt["snapshot_id"])
-        if obj["object_id"] == djg["object_id"]
-    )
-    assert live.get("confirmed_object_type") != "recommendation"
-    assert _admission(live)["gate_result"] == GATE_BLOCKED
-
+    objects = console.snapshot_objects(receipt["snapshot_id"])
+    djg = _find_by_text(objects, DJG)
+    assert _admission(djg) == {}
+    eligibility = (djg.get("metadata") or {}).get("candidate_eligibility") or {}
+    assert eligibility.get("eligible") is False
+    assert djg not in ordinary_review_queue(objects)
+    assert djg not in blocked_audit_lane(objects)
 
 def test_ordinary_queue_and_index_remain_allowed_only(tmp_path: Path) -> None:
     console = _console(tmp_path)

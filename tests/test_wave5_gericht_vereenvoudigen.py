@@ -352,8 +352,11 @@ def test_blocked_candidates_stay_out_of_ordinary_review_lane(tmp_path: Path) -> 
     ).text
     slow = review.split('class="review-lane-slow"', 1)[-1]
     assert DJG not in slow
+    assert "recente fractuur" not in slow
     assert "review-blocked-audit" in control
-    assert DJG in control.split("review-blocked-audit", 1)[-1]
+    blocked = control.split("review-blocked-audit", 1)[-1]
+    assert DJG not in blocked
+    assert "recente fractuur" in blocked
 
 
 # ---------------------------------------------------------------------------

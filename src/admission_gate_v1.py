@@ -11,6 +11,10 @@ import re
 from typing import Any, Iterable
 
 from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES, review_path_for_klasse
+from src.candidate_eligibility_v1 import (
+    assess_candidate_eligibility,
+    candidate_eligibility_of,
+)
 from src.object_taxonomy_v1 import (
     has_terminal_sentence_boundary,
     locator_of,
@@ -205,13 +209,33 @@ def is_boom_object(obj: dict[str, Any]) -> bool:
 
 
 def is_inhoudelijk_candidate(obj: dict[str, Any]) -> bool:
+    """Project whether the row represents a KnowledgeCandidate.
+
+    New D2b2-C records carry explicit eligibility evidence. Existing persisted
+    Admission remains evidence that an older row was treated as a candidate,
+    so historical snapshots are not silently reinterpreted.
+    """
+
     if obj.get("object_type") in {"document", "heading"}:
         return False
     if obj.get("proposed_object_type") == "heading":
         return False
     if is_boom_object(obj):
         return False
-    return True
+
+    confirmed = str(obj.get("confirmed_object_type") or "").strip()
+    stored = str(obj.get("object_type") or "").strip()
+    if confirmed or stored not in {"", "unclassified", "document", "heading"}:
+        return True
+
+    eligibility = candidate_eligibility_of(obj)
+    if isinstance(eligibility.get("eligible"), bool):
+        return bool(eligibility["eligible"])
+
+    if admission_of(obj):
+        return True
+
+    return assess_candidate_eligibility(obj).eligible
 
 
 def build_candidate_record(**fields: Any) -> dict[str, Any]:
@@ -753,8 +777,12 @@ def apply_admission_gate(
     }
     out: list[dict[str, Any]] = []
     for index, obj in enumerate(objects):
-        row = obj
-        if is_inhoudelijk_candidate(row):
+        eligibility = assess_candidate_eligibility(obj)
+        row = dict(obj)
+        metadata = dict(row.get("metadata") or {})
+        metadata["candidate_eligibility"] = eligibility.as_metadata()
+
+        if eligibility.eligible:
             candidate = candidate_from_object(
                 row,
                 objects=objects,
@@ -763,11 +791,13 @@ def apply_admission_gate(
                 source_hash=source_hash,
                 fragments_by_id=fragments_by_id,
             )
-            admitted = admit_candidate(candidate)
-            row = dict(row)
-            metadata = dict(row.get("metadata") or {})
-            metadata["admission"] = admitted
-            row["metadata"] = metadata
+            metadata["admission"] = admit_candidate(candidate)
+        else:
+            # Admission is candidate-only evidence. Re-running this projection
+            # on an ineligible passage must not preserve stale machine failure.
+            metadata.pop("admission", None)
+
+        row["metadata"] = metadata
         out.append(row)
     return out
 
