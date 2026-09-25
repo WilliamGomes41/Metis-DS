@@ -762,9 +762,21 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             snapshot_revision=snapshot_revision,
         )
         if isinstance(response, RedirectResponse) and response.status_code == 303:
-            # The mutation succeeded. Return to the live document dashboard so
-            # it can select the next task from current review state instead of
-            # hard-coding the completed headings lane again.
+            envelope = console._envelope(snapshot_id)
+            item = review_work_item(
+                console,
+                account=_current_account(console, request),
+                envelope=envelope,
+            )
+            if item and int(item.get("actionable_structure_duties") or 0):
+                return RedirectResponse(
+                    console_ui._review_location(
+                        console,
+                        snapshot_id,
+                        task="structure",
+                    ),
+                    status_code=303,
+                )
             return RedirectResponse(
                 console_ui._review_location(console, snapshot_id),
                 status_code=303,
