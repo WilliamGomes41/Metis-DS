@@ -150,7 +150,7 @@ def test_pdf_review_index_uses_human_labels_and_working_object_links(upload):
     console, client, payload, form, _ = upload
     assert client.post("/ingest", data=form, files={"file": ("Eenzaamheid bij ouderen.pdf", payload, "application/pdf")}).status_code == 200
     envelope, = console.list_envelopes()
-    response = client.get("/review", params={"document": envelope["snapshot_id"], "task": "control"})
+    response = client.get("/review", params={"document": envelope["snapshot_id"], "task": "individual"})
     assert response.status_code == 200
     visible = VisibleRows()
     visible.feed(response.text)
