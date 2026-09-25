@@ -3003,11 +3003,11 @@ def create_console_app(
         if "publisher" in account["roles"]:
             scope_boxes = "".join(
                 f'<label class="check"><input type="checkbox" name="application_scopes" value="{_esc(scope)}" checked> {_esc(scope)}</label>'
-                for scope in sorted(VALID_SCOPES - {"usage:read"})
+                for scope in sorted(VALID_SCOPES)
             )
             tenant_scope_boxes = "".join(
                 f'<label class="check"><input type="checkbox" name="tenant_scopes" value="{_esc(scope)}" checked> {_esc(scope)}</label>'
-                for scope in sorted(VALID_SCOPES - {"usage:read"})
+                for scope in sorted(VALID_SCOPES)
             )
             form = f"""
               <form method="post" action="/settings/api-access/provision" class="stack">
