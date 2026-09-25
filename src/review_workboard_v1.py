@@ -653,7 +653,7 @@ def _projected_document_dashboard(
         snapshot_id,
         koppen=[],
         individual=[],
-        normal_passages=int(summary.get("normal_passages") or 0),
+        normal_passages=int(summary.get("actionable_batch_duties") or 0),
         normal_batches=int(summary.get("normal_batches") or 0),
         blocked_count=int(summary.get("blocked_count") or 0),
         progress=progress,
