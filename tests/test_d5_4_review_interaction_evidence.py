@@ -164,6 +164,21 @@ def test_legacy_decision_is_unmeasured_not_invented_as_interaction() -> None:
     assert result["legacy_unmeasured_decisions"] == 1
 
 
+def test_document_projection_does_not_claim_unscoped_legacy_decision() -> None:
+    result = review_burden_projection(
+        [
+            {
+                "event_type": "clinical_review_approve",
+                "object_id": "old",
+                "object_version": "1.0",
+                "details": {"review_snapshot_hash": "abc"},
+            }
+        ],
+        snapshot_id="snap-1",
+    )
+    assert result["legacy_unmeasured_decisions"] == 0
+
+
 def test_interaction_id_cannot_move_between_reviewer_snapshot_or_task() -> None:
     prior = {
         "event_type": "clinical_review_approve",
