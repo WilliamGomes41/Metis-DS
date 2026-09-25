@@ -2033,6 +2033,130 @@ def _processing_diagnostics_html(
     """
 
 
+def _review_route_objects(
+    objects: list[dict[str, Any]],
+    *,
+    review_path: str,
+    bindings: list[dict[str, Any]],
+    reviewer_id: str,
+    canonical_task: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for obj in objects:
+        route = reviewer_route_for(
+            obj,
+            review_path=review_path,
+            reviewer_id=reviewer_id,
+            bindings=bindings,
+        )
+        if not route or not route.get("actionable"):
+            continue
+        if str(route.get("canonical_task") or "") != canonical_task:
+            continue
+        rows.append(obj)
+    return sorted(rows, key=review_priority_rank)
+
+
+def _render_second_review_card(
+    console: OperationsConsole,
+    snapshot_id: str,
+    obj: dict[str, Any],
+    snapshot_objects: list[dict[str, Any]],
+    review_path: str,
+    *,
+    reviewer_id: str,
+    snapshot_revision: str,
+) -> str:
+    bindings = console.object_review_bindings(snapshot_id)
+    route = reviewer_route_for(
+        obj,
+        review_path=review_path,
+        reviewer_id=reviewer_id,
+        bindings=bindings,
+    )
+    if not route or route.get("canonical_task") != "second_review":
+        raise ConsoleError("second_review_not_available")
+    if not route.get("actionable"):
+        raise ConsoleError("independent_second_reviewer_required")
+
+    semantics = confirmed_recommendation_semantics_of(obj)
+    semantics_html = ""
+    if semantics:
+        semantics_html = (
+            '<section class="review-step">'
+            '<h4>Bevestigde aanbevelingssemantiek</h4>'
+            f'<p>Richting: <b>{_esc(semantics.get("direction") or "")}</b> · '
+            f'Sterkte: <b>{_esc(semantics.get("strength") or semantics.get("strength_status") or "")}</b></p>'
+            '</section>'
+        )
+    relations = confirmed_knowledge_relations_of(obj)
+    relations_html = ""
+    if relations:
+        items = "".join(
+            f'<li><b>{_esc(RELATION_LABELS.get(str(row.get("relation_type") or ""), str(row.get("relation_type") or "")))}</b> '
+            f'→ {_esc(row.get("target_object_id") or "")} '
+            f'(versie {_esc(row.get("target_object_version") or "")})</li>'
+            for row in relations
+        )
+        relations_html = (
+            '<section class="review-step"><h4>Bevestigde relaties</h4>'
+            f'<ul>{items}</ul></section>'
+        )
+
+    first_reviewers = [
+        str(row.get("reviewer") or row.get("reviewer_id") or "")
+        for row in bindings
+        if row.get("valid")
+        and row.get("decision") == "approve"
+        and row.get("object_id") == obj.get("object_id")
+        and row.get("object_version") == obj.get("object_version")
+        and row.get("canonical_object_hash") == (obj.get("provenance") or {}).get("canonical_object_hash")
+        and row.get("confirmed_object_type") == obj.get("confirmed_object_type")
+    ]
+    first_copy = ", ".join(dict.fromkeys(first_reviewers)) or "eerste reviewer"
+    text = str((obj.get("content") or {}).get("clean_text") or "")
+    return f"""
+      <p><a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=second_review">← Terug naar tweede beoordelingen</a></p>
+      <article class="object review-card-two-column second-review-card" data-object-id="{_esc(obj.get("object_id"))}">
+        <div class="review-cockpit-copy">
+          <p class="eyebrow">Onafhankelijke tweede beoordeling</p>
+          <h3>{_esc(review_card_sentence(obj))}</h3>
+          <p>De canonieke inhoud staat vast. Controleer dezelfde objectversie onafhankelijk; deze stap wijzigt type, semantiek of relaties niet.</p>
+        </div>
+        <section class="review-card-object review-step">
+          <p>{_esc(text)}</p>
+          <p class="meta">
+            <span>type <b>{_esc(_object_type_label(str(obj.get("confirmed_object_type") or "")))}</b></span>
+            <span>versie <b>{_esc(obj.get("object_version") or "")}</b></span>
+            <span>eerste beoordeling <b>{_esc(first_copy)}</b></span>
+          </p>
+        </section>
+        {_broncontext_html(obj, snapshot_id, str(obj.get("object_id") or ""), True, task="second_review")}
+        {_review_context_block(
+            obj,
+            snapshot_objects,
+            snapshot_id=snapshot_id,
+            review_path=review_path,
+            task="second_review",
+        )}
+        {semantics_html}
+        {relations_html}
+        <form method="post" action="/review/second-review" class="review-decision-form">
+          <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
+          <input type="hidden" name="object_id" value="{_esc(obj.get("object_id") or "")}">
+          {_snapshot_revision_input(snapshot_revision)}
+          <section class="review-step">
+            <h4>Tweede beoordeling</h4>
+            <button class="btn-primary" type="submit" name="action" value="approve">Tweede beoordeling goedkeuren</button>
+            <label for="second-review-comment-{_esc(obj.get("object_id") or "")}">Correctie nodig</label>
+            <textarea id="second-review-comment-{_esc(obj.get("object_id") or "")}" name="comment"></textarea>
+            <button class="btn-secondary" type="submit" name="action" value="revise">Correctie nodig</button>
+          </section>
+        </form>
+      </article>
+    """
+
+
 def _render_review_index(
     snapshot_id: str,
     snapshot_objects: list[dict[str, Any]],
@@ -2042,13 +2166,32 @@ def _render_review_index(
     task: str = "",
     normal_review_enabled: bool = True,
     audit_signals: list[dict[str, Any]] | None = None,
+    bindings: list[dict[str, Any]] | None = None,
+    reviewer_id: str = "",
 ) -> str:
-    koppen, _old_inhoud = review_stacks(snapshot_objects, review_path=review_path)
-    duty = slow_review_duty(snapshot_objects, review_path=review_path)
-    regular_individual = regular_individual_review_queue(
-        snapshot_objects, review_path=review_path
-    ) if review_path != "boom" else []
-    individual = sorted([*duty, *regular_individual], key=review_priority_rank)
+    task = normalize_review_task(task)
+    bindings = list(bindings or [])
+    koppen = _review_route_objects(
+        snapshot_objects,
+        review_path=review_path,
+        bindings=bindings,
+        reviewer_id=reviewer_id,
+        canonical_task="structure",
+    )
+    individual = _review_route_objects(
+        snapshot_objects,
+        review_path=review_path,
+        bindings=bindings,
+        reviewer_id=reviewer_id,
+        canonical_task="contextual",
+    )
+    second_review = _review_route_objects(
+        snapshot_objects,
+        review_path=review_path,
+        bindings=bindings,
+        reviewer_id=reviewer_id,
+        canonical_task="second_review",
+    )
     blocked = processing_issue_objects(snapshot_objects) if review_path != "boom" else []
     normal_passages, normal_batches = (0, 0)
     if normal_review_enabled:
@@ -2067,7 +2210,7 @@ def _render_review_index(
                     """
     copy = _review_lane_copy(review_path, koppen)
     progress = _review_progress_summary(snapshot_objects)
-    if task == "decisions":
+    if task == "history":
         decision_rows = [
             obj
             for obj in snapshot_objects
@@ -2083,31 +2226,38 @@ def _render_review_index(
             </ol>
           </section>
         '''
-    if task == "individual":
+    if task == "contextual":
         return f'''
           {_review_task_header(snapshot_id, "Belangrijke passages beoordelen", "Open iedere passage en vergelijk haar met de oorspronkelijke bron")}
           <section class="review-lane-slow">
-            {_review_section_groups(individual, snapshot_id, priority_ids={str(obj.get("object_id")) for obj in duty}) if individual else '<p class="review-task-empty">Deze taak is afgerond.</p>'}
+            {_review_section_groups(individual, snapshot_id, priority_ids={str(obj.get("object_id")) for obj in individual}) if individual else '<p class="review-task-empty">Deze taak is afgerond.</p>'}
           </section>
         '''
-    if task == "together":
+    if task == "batch":
         return f'''
           {_review_task_header(snapshot_id, "Vergelijkbare passages samen beoordelen", "Bevestig alleen passages waarover je op basis van de bron zeker bent")}
           {normal_content_html or '<p class="review-task-empty">Deze taak is afgerond.</p>'}
         '''
-    if task == "headings":
+    if task == "structure":
         return f'''
           {_review_task_header(snapshot_id, copy["fast_title"], copy["fast_lead"])}
           <section class="review-lane-fast">
             <form method="post" action="/review/headings/batch-confirm">
               <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
               {_snapshot_revision_input(snapshot_revision)}
-              <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, checkbox=True, task="headings") for obj in koppen)}</ol>
+              <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, checkbox=True, task="structure") for obj in koppen)}</ol>
               <button class="btn-primary" type="submit">{copy["fast_button"]}</button>
             </form>
           </section>
         '''
-    if task == "control":
+    if task == "second_review":
+        return f'''
+          {_review_task_header(snapshot_id, "Tweede beoordelingen", "Beoordeel onafhankelijk exact dezelfde goedgekeurde objectversie")}
+          <section class="review-lane-second">
+            {_review_section_groups(second_review, snapshot_id, priority_ids=set()) if second_review else '<p class="review-task-empty">Deze taak is afgerond of wacht op een andere reviewer.</p>'}
+          </section>
+        '''
+    if task == "repair":
         return f'''
           {_review_task_header(snapshot_id, "Dekking en technische controle", "Controleer hier de volledigheid en technische blokkades; dit is geen extra inhoudelijke reviewtaak")}
           {_processing_diagnostics_html(snapshot_objects)}
