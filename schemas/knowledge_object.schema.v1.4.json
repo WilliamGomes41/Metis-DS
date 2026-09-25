@@ -1026,42 +1026,6 @@
           }
         }
       }
-    },
-    {
-      "not": {
-        "allOf": [
-          {
-            "required": [
-              "proposed_knowledge_relations"
-            ]
-          },
-          {
-            "properties": {
-              "relations": {
-                "minItems": 1
-              }
-            }
-          }
-        ]
-      }
-    },
-    {
-      "not": {
-        "allOf": [
-          {
-            "required": [
-              "confirmed_knowledge_relations"
-            ]
-          },
-          {
-            "properties": {
-              "confirmed_relations": {
-                "minItems": 1
-              }
-            }
-          }
-        ]
-      }
     }
   ],
   "$defs": {
