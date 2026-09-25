@@ -19,10 +19,12 @@ from src.candidate_eligibility_v1 import (
     REASON_EXPLICIT_TYPE,
     REASON_NO_TYPE,
     REASON_SEMANTIC_COVERAGE,
+    REASON_UNEVIDENCED_TYPE,
     REASON_SEMANTIC_PROPOSAL,
     candidate_eligibility_of,
 )
 from src.domain_dimensions_v1 import processing_issue_objects
+from src.integrity_kernel import compute_canonical_object_hash
 from src.passage_register_v1 import apply_passage_register, passage_register_of
 
 
@@ -195,14 +197,26 @@ def test_legacy_persisted_admission_remains_candidate_projection_until_reprocess
     assert is_inhoudelijk_candidate(legacy) is True
 
 
-def test_candidate_eligibility_does_not_infer_type_from_prevalence_text() -> None:
+def test_weak_recommendation_proposal_does_not_make_prevalence_a_candidate() -> None:
     source = _passage(
         object_id="prevalence-source",
         text="Urine-incontinentie komt bij ouderen vaak voor in Nederland.",
+        proposed_type="recommendation",
     )
 
     [row] = _gate([source])
 
-    assert candidate_eligibility_of(row)["reason"] == REASON_NO_TYPE
+    assert candidate_eligibility_of(row)["reason"] == REASON_UNEVIDENCED_TYPE
     assert candidate_eligibility_of(row)["eligible"] is False
     assert admission_of(row) == {}
+
+
+def test_candidate_eligibility_metadata_is_processing_only_not_canonical() -> None:
+    source = _passage(
+        object_id="canonical-source",
+        text="Eenzaamheid komt veel voor onder ouderen.",
+    )
+    before = compute_canonical_object_hash(source)
+    [row] = _gate([source])
+    assert candidate_eligibility_of(row)["eligible"] is False
+    assert compute_canonical_object_hash(row) == before
