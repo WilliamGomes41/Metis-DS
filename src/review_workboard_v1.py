@@ -21,6 +21,7 @@ from src.document_status_ui_v1 import current_document_lifecycle_status
 from src.operations_console_app import (
     COOKIE,
     REVIEW_TASKS,
+    normalize_review_task,
     _esc,
     _nav,
     _page,
@@ -39,22 +40,26 @@ from src.review_duty_v1 import review_duty_counts, reviewer_route_counts
 
 
 _TASK_COPY = {
-    "headings": ("Koppen controleren", "Controleer de indeling van het document"),
-    "individual": (
-        "Belangrijke passages beoordelen",
-        "Beoordeel advies, voorwaarden, uitzonderingen en passages die extra aandacht vragen",
+    "structure": ("Structuur beoordelen", "Controleer koppen en documentstructuur"),
+    "contextual": (
+        "In samenhang beoordelen",
+        "Beoordeel passages die inhoudelijke of relationele context nodig hebben",
     ),
-    "together": (
-        "Vergelijkbare passages samen beoordelen",
-        "Beoordeel passages uit hetzelfde brononderdeel in overzichtelijke groepen",
+    "batch": (
+        "Vergelijkbare passages beoordelen",
+        "Beoordeel onafhankelijke vergelijkbare passages in overzichtelijke groepen",
     ),
-    "control": (
+    "second_review": (
+        "Tweede beoordeling",
+        "Beoordeel onafhankelijk exact dezelfde goedgekeurde objectversie",
+    ),
+    "repair": (
         "Technisch herstel nodig",
-        "Controleer passages die Metis nog niet veilig als gewone reviewtaak kan aanbieden",
+        "Controleer passages die Metis nog niet veilig als inhoudelijke review kan aanbieden",
     ),
-    "closure": (
-        "Review afronden",
-        "Rond de nog openstaande disposition af voordat publicatie kan worden vrijgegeven",
+    "disposition": (
+        "Bronpassages afhandelen",
+        "Rond nog open source-passage disposition af",
     ),
 }
 
@@ -123,18 +128,24 @@ def _work_item_from_counts(
     actionable_batch_duties: int | None = None,
     actionable_second_review_duties: int = 0,
 ) -> dict[str, Any]:
-    remaining = heading_pending + individual_pending + normal_passages + closure_gap_count
+    remaining = review_duties
 
+    effective_actionable = (
+        review_duties
+        if actionable_review_duties is None
+        else actionable_review_duties
+    )
     task_counts = (
-        ("headings", heading_pending),
-        ("individual", individual_pending),
-        ("together", normal_passages),
+        ("structure", structure_review_duties if actionable_structure_duties is None else actionable_structure_duties),
+        ("contextual", contextual_review_duties if actionable_contextual_duties is None else actionable_contextual_duties),
+        ("batch", batch_review_duties if actionable_batch_duties is None else actionable_batch_duties),
+        ("second_review", actionable_second_review_duties),
     )
     next_task = next((task for task, pending in task_counts if pending), "")
-    if not next_task and blocked_count:
-        next_task = "control"
     if not next_task and closure_gap_count:
-        next_task = "closure"
+        next_task = "disposition"
+    if not next_task and blocked_count:
+        next_task = "repair"
 
     meaningful_status = str(lifecycle_status["presentation_status"])
     if lifecycle_status["workflow_status"] == "closed":
@@ -143,8 +154,12 @@ def _work_item_from_counts(
         # a continuation into review even if legacy rows remain unresolved.
         work_state = "complete"
         next_task = ""
-    elif remaining:
+    elif effective_actionable:
         work_state = "review"
+    elif review_duties and waiting_for_reviewer_duties:
+        work_state = "waiting_for_reviewer"
+    elif closure_gap_count:
+        work_state = "disposition"
     elif blocked_count:
         work_state = "technical_repair"
     elif meaningful_status == "blocked":
@@ -153,7 +168,7 @@ def _work_item_from_counts(
         work_state = "complete"
 
     next_title, next_description = _TASK_COPY.get(next_task, ("", ""))
-    if next_task == "closure" and closure_gap_ids:
+    if next_task == "disposition" and closure_gap_ids:
         next_href = (
             f"/review?document={quote(snapshot_id, safe='')}"
             f"&object={quote(closure_gap_ids[0], safe='')}"
@@ -341,7 +356,7 @@ def review_workboard_items(
                     lifecycle_status=_lifecycle_for_work_item(console, snapshot_id),
                     heading_pending=int(summary.get("heading_pending") or 0),
                     individual_pending=int(summary.get("individual_pending") or 0),
-                    normal_passages=int(summary.get("normal_passages") or 0),
+                    normal_passages=int(summary.get("actionable_batch_duties") or 0),
                     normal_batches=int(summary.get("normal_batches") or 0),
                     blocked_count=int(summary.get("blocked_count") or 0),
                     closure_gap_ids=closure_gap_ids,
@@ -418,14 +433,26 @@ def review_workboard_items(
 
 def _work_summary(item: dict[str, Any]) -> str:
     state = item["work_state"]
-    remaining = int(item["remaining_review_items"])
-    blocked = int(item["blocked_count"])
+    review_duties = int(item.get("review_duties") or 0)
+    actionable = int(item.get("actionable_review_duties") or 0)
+    waiting = int(item.get("waiting_for_reviewer_duties") or 0)
     if state == "review":
-        noun = "reviewtaak" if remaining == 1 else "reviewtaken"
-        return f"Nog {remaining} {noun}."
+        return (
+            f"{review_duties} inhoudelijke beoordeling"
+            f"{'' if review_duties == 1 else 'en'} open; {actionable} voor jou uitvoerbaar."
+        )
+    if state == "waiting_for_reviewer":
+        return (
+            f"{waiting} beoordeling"
+            f"{'' if waiting == 1 else 'en'} wacht op een andere onafhankelijke reviewer."
+        )
+    if state == "disposition":
+        count = int(item.get("disposition_duties") or 0)
+        return f"Geen inhoudelijke review open; {count} bronpassage{' ' if count == 1 else 's '}nog afhandelen."
     if state == "technical_repair":
+        blocked = int(item.get("blocked_count") or 0)
         noun = "passage vereist" if blocked == 1 else "passages vereisen"
-        return f"Geen gewone reviewtaak; {blocked} {noun} technisch herstel."
+        return f"Geen inhoudelijke review open; {blocked} {noun} technisch herstel."
     if state == "publication_blocked":
         return "Review afgerond; publicatie is technisch geblokkeerd."
     if item["meaningful_status"] == "published":
@@ -438,7 +465,7 @@ def _work_summary(item: dict[str, Any]) -> str:
         return "Review afgerond; deze release is ingetrokken."
     if item["meaningful_status"] == "ready_for_publication":
         return "Review afgerond; document is klaar voor publicatie."
-    return "Geen open reviewtaak."
+    return "Geen open reviewplicht."
 
 
 def _work_queue_link(snapshot_id: str, task: str, label: str) -> str:
@@ -472,36 +499,28 @@ def _workboard_card(item: dict[str, Any]) -> str:
     detail_parts: list[str] = []
     if lifecycle["workflow_status"] != "closed":
         snapshot_id = str(item["snapshot_id"])
-        if item["heading_pending"]:
+        for task, count, label in (
+            ("structure", int(item.get("actionable_structure_duties") or 0), "structuur"),
+            ("contextual", int(item.get("actionable_contextual_duties") or 0), "in samenhang"),
+            ("batch", int(item.get("actionable_batch_duties") or 0), "vergelijkbaar"),
+            ("second_review", int(item.get("actionable_second_review_duties") or 0), "tweede beoordeling"),
+        ):
+            if count:
+                detail_parts.append(_work_queue_link(snapshot_id, task, f"{count} {label}"))
+        if item.get("waiting_for_reviewer_duties"):
             detail_parts.append(
-                _work_queue_link(snapshot_id, "headings", f"{item['heading_pending']} kop/pad")
+                _esc(f"{item['waiting_for_reviewer_duties']} wacht op andere reviewer")
             )
-        if item["individual_pending"]:
-            detail_parts.append(
-                _work_queue_link(
-                    snapshot_id,
-                    "individual",
-                    f"{item['individual_pending']} individueel",
-                )
-            )
-        if item["normal_passages"]:
-            detail_parts.append(
-                _work_queue_link(
-                    snapshot_id,
-                    "together",
-                    f"{item['normal_passages']} samen in {item['normal_batches']} groep(en)",
-                )
-            )
+        if item["closure_gap_count"]:
+            detail_parts.append(_esc(f"{item['closure_gap_count']} bronpassage disposition"))
         if item["blocked_count"]:
             detail_parts.append(
                 _work_queue_link(
                     snapshot_id,
-                    "control",
+                    "repair",
                     f"{item['blocked_count']} technisch herstel",
                 )
             )
-        if item["closure_gap_count"]:
-            detail_parts.append(_esc(f"{item['closure_gap_count']} disposition afronden"))
     detail_html = (
         f'<p class="muted review-work-queues">{" · ".join(detail_parts)}</p>'
         if detail_parts
@@ -528,6 +547,8 @@ def _workboard_page(
 
     items = review_workboard_items(console, account=account)
     active = [row for row in items if row["work_state"] == "review"]
+    waiting = [row for row in items if row["work_state"] == "waiting_for_reviewer"]
+    disposition = [row for row in items if row["work_state"] == "disposition"]
     technical = [row for row in items if row["work_state"] == "technical_repair"]
     done = [
         row
@@ -542,6 +563,21 @@ def _workboard_page(
             f'<h2 id="review-work-title">Nu te reviewen ({len(active)})</h2>'
             '<p>Ga verder met de eerstvolgende bestaande reviewtaak per document.</p>'
             f'<div class="doc-list">{"".join(_workboard_card(row) for row in active)}</div>'
+            '</section>'
+        )
+    if waiting:
+        sections.append(
+            '<section class="review-workboard-section" aria-labelledby="review-wait-title">'
+            f'<h2 id="review-wait-title">Wacht op andere reviewer ({len(waiting)})</h2>'
+            '<p>Deze documenten hebben nog reviewplicht, maar de open tweede beoordeling moet door een andere reviewer worden uitgevoerd.</p>'
+            f'<div class="doc-list">{"".join(_workboard_card(row) for row in waiting)}</div>'
+            '</section>'
+        )
+    if disposition:
+        sections.append(
+            '<section class="review-workboard-section" aria-labelledby="review-disposition-title">'
+            f'<h2 id="review-disposition-title">Bronpassages afhandelen ({len(disposition)})</h2>'
+            f'<div class="doc-list">{"".join(_workboard_card(row) for row in disposition)}</div>'
             '</section>'
         )
     if technical:
@@ -561,7 +597,7 @@ def _workboard_page(
         )
     if not items:
         sections.append('<p class="muted">Geen aan jou toegewezen reviewdocumenten.</p>')
-    elif not active and not technical and not done:
+    elif not active and not waiting and not disposition and not technical and not done:
         sections.append('<p class="muted">Geen open reviewtaken.</p>')
 
     counts = console.waiting_task_counts(str(account["account_id"]))
@@ -621,10 +657,11 @@ def _projected_document_dashboard(
         normal_batches=int(summary.get("normal_batches") or 0),
         blocked_count=int(summary.get("blocked_count") or 0),
         progress=progress,
-        heading_pending_override=int(summary.get("heading_pending") or 0),
+        heading_pending_override=int(summary.get("actionable_structure_duties") or 0),
         heading_total_override=int(summary.get("heading_total") or 0),
-        individual_pending_override=int(summary.get("individual_pending") or 0),
-        individual_total_override=int(summary.get("individual_total") or 0),
+        individual_pending_override=int(summary.get("actionable_contextual_duties") or 0),
+        individual_total_override=int(summary.get("contextual_review_duties") or 0),
+        second_review_pending=int(summary.get("actionable_second_review_duties") or 0),
     )
     picker = f"""
       <div class="review-document-context">
@@ -691,7 +728,7 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         chosen = document.strip()
         if chosen:
             counts = console.waiting_task_counts(str(account["account_id"]))
-            chosen_task = task.strip() if task.strip() in REVIEW_TASKS else ""
+            chosen_task = normalize_review_task(task)
             if not object.strip() and not chosen_task:
                 projected = _projected_document_dashboard(
                     console,
