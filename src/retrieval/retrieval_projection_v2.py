@@ -293,7 +293,6 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
                 "object_type": published_object_type(
                     {"confirmed_object_type": object_index[oid].get("confirmed_object_type")}
                 ),
-                "document_id": object_index[oid].get("document_id"),
                 "text": _context_summary(object_index[oid]),
             }
             for oid, role in context_roles
