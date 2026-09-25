@@ -26,13 +26,11 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
 from src.admission_gate_v1 import (
-    GATE_ALLOWED,
     GATE_BLOCKED,
     admission_of,
     apply_admission_gate,
     is_admission_blocked,
 )
-from src.candidate_eligibility_v1 import candidate_eligibility_of
 from src.passage_register_v1 import apply_passage_register, apply_register_from_review
 from src.review_cockpit_v1 import (
     SUITABILITY_VALUES,
@@ -1235,12 +1233,6 @@ class OperationsConsole:
             raise ConsoleError("unknown_object_type")
         if is_admission_blocked(target, review_path=review_path):
             raise ConsoleError("blocked_candidate_not_reviewable")
-        eligibility = candidate_eligibility_of(target)
-        if review_path != "boom" and eligibility and (
-            eligibility.get("eligible") is not True
-            or admission_of(target).get("gate_result") != GATE_ALLOWED
-        ):
-            raise ConsoleError("candidate_not_admitted")
         self._require_open_original(snapshot_id, object_id)
         if target.get("confirmed_object_type") != confirmed_object_type:
             target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
@@ -2409,17 +2401,6 @@ class OperationsConsole:
                 decision == "approve" or apply_type
             ):
                 raise ConsoleError("blocked_candidate_not_reviewable")
-            eligibility = candidate_eligibility_of(target)
-            if (
-                review_path != "boom"
-                and (decision == "approve" or apply_type)
-                and eligibility
-                and (
-                    eligibility.get("eligible") is not True
-                    or admission_of(target).get("gate_result") != GATE_ALLOWED
-                )
-            ):
-                raise ConsoleError("candidate_not_admitted")
             if decision == "approve" or apply_type:
                 self._require_open_original(snapshot_id, object_id)
             if decision == "approve":
