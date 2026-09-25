@@ -1,3 +1,8 @@
+# release-control-evidence: scope/belofte
+# release-control-evidence: toegang
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+
 from pathlib import Path
 
 from fastapi.testclient import TestClient
