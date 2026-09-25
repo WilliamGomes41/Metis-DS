@@ -63,11 +63,17 @@ DEFAULT_TIMEOUT_SECONDS = 60
 SEMANTIC_PROVIDER_ID = "openai-responses-v1"
 SEMANTIC_DEVELOPER_PROMPT = (
     "Form meaning units for human review by selecting only exact source spans. "
-    "Do not write, rewrite or paraphrase candidate knowledge text. "
+    "Do not write, rewrite or paraphrase candidate knowledge text or evidence text. "
     "Group spans only when they form one independently understandable unit. "
     "Keep target group, conditions, exceptions and modality with the statement "
-    "they qualify. Preserve source order. If no safe source-bound proposal is "
-    "possible, return zero objects and a short abstain_reason."
+    "they qualify. For every object return recommendation_semantics: null unless "
+    "proposed_object_type is recommendation. For a recommendation, propose only "
+    "closed direction/strength values and exact evidence references. Direction "
+    "evidence must come from the selected recommendation text. Strength evidence "
+    "may reference evidence_blocks. Treat only explicit strong/weak source wording "
+    "as explicit strength; conditional/voorwaardelijk alone never means weak. "
+    "Preserve source order. If no safe source-bound proposal is possible, return "
+    "zero objects and a short abstain_reason."
 )
 SEMANTIC_MODEL_CONFIG = {
     "api": "responses",
@@ -153,6 +159,36 @@ def _proposal_schema() -> dict[str, Any]:
         },
         "required": ["block_id", "start", "end"],
     }
+    nullable_span = {
+        "type": ["object", "null"],
+        "additionalProperties": False,
+        "properties": dict(span["properties"]),
+        "required": list(span["required"]),
+    }
+    recommendation_semantics = {
+        "type": ["object", "null"],
+        "additionalProperties": False,
+        "properties": {
+            "direction": {"type": "string", "enum": ["for", "against"]},
+            "direction_evidence": span,
+            "strength": {
+                "type": ["string", "null"],
+                "enum": ["strong", "weak", None],
+            },
+            "strength_status": {
+                "type": "string",
+                "enum": ["explicit", "not_stated", "unmapped"],
+            },
+            "strength_evidence": nullable_span,
+        },
+        "required": [
+            "direction",
+            "direction_evidence",
+            "strength",
+            "strength_status",
+            "strength_evidence",
+        ],
+    }
     obj = {
         "type": "object",
         "additionalProperties": False,
@@ -162,8 +198,13 @@ def _proposal_schema() -> dict[str, Any]:
                 "type": "string",
                 "enum": sorted(ALLOWED_PROPOSED_TYPES),
             },
+            "recommendation_semantics": recommendation_semantics,
         },
-        "required": ["spans", "proposed_object_type"],
+        "required": [
+            "spans",
+            "proposed_object_type",
+            "recommendation_semantics",
+        ],
     }
     return {
         "type": "object",
@@ -174,7 +215,6 @@ def _proposal_schema() -> dict[str, Any]:
         },
         "required": ["objects", "abstain_reason"],
     }
-
 
 def _extract_output_text(response: dict[str, Any]) -> str:
     output = response.get("output")
@@ -200,7 +240,12 @@ def _extract_output_text(response: dict[str, Any]) -> str:
     return text
 
 
-def _request_payload(*, model: str, blocks: list[dict[str, Any]]) -> dict[str, Any]:
+def _request_payload(
+    *,
+    model: str,
+    blocks: list[dict[str, Any]],
+    evidence_blocks: list[dict[str, Any]],
+) -> dict[str, Any]:
     return {
         "model": model,
         "input": [
@@ -210,7 +255,13 @@ def _request_payload(*, model: str, blocks: list[dict[str, Any]]) -> dict[str, A
             },
             {
                 "role": "user",
-                "content": json.dumps({"source_blocks": blocks}, ensure_ascii=False),
+                "content": json.dumps(
+                    {
+                        "source_blocks": blocks,
+                        "evidence_blocks": evidence_blocks,
+                    },
+                    ensure_ascii=False,
+                ),
             },
         ],
         "text": {
@@ -222,7 +273,6 @@ def _request_payload(*, model: str, blocks: list[dict[str, Any]]) -> dict[str, A
             }
         },
     }
-
 
 def _content_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
@@ -299,7 +349,8 @@ def _replay_identity(
     document_id: str,
     model: str,
     blocks: list[dict[str, Any]],
-    content_fragments: list[dict[str, Any]],
+    evidence_blocks: list[dict[str, Any]],
+    source_fragments: list[dict[str, Any]],
     formation_context: Mapping[str, Any] | None,
 ) -> dict[str, Any] | None:
     if not formation_context:
@@ -308,12 +359,16 @@ def _replay_identity(
     source_sha256 = str(formation_context.get("source_sha256") or "").strip()
     if not snapshot_id or not source_sha256:
         return None
+    semantic_input = {
+        "source_blocks": blocks,
+        "evidence_blocks": evidence_blocks,
+    }
     return build_replay_identity(
         snapshot_id=snapshot_id,
         source_sha256=source_sha256,
         document_id=document_id,
-        source_blocks_hash=_stable_json_hash(blocks),
-        extractor_version=_extractor_contract(content_fragments),
+        source_blocks_hash=_stable_json_hash(semantic_input),
+        extractor_version=_extractor_contract(source_fragments),
         reconstruction_version=RECONSTRUCTION_VERSION,
         formation_policy_version=PASSAGE_FORMATION_POLICY_VERSION,
         semantic_contract_version=SEMANTIC_PASSAGE_VERSION,
@@ -324,12 +379,12 @@ def _replay_identity(
         model_config_hash=_stable_json_hash(SEMANTIC_MODEL_CONFIG),
     )
 
-
 def _provider_proposal(
     *,
     api_key: str,
     model: str,
     blocks: list[dict[str, Any]],
+    evidence_blocks: list[dict[str, Any]],
     post_json: PostJson | None,
 ) -> dict[str, Any]:
     safe_key = str(api_key or "").strip()
@@ -341,7 +396,11 @@ def _provider_proposal(
             "Authorization": f"Bearer {safe_key}",
             "Content-Type": "application/json",
         },
-        _request_payload(model=model, blocks=blocks),
+        _request_payload(
+            model=model,
+            blocks=blocks,
+            evidence_blocks=evidence_blocks,
+        ),
         DEFAULT_TIMEOUT_SECONDS,
     )
     if not isinstance(response, dict):
@@ -355,7 +414,6 @@ def _provider_proposal(
     if str(proposal.get("abstain_reason") or "").strip():
         raise ConsoleError("pre_review_llm_abstained")
     return proposal
-
 
 def _semantic_execution_before_review(
     fragments: list[dict[str, Any]],
@@ -375,6 +433,11 @@ def _semantic_execution_before_review(
 
     content_fragments = _content_fragments(fragments)
     blocks = semantic_source_blocks(content_fragments)
+    evidence_blocks = semantic_source_blocks(fragments)
+    semantic_input = {
+        "source_blocks": blocks,
+        "evidence_blocks": evidence_blocks,
+    }
     content_units: list[dict[str, Any]] = []
     replay_record: dict[str, Any] | None = None
     proposal: dict[str, Any] | None = None
@@ -385,7 +448,8 @@ def _semantic_execution_before_review(
         document_id=document_id,
         model=safe_model,
         blocks=blocks,
-        content_fragments=content_fragments,
+        evidence_blocks=evidence_blocks,
+        source_fragments=fragments,
         formation_context=formation_context,
     )
     existing_replay = (
@@ -405,6 +469,7 @@ def _semantic_execution_before_review(
                     content_fragments,
                     document_id=document_id,
                     proposal=lookup.proposal,
+                    evidence_fragments=fragments,
                 )
             except SemanticPassageError as exc:
                 replay_rejection_reason = exc.code
@@ -424,6 +489,7 @@ def _semantic_execution_before_review(
             api_key=api_key,
             model=safe_model,
             blocks=blocks,
+            evidence_blocks=evidence_blocks,
             post_json=post_json,
         )
         try:
@@ -431,6 +497,7 @@ def _semantic_execution_before_review(
                 content_fragments,
                 document_id=document_id,
                 proposal=proposal,
+                evidence_fragments=fragments,
             )
         except SemanticPassageError as exc:
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
@@ -442,12 +509,10 @@ def _semantic_execution_before_review(
                 replay_rejection_reason=replay_rejection_reason,
             )
     elif not blocks and not safe_key:
-        # Preserve the pre-F2 configuration contract for semantic mode even
-        # when a document contains only deterministic headings.
         raise ConsoleError("pre_review_llm_api_key_required")
 
     if proposal is not None:
-        source_blocks_hash = _stable_json_hash(blocks)
+        source_blocks_hash = _stable_json_hash(semantic_input)
         proposal_hash = _stable_json_hash(proposal)
         for unit in content_units:
             semantic_passage = unit.get("semantic_passage")
