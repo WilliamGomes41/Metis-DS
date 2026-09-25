@@ -236,6 +236,8 @@ def confirmed_recommendation_semantics_from_review(
         raise ValueError("recommendation_direction_evidence_missing")
 
     if safe_strength == "not_stated":
+        if _review_strength_evidence(obj, "strong") or _review_strength_evidence(obj, "weak"):
+            raise ValueError("recommendation_strength_not_stated_conflict")
         value = {
             "version": RECOMMENDATION_SEMANTICS_VERSION,
             "direction": safe_direction,
