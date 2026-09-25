@@ -143,6 +143,19 @@ def _endpoint_projection(
     }
 
 
+def _relation_resolution(
+    source: dict[str, Any],
+    target: dict[str, Any],
+) -> tuple[str, dict[str, Any] | None]:
+    for endpoint in (source, target):
+        if endpoint.get("resolution") == RESOLUTION_MISSING:
+            return RESOLUTION_MISSING, endpoint
+    for endpoint in (source, target):
+        if endpoint.get("resolution") == RESOLUTION_VERSION_MISMATCH:
+            return RESOLUTION_VERSION_MISMATCH, endpoint
+    return RESOLUTION_CURRENT, None
+
+
 def _evidence_for(
     source: dict[str, Any],
     relation: dict[str, Any],
@@ -187,24 +200,32 @@ def _outgoing_links(
     ):
         target_id = str(relation.get("target_object_id") or "")
         target_version = str(relation.get("target_object_version") or "")
+        source_endpoint = _endpoint_projection(
+            object_id=source_id,
+            expected_version=source_version,
+            current_by_id=current_by_id,
+            review_path=review_path,
+        )
+        target_endpoint = _endpoint_projection(
+            object_id=target_id,
+            expected_version=target_version,
+            current_by_id=current_by_id,
+            review_path=review_path,
+        )
+        resolution, stale_endpoint = _relation_resolution(
+            source_endpoint,
+            target_endpoint,
+        )
         out.append(
             {
                 "relation_id": str(relation.get("relation_id") or ""),
                 "relation_type": str(relation.get("relation_type") or ""),
                 "authority": authority,
                 "direction": DIRECTION_OUTGOING,
-                "source": _endpoint_projection(
-                    object_id=source_id,
-                    expected_version=source_version,
-                    current_by_id=current_by_id,
-                    review_path=review_path,
-                ),
-                "target": _endpoint_projection(
-                    object_id=target_id,
-                    expected_version=target_version,
-                    current_by_id=current_by_id,
-                    review_path=review_path,
-                ),
+                "resolution": resolution,
+                "stale_endpoint": deepcopy(stale_endpoint),
+                "source": source_endpoint,
+                "target": target_endpoint,
                 "evidence": _evidence_for(
                     focal,
                     relation,
@@ -241,24 +262,32 @@ def _incoming_links(
             # Preserve stale incoming relations as explicit context issues too.
             if not target_version:
                 continue
+            source_endpoint = _endpoint_projection(
+                object_id=source_id,
+                expected_version=source_version,
+                current_by_id=current_by_id,
+                review_path=review_path,
+            )
+            target_endpoint = _endpoint_projection(
+                object_id=focal_id,
+                expected_version=target_version,
+                current_by_id=current_by_id,
+                review_path=review_path,
+            )
+            resolution, stale_endpoint = _relation_resolution(
+                source_endpoint,
+                target_endpoint,
+            )
             out.append(
                 {
                     "relation_id": str(relation.get("relation_id") or ""),
                     "relation_type": str(relation.get("relation_type") or ""),
                     "authority": authority,
                     "direction": DIRECTION_INCOMING,
-                    "source": _endpoint_projection(
-                        object_id=source_id,
-                        expected_version=source_version,
-                        current_by_id=current_by_id,
-                        review_path=review_path,
-                    ),
-                    "target": _endpoint_projection(
-                        object_id=focal_id,
-                        expected_version=target_version,
-                        current_by_id=current_by_id,
-                        review_path=review_path,
-                    ),
+                    "resolution": resolution,
+                    "stale_endpoint": deepcopy(stale_endpoint),
+                    "source": source_endpoint,
+                    "target": target_endpoint,
                     "evidence": _evidence_for(
                         source,
                         relation,
@@ -321,24 +350,22 @@ def review_context(
 
     issues: list[dict[str, Any]] = []
     for link in links:
-        related = (
-            link["target"]
-            if link["direction"] == DIRECTION_OUTGOING
-            else link["source"]
+        if link.get("resolution") == RESOLUTION_CURRENT:
+            continue
+        stale = link.get("stale_endpoint")
+        stale = stale if isinstance(stale, dict) else {}
+        issues.append(
+            {
+                "relation_id": link["relation_id"],
+                "relation_type": link["relation_type"],
+                "direction": link["direction"],
+                "authority": link["authority"],
+                "endpoint_object_id": str(stale.get("object_id") or ""),
+                "expected_version": str(stale.get("expected_version") or ""),
+                "current_version": str(stale.get("current_version") or ""),
+                "resolution": str(link.get("resolution") or ""),
+            }
         )
-        if related["resolution"] != RESOLUTION_CURRENT:
-            issues.append(
-                {
-                    "relation_id": link["relation_id"],
-                    "relation_type": link["relation_type"],
-                    "direction": link["direction"],
-                    "authority": link["authority"],
-                    "related_object_id": related["object_id"],
-                    "expected_version": related["expected_version"],
-                    "current_version": related["current_version"],
-                    "resolution": related["resolution"],
-                }
-            )
 
     return {
         "focal": {
