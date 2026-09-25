@@ -3,6 +3,11 @@
 Proves the authority chain:
 real source -> review confirmation -> retrieval projection -> Product API.
 """
+
+# release-control-evidence: scope/belofte
+# release-control-evidence: toegang
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 from __future__ import annotations
 
 import copy
