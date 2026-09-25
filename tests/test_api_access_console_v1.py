@@ -113,6 +113,7 @@ def test_publisher_can_provision_consumer_and_secret_is_only_in_issue_response(t
 
     issued = client.post("/settings/api-access/provision", data=_provision_payload())
     assert issued.status_code == 200
+    assert issued.headers["cache-control"] == "no-store"
     assert store.secret in issued.text
     assert "na deze pagina niet opnieuw getoond" in issued.text
     assert len(store.calls) == 1
