@@ -1,4 +1,4 @@
-"""D2a.1 machine-readable processing diagnostics export.
+"""D2a.1/D2a.2 machine-readable processing diagnostics exports.
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: toegang
@@ -15,7 +15,10 @@ from fastapi.testclient import TestClient
 from src.integrity_kernel import stamp_canonical_hashes
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
-from src.processing_diagnostics_v1 import processing_diagnostics
+from src.processing_diagnostics_v1 import (
+    processing_diagnostic_rows,
+    processing_diagnostics,
+)
 
 
 PASSWORD = "d2a1-secret"
@@ -85,7 +88,10 @@ def _system(tmp_path):
         "section_path": ["Richtlijn", "Aanbevelingen"],
     }
     target["proposed_object_type"] = "recommendation"
-    target["metadata"]["passage_formation"] = {"strategy": "semantic"}
+    target["metadata"]["passage_formation"] = {
+        "strategy": "semantic",
+        "reason": "semantic_free_text_required",
+    }
     target["metadata"]["semantic_passage"] = {
         "selection_origin": "proposal_selected",
         "source_bound": True,
@@ -157,31 +163,78 @@ def test_export_matches_pure_projection_and_does_not_mutate_state(tmp_path) -> N
     assert console.objects_revision(snapshot_id) == before_revision
 
 
+def test_detail_export_preserves_candidate_combinations_and_does_not_mutate_state(tmp_path) -> None:
+    console, _reviewer, _other, _publisher, snapshot_id = _system(tmp_path)
+    client = _client(console)
+    _login(client, "reviewer.d2a1")
+
+    before_objects = deepcopy(console.snapshot_objects(snapshot_id))
+    before_envelope = deepcopy(console._envelope(snapshot_id))
+    before_bindings = deepcopy(console.object_review_bindings(snapshot_id))
+    before_revision = console.objects_revision(snapshot_id)
+    expected = processing_diagnostic_rows(before_objects)
+
+    response = client.get(
+        f"/review/processing-diagnostics-detail?document={snapshot_id}"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["snapshot_id"] == snapshot_id
+    assert payload["title"] == "Diagnostiek"
+    assert payload["version"] == "1.0"
+    assert payload["objects_revision"] == before_revision
+    assert payload["rows"] == expected
+    assert len(payload["rows"]) == 1
+
+    row = payload["rows"][0]
+    assert row["object_id"]
+    assert row["candidate_text"]
+    assert row["reason_codes"] == [
+        "incomplete_sentence",
+        "recommendation_evidence_missing",
+    ]
+    assert row["families"] == [
+        "unit_completeness",
+        "semantic_contract",
+    ]
+    assert row["proposed_type"] == "recommendation"
+    assert row["section_role"] == "primary"
+    assert row["section_path"] == ["Richtlijn", "Aanbevelingen"]
+    assert row["formation_strategy"] == "semantic"
+    assert row["formation_reason"] == "semantic_free_text_required"
+    assert row["selection_origin"] == "proposal_selected"
+
+    assert console.snapshot_objects(snapshot_id) == before_objects
+    assert console._envelope(snapshot_id) == before_envelope
+    assert console.object_review_bindings(snapshot_id) == before_bindings
+    assert console.objects_revision(snapshot_id) == before_revision
+
+
 def test_export_requires_authentication_reviewer_role_and_assignment(tmp_path) -> None:
     console, _reviewer, _other, _publisher, snapshot_id = _system(tmp_path)
-
-    anonymous = _client(console)
-    response = anonymous.get(
-        f"/review/processing-diagnostics?document={snapshot_id}"
+    paths = (
+        "/review/processing-diagnostics",
+        "/review/processing-diagnostics-detail",
     )
-    assert response.status_code == 401
-    assert "not_authenticated" in response.text
 
-    publisher_client = _client(console)
-    _login(publisher_client, "publisher.d2a1")
-    response = publisher_client.get(
-        f"/review/processing-diagnostics?document={snapshot_id}"
-    )
-    assert response.status_code == 403
-    assert "reviewer_role_required" in response.text
+    for path in paths:
+        anonymous = _client(console)
+        response = anonymous.get(f"{path}?document={snapshot_id}")
+        assert response.status_code == 401
+        assert "not_authenticated" in response.text
 
-    other_client = _client(console)
-    _login(other_client, "reviewer.other")
-    response = other_client.get(
-        f"/review/processing-diagnostics?document={snapshot_id}"
-    )
-    assert response.status_code == 400
-    assert "reviewer_not_named_on_snapshot" in response.text
+        publisher_client = _client(console)
+        _login(publisher_client, "publisher.d2a1")
+        response = publisher_client.get(f"{path}?document={snapshot_id}")
+        assert response.status_code == 403
+        assert "reviewer_role_required" in response.text
+
+        other_client = _client(console)
+        _login(other_client, "reviewer.other")
+        response = other_client.get(f"{path}?document={snapshot_id}")
+        assert response.status_code == 400
+        assert "reviewer_not_named_on_snapshot" in response.text
 
 
 def test_export_unknown_snapshot_fails_and_control_page_links_to_export(tmp_path) -> None:
@@ -189,11 +242,13 @@ def test_export_unknown_snapshot_fails_and_control_page_links_to_export(tmp_path
     client = _client(console)
     _login(client, "reviewer.d2a1")
 
-    missing = client.get(
-        "/review/processing-diagnostics?document=snap-does-not-exist"
-    )
-    assert missing.status_code == 400
-    assert "unknown_snapshot" in missing.text
+    for path in (
+        "/review/processing-diagnostics",
+        "/review/processing-diagnostics-detail",
+    ):
+        missing = client.get(f"{path}?document=snap-does-not-exist")
+        assert missing.status_code == 400
+        assert "unknown_snapshot" in missing.text
 
     control = client.get(f"/review?document={snapshot_id}&task=control")
     assert control.status_code == 200
@@ -202,3 +257,8 @@ def test_export_unknown_snapshot_fails_and_control_page_links_to_export(tmp_path
         in control.text
     )
     assert "Exporteer diagnostiek als JSON" in control.text
+    assert (
+        f'href="/review/processing-diagnostics-detail?document={snapshot_id}"'
+        in control.text
+    )
+    assert "Exporteer detaildiagnostiek als JSON" in control.text
