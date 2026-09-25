@@ -100,30 +100,30 @@ def _account(account_id: str = "reviewer-1") -> dict[str, Any]:
 
 def test_work_item_reuses_existing_queue_order_and_deep_links() -> None:
     heading = _obj("heading", "heading")
-    individual = _obj("individual", "recommendation")
+    individual = _obj("contextual", "recommendation")
     batch = _obj("batch", "explanation")
     blocked = _obj("blocked", "explanation", gate_result="blocked")
     console = _QueueConsole([heading, individual, batch, blocked])
 
     item = review_work_item(console, account=_account(), envelope=_envelope())
     assert item is not None
-    assert item["next_task"] == "headings"
-    assert item["next_href"].endswith("task=headings")
+    assert item["next_task"] == "structure"
+    assert item["next_href"].endswith("task=structure")
 
     heading["governance"]["validation_status"] = "approved"
     console._test_objects = [heading, individual, batch, blocked]
     item = review_work_item(console, account=_account(), envelope=_envelope())
     assert item is not None
-    assert item["next_task"] == "individual"
-    assert item["next_href"].endswith("task=individual")
+    assert item["next_task"] == "contextual"
+    assert item["next_href"].endswith("task=contextual")
 
     individual["governance"]["validation_status"] = "approved"
     console._test_objects = [heading, individual, batch, blocked]
     item = review_work_item(console, account=_account(), envelope=_envelope())
     assert item is not None
-    assert item["next_task"] == "together"
+    assert item["next_task"] == "batch"
     assert item["normal_passages"] == 1
-    assert item["next_href"].endswith("task=together")
+    assert item["next_href"].endswith("task=batch")
 
     batch["governance"]["validation_status"] = "approved"
     console._test_objects = [heading, individual, batch, blocked]
@@ -131,8 +131,8 @@ def test_work_item_reuses_existing_queue_order_and_deep_links() -> None:
     assert item is not None
     assert item["remaining_review_items"] == 0
     assert item["work_state"] == "technical_repair"
-    assert item["next_task"] == "control"
-    assert item["next_href"].endswith("task=control")
+    assert item["next_task"] == "repair"
+    assert item["next_href"].endswith("task=repair")
 
 
 def test_unassigned_document_is_not_a_work_item() -> None:
@@ -311,13 +311,13 @@ def test_heading_batch_success_returns_to_live_document_dashboard(tmp_path: Path
 
     assert response.status_code == 303
     assert response.headers["location"] == f"/review?document={snapshot_id}"
-    assert "task=headings" not in response.headers["location"]
+    assert "task=structure" not in response.headers["location"]
 
     page = client.get(response.headers["location"])
     assert page.status_code == 200
     assert "Alle taken" in page.text
     assert (
-        f'href="/review?document={snapshot_id}&amp;task=headings">Ga verder</a>'
+        f'href="/review?document={snapshot_id}&amp;task=structure">Ga verder</a>'
         not in page.text
     )
 
