@@ -43,9 +43,15 @@ def _context_manifest(
     review_path: str,
     stage: str,
 ) -> dict[str, Any]:
+    rows = list(objects)
+    current_by_id = {
+        str(row.get("object_id") or ""): row
+        for row in rows
+        if str(row.get("object_id") or "")
+    }
     context = review_context(
         focal,
-        objects=list(objects),
+        objects=rows,
         review_path=review_path,
         stage=stage,
     )
@@ -65,12 +71,26 @@ def _context_manifest(
                     "expected_version": str(source.get("expected_version") or ""),
                     "current_version": str(source.get("current_version") or ""),
                     "resolution": str(source.get("resolution") or ""),
+                    "current_canonical_object_hash": (
+                        compute_canonical_object_hash(
+                            current_by_id[str(source.get("object_id") or "")]
+                        )
+                        if str(source.get("object_id") or "") in current_by_id
+                        else ""
+                    ),
                 },
                 "target": {
                     "object_id": str(target.get("object_id") or ""),
                     "expected_version": str(target.get("expected_version") or ""),
                     "current_version": str(target.get("current_version") or ""),
                     "resolution": str(target.get("resolution") or ""),
+                    "current_canonical_object_hash": (
+                        compute_canonical_object_hash(
+                            current_by_id[str(target.get("object_id") or "")]
+                        )
+                        if str(target.get("object_id") or "") in current_by_id
+                        else ""
+                    ),
                 },
             }
         )
@@ -183,6 +203,7 @@ def review_burden_projection(
 ) -> dict[str, Any]:
     grouped: dict[str, dict[str, Any]] = {}
     legacy_unmeasured = 0
+    invalid_evidence = 0
 
     for event in events:
         if not _is_decision_event(event):
@@ -198,8 +219,16 @@ def review_burden_projection(
                 legacy_unmeasured += 1
             continue
         if str(evidence.get("version") or "") != REVIEW_INTERACTION_VERSION:
+            invalid_evidence += 1
             continue
         if snapshot_id and str(evidence.get("snapshot_id") or "") != snapshot_id:
+            continue
+        manifest = evidence.get("context_manifest")
+        if (
+            not isinstance(manifest, dict)
+            or str(evidence.get("context_manifest_hash") or "") != stable_hash(manifest)
+        ):
+            invalid_evidence += 1
             continue
 
         interaction_id = str(evidence.get("interaction_id") or "")
@@ -263,6 +292,7 @@ def review_burden_projection(
             for row in interactions
         ),
         "legacy_unmeasured_decisions": legacy_unmeasured,
+        "invalid_evidence_events": invalid_evidence,
         "by_kind": by_kind,
         "interactions": interactions,
     }
