@@ -2793,12 +2793,13 @@ class OperationsConsole:
         }
         if interaction_evidence is not None and decision != "later":
             payload["review_interaction"] = deepcopy(interaction_evidence)
+        interaction_atomic = interaction_evidence is not None and decision != "later"
         updated, report = apply_reviews(
             current,
             [payload],
             track=track,
             schema_path=self.schema_path,
-            ledger_path=self._ledger_path,
+            ledger_path=None if interaction_atomic else self._ledger_path,
         )
         if report["errors"]:
             raise ConsoleError("review_failed", json.dumps(report["errors"], ensure_ascii=False))
@@ -2899,11 +2900,32 @@ class OperationsConsole:
                 new_bindings.get(snapshot_id, []),
                 object_id,
             )
+        ledger_fn = None
+        if interaction_atomic:
+            ledger_details = {
+                "review_snapshot_hash": str(
+                    payload.get("reviewed_canonical_object_hash") or ""
+                ),
+                "comment": str(comment or ""),
+                "proposed_correction": str(proposed_correction or ""),
+                "snapshot_id": snapshot_id,
+                "review_interaction": deepcopy(interaction_evidence),
+            }
+            ledger_fn = lambda: append_event(
+                self._ledger_path,
+                event_type=f"{track}_review_{decision}",
+                object_id=object_id,
+                object_version=str(updated_target.get("object_version") or ""),
+                actor=reviewer["username"],
+                details=ledger_details,
+            )
         self._commit_prepared_store(
             objects=(snapshot_id, history),
             envelopes=new_envelopes,
             bindings=new_bindings,
             expected_revision=expected_revision,
+            snapshot_id=snapshot_id if interaction_atomic else None,
+            ledger_fn=ledger_fn,
         )
         return deepcopy(updated)
 
