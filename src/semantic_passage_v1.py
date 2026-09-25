@@ -334,6 +334,23 @@ def _recommendation_semantics_from_proposal(
     return semantics, evidence
 
 
+def semantic_coverage_units(
+    fragments: Iterable[dict[str, Any]],
+    *,
+    document_id: str,
+) -> list[dict[str, Any]]:
+    """Preserve source-only content when no candidate-selectable block exists."""
+
+    reconstructed = _reconstructed_blocks(list(fragments))
+    rows = _coverage_remainders(
+        reconstructed,
+        document_id=document_id,
+        selected_ranges_by_block={},
+    )
+    rows.sort(key=lambda pair: pair[0])
+    return [unit for _position, unit in rows]
+
+
 def semantic_units_from_proposal(
     fragments: Iterable[dict[str, Any]],
     *,
