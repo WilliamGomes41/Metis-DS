@@ -110,3 +110,118 @@ def test_provisioned_credential_survives_fresh_store_and_plaintext_is_not_persis
                     "DELETE FROM api_access.tenants WHERE tenant_id=%s",
                     (issued.tenant_id,),
                 )
+
+
+
+def test_authentication_rechecks_current_credential_application_and_tenant_state():
+    dsn = _dsn()
+    _apply_api_access_migration(dsn)
+    config = PostgresCanonicalConfig(dsn=dsn)
+    store = PostgresApiAccessStore(config)
+
+    issued = store.provision_consumer(
+        actor_id="test-publisher-state",
+        tenant_name="API access current-state test",
+        tenant_content_scope="ALL_PUBLISHED",
+        tenant_document_ids=[],
+        tenant_scopes=["retrieve"],
+        tenant_requests_per_minute=100,
+        tenant_max_top_k=5,
+        application_name="State reader",
+        environment="TEST",
+        application_content_scope="ALL_PUBLISHED",
+        application_document_ids=[],
+        application_scopes=["retrieve"],
+        application_requests_per_minute=100,
+        application_max_top_k=5,
+    )
+
+    import psycopg
+
+    try:
+        assert store.authenticate(issued.api_key) is not None
+        with psycopg.connect(dsn) as con:
+            with con.transaction():
+                con.execute(
+                    "UPDATE api_access.credentials SET state='REVOKED', revoked_at=now() WHERE credential_id=%s",
+                    (issued.credential_id,),
+                )
+        assert store.authenticate(issued.api_key) is None
+
+        with psycopg.connect(dsn) as con:
+            with con.transaction():
+                con.execute(
+                    "UPDATE api_access.credentials SET state='ACTIVE', revoked_at=NULL WHERE credential_id=%s",
+                    (issued.credential_id,),
+                )
+                con.execute(
+                    "UPDATE api_access.applications SET state='SUSPENDED' WHERE application_id=%s",
+                    (issued.application_id,),
+                )
+        assert store.authenticate(issued.api_key) is None
+
+        with psycopg.connect(dsn) as con:
+            with con.transaction():
+                con.execute(
+                    "UPDATE api_access.applications SET state='ACTIVE' WHERE application_id=%s",
+                    (issued.application_id,),
+                )
+                con.execute(
+                    "UPDATE api_access.tenants SET state='SUSPENDED' WHERE tenant_id=%s",
+                    (issued.tenant_id,),
+                )
+        assert store.authenticate(issued.api_key) is None
+    finally:
+        with psycopg.connect(dsn) as con:
+            with con.transaction():
+                con.execute("DELETE FROM api_access.audit_events WHERE tenant_id=%s", (issued.tenant_id,))
+                con.execute("DELETE FROM api_access.credentials WHERE application_id=%s", (issued.application_id,))
+                con.execute("DELETE FROM api_access.application_resources WHERE application_id=%s", (issued.application_id,))
+                con.execute("DELETE FROM api_access.application_scopes WHERE application_id=%s", (issued.application_id,))
+                con.execute("DELETE FROM api_access.applications WHERE application_id=%s", (issued.application_id,))
+                con.execute("DELETE FROM api_access.tenant_resources WHERE tenant_id=%s", (issued.tenant_id,))
+                con.execute("DELETE FROM api_access.tenant_scopes WHERE tenant_id=%s", (issued.tenant_id,))
+                con.execute("DELETE FROM api_access.tenants WHERE tenant_id=%s", (issued.tenant_id,))
+
+
+def test_provisioning_and_audit_roll_back_together_on_audit_failure():
+    dsn = _dsn()
+    _apply_api_access_migration(dsn)
+    config = PostgresCanonicalConfig(dsn=dsn)
+    store = PostgresApiAccessStore(config)
+    tenant_name = "API access rollback test"
+
+    def fail_audit(*args, **kwargs):
+        raise RuntimeError("synthetic audit failure")
+
+    store._audit = fail_audit
+
+    from src.api_access_v1 import ApiAccessStoreError
+
+    with pytest.raises(ApiAccessStoreError, match="api_access_provision_failed"):
+        store.provision_consumer(
+            actor_id="test-publisher-rollback",
+            tenant_name=tenant_name,
+            tenant_content_scope="ALL_PUBLISHED",
+            tenant_document_ids=[],
+            tenant_scopes=["retrieve"],
+            tenant_requests_per_minute=100,
+            tenant_max_top_k=5,
+            application_name="Rollback reader",
+            environment="TEST",
+            application_content_scope="ALL_PUBLISHED",
+            application_document_ids=[],
+            application_scopes=["retrieve"],
+            application_requests_per_minute=100,
+            application_max_top_k=5,
+        )
+
+    import psycopg
+    from psycopg.rows import dict_row
+
+    with psycopg.connect(dsn, row_factory=dict_row) as con:
+        row = con.execute(
+            "SELECT tenant_id FROM api_access.tenants WHERE name=%s",
+            (tenant_name,),
+        ).fetchone()
+    assert row is None
