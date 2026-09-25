@@ -420,13 +420,17 @@ def _relation_spans(
     return rows
 
 
-def _attach_relation_proposals(
+def attach_relation_proposals(
     units: list[dict[str, Any]],
     *,
     raw_relations: Any,
-    evidence_by_id: dict[str, tuple[dict[str, Any], dict[str, Any]]],
+    evidence_fragments: Iterable[dict[str, Any]],
     object_version: str,
 ) -> None:
+    evidence_by_id = {
+        public["block_id"]: (public, source)
+        for public, source in _reconstructed_blocks(list(evidence_fragments))
+    }
     if raw_relations is None:
         raw_relations = []
     if not isinstance(raw_relations, list):
@@ -749,11 +753,4 @@ def semantic_units_from_proposal(
         )
     )
     units_with_position.sort(key=lambda pair: pair[0])
-    units = [unit for _position, unit in units_with_position]
-    _attach_relation_proposals(
-        units,
-        raw_relations=raw_relations,
-        evidence_by_id=evidence_by_id,
-        object_version="1.0",
-    )
-    return units
+    return [unit for _position, unit in units_with_position]
