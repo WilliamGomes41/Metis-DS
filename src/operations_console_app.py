@@ -3548,6 +3548,32 @@ def create_console_app(
             status_code=303,
         )
 
+    @app.post("/review/context/accept")
+    def review_context_accept(
+        request: Request,
+        snapshot_id: str = Form(...),
+        object_id: str = Form(...),
+        snapshot_revision: str = Form(""),
+        return_task: str = Form(""),
+    ) -> RedirectResponse:
+        account = _require(request)
+        state.accept_source_continuation(
+            actor_id=account["account_id"],
+            snapshot_id=snapshot_id,
+            object_id=object_id,
+            expected_revision=snapshot_revision.strip() or None,
+        )
+        safe_task = normalize_review_task(return_task)
+        return RedirectResponse(
+            _review_location(
+                state,
+                snapshot_id,
+                object_id,
+                task=safe_task,
+            ),
+            status_code=303,
+        )
+
     @app.post("/review/headings/batch-confirm")
     def review_headings_batch_confirm(
         request: Request,
