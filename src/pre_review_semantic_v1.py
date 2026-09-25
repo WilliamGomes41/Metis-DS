@@ -22,7 +22,11 @@ from urllib.request import Request, urlopen
 from src.atomic_split_v1 import proposed_relations_for_units
 from src.context_aware_split_v1 import split_context_aware_units
 from src.llm_provider_v1 import OPENAI_RESPONSES_URL, load_llm_provider_config
-from src.object_taxonomy_v1 import extract_object_type
+from src.object_taxonomy_v1 import (
+    extract_object_type,
+    is_kennisplatform_chrome_text,
+    is_strength_stamp,
+)
 from src.operations_console_v1 import ConsoleError
 from src.passage_formation_policy_v1 import (
     DETERMINISTIC_MODE,
@@ -283,6 +287,34 @@ def _content_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def _candidate_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return source fragments the provider may select as KnowledgeCandidates.
+
+    Strength labels stay in source coverage/evidence but are not themselves
+    candidate passages.
+    """
+
+    out: list[dict[str, Any]] = []
+    for fragment in _content_fragments(fragments):
+        text = str(fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
+        if is_strength_stamp(text) or is_kennisplatform_chrome_text(text):
+            continue
+        out.append(fragment)
+    return out
+
+
+def _evidence_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return source material eligible to support semantics evidence."""
+
+    return [
+        fragment
+        for fragment in fragments
+        if not is_kennisplatform_chrome_text(
+            str(fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
+        )
+    ]
+
+
 def _heading_units(
     fragments: list[dict[str, Any]],
     *,
@@ -432,8 +464,15 @@ def _semantic_execution_before_review(
         raise ConsoleError("pre_review_llm_model_required")
 
     content_fragments = _content_fragments(fragments)
-    blocks = semantic_source_blocks(content_fragments)
-    evidence_blocks = semantic_source_blocks(fragments)
+    candidate_fragments = _candidate_fragments(fragments)
+    evidence_fragments = _evidence_fragments(fragments)
+    blocks = semantic_source_blocks(candidate_fragments)
+    evidence_blocks = semantic_source_blocks(evidence_fragments)
+    allowed_candidate_block_ids = {
+        str(block.get("block_id") or "")
+        for block in blocks
+        if str(block.get("block_id") or "")
+    }
     semantic_input = {
         "source_blocks": blocks,
         "evidence_blocks": evidence_blocks,
@@ -469,7 +508,8 @@ def _semantic_execution_before_review(
                     content_fragments,
                     document_id=document_id,
                     proposal=lookup.proposal,
-                    evidence_fragments=fragments,
+                    evidence_fragments=evidence_fragments,
+                    allowed_candidate_block_ids=allowed_candidate_block_ids,
                 )
             except SemanticPassageError as exc:
                 replay_rejection_reason = exc.code
@@ -497,7 +537,8 @@ def _semantic_execution_before_review(
                 content_fragments,
                 document_id=document_id,
                 proposal=proposal,
-                evidence_fragments=fragments,
+                evidence_fragments=evidence_fragments,
+                allowed_candidate_block_ids=allowed_candidate_block_ids,
             )
         except SemanticPassageError as exc:
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
