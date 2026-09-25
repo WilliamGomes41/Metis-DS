@@ -315,6 +315,63 @@ class _PostgresBadgeCountsMixin:
                         JOIN assigned a ON a.snapshot_id=o.snapshot_id
                         ORDER BY o.snapshot_id,o.object_id,o.position DESC NULLS LAST
                     ),
+                    authorization_counts AS (
+                        SELECT o.snapshot_id,
+                               o.object_id,
+                               COUNT(DISTINCT pa.reviewer_account_id) FILTER (
+                                   WHERE pa.valid
+                                     AND pa.decision='approve'
+                                     AND pa.object_version=COALESCE(
+                                         o.payload->>'object_version',''
+                                     )
+                                     AND pa.canonical_object_hash=COALESCE(
+                                         o.payload->'provenance'->>'canonical_object_hash',''
+                                     )
+                                     AND pa.confirmed_object_type=COALESCE(
+                                         o.payload->>'confirmed_object_type',''
+                                     )
+                                     AND LOWER(COALESCE(ra.username,'')) NOT IN (
+                                         'ai','grok bot','grok','metis',
+                                         'implementation engineer','auditor'
+                                     )
+                                     AND LOWER(COALESCE(ra.display_name,'')) NOT IN (
+                                         'ai','grok bot','grok','metis',
+                                         'implementation engineer','auditor'
+                                     )
+                               ) AS exact_approver_count,
+                               COALESCE(
+                                   BOOL_OR(
+                                       pa.reviewer_account_id=%s
+                                       AND pa.valid
+                                       AND pa.decision='approve'
+                                       AND pa.object_version=COALESCE(
+                                           o.payload->>'object_version',''
+                                       )
+                                       AND pa.canonical_object_hash=COALESCE(
+                                           o.payload->'provenance'->>'canonical_object_hash',''
+                                       )
+                                       AND pa.confirmed_object_type=COALESCE(
+                                           o.payload->>'confirmed_object_type',''
+                                       )
+                                       AND LOWER(COALESCE(ra.username,'')) NOT IN (
+                                           'ai','grok bot','grok','metis',
+                                           'implementation engineer','auditor'
+                                       )
+                                       AND LOWER(COALESCE(ra.display_name,'')) NOT IN (
+                                           'ai','grok bot','grok','metis',
+                                           'implementation engineer','auditor'
+                                       )
+                                   ),
+                                   FALSE
+                               ) AS reviewer_has_approved
+                        FROM current_objects o
+                        LEFT JOIN workflow.publish_authorizations pa
+                          ON pa.snapshot_id=o.snapshot_id
+                         AND pa.object_id=o.object_id
+                        LEFT JOIN workflow.accounts ra
+                          ON ra.account_id=pa.reviewer_account_id
+                        GROUP BY o.snapshot_id,o.object_id
+                    ),
                     base AS (
                         SELECT a.snapshot_id,
                                a.class,
@@ -351,6 +408,8 @@ class _PostgresBadgeCountsMixin:
                                COALESCE(
                                    o.payload->'metadata'->'admission'->>'gate_result',''
                                ) AS gate_result,
+                               COALESCE(ac.exact_approver_count,0) AS exact_approver_count,
+                               COALESCE(ac.reviewer_has_approved,FALSE) AS reviewer_has_approved,
                                CASE
                                    WHEN jsonb_typeof(
                                        o.payload->'metadata'->'admission'->'section_path'
@@ -366,6 +425,9 @@ class _PostgresBadgeCountsMixin:
                         FROM assigned a
                         JOIN current_objects o
                           ON o.snapshot_id=a.snapshot_id
+                        LEFT JOIN authorization_counts ac
+                          ON ac.snapshot_id=o.snapshot_id
+                         AND ac.object_id=o.object_id
                     ),
                     classified AS (
                         SELECT b.*,
@@ -498,20 +560,19 @@ class _PostgresBadgeCountsMixin:
                                (
                                    r.object_type<>'document'
                                    AND r.validation_status NOT IN (
-                                       'approved','rejected','superseded','revise'
+                                       'rejected','superseded','revise'
                                    )
                                    AND (r.boom OR r.gate_result<>'blocked')
+                                   AND r.exact_approver_count=0
                                ) AS first_review_open,
                                (
-                                   r.validation_status='approved'
-                                   AND COALESCE(
-                                       r.payload->'governance'->'second_review'->>'required',
-                                       'false'
-                                   )='true'
-                                   AND COALESCE(
-                                       r.payload->'governance'->'second_review'->>'status',
-                                       ''
-                                   )='pending'
+                                   r.object_type<>'document'
+                                   AND r.validation_status NOT IN (
+                                       'rejected','superseded','revise'
+                                   )
+                                   AND (r.boom OR r.gate_result<>'blocked')
+                                   AND r.four_eyes
+                                   AND r.exact_approver_count=1
                                ) AS second_review_open,
                                COALESCE(
                                    (
@@ -539,6 +600,17 @@ class _PostgresBadgeCountsMixin:
                                (
                                    f.first_review_open OR f.second_review_open
                                ) AS review_duty_open,
+                               (
+                                   f.first_review_open
+                                   OR (
+                                       f.second_review_open
+                                       AND NOT f.reviewer_has_approved
+                                   )
+                               ) AS actionable_review_duty,
+                               (
+                                   f.second_review_open
+                                   AND f.reviewer_has_approved
+                               ) AS waiting_for_reviewer_duty,
                                (
                                    f.first_review_open AND f.queue_fast
                                ) AS structure_review_duty,
@@ -629,6 +701,28 @@ class _PostgresBadgeCountsMixin:
                                    WHERE batch_review_duty
                                ) AS batch_review_duties,
                                COUNT(*) FILTER (
+                                   WHERE actionable_review_duty
+                               ) AS actionable_review_duties,
+                               COUNT(*) FILTER (
+                                   WHERE waiting_for_reviewer_duty
+                               ) AS waiting_for_reviewer_duties,
+                               COUNT(*) FILTER (
+                                   WHERE first_review_open
+                                     AND structure_review_duty
+                               ) AS actionable_structure_duties,
+                               COUNT(*) FILTER (
+                                   WHERE first_review_open
+                                     AND contextual_review_duty
+                               ) AS actionable_contextual_duties,
+                               COUNT(*) FILTER (
+                                   WHERE first_review_open
+                                     AND batch_review_duty
+                               ) AS actionable_batch_duties,
+                               COUNT(*) FILTER (
+                                   WHERE second_review_open
+                                     AND NOT reviewer_has_approved
+                               ) AS actionable_second_review_duties,
+                               COUNT(*) FILTER (
                                    WHERE object_type<>'document'
                                ) AS progress_total,
                                COUNT(*) FILTER (
@@ -710,6 +804,12 @@ class _PostgresBadgeCountsMixin:
                            COALESCE(c.structure_review_duties,0) AS structure_review_duties,
                            COALESCE(c.contextual_review_duties,0) AS contextual_review_duties,
                            COALESCE(c.batch_review_duties,0) AS batch_review_duties,
+                           COALESCE(c.actionable_review_duties,0) AS actionable_review_duties,
+                           COALESCE(c.waiting_for_reviewer_duties,0) AS waiting_for_reviewer_duties,
+                           COALESCE(c.actionable_structure_duties,0) AS actionable_structure_duties,
+                           COALESCE(c.actionable_contextual_duties,0) AS actionable_contextual_duties,
+                           COALESCE(c.actionable_batch_duties,0) AS actionable_batch_duties,
+                           COALESCE(c.actionable_second_review_duties,0) AS actionable_second_review_duties,
                            COALESCE(c.progress_total,0) AS progress_total,
                            COALESCE(c.progress_done,0) AS progress_done,
                            COALESCE(c.progress_rejected,0) AS progress_rejected,
@@ -724,7 +824,7 @@ class _PostgresBadgeCountsMixin:
                     LEFT JOIN batch_counts bc ON bc.snapshot_id=a.snapshot_id
                     ORDER BY a.snapshot_id
                     """,
-                    (account_id, snapshot_id or None, PRE_REVIEW_BLOCKED),
+                    (account_id, snapshot_id or None, PRE_REVIEW_BLOCKED, account_id),
                 ).fetchall()
         except WorkflowDocumentStoreError:
             raise
@@ -763,6 +863,24 @@ class _PostgresBadgeCountsMixin:
                     row.get("contextual_review_duties") or 0
                 ),
                 "batch_review_duties": int(row.get("batch_review_duties") or 0),
+                "actionable_review_duties": int(
+                    row.get("actionable_review_duties") or 0
+                ),
+                "waiting_for_reviewer_duties": int(
+                    row.get("waiting_for_reviewer_duties") or 0
+                ),
+                "actionable_structure_duties": int(
+                    row.get("actionable_structure_duties") or 0
+                ),
+                "actionable_contextual_duties": int(
+                    row.get("actionable_contextual_duties") or 0
+                ),
+                "actionable_batch_duties": int(
+                    row.get("actionable_batch_duties") or 0
+                ),
+                "actionable_second_review_duties": int(
+                    row.get("actionable_second_review_duties") or 0
+                ),
                 "progress_total": int(row.get("progress_total") or 0),
                 "progress_done": int(row.get("progress_done") or 0),
                 "progress_approved": int(row.get("progress_approved") or 0),
