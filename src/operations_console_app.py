@@ -830,9 +830,7 @@ def _recommendation_semantics_block(
                         <label class="check"><input type="radio" name="recommendation_strength_level" value="weak"{disabled_attr}{_checked(strength_level, "weak")}> Zwak</label>
                         <label class="check"><input type="radio" name="recommendation_strength_level" value="not_stated"{disabled_attr}{_checked(strength_level, "not_stated")}> Niet vermeld in de bron</label>
                       </fieldset>
-                      <select name="recommendation_strength" hidden disabled data-legacy-recommendation-strength-compat aria-hidden="true">
-                        {_strength_options(None)}
-                      </select>
+                      <select name="recommendation_strength" hidden disabled data-legacy-recommendation-strength-compat aria-hidden="true"></select>
                     </section>
     """
 
