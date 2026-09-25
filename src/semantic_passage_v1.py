@@ -340,6 +340,7 @@ def semantic_units_from_proposal(
     document_id: str,
     proposal: dict[str, Any],
     evidence_fragments: Iterable[dict[str, Any]] | None = None,
+    allowed_candidate_block_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Validate provider proposal and reconstruct source-bound candidate data."""
 
@@ -400,6 +401,11 @@ def semantic_units_from_proposal(
             block_id = str(raw_span.get("block_id") or "")
             if block_id not in by_id:
                 _fail("semantic_span_unknown_block")
+            if (
+                allowed_candidate_block_ids is not None
+                and block_id not in allowed_candidate_block_ids
+            ):
+                _fail("semantic_span_not_candidate_selectable")
 
             start = raw_span.get("start")
             end = raw_span.get("end")
