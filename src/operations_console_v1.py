@@ -79,6 +79,13 @@ from src.object_taxonomy_v1 import (
     is_closed_recommendation_strength,
     review_priority_rank,
 )
+from src.recommendation_semantics_v1 import (
+    CONFIRMED_FIELD as CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD,
+    LEGACY_CONFIRMED_FIELD as LEGACY_CONFIRMED_RECOMMENDATION_STRENGTH_FIELD,
+    confirmed_recommendation_semantics_from_review,
+    confirmed_recommendation_semantics_of,
+    proposed_recommendation_semantics_of,
+)
 from src.open_original_v1 import OpenOriginalError, open_source_passage, researcher_visible_prose
 from src.publish_authorization_v1 import invalidate_for_object, still_matches, tuple_record
 from src.review_ledger import append_event
@@ -1245,6 +1252,8 @@ class OperationsConsole:
         target["object_type"] = confirmed_object_type
         if confirmed_object_type not in {"recommendation", "outcome"}:
             target.pop("confirmed_recommendation_strength", None)
+        if confirmed_object_type != "recommendation":
+            target.pop(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD, None)
         mark_four_eyes_on_object(target, confirmed_type=confirmed_object_type)
         stamp_canonical_hashes(target)
         history = [
@@ -2347,6 +2356,8 @@ class OperationsConsole:
         proposed_correction: str | None = None,
         confirmed_object_type: str | None = None,
         recommendation_strength: str | None = None,
+        recommendation_direction: str | None = None,
+        recommendation_strength_level: str | None = None,
         suitability: str | None = None,
         eindoordeel: str | None = None,
         documentpositie_action: str | None = None,
@@ -2370,6 +2381,8 @@ class OperationsConsole:
         if rejecting:
             confirmed_object_type = None
             recommendation_strength = None
+            recommendation_direction = None
+            recommendation_strength_level = None
         current = self.snapshot_objects(snapshot_id, for_update=True)
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
@@ -2420,6 +2433,38 @@ class OperationsConsole:
                     raise ConsoleError("outcome_review_failed", ",".join(errors))
             stamp_type = confirmed or target.get("confirmed_object_type") or target.get("object_type")
             strength_preview = (recommendation_strength or "").strip() or None
+            direction_preview = (recommendation_direction or "").strip() or None
+            strength_level_preview = (recommendation_strength_level or "").strip() or None
+            has_new_recommendation_semantics = bool(
+                proposed_recommendation_semantics_of(target)
+                or confirmed_recommendation_semantics_of(target)
+                or direction_preview
+                or strength_level_preview
+            )
+            new_recommendation_semantics_mode = (
+                review_path != "boom"
+                and stamp_type == "recommendation"
+                and has_new_recommendation_semantics
+            )
+            if decision == "approve" and new_recommendation_semantics_mode:
+                existing_semantics = confirmed_recommendation_semantics_of(target)
+                effective_direction = direction_preview or str(existing_semantics.get("direction") or "")
+                if strength_level_preview:
+                    effective_strength_level = strength_level_preview
+                elif existing_semantics.get("strength_status") == "not_stated":
+                    effective_strength_level = "not_stated"
+                else:
+                    effective_strength_level = str(existing_semantics.get("strength") or "")
+                try:
+                    confirmed_recommendation_semantics_from_review(
+                        target,
+                        direction=effective_direction,
+                        strength_choice=effective_strength_level,
+                    )
+                except ValueError as exc:
+                    raise ConsoleError(str(exc)) from exc
+                if strength_preview:
+                    raise ConsoleError("legacy_recommendation_strength_not_allowed")
             if decision == "approve" and stamp_type == "outcome":
                 effective = strength_preview or target.get("confirmed_recommendation_strength")
                 if not effective and not is_geen_actie_outcome(
@@ -2427,7 +2472,11 @@ class OperationsConsole:
                 ):
                     raise ConsoleError("outcome_strength_required")
             if strength_preview:
-                if stamp_type in {"recommendation", "outcome"}:
+                legacy_strength_allowed = (
+                    stamp_type == "outcome"
+                    or (stamp_type == "recommendation" and not new_recommendation_semantics_mode)
+                )
+                if legacy_strength_allowed:
                     if not is_closed_recommendation_strength(strength_preview):
                         raise ConsoleError("unknown_recommendation_strength")
                 else:
@@ -2487,6 +2536,8 @@ class OperationsConsole:
                     target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
                 target["confirmed_object_type"] = confirmed
                 target["object_type"] = confirmed
+                if confirmed != "recommendation":
+                    target.pop(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD, None)
                 mark_four_eyes_on_object(target, confirmed_type=confirmed)
                 stamp_canonical_hashes(target)
         if decision == "approve" and confirmed == "outcome":
@@ -2495,13 +2546,58 @@ class OperationsConsole:
                 raise ConsoleError("outcome_review_failed", ",".join(errors))
         strength = (recommendation_strength or "").strip() or None
         stamp_type = confirmed or target.get("confirmed_object_type") or target.get("object_type")
-        strength_allowed = stamp_type in {"recommendation", "outcome"}
+        direction_choice = (recommendation_direction or "").strip()
+        strength_level_choice = (recommendation_strength_level or "").strip()
+        has_new_recommendation_semantics = bool(
+            proposed_recommendation_semantics_of(target)
+            or confirmed_recommendation_semantics_of(target)
+            or direction_choice
+            or strength_level_choice
+        )
+        new_recommendation_semantics_mode = (
+            review_path != "boom"
+            and stamp_type == "recommendation"
+            and has_new_recommendation_semantics
+        )
+        confirmed_semantics: dict[str, Any] | None = None
+        if decision == "approve" and new_recommendation_semantics_mode:
+            existing_semantics = confirmed_recommendation_semantics_of(target)
+            effective_direction = direction_choice or str(existing_semantics.get("direction") or "")
+            if strength_level_choice:
+                effective_strength_level = strength_level_choice
+            elif existing_semantics.get("strength_status") == "not_stated":
+                effective_strength_level = "not_stated"
+            else:
+                effective_strength_level = str(existing_semantics.get("strength") or "")
+            try:
+                confirmed_semantics = confirmed_recommendation_semantics_from_review(
+                    target,
+                    direction=effective_direction,
+                    strength_choice=effective_strength_level,
+                )
+            except ValueError as exc:
+                raise ConsoleError(str(exc)) from exc
+            if target.get(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD) != confirmed_semantics:
+                target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
+                target[CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD] = confirmed_semantics
+            target.pop(LEGACY_CONFIRMED_RECOMMENDATION_STRENGTH_FIELD, None)
+            strength = None
+            stamp_canonical_hashes(target)
+        elif apply_type and confirmed != "recommendation":
+            if target.get(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD):
+                target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
+                target.pop(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD, None)
+                stamp_canonical_hashes(target)
+
+        strength_allowed = (
+            stamp_type == "outcome"
+            or (stamp_type == "recommendation" and not new_recommendation_semantics_mode)
+        )
         previous_strength = target.get("confirmed_recommendation_strength")
         if apply_type and confirmed and not strength_allowed and previous_strength:
-            if target.get("confirmed_object_type") != confirmed:
-                target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
             target.pop("confirmed_recommendation_strength", None)
             strength = None
+            stamp_canonical_hashes(target)
         if not strength and decision == "approve" and stamp_type == "outcome":
             text = str((target.get("content") or {}).get("clean_text") or "")
             if is_geen_actie_outcome(text):
@@ -2568,6 +2664,13 @@ class OperationsConsole:
             stamp_canonical_hashes(updated_target)
         if target.get("confirmed_relations"):
             updated_target["confirmed_relations"] = target["confirmed_relations"]
+        if confirmed_semantics is not None:
+            updated_target[CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD] = confirmed_semantics
+            updated_target.pop(LEGACY_CONFIRMED_RECOMMENDATION_STRENGTH_FIELD, None)
+            stamp_canonical_hashes(updated_target)
+        elif apply_type and confirmed and confirmed != "recommendation":
+            updated_target.pop(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD, None)
+            stamp_canonical_hashes(updated_target)
         if strength:
             updated_target["confirmed_recommendation_strength"] = strength
             stamp_canonical_hashes(updated_target)
