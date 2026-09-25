@@ -159,6 +159,50 @@ def test_source_literal_normalization_never_maps_conditional_alone_to_weak() -> 
     assert source_literal_strength("Voorwaardelijke aanbeveling") is None
 
 
+@pytest.mark.parametrize(
+    ("direction", "strength", "label"),
+    [
+        ("for", "strong", "Sterke aanbeveling"),
+        ("for", "weak", "Zwakke aanbeveling"),
+        ("against", "strong", "Sterke aanbeveling"),
+        ("against", "weak", "Zwakke aanbeveling"),
+    ],
+)
+def test_source_bound_proposal_supports_all_direction_strength_combinations(
+    direction: str,
+    strength: str,
+    label: str,
+) -> None:
+    path = ["Behandeling", label]
+    heading = _fragment("h", label, object_type="heading", section_path=path)
+    candidate = _fragment(
+        "p",
+        "De werkgroep adviseert de verpleegkundige de interventie te gebruiken.",
+        section_path=path,
+    )
+    candidate_block = semantic_source_blocks([candidate])[0]
+    evidence_blocks = semantic_source_blocks([heading, candidate])
+    strength_block = next(block for block in evidence_blocks if block["text"] == label)
+
+    [unit] = semantic_units_from_proposal(
+        [candidate],
+        evidence_fragments=[heading, candidate],
+        document_id="doc-d32",
+        proposal=_proposal(
+            candidate_block,
+            direction=direction,
+            strength=strength,
+            status="explicit",
+            strength_block=strength_block,
+        ),
+    )
+
+    semantics = unit[PROPOSED_FIELD]
+    assert semantics["direction"] == direction
+    assert semantics["strength"] == strength
+    assert semantics["strength_status"] == "explicit"
+
+
 def test_semantic_kernel_reconstructs_strength_label_outside_candidate_text() -> None:
     path = ["Behandeling", "Zwakke (conditionele) aanbeveling"]
     heading = _fragment(
