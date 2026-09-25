@@ -512,7 +512,8 @@ def test_end_to_end_semantic_proposal_persists_v13_and_admits_source_bound_weak_
         source_hash="f" * 64,
     )
     admitted = next(row for row in gated if row["object_id"] == recommendation["object_id"])
-    assert admission_of(admitted)["gate_result"] == GATE_ALLOWED
+    admission = admission_of(admitted)
+    assert admission["gate_result"] == GATE_ALLOWED, admission["reason_codes"]
     assert "confirmed_recommendation_semantics" not in admitted
 
 
