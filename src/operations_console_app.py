@@ -3535,6 +3535,14 @@ def create_console_app(
                 _review_location(state, snapshot_id),
                 status_code=303,
             )
+        if not safe_task:
+            current = state.snapshot_objects(snapshot_id)
+            nxt = next_review_object_id(current, object_id)
+            if nxt:
+                return RedirectResponse(
+                    _review_location(state, snapshot_id, nxt),
+                    status_code=303,
+                )
         return RedirectResponse(
             _review_location(state, snapshot_id, task=safe_task),
             status_code=303,
