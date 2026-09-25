@@ -494,8 +494,77 @@ class _PostgresBadgeCountsMixin:
                                    AND NOT r.slow_duty
                                    AND r.gate_result='allowed'
                                    AND NOT r.batch_eligible
-                               ) AS regular_individual
+                               ) AS regular_individual,
+                               (
+                                   r.object_type<>'document'
+                                   AND r.validation_status NOT IN (
+                                       'approved','rejected','superseded','revise'
+                                   )
+                                   AND (r.boom OR r.gate_result<>'blocked')
+                               ) AS first_review_open,
+                               (
+                                   r.validation_status='approved'
+                                   AND COALESCE(
+                                       r.payload->'governance'->'second_review'->>'required',
+                                       'false'
+                                   )='true'
+                                   AND COALESCE(
+                                       r.payload->'governance'->'second_review'->>'status',
+                                       ''
+                                   )='pending'
+                               ) AS second_review_open,
+                               COALESCE(
+                                   (
+                                       jsonb_typeof(
+                                           r.payload->'proposed_knowledge_relations'
+                                       )='array'
+                                       AND jsonb_array_length(
+                                           r.payload->'proposed_knowledge_relations'
+                                       )>0
+                                   )
+                                   OR (
+                                       jsonb_typeof(
+                                           r.payload->'confirmed_knowledge_relations'
+                                       )='array'
+                                       AND jsonb_array_length(
+                                           r.payload->'confirmed_knowledge_relations'
+                                       )>0
+                                   ),
+                                   FALSE
+                               ) AS relation_review_required
                         FROM routed r
+                    ),
+                    duty_rows AS (
+                        SELECT f.*,
+                               (
+                                   f.first_review_open OR f.second_review_open
+                               ) AS review_duty_open,
+                               (
+                                   f.first_review_open AND f.queue_fast
+                               ) AS structure_review_duty,
+                               (
+                                   f.second_review_open
+                                   OR (
+                                       f.first_review_open
+                                       AND NOT f.queue_fast
+                                       AND (
+                                           f.review_type IN (
+                                               'recommendation','condition','exception',
+                                               'node','outcome'
+                                           )
+                                           OR f.four_eyes
+                                           OR f.relation_review_required
+                                           OR NOT f.batch_eligible
+                                       )
+                                   )
+                               ) AS contextual_review_duty,
+                               (
+                                   f.first_review_open
+                                   AND NOT f.queue_fast
+                                   AND f.batch_eligible
+                                   AND NOT f.relation_review_required
+                               ) AS batch_review_duty
+                        FROM final_rows f
                     ),
                     counts AS (
                         SELECT snapshot_id,
@@ -541,6 +610,24 @@ class _PostgresBadgeCountsMixin:
                                COUNT(*) FILTER (
                                    WHERE unresolved_closure
                                ) AS unresolved_closure_count,
+                               COUNT(*) FILTER (
+                                   WHERE review_duty_open
+                               ) AS review_duties,
+                               COUNT(*) FILTER (
+                                   WHERE first_review_open
+                               ) AS first_review_duties,
+                               COUNT(*) FILTER (
+                                   WHERE second_review_open
+                               ) AS second_review_duties,
+                               COUNT(*) FILTER (
+                                   WHERE structure_review_duty
+                               ) AS structure_review_duties,
+                               COUNT(*) FILTER (
+                                   WHERE contextual_review_duty
+                               ) AS contextual_review_duties,
+                               COUNT(*) FILTER (
+                                   WHERE batch_review_duty
+                               ) AS batch_review_duties,
                                COUNT(*) FILTER (
                                    WHERE object_type<>'document'
                                ) AS progress_total,
@@ -590,12 +677,12 @@ class _PostgresBadgeCountsMixin:
                                          payload->'provenance'->>'previous_object_version',''
                                      )<>''
                                ) AS progress_revised
-                        FROM final_rows
+                        FROM duty_rows
                         GROUP BY snapshot_id
                     ),
                     batch_groups AS (
                         SELECT snapshot_id,section_path,batch_type,COUNT(*) AS n
-                        FROM final_rows
+                        FROM duty_rows
                         WHERE batch_eligible
                         GROUP BY snapshot_id,section_path,batch_type
                     ),
@@ -617,6 +704,12 @@ class _PostgresBadgeCountsMixin:
                            COALESCE(c.closure_gap_count,0) AS closure_gap_count,
                            c.closure_gap_first,
                            COALESCE(c.unresolved_closure_count,0) AS unresolved_closure_count,
+                           COALESCE(c.review_duties,0) AS review_duties,
+                           COALESCE(c.first_review_duties,0) AS first_review_duties,
+                           COALESCE(c.second_review_duties,0) AS second_review_duties,
+                           COALESCE(c.structure_review_duties,0) AS structure_review_duties,
+                           COALESCE(c.contextual_review_duties,0) AS contextual_review_duties,
+                           COALESCE(c.batch_review_duties,0) AS batch_review_duties,
                            COALESCE(c.progress_total,0) AS progress_total,
                            COALESCE(c.progress_done,0) AS progress_done,
                            COALESCE(c.progress_rejected,0) AS progress_rejected,
@@ -660,6 +753,16 @@ class _PostgresBadgeCountsMixin:
                 "source_passage_review_complete": int(
                     row.get("unresolved_closure_count") or 0
                 ) == 0,
+                "review_duties": int(row.get("review_duties") or 0),
+                "first_review_duties": int(row.get("first_review_duties") or 0),
+                "second_review_duties": int(row.get("second_review_duties") or 0),
+                "structure_review_duties": int(
+                    row.get("structure_review_duties") or 0
+                ),
+                "contextual_review_duties": int(
+                    row.get("contextual_review_duties") or 0
+                ),
+                "batch_review_duties": int(row.get("batch_review_duties") or 0),
                 "progress_total": int(row.get("progress_total") or 0),
                 "progress_done": int(row.get("progress_done") or 0),
                 "progress_approved": int(row.get("progress_approved") or 0),
