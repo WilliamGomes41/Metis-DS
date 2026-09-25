@@ -2528,6 +2528,7 @@ class OperationsConsole:
             history.append(saved)
             self._save_objects_pinned(snapshot_id, history, expected_revision)
             return deepcopy(self.snapshot_objects(snapshot_id))
+        review_semantics_base_version = str(target.get("object_version") or "1.0")
         if apply_type and confirmed:
             if not is_confirmable_type_for_path(confirmed, review_path):
                 raise ConsoleError("unknown_object_type")
@@ -2578,14 +2579,16 @@ class OperationsConsole:
             except ValueError as exc:
                 raise ConsoleError(str(exc)) from exc
             if target.get(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD) != confirmed_semantics:
-                target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
+                if str(target.get("object_version") or "1.0") == review_semantics_base_version:
+                    target["object_version"] = bump_patch(review_semantics_base_version)
                 target[CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD] = confirmed_semantics
             target.pop(LEGACY_CONFIRMED_RECOMMENDATION_STRENGTH_FIELD, None)
             strength = None
             stamp_canonical_hashes(target)
         elif apply_type and confirmed != "recommendation":
             if target.get(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD):
-                target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
+                if str(target.get("object_version") or "1.0") == review_semantics_base_version:
+                    target["object_version"] = bump_patch(review_semantics_base_version)
                 target.pop(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD, None)
                 stamp_canonical_hashes(target)
 
