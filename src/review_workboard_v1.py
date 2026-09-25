@@ -311,12 +311,36 @@ def review_workboard_items(
                     source_passage_review_complete=bool(
                         summary.get("source_passage_review_complete")
                     ),
-                    review_duties=int(summary.get("review_duties") or 0),
-                    first_review_duties=int(summary.get("first_review_duties") or 0),
+                    review_duties=(
+                        int(summary.get("review_duties") or 0)
+                        if "review_duties" in summary
+                        else int(summary.get("heading_pending") or 0)
+                        + int(summary.get("individual_pending") or 0)
+                        + int(summary.get("normal_passages") or 0)
+                    ),
+                    first_review_duties=(
+                        int(summary.get("first_review_duties") or 0)
+                        if "first_review_duties" in summary
+                        else int(summary.get("heading_pending") or 0)
+                        + int(summary.get("individual_pending") or 0)
+                        + int(summary.get("normal_passages") or 0)
+                    ),
                     second_review_duties=int(summary.get("second_review_duties") or 0),
-                    structure_review_duties=int(summary.get("structure_review_duties") or 0),
-                    contextual_review_duties=int(summary.get("contextual_review_duties") or 0),
-                    batch_review_duties=int(summary.get("batch_review_duties") or 0),
+                    structure_review_duties=(
+                        int(summary.get("structure_review_duties") or 0)
+                        if "structure_review_duties" in summary
+                        else int(summary.get("heading_pending") or 0)
+                    ),
+                    contextual_review_duties=(
+                        int(summary.get("contextual_review_duties") or 0)
+                        if "contextual_review_duties" in summary
+                        else int(summary.get("individual_pending") or 0)
+                    ),
+                    batch_review_duties=(
+                        int(summary.get("batch_review_duties") or 0)
+                        if "batch_review_duties" in summary
+                        else int(summary.get("normal_passages") or 0)
+                    ),
                 )
             )
         return items
