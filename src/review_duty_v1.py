@@ -106,8 +106,10 @@ def review_stage(
         return None
     if _terminal_without_open_review(obj):
         return None
+    obj_type = authoritative_review_type(obj)
     if (
         review_path != "boom"
+        and obj_type != "heading"
         and admission_of(obj).get("gate_result") != GATE_ALLOWED
     ):
         return None
