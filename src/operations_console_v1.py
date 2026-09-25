@@ -68,7 +68,7 @@ from src.four_eyes_v1 import (
     publish_authorization_contract,
     requires_four_eyes,
 )
-from src.review_duty_v1 import exact_current_approver_ids, reviewer_route_for
+from src.review_duty_v1 import SECOND_REVIEW, exact_current_approver_ids, review_duty_for, reviewer_route_for
 from src.g2_source_store import G2SourceStoreError, ImmutableSourceStore, is_g2_locator
 from src.integrity_kernel import compute_canonical_object_hash, schema_errors, sha256_bytes, stamp_canonical_hashes
 from src.klasse_wijzigen_v1 import (
@@ -2432,6 +2432,18 @@ class OperationsConsole:
             confirmed = target["confirmed_object_type"]
         apply_type = bool(confirmed_object_type)
         review_path = review_path_for_klasse(envelope["class"])
+        binding_authority = self.object_review_bindings(snapshot_id)
+        current_duty = review_duty_for(
+            target,
+            review_path=review_path,
+            bindings=binding_authority,
+        )
+        if (
+            current_duty
+            and current_duty.get("stage") == SECOND_REVIEW
+            and decision != "revise"
+        ):
+            raise ConsoleError("second_review_command_required")
         if decision != "later":
             if is_admission_blocked(target, review_path=review_path) and (
                 decision == "approve" or apply_type
