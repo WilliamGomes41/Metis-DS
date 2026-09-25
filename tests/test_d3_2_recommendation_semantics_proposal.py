@@ -62,6 +62,8 @@ def _fragment(
     }
     if object_type:
         row["object_type"] = object_type
+    if object_type == "heading":
+        row["heading"] = text
     return row
 
 
