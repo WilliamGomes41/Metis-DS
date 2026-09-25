@@ -35,6 +35,7 @@ from src.proportionate_review_v1 import (
     regular_individual_review_queue,
 )
 from src.publication_readiness_v1 import source_passage_closure
+from src.review_duty_v1 import review_duty_counts
 
 
 _TASK_COPY = {
@@ -109,8 +110,14 @@ def _work_item_from_counts(
     closure_gap_ids: list[str],
     closure_gap_count: int,
     source_passage_review_complete: bool,
+    review_duties: int,
+    first_review_duties: int,
+    second_review_duties: int,
+    structure_review_duties: int,
+    contextual_review_duties: int,
+    batch_review_duties: int,
 ) -> dict[str, Any]:
-    remaining = heading_pending + individual_pending + normal_passages + closure_gap_count
+    remaining = review_duties
 
     task_counts = (
         ("headings", heading_pending),
@@ -134,6 +141,8 @@ def _work_item_from_counts(
         work_state = "review"
     elif blocked_count:
         work_state = "technical_repair"
+    elif closure_gap_count:
+        work_state = "review"
     elif meaningful_status == "blocked":
         work_state = "publication_blocked"
     else:
@@ -159,6 +168,14 @@ def _work_item_from_counts(
         "meaningful_status": meaningful_status,
         "work_state": work_state,
         "remaining_review_items": remaining,
+        "review_duties": review_duties,
+        "first_review_duties": first_review_duties,
+        "second_review_duties": second_review_duties,
+        "structure_review_duties": structure_review_duties,
+        "contextual_review_duties": contextual_review_duties,
+        "batch_review_duties": batch_review_duties,
+        "disposition_duties": closure_gap_count,
+        "repair_duties": blocked_count,
         "heading_pending": heading_pending,
         "individual_pending": individual_pending,
         "normal_passages": normal_passages,
@@ -243,6 +260,8 @@ def review_work_item(
         if object_id not in represented_ids
     ]
 
+    duty_counts = review_duty_counts(objects, review_path=review_path)
+
     return _work_item_from_counts(
         envelope=envelope,
         snapshot_id=snapshot_id,
@@ -255,6 +274,7 @@ def review_work_item(
         closure_gap_ids=closure_gap_ids,
         closure_gap_count=len(closure_gap_ids),
         source_passage_review_complete=bool(closure["source_passage_review_complete"]),
+        **duty_counts,
     )
 
 
@@ -291,6 +311,12 @@ def review_workboard_items(
                     source_passage_review_complete=bool(
                         summary.get("source_passage_review_complete")
                     ),
+                    review_duties=int(summary.get("review_duties") or 0),
+                    first_review_duties=int(summary.get("first_review_duties") or 0),
+                    second_review_duties=int(summary.get("second_review_duties") or 0),
+                    structure_review_duties=int(summary.get("structure_review_duties") or 0),
+                    contextual_review_duties=int(summary.get("contextual_review_duties") or 0),
+                    batch_review_duties=int(summary.get("batch_review_duties") or 0),
                 )
             )
         return items
@@ -307,8 +333,14 @@ def _work_summary(item: dict[str, Any]) -> str:
     remaining = int(item["remaining_review_items"])
     blocked = int(item["blocked_count"])
     if state == "review":
-        noun = "reviewtaak" if remaining == 1 else "reviewtaken"
-        return f"Nog {remaining} {noun}."
+        if remaining:
+            noun = "reviewplicht" if remaining == 1 else "reviewplichten"
+            return f"Nog {remaining} inhoudelijke {noun}."
+        disposition = int(item.get("disposition_duties") or 0)
+        if disposition:
+            noun = "bronpassage" if disposition == 1 else "bronpassages"
+            return f"Geen open inhoudelijke reviewplicht; nog {disposition} {noun} afhandelen."
+        return "Geen open inhoudelijke reviewplicht."
     if state == "technical_repair":
         noun = "passage vereist" if blocked == 1 else "passages vereisen"
         return f"Geen gewone reviewtaak; {blocked} {noun} technisch herstel."
