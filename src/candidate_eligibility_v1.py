@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from src.object_taxonomy_v1 import has_candidate_type_evidence
 from src.semantic_passage_v1 import (
     SELECTION_ORIGIN_COVERAGE,
     SELECTION_ORIGIN_PROPOSAL,
@@ -21,6 +22,7 @@ CANDIDATE_ELIGIBILITY_VERSION = "candidate-eligibility-v1.0.0"
 REASON_SEMANTIC_PROPOSAL = "semantic_proposal_selected"
 REASON_SEMANTIC_COVERAGE = "semantic_coverage_remainder"
 REASON_EXPLICIT_TYPE = "explicit_type_proposal"
+REASON_UNEVIDENCED_TYPE = "deterministic_proposal_not_evidenced"
 REASON_NO_TYPE = "deterministic_no_type_proposal"
 REASON_STRUCTURAL = "structural_object"
 
@@ -80,6 +82,10 @@ def assess_candidate_eligibility(obj: dict[str, Any]) -> CandidateEligibility:
         return CandidateEligibility(False, REASON_SEMANTIC_COVERAGE, SOURCE_SEMANTIC)
 
     if proposed and proposed != "unclassified":
-        return CandidateEligibility(True, REASON_EXPLICIT_TYPE, SOURCE_DETERMINISTIC)
+        content = obj.get("content") if isinstance(obj.get("content"), dict) else {}
+        text = str(content.get("clean_text") or obj.get("text") or "").strip()
+        if has_candidate_type_evidence(text, proposed):
+            return CandidateEligibility(True, REASON_EXPLICIT_TYPE, SOURCE_DETERMINISTIC)
+        return CandidateEligibility(False, REASON_UNEVIDENCED_TYPE, SOURCE_DETERMINISTIC)
 
     return CandidateEligibility(False, REASON_NO_TYPE, SOURCE_DETERMINISTIC)
