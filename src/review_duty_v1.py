@@ -106,7 +106,10 @@ def review_stage(
         return None
     if _terminal_without_open_review(obj):
         return None
-    if review_path != "boom" and admission_of(obj).get("gate_result") == GATE_BLOCKED:
+    if (
+        review_path != "boom"
+        and admission_of(obj).get("gate_result") != GATE_ALLOWED
+    ):
         return None
 
     if bindings is None:
