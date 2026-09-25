@@ -26,6 +26,11 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from src.object_taxonomy_v1 import published_object_type
+from src.recommendation_semantics_v1 import (
+    CONFIRMED_FIELD as CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD,
+    confirmed_recommendation_semantics_of,
+    recommendation_semantics_errors,
+)
 from src.serving_relations_v1 import (
     HISTORICAL_NON_SERVING_TYPES,
     applies_if_targets,
@@ -106,6 +111,14 @@ def publication_errors(envelope: dict[str, Any]) -> list[str]:
         errors.append("object_version_missing")
     if obj.get("object_type") not in SEARCHABLE_TYPES | NON_SEARCHABLE_TYPES:
         errors.append("unknown_object_type")
+    if (
+        CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD in obj
+        or "proposed_recommendation_semantics" in obj
+    ):
+        errors.extend(
+            f"recommendation_semantics:{error}"
+            for error in recommendation_semantics_errors(obj)
+        )
     return errors
 
 
@@ -199,6 +212,11 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
         # pass that field explicitly so generic metadata cannot shadow it.
         served_type = published_object_type(
             {"confirmed_object_type": obj.get("confirmed_object_type")}
+        )
+        confirmed_recommendation_semantics = (
+            confirmed_recommendation_semantics_of(obj)
+            if served_type == "recommendation"
+            else {}
         )
         if served_type in HISTORICAL_NON_SERVING_TYPES or served_type in NON_SEARCHABLE_TYPES:
             continue
@@ -300,6 +318,14 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             "risk_level": (obj.get("risk") or {}).get("risk_level"),
             "confirmed_object_type": served_type,
             "proposed_object_type": obj.get("proposed_object_type"),
+            **(
+                {
+                    "confirmed_recommendation_semantics":
+                        confirmed_recommendation_semantics
+                }
+                if confirmed_recommendation_semantics
+                else {}
+            ),
             "source_locator": source_locator,
             "chunk_readiness": chunk_readiness,
         }
