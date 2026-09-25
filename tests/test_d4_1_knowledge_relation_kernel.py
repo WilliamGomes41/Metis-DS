@@ -25,6 +25,7 @@ from src.knowledge_relations_v1 import (
     knowledge_relation_errors,
     knowledge_relation_set_hash,
     legacy_knowledge_relations_view,
+    legacy_relation_mirror_matches,
     proposed_knowledge_relations_of,
     relation_id_for,
     relation_kind,
@@ -285,30 +286,46 @@ def test_schema_v14_accepts_new_relation_sets_and_v13_remains_runtime_contract()
     assert Path(SCHEMA_V13).name == "knowledge_object.schema.v1.3.json"
 
 
-def test_new_and_nonempty_legacy_relation_authority_cannot_coexist() -> None:
-    proposed = _base_object()
-    proposed[PROPOSED_FIELD] = [_relation()]
-    proposed["relations"] = [
-        {
-            "relation_type": "applies_if",
-            "target_object_id": "condition-a",
-            "confirmed": False,
-        }
-    ]
-    assert "proposed_knowledge_relations_legacy_authority_conflict" in knowledge_relation_errors(proposed)
-    assert schema_errors(proposed, SCHEMA_V14)
+def test_exact_legacy_compatibility_mirror_may_coexist_during_staged_cutover() -> None:
+    new_row = _relation()
+    legacy_row = {
+        "relation_type": "applies_if",
+        "target_object_id": "condition-a",
+        "target_object_version": "1.0",
+        "confirmed": True,
+    }
+    assert legacy_relation_mirror_matches([new_row], [legacy_row])
 
-    confirmed = _base_object()
-    confirmed[CONFIRMED_FIELD] = [_relation()]
-    confirmed["confirmed_relations"] = [
-        {
-            "relation_type": "applies_if",
-            "target_object_id": "condition-a",
-            "confirmed": True,
-        }
-    ]
-    assert "confirmed_knowledge_relations_legacy_authority_conflict" in knowledge_relation_errors(confirmed)
-    assert schema_errors(confirmed, SCHEMA_V14)
+    obj = _base_object()
+    obj[CONFIRMED_FIELD] = [new_row]
+    obj["confirmed_relations"] = [legacy_row]
+    assert knowledge_relation_errors(obj) == []
+    assert schema_errors(obj, SCHEMA_V14) == []
+
+
+def test_divergent_or_unversioned_legacy_relation_is_not_a_valid_mirror() -> None:
+    new_row = _relation()
+    divergent = {
+        "relation_type": "applies_if",
+        "target_object_id": "condition-b",
+        "target_object_version": "1.0",
+        "confirmed": True,
+    }
+    unversioned = {
+        "relation_type": "applies_if",
+        "target_object_id": "condition-a",
+        "confirmed": True,
+    }
+    assert not legacy_relation_mirror_matches([new_row], [divergent])
+    assert not legacy_relation_mirror_matches([new_row], [unversioned])
+
+    obj = _base_object()
+    obj[CONFIRMED_FIELD] = [new_row]
+    obj["confirmed_relations"] = [divergent]
+    assert (
+        "confirmed_knowledge_relations_legacy_authority_conflict"
+        in knowledge_relation_errors(obj)
+    )
 
 
 def test_empty_legacy_containers_do_not_block_additive_new_format() -> None:
