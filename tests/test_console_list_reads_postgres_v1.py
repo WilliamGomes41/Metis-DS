@@ -299,3 +299,139 @@ def test_list_status_and_workboard_are_set_based_at_pilot_scale() -> None:
             for snapshot_id in reversed(snapshots):
                 con.execute("DELETE FROM workflow.documents WHERE snapshot_id=%s", (snapshot_id,))
             con.execute("DELETE FROM workflow.accounts WHERE account_id=%s", (account_id,))
+
+
+def test_review_workboard_summary_uses_exact_authorizations_for_four_eyes() -> None:
+    config = PostgresCanonicalConfig(dsn=_dsn())
+    store = PostgresWorkflowDocumentRuntimeStore(config)
+    with store._connect() as con:
+        paths = migration_paths(ROOT)
+        apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))
+
+    token = uuid.uuid4().hex
+    reviewer_a = f"acc-d53a-a-{token[:12]}"
+    reviewer_b = f"acc-d53a-b-{token[:12]}"
+    snapshot_id = f"snap-d53a-{token[:12]}"
+    envelope = _envelope(snapshot_id, token, reviewer_a)
+    envelope["named_reviewers"] = [reviewer_a, reviewer_b]
+
+    target = _object(
+        snapshot_id,
+        1,
+        object_type="recommendation",
+        validation_status="approved",
+        section="Advies",
+    )
+    target["object_version"] = "2.0"
+    target["confirmed_object_type"] = "recommendation"
+    target["provenance"] = {"canonical_object_hash": "c" * 64}
+    target["risk"] = {
+        "level": "high",
+        "risk_level": "high",
+        "requires_second_review": True,
+        "risk_fields": ["contraindication"],
+    }
+    target["governance"]["second_review"] = {
+        "required": True,
+        "status": "pending",
+        "reviewer": None,
+        "review_date": None,
+        "snapshot_hash": None,
+    }
+    document = _object(
+        snapshot_id,
+        0,
+        object_type="document",
+        validation_status="approved",
+    )
+
+    with store._connect() as con:
+        for account_id, username in (
+            (reviewer_a, f"d53a-a-{token}"),
+            (reviewer_b, f"d53a-b-{token}"),
+        ):
+            con.execute(
+                "INSERT INTO workflow.accounts("
+                "account_id,username,display_name,roles,password_salt,password_hash,created_at"
+                ") VALUES(%s,%s,%s,%s,%s,%s,CURRENT_TIMESTAMP)",
+                (
+                    account_id,
+                    username,
+                    username,
+                    ["reviewer"],
+                    "salt",
+                    "hash",
+                ),
+            )
+
+    try:
+        store.write_bundle(envelope=envelope, objects=[document, target])
+        with store._connect() as con:
+            con.execute(
+                "INSERT INTO workflow.publish_authorizations("
+                "snapshot_id,object_id,object_version,canonical_object_hash,"
+                "confirmed_object_type,reviewer_account_id,reviewer_display_name,"
+                "decision,valid"
+                ") VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (
+                    snapshot_id,
+                    target["object_id"],
+                    target["object_version"],
+                    target["provenance"]["canonical_object_hash"],
+                    target["confirmed_object_type"],
+                    reviewer_a,
+                    "Reviewer A",
+                    "approve",
+                    True,
+                ),
+            )
+
+        subject_a = _ListReadSubject(store, reviewer_a)
+        first = subject_a.review_workboard_summaries(reviewer_a)[snapshot_id]
+        assert first["review_duties"] == 1
+        assert first["first_review_duties"] == 0
+        assert first["second_review_duties"] == 1
+        assert first["actionable_review_duties"] == 0
+        assert first["waiting_for_reviewer_duties"] == 1
+        assert first["actionable_second_review_duties"] == 0
+
+        subject_b = _ListReadSubject(store, reviewer_b)
+        other = subject_b.review_workboard_summaries(reviewer_b)[snapshot_id]
+        assert other["review_duties"] == 1
+        assert other["actionable_review_duties"] == 1
+        assert other["waiting_for_reviewer_duties"] == 0
+        assert other["actionable_second_review_duties"] == 1
+
+        with store._connect() as con:
+            con.execute(
+                "INSERT INTO workflow.publish_authorizations("
+                "snapshot_id,object_id,object_version,canonical_object_hash,"
+                "confirmed_object_type,reviewer_account_id,reviewer_display_name,"
+                "decision,valid"
+                ") VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (
+                    snapshot_id,
+                    target["object_id"],
+                    target["object_version"],
+                    target["provenance"]["canonical_object_hash"],
+                    target["confirmed_object_type"],
+                    reviewer_b,
+                    "Reviewer B",
+                    "approve",
+                    True,
+                ),
+            )
+
+        complete = subject_a.review_workboard_summaries(reviewer_a)[snapshot_id]
+        assert complete["review_duties"] == 0
+        assert complete["second_review_duties"] == 0
+        assert complete["actionable_review_duties"] == 0
+        # The compatibility mirror deliberately remains pending; bindings win.
+        assert target["governance"]["second_review"]["status"] == "pending"
+    finally:
+        with store._connect() as con:
+            con.execute("DELETE FROM workflow.documents WHERE snapshot_id=%s", (snapshot_id,))
+            con.execute(
+                "DELETE FROM workflow.accounts WHERE account_id=ANY(%s)",
+                ([reviewer_a, reviewer_b],),
+            )
