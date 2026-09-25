@@ -513,7 +513,7 @@ class _PostgresBadgeCountsMixin:
                                        ''
                                    )='pending'
                                ) AS second_review_open,
-                               (
+                               COALESCE(
                                    (
                                        jsonb_typeof(
                                            r.payload->'proposed_knowledge_relations'
@@ -529,7 +529,8 @@ class _PostgresBadgeCountsMixin:
                                        AND jsonb_array_length(
                                            r.payload->'confirmed_knowledge_relations'
                                        )>0
-                                   )
+                                   ),
+                                   FALSE
                                ) AS relation_review_required
                         FROM routed r
                     ),
