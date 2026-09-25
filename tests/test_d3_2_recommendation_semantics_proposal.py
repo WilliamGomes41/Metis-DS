@@ -30,6 +30,7 @@ from src.recommendation_semantics_v1 import (
 )
 from src.semantic_passage_v1 import (
     SemanticPassageError,
+    semantic_coverage_units,
     semantic_source_blocks,
     semantic_units_from_proposal,
 )
@@ -598,6 +599,15 @@ def test_unmapped_semantic_strength_is_blocked_and_diagnostic_family_is_semantic
     assert admission["gate_result"] == GATE_BLOCKED
     assert "recommendation_strength_unmapped" in admission["reason_codes"]
     assert processing_issue_family("recommendation_strength_unmapped") == "semantic_contract"
+
+
+def test_evidence_only_source_still_has_explicit_coverage_unit() -> None:
+    label = _fragment("h", "Zwakke aanbeveling")
+    [coverage] = semantic_coverage_units([label], document_id="doc-d32")
+    semantic = coverage["semantic_passage"]
+    assert coverage["text"] == "Zwakke aanbeveling"
+    assert semantic["selection_origin"] == "coverage_remainder"
+    assert PROPOSED_FIELD not in coverage
 
 
 def test_coverage_remainder_has_no_semantics_and_no_admission() -> None:
