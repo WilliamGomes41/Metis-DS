@@ -68,7 +68,7 @@ from src.four_eyes_v1 import (
     publish_authorization_contract,
     requires_four_eyes,
 )
-from src.review_duty_v1 import exact_current_approver_ids
+from src.review_duty_v1 import exact_current_approver_ids, reviewer_route_for
 from src.g2_source_store import G2SourceStoreError, ImmutableSourceStore, is_g2_locator
 from src.integrity_kernel import compute_canonical_object_hash, schema_errors, sha256_bytes, stamp_canonical_hashes
 from src.klasse_wijzigen_v1 import (
@@ -3012,11 +3012,22 @@ class OperationsConsole:
         review_path = review_path_for_klasse(self._envelope(snapshot_id)["class"])
         structure_type = "path" if review_path == "boom" else "heading"
         current = {row["object_id"]: row for row in self.snapshot_objects(snapshot_id)}
+        bindings = self.object_review_bindings(snapshot_id)
         for object_id in ids:
             target = current.get(object_id)
             if target is None:
                 raise ConsoleError("unknown_object")
-            if review_lane(target, review_path=review_path) != "fast":
+            route = reviewer_route_for(
+                target,
+                review_path=review_path,
+                reviewer_id=actor_id,
+                bindings=bindings,
+            )
+            if not (
+                route
+                and route.get("actionable")
+                and route.get("canonical_task") == "structure"
+            ):
                 raise ConsoleError("fast_lane_heading_required")
         updated: list[dict[str, Any]] = []
         pin = expected_revision
