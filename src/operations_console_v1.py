@@ -2353,30 +2353,6 @@ class OperationsConsole:
     def next_review_object_id(self, snapshot_id: str, object_id: str) -> str:
         envelope = self._envelope(snapshot_id)
         review_path = review_path_for_klasse(envelope["class"])
-        d4_relation_review = (
-            decision == "approve"
-            and review_path != "boom"
-            and has_semantic_relation_review(target)
-        )
-        relation_plan: dict[str, Any] | None = None
-        if d4_relation_review:
-            if not relation_review_ack:
-                raise ConsoleError("knowledge_relation_review_required")
-            try:
-                relation_plan = plan_semantic_relation_review(
-                    target,
-                    objects=current,
-                    selected_choices=list(relation_choices or []),
-                    source_type=str(
-                        confirmed
-                        or target.get("confirmed_object_type")
-                        or target.get("proposed_object_type")
-                        or target.get("object_type")
-                        or ""
-                    ),
-                )
-            except ValueError as exc:
-                raise ConsoleError(str(exc)) from exc
         return next_ordinary_object_id(
             self.snapshot_objects(snapshot_id),
             object_id,
@@ -2526,6 +2502,30 @@ class OperationsConsole:
                     )
                     if not will_clear:
                         raise ConsoleError("recommendation_strength_requires_recommendation")
+        d4_relation_review = (
+            decision == "approve"
+            and review_path != "boom"
+            and has_semantic_relation_review(target)
+        )
+        relation_plan: dict[str, Any] | None = None
+        if d4_relation_review:
+            if not relation_review_ack:
+                raise ConsoleError("knowledge_relation_review_required")
+            try:
+                relation_plan = plan_semantic_relation_review(
+                    target,
+                    objects=current,
+                    selected_choices=list(relation_choices or []),
+                    source_type=str(
+                        confirmed
+                        or target.get("confirmed_object_type")
+                        or target.get("proposed_object_type")
+                        or target.get("object_type")
+                        or ""
+                    ),
+                )
+            except ValueError as exc:
+                raise ConsoleError(str(exc)) from exc
         if parent_id and parent_id != object_id and not d4_relation_review:
             self.confirm_relations(
                 actor_id=actor_id,
