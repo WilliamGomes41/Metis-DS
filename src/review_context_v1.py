@@ -15,6 +15,7 @@ from src.knowledge_relations_v1 import (
     SEMANTIC_RELATION_TYPES,
     confirmed_knowledge_relations_of,
     proposed_knowledge_relations_of,
+    validate_knowledge_relation_set,
 )
 from src.review_duty_v1 import (
     FIRST_REVIEW,
@@ -46,11 +47,23 @@ def _semantic_relations(
     *,
     include_proposed: bool,
 ) -> list[tuple[str, dict[str, Any]]]:
-    confirmed = [
-        deepcopy(row)
-        for row in confirmed_knowledge_relations_of(obj)
-        if str(row.get("relation_type") or "") in SEMANTIC_RELATION_TYPES
-    ]
+    source_id = str(obj.get("object_id") or "")
+    source_version = str(obj.get("object_version") or "")
+    raw_confirmed = confirmed_knowledge_relations_of(obj)
+    confirmed_errors = validate_knowledge_relation_set(
+        raw_confirmed,
+        source_object_id=source_id,
+        source_object_version=source_version,
+    )
+    confirmed = (
+        []
+        if confirmed_errors
+        else [
+            deepcopy(row)
+            for row in raw_confirmed
+            if str(row.get("relation_type") or "") in SEMANTIC_RELATION_TYPES
+        ]
+    )
     out: list[tuple[str, dict[str, Any]]] = [
         (AUTHORITY_CONFIRMED, row)
         for row in confirmed
@@ -62,7 +75,15 @@ def _semantic_relations(
         return out
 
     confirmed_keys = {_semantic_key(row) for row in confirmed}
-    for row in proposed_knowledge_relations_of(obj):
+    raw_proposed = proposed_knowledge_relations_of(obj)
+    proposed_errors = validate_knowledge_relation_set(
+        raw_proposed,
+        source_object_id=source_id,
+        source_object_version=source_version,
+    )
+    if proposed_errors:
+        return out
+    for row in raw_proposed:
         if str(row.get("relation_type") or "") not in SEMANTIC_RELATION_TYPES:
             continue
         if _semantic_key(row) in confirmed_keys:
