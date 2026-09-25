@@ -641,7 +641,7 @@ def test_source_text_exact_stays_freeze_fragment() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_phase1_ingest_still_keeps_adviseert_and_blocks_djg(tmp_path: Path) -> None:
+def test_phase1_ingest_still_keeps_adviseert_and_leaves_djg_as_coverage(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, PHASE1_FIXTURE, title="Phase 1 admission regression")
@@ -652,13 +652,8 @@ def test_phase1_ingest_still_keeps_adviseert_and_blocks_djg(tmp_path: Path) -> N
     ]
     djg = _find_by_text(objects, DJG)
     adviseert = _find_by_text(objects, "adviseert de verpleegkundige")
-    assert _admission(djg)["gate_result"] == GATE_BLOCKED
-    for code in (
-        "recommendation_evidence_missing",
-        "comparison_target_missing",
-        "abbreviation_unresolved",
-    ):
-        assert code in _admission(djg)["reason_codes"], code
+    assert _admission(djg) == {}
+    assert ((djg.get("metadata") or {}).get("candidate_eligibility") or {}).get("eligible") is False
     assert _admission(adviseert)["gate_result"] == GATE_ALLOWED
     assert _admission(adviseert).get("context_scan_done") is True or _scan_of(adviseert).get(
         "context_scan_done"
@@ -670,7 +665,6 @@ def test_phase1_ingest_still_keeps_adviseert_and_blocks_djg(tmp_path: Path) -> N
     assert any("adviseert de verpleegkundige" in text for text in ordinary_texts)
     assert all(_admission(obj).get("gate_result") == GATE_ALLOWED for obj in ordinary)
     assert not any(obj in ordinary for obj in blocked_audit_lane(objects))
-
 
 def test_phase2_ingest_records_deep_window_and_wires_scan(tmp_path: Path) -> None:
     console = _console(tmp_path)
@@ -706,15 +700,15 @@ def test_phase2_ingest_records_deep_window_and_wires_scan(tmp_path: Path) -> Non
         assert signal in (scan.get("checked_signals") or admission.get("checked_signals") or []), signal
     assert "context_scan_not_done" not in (admission.get("reason_codes") or [])
 
-    unresolved = _find_by_text(objects, "tabel 4")
-    assert "unresolved_reference" in _admission(unresolved)["reason_codes"]
-    comparison = _find_by_text(objects, "vaker effectief.")
-    assert "comparison_target_missing" in _admission(comparison)["reason_codes"]
-
-    djg = _find_by_text(objects, DJG)
-    assert _admission(djg)["gate_result"] == GATE_BLOCKED
-    assert "recommendation_evidence_missing" in _admission(djg)["reason_codes"]
-    assert ordinary_review_queue([djg]) == []
+    # D2b2-C: source-only passages do not acquire Admission failures merely
+    # because no type proposal exists.
+    for snippet in ("tabel 4", "vaker effectief.", DJG):
+        passage = _find_by_text(objects, snippet)
+        assert _admission(passage) == {}
+        eligibility = (passage.get("metadata") or {}).get("candidate_eligibility") or {}
+        assert eligibility.get("eligible") is False
+        assert eligibility.get("reason") == "deterministic_no_type_proposal"
+        assert ordinary_review_queue([passage]) == []
 
     calcium = _find_by_text(objects, "adviseert calcium te geven")
     calcium_scan = _scan_of(calcium)
@@ -734,7 +728,6 @@ def test_phase2_ingest_records_deep_window_and_wires_scan(tmp_path: Path) -> Non
     assert "hypercalciëmie" in card
     assert "Gevonden onder" in card
     assert "Review opslaan en volgende" in card
-
 
 def test_boom_ingest_still_skips_richtlijn_phase2(tmp_path: Path) -> None:
     console = _console(tmp_path)
@@ -767,21 +760,21 @@ def test_boom_ingest_still_skips_richtlijn_phase2(tmp_path: Path) -> None:
     assert slow_review_duty(objects, review_path="boom")
 
 
-def test_blocked_candidate_still_cannot_be_confirmed(tmp_path: Path) -> None:
+def test_ineligible_source_passage_cannot_be_type_confirmed(tmp_path: Path) -> None:
     from src.operations_console_v1 import ConsoleError
 
     console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, PHASE1_FIXTURE, title="Phase 1 admission regression")
     djg = _find_by_text(console.snapshot_objects(receipt["snapshot_id"]), DJG)
-    with pytest.raises(ConsoleError, match="blocked_candidate_not_reviewable"):
+    assert _admission(djg) == {}
+    with pytest.raises(ConsoleError, match="candidate_not_admitted"):
         console.confirm_object_type(
             actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=receipt["snapshot_id"],
             object_id=djg["object_id"],
             confirmed_object_type="recommendation",
         )
-
 
 def test_no_handoff_and_no_protocol_rewrite() -> None:
     assert not (ROOT / "HANDOFF.md").exists()
