@@ -22,7 +22,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from .abstain_catalog_v1 import sentence_for
-from .api_access_v1 import ApiAccessStoreError, PostgresApiAccessStore
+from .api_access_v1 import ApiAccessPrincipal, ApiAccessStoreError, PostgresApiAccessStore
 from .retrieval.answerability_gate_v1 import AnswerabilityConfig
 from .canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
 from .g2_source_store import AzureBlobSourceStore
@@ -40,6 +40,8 @@ from .usage_ledger_v1 import UsageLedger
 ROOT = Path(__file__).resolve().parents[1]
 API_VERSION = "v1"
 SERVICE_VERSION = "product-api-v1.5.0"
+
+ProductAccessPrincipal = TenantPolicy | ApiAccessPrincipal
 
 
 class ProductCorpusError(RuntimeError):
@@ -239,7 +241,7 @@ class ProductState:
     def refresh(self) -> bool:
         return self._reload_records(force=False)
 
-    def auth(self, api_key: str | None) -> TenantPolicy:
+    def auth(self, api_key: str | None) -> ProductAccessPrincipal:
         if not api_key:
             raise HTTPException(status_code=401, detail={"code": "missing_api_key"}, headers={"WWW-Authenticate": "Bearer"})
         try:
@@ -254,11 +256,11 @@ class ProductState:
             raise HTTPException(status_code=429, detail={"code": "rate_limit_exceeded"}, headers={"Retry-After": str(retry_after)})
         return tenant
 
-    def require_scope(self, tenant: TenantPolicy, scope: str) -> None:
+    def require_scope(self, tenant: ProductAccessPrincipal, scope: str) -> None:
         if not tenant.has_scope(scope):
             raise HTTPException(status_code=403, detail={"code": "scope_denied", "required_scope": scope})
 
-    def _record_is_entitled(self, tenant: TenantPolicy, record: dict[str, Any]) -> bool:
+    def _record_is_entitled(self, tenant: ProductAccessPrincipal, record: dict[str, Any]) -> bool:
         """Authorize all published evidence represented inside one derived record.
 
         Retrieval text may embed reviewed context from related canonical
@@ -283,7 +285,7 @@ class ProductState:
                 return False
         return True
 
-    def _tenant_records(self, tenant: TenantPolicy, filters: RetrieveFilters | None = None) -> list[dict[str, Any]]:
+    def _tenant_records(self, tenant: ProductAccessPrincipal, filters: RetrieveFilters | None = None) -> list[dict[str, Any]]:
         self.refresh()
         requested_docs = set(filters.document_ids) if filters else set()
         requested_topics = set(filters.topics) if filters else set()
@@ -385,7 +387,7 @@ class ProductState:
             out.append(item)
         return out
 
-    def retrieve(self, tenant: TenantPolicy, req: RetrieveRequest) -> dict[str, Any]:
+    def retrieve(self, tenant: ProductAccessPrincipal, req: RetrieveRequest) -> dict[str, Any]:
         self.require_scope(tenant, "retrieve")
         if req.top_k > tenant.max_top_k:
             raise HTTPException(status_code=400, detail={"code": "top_k_exceeds_tenant_limit", "max_top_k": tenant.max_top_k})
@@ -410,7 +412,7 @@ class ProductState:
             return {"api_version": API_VERSION, "service_version": SERVICE_VERSION, "synthetic_fixture": self.synthetic, "status": "abstain", "answerability": "insufficient_evidence", "reason": "advice_bounds_missing", "false_positive_class": "relation_mismatch", "labels": [], "advice_weight": False, "abstain_sentence": sentence_for("advice_bounds_missing"), "results": [], "result_count": 0}
         return {"api_version": API_VERSION, "service_version": SERVICE_VERSION, "synthetic_fixture": self.synthetic, "status": raw.get("behavior"), "answerability": raw.get("answerability"), "reason": raw.get("reason"), "false_positive_class": raw.get("false_positive_class"), "labels": raw.get("labels") or [], "advice_weight": bool(raw.get("advice_weight")), "abstain_sentence": raw.get("abstain_sentence"), "results": results, "result_count": len(results)}
 
-    def knowledge(self, tenant: TenantPolicy, object_id: str) -> dict[str, Any]:
+    def knowledge(self, tenant: ProductAccessPrincipal, object_id: str) -> dict[str, Any]:
         self.require_scope(tenant, "knowledge:read")
         self.refresh()
         record = self.record_by_object.get(object_id)
@@ -431,7 +433,7 @@ class ProductState:
             payload["knowledge_relations"] = relations
         return payload
 
-    def documents(self, tenant: TenantPolicy) -> list[dict[str, Any]]:
+    def documents(self, tenant: ProductAccessPrincipal) -> list[dict[str, Any]]:
         self.require_scope(tenant, "documents:read")
         rows = self._tenant_records(tenant)
         grouped: dict[str, dict[str, Any]] = {}
@@ -444,7 +446,7 @@ class ProductState:
             bucket["knowledge_object_count"] += 1
         return sorted(grouped.values(), key=lambda x: x["document_id"])
 
-    def updates(self, tenant: TenantPolicy) -> list[dict[str, Any]]:
+    def updates(self, tenant: ProductAccessPrincipal) -> list[dict[str, Any]]:
         self.require_scope(tenant, "updates:read")
         rows = self._tenant_records(tenant)
         releases: dict[tuple[str, str], dict[str, Any]] = {}
@@ -512,11 +514,11 @@ def create_product_app(
     app.state.product = state
     bearer = HTTPBearer(auto_error=False, scheme_name="VVNApiKeyBearer", description="Tenant API key as Bearer token")
 
-    def current_tenant(credentials: HTTPAuthorizationCredentials | None = Security(bearer), x_api_key: str | None = Header(default=None, alias="X-API-Key", include_in_schema=False)) -> TenantPolicy:
+    def current_tenant(credentials: HTTPAuthorizationCredentials | None = Security(bearer), x_api_key: str | None = Header(default=None, alias="X-API-Key", include_in_schema=False)) -> ProductAccessPrincipal:
         authorization = f"Bearer {credentials.credentials}" if credentials else None
         return state.auth(_extract_api_key(authorization, x_api_key))
 
-    def logged_response(*, request_id: str, tenant: TenantPolicy, endpoint: str, started: float, status_code: int, behavior: str | None = None, query: str | None = None, object_ids: list[str] | None = None) -> None:
+    def logged_response(*, request_id: str, tenant: ProductAccessPrincipal, endpoint: str, started: float, status_code: int, behavior: str | None = None, query: str | None = None, object_ids: list[str] | None = None) -> None:
         state.ledger.record(request_id=request_id, tenant_id=tenant.tenant_id, endpoint=endpoint, status_code=status_code, behavior=behavior, result_count=len(object_ids or []), query=query, result_object_ids=object_ids, latency_ms=(time.perf_counter() - started) * 1000.0, synthetic_fixture=state.synthetic)
 
     @app.middleware("http")
@@ -534,30 +536,30 @@ def create_product_app(
         return {"status": "ok", "api_version": API_VERSION, "service_version": SERVICE_VERSION, "mode": state.mode, "synthetic_fixture": state.synthetic, "published_retrieval_records": len(state.records) if state.synthetic else None, "published_corpus_ready": bool(state.records), "corpus_reload_policy": "postgres_active_registry_plus_blob_readback" if state.mode == "real" else "reload_fixture_on_file_change", "published_corpus_authority": "postgres+azure_blob" if state.mode == "real" else "fixture_jsonl", "generation_enabled": False}
 
     @app.post("/v1/retrieve")
-    def retrieve(req: RetrieveRequest, request: Request, tenant: TenantPolicy = Depends(current_tenant)) -> dict[str, Any]:
+    def retrieve(req: RetrieveRequest, request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
         started = time.perf_counter(); result = state.retrieve(tenant, req); result["request_id"] = request.state.request_id; result["tenant_id"] = tenant.tenant_id
         ids = [x["knowledge_object_id"] for x in result["results"]]; logged_response(request_id=request.state.request_id, tenant=tenant, endpoint="/v1/retrieve", started=started, status_code=200, behavior=result["status"], query=req.query, object_ids=ids); return result
 
     @app.get("/v1/knowledge/{object_id}")
-    def knowledge(object_id: str, request: Request, tenant: TenantPolicy = Depends(current_tenant)) -> dict[str, Any]:
+    def knowledge(object_id: str, request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
         started = time.perf_counter(); result = state.knowledge(tenant, object_id); result["request_id"] = request.state.request_id; logged_response(request_id=request.state.request_id, tenant=tenant, endpoint="/v1/knowledge/{id}", started=started, status_code=200, behavior="read", object_ids=[object_id]); return result
 
     @app.get("/v1/documents")
-    def documents(request: Request, tenant: TenantPolicy = Depends(current_tenant)) -> dict[str, Any]:
+    def documents(request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
         started = time.perf_counter(); docs = state.documents(tenant); logged_response(request_id=request.state.request_id, tenant=tenant, endpoint="/v1/documents", started=started, status_code=200, behavior="read", object_ids=[]); return {"api_version": API_VERSION, "request_id": request.state.request_id, "tenant_id": tenant.tenant_id, "documents": docs}
 
     @app.get("/v1/documents/{document_id}")
-    def document(document_id: str, request: Request, tenant: TenantPolicy = Depends(current_tenant)) -> dict[str, Any]:
+    def document(document_id: str, request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
         started = time.perf_counter(); docs = [d for d in state.documents(tenant) if d["document_id"] == document_id]
         if not docs: raise HTTPException(status_code=404, detail={"code": "document_not_found"})
         logged_response(request_id=request.state.request_id, tenant=tenant, endpoint="/v1/documents/{id}", started=started, status_code=200, behavior="read", object_ids=[]); return {"api_version": API_VERSION, "request_id": request.state.request_id, "tenant_id": tenant.tenant_id, **docs[0]}
 
     @app.get("/v1/updates")
-    def updates(request: Request, tenant: TenantPolicy = Depends(current_tenant)) -> dict[str, Any]:
+    def updates(request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
         started = time.perf_counter(); rows = state.updates(tenant); logged_response(request_id=request.state.request_id, tenant=tenant, endpoint="/v1/updates", started=started, status_code=200, behavior="read", object_ids=[]); return {"api_version": API_VERSION, "request_id": request.state.request_id, "tenant_id": tenant.tenant_id, "updates": rows}
 
     @app.get("/v1/usage")
-    def usage(request: Request, tenant: TenantPolicy = Depends(current_tenant)) -> dict[str, Any]:
+    def usage(request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
         started = time.perf_counter(); state.require_scope(tenant, "usage:read"); summary = state.ledger.summary(tenant.tenant_id); logged_response(request_id=request.state.request_id, tenant=tenant, endpoint="/v1/usage", started=started, status_code=200, behavior="read", object_ids=[]); return {"api_version": API_VERSION, "request_id": request.state.request_id, **summary}
 
     return app
