@@ -437,7 +437,19 @@ def install_proportionate_review_routes(app: FastAPI, console: ProportionateRevi
                 ),
                 status_code=409,
             )
-        return RedirectResponse(f"/review?document={snapshot_id}&task=batch", status_code=303)
+        envelope = console._envelope(snapshot_id)
+        review_path = review_path_for_klasse(envelope["class"])
+        remaining = normal_risk_batch_queue(
+            console.snapshot_objects(snapshot_id),
+            review_path=review_path,
+            bindings=console.object_review_bindings(snapshot_id),
+        )
+        target = (
+            f"/review?document={snapshot_id}&task=batch"
+            if remaining
+            else f"/review?document={snapshot_id}"
+        )
+        return RedirectResponse(target, status_code=303)
 
     app.add_api_route(
         "/review/normal-risk/batch-confirm",
