@@ -88,6 +88,7 @@ def _split_existing_object(console: OperationsConsole, snapshot_id: str) -> str:
     first = deepcopy(original)
     first["content"]["clean_text"] = FIRST
     first["content"]["raw_text"] = FIRST
+    first["proposed_object_type"] = "recommendation"
     first["provenance"]["source_fragments"] = [refs[0]]
     first["governance"]["validation_status"] = "needs_review"
     stamp_canonical_hashes(first)
@@ -98,6 +99,7 @@ def _split_existing_object(console: OperationsConsole, snapshot_id: str) -> str:
     continuation["content"]["raw_text"] = CONTINUATION
     continuation["provenance"]["source_fragments"] = [refs[1]]
     continuation["object_type"] = "unclassified"
+    continuation.pop("proposed_object_type", None)
     continuation.pop("confirmed_object_type", None)
     continuation["governance"]["validation_status"] = "needs_review"
     stamp_canonical_hashes(continuation)
