@@ -68,6 +68,7 @@ from src.four_eyes_v1 import (
     publish_authorization_contract,
     requires_four_eyes,
 )
+from src.review_duty_v1 import SECOND_REVIEW, exact_current_approver_ids, review_duty_for, reviewer_route_for
 from src.g2_source_store import G2SourceStoreError, ImmutableSourceStore, is_g2_locator
 from src.integrity_kernel import compute_canonical_object_hash, schema_errors, sha256_bytes, stamp_canonical_hashes
 from src.klasse_wijzigen_v1 import (
@@ -2431,6 +2432,18 @@ class OperationsConsole:
             confirmed = target["confirmed_object_type"]
         apply_type = bool(confirmed_object_type)
         review_path = review_path_for_klasse(envelope["class"])
+        binding_authority = self.object_review_bindings(snapshot_id)
+        current_duty = review_duty_for(
+            target,
+            review_path=review_path,
+            bindings=binding_authority,
+        )
+        if (
+            current_duty
+            and current_duty.get("stage") == SECOND_REVIEW
+            and decision != "revise"
+        ):
+            raise ConsoleError("second_review_command_required")
         if decision != "later":
             if is_admission_blocked(target, review_path=review_path) and (
                 decision == "approve" or apply_type
@@ -2882,6 +2895,115 @@ class OperationsConsole:
         )
         return deepcopy(updated)
 
+    def approve_second_review(
+        self,
+        *,
+        actor_id: str,
+        snapshot_id: str,
+        object_id: str,
+        expected_revision: str | None = None,
+    ) -> dict[str, Any]:
+        """Approve one exact current tuple as the independent second reviewer.
+
+        This mutation does not change canonical knowledge content, object
+        version or canonical hash. It only adds the second exact review
+        authorization and updates the compatibility second_review mirror plus
+        audit evidence in the same store transaction.
+        """
+
+        reviewer = self._require_role(actor_id, "reviewer")
+        envelope = self._envelope(snapshot_id)
+        if actor_id not in set(envelope.get("named_reviewers") or []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+
+        objects, revision = self.snapshot_objects_and_revision(snapshot_id)
+        if expected_revision is not None and revision != expected_revision:
+            raise ConsoleError(
+                SNAPSHOT_OBJECT_WRITE_CONFLICT,
+                current_revision=revision,
+            )
+        target = next((row for row in objects if row.get("object_id") == object_id), None)
+        if target is None:
+            raise ConsoleError("unknown_object")
+        if not requires_four_eyes(
+            target,
+            confirmed_type=str(target.get("confirmed_object_type") or "") or None,
+        ):
+            raise ConsoleError("second_review_not_required")
+
+        bindings = self.object_review_bindings(snapshot_id)
+        approvers = exact_current_approver_ids(target, bindings)
+        if len(approvers) >= 2:
+            return deepcopy(target)
+        if not approvers:
+            raise ConsoleError("first_review_required")
+        if actor_id in set(approvers):
+            raise ConsoleError("independent_second_reviewer_required")
+        self._require_open_original(snapshot_id, object_id)
+
+        canonical_hash = compute_canonical_object_hash(target)
+        binding = tuple_record(
+            object_id=object_id,
+            object_version=str(target.get("object_version") or ""),
+            canonical_object_hash=canonical_hash,
+            confirmed_object_type=target.get("confirmed_object_type"),
+            reviewer=reviewer["username"],
+            reviewer_id=actor_id,
+            decision="approve",
+        )
+        new_bindings = deepcopy(self._bindings)
+        rows = [
+            item
+            for item in new_bindings.get(snapshot_id, [])
+            if not (
+                item.get("object_id") == object_id
+                and item.get("reviewer_id") == actor_id
+            )
+        ]
+        rows.append(binding)
+        new_bindings[snapshot_id] = rows
+
+        history = self._load_objects(snapshot_id)
+        current_target = next(
+            row for row in history
+            if row.get("object_id") == object_id
+            and row.get("object_version") == target.get("object_version")
+        )
+        governance = current_target.setdefault("governance", {})
+        second = governance.setdefault("second_review", {})
+        second.update(
+            {
+                "required": True,
+                "status": "approved",
+                "reviewer": reviewer["username"],
+                "review_date": date.today().isoformat(),
+                "snapshot_hash": canonical_hash,
+            }
+        )
+
+        self._commit_prepared_store(
+            objects=(snapshot_id, history),
+            bindings=new_bindings,
+            expected_revision=expected_revision,
+            snapshot_id=snapshot_id,
+            ledger_fn=lambda: append_event(
+                self._ledger_path,
+                event_type="second_review_approve",
+                object_id=object_id,
+                object_version=str(target.get("object_version") or ""),
+                actor=reviewer["username"],
+                details={
+                    "snapshot_id": snapshot_id,
+                    "canonical_object_hash": canonical_hash,
+                    "confirmed_object_type": target.get("confirmed_object_type"),
+                    "first_approver_ids": list(approvers),
+                    "second_reviewer_id": actor_id,
+                },
+            ),
+        )
+        return deepcopy(current_target)
+
+
     def batch_confirm_headings(
         self,
         *,
@@ -2903,11 +3025,22 @@ class OperationsConsole:
         review_path = review_path_for_klasse(self._envelope(snapshot_id)["class"])
         structure_type = "path" if review_path == "boom" else "heading"
         current = {row["object_id"]: row for row in self.snapshot_objects(snapshot_id)}
+        bindings = self.object_review_bindings(snapshot_id)
         for object_id in ids:
             target = current.get(object_id)
             if target is None:
                 raise ConsoleError("unknown_object")
-            if review_lane(target, review_path=review_path) != "fast":
+            route = reviewer_route_for(
+                target,
+                review_path=review_path,
+                reviewer_id=actor_id,
+                bindings=bindings,
+            )
+            if not (
+                route
+                and route.get("actionable")
+                and route.get("canonical_task") == "structure"
+            ):
                 raise ConsoleError("fast_lane_heading_required")
         updated: list[dict[str, Any]] = []
         pin = expected_revision

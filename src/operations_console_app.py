@@ -48,6 +48,7 @@ from src.knowledge_relation_review_v1 import (
     has_semantic_relation_review,
     relation_choice_value,
 )
+from src.review_duty_v1 import review_duty_for, review_duty_lane, reviewer_route_for
 from src.review_context_v1 import (
     AUTHORITY_CONFIRMED,
     DIRECTION_INCOMING,
@@ -115,7 +116,32 @@ FILENAME_HINT = (
     "De titel hieronder mag wél spaties bevatten."
 )
 BRAND_DIR = REPO_ROOT / "assets" / "brand"
-REVIEW_TASKS = frozenset({"individual", "together", "headings", "control", "decisions"})
+CANONICAL_REVIEW_TASKS = frozenset({
+    "structure",
+    "contextual",
+    "batch",
+    "second_review",
+    "repair",
+    "history",
+    "disposition",
+})
+LEGACY_REVIEW_TASK_ALIASES = {
+    "headings": "structure",
+    "individual": "contextual",
+    "together": "batch",
+    "control": "repair",
+    "decisions": "history",
+    "closure": "disposition",
+}
+REVIEW_TASKS = frozenset({
+    *CANONICAL_REVIEW_TASKS,
+    *LEGACY_REVIEW_TASK_ALIASES,
+})
+
+
+def normalize_review_task(value: str) -> str:
+    task = str(value or "").strip()
+    return LEGACY_REVIEW_TASK_ALIASES.get(task, task if task in CANONICAL_REVIEW_TASKS else "")
 
 
 def _passage_formation_status_html(state: OperationsConsole) -> str:
@@ -212,6 +238,11 @@ ERROR_COPY = {
     "knowledge_relation_choice_not_available": "De gekozen relatie hoort niet meer bij de huidige relationele set.",
     "knowledge_relation_source_version_stale": "Het bronobject is gewijzigd. Open de review opnieuw.",
     "knowledge_relation_endpoint_type_invalid": "Deze relatie past niet bij de huidige typen van bron en doel.",
+    "second_review_not_required": "Voor dit object is geen onafhankelijke tweede beoordeling vereist.",
+    "second_review_not_available": "Deze tweede beoordeling is niet meer actueel.",
+    "first_review_required": "De eerste beoordeling moet eerst zijn afgerond.",
+    "independent_second_reviewer_required": "De tweede beoordeling moet door een andere reviewer worden uitgevoerd.",
+    "second_review_command_required": "Gebruik de aparte tweede-beoordelingsroute voor dit object.",
     "open_original_required": "Open eerst de bronpassage. Type bevestigen zonder het origineel is niet toegestaan.",
     "source_locator_missing": "De bronpassage ontbreekt; type bevestigen is niet toegestaan.",
     "freeze_bytes_missing": "Het geüploade origineel ontbreekt; type bevestigen is niet toegestaan.",
@@ -663,7 +694,8 @@ def _review_context_block(
         return ""
 
     snap = quote(str(snapshot_id), safe="")
-    task_query = f"&task={quote(task, safe='')}" if task in REVIEW_TASKS else ""
+    normalized_task = normalize_review_task(task)
+    task_query = f"&task={quote(normalized_task, safe='')}" if normalized_task else ""
     rows: list[str] = []
     for link in links:
         outgoing = link.get("direction") == DIRECTION_OUTGOING
@@ -1312,7 +1344,13 @@ def _review_index_item(
     return f'<li class="review-row">{link}{status_html}</li>'
 
 
-def _review_section_groups(objects: list[dict[str, Any]], snapshot_id: str, *, priority_ids: set[str] | None = None) -> str:
+def _review_section_groups(
+    objects: list[dict[str, Any]],
+    snapshot_id: str,
+    *,
+    priority_ids: set[str] | None = None,
+    task: str = "contextual",
+) -> str:
     """Presentation only: preserve exact source paths and existing object links."""
     priority_ids = priority_ids or set()
     groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
@@ -1332,7 +1370,18 @@ def _review_section_groups(objects: list[dict[str, Any]], snapshot_id: str, *, p
             'Controleer de plaatsing bij het beoordelen.</p>'
             f'<p>{_esc(path or "Geen bronpad beschikbaar")}</p></details>'
             '<ol class="object-index">'
-            + "".join(_review_index_item(obj, snapshot_id, reason=_individual_review_reason(obj, priority=str(obj.get("object_id")) in priority_ids), task="individual") for obj in rows)
+            + "".join(
+                _review_index_item(
+                    obj,
+                    snapshot_id,
+                    reason=_individual_review_reason(
+                        obj,
+                        priority=str(obj.get("object_id")) in priority_ids,
+                    ),
+                    task=task,
+                )
+                for obj in rows
+            )
             + '</ol></details>'
         )
     return "".join(panels)
@@ -1680,12 +1729,12 @@ def _review_decision_row(
     source_href = (
         f"/review/bronpassage?document={quote(snapshot_id, safe='')}"
         f"&amp;object={quote(object_id, safe='')}"
-        "&amp;task=decisions"
+        "&amp;task=history"
     )
     history_href = (
         f"/review?document={quote(snapshot_id, safe='')}"
         f"&amp;object={quote(object_id, safe='')}"
-        "&amp;task=decisions"
+        "&amp;task=history"
     )
     return f"""
       <li class="review-row review-decision-row">
@@ -1734,7 +1783,7 @@ def _review_progress_overview(
           <strong>{progress["not_included"]}</strong> niet opgenomen
           {extras_html}
         </p>
-        <a class="review-control-card" href="/review?document={_esc(snapshot_id)}&amp;task=decisions">
+        <a class="review-control-card" href="/review?document={_esc(snapshot_id)}&amp;task=history">
           <span class="review-control-card-body">
             <span class="review-control-card-label">Besluiten en historie</span>
             <span class="review-control-card-title">Bekijk wat is goedgekeurd, afgewezen, anders gebruikt of herzien</span>
@@ -1780,6 +1829,7 @@ def _review_task_dashboard(
     heading_total_override: int | None = None,
     individual_pending_override: int | None = None,
     individual_total_override: int | None = None,
+    second_review_pending: int = 0,
 ) -> str:
     heading_pending = (
         int(heading_pending_override)
@@ -1805,25 +1855,32 @@ def _review_task_dashboard(
     individual_done = max(individual_total - individual_pending, 0)
     tasks = [
         (
-            "headings",
+            "structure",
             "Koppen controleren",
             "Controleer de indeling van het document",
             f"{heading_pending} te controleren · {heading_done} afgerond",
             heading_pending,
         ),
         (
-            "individual",
-            "Belangrijke passages beoordelen",
-            "Beoordeel advies, voorwaarden, uitzonderingen en passages die extra aandacht vragen",
+            "contextual",
+            "In samenhang beoordelen",
+            "Beoordeel advies, voorwaarden, uitzonderingen en relationele context",
             f"{individual_pending} te beoordelen · {individual_done} afgerond",
             individual_pending,
         ),
         (
-            "together",
-            "Vergelijkbare passages samen beoordelen",
-            "Beoordeel passages uit hetzelfde brononderdeel in overzichtelijke groepen",
+            "batch",
+            "Vergelijkbare passages beoordelen",
+            "Beoordeel onafhankelijke passages uit hetzelfde brononderdeel in overzichtelijke groepen",
             f"{normal_batches} groepen · {normal_passages} passages",
             normal_passages,
+        ),
+        (
+            "second_review",
+            "Tweede beoordelingen",
+            "Beoordeel onafhankelijk exact dezelfde goedgekeurde objectversie",
+            f"{second_review_pending} te beoordelen",
+            second_review_pending,
         ),
     ]
     recommended = next((row for row in tasks if row[4]), None)
@@ -1875,7 +1932,7 @@ def _review_task_dashboard(
           <p>Kies een taak om het bijbehorende werk af te ronden.</p>
         </div>
         <div class="review-task-grid">{cards}</div>
-        <a class="review-control-card review-control-card-{control_state}" href="/review?document={_esc(snapshot_id)}&amp;task=control">
+        <a class="review-control-card review-control-card-{control_state}" href="/review?document={_esc(snapshot_id)}&amp;task=repair">
           <span class="review-control-card-body">
             <span class="review-control-card-label">Controle en uitzonderingen</span>
             <span class="review-control-card-title">Dekking en technische controle</span>
@@ -2006,6 +2063,187 @@ def _processing_diagnostics_html(
     """
 
 
+def _review_route_objects(
+    objects: list[dict[str, Any]],
+    *,
+    review_path: str,
+    bindings: list[dict[str, Any]] | None,
+    reviewer_id: str,
+    canonical_task: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for obj in objects:
+        if bindings is None:
+            duty = review_duty_for(
+                obj,
+                review_path=review_path,
+                bindings=None,
+            )
+            if not duty:
+                continue
+            task = (
+                "second_review"
+                if duty.get("stage") == "second_review"
+                else str(duty.get("lane") or "")
+            )
+            if task == canonical_task:
+                rows.append(obj)
+            continue
+
+        route = reviewer_route_for(
+            obj,
+            review_path=review_path,
+            reviewer_id=reviewer_id,
+            bindings=bindings,
+        )
+        if not route or not route.get("actionable"):
+            continue
+        if str(route.get("canonical_task") or "") != canonical_task:
+            continue
+        rows.append(obj)
+    return sorted(rows, key=review_priority_rank)
+
+
+def _render_second_review_card(
+    console: OperationsConsole,
+    snapshot_id: str,
+    obj: dict[str, Any],
+    snapshot_objects: list[dict[str, Any]],
+    review_path: str,
+    *,
+    reviewer_id: str,
+    snapshot_revision: str,
+) -> str:
+    bindings = console.object_review_bindings(snapshot_id)
+    route = reviewer_route_for(
+        obj,
+        review_path=review_path,
+        reviewer_id=reviewer_id,
+        bindings=bindings,
+    )
+    if not route or route.get("canonical_task") != "second_review":
+        raise ConsoleError("second_review_not_available")
+    if not route.get("actionable"):
+        raise ConsoleError("independent_second_reviewer_required")
+
+    semantics = confirmed_recommendation_semantics_of(obj)
+    semantics_html = ""
+    if semantics:
+        semantics_html = (
+            '<section class="review-step">'
+            '<h4>Bevestigde aanbevelingssemantiek</h4>'
+            f'<p>Richting: <b>{_esc(semantics.get("direction") or "")}</b> · '
+            f'Sterkte: <b>{_esc(semantics.get("strength") or semantics.get("strength_status") or "")}</b></p>'
+            '</section>'
+        )
+    relations = confirmed_knowledge_relations_of(obj)
+    relations_html = ""
+    if relations:
+        items = "".join(
+            f'<li><b>{_esc(RELATION_LABELS.get(str(row.get("relation_type") or ""), str(row.get("relation_type") or "")))}</b> '
+            f'→ {_esc(row.get("target_object_id") or "")} '
+            f'(versie {_esc(row.get("target_object_version") or "")})</li>'
+            for row in relations
+        )
+        relations_html = (
+            '<section class="review-step"><h4>Bevestigde relaties</h4>'
+            f'<ul>{items}</ul></section>'
+        )
+
+    first_reviewers = [
+        str(row.get("reviewer") or row.get("reviewer_id") or "")
+        for row in bindings
+        if row.get("valid")
+        and row.get("decision") == "approve"
+        and row.get("object_id") == obj.get("object_id")
+        and row.get("object_version") == obj.get("object_version")
+        and row.get("canonical_object_hash") == (obj.get("provenance") or {}).get("canonical_object_hash")
+        and row.get("confirmed_object_type") == obj.get("confirmed_object_type")
+    ]
+    first_copy = ", ".join(dict.fromkeys(first_reviewers)) or "eerste reviewer"
+    text = str((obj.get("content") or {}).get("clean_text") or "")
+    return f"""
+      <p><a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=second_review">← Terug naar tweede beoordelingen</a></p>
+      <article class="object review-card-two-column second-review-card" data-object-id="{_esc(obj.get("object_id"))}">
+        <div class="review-cockpit-copy">
+          <p class="eyebrow">Onafhankelijke tweede beoordeling</p>
+          <h3>{_esc(review_card_sentence(obj))}</h3>
+          <p>De canonieke inhoud staat vast. Controleer dezelfde objectversie onafhankelijk; deze stap wijzigt type, semantiek of relaties niet.</p>
+        </div>
+        <section class="review-card-object review-step">
+          <p>{_esc(text)}</p>
+          <p class="meta">
+            <span>type <b>{_esc(_object_type_label(str(obj.get("confirmed_object_type") or "")))}</b></span>
+            <span>versie <b>{_esc(obj.get("object_version") or "")}</b></span>
+            <span>eerste beoordeling <b>{_esc(first_copy)}</b></span>
+          </p>
+        </section>
+        {_broncontext_html(obj, snapshot_id, str(obj.get("object_id") or ""), True, task="second_review")}
+        {_review_context_block(
+            obj,
+            snapshot_objects,
+            snapshot_id=snapshot_id,
+            review_path=review_path,
+            task="second_review",
+        )}
+        {semantics_html}
+        {relations_html}
+        <form method="post" action="/review/second-review" class="review-decision-form">
+          <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
+          <input type="hidden" name="object_id" value="{_esc(obj.get("object_id") or "")}">
+          {_snapshot_revision_input(snapshot_revision)}
+          <section class="review-step">
+            <h4>Tweede beoordeling</h4>
+            <button class="btn-primary" type="submit" name="action" value="approve">Tweede beoordeling goedkeuren</button>
+            <label for="second-review-comment-{_esc(obj.get("object_id") or "")}">Correctie nodig</label>
+            <textarea id="second-review-comment-{_esc(obj.get("object_id") or "")}" name="comment"></textarea>
+            <button class="btn-secondary" type="submit" name="action" value="revise">Correctie nodig</button>
+          </section>
+        </form>
+      </article>
+    """
+
+
+def _review_bindings(console: OperationsConsole, snapshot_id: str) -> list[dict[str, Any]] | None:
+    """Actor routes when bindings exist; governance fallback for projection consoles."""
+    try:
+        return console.object_review_bindings(snapshot_id)
+    except AttributeError:
+        return None
+    except ConsoleError as exc:
+        if exc.code == "unknown_snapshot":
+            return None
+        raise
+
+
+def _lane_total(
+    objects: list[dict[str, Any]],
+    *,
+    review_path: str,
+    lane: str,
+    open_rows: list[dict[str, Any]],
+) -> int:
+    """Open duties plus already finished objects of the same lane.
+
+    The task list only contains open work. The dashboard still reports how
+    many objects of that lane are already afgerond.
+    """
+    open_ids = {str(obj.get("object_id") or "") for obj in open_rows}
+    finished = 0
+    for obj in objects:
+        object_id = str(obj.get("object_id") or "")
+        if not object_id or object_id in open_ids:
+            continue
+        if str(obj.get("object_type") or "") == "document":
+            continue
+        if not _review_is_final(obj):
+            continue
+        if review_duty_lane(obj, review_path=review_path, stage="first_review") != lane:
+            continue
+        finished += 1
+    return len(open_rows) + finished
+
+
 def _render_review_index(
     snapshot_id: str,
     snapshot_objects: list[dict[str, Any]],
@@ -2015,19 +2253,39 @@ def _render_review_index(
     task: str = "",
     normal_review_enabled: bool = True,
     audit_signals: list[dict[str, Any]] | None = None,
+    bindings: list[dict[str, Any]] | None = None,
+    reviewer_id: str = "",
 ) -> str:
-    koppen, _old_inhoud = review_stacks(snapshot_objects, review_path=review_path)
-    duty = slow_review_duty(snapshot_objects, review_path=review_path)
-    regular_individual = regular_individual_review_queue(
-        snapshot_objects, review_path=review_path
-    ) if review_path != "boom" else []
-    individual = sorted([*duty, *regular_individual], key=review_priority_rank)
+    task = normalize_review_task(task)
+    bindings = list(bindings) if bindings is not None else None
+    koppen = _review_route_objects(
+        snapshot_objects,
+        review_path=review_path,
+        bindings=bindings,
+        reviewer_id=reviewer_id,
+        canonical_task="structure",
+    )
+    individual = _review_route_objects(
+        snapshot_objects,
+        review_path=review_path,
+        bindings=bindings,
+        reviewer_id=reviewer_id,
+        canonical_task="contextual",
+    )
+    second_review = _review_route_objects(
+        snapshot_objects,
+        review_path=review_path,
+        bindings=bindings,
+        reviewer_id=reviewer_id,
+        canonical_task="second_review",
+    )
     blocked = processing_issue_objects(snapshot_objects) if review_path != "boom" else []
     normal_passages, normal_batches = (0, 0)
     if normal_review_enabled:
         normal_passages, normal_batches = normal_risk_batch_counts(
             snapshot_objects,
             review_path=review_path,
+            bindings=bindings,
         )
     blocked_html = ""
     if blocked:
@@ -2035,12 +2293,12 @@ def _render_review_index(
           <details class="review-blocked-audit" aria-label="Technisch herstel nodig">
             <summary>Technisch herstel nodig ({len(blocked)}) — bekijk passages</summary>
             <p class="lead">Dit is geen inhoudelijke reviewtaak. Laat Metis eerst veilige broncontext aanvullen. Als automatisch herstel niet verantwoord is, blijft de passage geblokkeerd voor technisch herstel.</p>
-            <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, reason="Technische controle heeft deze passage geblokkeerd; inhoudelijk goedkeuren is pas mogelijk na herstel.", task="control") for obj in blocked)}</ol>
+            <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, reason="Technische controle heeft deze passage geblokkeerd; inhoudelijk goedkeuren is pas mogelijk na herstel.", task="repair") for obj in blocked)}</ol>
           </details>
                     """
     copy = _review_lane_copy(review_path, koppen)
     progress = _review_progress_summary(snapshot_objects)
-    if task == "decisions":
+    if task == "history":
         decision_rows = [
             obj
             for obj in snapshot_objects
@@ -2056,31 +2314,48 @@ def _render_review_index(
             </ol>
           </section>
         '''
-    if task == "individual":
+    if task == "contextual":
         return f'''
           {_review_task_header(snapshot_id, "Belangrijke passages beoordelen", "Open iedere passage en vergelijk haar met de oorspronkelijke bron")}
           <section class="review-lane-slow">
-            {_review_section_groups(individual, snapshot_id, priority_ids={str(obj.get("object_id")) for obj in duty}) if individual else '<p class="review-task-empty">Deze taak is afgerond.</p>'}
+            {_review_section_groups(
+                individual,
+                snapshot_id,
+                priority_ids={str(obj.get("object_id")) for obj in individual},
+                task="contextual",
+            ) if individual else '<p class="review-task-empty">Deze taak is afgerond.</p>'}
           </section>
         '''
-    if task == "together":
+    if task == "batch":
         return f'''
           {_review_task_header(snapshot_id, "Vergelijkbare passages samen beoordelen", "Bevestig alleen passages waarover je op basis van de bron zeker bent")}
           {normal_content_html or '<p class="review-task-empty">Deze taak is afgerond.</p>'}
         '''
-    if task == "headings":
+    if task == "structure":
         return f'''
           {_review_task_header(snapshot_id, copy["fast_title"], copy["fast_lead"])}
           <section class="review-lane-fast">
             <form method="post" action="/review/headings/batch-confirm">
               <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
               {_snapshot_revision_input(snapshot_revision)}
-              <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, checkbox=True, task="headings") for obj in koppen)}</ol>
+              <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, checkbox=True, task="structure") for obj in koppen)}</ol>
               <button class="btn-primary" type="submit">{copy["fast_button"]}</button>
             </form>
           </section>
         '''
-    if task == "control":
+    if task == "second_review":
+        return f'''
+          {_review_task_header(snapshot_id, "Tweede beoordelingen", "Beoordeel onafhankelijk exact dezelfde goedgekeurde objectversie")}
+          <section class="review-lane-second">
+            {_review_section_groups(
+                second_review,
+                snapshot_id,
+                priority_ids=set(),
+                task="second_review",
+            ) if second_review else '<p class="review-task-empty">Deze taak is afgerond of wacht op een andere reviewer.</p>'}
+          </section>
+        '''
+    if task == "repair":
         return f'''
           {_review_task_header(snapshot_id, "Dekking en technische controle", "Controleer hier de volledigheid en technische blokkades; dit is geen extra inhoudelijke reviewtaak")}
           {_processing_diagnostics_html(snapshot_objects)}
@@ -2099,6 +2374,21 @@ def _render_review_index(
         normal_batches=normal_batches,
         blocked_count=len(blocked),
         progress=progress,
+        heading_pending_override=len(koppen),
+        heading_total_override=_lane_total(
+            snapshot_objects,
+            review_path=review_path,
+            lane="structure",
+            open_rows=koppen,
+        ),
+        individual_pending_override=len(individual),
+        individual_total_override=_lane_total(
+            snapshot_objects,
+            review_path=review_path,
+            lane="contextual",
+            open_rows=individual,
+        ),
+        second_review_pending=len(second_review),
     )
 
 
@@ -2282,7 +2572,7 @@ def _render_review_room(
 ) -> str:
     chosen = document.strip()
     chosen_object_id = object.strip()
-    chosen_task = task.strip() if task.strip() in REVIEW_TASKS else ""
+    chosen_task = normalize_review_task(task)
     draft = _sanitize_review_draft(draft)
     conflict_html = _review_conflict_html(conflict)
     if conflict and batch_completed:
@@ -2326,7 +2616,7 @@ def _render_review_room(
             f'<div class="doc-card">{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}'
             "</div>"
         )
-        history_enabled = chosen_task == "decisions"
+        history_enabled = chosen_task == "history"
         if history_enabled:
             loaded_objects, snapshot_revision = console.snapshot_objects_and_revision(
                 chosen,
@@ -2345,13 +2635,17 @@ def _render_review_room(
                 audit_signals = list(audit_reader())
         if not chosen_object_id:
             normal_content_html = ""
-            if isinstance(console, ProportionateReviewConsole) and chosen_task == "together":
+            if isinstance(console, ProportionateReviewConsole) and chosen_task == "batch":
                 normal_content_html = render_normal_risk_batch_panel(
                     console, chosen,
                     snapshot=(snapshot_objects, snapshot_revision),
                     selected_ids=batch_selection or (),
                     include_individual=False,
                 )
+            try:
+                bindings = _review_bindings(console, chosen)
+            except AttributeError:
+                bindings = None
             objects_html += _render_review_index(
                 chosen,
                 snapshot_objects,
@@ -2361,6 +2655,8 @@ def _render_review_room(
                 task=chosen_task,
                 normal_review_enabled=isinstance(console, ProportionateReviewConsole),
                 audit_signals=audit_signals,
+                bindings=bindings,
+                reviewer_id=str(account.get("account_id") or ""),
             )
         else:
             obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
@@ -2375,17 +2671,58 @@ def _render_review_room(
                 )
             else:
                 conflict_html = _review_conflict_html(conflict, current=obj, draft=draft)
-                objects_html += _render_review_card(
-                    console,
-                    chosen,
-                    obj,
-                    snapshot_objects,
-                    review_path,
-                    draft,
-                    conflict_html,
-                    snapshot_revision,
-                    chosen_task,
+                try:
+                    current_bindings = _review_bindings(console, chosen)
+                except AttributeError:
+                    current_bindings = None
+                route = (
+                    reviewer_route_for(
+                        obj,
+                        review_path=review_path,
+                        reviewer_id=str(account.get("account_id") or ""),
+                        bindings=current_bindings,
+                    )
+                    if current_bindings is not None
+                    else None
                 )
+                if route and route.get("canonical_task") == "second_review":
+                    if route.get("actionable"):
+                        objects_html += _render_second_review_card(
+                            console,
+                            chosen,
+                            obj,
+                            snapshot_objects,
+                            review_path,
+                            reviewer_id=str(account.get("account_id") or ""),
+                            snapshot_revision=snapshot_revision,
+                        )
+                    else:
+                        objects_html += f"""
+                          <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">← Terug naar taken</a></p>
+                          <div class="banner warn">Deze tweede beoordeling moet door een andere onafhankelijke reviewer worden uitgevoerd.</div>
+                        """
+                elif chosen_task == "second_review":
+                    objects_html += _render_second_review_card(
+                        console,
+                        chosen,
+                        obj,
+                        snapshot_objects,
+                        review_path,
+                        reviewer_id=str(account.get("account_id") or ""),
+                        snapshot_revision=snapshot_revision,
+                    )
+                else:
+                    objects_html += _render_review_card(
+                        console,
+                        chosen,
+                        obj,
+                        snapshot_objects,
+                        review_path,
+                        draft,
+                        conflict_html,
+                        snapshot_revision,
+                        chosen_task,
+                    )
     empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
     return _page(
         f"""
@@ -3121,7 +3458,7 @@ def create_console_app(
         account = _require(request)
         chosen = document.strip()
         object_id = object.strip()
-        safe_task = task.strip() if task.strip() in REVIEW_TASKS else ""
+        safe_task = normalize_review_task(task)
         if not chosen or not object_id:
             raise ConsoleError("unknown_object")
         opened = state.open_source_passage(snapshot_id=chosen, object_id=object_id)
@@ -3246,31 +3583,52 @@ def create_console_app(
                     "operations": [{"op": "set", "path": "content.clean_text", "value": proposed_correction.strip()}],
                 },
             )
-        safe_task = return_task if return_task in REVIEW_TASKS else ""
-        if safe_task == "individual":
+        safe_task = normalize_review_task(return_task)
+        if safe_task in {"contextual", "structure", "batch", "second_review"}:
             current = state.snapshot_objects(snapshot_id)
             path = review_path_for_klasse(state._envelope(snapshot_id)["class"])
-            queue = sorted(
-                [
-                    *slow_review_duty(current, review_path=path),
-                    *regular_individual_review_queue(current, review_path=path),
-                ],
-                key=review_priority_rank,
-            )
+            bindings = state.object_review_bindings(snapshot_id)
             nxt = next(
                 (
-                    str(row["object_id"])
-                    for row in queue
-                    if str(row.get("object_id")) != object_id and not _review_is_final(row)
+                    str(row.get("object_id") or "")
+                    for row in current
+                    if str(row.get("object_id") or "") != object_id
+                    and (
+                        route := reviewer_route_for(
+                            row,
+                            review_path=path,
+                            reviewer_id=str(account.get("account_id") or ""),
+                            bindings=bindings,
+                        )
+                    )
+                    and route.get("actionable")
+                    and route.get("canonical_task") == safe_task
                 ),
                 "",
             )
-        elif safe_task:
-            nxt = ""
-        else:
+            if nxt:
+                return RedirectResponse(
+                    _review_location(
+                        state,
+                        snapshot_id,
+                        nxt,
+                        task=safe_task,
+                    ),
+                    status_code=303,
+                )
+            return RedirectResponse(
+                _review_location(state, snapshot_id),
+                status_code=303,
+            )
+        if not safe_task:
             nxt = state.next_review_object_id(snapshot_id, object_id)
+            if nxt:
+                return RedirectResponse(
+                    _review_location(state, snapshot_id, nxt),
+                    status_code=303,
+                )
         return RedirectResponse(
-            _review_location(state, snapshot_id, nxt or None, task=safe_task),
+            _review_location(state, snapshot_id, task=safe_task),
             status_code=303,
         )
 
@@ -3289,8 +3647,16 @@ def create_console_app(
             object_id=object_id,
             expected_revision=snapshot_revision.strip() or None,
         )
-        safe_task = return_task if return_task in REVIEW_TASKS else ""
-        return RedirectResponse(_review_location(state, snapshot_id, object_id, task=safe_task), status_code=303)
+        safe_task = normalize_review_task(return_task)
+        return RedirectResponse(
+            _review_location(
+                state,
+                snapshot_id,
+                object_id,
+                task=safe_task,
+            ),
+            status_code=303,
+        )
 
     @app.post("/review/headings/batch-confirm")
     def review_headings_batch_confirm(
@@ -3316,13 +3682,13 @@ def create_console_app(
                     state,
                     account,
                     html.escape(snapshot_id, quote=True),
-                    task="headings",
+                    task="structure",
                     counts=_counts(account),
                     conflict=True,
                 ),
                 status_code=409,
             )
-        return RedirectResponse(_review_location(state, snapshot_id, task="headings"), status_code=303)
+        return RedirectResponse(_review_location(state, snapshot_id, task="structure"), status_code=303)
 
     @app.post("/review/relations")
     def review_relations_post(
@@ -3357,6 +3723,68 @@ def create_console_app(
             expected_revision=snapshot_revision.strip() or None,
         )
         return RedirectResponse(_review_location(state, snapshot_id, object_id), status_code=303)
+
+    @app.post("/review/second-review")
+    def second_review_post(
+        request: Request,
+        snapshot_id: str = Form(...),
+        object_id: str = Form(...),
+        snapshot_revision: str = Form(""),
+        action: str = Form(...),
+        comment: str = Form(""),
+    ) -> RedirectResponse:
+        account = _require(request)
+        if action == "approve":
+            state.approve_second_review(
+                actor_id=account["account_id"],
+                snapshot_id=snapshot_id,
+                object_id=object_id,
+                expected_revision=snapshot_revision.strip() or None,
+            )
+        elif action == "revise":
+            if not comment.strip():
+                raise ConsoleError("review_comment_required")
+            state.review_object(
+                actor_id=account["account_id"],
+                snapshot_id=snapshot_id,
+                object_id=object_id,
+                decision="revise",
+                comment=comment.strip(),
+                expected_revision=snapshot_revision.strip() or None,
+            )
+        else:
+            raise ConsoleError("invalid_review_decision")
+
+        current = state.snapshot_objects(snapshot_id)
+        review_path = review_path_for_klasse(state._envelope(snapshot_id)["class"])
+        bindings = state.object_review_bindings(snapshot_id)
+        nxt = next(
+            (
+                str(row.get("object_id") or "")
+                for row in current
+                if str(row.get("object_id") or "") != object_id
+                and (
+                    route := reviewer_route_for(
+                        row,
+                        review_path=review_path,
+                        reviewer_id=str(account.get("account_id") or ""),
+                        bindings=bindings,
+                    )
+                )
+                and route.get("actionable")
+                and route.get("canonical_task") == "second_review"
+            ),
+            "",
+        )
+        if nxt:
+            return RedirectResponse(
+                _review_location(state, snapshot_id, nxt, task="second_review"),
+                status_code=303,
+            )
+        return RedirectResponse(
+            _review_location(state, snapshot_id),
+            status_code=303,
+        )
 
     @app.get("/publish", response_class=HTMLResponse)
     def publish_get(request: Request) -> str:

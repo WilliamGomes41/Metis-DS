@@ -13,7 +13,7 @@ def _obj(object_id: str, proposed: str, *, status: str = "needs_review", section
         "proposed_object_type": proposed,
         "content": {"clean_text": f"Passage {object_id}."},
         "structure": {"section_path": [section]},
-        "admission": {"gate_result": "allowed", "section_path": [section]},
+        "metadata": {"admission": {"gate_result": "allowed", "section_path": [section]}},
         "governance": {"validation_status": status},
         "risk": {"level": "normal", "requires_second_review": False},
     }
@@ -31,12 +31,12 @@ def test_default_review_page_is_a_clickable_task_dashboard():
 
     assert "Volgende stap" in html
     assert "Koppen controleren" in html
-    assert "Belangrijke passages beoordelen" in html
-    assert "Vergelijkbare passages samen beoordelen" in html
+    assert "In samenhang beoordelen" in html
+    assert "Vergelijkbare passages beoordelen" in html
     assert "1 te beoordelen · 1 afgerond" in html
-    assert 'href="/review?document=snap-1&amp;task=headings"' in html
-    assert 'href="/review?document=snap-1&amp;task=individual"' in html
-    assert 'href="/review?document=snap-1&amp;task=together"' in html
+    assert 'href="/review?document=snap-1&amp;task=structure"' in html
+    assert 'href="/review?document=snap-1&amp;task=contextual"' in html
+    assert 'href="/review?document=snap-1&amp;task=batch"' in html
     assert "Passage r1." not in html
     assert "Controleoverzicht per kop" not in html
 
@@ -70,7 +70,7 @@ def test_control_information_is_secondary_to_review_tasks():
     assert "Geen technische blokkades" in dashboard
     assert "Open technische controle" in dashboard
     assert "review-control-card-clear" in dashboard
-    assert 'href="/review?document=snap-1&amp;task=control"' in dashboard
+    assert 'href="/review?document=snap-1&amp;task=repair"' in dashboard
     assert "Controleoverzicht per kop" not in dashboard
     assert "Dekking en technische controle" in control
     assert "Controleoverzicht per kop" in control
@@ -160,7 +160,7 @@ def test_review_dashboard_projects_distinct_final_dispositions_and_revision_work
     assert "<strong>1</strong> context" in dashboard
     assert "<strong>1</strong> onderbouwing" in dashboard
     assert "<strong>1</strong> herzien na correctie" in dashboard
-    assert 'task=decisions' in dashboard
+    assert 'task=history' in dashboard
 
     decisions = _render_review_index(
         "snap-1",
@@ -207,7 +207,7 @@ def test_review_dashboard_projects_distinct_final_dispositions_and_revision_work
     assert "Passage pending." not in decisions
     assert "data-review-form" not in decisions
     assert "Bekijk historie" in decisions
-    assert "task=decisions" in decisions
+    assert "task=history" in decisions
 
 
 class _HistoryConsole:

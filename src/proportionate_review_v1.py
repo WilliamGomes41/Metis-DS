@@ -25,10 +25,23 @@ from src.operations_console_v1 import (
     review_lane,
 )
 from src.review_cockpit_v1 import confirmable_proposed_type
+from src.review_duty_v1 import FIRST_REVIEW, LANE_BATCH, review_duty_for
 
 
 NORMAL_RISK_BATCH_TYPES = frozenset({"definition", "explanation"})
 NORMAL_RISK_BATCH_MAX = 20
+
+
+def _review_bindings_or_legacy(
+    console: OperationsConsole,
+    snapshot_id: str,
+) -> list[dict[str, Any]] | None:
+    try:
+        return console.object_review_bindings(snapshot_id)
+    except AttributeError:
+        # Thin deterministic test/compatibility consoles can intentionally
+        # omit the review-binding store. Production consoles expose it.
+        return None
 
 
 def _batch_type(obj: dict[str, Any]) -> str:
@@ -110,21 +123,45 @@ def normal_risk_batch_queue(
     objects: Iterable[dict[str, Any]],
     *,
     review_path: str,
+    bindings: Iterable[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    return sorted(
-        [obj for obj in objects if normal_risk_batch_eligible(obj, review_path=review_path)],
-        key=review_priority_rank,
-    )
+    rows = list(objects)
+    if bindings is None:
+        selected = [
+            obj for obj in rows
+            if normal_risk_batch_eligible(obj, review_path=review_path)
+        ]
+    else:
+        selected = []
+        bound = list(bindings)
+        for obj in rows:
+            duty = review_duty_for(
+                obj,
+                review_path=review_path,
+                bindings=bound,
+            )
+            if (
+                duty
+                and duty.get("stage") == FIRST_REVIEW
+                and duty.get("lane") == LANE_BATCH
+            ):
+                selected.append(obj)
+    return sorted(selected, key=review_priority_rank)
 
 
 def normal_risk_batch_counts(
     objects: Iterable[dict[str, Any]],
     *,
     review_path: str,
+    bindings: Iterable[dict[str, Any]] | None = None,
 ) -> tuple[int, int]:
     """Return pending passage and bounded batch counts for task navigation."""
     groups: dict[tuple[tuple[str, ...], str], int] = defaultdict(int)
-    for obj in normal_risk_batch_queue(objects, review_path=review_path):
+    for obj in normal_risk_batch_queue(
+        objects,
+        review_path=review_path,
+        bindings=bindings,
+    ):
         groups[(_section_key(obj), _batch_type(obj))] += 1
     passages = sum(groups.values())
     batches = sum((count + NORMAL_RISK_BATCH_MAX - 1) // NORMAL_RISK_BATCH_MAX for count in groups.values())
@@ -169,7 +206,12 @@ def render_normal_risk_batch_panel(
     review_path = review_path_for_klasse(envelope["class"])
     objects, revision = snapshot if snapshot is not None else console.snapshot_objects_and_revision(snapshot_id)
     all_objects = objects
-    queue = normal_risk_batch_queue(all_objects, review_path=review_path)
+    bindings = _review_bindings_or_legacy(console, snapshot_id)
+    queue = normal_risk_batch_queue(
+        all_objects,
+        review_path=review_path,
+        bindings=bindings,
+    )
     if not queue:
         return ""
     groups: dict[tuple[tuple[str, ...], str], list[dict[str, Any]]] = defaultdict(list)
@@ -181,7 +223,7 @@ def render_normal_risk_batch_panel(
     selected = set(selected_ids)
     panels: list[str] = [
         '<section class="review-normal-risk" aria-labelledby="normal-risk-title">',
-        '<h2 id="normal-risk-title">Samen beoordelen</h2>',
+        '<h2 id="normal-risk-title">Vergelijkbare passages beoordelen</h2>',
         '<p><span class="info-tip" tabindex="0" aria-label="Deze passages staan in dezelfde sectie en zijn van hetzelfde soort.">ⓘ'
         '<span class="info-tip-text">Deze passages staan in dezelfde sectie en zijn van hetzelfde soort.</span></span> '
         'Deze passages staan in dezelfde sectie en zijn van hetzelfde soort. '
@@ -214,7 +256,7 @@ def render_normal_risk_batch_panel(
                     f'<input type="checkbox" name="object_ids" value="{object_id}"{checked}> '
                     f'<strong>{type_label}</strong> — {text}'
                     '</label>'
-                    f' <a href="/review?document={safe_snapshot}&amp;object={object_id}&amp;task=together">Afzonderlijk beoordelen</a>'
+                    f' <a href="/review?document={safe_snapshot}&amp;object={object_id}&amp;task=batch">Afzonderlijk beoordelen</a>'
                     f' <a href="/review/bronpassage?document={safe_snapshot}&amp;object={object_id}">Bronpassage</a>'
                     '</div>'
                 )
@@ -294,7 +336,16 @@ class ProportionateReviewConsole(OperationsConsole):
             target = current.get(object_id)
             if target is None:
                 raise ConsoleError("unknown_object")
-            if not normal_risk_batch_eligible(target, review_path=review_path):
+            duty = review_duty_for(
+                target,
+                review_path=review_path,
+                bindings=_review_bindings_or_legacy(self, snapshot_id),
+            )
+            if not (
+                duty
+                and duty.get("stage") == FIRST_REVIEW
+                and duty.get("lane") == LANE_BATCH
+            ):
                 raise ConsoleError("normal_risk_batch_ineligible")
             selected.append(target)
         sections = {_section_key(obj) for obj in selected}
@@ -373,28 +424,44 @@ def install_proportionate_review_routes(app: FastAPI, console: ProportionateRevi
                 and (current[object_id].get("governance") or {}).get("validation_status")
                 == "approved"
             ]
+            retryable_ids = {
+                str(row.get("object_id") or "")
+                for row in normal_risk_batch_queue(
+                    current.values(),
+                    review_path=review_path,
+                    bindings=_review_bindings_or_legacy(console, snapshot_id),
+                )
+            }
             retry_selection = [
                 object_id
                 for object_id in raw
-                if object_id in current
-                and normal_risk_batch_eligible(
-                    current[object_id],
-                    review_path=review_path,
-                )
+                if object_id in retryable_ids
             ]
             return HTMLResponse(
                 _render_review_room(
                     console,
                     account,
                     snapshot_id,
-                    task="together",
+                    task="batch",
                     conflict=True,
                     batch_selection=retry_selection,
                     batch_completed=len(completed),
                 ),
                 status_code=409,
             )
-        return RedirectResponse(f"/review?document={snapshot_id}&task=together", status_code=303)
+        envelope = console._envelope(snapshot_id)
+        review_path = review_path_for_klasse(envelope["class"])
+        remaining = normal_risk_batch_queue(
+            console.snapshot_objects(snapshot_id),
+            review_path=review_path,
+            bindings=_review_bindings_or_legacy(console, snapshot_id),
+        )
+        target = (
+            f"/review?document={snapshot_id}&task=batch"
+            if remaining
+            else f"/review?document={snapshot_id}"
+        )
+        return RedirectResponse(target, status_code=303)
 
     app.add_api_route(
         "/review/normal-risk/batch-confirm",

@@ -207,11 +207,11 @@ def test_workboard_review_count_excludes_disposition_and_repair_counts() -> None
     }
     item = _work_item_from_counts(**base)
 
-    assert item["remaining_review_items"] == 8
+    assert item["remaining_review_items"] == 6
     assert item["review_duties"] == 6
     assert item["disposition_duties"] == 2
     assert item["repair_duties"] == 7
-    assert _work_summary(item) == "Nog 8 reviewtaken."
+    assert _work_summary(item) == "6 inhoudelijke beoordelingen open; 6 voor jou uitvoerbaar."
 
 
 def test_closure_only_work_is_not_mislabeled_as_review_duty() -> None:
@@ -240,8 +240,8 @@ def test_closure_only_work_is_not_mislabeled_as_review_duty() -> None:
         batch_review_duties=0,
     )
 
-    assert item["remaining_review_items"] == 1
+    assert item["remaining_review_items"] == 0
     assert item["review_duties"] == 0
     assert item["disposition_duties"] == 1
-    assert item["next_task"] == "closure"
-    assert _work_summary(item) == "Nog 1 reviewtaak."
+    assert item["next_task"] == "disposition"
+    assert _work_summary(item) == "Geen inhoudelijke review open; 1 bronpassage nog afhandelen."

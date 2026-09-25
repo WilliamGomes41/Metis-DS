@@ -41,6 +41,18 @@ def _item() -> dict[str, object]:
         "meaningful_status": "in_review",
         "work_state": "review",
         "remaining_review_items": 69,
+        "review_duties": 69,
+        "first_review_duties": 69,
+        "second_review_duties": 0,
+        "structure_review_duties": 56,
+        "contextual_review_duties": 6,
+        "batch_review_duties": 7,
+        "actionable_review_duties": 69,
+        "waiting_for_reviewer_duties": 0,
+        "actionable_structure_duties": 56,
+        "actionable_contextual_duties": 6,
+        "actionable_batch_duties": 7,
+        "actionable_second_review_duties": 0,
         "heading_pending": 56,
         "individual_pending": 6,
         "normal_passages": 7,
@@ -49,10 +61,10 @@ def _item() -> dict[str, object]:
         "closure_gap_ids": [],
         "closure_gap_count": 0,
         "source_passage_review_complete": False,
-        "next_task": "headings",
+        "next_task": "structure",
         "next_title": "Koppen controleren",
         "next_description": "Controleer de indeling van het document",
-        "next_href": "/review?document=snap-test&task=headings",
+        "next_href": "/review?document=snap-test&task=structure",
     }
 
 
@@ -61,19 +73,19 @@ def test_non_empty_workboard_queues_are_independent_links() -> None:
 
     assert html.count('class="review-work-queue-link"') == 4
     assert (
-        'data-work-queue="headings" href="/review?document=snap-test&amp;task=headings">56 kop/pad</a>'
+        'data-work-queue="structure" href="/review?document=snap-test&amp;task=structure">56 structuur</a>'
         in html
     )
     assert (
-        'data-work-queue="individual" href="/review?document=snap-test&amp;task=individual">6 individueel</a>'
+        'data-work-queue="contextual" href="/review?document=snap-test&amp;task=contextual">6 in samenhang</a>'
         in html
     )
     assert (
-        'data-work-queue="together" href="/review?document=snap-test&amp;task=together">7 samen in 4 groep(en)</a>'
+        'data-work-queue="batch" href="/review?document=snap-test&amp;task=batch">7 vergelijkbaar</a>'
         in html
     )
     assert (
-        'data-work-queue="control" href="/review?document=snap-test&amp;task=control">361 technisch herstel</a>'
+        'data-work-queue="repair" href="/review?document=snap-test&amp;task=repair">361 technisch herstel</a>'
         in html
     )
     assert "Volgende stap" in html
@@ -82,12 +94,12 @@ def test_non_empty_workboard_queues_are_independent_links() -> None:
 
 def test_empty_queue_is_not_rendered_as_a_link() -> None:
     item = _item()
-    item["individual_pending"] = 0
+    item["actionable_contextual_duties"] = 0
 
     html = _workboard_card(item)
 
-    assert 'data-work-queue="individual"' not in html
-    assert "0 individueel" not in html
+    assert 'data-work-queue="contextual"' not in html
+    assert "0 in samenhang" not in html
     assert html.count('class="review-work-queue-link"') == 3
 
 
