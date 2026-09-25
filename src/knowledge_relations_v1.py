@@ -328,6 +328,54 @@ def knowledge_relation_set_hash(
     return hashlib.sha256(_canonical_json(canonical)).hexdigest()
 
 
+def legacy_relation_mirror_matches(
+    new_relations: Any,
+    legacy_relations: Any,
+) -> bool:
+    """Whether legacy rows are an exact compatibility projection of new-format rows.
+
+    Coexistence is allowed only for a temporary staged cutover. New-format
+    relations remain the named authority; the legacy set must contain the same
+    canonical relation type, target object id and exact target object version.
+    A legacy row without target version cannot prove mirror equivalence.
+    """
+
+    if not isinstance(new_relations, list) or not isinstance(legacy_relations, list):
+        return False
+
+    new_keys: list[tuple[str, str, str]] = []
+    for row in new_relations:
+        if not isinstance(row, dict):
+            return False
+        relation_type = str(row.get("relation_type") or "").strip()
+        target_id = str(row.get("target_object_id") or "").strip()
+        target_version = str(row.get("target_object_version") or "").strip()
+        if (
+            relation_type not in CLOSED_RELATION_SET
+            or not target_id
+            or not target_version
+        ):
+            return False
+        new_keys.append((relation_type, target_id, target_version))
+
+    legacy_keys: list[tuple[str, str, str]] = []
+    for row in legacy_relations:
+        if not isinstance(row, dict):
+            return False
+        relation_type = serving_relation_type(row.get("relation_type"))
+        target_id = str(row.get("target_object_id") or "").strip()
+        target_version = str(row.get("target_object_version") or "").strip()
+        if (
+            relation_type not in CLOSED_RELATION_SET
+            or not target_id
+            or not target_version
+        ):
+            return False
+        legacy_keys.append((relation_type, target_id, target_version))
+
+    return sorted(new_keys) == sorted(legacy_keys)
+
+
 def knowledge_relation_errors(obj: dict[str, Any]) -> list[str]:
     """Validate D4.1 object-level authority and version binding."""
 
@@ -344,7 +392,11 @@ def knowledge_relation_errors(obj: dict[str, Any]) -> list[str]:
                 source_object_version=source_version,
             )
         )
-        if obj.get(LEGACY_PROPOSED_FIELD):
+        legacy_proposed = obj.get(LEGACY_PROPOSED_FIELD)
+        if legacy_proposed and not legacy_relation_mirror_matches(
+            obj.get(PROPOSED_FIELD),
+            legacy_proposed,
+        ):
             errors.append("proposed_knowledge_relations_legacy_authority_conflict")
 
     if CONFIRMED_FIELD in obj:
@@ -356,7 +408,11 @@ def knowledge_relation_errors(obj: dict[str, Any]) -> list[str]:
                 source_object_version=source_version,
             )
         )
-        if obj.get(LEGACY_CONFIRMED_FIELD):
+        legacy_confirmed = obj.get(LEGACY_CONFIRMED_FIELD)
+        if legacy_confirmed and not legacy_relation_mirror_matches(
+            obj.get(CONFIRMED_FIELD),
+            legacy_confirmed,
+        ):
             errors.append("confirmed_knowledge_relations_legacy_authority_conflict")
 
     return errors
