@@ -31,6 +31,7 @@ from src.admission_gate_v1 import (
     apply_admission_gate,
     is_admission_blocked,
 )
+from src.candidate_eligibility_v1 import candidate_eligibility_of
 from src.passage_register_v1 import apply_passage_register, apply_register_from_review
 from src.review_cockpit_v1 import (
     SUITABILITY_VALUES,
@@ -429,6 +430,9 @@ def is_slow_review_duty(obj: dict[str, Any], review_path: str | None = None) -> 
         return True
     if stored in duty_types:
         return True
+    eligibility = candidate_eligibility_of(obj)
+    if path != "boom" and eligibility.get("eligible") is False:
+        return False
     if proposed in duty_types:
         return True
     return False
