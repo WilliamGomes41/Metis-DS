@@ -28,6 +28,7 @@ from src.object_taxonomy_v1 import (
     is_strength_stamp,
 )
 from src.operations_console_v1 import ConsoleError
+from src.recommendation_semantics_v1 import source_literal_strength
 from src.passage_formation_policy_v1 import (
     DETERMINISTIC_MODE,
     SEMANTIC_MODE,
@@ -297,7 +298,11 @@ def _candidate_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]
     out: list[dict[str, Any]] = []
     for fragment in _content_fragments(fragments):
         text = str(fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
-        if is_strength_stamp(text) or is_kennisplatform_chrome_text(text):
+        if (
+            is_strength_stamp(text)
+            or source_literal_strength(text) is not None
+            or is_kennisplatform_chrome_text(text)
+        ):
             continue
         out.append(fragment)
     return out
