@@ -1,6 +1,7 @@
 """D2b2-C: source passages are not automatically KnowledgeCandidates.
 
 # release-control-evidence: scope/belofte
+# release-control-evidence: opslag concurrent stale
 # release-control-evidence: kwaliteit
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
