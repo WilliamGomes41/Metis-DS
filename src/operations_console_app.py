@@ -2589,7 +2589,7 @@ def _render_review_room(
                 )
             try:
                 bindings = console.object_review_bindings(chosen)
-            except (AttributeError, ConsoleError):
+            except AttributeError:
                 bindings = None
             objects_html += _render_review_index(
                 chosen,
