@@ -45,6 +45,7 @@ from src.semantic_passage_v1 import (
     SELECTION_ORIGIN_PROPOSAL,
     SEMANTIC_PASSAGE_VERSION,
     SemanticPassageError,
+    semantic_coverage_units,
     semantic_source_blocks,
     semantic_units_from_proposal,
 )
@@ -556,6 +557,12 @@ def _semantic_execution_before_review(
             )
     elif not blocks and not safe_key:
         raise ConsoleError("pre_review_llm_api_key_required")
+
+    if not blocks and content_fragments:
+        content_units = semantic_coverage_units(
+            content_fragments,
+            document_id=document_id,
+        )
 
     if proposal is not None:
         source_blocks_hash = _stable_json_hash(semantic_input)
