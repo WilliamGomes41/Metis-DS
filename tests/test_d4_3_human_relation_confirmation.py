@@ -290,6 +290,36 @@ def test_empty_selection_is_valid_only_with_explicit_relation_acknowledgement(tm
     assert live["confirmed_relations"] == []
 
 
+def test_stale_source_snapshot_revision_rejects_relation_confirmation(tmp_path: Path) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    snapshot_id = _ingest(console, accounts)["snapshot_id"]
+    rec, proposals = _plant_proposals(console, snapshot_id, include_explanation=False)
+    stale_revision = console.objects_revision(snapshot_id)
+
+    rows = console._load_objects(snapshot_id)
+    document = next(row for row in rows if row.get("object_type") == "document")
+    document.setdefault("metadata", {})["d43_concurrent_touch"] = True
+    stamp_canonical_hashes(document)
+    console._save_objects(snapshot_id, rows)
+
+    with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
+        console.review_object(
+            actor_id=accounts["reviewer"]["account_id"],
+            snapshot_id=snapshot_id,
+            object_id=rec["object_id"],
+            decision="approve",
+            confirmed_object_type="recommendation",
+            relation_choices=[relation_choice_value(proposals[0])],
+            relation_review_ack=True,
+            expected_revision=stale_revision,
+        )
+
+    live = _rows(console, snapshot_id)[REC]
+    assert live.get(CONFIRMED_FIELD) in (None, [])
+    assert PROPOSED_FIELD in live
+
+
 def test_target_version_change_rejects_entire_confirmation_without_partial_write(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
