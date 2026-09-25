@@ -98,7 +98,7 @@ def _lifecycle_for_work_item(
         return cached
     try:
         return dict(console.document_lifecycle_status(snapshot_id))  # type: ignore[attr-defined]
-    except (AttributeError, ConsoleError):
+    except AttributeError:
         return _fallback_lifecycle_status()
 
 
@@ -307,7 +307,7 @@ def review_work_item(
     else:
         try:
             bindings = console.object_review_bindings(snapshot_id)
-        except (AttributeError, ConsoleError):
+        except AttributeError:
             bindings = None
 
     duty_counts = review_duty_counts(
