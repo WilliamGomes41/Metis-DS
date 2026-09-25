@@ -3167,7 +3167,8 @@ def create_console_app(
                 </section>
                 """,
                 title="API-key uitgegeven — Metis",
-            )
+            ),
+            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
         )
 
     @app.get("/settings/llm", response_class=HTMLResponse)
