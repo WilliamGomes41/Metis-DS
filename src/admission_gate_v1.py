@@ -21,6 +21,10 @@ from src.object_taxonomy_v1 import (
     review_priority_rank,
     section_role_for_path,
 )
+from src.recommendation_semantics_v1 import (
+    proposed_recommendation_semantics_of,
+    validate_recommendation_semantics,
+)
 
 
 GATE_ALLOWED = "allowed"
@@ -501,6 +505,55 @@ def _has_sentence_continuation(row: dict[str, Any]) -> bool:
     )
 
 
+def _recommendation_semantics_codes(
+    row: dict[str, Any],
+    proposed: str,
+) -> list[str]:
+    """Validate D3.2 semantic proposal evidence without changing Admission authority."""
+
+    if (
+        proposed != "recommendation"
+        or str(row.get("semantic_selection_origin") or "") != "proposal_selected"
+    ):
+        return []
+
+    semantics = row.get("proposed_recommendation_semantics")
+    if not isinstance(semantics, dict) or not semantics:
+        return [
+            "recommendation_direction_missing",
+            "recommendation_semantics_invalid",
+        ]
+
+    codes: list[str] = []
+    if validate_recommendation_semantics(semantics, confirmed=False):
+        codes.append("recommendation_semantics_invalid")
+    if str(semantics.get("direction") or "").strip() not in {"for", "against"}:
+        codes.append("recommendation_direction_missing")
+    if not str(semantics.get("direction_evidence_span") or "").strip():
+        codes.append("recommendation_direction_evidence_missing")
+
+    status = str(semantics.get("strength_status") or "").strip()
+    if status == "explicit" and not str(
+        semantics.get("strength_evidence_span") or ""
+    ).strip():
+        codes.append("recommendation_strength_evidence_missing")
+    if status == "unmapped":
+        codes.append("recommendation_strength_unmapped")
+
+    evidence_meta = row.get("recommendation_semantics_evidence")
+    if not isinstance(evidence_meta, dict):
+        codes.append("recommendation_semantics_invalid")
+        return codes
+    if not isinstance(evidence_meta.get("direction"), dict):
+        codes.append("recommendation_direction_evidence_missing")
+    if status in {"explicit", "unmapped"} and not isinstance(
+        evidence_meta.get("strength"),
+        dict,
+    ):
+        codes.append("recommendation_strength_evidence_missing")
+    return codes
+
+
 def admit_candidate(
     candidate: dict[str, Any],
     *,
@@ -581,6 +634,8 @@ def admit_candidate(
         not _has_recommendation_evidence(source) or not _present(row.get("recommendation_evidence_span"))
     ):
         codes.append("recommendation_evidence_missing")
+
+    codes.extend(_recommendation_semantics_codes(row, proposed))
     if _has_impliciet_filler(row):
         codes.append("source_fidelity_failure")
     if _EXCEPTION_RE.search(source) and not _EXCEPTION_RE.search(text):
@@ -745,6 +800,17 @@ def candidate_from_object(
         "next_paragraph": next_paragraph,
         "current_heading": current_heading,
         "ancestor_headings": ancestor_headings,
+        "proposed_recommendation_semantics": proposed_recommendation_semantics_of(obj),
+        "recommendation_semantics_evidence": (
+            ((obj.get("metadata") or {}).get("recommendation_semantics_evidence") or {})
+            if isinstance(obj.get("metadata"), dict)
+            else {}
+        ),
+        "semantic_selection_origin": (
+            ((obj.get("metadata") or {}).get("semantic_passage") or {}).get("selection_origin")
+            if isinstance((obj.get("metadata") or {}).get("semantic_passage"), dict)
+            else ""
+        ),
     }
     if proposed == "condition":
         fields["condition_span"] = text

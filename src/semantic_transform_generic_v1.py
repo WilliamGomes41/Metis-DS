@@ -102,13 +102,15 @@ def _system_candidate_metadata(item: dict[str, Any]) -> dict[str, Any]:
     """Persist only closed system-generated F1 evidence from the semantic spec."""
 
     source = item.get("metadata")
-    if not isinstance(source, dict):
-        return {}
+    source = source if isinstance(source, dict) else {}
     out: dict[str, Any] = {}
     for key in ("passage_formation", "source_occurrence_authority"):
         value = source.get(key)
         if isinstance(value, dict):
             out[key] = deepcopy(value)
+    semantics_evidence = item.get("recommendation_semantics_evidence")
+    if isinstance(semantics_evidence, dict):
+        out["recommendation_semantics_evidence"] = deepcopy(semantics_evidence)
     return out
 
 
@@ -217,6 +219,11 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
                 if item.get("confirmed_recommendation_strength")
                 else {}
             ),
+            **(
+                {"proposed_recommendation_semantics": deepcopy(item["proposed_recommendation_semantics"])}
+                if isinstance(item.get("proposed_recommendation_semantics"), dict)
+                else {}
+            ),
             "source": _source(manifest, page),
             "structure": {
                 "section_path": item.get("section_path", []),
@@ -282,7 +289,7 @@ def main() -> int:
     ap.add_argument("--spec", type=Path, required=True)
     ap.add_argument("--manifest", type=Path, required=True)
     ap.add_argument("--raw", type=Path, required=True)
-    ap.add_argument("--schema", type=Path, default=Path("schemas/knowledge_object.schema.v1.2.json"))
+    ap.add_argument("--schema", type=Path, default=Path("schemas/knowledge_object.schema.v1.3.json"))
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--report", type=Path, required=True)
     a=ap.parse_args()

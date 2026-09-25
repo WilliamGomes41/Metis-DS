@@ -8,6 +8,7 @@ recommendations.
 from __future__ import annotations
 
 from typing import Any
+import re
 
 
 RECOMMENDATION_SEMANTICS_VERSION = "recommendation-semantics-v1"
@@ -15,6 +16,17 @@ DIRECTIONS = ("for", "against")
 STRENGTHS = ("strong", "weak")
 STRENGTH_STATUSES = ("explicit", "not_stated", "unmapped")
 NORMALIZATION_SCHEMES = ("source_literal_v1",)
+
+SOURCE_LITERAL_STRONG_RE = re.compile(
+    r"\bsterk(?:e)?\s*(?:\([^)]*\)\s*)?(?:aanbeveling|advies)\b|"
+    r"\b(?:aanbeveling|advies)\s*[:\-]\s*sterk\b",
+    re.I,
+)
+SOURCE_LITERAL_WEAK_RE = re.compile(
+    r"\bzwak(?:ke)?\s*(?:\([^)]*\)\s*)?(?:aanbeveling|advies)\b|"
+    r"\b(?:aanbeveling|advies)\s*[:\-]\s*zwak\b",
+    re.I,
+)
 
 PROPOSED_FIELD = "proposed_recommendation_semantics"
 CONFIRMED_FIELD = "confirmed_recommendation_semantics"
@@ -153,6 +165,24 @@ def confirmed_recommendation_semantics_of(obj: dict[str, Any]) -> dict[str, Any]
 
     value = obj.get(CONFIRMED_FIELD)
     return dict(value) if isinstance(value, dict) else {}
+
+
+def source_literal_strength(text: str) -> str | None:
+    """Return the one explicit source-literal strength cue, if unambiguous.
+
+    D3.2 deliberately does not treat conditional/voorwaardelijk as weak.
+    """
+
+    blob = str(text or "")
+    strong = bool(SOURCE_LITERAL_STRONG_RE.search(blob))
+    weak = bool(SOURCE_LITERAL_WEAK_RE.search(blob))
+    if strong == weak:
+        return None
+    return "strong" if strong else "weak"
+
+
+def has_source_literal_strength(text: str) -> bool:
+    return source_literal_strength(text) is not None
 
 
 def legacy_recommendation_semantics_view(
