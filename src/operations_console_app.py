@@ -1728,12 +1728,12 @@ def _review_decision_row(
     source_href = (
         f"/review/bronpassage?document={quote(snapshot_id, safe='')}"
         f"&amp;object={quote(object_id, safe='')}"
-        "&amp;task=decisions"
+        "&amp;task=history"
     )
     history_href = (
         f"/review?document={quote(snapshot_id, safe='')}"
         f"&amp;object={quote(object_id, safe='')}"
-        "&amp;task=decisions"
+        "&amp;task=history"
     )
     return f"""
       <li class="review-row review-decision-row">
@@ -2235,7 +2235,7 @@ def _render_review_index(
           <details class="review-blocked-audit" aria-label="Technisch herstel nodig">
             <summary>Technisch herstel nodig ({len(blocked)}) — bekijk passages</summary>
             <p class="lead">Dit is geen inhoudelijke reviewtaak. Laat Metis eerst veilige broncontext aanvullen. Als automatisch herstel niet verantwoord is, blijft de passage geblokkeerd voor technisch herstel.</p>
-            <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, reason="Technische controle heeft deze passage geblokkeerd; inhoudelijk goedkeuren is pas mogelijk na herstel.", task="control") for obj in blocked)}</ol>
+            <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, reason="Technische controle heeft deze passage geblokkeerd; inhoudelijk goedkeuren is pas mogelijk na herstel.", task="repair") for obj in blocked)}</ol>
           </details>
                     """
     copy = _review_lane_copy(review_path, koppen)
