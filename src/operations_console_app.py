@@ -3544,13 +3544,13 @@ def create_console_app(
                     state,
                     account,
                     html.escape(snapshot_id, quote=True),
-                    task="headings",
+                    task="structure",
                     counts=_counts(account),
                     conflict=True,
                 ),
                 status_code=409,
             )
-        return RedirectResponse(_review_location(state, snapshot_id, task="headings"), status_code=303)
+        return RedirectResponse(_review_location(state, snapshot_id, task="structure"), status_code=303)
 
     @app.post("/review/relations")
     def review_relations_post(
