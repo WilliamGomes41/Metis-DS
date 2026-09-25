@@ -48,6 +48,7 @@ from src.knowledge_relation_review_v1 import (
     has_semantic_relation_review,
     relation_choice_value,
 )
+from src.review_duty_v1 import reviewer_route_for
 from src.review_context_v1 import (
     AUTHORITY_CONFIRMED,
     DIRECTION_INCOMING,
@@ -115,7 +116,32 @@ FILENAME_HINT = (
     "De titel hieronder mag wél spaties bevatten."
 )
 BRAND_DIR = REPO_ROOT / "assets" / "brand"
-REVIEW_TASKS = frozenset({"individual", "together", "headings", "control", "decisions"})
+CANONICAL_REVIEW_TASKS = frozenset({
+    "structure",
+    "contextual",
+    "batch",
+    "second_review",
+    "repair",
+    "history",
+    "disposition",
+})
+LEGACY_REVIEW_TASK_ALIASES = {
+    "headings": "structure",
+    "individual": "contextual",
+    "together": "batch",
+    "control": "repair",
+    "decisions": "history",
+    "closure": "disposition",
+}
+REVIEW_TASKS = frozenset({
+    *CANONICAL_REVIEW_TASKS,
+    *LEGACY_REVIEW_TASK_ALIASES,
+})
+
+
+def normalize_review_task(value: str) -> str:
+    task = str(value or "").strip()
+    return LEGACY_REVIEW_TASK_ALIASES.get(task, task if task in CANONICAL_REVIEW_TASKS else "")
 
 
 def _passage_formation_status_html(state: OperationsConsole) -> str:
@@ -663,7 +689,8 @@ def _review_context_block(
         return ""
 
     snap = quote(str(snapshot_id), safe="")
-    task_query = f"&task={quote(task, safe='')}" if task in REVIEW_TASKS else ""
+    normalized_task = normalize_review_task(task)
+    task_query = f"&task={quote(normalized_task, safe='')}" if normalized_task else ""
     rows: list[str] = []
     for link in links:
         outgoing = link.get("direction") == DIRECTION_OUTGOING
