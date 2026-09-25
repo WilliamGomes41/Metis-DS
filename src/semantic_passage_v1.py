@@ -286,12 +286,18 @@ def _recommendation_semantics_from_proposal(
     elif status == "not_stated":
         if strength is not None or raw_semantics.get("strength_evidence") is not None:
             _fail("recommendation_strength_not_stated_invalid")
+        related_evidence_text = [
+            str(public.get("text") or "")
+            for public, _source in evidence_by_id.values()
+            if _paths_related(
+                candidate_section_path,
+                list(public.get("section_path") or []),
+            )
+        ]
         context_for_strength = " ".join(
-            [
-                str(row.get("text") or "")
-                for row in selected
-            ]
+            [str(row.get("text") or "") for row in selected]
             + list(candidate_section_path)
+            + related_evidence_text
         )
         if source_literal_strength(context_for_strength) is not None:
             _fail("recommendation_strength_not_stated_conflict")
