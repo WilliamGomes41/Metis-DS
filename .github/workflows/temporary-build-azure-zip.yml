@@ -1,0 +1,73 @@
+name: temporary-build-azure-zip
+
+on:
+  push:
+    branches:
+      - artifact-build-2ec78834
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 2ec78834c44209acd34c43325b04beede87bf807
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify exact main SHA
+        run: test "$(git rev-parse HEAD)" = "2ec78834c44209acd34c43325b04beede87bf807"
+      - name: Build deploy ZIP
+        run: bash scripts/create_azure_deploy_package.sh "$RUNNER_TEMP/metis-console-2ec78834-azure.zip"
+      - name: Verify Azure package contract and D2a.2
+        run: |
+          python - <<'PY'
+          import zipfile
+          p = '/home/runner/work/_temp/metis-console-2ec78834-azure.zip'
+          with zipfile.ZipFile(p) as z:
+              names = set(z.namelist())
+              native = sorted(n for n in names if n.endswith('.so'))
+              bad_313 = [n for n in native if 'cpython-313-' in n]
+              wrong_cp = [n for n in native if 'cpython-' in n and 'cpython-312-' not in n]
+              crypto = sorted(n for n in names if n.startswith('.python_packages/cryptography-') and '.dist-info/' in n)
+              marker = z.read('config/deployed_commit.txt').decode().strip()
+              required = [
+                  '.python_packages/azure/identity/__init__.py',
+                  '.python_packages/azure/core/__init__.py',
+                  '.python_packages/azure/storage/blob/__init__.py',
+                  'src/processing_diagnostics_v1.py',
+                  'src/operations_console_app.py',
+              ]
+              missing = [n for n in required if n not in names]
+              app = z.read('src/operations_console_app.py').decode('utf-8')
+              diag = z.read('src/processing_diagnostics_v1.py').decode('utf-8')
+              assert marker == '2ec78834c44209acd34c43325b04beede87bf807', marker
+              assert not bad_313, bad_313
+              assert not wrong_cp, wrong_cp
+              assert not missing, missing
+              assert any(n.startswith('.python_packages/cryptography-44.0.3.dist-info/') for n in crypto), crypto
+              assert not any(n.startswith('.python_packages/cryptography-50.') for n in crypto), crypto
+              assert '/review/processing-diagnostics-detail' in app
+              assert 'processing_diagnostic_rows' in app
+              assert 'def processing_diagnostic_rows' in diag
+              print('native_extensions', len(native))
+              print('azure_namespace_ok', True)
+              print('cryptography_pin_ok', True)
+              print('d2a2_endpoint_ok', True)
+              print('deployed_commit', marker)
+          PY
+      - name: Test ZIP integrity
+        run: unzip -t "$RUNNER_TEMP/metis-console-2ec78834-azure.zip" >/dev/null
+      - name: Show checksum
+        run: sha256sum "$RUNNER_TEMP/metis-console-2ec78834-azure.zip"
+      - name: Upload deploy ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: metis-console-2ec78834-azure
+          path: ${{ runner.temp }}/metis-console-2ec78834-azure.zip
+          if-no-files-found: error
+          retention-days: 1
