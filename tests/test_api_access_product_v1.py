@@ -147,3 +147,58 @@ def test_postgres_access_mode_fails_closed_when_store_is_unavailable(tmp_path):
     )
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "access_store_unavailable"
+
+
+def test_entitlement_covers_context_embedded_in_derived_retrieval_text():
+    principal = _principal(
+        tenant="tenant-a",
+        app="app-a",
+        credential="credential-a",
+        docs=(DOC,),
+        scopes=("retrieve",),
+    )
+    record = {
+        "metadata": {
+            "document_id": DOC,
+            "topic": [],
+            "context_relations": [
+                {
+                    "object_id": "context-from-other-document",
+                    "document_id": "not-entitled-document",
+                    "relation_type": "applies_if",
+                    "text": "restricted context",
+                }
+            ],
+        }
+    }
+    from src.product_api_v1 import ProductState
+
+    assert ProductState._record_is_entitled(principal, record) is False
+
+
+def test_postgres_mode_does_not_read_or_fallback_to_legacy_registry(tmp_path):
+    store = MutableAccessStore()
+    store.principals[KEY_A] = _principal(
+        tenant="tenant-a",
+        app="app-a",
+        credential="credential-a",
+        docs=(DOC,),
+        scopes=("documents:read",),
+    )
+    p = _paths(tmp_path)
+    p.tenant_config.write_text("{ definitely-not-valid-json", encoding="utf-8")
+    app = create_product_app(
+        "fixture",
+        paths=p,
+        api_access_store=store,
+        api_access_mode="postgres",
+        usage_ledger=UsageLedger(p.usage_db),
+        allow_fixture=True,
+    )
+    client = TestClient(app)
+    response = client.get(
+        "/v1/documents",
+        headers={"Authorization": f"Bearer {KEY_A}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["tenant_id"] == "tenant-a"
