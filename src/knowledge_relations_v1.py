@@ -331,6 +331,8 @@ def knowledge_relation_set_hash(
 def legacy_relation_mirror_matches(
     new_relations: Any,
     legacy_relations: Any,
+    *,
+    confirmed: bool,
 ) -> bool:
     """Whether legacy rows are an exact compatibility projection of new-format rows.
 
@@ -365,10 +367,15 @@ def legacy_relation_mirror_matches(
         relation_type = serving_relation_type(row.get("relation_type"))
         target_id = str(row.get("target_object_id") or "").strip()
         target_version = str(row.get("target_object_version") or "").strip()
+        if confirmed:
+            confirmation_matches = row.get("confirmed") is True
+        else:
+            confirmation_matches = row.get("confirmed") is not True
         if (
             relation_type not in CLOSED_RELATION_SET
             or not target_id
             or not target_version
+            or not confirmation_matches
         ):
             return False
         legacy_keys.append((relation_type, target_id, target_version))
@@ -396,6 +403,7 @@ def knowledge_relation_errors(obj: dict[str, Any]) -> list[str]:
         if legacy_proposed and not legacy_relation_mirror_matches(
             obj.get(PROPOSED_FIELD),
             legacy_proposed,
+            confirmed=False,
         ):
             errors.append("proposed_knowledge_relations_legacy_authority_conflict")
 
@@ -412,6 +420,7 @@ def knowledge_relation_errors(obj: dict[str, Any]) -> list[str]:
         if legacy_confirmed and not legacy_relation_mirror_matches(
             obj.get(CONFIRMED_FIELD),
             legacy_confirmed,
+            confirmed=True,
         ):
             errors.append("confirmed_knowledge_relations_legacy_authority_conflict")
 
