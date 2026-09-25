@@ -93,7 +93,7 @@ def review_stage(
     obj: dict[str, Any],
     *,
     review_path: str,
-    bindings: Iterable[dict[str, Any]] = (),
+    bindings: Iterable[dict[str, Any]] | None = None,
 ) -> str | None:
     """Return the open review stage from current tuple approvals.
 
@@ -107,6 +107,24 @@ def review_stage(
     if _terminal_without_open_review(obj):
         return None
     if review_path != "boom" and admission_of(obj).get("gate_result") == GATE_BLOCKED:
+        return None
+
+    if bindings is None:
+        governance = obj.get("governance")
+        status = (
+            str(governance.get("validation_status") or "")
+            if isinstance(governance, dict)
+            else ""
+        )
+        if status not in {"approved"}:
+            return FIRST_REVIEW
+        second = governance.get("second_review") if isinstance(governance, dict) else {}
+        if (
+            isinstance(second, dict)
+            and bool(second.get("required"))
+            and str(second.get("status") or "") == "pending"
+        ):
+            return SECOND_REVIEW
         return None
 
     approvers = exact_current_approver_ids(obj, bindings)
@@ -143,7 +161,7 @@ def first_review_open(
     obj: dict[str, Any],
     *,
     review_path: str,
-    bindings: Iterable[dict[str, Any]] = (),
+    bindings: Iterable[dict[str, Any]] | None = None,
 ) -> bool:
     return review_stage(
         obj,
@@ -206,7 +224,7 @@ def review_duty_for(
     obj: dict[str, Any],
     *,
     review_path: str,
-    bindings: Iterable[dict[str, Any]] = (),
+    bindings: Iterable[dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     """Project the one currently open human review duty for this object.
 
@@ -243,7 +261,7 @@ def review_duties(
     objects: Iterable[dict[str, Any]],
     *,
     review_path: str,
-    bindings: Iterable[dict[str, Any]] = (),
+    bindings: Iterable[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
@@ -271,7 +289,7 @@ def review_duty_counts(
     objects: Iterable[dict[str, Any]],
     *,
     review_path: str,
-    bindings: Iterable[dict[str, Any]] = (),
+    bindings: Iterable[dict[str, Any]] | None = None,
 ) -> dict[str, int]:
     duties = review_duties(
         objects,
