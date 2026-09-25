@@ -157,6 +157,7 @@ def test_source_literal_normalization_never_maps_conditional_alone_to_weak() -> 
     assert source_literal_strength("Zwakke (conditionele) aanbeveling") == "weak"
     assert source_literal_strength("Conditionele aanbeveling") is None
     assert source_literal_strength("Voorwaardelijke aanbeveling") is None
+    assert source_literal_strength("De cliënt heeft een sterke voorkeur.") is None
 
 
 @pytest.mark.parametrize(
@@ -321,6 +322,36 @@ def test_not_stated_strength_is_valid_without_strength_evidence() -> None:
     assert semantics["strength_status"] == "not_stated"
     assert semantics["strength_evidence_span"] is None
     assert semantics["source_label"] is None
+
+
+def test_not_stated_conflicts_with_literal_strength_in_related_heading_context() -> None:
+    path = ["Behandeling", "Zwakke aanbeveling"]
+    heading = _fragment(
+        "h",
+        "Zwakke aanbeveling",
+        object_type="heading",
+        section_path=path,
+    )
+    candidate = _fragment(
+        "p",
+        "De werkgroep adviseert de verpleegkundige de interventie te gebruiken.",
+        section_path=path,
+    )
+    block = semantic_source_blocks([candidate])[0]
+    proposal = _proposal(
+        block,
+        strength=None,
+        status="not_stated",
+        strength_block=None,
+    )
+
+    with pytest.raises(SemanticPassageError, match="recommendation_strength_not_stated_conflict"):
+        semantic_units_from_proposal(
+            [candidate],
+            evidence_fragments=[heading, candidate],
+            document_id="doc-d32",
+            proposal=proposal,
+        )
 
 
 def test_not_stated_conflicts_with_literal_strength_in_candidate_context() -> None:
