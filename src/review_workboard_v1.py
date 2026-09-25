@@ -37,6 +37,8 @@ from src.proportionate_review_v1 import (
 )
 from src.publication_readiness_v1 import source_passage_closure
 from src.review_duty_v1 import review_duty_counts, reviewer_route_counts
+from src.review_interaction_v1 import review_burden_projection
+from src.review_ledger import read_events
 
 
 _TASK_COPY = {
@@ -714,6 +716,20 @@ def _projected_document_dashboard(
     heading = console_ui._document_card_heading(
         {**envelope, "status": envelope.get("state") or ""}
     )
+    ledger_path = getattr(console, "_ledger_path", None)
+    burden = review_burden_projection(
+        read_events(ledger_path) if ledger_path is not None else [],
+        snapshot_id=snapshot_id,
+    )
+    burden_html = (
+        '<section class="review-burden" aria-labelledby="review-burden-title">'
+        '<h3 id="review-burden-title">Reviewinteracties</h3>'
+        f'<p><b>{int(burden["review_interactions"])}</b> gemeten menselijke interacties voor '
+        f'<b>{int(burden["object_decisions"])}</b> objectbesluiten.</p>'
+        f'<p class="muted">Historische besluiten zonder D5.4-interactiebewijs: '
+        f'{int(burden["legacy_unmeasured_decisions"])}.</p>'
+        '</section>'
+    )
     return _page(
         f"""
         {_nav(account, "review", counts)}
@@ -723,6 +739,7 @@ def _projected_document_dashboard(
           {picker}
           <div class="doc-card">{heading}</div>
           {dashboard}
+          {burden_html}
         </section>
         """
     )
@@ -792,12 +809,14 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         snapshot_id: str = Form(...),
         object_ids: list[str] = Form(default=[]),
         snapshot_revision: str = Form(""),
+        interaction_id: str = Form(""),
     ) -> Any:
         response = original_headings_batch_confirm(
             request=request,
             snapshot_id=snapshot_id,
             object_ids=object_ids,
             snapshot_revision=snapshot_revision,
+            interaction_id=interaction_id,
         )
         if isinstance(response, RedirectResponse) and response.status_code == 303:
             envelope = console._envelope(snapshot_id)

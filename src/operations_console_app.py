@@ -49,6 +49,10 @@ from src.knowledge_relation_review_v1 import (
     relation_choice_value,
 )
 from src.review_duty_v1 import review_duty_for, review_duty_lane, reviewer_route_for
+from src.review_interaction_v1 import (
+    build_review_interaction_evidence,
+    new_review_interaction_id,
+)
 from src.review_context_v1 import (
     AUTHORITY_CONFIRMED,
     DIRECTION_INCOMING,
@@ -2191,6 +2195,7 @@ def _render_second_review_card(
         <form method="post" action="/review/second-review" class="review-decision-form">
           <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
           <input type="hidden" name="object_id" value="{_esc(obj.get("object_id") or "")}">
+          <input type="hidden" name="interaction_id" value="{_esc(new_review_interaction_id())}">
           {_snapshot_revision_input(snapshot_revision)}
           <section class="review-step">
             <h4>Tweede beoordeling</h4>
@@ -2337,6 +2342,7 @@ def _render_review_index(
           <section class="review-lane-fast">
             <form method="post" action="/review/headings/batch-confirm">
               <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
+              <input type="hidden" name="interaction_id" value="{_esc(new_review_interaction_id())}">
               {_snapshot_revision_input(snapshot_revision)}
               <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, checkbox=True, task="structure") for obj in koppen)}</ol>
               <button class="btn-primary" type="submit">{copy["fast_button"]}</button>
@@ -2469,6 +2475,7 @@ def _render_review_card(
                     <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
                     <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
                     <input type="hidden" name="return_task" value="{_esc(task if task in REVIEW_TASKS else '')}">
+                    <input type="hidden" name="interaction_id" value="{_esc(new_review_interaction_id())}">
                     {_snapshot_revision_input(snapshot_revision)}
                     <input type="hidden" name="proposed_object_type" value="{_esc(confirmable)}">
                     <input type="hidden" name="found_under" value="{_esc(path_text)}">
@@ -3499,6 +3506,7 @@ def create_console_app(
         proposed_object_type: str = Form(""),
         snapshot_revision: str = Form(""),
         return_task: str = Form(""),
+        interaction_id: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
         mapped = map_eindoordeel(eindoordeel, decision)
@@ -3512,6 +3520,34 @@ def create_console_app(
             raise ConsoleError("suitability_required")
         if type_action == "dit_klopt" and not confirmed_object_type.strip():
             confirmed_object_type = proposed_object_type
+        current_rows = state.snapshot_objects(snapshot_id)
+        focal = next(
+            (row for row in current_rows if row.get("object_id") == object_id),
+            None,
+        )
+        if focal is None:
+            raise ConsoleError("unknown_object")
+        review_path = review_path_for_klasse(state._envelope(snapshot_id)["class"])
+        bindings = state.object_review_bindings(snapshot_id)
+        duty = review_duty_for(
+            focal,
+            review_path=review_path,
+            bindings=bindings,
+        )
+        evidence = (
+            build_review_interaction_evidence(
+                interaction_id=interaction_id,
+                interaction_kind="contextual",
+                reviewer_account_id=str(account["account_id"]),
+                snapshot_id=snapshot_id,
+                review_stage=str((duty or {}).get("stage") or "first_review"),
+                focal=focal,
+                objects=current_rows,
+                review_path=review_path,
+            )
+            if interaction_id.strip() and mapped != "later"
+            else None
+        )
         try:
             state.review_object(
                 actor_id=account["account_id"],
@@ -3537,6 +3573,7 @@ def create_console_app(
                 parent_choice=parent_choice.strip() or None,
                 type_action=type_action.strip() or None,
                 expected_revision=snapshot_revision.strip() or None,
+                interaction_evidence=evidence,
             )
         except ConsoleError as exc:
             if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT:
@@ -3664,15 +3701,35 @@ def create_console_app(
         snapshot_id: str = Form(...),
         object_ids: list[str] = Form(default=[]),
         snapshot_revision: str = Form(""),
+        interaction_id: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
         raw = [object_ids] if isinstance(object_ids, str) else list(object_ids or [])
         try:
+            current_rows = state.snapshot_objects(snapshot_id)
+            by_id = {
+                str(row.get("object_id") or ""): row
+                for row in current_rows
+            }
+            members = [by_id[oid] for oid in raw if oid in by_id]
+            evidence = (
+                build_review_interaction_evidence(
+                    interaction_id=interaction_id,
+                    interaction_kind="structure",
+                    reviewer_account_id=str(account["account_id"]),
+                    snapshot_id=snapshot_id,
+                    review_stage="first_review",
+                    members=members,
+                )
+                if interaction_id.strip()
+                else None
+            )
             state.batch_confirm_headings(
                 actor_id=account["account_id"],
                 snapshot_id=snapshot_id,
                 object_ids=raw,
                 expected_revision=snapshot_revision.strip() or None,
+                interaction_evidence=evidence,
             )
         except ConsoleError as exc:
             if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT:
@@ -3732,14 +3789,38 @@ def create_console_app(
         snapshot_revision: str = Form(""),
         action: str = Form(...),
         comment: str = Form(""),
+        interaction_id: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
+        current_rows = state.snapshot_objects(snapshot_id)
+        focal = next(
+            (row for row in current_rows if row.get("object_id") == object_id),
+            None,
+        )
+        if focal is None:
+            raise ConsoleError("unknown_object")
+        review_path = review_path_for_klasse(state._envelope(snapshot_id)["class"])
+        evidence = (
+            build_review_interaction_evidence(
+                interaction_id=interaction_id,
+                interaction_kind="second_review",
+                reviewer_account_id=str(account["account_id"]),
+                snapshot_id=snapshot_id,
+                review_stage="second_review",
+                focal=focal,
+                objects=current_rows,
+                review_path=review_path,
+            )
+            if interaction_id.strip()
+            else None
+        )
         if action == "approve":
             state.approve_second_review(
                 actor_id=account["account_id"],
                 snapshot_id=snapshot_id,
                 object_id=object_id,
                 expected_revision=snapshot_revision.strip() or None,
+                interaction_evidence=evidence,
             )
         elif action == "revise":
             if not comment.strip():
@@ -3751,6 +3832,7 @@ def create_console_app(
                 decision="revise",
                 comment=comment.strip(),
                 expected_revision=snapshot_revision.strip() or None,
+                interaction_evidence=evidence,
             )
         else:
             raise ConsoleError("invalid_review_decision")

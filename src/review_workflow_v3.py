@@ -57,8 +57,13 @@ def apply_reviews(objects:list[dict[str,Any]], decisions:list[dict[str,Any]], *,
         serr=schema_errors(o,schema_path)
         if serr: errors.append({'object_id':o['object_id'],'error':'schema_error_after_review','details':serr})
         if ledger_path:
+            details={'review_snapshot_hash':current,'comment':comment,'proposed_correction':correction}
+            interaction=d.get('review_interaction')
+            if isinstance(interaction,dict):
+                details['review_interaction']=deepcopy(interaction)
+                details['snapshot_id']=str(interaction.get('snapshot_id') or '')
             append_event(ledger_path,event_type=f'{track}_review_{decision}',object_id=o['object_id'],object_version=o['object_version'],actor=reviewer,
-                         details={'review_snapshot_hash':current,'comment':comment,'proposed_correction':correction})
+                         details=details)
         out.append(o)
     extras=sorted(set(by)-{o['object_id'] for o in objects})
     if extras: errors.append({'error':'review_rows_without_object','object_ids':extras})

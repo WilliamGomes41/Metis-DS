@@ -102,7 +102,8 @@ from src.recommendation_semantics_v1 import (
 )
 from src.open_original_v1 import OpenOriginalError, open_source_passage, researcher_visible_prose
 from src.publish_authorization_v1 import invalidate_for_object, still_matches, tuple_record
-from src.review_ledger import append_event
+from src.review_ledger import append_event, read_events
+from src.review_interaction_v1 import validate_review_interaction_identity
 from src.review_workflow_v3 import apply_reviews
 from src.revision_workflow import bump_patch, create_revision
 from src.retrieval.retrieval_projection_v2 import build_projection
@@ -2382,6 +2383,7 @@ class OperationsConsole:
         parent_choice: str | None = None,
         type_action: str | None = None,
         expected_revision: str | None = None,
+        interaction_evidence: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         reviewer = self._require_role(actor_id, "reviewer")
         if _is_forbidden_identity(reviewer["username"]) or _is_forbidden_identity(reviewer["display_name"]):
@@ -2389,6 +2391,14 @@ class OperationsConsole:
         envelope = self._envelope(snapshot_id)
         if actor_id not in envelope["named_reviewers"]:
             raise ConsoleError("reviewer_not_named_on_snapshot")
+        if interaction_evidence is not None:
+            try:
+                validate_review_interaction_identity(
+                    interaction_evidence,
+                    read_events(self._ledger_path),
+                )
+            except ValueError as exc:
+                raise ConsoleError(str(exc)) from exc
         mapped = map_eindoordeel(eindoordeel or "", decision)
         if mapped:
             decision = mapped
@@ -2781,12 +2791,15 @@ class OperationsConsole:
             "comment": comment or "",
             "proposed_correction": proposed_correction or "",
         }
+        if interaction_evidence is not None and decision != "later":
+            payload["review_interaction"] = deepcopy(interaction_evidence)
+        interaction_atomic = interaction_evidence is not None and decision != "later"
         updated, report = apply_reviews(
             current,
             [payload],
             track=track,
             schema_path=self.schema_path,
-            ledger_path=self._ledger_path,
+            ledger_path=None if interaction_atomic else self._ledger_path,
         )
         if report["errors"]:
             raise ConsoleError("review_failed", json.dumps(report["errors"], ensure_ascii=False))
@@ -2887,11 +2900,32 @@ class OperationsConsole:
                 new_bindings.get(snapshot_id, []),
                 object_id,
             )
+        ledger_fn = None
+        if interaction_atomic:
+            ledger_details = {
+                "review_snapshot_hash": str(
+                    payload.get("reviewed_canonical_object_hash") or ""
+                ),
+                "comment": str(comment or ""),
+                "proposed_correction": str(proposed_correction or ""),
+                "snapshot_id": snapshot_id,
+                "review_interaction": deepcopy(interaction_evidence),
+            }
+            ledger_fn = lambda: append_event(
+                self._ledger_path,
+                event_type=f"{track}_review_{decision}",
+                object_id=object_id,
+                object_version=str(updated_target.get("object_version") or ""),
+                actor=reviewer["username"],
+                details=ledger_details,
+            )
         self._commit_prepared_store(
             objects=(snapshot_id, history),
             envelopes=new_envelopes,
             bindings=new_bindings,
             expected_revision=expected_revision,
+            snapshot_id=snapshot_id if interaction_atomic else None,
+            ledger_fn=ledger_fn,
         )
         return deepcopy(updated)
 
@@ -2902,6 +2936,7 @@ class OperationsConsole:
         snapshot_id: str,
         object_id: str,
         expected_revision: str | None = None,
+        interaction_evidence: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Approve one exact current tuple as the independent second reviewer.
 
@@ -2915,6 +2950,14 @@ class OperationsConsole:
         envelope = self._envelope(snapshot_id)
         if actor_id not in set(envelope.get("named_reviewers") or []):
             raise ConsoleError("reviewer_not_named_on_snapshot")
+        if interaction_evidence is not None:
+            try:
+                validate_review_interaction_identity(
+                    interaction_evidence,
+                    read_events(self._ledger_path),
+                )
+            except ValueError as exc:
+                raise ConsoleError(str(exc)) from exc
 
         objects, revision = self.snapshot_objects_and_revision(snapshot_id)
         if expected_revision is not None and revision != expected_revision:
@@ -2998,6 +3041,13 @@ class OperationsConsole:
                     "confirmed_object_type": target.get("confirmed_object_type"),
                     "first_approver_ids": list(approvers),
                     "second_reviewer_id": actor_id,
+                    **(
+                        {
+                            "review_interaction": deepcopy(interaction_evidence),
+                        }
+                        if interaction_evidence is not None
+                        else {}
+                    ),
                 },
             ),
         )
@@ -3011,6 +3061,7 @@ class OperationsConsole:
         snapshot_id: str,
         object_ids: Iterable[str],
         expected_revision: str | None = None,
+        interaction_evidence: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Fast-lane confirm of proposed headings as structure, not advice.
 
@@ -3052,6 +3103,7 @@ class OperationsConsole:
                 decision="approve",
                 confirmed_object_type=structure_type,
                 expected_revision=pin,
+                interaction_evidence=interaction_evidence,
             )
             if pin is not None:
                 pin = self.objects_revision(snapshot_id)

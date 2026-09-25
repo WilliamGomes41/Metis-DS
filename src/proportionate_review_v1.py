@@ -26,6 +26,10 @@ from src.operations_console_v1 import (
 )
 from src.review_cockpit_v1 import confirmable_proposed_type
 from src.review_duty_v1 import FIRST_REVIEW, LANE_BATCH, review_duty_for
+from src.review_interaction_v1 import (
+    build_review_interaction_evidence,
+    new_review_interaction_id,
+)
 
 
 NORMAL_RISK_BATCH_TYPES = frozenset({"definition", "explanation"})
@@ -242,6 +246,7 @@ def render_normal_risk_batch_panel(
                 f'<form method="post" action="/review/normal-risk/batch-confirm" class="normal-risk-batch">'
                 f'<input type="hidden" name="snapshot_id" value="{safe_snapshot}">'
                 f'<input type="hidden" name="snapshot_revision" value="{revision}">'
+                f'<input type="hidden" name="interaction_id" value="{new_review_interaction_id()}">'
                 f'<fieldset><legend>{escape(section[-1])} — {type_label} ({len(batch)})</legend>'
                 f'<details class="review-source-path"><summary>Volledig bronpad</summary><p>{label}</p></details>'
                 '<button class="btn-secondary" type="button" data-select-review-batch>Alles in deze groep selecteren</button>'
@@ -308,6 +313,7 @@ class ProportionateReviewConsole(OperationsConsole):
         snapshot_id: str,
         object_ids: Iterable[str],
         expected_revision: str | None = None,
+        interaction_evidence: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Approve one bounded coherent normal-risk batch per object.
 
@@ -376,6 +382,7 @@ class ProportionateReviewConsole(OperationsConsole):
                 eindoordeel="goedkeuren",
                 type_action="dit_klopt",
                 expected_revision=pin,
+                interaction_evidence=interaction_evidence,
             )
             # _save_objects records this call's committed revision in thread-local
             # state. Never adopt a later writer's revision between batch members.
@@ -393,6 +400,7 @@ def install_proportionate_review_routes(app: FastAPI, console: ProportionateRevi
         snapshot_id: str = Form(...),
         object_ids: list[str] = Form(default=[]),
         snapshot_revision: str = Form(""),
+        interaction_id: str = Form(""),
     ) -> Response:
         token = request.cookies.get("console_session")
         account = console.session_account(token)
@@ -400,11 +408,30 @@ def install_proportionate_review_routes(app: FastAPI, console: ProportionateRevi
         if not snapshot_revision.strip():
             raise ConsoleError("snapshot_revision_required")
         try:
+            current_rows = console.snapshot_objects(snapshot_id)
+            by_id = {
+                str(row.get("object_id") or ""): row
+                for row in current_rows
+            }
+            members = [by_id[oid] for oid in raw if oid in by_id]
+            evidence = (
+                build_review_interaction_evidence(
+                    interaction_id=interaction_id,
+                    interaction_kind="batch",
+                    reviewer_account_id=str(account["account_id"]),
+                    snapshot_id=snapshot_id,
+                    review_stage="first_review",
+                    members=members,
+                )
+                if interaction_id.strip()
+                else None
+            )
             console.batch_review_normal_risk(
                 actor_id=account["account_id"],
                 snapshot_id=snapshot_id,
                 object_ids=raw,
                 expected_revision=snapshot_revision.strip(),
+                interaction_evidence=evidence,
             )
         except ConsoleError as exc:
             if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT:
