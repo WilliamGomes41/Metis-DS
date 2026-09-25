@@ -22,6 +22,7 @@ CANDIDATE_ELIGIBILITY_VERSION = "candidate-eligibility-v1.0.0"
 REASON_SEMANTIC_PROPOSAL = "semantic_proposal_selected"
 REASON_SEMANTIC_COVERAGE = "semantic_coverage_remainder"
 REASON_EXPLICIT_TYPE = "explicit_type_proposal"
+REASON_CANDIDATE_LINEAGE = "candidate_revision_lineage"
 REASON_UNEVIDENCED_TYPE = "deterministic_proposal_not_evidenced"
 REASON_NO_TYPE = "deterministic_no_type_proposal"
 REASON_STRUCTURAL = "structural_object"
@@ -75,6 +76,14 @@ def assess_candidate_eligibility(obj: dict[str, Any]) -> CandidateEligibility:
     if object_type in {"document", "heading"} or proposed == "heading":
         return CandidateEligibility(False, REASON_STRUCTURAL, SOURCE_STRUCTURE)
 
+    existing = candidate_eligibility_of(obj)
+    if existing.get("eligible") is True:
+        return CandidateEligibility(
+            True,
+            REASON_CANDIDATE_LINEAGE,
+            str(existing.get("source") or SOURCE_DETERMINISTIC),
+        )
+
     origin = _semantic_origin(obj)
     if origin == SELECTION_ORIGIN_PROPOSAL:
         return CandidateEligibility(True, REASON_SEMANTIC_PROPOSAL, SOURCE_SEMANTIC)
@@ -82,6 +91,8 @@ def assess_candidate_eligibility(obj: dict[str, Any]) -> CandidateEligibility:
         return CandidateEligibility(False, REASON_SEMANTIC_COVERAGE, SOURCE_SEMANTIC)
 
     if proposed and proposed != "unclassified":
+        if proposed == "factual_finding":
+            return CandidateEligibility(True, REASON_EXPLICIT_TYPE, SOURCE_DETERMINISTIC)
         content = obj.get("content") if isinstance(obj.get("content"), dict) else {}
         text = str(content.get("clean_text") or obj.get("text") or "").strip()
         if has_candidate_type_evidence(text, proposed):
