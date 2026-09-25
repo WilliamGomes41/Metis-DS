@@ -412,14 +412,18 @@ def install_proportionate_review_routes(app: FastAPI, console: ProportionateRevi
                 and (current[object_id].get("governance") or {}).get("validation_status")
                 == "approved"
             ]
+            retryable_ids = {
+                str(row.get("object_id") or "")
+                for row in normal_risk_batch_queue(
+                    current.values(),
+                    review_path=review_path,
+                    bindings=console.object_review_bindings(snapshot_id),
+                )
+            }
             retry_selection = [
                 object_id
                 for object_id in raw
-                if object_id in current
-                and normal_risk_batch_eligible(
-                    current[object_id],
-                    review_path=review_path,
-                )
+                if object_id in retryable_ids
             ]
             return HTMLResponse(
                 _render_review_room(
