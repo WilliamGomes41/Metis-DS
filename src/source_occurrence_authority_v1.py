@@ -89,6 +89,9 @@ def _apply_candidate_semantics(
         "proposed_recommendation_strength",
         "proposed_recommendation_semantics",
         "recommendation_semantics_evidence",
+        "proposed_knowledge_relations",
+        "knowledge_relation_evidence",
+        "relations",
     ):
         if key in donor:
             row[key] = deepcopy(donor[key])
