@@ -301,18 +301,36 @@ def review_work_item(
         if object_id not in represented_ids
     ]
 
-    bindings = console.object_review_bindings(snapshot_id)
+    bindings: list[dict[str, Any]] | None
+    if not hasattr(console, "_bindings") and not hasattr(console, "workflow_review_store"):
+        bindings = None
+    else:
+        try:
+            bindings = console.object_review_bindings(snapshot_id)
+        except (AttributeError, ConsoleError):
+            bindings = None
+
     duty_counts = review_duty_counts(
         objects,
         review_path=review_path,
         bindings=bindings,
     )
-    route_counts = reviewer_route_counts(
-        objects,
-        review_path=review_path,
-        reviewer_id=account_id,
-        bindings=bindings,
-    )
+    if bindings is None:
+        route_counts = {
+            "actionable_review_duties": duty_counts["review_duties"],
+            "waiting_for_reviewer_duties": 0,
+            "actionable_structure_duties": duty_counts["structure_review_duties"],
+            "actionable_contextual_duties": duty_counts["contextual_review_duties"],
+            "actionable_batch_duties": duty_counts["batch_review_duties"],
+            "actionable_second_review_duties": duty_counts["second_review_duties"],
+        }
+    else:
+        route_counts = reviewer_route_counts(
+            objects,
+            review_path=review_path,
+            reviewer_id=account_id,
+            bindings=bindings,
+        )
 
     return _work_item_from_counts(
         envelope=envelope,
