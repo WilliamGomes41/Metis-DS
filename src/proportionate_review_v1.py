@@ -38,7 +38,7 @@ def _review_bindings_or_legacy(
 ) -> list[dict[str, Any]] | None:
     try:
         return console.object_review_bindings(snapshot_id)
-    except (AttributeError, ConsoleError):
+    except AttributeError:
         # Thin deterministic test/compatibility consoles can intentionally
         # omit the review-binding store. Production consoles expose it.
         return None
