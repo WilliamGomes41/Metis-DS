@@ -173,7 +173,11 @@ def test_entitlement_covers_context_embedded_in_derived_retrieval_text():
     }
     from src.product_api_v1 import ProductState
 
-    assert ProductState._record_is_entitled(principal, record) is False
+    state = object.__new__(ProductState)
+    state._object_document_ids = {
+        "context-from-other-document": "not-entitled-document",
+    }
+    assert state._record_is_entitled(principal, record) is False
 
 
 def test_postgres_mode_does_not_read_or_fallback_to_legacy_registry(tmp_path):
