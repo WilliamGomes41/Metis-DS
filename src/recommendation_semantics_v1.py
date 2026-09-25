@@ -17,8 +17,16 @@ STRENGTHS = ("strong", "weak")
 STRENGTH_STATUSES = ("explicit", "not_stated", "unmapped")
 NORMALIZATION_SCHEMES = ("source_literal_v1",)
 
-SOURCE_LITERAL_STRONG_RE = re.compile(r"\bsterk(?:e)?\b", re.I)
-SOURCE_LITERAL_WEAK_RE = re.compile(r"\bzwak(?:ke)?\b", re.I)
+SOURCE_LITERAL_STRONG_RE = re.compile(
+    r"\bsterk(?:e)?\s*(?:\([^)]*\)\s*)?(?:aanbeveling|advies)\b|"
+    r"\b(?:aanbeveling|advies)\s*[:\-]\s*sterk\b",
+    re.I,
+)
+SOURCE_LITERAL_WEAK_RE = re.compile(
+    r"\bzwak(?:ke)?\s*(?:\([^)]*\)\s*)?(?:aanbeveling|advies)\b|"
+    r"\b(?:aanbeveling|advies)\s*[:\-]\s*zwak\b",
+    re.I,
+)
 
 PROPOSED_FIELD = "proposed_recommendation_semantics"
 CONFIRMED_FIELD = "confirmed_recommendation_semantics"
