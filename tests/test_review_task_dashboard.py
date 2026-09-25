@@ -31,7 +31,7 @@ def test_default_review_page_is_a_clickable_task_dashboard():
 
     assert "Volgende stap" in html
     assert "Koppen controleren" in html
-    assert "Belangrijke passages beoordelen" in html
+    assert "In samenhang beoordelen" in html
     assert "Vergelijkbare passages beoordelen" in html
     assert "1 te beoordelen · 1 afgerond" in html
     assert 'href="/review?document=snap-1&amp;task=structure"' in html
