@@ -107,10 +107,16 @@ def review_stage(
     if _terminal_without_open_review(obj):
         return None
     obj_type = authoritative_review_type(obj)
+    gate = str(admission_of(obj).get("gate_result") or "")
+    confirmed = str(obj.get("confirmed_object_type") or "").strip()
+    # Headings are structural and have no Admission. A human-confirmed type
+    # without a gate is also reviewable: the reviewer already classified it.
+    # An explicit non-allowed gate stays out, including after confirmation.
     if (
         review_path != "boom"
         and obj_type != "heading"
-        and admission_of(obj).get("gate_result") != GATE_ALLOWED
+        and gate != GATE_ALLOWED
+        and not (confirmed and not gate)
     ):
         return None
 

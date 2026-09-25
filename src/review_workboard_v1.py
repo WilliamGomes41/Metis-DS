@@ -374,7 +374,7 @@ def review_workboard_items(
                     lifecycle_status=_lifecycle_for_work_item(console, snapshot_id),
                     heading_pending=int(summary.get("heading_pending") or 0),
                     individual_pending=int(summary.get("individual_pending") or 0),
-                    normal_passages=actionable_batch,
+                    normal_passages=int(summary.get("normal_passages") or 0),
                     normal_batches=int(summary.get("normal_batches") or 0),
                     blocked_count=int(summary.get("blocked_count") or 0),
                     closure_gap_ids=closure_gap_ids,
@@ -687,14 +687,18 @@ def _projected_document_dashboard(
         snapshot_id,
         koppen=[],
         individual=[],
-        normal_passages=int(summary.get("actionable_batch_duties") or 0),
+        normal_passages=actionable_batch,
         normal_batches=int(summary.get("normal_batches") or 0),
         blocked_count=int(summary.get("blocked_count") or 0),
         progress=progress,
         heading_pending_override=actionable_structure,
         heading_total_override=int(summary.get("heading_total") or 0),
         individual_pending_override=actionable_contextual,
-        individual_total_override=int(summary.get("contextual_review_duties") or 0),
+        individual_total_override=(
+            int(summary.get("contextual_review_duties") or 0)
+            if "contextual_review_duties" in summary
+            else int(summary.get("individual_total") or 0)
+        ),
         second_review_pending=actionable_second,
     )
     picker = f"""

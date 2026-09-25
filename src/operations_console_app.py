@@ -48,7 +48,7 @@ from src.knowledge_relation_review_v1 import (
     has_semantic_relation_review,
     relation_choice_value,
 )
-from src.review_duty_v1 import review_duty_for, reviewer_route_for
+from src.review_duty_v1 import review_duty_for, review_duty_lane, reviewer_route_for
 from src.review_context_v1 import (
     AUTHORITY_CONFIRMED,
     DIRECTION_INCOMING,
@@ -2204,6 +2204,46 @@ def _render_second_review_card(
     """
 
 
+def _review_bindings(console: OperationsConsole, snapshot_id: str) -> list[dict[str, Any]] | None:
+    """Actor routes when bindings exist; governance fallback for projection consoles."""
+    try:
+        return console.object_review_bindings(snapshot_id)
+    except AttributeError:
+        return None
+    except ConsoleError as exc:
+        if exc.code == "unknown_snapshot":
+            return None
+        raise
+
+
+def _lane_total(
+    objects: list[dict[str, Any]],
+    *,
+    review_path: str,
+    lane: str,
+    open_rows: list[dict[str, Any]],
+) -> int:
+    """Open duties plus already finished objects of the same lane.
+
+    The task list only contains open work. The dashboard still reports how
+    many objects of that lane are already afgerond.
+    """
+    open_ids = {str(obj.get("object_id") or "") for obj in open_rows}
+    finished = 0
+    for obj in objects:
+        object_id = str(obj.get("object_id") or "")
+        if not object_id or object_id in open_ids:
+            continue
+        if str(obj.get("object_type") or "") == "document":
+            continue
+        if not _review_is_final(obj):
+            continue
+        if review_duty_lane(obj, review_path=review_path, stage="first_review") != lane:
+            continue
+        finished += 1
+    return len(open_rows) + finished
+
+
 def _render_review_index(
     snapshot_id: str,
     snapshot_objects: list[dict[str, Any]],
@@ -2334,6 +2374,20 @@ def _render_review_index(
         normal_batches=normal_batches,
         blocked_count=len(blocked),
         progress=progress,
+        heading_pending_override=len(koppen),
+        heading_total_override=_lane_total(
+            snapshot_objects,
+            review_path=review_path,
+            lane="structure",
+            open_rows=koppen,
+        ),
+        individual_pending_override=len(individual),
+        individual_total_override=_lane_total(
+            snapshot_objects,
+            review_path=review_path,
+            lane="contextual",
+            open_rows=individual,
+        ),
         second_review_pending=len(second_review),
     )
 
@@ -2589,7 +2643,7 @@ def _render_review_room(
                     include_individual=False,
                 )
             try:
-                bindings = console.object_review_bindings(chosen)
+                bindings = _review_bindings(console, chosen)
             except AttributeError:
                 bindings = None
             objects_html += _render_review_index(
@@ -2618,7 +2672,7 @@ def _render_review_room(
             else:
                 conflict_html = _review_conflict_html(conflict, current=obj, draft=draft)
                 try:
-                    current_bindings = console.object_review_bindings(chosen)
+                    current_bindings = _review_bindings(console, chosen)
                 except AttributeError:
                     current_bindings = None
                 route = (
@@ -3567,8 +3621,7 @@ def create_console_app(
                 status_code=303,
             )
         if not safe_task:
-            current = state.snapshot_objects(snapshot_id)
-            nxt = next_review_object_id(current, object_id)
+            nxt = state.next_review_object_id(snapshot_id, object_id)
             if nxt:
                 return RedirectResponse(
                     _review_location(state, snapshot_id, nxt),
