@@ -44,6 +44,7 @@ from src.semantic_passage_v1 import (
     SELECTION_ORIGIN_PROPOSAL,
     SEMANTIC_PASSAGE_VERSION,
     SemanticPassageError,
+    attach_relation_proposals,
     semantic_coverage_units,
     semantic_source_blocks,
     semantic_units_from_proposal,
@@ -620,6 +621,13 @@ def _semantic_execution_before_review(
             content=content_units,
         )
     )
+    if proposal is not None:
+        attach_relation_proposals(
+            units,
+            raw_relations=proposal.get("relations", []),
+            evidence_fragments=evidence_fragments,
+            object_version="1.0",
+        )
     return units, replay_record
 
 
