@@ -180,12 +180,48 @@ def test_unmapped_is_proposal_only_and_requires_source_evidence() -> None:
     )
 
 
+def test_unknown_normalization_scheme_is_rejected() -> None:
+    value = _semantics("for", "strong")
+    value["normalization_scheme"] = "conditional_means_weak"
+    assert "recommendation_normalization_scheme_invalid" in (
+        validate_recommendation_semantics(value)
+    )
+
+
 def test_direction_requires_literal_source_evidence() -> None:
     value = _semantics("for", "strong")
     value["direction_evidence_span"] = ""
     assert "recommendation_direction_evidence_missing" in (
         validate_recommendation_semantics(value)
     )
+
+
+def test_schema_v13_accepts_all_four_direction_strength_combinations() -> None:
+    for direction in ("for", "against"):
+        for strength in ("strong", "weak"):
+            obj = _base_object()
+            obj[PROPOSED_FIELD] = _semantics(direction, strength)
+            obj[CONFIRMED_FIELD] = _semantics(direction, strength)
+            stamp_canonical_hashes(obj)
+            assert schema_errors(obj, SCHEMA_V13) == []
+
+
+def test_schema_accepts_unmapped_proposal_but_rejects_unmapped_confirmation() -> None:
+    proposal = _base_object()
+    proposal[PROPOSED_FIELD] = _semantics(
+        "for",
+        None,
+        status="unmapped",
+        strength_evidence="Voorwaardelijke aanbeveling",
+        source_label="Voorwaardelijke aanbeveling",
+    )
+    stamp_canonical_hashes(proposal)
+    assert schema_errors(proposal, SCHEMA_V13) == []
+
+    confirmed = _base_object()
+    confirmed[CONFIRMED_FIELD] = deepcopy(proposal[PROPOSED_FIELD])
+    stamp_canonical_hashes(confirmed)
+    assert schema_errors(confirmed, SCHEMA_V13)
 
 
 def test_schema_v13_accepts_new_confirmed_semantics() -> None:
@@ -199,15 +235,23 @@ def test_schema_v13_accepts_new_confirmed_semantics() -> None:
 
 
 def test_schema_and_kernel_reject_dual_legacy_and_new_authority() -> None:
-    obj = _base_object()
-    obj[CONFIRMED_FIELD] = _semantics("for", "strong")
-    obj["confirmed_recommendation_strength"] = "doen"
-
+    confirmed = _base_object()
+    confirmed[CONFIRMED_FIELD] = _semantics("for", "strong")
+    confirmed["confirmed_recommendation_strength"] = "doen"
     assert (
         "confirmed_recommendation_semantics_legacy_authority_conflict"
-        in recommendation_semantics_errors(obj)
+        in recommendation_semantics_errors(confirmed)
     )
-    assert schema_errors(obj, SCHEMA_V13)
+    assert schema_errors(confirmed, SCHEMA_V13)
+
+    proposed = _base_object()
+    proposed[PROPOSED_FIELD] = _semantics("for", "weak")
+    proposed["proposed_recommendation_strength"] = "overweeg"
+    assert (
+        "proposed_recommendation_semantics_legacy_authority_conflict"
+        in recommendation_semantics_errors(proposed)
+    )
+    assert schema_errors(proposed, SCHEMA_V13)
 
 
 def test_confirmed_semantics_is_bound_to_confirmed_recommendation_type() -> None:
