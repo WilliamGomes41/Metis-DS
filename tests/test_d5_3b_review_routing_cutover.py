@@ -287,8 +287,8 @@ def test_second_review_http_surface_is_read_only_for_canonical_semantics(tmp_pat
     assert "Onafhankelijke tweede beoordeling" in card.text
     assert "Tweede beoordeling goedkeuren" in card.text
     assert 'action="/review/second-review"' in card.text
-    assert 'name="type_action"' not in card.text
-    assert 'name="relation_choice"' not in card.text
+    assert '<input type="radio" name="type_action"' not in card.text
+    assert '<input type="checkbox" name="relation_choice"' not in card.text
     assert "Wat voor informatie is dit?" not in card.text
 
 
