@@ -605,7 +605,16 @@ def test_ingest_fixture_gates_named_regressions_and_keeps_adviseert(tmp_path: Pa
         assert _admission(passage) == {}
         eligibility = (passage.get("metadata") or {}).get("candidate_eligibility") or {}
         assert eligibility.get("eligible") is False
-        assert eligibility.get("reason") == "deterministic_no_type_proposal"
+    assert ((djg.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
+        "deterministic_proposal_not_evidenced"
+    )
+    assert ((false_rec.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
+        "deterministic_proposal_not_evidenced"
+    )
+    for passage in (one_word, unresolved, comparison):
+        assert ((passage.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
+            "deterministic_no_type_proposal"
+        )
 
     assert _admission(adviseert)["gate_result"] == GATE_ALLOWED
     assert any(
