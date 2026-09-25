@@ -271,7 +271,7 @@ def test_clinical_condition_does_not_rewrite_strong_to_weak(tmp_path: Path) -> N
     assert semantics["strength"] == "strong"
 
 
-def test_proposal_and_legacy_fields_are_never_promoted_by_serving(tmp_path: Path) -> None:
+def test_proposal_is_never_promoted_over_confirmed_semantics(tmp_path: Path) -> None:
     objects, object_id = _reviewed_source_objects(
         tmp_path,
         direction="for",
@@ -286,7 +286,6 @@ def test_proposal_and_legacy_fields_are_never_promoted_by_serving(tmp_path: Path
         label="Zwakke aanbeveling",
         text=RECOMMENDATION_TEXT,
     )
-    live["confirmed_recommendation_strength"] = "niet_doen"
 
     records, blocked = build_projection(_published_envelopes(objects))
     assert blocked == []
@@ -294,7 +293,44 @@ def test_proposal_and_legacy_fields_are_never_promoted_by_serving(tmp_path: Path
     assert projected["metadata"]["confirmed_recommendation_semantics"]["direction"] == "for"
     assert projected["metadata"]["confirmed_recommendation_semantics"]["strength"] == "strong"
     assert "proposed_recommendation_semantics" not in projected["metadata"]
+
+
+def test_legacy_only_strength_is_not_promoted_to_new_serving_semantics(tmp_path: Path) -> None:
+    objects, object_id = _reviewed_source_objects(
+        tmp_path,
+        direction="for",
+        strength_choice="strong",
+        label="Sterke aanbeveling",
+    )
+    live = next(row for row in objects if row["object_id"] == object_id)
+    live.pop(CONFIRMED_FIELD, None)
+    live.pop(PROPOSED_FIELD, None)
+    live["confirmed_recommendation_strength"] = "doen"
+
+    records, blocked = build_projection(_published_envelopes(objects))
+    assert blocked == []
+    projected = next(row for row in records if row["metadata"]["object_id"] == object_id)
+    assert "confirmed_recommendation_semantics" not in projected["metadata"]
     assert "confirmed_recommendation_strength" not in projected["metadata"]
+
+
+def test_dual_new_and_legacy_confirmed_authority_is_blocked(tmp_path: Path) -> None:
+    objects, object_id = _reviewed_source_objects(
+        tmp_path,
+        direction="for",
+        strength_choice="strong",
+        label="Sterke aanbeveling",
+    )
+    live = next(row for row in objects if row["object_id"] == object_id)
+    live["confirmed_recommendation_strength"] = "niet_doen"
+
+    records, blocked = build_projection(_published_envelopes(objects))
+    assert all(row["metadata"]["object_id"] != object_id for row in records)
+    error_row = next(row for row in blocked if row["object_id"] == object_id)
+    assert any(
+        "confirmed_recommendation_semantics_legacy_authority_conflict" in error
+        for error in error_row["errors"]
+    )
 
 
 def test_unconfirmed_new_format_proposal_remains_absent_from_api(tmp_path: Path) -> None:
