@@ -403,6 +403,32 @@ def test_direction_evidence_must_be_inside_candidate_selection() -> None:
         )
 
 
+def test_evidence_only_block_cannot_be_selected_as_candidate() -> None:
+    label = _fragment("h", "Zwakke aanbeveling", object_type="heading")
+    candidate = _fragment(
+        "p",
+        "De werkgroep adviseert de verpleegkundige de interventie te gebruiken.",
+    )
+    all_blocks = semantic_source_blocks([label, candidate])
+    label_block = next(block for block in all_blocks if block["text"] == "Zwakke aanbeveling")
+    candidate_block = next(block for block in all_blocks if block["text"].startswith("De werkgroep"))
+    proposal = _proposal(
+        label_block,
+        strength="weak",
+        status="explicit",
+        strength_block=label_block,
+    )
+
+    with pytest.raises(SemanticPassageError, match="semantic_span_not_candidate_selectable"):
+        semantic_units_from_proposal(
+            [label, candidate],
+            evidence_fragments=[label, candidate],
+            allowed_candidate_block_ids={candidate_block["block_id"]},
+            document_id="doc-d32",
+            proposal=proposal,
+        )
+
+
 def test_non_recommendation_cannot_carry_recommendation_semantics() -> None:
     candidate = _fragment("p", "Een definitie is een omschrijving.")
     block = semantic_source_blocks([candidate])[0]
@@ -474,7 +500,12 @@ def test_end_to_end_semantic_proposal_persists_v13_and_admits_source_bound_weak_
 
     def fake_post(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
         source_payload = json.loads(payload["input"][1]["content"])
+        assert all(
+            block["text"] != "Zwakke aanbeveling"
+            for block in source_payload["source_blocks"]
+        )
         candidate_block = source_payload["source_blocks"][0]
+        assert candidate_block["text"].startswith("De werkgroep adviseert")
         strength_block = next(
             block
             for block in source_payload["evidence_blocks"]
