@@ -71,6 +71,8 @@ def canonical_object_payload(obj: dict[str, Any]) -> dict[str, Any]:
         "confirmed_relations",
         "proposed_recommendation_strength",
         "confirmed_recommendation_strength",
+        "proposed_recommendation_semantics",
+        "confirmed_recommendation_semantics",
         "no_action",
         "metadata",
     ):
