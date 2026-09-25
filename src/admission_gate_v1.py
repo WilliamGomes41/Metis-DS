@@ -25,6 +25,7 @@ from src.recommendation_semantics_v1 import (
     proposed_recommendation_semantics_of,
     validate_recommendation_semantics,
 )
+from src.knowledge_relation_proposal_v1 import relation_proposal_admission_codes
 
 
 GATE_ALLOWED = "allowed"
@@ -857,7 +858,19 @@ def apply_admission_gate(
                 source_hash=source_hash,
                 fragments_by_id=fragments_by_id,
             )
-            metadata["admission"] = admit_candidate(candidate)
+            admission = admit_candidate(candidate)
+            relation_codes = relation_proposal_admission_codes(
+                row,
+                objects=objects,
+            )
+            if relation_codes:
+                merged = list(admission.get("reason_codes") or [])
+                for code in relation_codes:
+                    if code not in merged:
+                        merged.append(code)
+                admission["reason_codes"] = merged
+                admission["gate_result"] = GATE_BLOCKED
+            metadata["admission"] = admission
         else:
             # Admission is candidate-only evidence. Re-running this projection
             # on an ineligible passage must not preserve stale machine failure.
