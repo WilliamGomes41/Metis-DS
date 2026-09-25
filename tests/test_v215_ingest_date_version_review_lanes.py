@@ -465,7 +465,8 @@ def test_four_thousand_identical_unclassified_titles_is_a_fail(tmp_path: Path) -
     assert passage_titles == []
     visible = re.sub(r"\s+", " ", html)
     assert "Technisch herstel nodig (12)" not in visible
-    assert "Nog niet beoordeeld 12" in visible
+    # The heading stays in the same not-yet-assessed coverage count as the 12 passages.
+    assert "Nog niet beoordeeld 13" in visible
     assert "unclassified" not in visible.casefold()
 
 
