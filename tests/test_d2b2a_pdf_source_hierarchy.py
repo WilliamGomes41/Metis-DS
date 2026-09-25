@@ -1,7 +1,8 @@
 """D2b2-A PDF source hierarchy regression tests.
 
 # release-control-evidence: scope/belofte
-# release-control-evidence: kwaliteit
+# release-control-evidence: beschikbaarheid
+# release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
