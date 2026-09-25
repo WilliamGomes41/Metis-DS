@@ -197,6 +197,12 @@ ERROR_COPY = {
     "unknown_role": "Alleen researcher, reviewer of publisher zijn toegestaan.",
     "forbidden_reviewer_identity": "Deze identiteit mag niet als reviewer worden aangemaakt.",
     "unknown_relation_type": "Kies alleen relaties uit de gesloten set.",
+    "knowledge_relation_review_required": "Controleer en bevestig eerst de voorgestelde relaties.",
+    "knowledge_relation_target_stale": "Een gekoppeld kennisobject is gewijzigd. Controleer de relaties opnieuw.",
+    "knowledge_relation_target_missing": "Een gekoppeld kennisobject bestaat niet meer in deze werkversie.",
+    "knowledge_relation_choice_not_available": "De gekozen relatie hoort niet meer bij de huidige relationele set.",
+    "knowledge_relation_source_version_stale": "Het bronobject is gewijzigd. Open de review opnieuw.",
+    "knowledge_relation_endpoint_type_invalid": "Deze relatie past niet bij de huidige typen van bron en doel.",
     "open_original_required": "Open eerst de bronpassage. Type bevestigen zonder het origineel is niet toegestaan.",
     "source_locator_missing": "De bronpassage ontbreekt; type bevestigen is niet toegestaan.",
     "freeze_bytes_missing": "Het geüploade origineel ontbreekt; type bevestigen is niet toegestaan.",
@@ -361,6 +367,7 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
   const search = form.querySelector('[data-heading-search]');
   const posAction = form.querySelectorAll('[name="documentpositie_action"]');
   const suitability = form.querySelectorAll('[name="suitability"]');
+  const relationAck = form.querySelector('[name="relation_review_ack"]');
   const strengthTypes = new Set(['recommendation', 'outcome']);
   const selected = (nodes) => {{
     const hit = Array.from(nodes || []).find((node) => node.checked);
@@ -432,8 +439,10 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
       !needsRecommendationSemantics
       || (Boolean(selected(direction)) && Boolean(selected(strengthLevel)))
     );
+    const needsRelationReview = needsType && Boolean(relationAck);
+    const hasRelationReview = !needsRelationReview || Boolean(relationAck && relationAck.checked);
     if (submit) {{
-      submit.disabled = !value || !hasType || !hasComment || !hasSuitability || !hasRecommendationSemantics;
+      submit.disabled = !value || !hasType || !hasComment || !hasSuitability || !hasRecommendationSemantics || !hasRelationReview;
       submit.textContent = 'Review opslaan en volgende';
     }}
     if (hint) {{
@@ -441,6 +450,7 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
       else if (!hasSuitability) hint.textContent = 'Kies of de passage geschikt is.';
       else if (needsType && !liveType()) hint.textContent = 'Bevestig eerst het type.';
       else if (needsRecommendationSemantics && !hasRecommendationSemantics) hint.textContent = 'Bevestig richting en sterkte van de aanbeveling.';
+      else if (needsRelationReview && !hasRelationReview) hint.textContent = 'Controleer en bevestig de voorgestelde relaties.';
       else hint.textContent = '';
     }}
     updateChooser();
@@ -450,6 +460,7 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
   typeAction.forEach((node) => node.addEventListener('change', update));
   posAction.forEach((node) => node.addEventListener('change', update));
   suitability.forEach((node) => node.addEventListener('change', update));
+  if (relationAck) relationAck.addEventListener('change', update);
   if (type) type.addEventListener('change', update);
   direction.forEach((node) => node.addEventListener('change', update));
   strengthLevel.forEach((node) => node.addEventListener('change', update));
