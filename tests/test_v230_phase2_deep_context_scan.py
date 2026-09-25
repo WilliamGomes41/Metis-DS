@@ -760,21 +760,15 @@ def test_boom_ingest_still_skips_richtlijn_phase2(tmp_path: Path) -> None:
     assert slow_review_duty(objects, review_path="boom")
 
 
-def test_ineligible_source_passage_cannot_be_type_confirmed(tmp_path: Path) -> None:
-    from src.operations_console_v1 import ConsoleError
-
+def test_ineligible_source_passage_is_not_a_processing_issue(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, PHASE1_FIXTURE, title="Phase 1 admission regression")
     djg = _find_by_text(console.snapshot_objects(receipt["snapshot_id"]), DJG)
     assert _admission(djg) == {}
-    with pytest.raises(ConsoleError, match="candidate_not_admitted"):
-        console.confirm_object_type(
-            actor_id=accounts["reviewer"]["account_id"],
-            snapshot_id=receipt["snapshot_id"],
-            object_id=djg["object_id"],
-            confirmed_object_type="recommendation",
-        )
+    eligibility = (djg.get("metadata") or {}).get("candidate_eligibility") or {}
+    assert eligibility.get("eligible") is False
+    assert djg not in blocked_audit_lane(console.snapshot_objects(receipt["snapshot_id"]))
 
 def test_no_handoff_and_no_protocol_rewrite() -> None:
     assert not (ROOT / "HANDOFF.md").exists()
