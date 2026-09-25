@@ -255,6 +255,17 @@ class ProductState:
             self._index_cache = {key: engine}
         return engine
 
+    @staticmethod
+    def _confirmed_recommendation_semantics(record: dict[str, Any]) -> dict[str, Any] | None:
+        """Expose only persisted confirmed semantics carried by the projection.
+
+        Deliberately no proposal, source-text, or legacy-strength fallback lives
+        in the Product API. Absence therefore stays absence.
+        """
+        md = record.get("metadata") or {}
+        value = md.get("confirmed_recommendation_semantics")
+        return dict(value) if isinstance(value, dict) and value else None
+
     def _bound_payload(self, record: dict[str, Any]) -> dict[str, Any]:
         md = record.get("metadata") or {}
         return {"knowledge_object_id": md.get("object_id"), "object_version": md.get("object_version"), "object_type": md.get("object_type") or md.get("confirmed_object_type"), "content": record.get("retrieval_text"), "advice_weight": False, "labels": ["V", "VN"]}
@@ -306,7 +317,11 @@ class ProductState:
             if not record:
                 continue
             md = record.get("metadata") or {}
-            results.append({"knowledge_object_id": item["object_id"], "object_version": item.get("object_version"), "document_id": md.get("document_id"), "object_type": item.get("object_type") or md.get("object_type"), "content": record.get("retrieval_text"), "structured_logic": record.get("structured_logic"), "source": {"title": md.get("source_title"), "url": md.get("source_url"), "page": md.get("source_page"), "version": md.get("source_version"), "locator": md.get("source_locator")}, "release": {"release_id": md.get("release_id"), "release_version": md.get("release_version"), "published_at": md.get("published_at")}, "scores": {"hybrid_rrf": item.get("rrf_score"), "lexical": item.get("lexical_score"), "vector": item.get("vector_score")}, "content_hash": md.get("content_hash"), "projection_hash": record.get("projection_hash"), "chunk_readiness": md.get("chunk_readiness"), "advice_weight": bool(item.get("advice_weight")), "labels": item.get("labels") or (["V", "VN"] if raw.get("answerability") == "supported" else [])})
+            result = {"knowledge_object_id": item["object_id"], "object_version": item.get("object_version"), "document_id": md.get("document_id"), "object_type": item.get("object_type") or md.get("object_type"), "content": record.get("retrieval_text"), "structured_logic": record.get("structured_logic"), "source": {"title": md.get("source_title"), "url": md.get("source_url"), "page": md.get("source_page"), "version": md.get("source_version"), "locator": md.get("source_locator")}, "release": {"release_id": md.get("release_id"), "release_version": md.get("release_version"), "published_at": md.get("published_at")}, "scores": {"hybrid_rrf": item.get("rrf_score"), "lexical": item.get("lexical_score"), "vector": item.get("vector_score")}, "content_hash": md.get("content_hash"), "projection_hash": record.get("projection_hash"), "chunk_readiness": md.get("chunk_readiness"), "advice_weight": bool(item.get("advice_weight")), "labels": item.get("labels") or (["V", "VN"] if raw.get("answerability") == "supported" else [])}
+            semantics = self._confirmed_recommendation_semantics(record)
+            if semantics is not None:
+                result["recommendation_semantics"] = semantics
+            results.append(result)
         results = self._attach_advice_bounds(results, records)
         if raw.get("answerability") == "supported" and not results:
             return {"api_version": API_VERSION, "service_version": SERVICE_VERSION, "synthetic_fixture": self.synthetic, "status": "abstain", "answerability": "insufficient_evidence", "reason": "advice_bounds_missing", "false_positive_class": "relation_mismatch", "labels": [], "advice_weight": False, "abstain_sentence": sentence_for("advice_bounds_missing"), "results": [], "result_count": 0}
@@ -324,7 +339,11 @@ class ProductState:
         blocked = serving_block_reason(record)
         if blocked:
             raise HTTPException(status_code=404, detail={"code": "knowledge_object_not_servable", "reason": blocked, "status": "abstain", "answerability": "insufficient_evidence", "abstain_sentence": sentence_for(blocked)})
-        return {"api_version": API_VERSION, "synthetic_fixture": self.synthetic, "knowledge_object_id": object_id, "object_version": md.get("object_version"), "document_id": md.get("document_id"), "object_type": md.get("confirmed_object_type") or md.get("object_type"), "content": record.get("retrieval_text"), "structured_logic": record.get("structured_logic"), "source": {"title": md.get("source_title"), "url": md.get("source_url"), "page": md.get("source_page"), "version": md.get("source_version")}, "release": {"release_id": md.get("release_id"), "release_version": md.get("release_version"), "published_at": md.get("published_at")}, "content_hash": md.get("content_hash"), "projection_hash": record.get("projection_hash"), "chunk_readiness": md.get("chunk_readiness")}
+        payload = {"api_version": API_VERSION, "synthetic_fixture": self.synthetic, "knowledge_object_id": object_id, "object_version": md.get("object_version"), "document_id": md.get("document_id"), "object_type": md.get("confirmed_object_type") or md.get("object_type"), "content": record.get("retrieval_text"), "structured_logic": record.get("structured_logic"), "source": {"title": md.get("source_title"), "url": md.get("source_url"), "page": md.get("source_page"), "version": md.get("source_version")}, "release": {"release_id": md.get("release_id"), "release_version": md.get("release_version"), "published_at": md.get("published_at")}, "content_hash": md.get("content_hash"), "projection_hash": record.get("projection_hash"), "chunk_readiness": md.get("chunk_readiness")}
+        semantics = self._confirmed_recommendation_semantics(record)
+        if semantics is not None:
+            payload["recommendation_semantics"] = semantics
+        return payload
 
     def documents(self, tenant: TenantPolicy) -> list[dict[str, Any]]:
         self.require_scope(tenant, "documents:read")
