@@ -29,7 +29,7 @@ from src.object_taxonomy_v1 import published_object_type
 from src.recommendation_semantics_v1 import (
     CONFIRMED_FIELD as CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD,
     confirmed_recommendation_semantics_of,
-    validate_recommendation_semantics,
+    recommendation_semantics_errors,
 )
 from src.serving_relations_v1 import (
     HISTORICAL_NON_SERVING_TYPES,
@@ -111,14 +111,14 @@ def publication_errors(envelope: dict[str, Any]) -> list[str]:
         errors.append("object_version_missing")
     if obj.get("object_type") not in SEARCHABLE_TYPES | NON_SEARCHABLE_TYPES:
         errors.append("unknown_object_type")
-    if CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD in obj:
-        semantics = obj.get(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD)
+    if (
+        CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD in obj
+        or "proposed_recommendation_semantics" in obj
+    ):
         errors.extend(
-            f"confirmed_recommendation_semantics:{error}"
-            for error in validate_recommendation_semantics(semantics, confirmed=True)
+            f"recommendation_semantics:{error}"
+            for error in recommendation_semantics_errors(obj)
         )
-        if str(obj.get("confirmed_object_type") or "") != "recommendation":
-            errors.append("confirmed_recommendation_semantics_requires_recommendation_type")
     return errors
 
 
