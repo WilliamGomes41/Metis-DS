@@ -33,7 +33,7 @@ from .product_source_authority_v1 import ProductSourceAuthorityError, verify_act
 from .retrieval.retrieval_projection_v2 import build_projection
 from .retrieval.safe_retrieval_v1 import SafeRetrievalIndex
 from .retrieval.semantic_vector_retrieval_v1 import VectorConfig
-from .serving_relations_v1 import applies_if_targets, except_if_targets, historical_type_must_not_serve
+from .serving_relations_v1 import historical_type_must_not_serve
 from .usage_ledger_v1 import UsageLedger
 
 ROOT = Path(__file__).resolve().parents[1]
