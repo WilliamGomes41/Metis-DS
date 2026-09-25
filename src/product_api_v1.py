@@ -231,6 +231,28 @@ class ProductState:
         if not tenant.has_scope(scope):
             raise HTTPException(status_code=403, detail={"code": "scope_denied", "required_scope": scope})
 
+    @staticmethod
+    def _record_is_entitled(tenant: TenantPolicy, record: dict[str, Any]) -> bool:
+        """Authorize the complete derived evidence carried by one record.
+
+        Retrieval text can include reviewed context from related objects. A
+        consumer may therefore see a record only when its own document and each
+        explicitly carried context document are entitled. Current REAL
+        projections carry context document identity; legacy synthetic fixtures
+        without it are treated as same-document context.
+        """
+        md = record.get("metadata") or {}
+        document_id = md.get("document_id")
+        if not tenant.allows_document(document_id) or not tenant.allows_topics(md.get("topic") or []):
+            return False
+        for context in md.get("context_relations") or []:
+            if not isinstance(context, dict):
+                continue
+            context_document_id = context.get("document_id") or document_id
+            if not tenant.allows_document(context_document_id):
+                return False
+        return True
+
     def _tenant_records(self, tenant: TenantPolicy, filters: RetrieveFilters | None = None) -> list[dict[str, Any]]:
         self.refresh()
         requested_docs = set(filters.document_ids) if filters else set()
@@ -245,7 +267,7 @@ class ProductState:
         rows: list[dict[str, Any]] = []
         for r in self.records:
             md = r.get("metadata") or {}
-            if not tenant.allows_document(md.get("document_id")) or not tenant.allows_topics(md.get("topic") or []):
+            if not self._record_is_entitled(tenant, r):
                 continue
             if requested_docs and md.get("document_id") not in requested_docs:
                 continue
@@ -365,7 +387,7 @@ class ProductState:
         if not record:
             raise HTTPException(status_code=404, detail={"code": "knowledge_object_not_found"})
         md = record.get("metadata") or {}
-        if not tenant.allows_document(md.get("document_id")) or not tenant.allows_topics(md.get("topic") or []):
+        if not self._record_is_entitled(tenant, record):
             raise HTTPException(status_code=404, detail={"code": "knowledge_object_not_found"})
         blocked = serving_block_reason(record)
         if blocked:
@@ -431,18 +453,23 @@ def create_product_app(
     if mode == "fixture" and not allow_fixture:
         raise ValueError("fixture mode is disabled for Product API unless allow_fixture=True")
     p = paths or ProductPaths.defaults()
-    registry = tenant_registry or TenantRegistry.from_path(p.tenant_config)
     selected_access_mode = str(api_access_mode or os.getenv("METIS_API_ACCESS_STORE", "legacy")).strip().lower()
     if selected_access_mode not in {"legacy", "postgres"}:
         raise ValueError("METIS_API_ACCESS_STORE must be legacy or postgres")
-    access_authenticator: Any = registry
     if selected_access_mode == "postgres":
-        access_authenticator = api_access_store or PostgresApiAccessStore()
+        # In PostgreSQL mode the legacy JSON registry is not read at all. This
+        # prevents stale or malformed legacy state from becoming a hidden
+        # availability dependency or fallback authority.
+        registry = tenant_registry or TenantRegistry([])
+        access_authenticator: Any = api_access_store or PostgresApiAccessStore()
         verify_access_schema = getattr(access_authenticator, "verify_schema", None)
         if callable(verify_access_schema):
             verify_access_schema()
-    elif api_access_store is not None:
-        raise ValueError("api_access_store requires api_access_mode='postgres'")
+    else:
+        if api_access_store is not None:
+            raise ValueError("api_access_store requires api_access_mode='postgres'")
+        registry = tenant_registry or TenantRegistry.from_path(p.tenant_config)
+        access_authenticator = registry
     store = canonical_publication_store
     source_store = immutable_source_store
     if mode == "real":
