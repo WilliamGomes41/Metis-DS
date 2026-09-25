@@ -23,7 +23,6 @@ from src.usage_ledger_v1 import UsageLedger
 
 ROOT = Path(__file__).resolve().parents[1]
 KEY = "d34-fixture-key"
-DOC = "d34-guideline"
 RECOMMENDATION_TEXT = "De werkgroep adviseert de verpleegkundige de interventie te gebruiken."
 
 
@@ -102,7 +101,7 @@ def _reviewed_source_objects(
         date="2026-09-25",
         live_url="https://example.test/d34",
         class_="richtlijn",
-        family="d34",
+        family="test",
         named_reviewers=[researcher["account_id"], reviewer["account_id"]],
     )
     snapshot_id = receipt["snapshot_id"]
