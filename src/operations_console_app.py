@@ -2587,7 +2587,10 @@ def _render_review_room(
                     selected_ids=batch_selection or (),
                     include_individual=False,
                 )
-            bindings = console.object_review_bindings(chosen)
+            try:
+                bindings = console.object_review_bindings(chosen)
+            except (AttributeError, ConsoleError):
+                bindings = None
             objects_html += _render_review_index(
                 chosen,
                 snapshot_objects,
