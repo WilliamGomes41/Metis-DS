@@ -128,6 +128,23 @@ def _case() -> tuple[dict, dict, dict, dict]:
     return condition, rec_a, rec_b, explanation
 
 
+def _stamp_source_locator(obj: dict) -> dict:
+    provenance = obj.setdefault("provenance", {})
+    fragments = list(provenance.get("source_fragments") or [])
+    if not any((frag.get("source_locator") or {}).get("locator_value") for frag in fragments):
+        page = (obj.get("source") or {}).get("source_page") or 15
+        fragments.append(
+            {
+                "source_locator": {
+                    "locator_type": "pdf_page",
+                    "locator_value": f"page:{page}",
+                }
+            }
+        )
+    provenance["source_fragments"] = fragments
+    return obj
+
+
 def test_projection_serves_many_to_many_confirmed_relations_only() -> None:
     condition, rec_a, rec_b, explanation = _case()
 
@@ -221,6 +238,8 @@ def test_proposal_and_legacy_semantic_edges_are_not_promoted() -> None:
 
 def test_product_api_exposes_same_confirmed_relations_and_bounds(tmp_path: Path) -> None:
     condition, rec, _rec_b, _explanation = _case()
+    _stamp_source_locator(condition)
+    _stamp_source_locator(rec)
     rec["confirmed_knowledge_relations"] = [
         build_knowledge_relation(
             source_object_id=rec["object_id"],
