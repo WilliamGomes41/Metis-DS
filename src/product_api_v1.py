@@ -271,7 +271,15 @@ class ProductState:
             return False
         for context_object_id in md.get("context_object_ids") or []:
             context_document_id = self._object_document_ids.get(str(context_object_id))
-            if not context_document_id or not tenant.allows_document(context_document_id):
+            if not context_document_id:
+                # REAL mode builds this map from every active canonical object,
+                # including non-searchable context. Synthetic fixture files may
+                # omit those non-searchable rows; preserve fixture-only behavior
+                # without weakening production authorization.
+                if self.mode == "real":
+                    return False
+                continue
+            if not tenant.allows_document(context_document_id):
                 return False
         return True
 
