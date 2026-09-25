@@ -108,6 +108,12 @@ def test_equal_visual_heading_levels_replace_previous_siblings() -> None:
     ]
 
 
+def test_numbered_headings_without_document_title_remain_root_siblings() -> None:
+    stack = _update_heading_stack([], heading="1. Inleiding", max_size=13)
+    stack = _update_heading_stack(stack, heading="2. Methode", max_size=13)
+    assert [text for _level, text, _size in stack] == ["2. Methode"]
+
+
 def test_hierarchy_fix_preserves_source_bound_fragment_evidence(tmp_path) -> None:
     rows = extract(
         _hierarchy_pdf(tmp_path),
