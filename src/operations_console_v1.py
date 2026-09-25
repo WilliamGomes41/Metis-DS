@@ -2360,6 +2360,8 @@ class OperationsConsole:
         )
         relation_plan: dict[str, Any] | None = None
         if d4_relation_review:
+            if not relation_review_ack:
+                raise ConsoleError("knowledge_relation_review_required")
             try:
                 relation_plan = plan_semantic_relation_review(
                     target,
@@ -2395,6 +2397,7 @@ class OperationsConsole:
         recommendation_direction: str | None = None,
         recommendation_strength_level: str | None = None,
         relation_choices: Iterable[str] | None = None,
+        relation_review_ack: bool = False,
         suitability: str | None = None,
         eindoordeel: str | None = None,
         documentpositie_action: str | None = None,
