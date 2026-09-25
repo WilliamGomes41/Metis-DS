@@ -32,7 +32,7 @@ from src.knowledge_relations_v1 import (
     validate_knowledge_relation,
     validate_knowledge_relation_set,
 )
-from src.operations_console_v1 import SCHEMA_V13
+from src.operations_console_v1 import SCHEMA_V13, SCHEMA_V14
 from src.semantic_transform_generic_v1 import transform
 from src.serving_relations_v1 import CLOSED_RELATION_SET, binding_relations
 
@@ -263,7 +263,7 @@ def test_duplicate_relation_semantics_are_rejected() -> None:
     assert any("knowledge_relation_duplicate" in error for error in errors)
 
 
-def test_schema_v14_accepts_new_relation_sets_and_v13_remains_runtime_contract() -> None:
+def test_schema_v14_accepts_new_relation_sets_and_v13_remains_legacy_contract() -> None:
     obj = _base_object()
     obj[PROPOSED_FIELD] = [_relation("applies_if", "condition-a")]
     obj[CONFIRMED_FIELD] = [_relation("supported_by", "support-a")]
@@ -282,8 +282,8 @@ def test_schema_v14_accepts_new_relation_sets_and_v13_remains_runtime_contract()
     assert PROPOSED_FIELD in v14["properties"]
     assert CONFIRMED_FIELD in v14["properties"]
 
-    # D4.1 is kernel only: the OperationsConsole still validates v1.3.
     assert Path(SCHEMA_V13).name == "knowledge_object.schema.v1.3.json"
+    assert Path(SCHEMA_V14).name == "knowledge_object.schema.v1.4.json"
 
 
 def test_exact_legacy_compatibility_mirror_may_coexist_during_staged_cutover() -> None:
