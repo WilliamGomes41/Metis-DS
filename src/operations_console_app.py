@@ -48,6 +48,15 @@ from src.knowledge_relation_review_v1 import (
     has_semantic_relation_review,
     relation_choice_value,
 )
+from src.review_context_v1 import (
+    AUTHORITY_CONFIRMED,
+    DIRECTION_INCOMING,
+    DIRECTION_OUTGOING,
+    RESOLUTION_CURRENT,
+    RESOLUTION_MISSING,
+    RESOLUTION_VERSION_MISMATCH,
+    review_context,
+)
 from src.domain_dimensions_v1 import processing_issue_objects
 from src.processing_diagnostics_v1 import (
     processing_diagnostic_rows,
@@ -620,18 +629,140 @@ def _relation_checkboxes(obj: dict[str, Any], objects: list[dict[str, Any]]) -> 
     )
 
 
+def _context_resolution_copy(endpoint: dict[str, Any]) -> str:
+    resolution = str(endpoint.get("resolution") or "")
+    expected = str(endpoint.get("expected_version") or "")
+    current = str(endpoint.get("current_version") or "")
+    if resolution == RESOLUTION_CURRENT:
+        return f"versie {expected}"
+    if resolution == RESOLUTION_VERSION_MISMATCH:
+        return (
+            f"verwacht versie {expected}; actuele versie {current}. "
+            "Deze relatie is niet automatisch aangepast."
+        )
+    if resolution == RESOLUTION_MISSING:
+        return f"verwacht versie {expected}; passage ontbreekt in deze werkversie"
+    return f"versie {expected}"
+
+
+def _review_context_block(
+    obj: dict[str, Any],
+    objects: list[dict[str, Any]],
+    *,
+    snapshot_id: str,
+    review_path: str,
+    task: str = "",
+) -> str:
+    context = review_context(
+        obj,
+        objects=objects,
+        review_path=review_path,
+    )
+    links = context.get("links") or []
+    if not links:
+        return ""
+
+    snap = quote(str(snapshot_id), safe="")
+    task_query = f"&task={quote(task, safe='')}" if task in REVIEW_TASKS else ""
+    rows: list[str] = []
+    for link in links:
+        outgoing = link.get("direction") == DIRECTION_OUTGOING
+        related = link.get("target") if outgoing else link.get("source")
+        related = related if isinstance(related, dict) else {}
+        relation_type = str(link.get("relation_type") or "")
+        label = RELATION_LABELS.get(relation_type, relation_type)
+        authority = str(link.get("authority") or "")
+        authority_label = (
+            "Bevestigde relatie"
+            if authority == AUTHORITY_CONFIRMED
+            else "Voorstel van Metis"
+        )
+        direction_label = "uitgaand" if outgoing else "inkomend"
+        text = str(related.get("text") or related.get("object_id") or "")
+        object_id = str(related.get("object_id") or "")
+        object_type = _object_type_label(str(related.get("object_type") or ""))
+        resolution = str(related.get("resolution") or "")
+        resolution_copy = _context_resolution_copy(related)
+        stale_class = " relation-context-stale" if resolution != RESOLUTION_CURRENT else ""
+        warning = ""
+        if resolution != RESOLUTION_CURRENT:
+            warning = (
+                '<p class="banner warn relation-context-warning">'
+                f'{_esc(resolution_copy)}</p>'
+            )
+        duty = related.get("review_duty")
+        duty_copy = ""
+        if isinstance(duty, dict):
+            stage = str(duty.get("stage") or "")
+            duty_copy = (
+                "Tweede beoordeling open"
+                if stage == "second_review"
+                else "Nog te beoordelen"
+            )
+        else:
+            duty_copy = "Geen open reviewplicht"
+
+        open_link = ""
+        if object_id and resolution != RESOLUTION_MISSING:
+            open_link = (
+                f'<a class="btn-secondary relation-context-open" '
+                f'href="/review?document={snap}&object={quote(object_id, safe="")}{task_query}">'
+                "Open passage</a>"
+            )
+
+        rows.append(
+            f'<article class="relation-context-item{stale_class}" '
+            f'data-relation-authority="{_esc(authority)}" '
+            f'data-relation-direction="{_esc(direction_label)}" '
+            f'data-relation-resolution="{_esc(resolution)}">'
+            f'<p class="eyebrow">{_esc(authority_label)}</p>'
+            f'<p><b>{_esc(label)}</b> · {_esc(direction_label)}</p>'
+            f'<p>{_esc(text)}</p>'
+            f'<p class="meta"><span>type <b>{_esc(object_type)}</b></span> '
+            f'<span>{_esc(resolution_copy)}</span> '
+            f'<span>{_esc(duty_copy)}</span></p>'
+            f'{warning}{open_link}'
+            "</article>"
+        )
+
+    return f"""
+      <section class="review-card-context review-step" data-review-step="context" aria-label="Samenhang met andere kennisobjecten">
+        <h4>Samenhang met andere kennisobjecten</h4>
+        <p class="field-help">
+          Deze context helpt je de passage te begrijpen. Alleen de geselecteerde passage wordt met dit formulier beoordeeld.
+        </p>
+        <div class="relation-context-list">{"".join(rows)}</div>
+      </section>
+    """
+
+
 def _knowledge_relation_review_block(
     obj: dict[str, Any],
     objects: list[dict[str, Any]],
+    *,
+    review_path: str,
 ) -> str:
     if not has_semantic_relation_review(obj):
         return ""
 
-    by_id = {
-        str(row.get("object_id") or ""): row
-        for row in objects
-        if str(row.get("object_id") or "")
-    }
+    context = review_context(
+        obj,
+        objects=objects,
+        review_path=review_path,
+        stage="first_review",
+    )
+    outgoing_by_key = {}
+    for link in context.get("links") or []:
+        if link.get("direction") != DIRECTION_OUTGOING:
+            continue
+        target = link.get("target") if isinstance(link.get("target"), dict) else {}
+        key = (
+            str(link.get("relation_type") or ""),
+            str(target.get("object_id") or ""),
+            str(target.get("expected_version") or ""),
+        )
+        outgoing_by_key[key] = link
+
     proposed = proposed_knowledge_relations_of(obj)
     confirmed = confirmed_knowledge_relations_of(obj)
     basis = proposed if proposed else confirmed
@@ -649,23 +780,33 @@ def _knowledge_relation_review_block(
         relation_type = str(relation.get("relation_type") or "")
         target_id = str(relation.get("target_object_id") or "")
         target_version = str(relation.get("target_object_version") or "")
-        target = by_id.get(target_id) or {}
-        target_text = str(
-            (target.get("content") or {}).get("clean_text")
-            or target_id
+        key = (relation_type, target_id, target_version)
+        link = outgoing_by_key.get(key) or {}
+        target = link.get("target") if isinstance(link.get("target"), dict) else {}
+        target_text = str(target.get("text") or target_id)
+        resolution = str(target.get("resolution") or RESOLUTION_MISSING)
+        resolution_copy = _context_resolution_copy(
+            target
+            if target
+            else {
+                "resolution": RESOLUTION_MISSING,
+                "expected_version": target_version,
+                "current_version": "",
+            }
         )
-        checked = (
-            " checked"
-            if (relation_type, target_id, target_version) in confirmed_keys
-            else ""
-        )
+        checked = " checked" if key in confirmed_keys else ""
         label = RELATION_LABELS.get(relation_type, relation_type)
+        stale_note = (
+            f' <span class="relation-review-stale">({_esc(resolution_copy)})</span>'
+            if resolution != RESOLUTION_CURRENT
+            else f' <span class="muted">(versie {_esc(target_version)})</span>'
+        )
         rows.append(
-            '<label class="check relation-review-choice">'
+            '<label class="check relation-review-choice" '
+            f'data-relation-resolution="{_esc(resolution)}">'
             f'<input type="checkbox" name="relation_choice" '
             f'value="{_esc(relation_choice_value(relation))}"{checked}>'
-            f'<span><b>{_esc(label)}</b> → {_esc(target_text)} '
-            f'<span class="muted">(versie {_esc(target_version)})</span></span>'
+            f'<span><b>{_esc(label)}</b> → {_esc(target_text)}{stale_note}</span>'
             "</label>"
         )
 
@@ -2045,6 +2186,13 @@ def _render_review_card(
                       {object_text_html}
                     </section>
                     {_broncontext_html(obj, snapshot_id, obj["object_id"], passage_ok, task=task)}
+                    {_review_context_block(
+                        obj,
+                        snapshot_objects,
+                        snapshot_id=snapshot_id,
+                        review_path=review_path,
+                        task=task,
+                    )}
                     <section class="review-step" data-review-step="c">
                       <h4>Is deze passage op zichzelf bruikbaar?</h4>
                       <p class="field-help">Een zelfstandige passage is begrijpelijk zonder dat iemand de rest van het document hoeft te lezen.</p>
@@ -2083,7 +2231,11 @@ def _render_review_card(
                             ),
                         )
                     )}
-                    {_knowledge_relation_review_block(obj, snapshot_objects)}
+                    {_knowledge_relation_review_block(
+                        obj,
+                        snapshot_objects,
+                        review_path=review_path,
+                    )}
                     <section class="review-step" data-review-step="f">
                       <h4>Wat is je besluit?</h4>
                       <fieldset id="decision-{_esc(obj["object_id"])}">
