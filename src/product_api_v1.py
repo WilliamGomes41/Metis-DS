@@ -286,8 +286,19 @@ class ProductState:
         for item in results:
             record = by_id.get(item.get("knowledge_object_id")) or {}
             md = record.get("metadata") or {}
-            applies_ids = list(md.get("applies_if_object_ids") or [])
-            except_ids = list(md.get("except_if_object_ids") or [])
+            relations = self._confirmed_knowledge_relations(record)
+            applies_ids = [
+                str(row.get("target_object_id") or "")
+                for row in relations
+                if row.get("relation_type") == "applies_if"
+                and str(row.get("target_object_id") or "")
+            ]
+            except_ids = [
+                str(row.get("target_object_id") or "")
+                for row in relations
+                if row.get("relation_type") == "except_if"
+                and str(row.get("target_object_id") or "")
+            ]
             item["applies_if"] = []
             item["except_if"] = []
             if item.get("object_type") != "recommendation" or not (applies_ids or except_ids):
