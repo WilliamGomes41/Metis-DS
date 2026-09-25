@@ -22,6 +22,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from .abstain_catalog_v1 import sentence_for
+from .api_access_v1 import ApiAccessStoreError, PostgresApiAccessStore
 from .retrieval.answerability_gate_v1 import AnswerabilityConfig
 from .canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
 from .g2_source_store import AzureBlobSourceStore
@@ -124,6 +125,7 @@ class ProductState:
         paths: ProductPaths,
         tenant_registry: TenantRegistry,
         *,
+        access_authenticator: Any | None = None,
         canonical_publication_store: Any | None = None,
         immutable_source_store: Any | None = None,
         usage_ledger: UsageLedger | None = None,
@@ -140,6 +142,7 @@ class ProductState:
         self.records: list[dict[str, Any]] = []
         self.record_by_object: dict[str, dict[str, Any]] = {}
         self.tenant_registry = tenant_registry
+        self.access_authenticator = access_authenticator or tenant_registry
         self.ledger = usage_ledger or UsageLedger(paths.usage_db)
         self.rate_limiter = rate_limiter or SlidingWindowRateLimiter()
         self.lexical_config = RetrievalConfig.from_dict(_read_json(paths.lexical_config, {}))
@@ -212,10 +215,14 @@ class ProductState:
     def auth(self, api_key: str | None) -> TenantPolicy:
         if not api_key:
             raise HTTPException(status_code=401, detail={"code": "missing_api_key"}, headers={"WWW-Authenticate": "Bearer"})
-        tenant = self.tenant_registry.authenticate(api_key)
+        try:
+            tenant = self.access_authenticator.authenticate(api_key)
+        except ApiAccessStoreError as exc:
+            raise HTTPException(status_code=503, detail={"code": "access_store_unavailable"}) from exc
         if tenant is None:
             raise HTTPException(status_code=401, detail={"code": "invalid_api_key"}, headers={"WWW-Authenticate": "Bearer"})
-        allowed, retry_after = self.rate_limiter.allow(tenant.tenant_id, tenant.requests_per_minute)
+        limiter_identity = getattr(tenant, "application_id", None) or tenant.tenant_id
+        allowed, retry_after = self.rate_limiter.allow(limiter_identity, tenant.requests_per_minute)
         if not allowed:
             raise HTTPException(status_code=429, detail={"code": "rate_limit_exceeded"}, headers={"Retry-After": str(retry_after)})
         return tenant
@@ -413,6 +420,8 @@ def create_product_app(
     *,
     paths: ProductPaths | None = None,
     tenant_registry: TenantRegistry | None = None,
+    api_access_store: Any | None = None,
+    api_access_mode: Literal["legacy", "postgres"] | None = None,
     canonical_publication_store: Any | None = None,
     immutable_source_store: Any | None = None,
     usage_ledger: UsageLedger | None = None,
@@ -423,6 +432,17 @@ def create_product_app(
         raise ValueError("fixture mode is disabled for Product API unless allow_fixture=True")
     p = paths or ProductPaths.defaults()
     registry = tenant_registry or TenantRegistry.from_path(p.tenant_config)
+    selected_access_mode = str(api_access_mode or os.getenv("METIS_API_ACCESS_STORE", "legacy")).strip().lower()
+    if selected_access_mode not in {"legacy", "postgres"}:
+        raise ValueError("METIS_API_ACCESS_STORE must be legacy or postgres")
+    access_authenticator: Any = registry
+    if selected_access_mode == "postgres":
+        access_authenticator = api_access_store or PostgresApiAccessStore()
+        verify_access_schema = getattr(access_authenticator, "verify_schema", None)
+        if callable(verify_access_schema):
+            verify_access_schema()
+    elif api_access_store is not None:
+        raise ValueError("api_access_store requires api_access_mode='postgres'")
     store = canonical_publication_store
     source_store = immutable_source_store
     if mode == "real":
@@ -430,7 +450,7 @@ def create_product_app(
             store = _default_real_store()
         if source_store is None and canonical_publication_store is None:
             source_store = AzureBlobSourceStore()
-    state = ProductState(mode, p, registry, canonical_publication_store=store, immutable_source_store=source_store, usage_ledger=usage_ledger, rate_limiter=rate_limiter)
+    state = ProductState(mode, p, registry, access_authenticator=access_authenticator, canonical_publication_store=store, immutable_source_store=source_store, usage_ledger=usage_ledger, rate_limiter=rate_limiter)
     app = FastAPI(title="V&VN Data Services API", version=SERVICE_VERSION, description="Machine-to-machine access to published V&VN knowledge. This API does not generate clinical answers.")
     app.state.product = state
     bearer = HTTPBearer(auto_error=False, scheme_name="VVNApiKeyBearer", description="Tenant API key as Bearer token")
