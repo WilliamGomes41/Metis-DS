@@ -117,7 +117,7 @@ def _work_item_from_counts(
     contextual_review_duties: int,
     batch_review_duties: int,
 ) -> dict[str, Any]:
-    remaining = review_duties
+    remaining = heading_pending + individual_pending + normal_passages + closure_gap_count
 
     task_counts = (
         ("headings", heading_pending),
@@ -141,8 +141,6 @@ def _work_item_from_counts(
         work_state = "review"
     elif blocked_count:
         work_state = "technical_repair"
-    elif closure_gap_count:
-        work_state = "review"
     elif meaningful_status == "blocked":
         work_state = "publication_blocked"
     else:
@@ -357,14 +355,8 @@ def _work_summary(item: dict[str, Any]) -> str:
     remaining = int(item["remaining_review_items"])
     blocked = int(item["blocked_count"])
     if state == "review":
-        if remaining:
-            noun = "reviewplicht" if remaining == 1 else "reviewplichten"
-            return f"Nog {remaining} inhoudelijke {noun}."
-        disposition = int(item.get("disposition_duties") or 0)
-        if disposition:
-            noun = "bronpassage" if disposition == 1 else "bronpassages"
-            return f"Geen open inhoudelijke reviewplicht; nog {disposition} {noun} afhandelen."
-        return "Geen open inhoudelijke reviewplicht."
+        noun = "reviewtaak" if remaining == 1 else "reviewtaken"
+        return f"Nog {remaining} {noun}."
     if state == "technical_repair":
         noun = "passage vereist" if blocked == 1 else "passages vereisen"
         return f"Geen gewone reviewtaak; {blocked} {noun} technisch herstel."
