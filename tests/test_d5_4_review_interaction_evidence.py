@@ -82,9 +82,12 @@ def _system(tmp_path: Path) -> tuple[OperationsConsole, dict[str, dict], str, st
             "section_path": ["Advies"],
         }
     )
-    target["structure"] = {"section_path": ["Advies"]}
+    structure = dict(target.get("structure") or {})
+    structure["section_path"] = ["Advies"]
+    structure.setdefault("heading", None)
+    structure.setdefault("sequence", 1)
+    target["structure"] = structure
     target["risk"] = {
-        "level": "standard",
         "risk_level": "standard",
         "requires_second_review": False,
         "risk_fields": [],
@@ -298,7 +301,6 @@ def test_second_review_uses_same_evidence_store_without_changing_object_tuple(
     target["object_type"] = "recommendation"
     target["confirmed_object_type"] = "recommendation"
     target["risk"] = {
-        "level": "high",
         "risk_level": "high",
         "requires_second_review": True,
         "risk_fields": ["contraindication"],
