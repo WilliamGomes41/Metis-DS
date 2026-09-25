@@ -10,6 +10,15 @@ import hashlib
 from typing import Any, Iterable
 
 from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES, DEFAULT_OBJECT_TYPE, normalize_visible_prose
+from src.knowledge_relations_v1 import (
+    PROPOSED_FIELD as PROPOSED_RELATIONS_FIELD,
+    build_knowledge_relation,
+    canonicalize_knowledge_relation_set,
+)
+from src.knowledge_relation_proposal_v1 import (
+    PROPOSABLE_RELATION_TYPES,
+    RELATION_EVIDENCE_VERSION,
+)
 from src.recommendation_semantics_v1 import (
     PROPOSED_FIELD,
     RECOMMENDATION_SEMANTICS_VERSION,
@@ -27,8 +36,11 @@ ALLOWED_PROPOSED_TYPES = frozenset(
     (set(CLOSED_OBJECT_TYPES) - {"heading"}) | {DEFAULT_OBJECT_TYPE}
 )
 
-_TOP_LEVEL_KEYS = frozenset({"objects", "abstain_reason"})
+_TOP_LEVEL_KEYS = frozenset({"objects", "relations", "abstain_reason"})
 _OBJECT_KEYS = frozenset({"spans", "proposed_object_type", "recommendation_semantics"})
+_RELATION_KEYS = frozenset(
+    {"source_spans", "relation_type", "target_spans", "evidence_spans"}
+)
 _SPAN_KEYS = frozenset({"block_id", "start", "end"})
 _RECOMMENDATION_KEYS = frozenset(
     {
@@ -334,6 +346,195 @@ def _recommendation_semantics_from_proposal(
     return semantics, evidence
 
 
+def _span_signature(spans: list[dict[str, Any]]) -> tuple[tuple[str, int, int], ...]:
+    return tuple(
+        sorted(
+            (
+                str(span.get("block_id") or ""),
+                int(span.get("start") or 0),
+                int(span.get("end") or 0),
+            )
+            for span in spans
+        )
+    )
+
+
+def _source_bound_relation_span(
+    raw_ref: Any,
+    *,
+    evidence_by_id: dict[str, tuple[dict[str, Any], dict[str, Any]]],
+    code_prefix: str,
+) -> dict[str, Any]:
+    if not isinstance(raw_ref, dict):
+        _fail(f"{code_prefix}_missing")
+    _require_only_keys(raw_ref, _SPAN_KEYS, f"{code_prefix}_contains_untrusted_fields")
+    block_id = str(raw_ref.get("block_id") or "")
+    if block_id not in evidence_by_id:
+        _fail(f"{code_prefix}_unknown_block")
+    start = raw_ref.get("start")
+    end = raw_ref.get("end")
+    if (
+        isinstance(start, bool)
+        or isinstance(end, bool)
+        or not isinstance(start, int)
+        or not isinstance(end, int)
+    ):
+        _fail(f"{code_prefix}_bounds_invalid")
+    public, source = evidence_by_id[block_id]
+    text = str(public["text"])
+    if start < 0 or end <= start or end > len(text):
+        _fail(f"{code_prefix}_bounds_invalid")
+    if not normalize_visible_prose(text[start:end]):
+        _fail(f"{code_prefix}_empty")
+    return {
+        "block_id": block_id,
+        "start": start,
+        "end": end,
+        "source_fragment_ids": source_fragment_ids_for_text(
+            source,
+            start=start,
+            end=end,
+        ),
+    }
+
+
+def _relation_spans(
+    raw_spans: Any,
+    *,
+    evidence_by_id: dict[str, tuple[dict[str, Any], dict[str, Any]]],
+    code_prefix: str,
+) -> list[dict[str, Any]]:
+    if not isinstance(raw_spans, list) or not raw_spans:
+        _fail(f"{code_prefix}_required")
+    rows = [
+        _source_bound_relation_span(
+            row,
+            evidence_by_id=evidence_by_id,
+            code_prefix=code_prefix,
+        )
+        for row in raw_spans
+    ]
+    keys = [(row["block_id"], row["start"], row["end"]) for row in rows]
+    if len(keys) != len(set(keys)):
+        _fail(f"{code_prefix}_duplicate")
+    return rows
+
+
+def attach_relation_proposals(
+    units: list[dict[str, Any]],
+    *,
+    raw_relations: Any,
+    evidence_fragments: Iterable[dict[str, Any]],
+    object_version: str,
+) -> None:
+    evidence_by_id = {
+        public["block_id"]: (public, source)
+        for public, source in _reconstructed_blocks(list(evidence_fragments))
+    }
+    if raw_relations is None:
+        raw_relations = []
+    if not isinstance(raw_relations, list):
+        _fail("knowledge_relations_invalid")
+
+    by_signature: dict[tuple[tuple[str, int, int], ...], dict[str, Any]] = {}
+    for unit in units:
+        semantic = unit.get("semantic_passage")
+        if (
+            not isinstance(semantic, dict)
+            or semantic.get("selection_origin") != SELECTION_ORIGIN_PROPOSAL
+        ):
+            continue
+        spans = semantic.get("spans")
+        if not isinstance(spans, list) or not spans:
+            continue
+        signature = _span_signature(spans)
+        if signature in by_signature:
+            _fail("relation_target_ambiguous")
+        by_signature[signature] = unit
+
+    proposed_by_source: dict[str, list[dict[str, Any]]] = {}
+    evidence_by_source: dict[str, list[dict[str, Any]]] = {}
+
+    for raw in raw_relations:
+        if not isinstance(raw, dict):
+            _fail("knowledge_relation_invalid")
+        _require_only_keys(raw, _RELATION_KEYS, "knowledge_relation_contains_untrusted_fields")
+
+        relation_type = str(raw.get("relation_type") or "").strip()
+        if relation_type not in PROPOSABLE_RELATION_TYPES:
+            _fail("relation_type_invalid")
+
+        source_spans = _relation_spans(
+            raw.get("source_spans"),
+            evidence_by_id=evidence_by_id,
+            code_prefix="relation_source_evidence",
+        )
+        target_spans = _relation_spans(
+            raw.get("target_spans"),
+            evidence_by_id=evidence_by_id,
+            code_prefix="relation_target_evidence",
+        )
+        evidence_spans = _relation_spans(
+            raw.get("evidence_spans"),
+            evidence_by_id=evidence_by_id,
+            code_prefix="relation_evidence",
+        )
+
+        source = by_signature.get(_span_signature(source_spans))
+        target = by_signature.get(_span_signature(target_spans))
+        if source is None:
+            _fail("relation_source_missing")
+        if target is None:
+            _fail("relation_target_missing")
+
+        relation = build_knowledge_relation(
+            source_object_id=str(source["object_id"]),
+            source_object_version=object_version,
+            relation_type=relation_type,
+            target_object_id=str(target["object_id"]),
+            target_object_version=object_version,
+        )
+        proposed_by_source.setdefault(str(source["object_id"]), []).append(relation)
+        evidence_by_source.setdefault(str(source["object_id"]), []).append(
+            {
+                "relation_id": relation["relation_id"],
+                "relation_type": relation_type,
+                "target_object_id": relation["target_object_id"],
+                "target_object_version": relation["target_object_version"],
+                "source_spans": source_spans,
+                "target_spans": target_spans,
+                "evidence_spans": evidence_spans,
+            }
+        )
+
+    for unit in units:
+        object_id = str(unit.get("object_id") or "")
+        relations = proposed_by_source.get(object_id)
+        if not relations:
+            continue
+        canonical = canonicalize_knowledge_relation_set(
+            relations,
+            source_object_id=object_id,
+            source_object_version=object_version,
+        )
+        unit[PROPOSED_RELATIONS_FIELD] = canonical
+        # D4.2 compatibility mirror only; this remains unconfirmed and is not
+        # serving authority. D4.4 removes the serving dependency on this field.
+        unit["relations"] = [
+            {
+                "relation_type": row["relation_type"],
+                "target_object_id": row["target_object_id"],
+                "target_object_version": row["target_object_version"],
+                "confirmed": False,
+            }
+            for row in canonical
+        ]
+        unit["knowledge_relation_evidence"] = {
+            "version": RELATION_EVIDENCE_VERSION,
+            "relations": evidence_by_source[object_id],
+        }
+
+
 def semantic_coverage_units(
     fragments: Iterable[dict[str, Any]],
     *,
@@ -369,6 +570,7 @@ def semantic_units_from_proposal(
     _require_only_keys(proposal, _TOP_LEVEL_KEYS, "semantic_proposal_contains_untrusted_fields")
 
     raw_objects = proposal.get("objects", [])
+    raw_relations = proposal.get("relations", [])
     abstain_reason = str(proposal.get("abstain_reason") or "").strip()
     if not isinstance(raw_objects, list):
         _fail("semantic_objects_invalid")

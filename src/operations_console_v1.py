@@ -105,6 +105,7 @@ from src.serving_relations_v1 import (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_V12 = REPO_ROOT / "schemas" / "knowledge_object.schema.v1.2.json"
 SCHEMA_V13 = REPO_ROOT / "schemas" / "knowledge_object.schema.v1.3.json"
+SCHEMA_V14 = REPO_ROOT / "schemas" / "knowledge_object.schema.v1.4.json"
 CONSOLE_VERSION = "operations-console-v1.0.0"
 SNAPSHOT_OBJECT_WRITE_CONFLICT = "snapshot_object_write_conflict"
 CAPTURED = "captured_not_published"
@@ -652,7 +653,7 @@ class OperationsConsole:
         self.runtime = Path(runtime or self.root / "output" / "runtime" / "operations-console")
         self.immutable_source_store = immutable_source_store
         self.url_fetcher = url_fetcher or default_url_fetcher
-        self.schema_path = Path(schema_path or SCHEMA_V13)
+        self.schema_path = Path(schema_path or SCHEMA_V14)
         self.source_store.mkdir(parents=True, exist_ok=True)
         self.runtime.mkdir(parents=True, exist_ok=True)
         self._accounts_path = self.runtime / "accounts.json"

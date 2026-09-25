@@ -19,7 +19,6 @@ from typing import Any, Callable, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from src.atomic_split_v1 import proposed_relations_for_units
 from src.context_aware_split_v1 import split_context_aware_units
 from src.llm_provider_v1 import OPENAI_RESPONSES_URL, load_llm_provider_config
 from src.object_taxonomy_v1 import (
@@ -45,6 +44,7 @@ from src.semantic_passage_v1 import (
     SELECTION_ORIGIN_PROPOSAL,
     SEMANTIC_PASSAGE_VERSION,
     SemanticPassageError,
+    attach_relation_proposals,
     semantic_coverage_units,
     semantic_source_blocks,
     semantic_units_from_proposal,
@@ -78,6 +78,11 @@ SEMANTIC_DEVELOPER_PROMPT = (
     "evidence must come from the selected recommendation text. Strength evidence "
     "may reference evidence_blocks. Treat only explicit strong/weak source wording "
     "as explicit strength; conditional/voorwaardelijk alone never means weak. "
+    "For knowledge relations return only source-bound relation proposals between "
+    "objects selected in this same proposal. Use only applies_if, except_if, defines, "
+    "explains, supported_by or supersedes. Identify source and target by their exact "
+    "selected spans and bind relation evidence to exact evidence_blocks spans. "
+    "Never infer a relation from proximity alone and never return parent/child here. "
     "Preserve source order. If no safe source-bound proposal is possible, return "
     "zero objects and a short abstain_reason."
 )
@@ -195,6 +200,32 @@ def _proposal_schema() -> dict[str, Any]:
             "strength_evidence",
         ],
     }
+    relation = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "source_spans": {"type": "array", "minItems": 1, "items": span},
+            "relation_type": {
+                "type": "string",
+                "enum": [
+                    "applies_if",
+                    "except_if",
+                    "defines",
+                    "explains",
+                    "supported_by",
+                    "supersedes",
+                ],
+            },
+            "target_spans": {"type": "array", "minItems": 1, "items": span},
+            "evidence_spans": {"type": "array", "minItems": 1, "items": span},
+        },
+        "required": [
+            "source_spans",
+            "relation_type",
+            "target_spans",
+            "evidence_spans",
+        ],
+    }
     obj = {
         "type": "object",
         "additionalProperties": False,
@@ -217,9 +248,10 @@ def _proposal_schema() -> dict[str, Any]:
         "additionalProperties": False,
         "properties": {
             "objects": {"type": "array", "items": obj},
+            "relations": {"type": "array", "items": relation},
             "abstain_reason": {"type": ["string", "null"]},
         },
-        "required": ["objects", "abstain_reason"],
+        "required": ["objects", "relations", "abstain_reason"],
     }
 
 def _extract_output_text(response: dict[str, Any]) -> str:
@@ -589,7 +621,13 @@ def _semantic_execution_before_review(
             content=content_units,
         )
     )
-    proposed_relations_for_units(units)
+    if proposal is not None:
+        attach_relation_proposals(
+            units,
+            raw_relations=proposal.get("relations", []),
+            evidence_fragments=evidence_fragments,
+            object_version="1.0",
+        )
     return units, replay_record
 
 

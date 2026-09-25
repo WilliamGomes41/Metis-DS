@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from src.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, admission_of, apply_admission_gate
-from src.operations_console_v1 import OperationsConsole, SCHEMA_V12, SCHEMA_V13
+from src.operations_console_v1 import OperationsConsole, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14
 from src.pre_review_semantic_v1 import (
     _proposal_schema,
     _replay_identity,
@@ -699,12 +699,13 @@ def test_semantic_recommendation_without_new_semantics_is_hard_blocked_not_legac
     assert "proposed_recommendation_strength" not in gated
 
 
-def test_runtime_current_schema_is_v13_while_legacy_v12_remains_addressable(tmp_path: Path) -> None:
+def test_runtime_current_schema_is_v14_while_legacy_schemas_remain_addressable(tmp_path: Path) -> None:
     console = OperationsConsole(
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",
     )
-    assert console.schema_path == SCHEMA_V13
+    assert console.schema_path == SCHEMA_V14
     assert Path(SCHEMA_V12).name == "knowledge_object.schema.v1.2.json"
     assert Path(SCHEMA_V13).name == "knowledge_object.schema.v1.3.json"
+    assert Path(SCHEMA_V14).name == "knowledge_object.schema.v1.4.json"

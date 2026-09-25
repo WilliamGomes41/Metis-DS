@@ -111,6 +111,9 @@ def _system_candidate_metadata(item: dict[str, Any]) -> dict[str, Any]:
     semantics_evidence = item.get("recommendation_semantics_evidence")
     if isinstance(semantics_evidence, dict):
         out["recommendation_semantics_evidence"] = deepcopy(semantics_evidence)
+    relation_evidence = item.get("knowledge_relation_evidence")
+    if isinstance(relation_evidence, dict):
+        out["knowledge_relation_evidence"] = deepcopy(relation_evidence)
     return out
 
 
@@ -243,6 +246,11 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
             "confirmed_relations": confirm_relation_set(item["confirmed_relations"])
             if item.get("confirmed_relations")
             else [],
+            **(
+                {"proposed_knowledge_relations": deepcopy(item["proposed_knowledge_relations"])}
+                if isinstance(item.get("proposed_knowledge_relations"), list)
+                else {}
+            ),
             "decision_graph": item.get("decision_graph"),
             "risk": {
                 "risk_level": "high" if high else "standard",
@@ -289,7 +297,7 @@ def main() -> int:
     ap.add_argument("--spec", type=Path, required=True)
     ap.add_argument("--manifest", type=Path, required=True)
     ap.add_argument("--raw", type=Path, required=True)
-    ap.add_argument("--schema", type=Path, default=Path("schemas/knowledge_object.schema.v1.3.json"))
+    ap.add_argument("--schema", type=Path, default=Path("schemas/knowledge_object.schema.v1.4.json"))
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--report", type=Path, required=True)
     a=ap.parse_args()
