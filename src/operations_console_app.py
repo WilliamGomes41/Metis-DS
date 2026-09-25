@@ -816,7 +816,7 @@ def _recommendation_semantics_block(
     hidden_attr = " hidden" if hidden else ""
     disabled_attr = " disabled" if hidden else ""
     return f"""
-                    <section class="review-step review-recommendation-semantics" data-recommendation-semantics-block{hidden_attr}>
+                    <section class="review-step review-recommendation-semantics" data-recommendation-semantics-block data-stamp-block{hidden_attr}>
                       <h4>Sterkte van de aanbeveling</h4>
                       <p class="field-help">Bevestig richting en sterkte afzonderlijk. Een klinische voorwaarde maakt een aanbeveling niet automatisch zwak.</p>
                       {evidence_html}
