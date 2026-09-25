@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import html
+import os
 import re
 from typing import Any
 from urllib.parse import quote, urlsplit
@@ -18,6 +19,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.four_eyes_v1 import requires_four_eyes
+from src.api_access_v1 import ApiAccessError, ApiAccessStoreError, PostgresApiAccessStore, VALID_SCOPES
 from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES, review_path_for_klasse
 from src.klasse_wijzigen_v1 import is_cross_model_class_change
 from src.heading_parent_list_v1 import (
@@ -2750,9 +2752,19 @@ def create_console_app(
     console: OperationsConsole | None = None,
     *,
     trusted_origin: str | None = None,
+    api_access_store: Any | None = None,
 ) -> FastAPI:
     state = console or OperationsConsole(root=REPO_ROOT)
     install_ingest_limits(state)
+    access_store = api_access_store
+    access_store_error = ""
+    selected_access_mode = str(os.getenv("METIS_API_ACCESS_STORE", "legacy") or "legacy").strip().lower()
+    if access_store is None and selected_access_mode == "postgres":
+        try:
+            access_store = PostgresApiAccessStore()
+            access_store.verify_schema()
+        except ApiAccessStoreError as exc:
+            access_store_error = str(exc)
     app = FastAPI(
         title="V&VN Data Services Internal Operations Console",
         version=SERVICE_VERSION,
@@ -2905,6 +2917,10 @@ def create_console_app(
               <p class="doc-title">Accounts</p>
               <p>Beheer interne gebruikers en rollen.</p>
             </a>
+            <a class="doc-card" href="/settings/api-access" style="text-decoration:none;">
+              <p class="doc-title">API Access</p>
+              <p>Beheer klanten, consumer-applicaties en eenmalig getoonde API-credentials.</p>
+            </a>
             <a class="doc-card" href="/settings/llm" style="text-decoration:none;">
               <p class="doc-title">LLM-instellingen</p>
               <p>Bekijk de gedeelde provider- en modelconfiguratie van Metis.</p>
@@ -2925,11 +2941,233 @@ def create_console_app(
             <section class="room">
               <p class="eyebrow">Beheer</p>
               <h1>Instellingen</h1>
-              <p class="lead">Accounts, gedeelde LLM-configuratie, auditdiagnostiek en informatie over Metis op één plek.</p>
+              <p class="lead">Accounts, API Access, gedeelde LLM-configuratie, auditdiagnostiek en informatie over Metis op één plek.</p>
               {cards}
             </section>
             """,
             title="Instellingen — Metis",
+        )
+
+    @app.get("/settings/api-access", response_class=HTMLResponse)
+    def settings_api_access(request: Request) -> str:
+        account = _require(request)
+        if access_store is None:
+            reason = access_store_error or "API Access is nog niet geactiveerd voor deze omgeving."
+            return _page(
+                f"""
+                {_nav(account, "settings", _counts(account))}
+                <section class="room">
+                  <p><a href="/settings">← Terug naar Instellingen</a></p>
+                  <p class="eyebrow">Instellingen · API Access</p>
+                  <h1>API Access</h1>
+                  <div class="banner warn">{_esc(reason)}</div>
+                </section>
+                """,
+                title="API Access — Metis",
+            )
+
+        try:
+            consumers = access_store.list_consumers()
+        except ApiAccessStoreError:
+            return HTMLResponse(
+                _page(
+                    f"""
+                    {_nav(account, "settings", _counts(account))}
+                    <section class="room">
+                      <p><a href="/settings">← Terug naar Instellingen</a></p>
+                      <h1>API Access</h1>
+                      <div class="banner err">De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.</div>
+                    </section>
+                    """,
+                    title="API Access — Metis",
+                ),
+                status_code=503,
+            )
+
+        cards = "".join(
+            f"""
+            <article class="doc-card">
+              <p class="doc-title">{_esc(row.get("tenant_name"))} · {_esc(row.get("application_name"))}</p>
+              <p class="meta">
+                <span>omgeving <b>{_esc(row.get("environment"))}</b></span>
+                <span>tenant <b>{_esc(row.get("tenant_id"))}</b></span>
+                <span>app <b>{_esc(row.get("application_id"))}</b></span>
+                <span>actieve credentials <b>{int(row.get("active_credentials") or 0)}</b></span>
+              </p>
+            </article>
+            """
+            for row in consumers
+        ) or '<p class="muted">Nog geen API-consumers.</p>'
+
+        form = ""
+        if "publisher" in account["roles"]:
+            scope_boxes = "".join(
+                f'<label class="check"><input type="checkbox" name="application_scopes" value="{_esc(scope)}" checked> {_esc(scope)}</label>'
+                for scope in sorted(VALID_SCOPES - {"usage:read"})
+            )
+            tenant_scope_boxes = "".join(
+                f'<label class="check"><input type="checkbox" name="tenant_scopes" value="{_esc(scope)}" checked> {_esc(scope)}</label>'
+                for scope in sorted(VALID_SCOPES - {"usage:read"})
+            )
+            form = f"""
+              <form method="post" action="/settings/api-access/provision" class="stack">
+                <div class="sections">
+                  <div class="section">
+                    <h3>Klant en maximale toegang</h3>
+                    <label>Klantnaam</label>
+                    <input name="tenant_name" required>
+                    <label>Content scope</label>
+                    <select name="tenant_content_scope">
+                      <option value="ALL_PUBLISHED">Alle gepubliceerde kennis</option>
+                      <option value="RESOURCE_SET">Specifieke documenten</option>
+                    </select>
+                    <label>Document-id's (één per regel, alleen bij specifieke documenten)</label>
+                    <textarea name="tenant_document_ids"></textarea>
+                    <fieldset><legend>Maximale API-capabilities</legend>{tenant_scope_boxes}</fieldset>
+                    <label>Requests per minuut</label>
+                    <input type="number" name="tenant_requests_per_minute" value="600" min="1" required>
+                    <label>Max top_k</label>
+                    <input type="number" name="tenant_max_top_k" value="20" min="1" required>
+                  </div>
+                  <div class="section">
+                    <h3>Consumer-applicatie</h3>
+                    <label>Naam</label>
+                    <input name="application_name" required>
+                    <label>Omgeving</label>
+                    <input name="environment" value="PRODUCTION" required>
+                    <label>Content scope</label>
+                    <select name="application_content_scope">
+                      <option value="ALL_PUBLISHED">Binnen de volledige klanttoegang</option>
+                      <option value="RESOURCE_SET">Specifieke documenten</option>
+                    </select>
+                    <label>Document-id's (één per regel)</label>
+                    <textarea name="application_document_ids"></textarea>
+                    <fieldset><legend>API-capabilities</legend>{scope_boxes}</fieldset>
+                    <label>Requests per minuut</label>
+                    <input type="number" name="application_requests_per_minute" value="600" min="1" required>
+                    <label>Max top_k</label>
+                    <input type="number" name="application_max_top_k" value="20" min="1" required>
+                    <button class="btn-primary" type="submit">Consumer aanmaken en key genereren</button>
+                  </div>
+                </div>
+              </form>
+            """
+
+        return _page(
+            f"""
+            {_nav(account, "settings", _counts(account))}
+            <section class="room">
+              <p><a href="/settings">← Terug naar Instellingen</a></p>
+              <p class="eyebrow">Instellingen · API Access</p>
+              <h1>API Access</h1>
+              <p class="lead">Een credential identificeert een consumer-applicatie; tenant- en applicatiebeleid bepalen de effectieve toegang.</p>
+              {form}
+              <div class="doc-list">{cards}</div>
+            </section>
+            """,
+            title="API Access — Metis",
+        )
+
+    @app.post("/settings/api-access/provision", response_class=HTMLResponse)
+    def settings_api_access_provision(
+        request: Request,
+        tenant_name: str = Form(...),
+        tenant_content_scope: str = Form(...),
+        tenant_document_ids: str = Form(""),
+        tenant_scopes: list[str] = Form(default=[]),
+        tenant_requests_per_minute: int = Form(...),
+        tenant_max_top_k: int = Form(...),
+        application_name: str = Form(...),
+        environment: str = Form(...),
+        application_content_scope: str = Form(...),
+        application_document_ids: str = Form(""),
+        application_scopes: list[str] = Form(default=[]),
+        application_requests_per_minute: int = Form(...),
+        application_max_top_k: int = Form(...),
+    ) -> HTMLResponse:
+        account = _require(request)
+        if "publisher" not in account["roles"]:
+            raise ConsoleError("publisher_role_required")
+        if access_store is None:
+            return HTMLResponse(
+                _page(
+                    f"""
+                    {_nav(account, "settings", _counts(account))}
+                    <section class="room">
+                      <h1>API Access</h1>
+                      <div class="banner err">API Access is in deze omgeving niet beschikbaar. Er is niets gewijzigd.</div>
+                    </section>
+                    """
+                ),
+                status_code=503,
+            )
+
+        parse_ids = lambda raw: [part.strip() for line in raw.splitlines() for part in line.split(",") if part.strip()]
+        try:
+            result = access_store.provision_consumer(
+                actor_id=str(account["account_id"]),
+                tenant_name=tenant_name,
+                tenant_content_scope=tenant_content_scope,
+                tenant_document_ids=parse_ids(tenant_document_ids),
+                tenant_scopes=tenant_scopes,
+                tenant_requests_per_minute=tenant_requests_per_minute,
+                tenant_max_top_k=tenant_max_top_k,
+                application_name=application_name,
+                environment=environment,
+                application_content_scope=application_content_scope,
+                application_document_ids=parse_ids(application_document_ids),
+                application_scopes=application_scopes,
+                application_requests_per_minute=application_requests_per_minute,
+                application_max_top_k=application_max_top_k,
+            )
+        except ApiAccessError as exc:
+            return HTMLResponse(
+                _page(
+                    f"""
+                    {_nav(account, "settings", _counts(account))}
+                    <section class="room">
+                      <h1>API Access</h1>
+                      <div class="banner err">De toegang kon niet worden aangemaakt: {_esc(str(exc))}</div>
+                      <p><a href="/settings/api-access">Terug</a></p>
+                    </section>
+                    """
+                ),
+                status_code=400,
+            )
+        except ApiAccessStoreError:
+            return HTMLResponse(
+                _page(
+                    f"""
+                    {_nav(account, "settings", _counts(account))}
+                    <section class="room">
+                      <h1>API Access</h1>
+                      <div class="banner err">De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.</div>
+                    </section>
+                    """
+                ),
+                status_code=503,
+            )
+
+        return HTMLResponse(
+            _page(
+                f"""
+                {_nav(account, "settings", _counts(account))}
+                <section class="room">
+                  <p><a href="/settings/api-access">← Terug naar API Access</a></p>
+                  <p class="eyebrow">Credential uitgegeven</p>
+                  <h1>Bewaar deze API-key nu</h1>
+                  <div class="banner warn">Deze plaintext key wordt na deze pagina niet opnieuw getoond.</div>
+                  <article class="doc-card">
+                    <p>Tenant <b>{_esc(result.tenant_id)}</b></p>
+                    <p>Applicatie <b>{_esc(result.application_id)}</b></p>
+                    <p>Credential <b>{_esc(result.credential_id)}</b></p>
+                    <label>API-key</label>
+                    <input value="{_esc(result.api_key)}" readonly>
+                  </article>
+                </section>
+                """,
+                title="API-key uitgegeven — Metis",
+            )
         )
 
     @app.get("/settings/llm", response_class=HTMLResponse)
