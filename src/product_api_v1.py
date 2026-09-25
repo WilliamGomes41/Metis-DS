@@ -141,6 +141,7 @@ class ProductState:
         self._corpus_revision: str | None = None
         self.records: list[dict[str, Any]] = []
         self.record_by_object: dict[str, dict[str, Any]] = {}
+        self._object_document_ids: dict[str, str] = {}
         self.tenant_registry = tenant_registry
         self.access_authenticator = access_authenticator or tenant_registry
         self.ledger = usage_ledger or UsageLedger(paths.usage_db)
@@ -152,12 +153,27 @@ class ProductState:
         self._index_cache: dict[tuple[Any, ...], SafeRetrievalIndex] = {}
         self._reload_records(force=True)
 
-    def _install_records(self, records: list[dict[str, Any]], *, revision: str) -> bool:
+    def _install_records(
+        self,
+        records: list[dict[str, Any]],
+        *,
+        revision: str,
+        object_document_ids: dict[str, str] | None = None,
+    ) -> bool:
         records = [row for row in records if not historical_type_must_not_serve((row.get("metadata") or {}).get("object_type"))]
         if revision == self._corpus_revision:
             return False
         self.records = records
         self.record_by_object = {r.get("metadata", {}).get("object_id"): r for r in records if (r.get("metadata") or {}).get("object_id")}
+        if object_document_ids is None:
+            object_document_ids = {
+                str((row.get("metadata") or {}).get("object_id") or ""):
+                    str((row.get("metadata") or {}).get("document_id") or "")
+                for row in records
+                if (row.get("metadata") or {}).get("object_id")
+                and (row.get("metadata") or {}).get("document_id")
+            }
+        self._object_document_ids = dict(object_document_ids)
         self._corpus_revision = revision
         self._index_cache = {}
         return True
@@ -197,12 +213,23 @@ class ProductState:
             raise ProductCorpusError(str(exc)) from exc
 
         envelopes = [{"knowledge_object": dict(row["knowledge_object"]), "publication": dict(row["publication"])} for row in authority_rows]
+        object_document_ids = {
+            str(envelope["knowledge_object"].get("object_id") or ""):
+                str(envelope["knowledge_object"].get("document_id") or "")
+            for envelope in envelopes
+            if envelope["knowledge_object"].get("object_id")
+            and envelope["knowledge_object"].get("document_id")
+        }
         records, blocked = build_projection(envelopes)
         if blocked:
             raise ProductCorpusError("canonical_publication_projection_invalid:" + json.dumps(blocked, ensure_ascii=False, sort_keys=True))
         if len({str((row.get("metadata") or {}).get("object_id") or "") for row in records}) != len(records):
             raise ProductCorpusError("canonical_publication_projection_duplicate_object")
-        return self._install_records(records, revision="postgres+blob:" + _corpus_revision(records))
+        return self._install_records(
+            records,
+            revision="postgres+blob:" + _corpus_revision(records),
+            object_document_ids=object_document_ids,
+        )
 
     def _reload_records(self, *, force: bool = False) -> bool:
         if self.mode == "real":
@@ -231,25 +258,20 @@ class ProductState:
         if not tenant.has_scope(scope):
             raise HTTPException(status_code=403, detail={"code": "scope_denied", "required_scope": scope})
 
-    @staticmethod
-    def _record_is_entitled(tenant: TenantPolicy, record: dict[str, Any]) -> bool:
-        """Authorize the complete derived evidence carried by one record.
+    def _record_is_entitled(self, tenant: TenantPolicy, record: dict[str, Any]) -> bool:
+        """Authorize all published evidence represented inside one derived record.
 
-        Retrieval text can include reviewed context from related objects. A
-        consumer may therefore see a record only when its own document and each
-        explicitly carried context document are entitled. Current REAL
-        projections carry context document identity; legacy synthetic fixtures
-        without it are treated as same-document context.
+        Retrieval text may embed reviewed context from related canonical
+        objects. REAL mode therefore authorizes each context object's canonical
+        document identity before the record enters retrieval or direct reads.
         """
         md = record.get("metadata") or {}
         document_id = md.get("document_id")
         if not tenant.allows_document(document_id) or not tenant.allows_topics(md.get("topic") or []):
             return False
-        for context in md.get("context_relations") or []:
-            if not isinstance(context, dict):
-                continue
-            context_document_id = context.get("document_id") or document_id
-            if not tenant.allows_document(context_document_id):
+        for context_object_id in md.get("context_object_ids") or []:
+            context_document_id = self._object_document_ids.get(str(context_object_id))
+            if not context_document_id or not tenant.allows_document(context_document_id):
                 return False
         return True
 
