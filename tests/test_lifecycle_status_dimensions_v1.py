@@ -182,6 +182,10 @@ class _ClosedQueueConsole(ProportionateReviewConsole):
     def snapshot_objects(self, _snapshot_id: str) -> list[dict[str, Any]]:
         return deepcopy(self._test_objects)
 
+    def object_review_bindings(self, _snapshot_id: str) -> list[dict[str, Any]]:
+        return []
+
+
     def document_lifecycle_status(self, _snapshot_id: str) -> dict[str, str]:
         return {
             "workflow_status": "closed",
