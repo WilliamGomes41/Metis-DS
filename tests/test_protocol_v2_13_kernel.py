@@ -24,6 +24,7 @@ from src.four_eyes_v1 import (
     requires_four_eyes,
 )
 from src.integrity_kernel import compute_canonical_object_hash, sha256_bytes
+from src.knowledge_relations_v1 import build_knowledge_relation
 from src.object_taxonomy_v1 import published_object_type
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
@@ -410,6 +411,22 @@ def test_published_recommendation_served_with_applies_if_except_if(tmp_path: Pat
             {"relation_type": "except_if", "target_object_id": "x1", "confirmed": True},
         ],
     )
+    rec["metadata"]["confirmed_knowledge_relations"] = [
+        build_knowledge_relation(
+            source_object_id="r1",
+            source_object_version="1.0",
+            relation_type="applies_if",
+            target_object_id="c1",
+            target_object_version="1.0",
+        ),
+        build_knowledge_relation(
+            source_object_id="r1",
+            source_object_version="1.0",
+            relation_type="except_if",
+            target_object_id="x1",
+            target_object_version="1.0",
+        ),
+    ]
     rec["metadata"]["applies_if_object_ids"] = ["c1"]
     rec["metadata"]["except_if_object_ids"] = ["x1"]
     path = tmp_path / "projection.jsonl"

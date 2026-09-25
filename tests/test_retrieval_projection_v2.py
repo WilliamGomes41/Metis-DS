@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from object_taxonomy_v1 import CLOSED_OBJECT_TYPES
 from src.retrieval.retrieval_projection_v2 import build_projection, canonical_hash
 from src.evaluation.validate_golden_set import validate
+from src.knowledge_relations_v1 import build_knowledge_relation
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: kwaliteit
@@ -128,14 +129,25 @@ def test_projection_blocks_empty_semantic_content_and_missing_source_anchor():
     assert blocked[0]["errors"] == ["semantic_content_missing", "source_anchor_missing"]
 
 
-def test_confirmed_relation_is_typed_and_unrelated_neighbour_is_not_padded_in():
+def test_new_format_confirmed_relation_is_typed_and_unrelated_neighbour_is_not_padded_in():
     objs = by_id()
     condition = copy.deepcopy(objs["vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus"])
     rec = copy.deepcopy(objs["vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01"])
     neighbour = copy.deepcopy(objs["vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02"])
+    rec["parent_object_id"] = None
+    rec["confirmed_knowledge_relations"] = [
+        build_knowledge_relation(
+            source_object_id=rec["object_id"],
+            source_object_version=rec["object_version"],
+            relation_type="applies_if",
+            target_object_id=condition["object_id"],
+            target_object_version=condition["object_version"],
+        )
+    ]
     rec["confirmed_relations"] = [{
         "relation_type": "applies_if",
         "target_object_id": condition["object_id"],
+        "target_object_version": condition["object_version"],
         "confirmed": True,
     }]
     neighbour["parent_object_id"] = None
@@ -150,6 +162,52 @@ def test_confirmed_relation_is_typed_and_unrelated_neighbour_is_not_padded_in():
     assert "Voorwaarde:" in projected["retrieval_text"]
     assert neighbour["content"]["clean_text"] not in projected["retrieval_text"]
     assert projected["metadata"]["context_relations"][0]["relation_type"] == "applies_if"
+    assert projected["metadata"]["confirmed_knowledge_relations"] == rec["confirmed_knowledge_relations"]
+
+
+def test_legacy_only_semantic_relation_is_not_serving_authority():
+    objs = by_id()
+    condition = copy.deepcopy(objs["vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus"])
+    rec = copy.deepcopy(objs["vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01"])
+    rec["parent_object_id"] = None
+    rec["confirmed_relations"] = [{
+        "relation_type": "applies_if",
+        "target_object_id": condition["object_id"],
+        "confirmed": True,
+    }]
+    records, blocked = build_projection([
+        published_envelope(condition),
+        published_envelope(rec),
+    ])
+    assert blocked == []
+    projected = next(row for row in records if row["metadata"]["object_id"] == rec["object_id"])
+    assert projected["metadata"]["confirmed_knowledge_relations"] == []
+    assert projected["metadata"]["applies_if_object_ids"] == []
+    assert condition["content"]["clean_text"] not in projected["retrieval_text"]
+
+
+def test_confirmed_relation_target_version_mismatch_blocks_projection():
+    objs = by_id()
+    condition = copy.deepcopy(objs["vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus"])
+    rec = copy.deepcopy(objs["vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01"])
+    rec["parent_object_id"] = None
+    rec["confirmed_knowledge_relations"] = [
+        build_knowledge_relation(
+            source_object_id=rec["object_id"],
+            source_object_version=rec["object_version"],
+            relation_type="applies_if",
+            target_object_id=condition["object_id"],
+            target_object_version=condition["object_version"],
+        )
+    ]
+    condition["object_version"] = "9.9"
+    records, blocked = build_projection([
+        published_envelope(condition),
+        published_envelope(rec),
+    ])
+    assert all(row["metadata"]["object_id"] != rec["object_id"] for row in records)
+    problem = next(row for row in blocked if row["object_id"] == rec["object_id"])
+    assert problem["errors"] == [f"context_target_version_mismatch:{condition['object_id']}"]
 
 
 def test_projection_does_not_serve_historical_score_rule():

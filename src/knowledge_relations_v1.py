@@ -446,6 +446,31 @@ def confirmed_knowledge_relations_of(obj: dict[str, Any]) -> list[dict[str, Any]
     return [dict(row) for row in value if isinstance(row, dict)]
 
 
+def confirmed_semantic_relations_for_serving(
+    obj: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Return only persisted new-format confirmed semantic relations.
+
+    This is the D4.4 serving authority. It deliberately does not consult
+    legacy confirmed_relations or proposal fields.
+    """
+
+    return [
+        dict(row)
+        for row in confirmed_knowledge_relations_of(obj)
+        if str(row.get("relation_type") or "") in SEMANTIC_RELATION_TYPES
+    ]
+
+
+def legacy_confirmed_semantic_relations_exist(obj: dict[str, Any]) -> bool:
+    """Whether legacy confirmed semantic edges exist without implying authority."""
+
+    return any(
+        str(row.get("relation_kind") or "") == "semantic"
+        for row in legacy_knowledge_relations_view(obj, confirmed=True)
+    )
+
+
 def legacy_knowledge_relations_view(
     obj: dict[str, Any],
     *,

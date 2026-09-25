@@ -33,12 +33,12 @@ from .product_source_authority_v1 import ProductSourceAuthorityError, verify_act
 from .retrieval.retrieval_projection_v2 import build_projection
 from .retrieval.safe_retrieval_v1 import SafeRetrievalIndex
 from .retrieval.semantic_vector_retrieval_v1 import VectorConfig
-from .serving_relations_v1 import applies_if_targets, except_if_targets, historical_type_must_not_serve
+from .serving_relations_v1 import historical_type_must_not_serve
 from .usage_ledger_v1 import UsageLedger
 
 ROOT = Path(__file__).resolve().parents[1]
 API_VERSION = "v1"
-SERVICE_VERSION = "product-api-v1.4.0"
+SERVICE_VERSION = "product-api-v1.5.0"
 
 
 class ProductCorpusError(RuntimeError):
@@ -256,6 +256,16 @@ class ProductState:
         return engine
 
     @staticmethod
+    def _confirmed_knowledge_relations(record: dict[str, Any]) -> list[dict[str, Any]]:
+        """Expose only D4 new-format confirmed semantic relations from projection."""
+
+        md = record.get("metadata") or {}
+        value = md.get("confirmed_knowledge_relations")
+        if not isinstance(value, list):
+            return []
+        return [dict(row) for row in value if isinstance(row, dict)]
+
+    @staticmethod
     def _confirmed_recommendation_semantics(record: dict[str, Any]) -> dict[str, Any] | None:
         """Expose only persisted confirmed semantics carried by the projection.
 
@@ -276,8 +286,19 @@ class ProductState:
         for item in results:
             record = by_id.get(item.get("knowledge_object_id")) or {}
             md = record.get("metadata") or {}
-            applies_ids = list(md.get("applies_if_object_ids") or applies_if_targets(record) or applies_if_targets(md))
-            except_ids = list(md.get("except_if_object_ids") or except_if_targets(record) or except_if_targets(md))
+            relations = self._confirmed_knowledge_relations(record)
+            applies_ids = [
+                str(row.get("target_object_id") or "")
+                for row in relations
+                if row.get("relation_type") == "applies_if"
+                and str(row.get("target_object_id") or "")
+            ]
+            except_ids = [
+                str(row.get("target_object_id") or "")
+                for row in relations
+                if row.get("relation_type") == "except_if"
+                and str(row.get("target_object_id") or "")
+            ]
             item["applies_if"] = []
             item["except_if"] = []
             if item.get("object_type") != "recommendation" or not (applies_ids or except_ids):
@@ -321,6 +342,9 @@ class ProductState:
             semantics = self._confirmed_recommendation_semantics(record)
             if semantics is not None:
                 result["recommendation_semantics"] = semantics
+            relations = self._confirmed_knowledge_relations(record)
+            if relations:
+                result["knowledge_relations"] = relations
             results.append(result)
         results = self._attach_advice_bounds(results, records)
         if raw.get("answerability") == "supported" and not results:
@@ -343,6 +367,9 @@ class ProductState:
         semantics = self._confirmed_recommendation_semantics(record)
         if semantics is not None:
             payload["recommendation_semantics"] = semantics
+        relations = self._confirmed_knowledge_relations(record)
+        if relations:
+            payload["knowledge_relations"] = relations
         return payload
 
     def documents(self, tenant: TenantPolicy) -> list[dict[str, Any]]:
