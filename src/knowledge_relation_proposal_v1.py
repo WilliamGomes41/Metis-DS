@@ -11,6 +11,7 @@ from typing import Any, Iterable
 from src.knowledge_relations_v1 import (
     PROPOSED_FIELD,
     SEMANTIC_RELATION_TYPES,
+    knowledge_relation_errors,
     proposed_knowledge_relations_of,
     validate_knowledge_relation_set,
 )
@@ -157,17 +158,20 @@ def relation_proposal_admission_codes(
         source_object_id=source_id,
         source_object_version=source_version,
     )
+    object_errors = knowledge_relation_errors(obj)
 
     codes: list[str] = []
-    if errors:
+    if errors or object_errors:
         codes.append("relation_proposal_invalid")
-        joined = "|".join(errors)
+        joined = "|".join(errors + object_errors)
         if "knowledge_relation_type_invalid" in joined:
             codes.append("relation_type_invalid")
         if "knowledge_relation_target_object_version_missing" in joined:
             codes.append("relation_target_version_missing")
         if "knowledge_relation_self_relation" in joined:
             codes.append("relation_self_reference")
+        if "legacy_authority_conflict" in joined:
+            codes.append("relation_legacy_mirror_conflict")
 
     by_id = {
         str(row.get("object_id") or ""): row
