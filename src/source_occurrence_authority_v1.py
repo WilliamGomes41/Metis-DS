@@ -87,6 +87,8 @@ def _apply_candidate_semantics(
         "semantic_passage",
         "proposed_object_type",
         "proposed_recommendation_strength",
+        "proposed_recommendation_semantics",
+        "recommendation_semantics_evidence",
     ):
         if key in donor:
             row[key] = deepcopy(donor[key])
