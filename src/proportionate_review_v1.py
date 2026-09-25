@@ -32,6 +32,18 @@ NORMAL_RISK_BATCH_TYPES = frozenset({"definition", "explanation"})
 NORMAL_RISK_BATCH_MAX = 20
 
 
+def _review_bindings_or_legacy(
+    console: OperationsConsole,
+    snapshot_id: str,
+) -> list[dict[str, Any]] | None:
+    try:
+        return _review_bindings_or_legacy(console, snapshot_id)
+    except (AttributeError, ConsoleError):
+        # Thin deterministic test/compatibility consoles can intentionally
+        # omit the review-binding store. Production consoles expose it.
+        return None
+
+
 def _batch_type(obj: dict[str, Any]) -> str:
     """Human/stored classification wins over an obsolete machine proposal."""
     if obj.get("confirmed_object_type"):
@@ -194,7 +206,7 @@ def render_normal_risk_batch_panel(
     review_path = review_path_for_klasse(envelope["class"])
     objects, revision = snapshot if snapshot is not None else console.snapshot_objects_and_revision(snapshot_id)
     all_objects = objects
-    bindings = console.object_review_bindings(snapshot_id)
+    bindings = _review_bindings_or_legacy(console, snapshot_id)
     queue = normal_risk_batch_queue(
         all_objects,
         review_path=review_path,
@@ -327,7 +339,7 @@ class ProportionateReviewConsole(OperationsConsole):
             duty = review_duty_for(
                 target,
                 review_path=review_path,
-                bindings=self.object_review_bindings(snapshot_id),
+                bindings=_review_bindings_or_legacy(self, snapshot_id),
             )
             if not (
                 duty
@@ -417,7 +429,7 @@ def install_proportionate_review_routes(app: FastAPI, console: ProportionateRevi
                 for row in normal_risk_batch_queue(
                     current.values(),
                     review_path=review_path,
-                    bindings=console.object_review_bindings(snapshot_id),
+                    bindings=_review_bindings_or_legacy(console, snapshot_id),
                 )
             }
             retry_selection = [
@@ -442,7 +454,7 @@ def install_proportionate_review_routes(app: FastAPI, console: ProportionateRevi
         remaining = normal_risk_batch_queue(
             console.snapshot_objects(snapshot_id),
             review_path=review_path,
-            bindings=console.object_review_bindings(snapshot_id),
+            bindings=_review_bindings_or_legacy(console, snapshot_id),
         )
         target = (
             f"/review?document={snapshot_id}&task=batch"
