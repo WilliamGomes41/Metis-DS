@@ -2066,12 +2066,29 @@ def _review_route_objects(
     objects: list[dict[str, Any]],
     *,
     review_path: str,
-    bindings: list[dict[str, Any]],
+    bindings: list[dict[str, Any]] | None,
     reviewer_id: str,
     canonical_task: str,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for obj in objects:
+        if bindings is None:
+            duty = review_duty_for(
+                obj,
+                review_path=review_path,
+                bindings=None,
+            )
+            if not duty:
+                continue
+            task = (
+                "second_review"
+                if duty.get("stage") == "second_review"
+                else str(duty.get("lane") or "")
+            )
+            if task == canonical_task:
+                rows.append(obj)
+            continue
+
         route = reviewer_route_for(
             obj,
             review_path=review_path,
@@ -2199,7 +2216,7 @@ def _render_review_index(
     reviewer_id: str = "",
 ) -> str:
     task = normalize_review_task(task)
-    bindings = list(bindings or [])
+    bindings = list(bindings) if bindings is not None else None
     koppen = _review_route_objects(
         snapshot_objects,
         review_path=review_path,
