@@ -1339,7 +1339,13 @@ def _review_index_item(
     return f'<li class="review-row">{link}{status_html}</li>'
 
 
-def _review_section_groups(objects: list[dict[str, Any]], snapshot_id: str, *, priority_ids: set[str] | None = None) -> str:
+def _review_section_groups(
+    objects: list[dict[str, Any]],
+    snapshot_id: str,
+    *,
+    priority_ids: set[str] | None = None,
+    task: str = "contextual",
+) -> str:
     """Presentation only: preserve exact source paths and existing object links."""
     priority_ids = priority_ids or set()
     groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
@@ -1359,7 +1365,18 @@ def _review_section_groups(objects: list[dict[str, Any]], snapshot_id: str, *, p
             'Controleer de plaatsing bij het beoordelen.</p>'
             f'<p>{_esc(path or "Geen bronpad beschikbaar")}</p></details>'
             '<ol class="object-index">'
-            + "".join(_review_index_item(obj, snapshot_id, reason=_individual_review_reason(obj, priority=str(obj.get("object_id")) in priority_ids), task="individual") for obj in rows)
+            + "".join(
+                _review_index_item(
+                    obj,
+                    snapshot_id,
+                    reason=_individual_review_reason(
+                        obj,
+                        priority=str(obj.get("object_id")) in priority_ids,
+                    ),
+                    task=task,
+                )
+                for obj in rows
+            )
             + '</ol></details>'
         )
     return "".join(panels)
@@ -2206,6 +2223,7 @@ def _render_review_index(
         normal_passages, normal_batches = normal_risk_batch_counts(
             snapshot_objects,
             review_path=review_path,
+            bindings=bindings,
         )
     blocked_html = ""
     if blocked:
@@ -2238,7 +2256,12 @@ def _render_review_index(
         return f'''
           {_review_task_header(snapshot_id, "Belangrijke passages beoordelen", "Open iedere passage en vergelijk haar met de oorspronkelijke bron")}
           <section class="review-lane-slow">
-            {_review_section_groups(individual, snapshot_id, priority_ids={str(obj.get("object_id")) for obj in individual}) if individual else '<p class="review-task-empty">Deze taak is afgerond.</p>'}
+            {_review_section_groups(
+                individual,
+                snapshot_id,
+                priority_ids={str(obj.get("object_id")) for obj in individual},
+                task="contextual",
+            ) if individual else '<p class="review-task-empty">Deze taak is afgerond.</p>'}
           </section>
         '''
     if task == "batch":
@@ -2262,7 +2285,12 @@ def _render_review_index(
         return f'''
           {_review_task_header(snapshot_id, "Tweede beoordelingen", "Beoordeel onafhankelijk exact dezelfde goedgekeurde objectversie")}
           <section class="review-lane-second">
-            {_review_section_groups(second_review, snapshot_id, priority_ids=set()) if second_review else '<p class="review-task-empty">Deze taak is afgerond of wacht op een andere reviewer.</p>'}
+            {_review_section_groups(
+                second_review,
+                snapshot_id,
+                priority_ids=set(),
+                task="second_review",
+            ) if second_review else '<p class="review-task-empty">Deze taak is afgerond of wacht op een andere reviewer.</p>'}
           </section>
         '''
     if task == "repair":
@@ -2284,6 +2312,7 @@ def _render_review_index(
         normal_batches=normal_batches,
         blocked_count=len(blocked),
         progress=progress,
+        second_review_pending=len(second_review),
     )
 
 
