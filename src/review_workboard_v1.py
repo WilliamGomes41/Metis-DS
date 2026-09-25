@@ -716,8 +716,9 @@ def _projected_document_dashboard(
     heading = console_ui._document_card_heading(
         {**envelope, "status": envelope.get("state") or ""}
     )
+    ledger_path = getattr(console, "_ledger_path", None)
     burden = review_burden_projection(
-        read_events(console._ledger_path),
+        read_events(ledger_path) if ledger_path is not None else [],
         snapshot_id=snapshot_id,
     )
     burden_html = (
