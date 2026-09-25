@@ -242,6 +242,7 @@ ERROR_COPY = {
     "second_review_not_available": "Deze tweede beoordeling is niet meer actueel.",
     "first_review_required": "De eerste beoordeling moet eerst zijn afgerond.",
     "independent_second_reviewer_required": "De tweede beoordeling moet door een andere reviewer worden uitgevoerd.",
+    "second_review_command_required": "Gebruik de aparte tweede-beoordelingsroute voor dit object.",
     "open_original_required": "Open eerst de bronpassage. Type bevestigen zonder het origineel is niet toegestaan.",
     "source_locator_missing": "De bronpassage ontbreekt; type bevestigen is niet toegestaan.",
     "freeze_bytes_missing": "Het geüploade origineel ontbreekt; type bevestigen is niet toegestaan.",
@@ -2616,7 +2617,37 @@ def _render_review_room(
                 )
             else:
                 conflict_html = _review_conflict_html(conflict, current=obj, draft=draft)
-                if chosen_task == "second_review":
+                try:
+                    current_bindings = console.object_review_bindings(chosen)
+                except AttributeError:
+                    current_bindings = None
+                route = (
+                    reviewer_route_for(
+                        obj,
+                        review_path=review_path,
+                        reviewer_id=str(account.get("account_id") or ""),
+                        bindings=current_bindings,
+                    )
+                    if current_bindings is not None
+                    else None
+                )
+                if route and route.get("canonical_task") == "second_review":
+                    if route.get("actionable"):
+                        objects_html += _render_second_review_card(
+                            console,
+                            chosen,
+                            obj,
+                            snapshot_objects,
+                            review_path,
+                            reviewer_id=str(account.get("account_id") or ""),
+                            snapshot_revision=snapshot_revision,
+                        )
+                    else:
+                        objects_html += f"""
+                          <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">← Terug naar taken</a></p>
+                          <div class="banner warn">Deze tweede beoordeling moet door een andere onafhankelijke reviewer worden uitgevoerd.</div>
+                        """
+                elif chosen_task == "second_review":
                     objects_html += _render_second_review_card(
                         console,
                         chosen,
