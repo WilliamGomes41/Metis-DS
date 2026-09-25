@@ -356,7 +356,7 @@ def review_workboard_items(
                     lifecycle_status=_lifecycle_for_work_item(console, snapshot_id),
                     heading_pending=int(summary.get("heading_pending") or 0),
                     individual_pending=int(summary.get("individual_pending") or 0),
-                    normal_passages=int(summary.get("actionable_batch_duties") or 0),
+                    normal_passages=actionable_batch,
                     normal_batches=int(summary.get("normal_batches") or 0),
                     blocked_count=int(summary.get("blocked_count") or 0),
                     closure_gap_ids=closure_gap_ids,
@@ -649,6 +649,22 @@ def _projected_document_dashboard(
         "superseded": int(summary.get("progress_superseded") or 0),
         "revised": int(summary.get("progress_revised") or 0),
     }
+    actionable_structure = (
+        int(summary.get("actionable_structure_duties") or 0)
+        if "actionable_structure_duties" in summary
+        else int(summary.get("heading_pending") or 0)
+    )
+    actionable_contextual = (
+        int(summary.get("actionable_contextual_duties") or 0)
+        if "actionable_contextual_duties" in summary
+        else int(summary.get("individual_pending") or 0)
+    )
+    actionable_batch = (
+        int(summary.get("actionable_batch_duties") or 0)
+        if "actionable_batch_duties" in summary
+        else int(summary.get("normal_passages") or 0)
+    )
+    actionable_second = int(summary.get("actionable_second_review_duties") or 0)
     dashboard = console_ui._review_task_dashboard(
         snapshot_id,
         koppen=[],
@@ -657,11 +673,11 @@ def _projected_document_dashboard(
         normal_batches=int(summary.get("normal_batches") or 0),
         blocked_count=int(summary.get("blocked_count") or 0),
         progress=progress,
-        heading_pending_override=int(summary.get("actionable_structure_duties") or 0),
+        heading_pending_override=actionable_structure,
         heading_total_override=int(summary.get("heading_total") or 0),
-        individual_pending_override=int(summary.get("actionable_contextual_duties") or 0),
+        individual_pending_override=actionable_contextual,
         individual_total_override=int(summary.get("contextual_review_duties") or 0),
-        second_review_pending=int(summary.get("actionable_second_review_duties") or 0),
+        second_review_pending=actionable_second,
     )
     picker = f"""
       <div class="review-document-context">
