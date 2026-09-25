@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -47,7 +48,7 @@ def _fragment(
 ) -> dict:
     row = {
         "fragment_id": fragment_id,
-        "fragment_hash": (fragment_id[0] if fragment_id else "a") * 64,
+        "fragment_hash": hashlib.sha256(fragment_id.encode("utf-8")).hexdigest(),
         "raw_text": text,
         "clean_text": text,
         "section_path": list(section_path or ["Aanbeveling"]),
@@ -130,6 +131,24 @@ def _response(proposal: dict) -> dict:
             }
         ]
     }
+
+
+def _stamp_semantic_runtime_metadata(units: list[dict]) -> list[dict]:
+    for unit in units:
+        semantic = unit.get("semantic_passage")
+        if (
+            isinstance(semantic, dict)
+            and semantic.get("selection_origin") == "proposal_selected"
+        ):
+            semantic.update(
+                {
+                    "formation_mode": "semantic-source-bound-v1",
+                    "model": "test-model",
+                    "source_blocks_hash": "a" * 64,
+                    "proposal_hash": "b" * 64,
+                }
+            )
+    return units
 
 
 def test_source_literal_normalization_never_maps_conditional_alone_to_weak() -> None:
@@ -360,7 +379,7 @@ def test_replay_identity_hashes_evidence_blocks_as_part_of_semantic_input() -> N
         formation_context=context,
     )
     assert first is not None and second is not None
-    assert first["source_blocks_hash"] != second["source_blocks_hash"]
+    assert first["components"]["source_blocks_hash"] != second["components"]["source_blocks_hash"]
 
 
 def test_end_to_end_semantic_proposal_persists_v13_and_admits_source_bound_weak_recommendation() -> None:
@@ -448,6 +467,7 @@ def test_unmapped_semantic_strength_is_blocked_and_diagnostic_family_is_semantic
             strength_block=strength_block,
         ),
     )
+    _stamp_semantic_runtime_metadata([unit])
     spec = {
         "spec_version": "test",
         "document_id": "doc-d32",
@@ -488,6 +508,7 @@ def test_coverage_remainder_has_no_semantics_and_no_admission() -> None:
             strength_block=None,
         ),
     )
+    _stamp_semantic_runtime_metadata(units)
     spec = {
         "spec_version": "test",
         "document_id": "doc-d32",
@@ -534,6 +555,7 @@ def test_semantic_recommendation_without_new_semantics_is_hard_blocked_not_legac
             "abstain_reason": None,
         },
     )
+    _stamp_semantic_runtime_metadata(units)
     spec = {
         "spec_version": "test",
         "document_id": "doc-d32",
