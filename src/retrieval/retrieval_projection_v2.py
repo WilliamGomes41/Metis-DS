@@ -26,17 +26,18 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from src.object_taxonomy_v1 import published_object_type
+from src.knowledge_relations_v1 import (
+    CONFIRMED_FIELD as CONFIRMED_KNOWLEDGE_RELATIONS_FIELD,
+    PROPOSED_FIELD as PROPOSED_KNOWLEDGE_RELATIONS_FIELD,
+    confirmed_semantic_relations_for_serving,
+    knowledge_relation_errors,
+)
 from src.recommendation_semantics_v1 import (
     CONFIRMED_FIELD as CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD,
     confirmed_recommendation_semantics_of,
     recommendation_semantics_errors,
 )
-from src.serving_relations_v1 import (
-    HISTORICAL_NON_SERVING_TYPES,
-    applies_if_targets,
-    binding_relations,
-    except_if_targets,
-)
+from src.serving_relations_v1 import HISTORICAL_NON_SERVING_TYPES
 
 SEARCHABLE_TYPES = {
     "definition",
@@ -119,6 +120,14 @@ def publication_errors(envelope: dict[str, Any]) -> list[str]:
             f"recommendation_semantics:{error}"
             for error in recommendation_semantics_errors(obj)
         )
+    if (
+        CONFIRMED_KNOWLEDGE_RELATIONS_FIELD in obj
+        or PROPOSED_KNOWLEDGE_RELATIONS_FIELD in obj
+    ):
+        errors.extend(
+            f"knowledge_relations:{error}"
+            for error in knowledge_relation_errors(obj)
+        )
     return errors
 
 
@@ -169,20 +178,20 @@ def _source_locator(obj: dict[str, Any]) -> dict[str, Any] | None:
     )
 
 
-def _context_roles(obj: dict[str, Any]) -> list[tuple[str, str]]:
-    """Return deterministic semantic context links as (object_id, role).
+def _context_roles(
+    obj: dict[str, Any],
+    semantic_relations: list[dict[str, Any]],
+) -> list[tuple[str, str]]:
+    """Return structural parent + D4.4 confirmed semantic context only."""
 
-    An explicit, human-confirmed relation takes precedence over the structural
-    parent role when both point to the same object.
-    """
     roles: dict[str, str] = {}
     parent_id = str(obj.get("parent_object_id") or "").strip()
     if parent_id:
         roles[parent_id] = "parent"
-    for relation in binding_relations(obj):
+    for relation in semantic_relations:
         target = str(relation.get("target_object_id") or "").strip()
         if target:
-            roles[target] = relation["relation_type"]
+            roles[target] = str(relation.get("relation_type") or "")
     return list(roles.items())
 
 
@@ -241,8 +250,8 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             })
             continue
 
-        bound = binding_relations(obj)
-        context_roles = _context_roles(obj)
+        semantic_relations = confirmed_semantic_relations_for_serving(obj)
+        context_roles = _context_roles(obj, semantic_relations)
         missing_context_ids = sorted(oid for oid, _ in context_roles if oid not in object_index)
         if missing_context_ids:
             blocked.append({
@@ -252,9 +261,31 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             })
             continue
 
+        stale_targets = sorted(
+            str(row.get("target_object_id") or "")
+            for row in semantic_relations
+            if str((object_index.get(str(row.get("target_object_id") or "")) or {}).get("object_version") or "")
+            != str(row.get("target_object_version") or "")
+        )
+        if stale_targets:
+            blocked.append({
+                "object_id": obj.get("object_id"),
+                "object_version": obj.get("object_version"),
+                "errors": [f"context_target_version_mismatch:{oid}" for oid in stale_targets],
+            })
+            continue
+
         context_ids = [oid for oid, _ in context_roles]
-        applies_ids = [oid for oid in applies_if_targets(obj) if oid in object_index]
-        except_ids = [oid for oid in except_if_targets(obj) if oid in object_index]
+        applies_ids = [
+            str(row["target_object_id"])
+            for row in semantic_relations
+            if row.get("relation_type") == "applies_if"
+        ]
+        except_ids = [
+            str(row["target_object_id"])
+            for row in semantic_relations
+            if row.get("relation_type") == "except_if"
+        ]
         context_entries = [
             {
                 "object_id": oid,
@@ -314,7 +345,7 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             "context_relations": context_entries,
             "applies_if_object_ids": applies_ids,
             "except_if_object_ids": except_ids,
-            "confirmed_relations": bound,
+            "confirmed_knowledge_relations": semantic_relations,
             "risk_level": (obj.get("risk") or {}).get("risk_level"),
             "confirmed_object_type": served_type,
             "proposed_object_type": obj.get("proposed_object_type"),
