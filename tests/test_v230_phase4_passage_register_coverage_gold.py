@@ -386,7 +386,7 @@ def test_missing_register_does_not_block_phase1_admission(tmp_path: Path) -> Non
     assert passage_register_of(adviseert).get("status") == "selected_as_candidate"
 
 
-def test_register_does_not_turn_source_passage_into_admitted_candidate(tmp_path: Path) -> None:
+def test_register_human_disposition_does_not_create_machine_admission(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
@@ -394,16 +394,22 @@ def test_register_does_not_turn_source_passage_into_admitted_candidate(tmp_path:
     assert _admission(djg) == {}
     assert passage_register_of(djg).get("status") == "not_yet_assessed"
 
-    with pytest.raises(ConsoleError, match="candidate_not_admitted"):
-        console.review_object(
-            actor_id=accounts["reviewer"]["account_id"],
-            snapshot_id=receipt["snapshot_id"],
-            object_id=djg["object_id"],
-            decision="approve",
-            confirmed_object_type="recommendation",
-            suitability="ja",
-            eindoordeel="goedkeuren",
-        )
+    console.review_object(
+        actor_id=accounts["reviewer"]["account_id"],
+        snapshot_id=receipt["snapshot_id"],
+        object_id=djg["object_id"],
+        decision="later",
+        suitability="geen_kenniseenheid",
+        eindoordeel="later_beoordelen",
+    )
+    live = next(
+        obj
+        for obj in console.snapshot_objects(receipt["snapshot_id"])
+        if obj["object_id"] == djg["object_id"]
+    )
+    assert _admission(live) == {}
+    assert passage_register_of(live).get("status") == "excluded_with_reason"
+    assert passage_register_of(live).get("source") == "review"
 
 def test_coverage_is_reported_per_section_without_objectifying_every_sentence(tmp_path: Path) -> None:
     console = _console(tmp_path)
