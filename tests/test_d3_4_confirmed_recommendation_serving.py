@@ -178,7 +178,7 @@ def _registry() -> TenantRegistry:
                     "name": "D3.4 test",
                     "enabled": True,
                     "api_key_sha256": hash_api_key(KEY),
-                    "scopes": ["knowledge:read"],
+                    "scopes": ["knowledge:read", "retrieve"],
                     "allowed_document_ids": ["*"],
                     "allowed_topics": ["*"],
                     "requests_per_minute": 100,
@@ -361,3 +361,60 @@ def test_unconfirmed_new_format_proposal_remains_absent_from_api(tmp_path: Path)
     )
     assert response.status_code == 200
     assert "recommendation_semantics" not in response.json()
+
+
+def test_retrieve_surface_exposes_the_same_confirmed_semantics(tmp_path: Path) -> None:
+    objects, object_id = _reviewed_source_objects(
+        tmp_path,
+        direction="against",
+        strength_choice="weak",
+        label="Zwakke aanbeveling",
+    )
+    records, blocked = build_projection(_published_envelopes(objects))
+    assert blocked == []
+    expected = next(
+        row for row in records if row["metadata"]["object_id"] == object_id
+    )["metadata"]["confirmed_recommendation_semantics"]
+
+    client = _product_client(tmp_path, records)
+    state = client.app.state.product
+
+    class SupportedIndex:
+        def search(self, query: str, top_k: int) -> dict:
+            return {
+                "behavior": "retrieve",
+                "answerability": "supported",
+                "reason": "evidence_gate_passed",
+                "false_positive_class": None,
+                "labels": ["V", "VN"],
+                "advice_weight": True,
+                "abstain_sentence": None,
+                "results": [
+                    {
+                        "object_id": object_id,
+                        "object_version": next(
+                            row["metadata"]["object_version"]
+                            for row in records
+                            if row["metadata"]["object_id"] == object_id
+                        ),
+                        "object_type": "recommendation",
+                        "rrf_score": 1.0,
+                        "lexical_score": 1.0,
+                        "vector_score": 1.0,
+                        "advice_weight": True,
+                        "labels": ["V", "VN"],
+                    }
+                ],
+            }
+
+    state._safe_index = lambda rows: SupportedIndex()
+    response = client.post(
+        "/v1/retrieve",
+        headers={"Authorization": f"Bearer {KEY}"},
+        json={"query": "Welke aanbeveling geldt?", "top_k": 1},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "retrieve"
+    assert data["results"][0]["knowledge_object_id"] == object_id
+    assert data["results"][0]["recommendation_semantics"] == expected
