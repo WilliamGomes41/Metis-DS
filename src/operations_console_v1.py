@@ -2698,9 +2698,13 @@ class OperationsConsole:
             relation_state_change = bool(relation_plan.get("state_change_required"))
             desired_parent = parent_id or None
             parent_state_change = target.get("parent_object_id") != desired_parent
-            if relation_state_change or parent_state_change:
-                base_version = str(target.get("object_version") or "1.0")
-                target["object_version"] = bump_patch(base_version)
+            relation_mutation = relation_state_change or parent_state_change
+            if (
+                relation_mutation
+                and str(target.get("object_version") or "1.0")
+                == review_semantics_base_version
+            ):
+                target["object_version"] = bump_patch(review_semantics_base_version)
             final_source_version = str(target.get("object_version") or "1.0")
             try:
                 confirmed_relation_set = build_confirmed_relation_set(
@@ -2716,15 +2720,16 @@ class OperationsConsole:
             )
             target["parent_object_id"] = desired_parent
             target.pop(PROPOSED_KNOWLEDGE_RELATIONS_FIELD, None)
-            metadata = target.setdefault("metadata", {})
-            metadata["knowledge_relation_review"] = relation_review_evidence(
-                relation_plan,
-                confirmed_relations=confirmed_relation_set,
-                reviewer_id=actor_id,
-                reviewer_username=reviewer["username"],
-                reviewed_at=utc_now(),
-                source_version_after=final_source_version,
-            )
+            if relation_mutation:
+                metadata = target.setdefault("metadata", {})
+                metadata["knowledge_relation_review"] = relation_review_evidence(
+                    relation_plan,
+                    confirmed_relations=confirmed_relation_set,
+                    reviewer_id=actor_id,
+                    reviewer_username=reviewer["username"],
+                    reviewed_at=utc_now(),
+                    source_version_after=final_source_version,
+                )
             stamp_canonical_hashes(target)
 
         track = target["governance"]["review_track"]
@@ -2779,11 +2784,11 @@ class OperationsConsole:
             )
             updated_target.pop(PROPOSED_KNOWLEDGE_RELATIONS_FIELD, None)
             updated_target["parent_object_id"] = target.get("parent_object_id")
-            metadata = updated_target.setdefault("metadata", {})
             relation_review = (target.get("metadata") or {}).get(
                 "knowledge_relation_review"
             )
             if isinstance(relation_review, dict):
+                metadata = updated_target.setdefault("metadata", {})
                 metadata["knowledge_relation_review"] = deepcopy(relation_review)
             stamp_canonical_hashes(updated_target)
         if confirmed_semantics is not None:
