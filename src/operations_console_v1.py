@@ -79,6 +79,19 @@ from src.object_taxonomy_v1 import (
     is_closed_recommendation_strength,
     review_priority_rank,
 )
+from src.knowledge_relations_v1 import (
+    CONFIRMED_FIELD as CONFIRMED_KNOWLEDGE_RELATIONS_FIELD,
+    PROPOSED_FIELD as PROPOSED_KNOWLEDGE_RELATIONS_FIELD,
+    STRUCTURAL_RELATION_TYPES,
+    confirmed_knowledge_relations_of,
+)
+from src.knowledge_relation_review_v1 import (
+    build_confirmed_relation_set,
+    has_semantic_relation_review,
+    legacy_confirmed_mirror,
+    plan_semantic_relation_review,
+    relation_review_evidence,
+)
 from src.recommendation_semantics_v1 import (
     CONFIRMED_FIELD as CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD,
     LEGACY_CONFIRMED_FIELD as LEGACY_CONFIRMED_RECOMMENDATION_STRENGTH_FIELD,
@@ -2359,6 +2372,8 @@ class OperationsConsole:
         recommendation_strength: str | None = None,
         recommendation_direction: str | None = None,
         recommendation_strength_level: str | None = None,
+        relation_choices: Iterable[str] | None = None,
+        relation_review_ack: bool = False,
         suitability: str | None = None,
         eindoordeel: str | None = None,
         documentpositie_action: str | None = None,
@@ -2384,6 +2399,7 @@ class OperationsConsole:
             recommendation_strength = None
             recommendation_direction = None
             recommendation_strength_level = None
+            relation_choices = None
         current = self.snapshot_objects(snapshot_id, for_update=True)
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
@@ -2486,7 +2502,31 @@ class OperationsConsole:
                     )
                     if not will_clear:
                         raise ConsoleError("recommendation_strength_requires_recommendation")
-        if parent_id and parent_id != object_id:
+        d4_relation_review = (
+            decision == "approve"
+            and review_path != "boom"
+            and has_semantic_relation_review(target)
+        )
+        relation_plan: dict[str, Any] | None = None
+        if d4_relation_review:
+            if not relation_review_ack:
+                raise ConsoleError("knowledge_relation_review_required")
+            try:
+                relation_plan = plan_semantic_relation_review(
+                    target,
+                    objects=current,
+                    selected_choices=list(relation_choices or []),
+                    source_type=str(
+                        confirmed
+                        or target.get("confirmed_object_type")
+                        or target.get("proposed_object_type")
+                        or target.get("object_type")
+                        or ""
+                    ),
+                )
+            except ValueError as exc:
+                raise ConsoleError(str(exc)) from exc
+        if parent_id and parent_id != object_id and not d4_relation_review:
             self.confirm_relations(
                 actor_id=actor_id,
                 snapshot_id=snapshot_id,
@@ -2624,6 +2664,100 @@ class OperationsConsole:
                     target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
                 target["confirmed_recommendation_strength"] = strength
                 stamp_canonical_hashes(target)
+        confirmed_relation_set: list[dict[str, Any]] | None = None
+        if d4_relation_review and relation_plan is not None:
+            structural: list[dict[str, Any]] = []
+            if parent_id and parent_id != object_id:
+                parent = next(
+                    (row for row in current if row.get("object_id") == parent_id),
+                    None,
+                )
+                if parent is None:
+                    raise ConsoleError("knowledge_relation_target_missing")
+                structural.append(
+                    {
+                        "relation_type": "child",
+                        "target_object_id": parent_id,
+                        "target_object_version": str(parent.get("object_version") or ""),
+                    }
+                )
+            else:
+                for row in confirmed_knowledge_relations_of(target):
+                    if str(row.get("relation_type") or "") in STRUCTURAL_RELATION_TYPES:
+                        peer = next(
+                            (
+                                item
+                                for item in current
+                                if item.get("object_id") == row.get("target_object_id")
+                            ),
+                            None,
+                        )
+                        if peer is None or str(peer.get("object_version") or "") != str(
+                            row.get("target_object_version") or ""
+                        ):
+                            raise ConsoleError("knowledge_relation_target_stale")
+                        structural.append(row)
+                if not structural and target.get("parent_object_id"):
+                    existing_parent_id = str(target.get("parent_object_id") or "")
+                    peer = next(
+                        (
+                            item
+                            for item in current
+                            if item.get("object_id") == existing_parent_id
+                        ),
+                        None,
+                    )
+                    if peer is None:
+                        raise ConsoleError("knowledge_relation_target_missing")
+                    structural.append(
+                        {
+                            "relation_type": "child",
+                            "target_object_id": existing_parent_id,
+                            "target_object_version": str(peer.get("object_version") or ""),
+                        }
+                    )
+
+            relation_state_change = bool(relation_plan.get("state_change_required"))
+            desired_parent = (
+                parent_id
+                if parent_id
+                else str(target.get("parent_object_id") or "") or None
+            )
+            parent_state_change = target.get("parent_object_id") != desired_parent
+            relation_mutation = relation_state_change or parent_state_change
+            if (
+                relation_mutation
+                and str(target.get("object_version") or "1.0")
+                == review_semantics_base_version
+            ):
+                target["object_version"] = bump_patch(review_semantics_base_version)
+            final_source_version = str(target.get("object_version") or "1.0")
+            try:
+                confirmed_relation_set = build_confirmed_relation_set(
+                    relation_plan,
+                    final_source_version=final_source_version,
+                    structural_relations=structural,
+                )
+            except ValueError as exc:
+                raise ConsoleError(str(exc)) from exc
+            target[CONFIRMED_KNOWLEDGE_RELATIONS_FIELD] = confirmed_relation_set
+            target["confirmed_relations"] = legacy_confirmed_mirror(
+                confirmed_relation_set
+            )
+            target["parent_object_id"] = desired_parent
+            target.pop(PROPOSED_KNOWLEDGE_RELATIONS_FIELD, None)
+            if relation_mutation:
+                metadata = target.setdefault("metadata", {})
+                metadata["knowledge_relation_review"] = relation_review_evidence(
+                    relation_plan,
+                    confirmed_relations=confirmed_relation_set,
+                    reviewer_id=actor_id,
+                    reviewer_username=reviewer["username"],
+                    reviewed_at=utc_now(),
+                    source_version_after=final_source_version,
+                )
+            stamp_canonical_hashes(target)
+
         track = target["governance"]["review_track"]
         payload = {
             "object_id": object_id,
@@ -2668,6 +2802,21 @@ class OperationsConsole:
             stamp_canonical_hashes(updated_target)
         if target.get("confirmed_relations"):
             updated_target["confirmed_relations"] = target["confirmed_relations"]
+        elif d4_relation_review:
+            updated_target["confirmed_relations"] = []
+        if confirmed_relation_set is not None:
+            updated_target[CONFIRMED_KNOWLEDGE_RELATIONS_FIELD] = deepcopy(
+                confirmed_relation_set
+            )
+            updated_target.pop(PROPOSED_KNOWLEDGE_RELATIONS_FIELD, None)
+            updated_target["parent_object_id"] = target.get("parent_object_id")
+            relation_review = (target.get("metadata") or {}).get(
+                "knowledge_relation_review"
+            )
+            if isinstance(relation_review, dict):
+                metadata = updated_target.setdefault("metadata", {})
+                metadata["knowledge_relation_review"] = deepcopy(relation_review)
+            stamp_canonical_hashes(updated_target)
         if confirmed_semantics is not None:
             updated_target[CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD] = confirmed_semantics
             updated_target.pop(LEGACY_CONFIRMED_RECOMMENDATION_STRENGTH_FIELD, None)

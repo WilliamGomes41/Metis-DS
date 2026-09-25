@@ -40,6 +40,14 @@ from src.recommendation_semantics_v1 import (
     confirmed_recommendation_semantics_of,
     proposed_recommendation_semantics_of,
 )
+from src.knowledge_relations_v1 import (
+    confirmed_knowledge_relations_of,
+    proposed_knowledge_relations_of,
+)
+from src.knowledge_relation_review_v1 import (
+    has_semantic_relation_review,
+    relation_choice_value,
+)
 from src.domain_dimensions_v1 import processing_issue_objects
 from src.processing_diagnostics_v1 import (
     processing_diagnostic_rows,
@@ -189,6 +197,12 @@ ERROR_COPY = {
     "unknown_role": "Alleen researcher, reviewer of publisher zijn toegestaan.",
     "forbidden_reviewer_identity": "Deze identiteit mag niet als reviewer worden aangemaakt.",
     "unknown_relation_type": "Kies alleen relaties uit de gesloten set.",
+    "knowledge_relation_review_required": "Controleer en bevestig eerst de voorgestelde relaties.",
+    "knowledge_relation_target_stale": "Een gekoppeld kennisobject is gewijzigd. Controleer de relaties opnieuw.",
+    "knowledge_relation_target_missing": "Een gekoppeld kennisobject bestaat niet meer in deze werkversie.",
+    "knowledge_relation_choice_not_available": "De gekozen relatie hoort niet meer bij de huidige relationele set.",
+    "knowledge_relation_source_version_stale": "Het bronobject is gewijzigd. Open de review opnieuw.",
+    "knowledge_relation_endpoint_type_invalid": "Deze relatie past niet bij de huidige typen van bron en doel.",
     "open_original_required": "Open eerst de bronpassage. Type bevestigen zonder het origineel is niet toegestaan.",
     "source_locator_missing": "De bronpassage ontbreekt; type bevestigen is niet toegestaan.",
     "freeze_bytes_missing": "Het geüploade origineel ontbreekt; type bevestigen is niet toegestaan.",
@@ -353,6 +367,7 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
   const search = form.querySelector('[data-heading-search]');
   const posAction = form.querySelectorAll('[name="documentpositie_action"]');
   const suitability = form.querySelectorAll('[name="suitability"]');
+  const relationAck = form.querySelector('[name="relation_review_ack"]');
   const strengthTypes = new Set(['recommendation', 'outcome']);
   const selected = (nodes) => {{
     const hit = Array.from(nodes || []).find((node) => node.checked);
@@ -424,8 +439,10 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
       !needsRecommendationSemantics
       || (Boolean(selected(direction)) && Boolean(selected(strengthLevel)))
     );
+    const needsRelationReview = needsType && Boolean(relationAck);
+    const hasRelationReview = !needsRelationReview || Boolean(relationAck && relationAck.checked);
     if (submit) {{
-      submit.disabled = !value || !hasType || !hasComment || !hasSuitability || !hasRecommendationSemantics;
+      submit.disabled = !value || !hasType || !hasComment || !hasSuitability || !hasRecommendationSemantics || !hasRelationReview;
       submit.textContent = 'Review opslaan en volgende';
     }}
     if (hint) {{
@@ -433,6 +450,7 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
       else if (!hasSuitability) hint.textContent = 'Kies of de passage geschikt is.';
       else if (needsType && !liveType()) hint.textContent = 'Bevestig eerst het type.';
       else if (needsRecommendationSemantics && !hasRecommendationSemantics) hint.textContent = 'Bevestig richting en sterkte van de aanbeveling.';
+      else if (needsRelationReview && !hasRelationReview) hint.textContent = 'Controleer en bevestig de voorgestelde relaties.';
       else hint.textContent = '';
     }}
     updateChooser();
@@ -442,6 +460,7 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
   typeAction.forEach((node) => node.addEventListener('change', update));
   posAction.forEach((node) => node.addEventListener('change', update));
   suitability.forEach((node) => node.addEventListener('change', update));
+  if (relationAck) relationAck.addEventListener('change', update);
   if (type) type.addEventListener('change', update);
   direction.forEach((node) => node.addEventListener('change', update));
   strengthLevel.forEach((node) => node.addEventListener('change', update));
@@ -599,6 +618,71 @@ def _relation_checkboxes(obj: dict[str, Any], objects: list[dict[str, Any]]) -> 
         f'{_esc(obj["object_id"])}">Relatie bevestigen</button>'
         "</fieldset>"
     )
+
+
+def _knowledge_relation_review_block(
+    obj: dict[str, Any],
+    objects: list[dict[str, Any]],
+) -> str:
+    if not has_semantic_relation_review(obj):
+        return ""
+
+    by_id = {
+        str(row.get("object_id") or ""): row
+        for row in objects
+        if str(row.get("object_id") or "")
+    }
+    proposed = proposed_knowledge_relations_of(obj)
+    confirmed = confirmed_knowledge_relations_of(obj)
+    basis = proposed if proposed else confirmed
+    confirmed_keys = {
+        (
+            str(row.get("relation_type") or ""),
+            str(row.get("target_object_id") or ""),
+            str(row.get("target_object_version") or ""),
+        )
+        for row in confirmed
+    }
+
+    rows: list[str] = []
+    for relation in basis:
+        relation_type = str(relation.get("relation_type") or "")
+        target_id = str(relation.get("target_object_id") or "")
+        target_version = str(relation.get("target_object_version") or "")
+        target = by_id.get(target_id) or {}
+        target_text = str(
+            (target.get("content") or {}).get("clean_text")
+            or target_id
+        )
+        checked = (
+            " checked"
+            if (relation_type, target_id, target_version) in confirmed_keys
+            else ""
+        )
+        label = RELATION_LABELS.get(relation_type, relation_type)
+        rows.append(
+            '<label class="check relation-review-choice">'
+            f'<input type="checkbox" name="relation_choice" '
+            f'value="{_esc(relation_choice_value(relation))}"{checked}>'
+            f'<span><b>{_esc(label)}</b> → {_esc(target_text)} '
+            f'<span class="muted">(versie {_esc(target_version)})</span></span>'
+            "</label>"
+        )
+
+    return f"""
+      <section class="review-step review-knowledge-relations" data-review-step="relations">
+        <h4>Welke relaties kloppen?</h4>
+        <p class="field-help">
+          Metis doet relationele voorstellen. Bevestig alleen relaties die volgens de bron bij deze passage horen.
+          Een voorwaarde verandert de sterkte van een aanbeveling niet.
+        </p>
+        <div class="relation-review-list">{"".join(rows)}</div>
+        <label class="check relation-review-ack">
+          <input type="checkbox" name="relation_review_ack" value="1">
+          <span>Ik heb de voorgestelde relaties gecontroleerd.</span>
+        </label>
+      </section>
+    """
 
 
 def _review_location(
@@ -1999,6 +2083,7 @@ def _render_review_card(
                             ),
                         )
                     )}
+                    {_knowledge_relation_review_block(obj, snapshot_objects)}
                     <section class="review-step" data-review-step="f">
                       <h4>Wat is je besluit?</h4>
                       <fieldset id="decision-{_esc(obj["object_id"])}">
@@ -2907,6 +2992,8 @@ def create_console_app(
         recommendation_strength: str = Form(""),
         recommendation_direction: str = Form(""),
         recommendation_strength_level: str = Form(""),
+        relation_choice: list[str] = Form(default=[]),
+        relation_review_ack: str = Form(""),
         suitability: str = Form(""),
         eindoordeel: str = Form(""),
         documentpositie_action: str = Form(""),
@@ -2941,6 +3028,12 @@ def create_console_app(
                 recommendation_strength=recommendation_strength.strip() or None,
                 recommendation_direction=recommendation_direction.strip() or None,
                 recommendation_strength_level=recommendation_strength_level.strip() or None,
+                relation_choices=(
+                    [relation_choice]
+                    if isinstance(relation_choice, str)
+                    else list(relation_choice or [])
+                ),
+                relation_review_ack=relation_review_ack == "1",
                 suitability=suitability.strip() or None,
                 eindoordeel=eindoordeel.strip() or None,
                 documentpositie_action=documentpositie_action.strip() or None,
