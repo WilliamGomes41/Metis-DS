@@ -7,7 +7,10 @@ from typing import Any
 import fitz
 from src.integrity_kernel import stable_hash, schema_errors
 
-PARSER_VERSION='pdf-fragments-v2.1.0'
+PARSER_VERSION='pdf-fragments-v2.2.0'
+_HEADING_SIZE_TOLERANCE=0.5
+_OUTLINE_HEADING_RE=re.compile(r'^\s*(?P<number>\d+(?:\.\d+)*)(?:[.)])?\s+\S')
+_TOC_HEADINGS=frozenset({'inhoud','inhoudsopgave'})
 
 def clean_text(text:str)->str:
     text=text.replace('\u00ad','')
@@ -29,6 +32,34 @@ def classify(text:str,max_size:float,bold:bool)->str:
     if t in {'DOEN','OVERWEEG','AFRADEN','NIET DOEN'}: return 'stamp'
     if max_size>=16 or (bold and max_size>=13 and len(t)<120): return 'section'
     return 'content'
+
+def _outline_depth(text:str)->int|None:
+    match=_OUTLINE_HEADING_RE.match(text or '')
+    return len(match.group('number').split('.')) if match else None
+
+def _is_toc_heading(text:str)->bool:
+    label=re.sub(r'\s+',' ',text or '').strip().casefold().rstrip(':')
+    return label in _TOC_HEADINGS
+
+def _heading_level(text:str,max_size:float,stack:list[tuple[int,str,float]])->int:
+    depth=_outline_depth(text)
+    if depth is not None:
+        root_offset=0
+        if stack:
+            root_level,root_text,_=stack[0]
+            if root_level==1 and _outline_depth(root_text) is None and not _is_toc_heading(root_text):
+                root_offset=1
+        return min(6,depth+root_offset)
+    if not stack: return 1
+    for level,_,active_size in reversed(stack):
+        if abs(active_size-max_size)<=_HEADING_SIZE_TOLERANCE: return level
+    for level,_,active_size in reversed(stack):
+        if active_size>max_size+_HEADING_SIZE_TOLERANCE: return min(6,level+1)
+    return 1
+
+def _update_heading_stack(stack:list[tuple[int,str,float]],heading:str,max_size:float)->list[tuple[int,str,float]]:
+    level=_heading_level(heading,max_size,stack)
+    return [item for item in stack if item[0]<level]+[(level,heading,max_size)]
 
 def fragment_payload(x:dict[str,Any])->dict[str,Any]:
     return {k:x[k] for k in ['fragment_id','document_id','source_id','source_page','bbox','source_locator','raw_text','clean_text','section_path','heading','sequence','parser_version']}
@@ -53,11 +84,9 @@ def extract(pdf:Path, *, document_id:str, source_id:str, pages:list[int]|None=No
             max_size,bold=style(block); kind=classify(c,max_size,bold); heading=None
             if kind=='section':
                 heading=c.replace('\n',' ').strip()
-                if max_size>=20: stack=[heading]
-                elif max_size>=15: stack=stack[:1]+[heading] if stack else [heading]
-                else: stack=stack+[heading]
-                path=stack.copy()
-            else: path=stack.copy()
+                stack=_update_heading_stack(stack,heading,max_size)
+                path=[text for _,text,_ in stack]
+            else: path=[text for _,text,_ in stack]
             seq+=1; fid=f'{document_id}-p{page_no:03d}-f{seq:03d}'
             x={'fragment_id':fid,'document_id':document_id,'source_id':source_id,'source_page':page_no,'bbox':bbox,'source_locator':page_bbox_locator(page_no,bbox),'raw_text':raw,'clean_text':c,'section_path':path,'heading':heading,'sequence':seq,'parser_version':PARSER_VERSION,'fragment_hash':'0'*64}
             x['fragment_hash']=stable_hash(fragment_payload(x)); out.append(x)
