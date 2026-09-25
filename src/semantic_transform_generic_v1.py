@@ -102,8 +102,7 @@ def _system_candidate_metadata(item: dict[str, Any]) -> dict[str, Any]:
     """Persist only closed system-generated F1 evidence from the semantic spec."""
 
     source = item.get("metadata")
-    if not isinstance(source, dict):
-        return {}
+    source = source if isinstance(source, dict) else {}
     out: dict[str, Any] = {}
     for key in ("passage_formation", "source_occurrence_authority"):
         value = source.get(key)
