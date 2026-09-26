@@ -738,13 +738,14 @@ def create_product_app(
         response.headers["X-VVN-API-Version"] = API_VERSION
         return response
 
-    @app.get("/v1/health", responses=_product_responses(HealthResponse))
+    @app.get("/v1/health", response_model=None, responses=_product_responses(HealthResponse))
     def health() -> dict[str, Any]:
         state.refresh()
         return {"status": "ok", "api_version": API_VERSION, "service_version": SERVICE_VERSION, "mode": state.mode, "synthetic_fixture": state.synthetic, "published_retrieval_records": len(state.records) if state.synthetic else None, "published_corpus_ready": bool(state.records), "corpus_reload_policy": "postgres_active_registry_plus_blob_readback" if state.mode == "real" else "reload_fixture_on_file_change", "published_corpus_authority": "postgres+azure_blob" if state.mode == "real" else "fixture_jsonl", "generation_enabled": False}
 
     @app.post(
         "/v1/retrieve",
+        response_model=None,
         responses=_product_responses(RetrieveResponse, 400, 401, 403, 429, 503),
         openapi_extra={"x-metis-required-scope": "retrieve"},
     )
@@ -754,6 +755,7 @@ def create_product_app(
 
     @app.get(
         "/v1/knowledge/{object_id}",
+        response_model=None,
         responses=_product_responses(KnowledgeResponse, 401, 403, 404, 429, 503),
         openapi_extra={"x-metis-required-scope": "knowledge:read"},
     )
@@ -762,6 +764,7 @@ def create_product_app(
 
     @app.get(
         "/v1/documents",
+        response_model=None,
         responses=_product_responses(DocumentsResponse, 401, 403, 429, 503),
         openapi_extra={"x-metis-required-scope": "documents:read"},
     )
@@ -770,6 +773,7 @@ def create_product_app(
 
     @app.get(
         "/v1/documents/{document_id}",
+        response_model=None,
         responses=_product_responses(DocumentResponse, 401, 403, 404, 429, 503),
         openapi_extra={"x-metis-required-scope": "documents:read"},
     )
@@ -780,6 +784,7 @@ def create_product_app(
 
     @app.get(
         "/v1/updates",
+        response_model=None,
         responses=_product_responses(UpdatesResponse, 401, 403, 429, 503),
         openapi_extra={"x-metis-required-scope": "updates:read"},
     )
@@ -788,6 +793,7 @@ def create_product_app(
 
     @app.get(
         "/v1/usage",
+        response_model=None,
         responses=_product_responses(UsageResponse, 401, 403, 429, 503),
         openapi_extra={"x-metis-required-scope": "usage:read"},
     )
