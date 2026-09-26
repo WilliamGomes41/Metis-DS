@@ -30,6 +30,7 @@ def test_provisioned_credential_survives_fresh_store_and_plaintext_is_not_persis
     _apply_api_access_migration(dsn)
     config = PostgresCanonicalConfig(dsn=dsn)
     store = PostgresApiAccessStore(config)
+    store.verify_schema()
 
     issued = store.provision_consumer(
         actor_id="test-publisher",

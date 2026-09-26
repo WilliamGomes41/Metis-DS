@@ -248,13 +248,15 @@ def _compare_schema(
             ("maximum", "decrease"),
             ("maxItems", "decrease"),
         ):
-            if key not in old or key not in new:
+            if key not in new:
                 continue
-            if direction == "increase" and new[key] > old[key]:
-                errors.append(f"{path}: {key} tightened from {old[key]} to {new[key]}")
-            if direction == "decrease" and new[key] < old[key]:
-                errors.append(f"{path}: {key} tightened from {old[key]} to {new[key]}")
-        if "enum" in old and "enum" in new and not set(old["enum"]).issubset(set(new["enum"])):
+            if key in {"minLength", "minItems"} and key not in old and new[key] == 0:
+                continue
+            if key not in old or (direction == "increase" and new[key] > old[key]) or (
+                direction == "decrease" and new[key] < old[key]
+            ):
+                errors.append(f"{path}: {key} tightened from {old.get(key)!r} to {new[key]!r}")
+        if "enum" in new and ("enum" not in old or not set(old["enum"]).issubset(set(new["enum"]))):
             errors.append(f"{path}: enum narrowed")
 
 
@@ -308,7 +310,9 @@ def assert_backward_compatible(old: dict[str, Any], new: dict[str, Any]) -> None
                 continue
             new_operation = new_path_item[method]
             old_security = old_operation.get("security")
-            if old_security and new_operation.get("security") != old_security:
+            if new_operation.get("security") != old_security and (
+                old_security or new_operation.get("security")
+            ):
                 errors.append(f"{method.upper()} {path}: security requirement changed")
 
             old_parameters = {
@@ -326,6 +330,8 @@ def assert_backward_compatible(old: dict[str, Any], new: dict[str, Any]) -> None
                     continue
                 if bool(old_parameter.get("required")) and not bool(new_parameter.get("required")):
                     errors.append(f"{method.upper()} {path}: required parameter {key} became optional")
+                if not bool(old_parameter.get("required")) and bool(new_parameter.get("required")):
+                    errors.append(f"{method.upper()} {path}: optional parameter {key} became required")
                 _compare_schema(
                     old,
                     new,
@@ -335,6 +341,15 @@ def assert_backward_compatible(old: dict[str, Any], new: dict[str, Any]) -> None
                     request=True,
                     errors=errors,
                 )
+
+            for key, new_parameter in new_parameters.items():
+                if key not in old_parameters and bool(new_parameter.get("required")):
+                    errors.append(f"{method.upper()} {path}: new required parameter {key}")
+
+            if not (old_operation.get("requestBody") or {}).get("required") and (
+                new_operation.get("requestBody") or {}
+            ).get("required"):
+                errors.append(f"{method.upper()} {path}: request body became required")
 
             old_body = old_operation.get("requestBody")
             if old_body:
@@ -347,6 +362,7 @@ def assert_backward_compatible(old: dict[str, Any], new: dict[str, Any]) -> None
                         .get("application/json", {})
                         .get("schema", {})
                     )
+
                     new_schema = (
                         new_body.get("content", {})
                         .get("application/json", {})
