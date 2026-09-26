@@ -2089,7 +2089,7 @@ class OperationsConsole:
         with self._store_write_lock():
             self._reload_store_locked()
             family = self.resolve_family_label(new_family)
-            envelope = self._envelope(snapshot_id)
+            envelope = deepcopy(self._envelope(snapshot_id))
             envelope["family"] = family
             envelope["clinical_rereview_required"] = False
             self._commit_prepared_store(
