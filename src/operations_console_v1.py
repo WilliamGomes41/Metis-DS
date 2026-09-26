@@ -1403,13 +1403,18 @@ class OperationsConsole:
         _ = reviewer
         return deepcopy(target)
 
-    def open_source_passage(self, *, snapshot_id: str, object_id: str) -> dict[str, Any]:
-        envelope = self._envelope(snapshot_id)
-        target = next((row for row in self.snapshot_objects(snapshot_id) if row["object_id"] == object_id), None)
-        if target is None:
-            raise ConsoleError("unknown_object")
-        freeze_path = Path(envelope["binary_path"])
-        freeze_bytes = freeze_path.read_bytes() if freeze_path.exists() else None
+    def _source_cache_path(self, envelope: dict[str, Any]) -> Path:
+        digest = safe_path_token(str(envelope["sha256"]), pattern=STORE_DIGEST_RE)
+        filename = safe_store_filename(Path(str(envelope["binary_path"])).name)
+        return safe_path_under(self.source_store, digest, filename)
+
+    def _verified_source_bytes(self, envelope: dict[str, Any]) -> tuple[Path, bytes]:
+        """Rebuild the configured cache from the existing immutable authority."""
+        freeze_path = self._source_cache_path(envelope)
+        try:
+            freeze_bytes = freeze_path.read_bytes() if freeze_path.is_file() else None
+        except OSError:
+            freeze_bytes = None
         expected_digest = str(envelope["sha256"])
         if freeze_bytes is not None and sha256_bytes(freeze_bytes) != expected_digest:
             freeze_bytes = None
@@ -1417,11 +1422,29 @@ class OperationsConsole:
         if freeze_bytes is None and immutable_locator and self.immutable_source_store is not None:
             try:
                 freeze_bytes = self.immutable_source_store.load_verified(immutable_locator)
-            except G2SourceStoreError as exc:
+            except (G2SourceStoreError, ValueError) as exc:
                 raise ConsoleError("immutable_source_recovery_failed") from exc
             if sha256_bytes(freeze_bytes) != expected_digest:
                 raise ConsoleError("immutable_source_recovery_failed")
             _atomic_write_bytes(freeze_path, freeze_bytes)
+        if freeze_bytes is None:
+            raise ConsoleError("freeze_bytes_missing")
+        return freeze_path, freeze_bytes
+
+    def _assert_source_work_unchanged(self, envelope: dict[str, Any], revision: str, published_error: str) -> None:
+        """Called under the existing store lock immediately before committing."""
+        snapshot_id = envelope["snapshot_id"]
+        if self.snapshot_is_published(snapshot_id):
+            raise ConsoleError(published_error)
+        if self._envelope(snapshot_id) != envelope or self.objects_revision(snapshot_id) != revision:
+            raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=self.objects_revision(snapshot_id))
+
+    def open_source_passage(self, *, snapshot_id: str, object_id: str) -> dict[str, Any]:
+        envelope = self._envelope(snapshot_id)
+        target = next((row for row in self.snapshot_objects(snapshot_id) if row["object_id"] == object_id), None)
+        if target is None:
+            raise ConsoleError("unknown_object")
+        _, freeze_bytes = self._verified_source_bytes(envelope)
         try:
             return open_source_passage(
                 freeze_bytes=freeze_bytes,
@@ -1656,16 +1679,10 @@ class OperationsConsole:
         if "researcher" not in account["roles"] and "reviewer" not in account["roles"]:
             raise ConsoleError("researcher_role_required")
         envelope = self._envelope(snapshot_id)
-        rows = self._load_objects(snapshot_id)
-        if any((row.get("governance") or {}).get("publication_status") == "published" for row in rows):
+        _, expected_revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
+        if self.snapshot_is_published(snapshot_id):
             raise ConsoleError("published_objects_must_not_be_rewritten")
-        freeze_path = Path(envelope["binary_path"])
-        if not freeze_path.is_file():
-            raise ConsoleError("freeze_bytes_missing")
-        freeze_bytes = freeze_path.read_bytes()
-        digest = sha256_bytes(freeze_bytes)
-        if digest != envelope["sha256"]:
-            raise ConsoleError("freeze_bytes_missing")
+        freeze_path, freeze_bytes = self._verified_source_bytes(envelope)
         fragments, spec = self._fragments_and_spec(
             envelope["content_kind"],
             freeze_path,
@@ -1727,11 +1744,18 @@ class OperationsConsole:
                 self.snapshot_objects(replaces_snapshot_id),
                 objects,
             )
-        self._commit_prepared_store(
-            objects=(snapshot_id, objects),
-            envelopes={snapshot_id: prepared_envelope},
-            bindings={snapshot_id: []},
-        )
+        with self._store_write_lock():
+            self._reload_store_locked()
+            self._assert_source_work_unchanged(envelope, expected_revision, "published_objects_must_not_be_rewritten")
+            account = self._account(actor_id)
+            if not {"researcher", "reviewer"}.intersection(account["roles"]):
+                raise ConsoleError("researcher_role_required")
+            self._commit_prepared_store(
+                objects=(snapshot_id, objects),
+                envelopes={snapshot_id: prepared_envelope},
+                bindings={snapshot_id: []},
+                expected_revision=expected_revision,
+            )
         return self._receipt(prepared_envelope)
 
     def snapshot_is_published(self, snapshot_id: str) -> bool:
@@ -2189,7 +2213,7 @@ class OperationsConsole:
         new_class: str,
         freeze_bytes: bytes,
     ) -> list[dict[str, Any]]:
-        freeze_path = Path(envelope["binary_path"])
+        freeze_path = self._source_cache_path(envelope)
         if review_path_for_klasse(new_class) == "boom":
             errors = boom_freeze_errors(
                 data=freeze_bytes,
@@ -2281,53 +2305,54 @@ class OperationsConsole:
         if new_class == from_class:
             raise ConsoleError("class_unchanged")
         identity_before = source_identity_fields(live)
-        freeze_path = Path(live["binary_path"])
-        if not freeze_path.is_file():
-            raise ConsoleError("freeze_bytes_missing")
-        freeze_bytes = freeze_path.read_bytes()
-        if sha256_bytes(freeze_bytes) != live["sha256"]:
-            raise ConsoleError("freeze_bytes_missing")
+        original_rows, expected_revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
+        _, freeze_bytes = self._verified_source_bytes(live)
         envelope = deepcopy(live)
         new_envelopes = deepcopy(self._envelopes)
         new_bindings = deepcopy(self._bindings)
         if is_cross_model_class_change(from_class, new_class):
             if not reextract:
                 raise ConsoleError("cross_model_direct_change_blocked")
-            prior = deepcopy(self._load_objects(snapshot_id))
+            prior = deepcopy(original_rows)
             new_objects = self._reextract_objects_for_klasse(envelope, new_class, freeze_bytes)
-            archived = self._archive_prior_objects(
-                snapshot_id=snapshot_id,
-                rows=prior,
-                from_class=from_class,
-                to_class=new_class,
-            )
-            envelope["class"] = new_class
-            envelope["clinical_rereview_required"] = True
-            envelope["review_passes"] = {}
-            envelope["state"] = CAPTURED
-            history = list(envelope.get("prior_processing_history") or [])
-            history.append(archived)
-            envelope["prior_processing_history"] = history
-            self._full_rereview_rows(new_objects)
-            new_envelopes[snapshot_id] = envelope
-            new_bindings[snapshot_id] = []
-            self._commit_prepared_store(
-                objects=(snapshot_id, new_objects),
-                envelopes=new_envelopes,
-                bindings=new_bindings,
-                ledger_fn=lambda: self._record_class_change_event(
-                    account=account,
-                    envelope=envelope,
+            with self._store_write_lock():
+                self._reload_store_locked()
+                self._require_role(actor_id, "reviewer")
+                self._assert_source_work_unchanged(live, expected_revision, "published_class_change_blocked")
+                archived = self._archive_prior_objects(
+                    snapshot_id=snapshot_id,
+                    rows=prior,
                     from_class=from_class,
                     to_class=new_class,
-                    model="cross_model",
-                ),
-            )
+                )
+                envelope["class"] = new_class
+                envelope["clinical_rereview_required"] = True
+                envelope["review_passes"] = {}
+                envelope["state"] = CAPTURED
+                history = list(envelope.get("prior_processing_history") or [])
+                history.append(archived)
+                envelope["prior_processing_history"] = history
+                self._full_rereview_rows(new_objects)
+                new_envelopes[snapshot_id] = envelope
+                new_bindings[snapshot_id] = []
+                self._commit_prepared_store(
+                    objects=(snapshot_id, new_objects),
+                    envelopes=new_envelopes,
+                    bindings=new_bindings,
+                    expected_revision=expected_revision,
+                    ledger_fn=lambda: self._record_class_change_event(
+                        account=account,
+                        envelope=envelope,
+                        from_class=from_class,
+                        to_class=new_class,
+                        model="cross_model",
+                    ),
+                )
             receipt = self._receipt(envelope)
             if source_identity_fields(receipt) != identity_before:
                 raise ConsoleError("source_identity_must_not_change")
             return receipt
-        rows = deepcopy(self._load_objects(snapshot_id))
+        rows = deepcopy(original_rows)
         envelope["class"] = new_class
         envelope["clinical_rereview_required"] = True
         envelope["review_passes"] = {}
@@ -2335,18 +2360,23 @@ class OperationsConsole:
         new_envelopes[snapshot_id] = envelope
         new_bindings[snapshot_id] = invalidate_for_object(new_bindings.get(snapshot_id, []), "")
         new_bindings[snapshot_id] = [{**row, "valid": False} for row in new_bindings.get(snapshot_id, [])]
-        self._commit_prepared_store(
-            objects=(snapshot_id, rows),
-            envelopes=new_envelopes,
-            bindings=new_bindings,
-            ledger_fn=lambda: self._record_class_change_event(
-                account=account,
-                envelope=envelope,
-                from_class=from_class,
-                to_class=new_class,
-                model="same_model",
-            ),
-        )
+        with self._store_write_lock():
+            self._reload_store_locked()
+            self._require_role(actor_id, "reviewer")
+            self._assert_source_work_unchanged(live, expected_revision, "published_class_change_blocked")
+            self._commit_prepared_store(
+                objects=(snapshot_id, rows),
+                envelopes=new_envelopes,
+                bindings=new_bindings,
+                expected_revision=expected_revision,
+                ledger_fn=lambda: self._record_class_change_event(
+                    account=account,
+                    envelope=envelope,
+                    from_class=from_class,
+                    to_class=new_class,
+                    model="same_model",
+                ),
+            )
         receipt = self._receipt(envelope)
         if source_identity_fields(receipt) != identity_before:
             raise ConsoleError("source_identity_must_not_change")
