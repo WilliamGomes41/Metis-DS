@@ -32,12 +32,15 @@ from src.publication_chain_recovery_v1 import (
     _DB_COLUMNS,
     _DB_ORDER_BY,
     _json_safe,
+    _audit_entries_from_state,
+    _audit_store,
+    _verify_audit_data,
     _utc_now,
     backup_publication_chain as _backup_chain,
     check_chain_integrity,
 )
 
-WORKFLOW_RECOVERY_VERSION = 3
+WORKFLOW_RECOVERY_VERSION = 4
 API_ACCESS_TABLES = tuple(API_ACCESS_COLUMNS)
 _API_ACCESS_ORDER_BY = {
     table: ",".join(columns)
@@ -91,7 +94,7 @@ _WORKFLOW_COLUMNS: dict[str, tuple[str, ...]] = {
     ),
     "audit_records": (
         "audit_id", "audit_type", "title", "created_by", "created_at", "updated_at",
-        "payload",
+        "payload", "retention_state",
     ),
     "audit_secrets": ("secret_name", "secret_payload", "updated_at"),
 }
@@ -137,6 +140,8 @@ def _validate_workflow_shape(state: Mapping[str, Any]) -> None:
         raise PublicationChainRecoveryError("workflow_backup_lifecycle_identity_missing:reexport_required")
     if state.get("workflow_recovery_version") == 2:
         raise PublicationChainRecoveryError("workflow_backup_api_access_missing:reexport_required")
+    if state.get("workflow_recovery_version") == 3:
+        raise PublicationChainRecoveryError("workflow_backup_audit_retention_missing:reexport_required")
     if int(state.get("workflow_recovery_version") or 0) != WORKFLOW_RECOVERY_VERSION:
         raise PublicationChainRecoveryError("workflow_backup_version_invalid")
     tables = state.get("workflow_tables")
@@ -147,6 +152,7 @@ def _validate_workflow_shape(state: Mapping[str, Any]) -> None:
         raise PublicationChainRecoveryError("workflow_backup_tables_missing:" + ",".join(missing))
     for table in WORKFLOW_TABLES:
         _rows(state, table)
+    _audit_entries_from_state(state)
 
 
 def _validate_api_access(state: Mapping[str, Any]) -> None:
@@ -561,20 +567,22 @@ def verify_workflow_chain_backup(archive: Any) -> dict[str, Any]:
     return {"ok": not errors, "errors": errors}
 
 
-def backup_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAdapter, source_store: Any, runtime_root: Any = None) -> dict[str, Any]:
-    manifest = _backup_chain(
-        archive,
-        database=database,
-        source_store=source_store,
-        runtime_root=runtime_root,
-    )
+def backup_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAdapter, source_store: Any, runtime_root: Any = None, audit_archive_store: Any = None) -> dict[str, Any]:
+    from src.workflows.workflow_remaining_postgres_v1 import audit_retention_lock
+
+    # Keep archived bytes stable from the database snapshot through Blob read.
+    with audit_retention_lock(database.store._connect):
+        manifest = _backup_chain(
+            archive, database=database, source_store=source_store,
+            runtime_root=runtime_root, audit_archive_store=audit_archive_store,
+        )
     verification = verify_workflow_chain_backup(archive)
     if not verification["ok"]:
         raise PublicationChainRecoveryError("workflow_chain_backup_verification_failed:" + ";".join(verification["errors"]))
     return manifest
 
 
-def restore_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAdapter, source_store: Any, runtime_dest: Any = None) -> dict[str, Any]:
+def restore_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAdapter, source_store: Any, runtime_dest: Any = None, audit_archive_store: Any = None) -> dict[str, Any]:
     verification = verify_workflow_chain_backup(archive)
     if not verification["ok"]:
         raise PublicationChainRecoveryError("workflow_chain_restore_backup_invalid:" + ";".join(verification["errors"]))
@@ -583,6 +591,7 @@ def restore_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAd
         database=database,
         source_store=source_store,
         runtime_dest=runtime_dest,
+        audit_archive_store=audit_archive_store,
     )
     restored = database.export_state()
     with zipfile.ZipFile(archive) as zipf:
@@ -600,8 +609,17 @@ def restore_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAd
     return result
 
 
-def live_workflow_chain_integrity(*, database: PostgresWorkflowRecoveryAdapter, source_store: Any, runtime_root: Any = None) -> dict[str, Any]:
-    state = database.export_state()
+def live_workflow_chain_integrity(*, database: PostgresWorkflowRecoveryAdapter, source_store: Any, runtime_root: Any = None, audit_archive_store: Any = None) -> dict[str, Any]:
+    from src.workflows.workflow_remaining_postgres_v1 import audit_retention_lock
+
+    with audit_retention_lock(database.store._connect):
+        state = database.export_state()
+        entries = _audit_entries_from_state(state)
+        audit_archive_store = _audit_store(audit_archive_store, entries)
+        for entry in entries:
+            _verify_audit_data(state, entry, audit_archive_store.load_verified(
+                entry["locator"], expected_sha256=entry["sha256"],
+            ))
     canonical = check_chain_integrity(state, source_store=source_store, runtime_root=runtime_root)
     workflow = check_workflow_integrity(state)
     return {

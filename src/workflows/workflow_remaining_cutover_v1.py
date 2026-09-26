@@ -9,6 +9,7 @@ compatibility/derived copies.
 from __future__ import annotations
 
 from copy import deepcopy
+from contextlib import contextmanager
 from typing import Any
 
 from src.audit_room_v1 import AUDIT_ID_RE, AUDIT_TYPE_RE
@@ -29,6 +30,44 @@ class PostgresAuditRegistry:
 
     def __init__(self, store: PostgresWorkflowRemainingStore) -> None:
         self.store = store
+
+    @contextmanager
+    def retention_lock(self, audit_id: str):
+        try:
+            with self.store.retention_lock(audit_id):
+                yield
+        except ConsoleError:
+            raise
+        except Exception as exc:
+            raise ConsoleError("audit_store_unavailable") from exc
+
+    def get_archived_reference(self, audit_id: str) -> dict[str, Any] | None:
+        try:
+            return self.store.get_archived_reference(audit_id)
+        except ConsoleError:
+            raise
+        except Exception as exc:
+            raise ConsoleError("audit_store_unavailable") from exc
+
+    def list_archived_references(self) -> list[dict[str, Any]]:
+        try:
+            return self.store.list_archived_references()
+        except ConsoleError:
+            raise
+        except Exception as exc:
+            raise ConsoleError("audit_store_unavailable") from exc
+
+    def replace_with_archived_ref(self, audit_id: str, reference: dict[str, Any]) -> None:
+        self.store.replace_with_archived_ref(audit_id, reference)
+
+    def replace_archived_ref_with_live(self, audit_id: str, reference: dict[str, Any], record: dict[str, Any]) -> None:
+        self.store.replace_archived_ref_with_live(audit_id, reference, record)
+
+    def mark_purge(self, audit_id: str, reference: dict[str, Any], *, actor_id: str) -> dict[str, Any]:
+        return self.store.mark_purge(audit_id, reference, actor_id=actor_id)
+
+    def remove_archived_ref(self, audit_id: str, reference: dict[str, Any]) -> bool:
+        return self.store.remove_archived_ref(audit_id, reference)
 
     @staticmethod
     def _valid_record(row: Any) -> bool:
