@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from src.api_access_v1 import ProvisionedConsumer
+from src.api_access_v1 import ApiAccessConflict, CredentialIssueResult, ProvisionedConsumer
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
 
@@ -36,6 +36,32 @@ class FakeAccessStore:
             credential_id="cred_test",
             credential=self.secret,
         )
+
+    def set_application_grant(self, **kwargs):
+        self.calls.append({"command": "set_application_grant", **kwargs})
+        if getattr(self, "conflict", False):
+            raise ApiAccessConflict("policy_version_mismatch")
+
+    def set_tenant_entitlement(self, **kwargs):
+        self.calls.append({"command": "set_tenant_entitlement", **kwargs})
+
+    def set_tenant_state(self, **kwargs):
+        self.calls.append({"command": "set_tenant_state", **kwargs})
+
+    def set_application_state(self, **kwargs):
+        self.calls.append({"command": "set_application_state", **kwargs})
+
+    def issue_credential(self, **kwargs):
+        self.calls.append({"command": "issue_credential", **kwargs})
+        return CredentialIssueResult(
+            tenant_id=kwargs["tenant_id"],
+            application_id=kwargs["application_id"],
+            credential_id="cred_rotated",
+            credential="metis_live_cred_rotated.once-only",
+        )
+
+    def revoke_credential(self, **kwargs):
+        self.calls.append({"command": "revoke_credential", **kwargs})
 
 
 def _console(tmp_path: Path) -> OperationsConsole:
@@ -137,3 +163,76 @@ def test_non_publisher_cannot_provision_api_access(tmp_path):
     response = client.post("/settings/api-access/provision", data=_provision_payload())
     assert response.status_code == 403
     assert store.calls == []
+
+
+
+def test_publisher_can_change_application_grant_through_existing_settings_surface(tmp_path):
+    store = FakeAccessStore()
+    client = _logged_in_client(
+        _console(tmp_path),
+        store,
+        "publisher.carla",
+        "publisher-secret",
+    )
+    response = client.post(
+        "/settings/api-access/tenants/ten_test/applications/app_test/grant",
+        data={
+            "expected_version": "3",
+            "content_scope": "RESOURCE_SET",
+            "document_ids": "doc-b",
+            "scopes": ["retrieve"],
+            "requests_per_minute": "50",
+            "max_top_k": "3",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    call = store.calls[-1]
+    assert call["command"] == "set_application_grant"
+    assert call["tenant_id"] == "ten_test"
+    assert call["application_id"] == "app_test"
+    assert call["expected_version"] == 3
+    assert call["document_ids"] == ["doc-b"]
+
+
+def test_stale_console_policy_edit_returns_conflict_instead_of_overwriting(tmp_path):
+    store = FakeAccessStore()
+    store.conflict = True
+    client = _logged_in_client(
+        _console(tmp_path),
+        store,
+        "publisher.carla",
+        "publisher-secret",
+    )
+    response = client.post(
+        "/settings/api-access/tenants/ten_test/applications/app_test/grant",
+        data={
+            "expected_version": "2",
+            "content_scope": "RESOURCE_SET",
+            "document_ids": "doc-a",
+            "scopes": ["retrieve"],
+            "requests_per_minute": "50",
+            "max_top_k": "3",
+        },
+    )
+    assert response.status_code == 409
+    assert "intussen gewijzigd" in response.text
+
+
+def test_rotated_credential_response_is_one_time_and_non_cacheable(tmp_path):
+    store = FakeAccessStore()
+    client = _logged_in_client(
+        _console(tmp_path),
+        store,
+        "publisher.carla",
+        "publisher-secret",
+    )
+    response = client.post(
+        "/settings/api-access/tenants/ten_test/applications/app_test/credentials"
+    )
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert "metis_live_cred_rotated.once-only" in response.text
+
+    listing = client.get("/settings/api-access")
+    assert "metis_live_cred_rotated.once-only" not in listing.text
