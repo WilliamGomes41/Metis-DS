@@ -143,7 +143,7 @@ def test_access_export_uses_same_snapshot_despite_concurrent_revocation(recovery
 
     def revoke_after_workflow_read(row):
         nonlocal changed
-        if not changed and "account_id" in row:
+        if not changed and isinstance(row, dict) and "account_id" in row:
             changed = True
             access.revoke_credential(
                 actor_id="publisher-test", tenant_id=issued.tenant_id,
