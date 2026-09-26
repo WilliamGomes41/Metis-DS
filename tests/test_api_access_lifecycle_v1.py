@@ -429,3 +429,85 @@ def test_same_running_product_api_observes_policy_and_lifecycle_changes_without_
         assert restored.json()["documents"] == []
     finally:
         _cleanup(issued)
+
+
+
+def test_issue_credential_requires_active_tenant_and_application():
+    store = _store()
+    issued = _provision(store, name="PR2 issue state gate")
+    try:
+        store.set_tenant_state(
+            actor_id="publisher-a",
+            tenant_id=issued.tenant_id,
+            expected_version=1,
+            target_state="SUSPENDED",
+        )
+        with pytest.raises(ApiAccessError, match="tenant_not_active"):
+            store.issue_credential(
+                actor_id="publisher-a",
+                tenant_id=issued.tenant_id,
+                application_id=issued.application_id,
+            )
+
+        store.set_tenant_state(
+            actor_id="publisher-a",
+            tenant_id=issued.tenant_id,
+            expected_version=2,
+            target_state="ACTIVE",
+        )
+        store.set_application_state(
+            actor_id="publisher-a",
+            tenant_id=issued.tenant_id,
+            application_id=issued.application_id,
+            expected_version=1,
+            target_state="SUSPENDED",
+        )
+        with pytest.raises(ApiAccessError, match="application_not_active"):
+            store.issue_credential(
+                actor_id="publisher-a",
+                tenant_id=issued.tenant_id,
+                application_id=issued.application_id,
+            )
+    finally:
+        _cleanup(issued)
+
+
+def test_duplicate_suspend_is_noop_and_does_not_duplicate_audit_transition():
+    store = _store()
+    issued = _provision(store, name="PR2 idempotent suspend")
+    try:
+        first = store.set_application_state(
+            actor_id="publisher-a",
+            tenant_id=issued.tenant_id,
+            application_id=issued.application_id,
+            expected_version=1,
+            target_state="SUSPENDED",
+        )
+        assert first.changed is True
+        second = store.set_application_state(
+            actor_id="publisher-a",
+            tenant_id=issued.tenant_id,
+            application_id=issued.application_id,
+            expected_version=2,
+            target_state="SUSPENDED",
+        )
+        assert second.changed is False
+        assert second.policy_version == 2
+
+        import psycopg
+        from psycopg.rows import dict_row
+
+        with psycopg.connect(_dsn(), row_factory=dict_row) as con:
+            row = con.execute(
+                """
+                SELECT count(*) AS n
+                FROM api_access.audit_events
+                WHERE tenant_id=%s
+                  AND application_id=%s
+                  AND event_type='application.suspended'
+                """,
+                (issued.tenant_id, issued.application_id),
+            ).fetchone()
+        assert int(row["n"]) == 1
+    finally:
+        _cleanup(issued)
