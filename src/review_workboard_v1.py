@@ -15,7 +15,6 @@ from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 import src.operations_console_app as console_ui
-from src.domain_dimensions_v1 import processing_issue_objects
 from src.beslisboom_path_v1 import review_path_for_klasse
 from src.document_status_ui_v1 import current_document_lifecycle_status
 from src.operations_console_app import (
@@ -32,10 +31,9 @@ from src.operations_console_v1 import PRE_REVIEW_BLOCKED, ConsoleError, Operatio
 from src.proportionate_review_v1 import (
     ProportionateReviewConsole,
     normal_risk_batch_counts,
-    normal_risk_batch_queue,
     regular_individual_review_queue,
 )
-from src.publication_readiness_v1 import source_passage_closure
+from src.publication_readiness_v1 import source_passage_closure, review_followup_queues
 from src.review_duty_v1 import review_duty_counts, reviewer_route_counts
 from src.review_interaction_v1 import review_burden_projection
 from src.review_ledger import read_events
@@ -61,7 +59,7 @@ _TASK_COPY = {
     ),
     "disposition": (
         "Bronpassages afhandelen",
-        "Rond nog open source-passage disposition af",
+        "Bepaal wat met de nog open bronpassages moet gebeuren",
     ),
 }
 
@@ -170,17 +168,11 @@ def _work_item_from_counts(
         work_state = "complete"
 
     next_title, next_description = _TASK_COPY.get(next_task, ("", ""))
-    if next_task == "disposition" and closure_gap_ids:
-        next_href = (
-            f"/review?document={quote(snapshot_id, safe='')}"
-            f"&object={quote(closure_gap_ids[0], safe='')}"
-        )
-    else:
-        next_href = (
-            f"/review?document={quote(snapshot_id, safe='')}&task={quote(next_task, safe='')}"
-            if next_task
-            else ""
-        )
+    next_href = (
+        f"/review?document={quote(snapshot_id, safe='')}&task={quote(next_task, safe='')}"
+        if next_task
+        else ""
+    )
 
     return {
         "snapshot_id": snapshot_id,
@@ -253,8 +245,6 @@ def review_work_item(
 
     objects = console.snapshot_objects(snapshot_id)
     closure = source_passage_closure(objects)
-    unresolved_closure_ids = list(closure["unresolved_source_passage_ids"])
-    unresolved_closure_set = set(unresolved_closure_ids)
 
     review_path = review_path_for_klasse(str(envelope.get("class") or ""))
     headings, _ = review_stacks(objects, review_path=review_path)
@@ -271,37 +261,13 @@ def review_work_item(
     open_individual = [row for row in individual if not _review_is_final(row)]
     individual_pending = len(open_individual)
 
-    normal_rows: list[dict[str, Any]] = []
     normal_passages = 0
     normal_batches = 0
     if isinstance(console, ProportionateReviewConsole):
-        normal_rows = normal_risk_batch_queue(objects, review_path=review_path)
         normal_passages, normal_batches = normal_risk_batch_counts(
             objects,
             review_path=review_path,
         )
-
-    blocked = (
-        [
-            row
-            for row in processing_issue_objects(objects)
-            if str(row.get("object_id") or "") in unresolved_closure_set
-        ]
-        if review_path != "boom"
-        else []
-    )
-    blocked_count = len(blocked)
-
-    represented_ids = {
-        str(row.get("object_id") or "")
-        for row in [*open_individual, *normal_rows, *blocked]
-        if str(row.get("object_id") or "")
-    }
-    closure_gap_ids = [
-        object_id
-        for object_id in unresolved_closure_ids
-        if object_id not in represented_ids
-    ]
 
     bindings: list[dict[str, Any]] | None
     if not hasattr(console, "_bindings") and not hasattr(console, "workflow_review_store"):
@@ -311,6 +277,10 @@ def review_work_item(
             bindings = console.object_review_bindings(snapshot_id)
         except AttributeError:
             bindings = None
+
+    followups = review_followup_queues(objects, review_path=review_path, bindings=bindings)
+    blocked_count = len(followups["repair"])
+    closure_gap_ids = [str(obj["object_id"]) for obj in followups["disposition"]]
 
     duty_counts = review_duty_counts(
         objects,
@@ -529,10 +499,10 @@ def _workboard_card(item: dict[str, Any]) -> str:
                 detail_parts.append(_work_queue_link(snapshot_id, task, f"{count} {label}"))
         if item.get("waiting_for_reviewer_duties"):
             detail_parts.append(
-                _esc(f"{item['waiting_for_reviewer_duties']} wacht op andere reviewer")
+                _work_queue_link(snapshot_id, "waiting", f"{item['waiting_for_reviewer_duties']} wacht op andere reviewer")
             )
         if item["closure_gap_count"]:
-            detail_parts.append(_esc(f"{item['closure_gap_count']} bronpassage disposition"))
+            detail_parts.append(_work_queue_link(snapshot_id, "disposition", f"{item['closure_gap_count']} bronpassages afhandelen"))
         if item["blocked_count"]:
             detail_parts.append(
                 _work_queue_link(
@@ -545,6 +515,10 @@ def _workboard_card(item: dict[str, Any]) -> str:
         f'<p class="muted review-work-queues">{" · ".join(detail_parts)}</p>'
         if detail_parts
         else ""
+    )
+    detail_html += (
+        f'<p><a href="/review?document={_esc(item["snapshot_id"])}&amp;task=inventory">'
+        'Alle passages en hun afhandeling bekijken</a></p>'
     )
 
     return f'''
@@ -702,6 +676,8 @@ def _projected_document_dashboard(
             else int(summary.get("individual_total") or 0)
         ),
         second_review_pending=actionable_second,
+        disposition_pending=int(summary.get("closure_gap_count") or 0),
+        waiting_pending=int(summary.get("waiting_for_reviewer_duties") or 0),
     )
     picker = f"""
       <div class="review-document-context">
