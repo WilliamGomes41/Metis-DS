@@ -18,6 +18,7 @@ MIGRATION_NAMES = (
     "006_workflow_authorization_payload.sql",
     "008_workflow_lifecycle_identity.sql",
     "009_console_hotpath_indexes.sql",
+    "011_workflow_audit_retention.sql",
 )
 REQUIRED_TABLES = frozenset(
     {
@@ -43,6 +44,7 @@ REQUIRED_COLUMNS = frozenset(
         ("review_events", "event_payload"),
         ("publish_authorizations", "position"),
         ("publish_authorizations", "authorization_payload"),
+        ("audit_records", "retention_state"),
     }
 )
 

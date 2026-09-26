@@ -11,6 +11,8 @@ import argparse
 import json
 from pathlib import Path
 
+from src.audit_archive_store_v1 import AzureAuditArchiveStore
+from src.audit_retention_v1 import is_archived_reference, valid_audit_record, validate_archived_record, is_purging
 from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
 from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore, WorkflowRemainingStoreError
 
@@ -25,20 +27,41 @@ def _read_json(path: Path) -> dict:
     return value
 
 
-def _migrate_audits(runtime: Path, store: PostgresWorkflowRemainingStore) -> int:
+def _migrate_audits(runtime: Path, store: PostgresWorkflowRemainingStore, *, archive_store=None) -> int:
     root = runtime / "audits"
     local = [_read_json(path) for path in sorted(root.glob("audit-*.json"))] if root.is_dir() else []
-    existing = store.list_audits()
+    existing = {row["audit_id"]: row for row in [*store.list_audits(), *store.list_archived_references()]}
     if not local:
         return len(existing)
-    expected = sorted(local, key=lambda row: (str(row.get("created_at") or ""), str(row.get("audit_id") or "")), reverse=True)
-    if existing:
-        if existing != expected:
+    prepared = []
+    seen = set()
+    # Validate every source and every known conflict before the first write.
+    # Source files are retained, including after an interrupted partial import.
+    for row in local:
+        reference = row if is_archived_reference(row) else None
+        record = row
+        if reference is not None:
+            archive_store = archive_store or AzureAuditArchiveStore()
+            record = json.loads(archive_store.load_verified(
+                reference["archive_locator"], expected_sha256=reference["checksum_sha256"],
+            ))
+            validate_archived_record(reference, record)
+        if not valid_audit_record(record) or record["audit_id"] in seen:
+            raise RuntimeError("workflow_audit_migration_invalid")
+        seen.add(record["audit_id"])
+        current = existing.get(record["audit_id"])
+        if reference is not None and is_purging(reference) and current not in (None, reference):
+            raise RuntimeError("workflow_audit_pending_purge_requires_legacy_completion")
+        if current is not None and current not in (row, record):
             raise RuntimeError("workflow_audit_migration_conflict")
-        return len(existing)
-    for record in local:
-        store.create_audit(record)
-    return len(local)
+        prepared.append((record, reference, current))
+    for record, reference, current in prepared:
+        if current is None:
+            store.create_audit(record, archived_reference=reference)
+        elif reference is not None and current == record:
+            archived = {key: value for key, value in reference.items() if not key.startswith("purge_requested_")}
+            store.replace_with_archived_ref(record["audit_id"], archived)
+    return len(set(existing) | seen)
 
 
 def _migrate_secret(runtime: Path, store: PostgresWorkflowRemainingStore) -> int:

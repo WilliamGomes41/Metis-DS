@@ -476,10 +476,27 @@ def check_chain_integrity(
 
 def _blob_entries_from_state(database_state: Mapping[str, Any]) -> list[dict[str, str]]:
     entries: dict[str, dict[str, str]] = {}
-    for snapshot in _table_rows(database_state, "source_snapshots"):
-        snapshot_id = str(snapshot.get("snapshot_id") or "")
-        checksum = str(snapshot.get("source_checksum") or "").lower()
-        locator = str(snapshot.get("source_locator") or "")
+    snapshot_sources: dict[str, tuple[str, str]] = {}
+    sources = [
+        (row.get("snapshot_id"), row.get("source_checksum"), row.get("source_locator"))
+        for row in _table_rows(database_state, "source_snapshots")
+    ]
+    if "workflow_tables" in database_state:
+        workflow = database_state["workflow_tables"]
+        documents = workflow.get("documents") if isinstance(workflow, Mapping) else None
+        if not isinstance(documents, list) or any(not isinstance(row, Mapping) for row in documents):
+            raise PublicationChainRecoveryError("workflow_backup_documents_invalid")
+        sources.extend(
+            (row.get("snapshot_id"), row.get("source_sha256"), row.get("immutable_storage_locator"))
+            for row in documents
+        )
+    for snapshot_id, raw_checksum, raw_locator in sources:
+        checksum = str(raw_checksum or "").lower()
+        locator = str(raw_locator or "")
+        source = (checksum, locator)
+        if snapshot_id in snapshot_sources and snapshot_sources[snapshot_id] != source:
+            raise PublicationChainRecoveryError(f"source_snapshot_reference_conflict:{snapshot_id}")
+        snapshot_sources[snapshot_id] = source
         parsed = parse_g2_locator(locator)
         if parsed is None or parsed["sha256"] != checksum:
             raise PublicationChainRecoveryError(f"source_snapshot_locator_invalid:{snapshot_id}")
@@ -497,12 +514,78 @@ def _blob_entries_from_state(database_state: Mapping[str, Any]) -> list[dict[str
     return sorted(entries.values(), key=lambda item: item["locator"])
 
 
+def _audit_entries_from_state(state: Mapping[str, Any]) -> list[dict[str, str]]:
+    from src.audit_archive_store_v1 import LOCATOR_RE
+    from src.audit_retention_v1 import is_archived_reference, is_purging
+
+    workflow = state.get("workflow_tables")
+    if workflow is None:
+        return []
+    if isinstance(workflow, Mapping) and "audit_records" not in workflow and "workflow_recovery_version" not in state:
+        return []
+    rows = workflow.get("audit_records") if isinstance(workflow, Mapping) else None
+    if not isinstance(rows, list):
+        raise PublicationChainRecoveryError("workflow_audit_records_invalid")
+    entries = []
+    seen = set()
+    for row in rows:
+        audit_id = row.get("audit_id")
+        status = row.get("retention_state")
+        if audit_id in seen or status not in {"LIVE", "ARCHIVED", "PURGING"}:
+            raise PublicationChainRecoveryError("workflow_audit_retention_invalid")
+        seen.add(audit_id)
+        if status == "LIVE":
+            continue
+        reference = row.get("payload")
+        if (not is_archived_reference(reference) or reference["audit_id"] != audit_id
+                or is_purging(reference) != (status == "PURGING")):
+            raise PublicationChainRecoveryError("workflow_audit_reference_invalid")
+        match = LOCATOR_RE.fullmatch(reference["archive_locator"])
+        if match is None or match.group("audit_id") != audit_id:
+            raise PublicationChainRecoveryError("workflow_audit_locator_invalid")
+        if status == "PURGING":
+            # Deletion was durably authorized before the snapshot. Its Blob
+            # may already be gone; recovery preserves the intent, not content.
+            continue
+        entries.append({
+            "audit_id": audit_id, "locator": reference["archive_locator"],
+            "sha256": reference["checksum_sha256"], "filename": f"{audit_id}.json",
+            "member": f"audit-blobs/{audit_id}.json",
+        })
+    return sorted(entries, key=lambda entry: entry["audit_id"])
+
+
+def _verify_audit_data(state: Mapping[str, Any], entry: Mapping[str, Any], data: bytes) -> None:
+    from src.audit_retention_v1 import validate_archived_record
+
+    try:
+        row = next(row for row in state["workflow_tables"]["audit_records"] if row["audit_id"] == entry["audit_id"])
+        record = json.loads(data)
+        validate_archived_record(row["payload"], record)
+        for key in ("audit_id", "audit_type", "title", "created_by"):
+            if row[key] != record[key]:
+                raise ValueError(key)
+        for key in ("created_at", "updated_at"):
+            if datetime.fromisoformat(str(row[key]).replace("Z", "+00:00")) != datetime.fromisoformat(record[key].replace("Z", "+00:00")):
+                raise ValueError(key)
+    except Exception as exc:
+        raise PublicationChainRecoveryError("workflow_audit_blob_record_mismatch") from exc
+
+
+def _audit_store(store: Any, entries: list[Any]) -> Any:
+    if store is None and entries:
+        from src.audit_archive_store_v1 import AzureAuditArchiveStore
+        return AzureAuditArchiveStore()
+    return store
+
+
 def backup_publication_chain(
     archive: Path,
     *,
     database: DatabaseBackupAdapter,
     source_store: ImmutableBackupSourceStore,
     runtime_root: Path | None = None,
+    audit_archive_store: Any = None,
 ) -> dict[str, Any]:
     """Create one verifiable archive covering DB, Blob bytes and runtime releases."""
     database_state = database.export_state()
@@ -512,6 +595,8 @@ def backup_publication_chain(
 
     db_bytes = _canonical_json_bytes(database_state)
     blob_entries = _blob_entries_from_state(database_state)
+    audit_entries = _audit_entries_from_state(database_state)
+    audit_archive_store = _audit_store(audit_archive_store, audit_entries)
     blobs: dict[str, bytes] = {}
     for entry in blob_entries:
         try:
@@ -520,6 +605,17 @@ def backup_publication_chain(
             raise PublicationChainRecoveryError("chain_backup_blob_read_failed") from exc
         if sha256_bytes(data) != entry["sha256"]:
             raise PublicationChainRecoveryError("chain_backup_blob_hash_mismatch")
+        blobs[entry["member"]] = data
+        entry["size"] = str(len(data))
+
+    for entry in audit_entries:
+        try:
+            data = audit_archive_store.load_verified(entry["locator"], expected_sha256=entry["sha256"])
+        except Exception as exc:
+            raise PublicationChainRecoveryError("chain_backup_audit_blob_read_failed") from exc
+        if sha256_bytes(data) != entry["sha256"]:
+            raise PublicationChainRecoveryError("chain_backup_audit_blob_hash_mismatch")
+        _verify_audit_data(database_state, entry, data)
         blobs[entry["member"]] = data
         entry["size"] = str(len(data))
 
@@ -540,6 +636,7 @@ def backup_publication_chain(
             "tables": {table: len(_table_rows(database_state, table)) for table in DB_TABLES},
         },
         "blobs": blob_entries,
+        "audit_blobs": audit_entries,
         "runtime": None,
         "preflight_integrity": preflight,
     }
@@ -599,7 +696,7 @@ def verify_publication_chain_backup(archive: Path) -> dict[str, Any]:
                 errors.append(f"database_backup_invalid:{type(exc).__name__}")
 
             expected_members = {"chain_manifest.json", "database.json"}
-            for entry in manifest.get("blobs") or []:
+            for entry in [*(manifest.get("blobs") or []), *(manifest.get("audit_blobs") or [])]:
                 member = _backup_member(str(entry.get("member") or ""))
                 expected_members.add(member)
                 if member not in names:
@@ -611,6 +708,17 @@ def verify_publication_chain_backup(archive: Path) -> dict[str, Any]:
                     errors.append(f"blob_backup_hash_mismatch:{member}")
                 if str(len(data)) != str(entry.get("size") or ""):
                     errors.append(f"blob_backup_size_mismatch:{member}")
+
+            expected_audits = _audit_entries_from_state(database_state)
+            actual_audits = manifest.get("audit_blobs", [])
+            if not isinstance(actual_audits, list) or [
+                {key: entry.get(key) for key in ("audit_id", "locator", "sha256", "filename", "member")}
+                for entry in actual_audits
+            ] != expected_audits:
+                errors.append("audit_blob_manifest_mismatch")
+            else:
+                for entry in expected_audits:
+                    _verify_audit_data(database_state, entry, zipf.read(entry["member"]))
 
             runtime = manifest.get("runtime")
             if runtime:
@@ -637,6 +745,7 @@ def restore_publication_chain(
     database: DatabaseBackupAdapter,
     source_store: ImmutableBackupSourceStore,
     runtime_dest: Path | None = None,
+    audit_archive_store: Any = None,
 ) -> dict[str, Any]:
     """Restore a clean target and prove the recovered chain before success."""
     verification = verify_publication_chain_backup(archive)
@@ -668,6 +777,20 @@ def restore_publication_chain(
             if restored_locator != locator:
                 raise PublicationChainRecoveryError("chain_restore_blob_locator_changed")
             restored_blobs += 1
+
+        audit_entries = manifest.get("audit_blobs") or []
+        audit_archive_store = _audit_store(audit_archive_store, audit_entries)
+        for entry in audit_entries:
+            data = zipf.read(entry["member"])
+            try:
+                locator = audit_archive_store.store_verified(
+                    audit_id=entry["audit_id"], data=data, sha256=entry["sha256"],
+                )
+                readback = audit_archive_store.load_verified(locator, expected_sha256=entry["sha256"])
+            except Exception as exc:
+                raise PublicationChainRecoveryError("chain_restore_audit_blob_failed") from exc
+            if locator != entry["locator"] or readback != data:
+                raise PublicationChainRecoveryError("chain_restore_audit_blob_mismatch")
 
         restored_runtime_files = 0
         runtime = manifest.get("runtime")

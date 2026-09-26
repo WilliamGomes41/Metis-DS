@@ -8,9 +8,17 @@ from __future__ import annotations
 
 import json
 import zipfile
+from contextlib import nullcontext
 from graphlib import CycleError, TopologicalSorter
 from typing import Any, Mapping
 
+from src.api_access_v1 import (
+    NULLABLE_COLUMNS as API_ACCESS_NULLABLE_COLUMNS,
+    REQUIRED_COLUMNS as API_ACCESS_COLUMNS,
+    REQUIRED_KEYS as API_ACCESS_KEYS,
+    ApiAccessStoreError,
+    PostgresApiAccessStore,
+)
 from src.integrity_kernel import stable_hash
 from src.publication_chain_recovery_guard_v1 import (
     restore_publication_chain as _guarded_restore,
@@ -24,12 +32,21 @@ from src.publication_chain_recovery_v1 import (
     _DB_COLUMNS,
     _DB_ORDER_BY,
     _json_safe,
+    _audit_entries_from_state,
+    _audit_store,
+    _verify_audit_data,
     _utc_now,
     backup_publication_chain as _backup_chain,
     check_chain_integrity,
 )
 
-WORKFLOW_RECOVERY_VERSION = 2
+WORKFLOW_RECOVERY_VERSION = 4
+API_ACCESS_TABLES = tuple(API_ACCESS_COLUMNS)
+_API_ACCESS_ORDER_BY = {
+    table: ",".join(columns)
+    for table, kind, columns, _parent, _parent_columns in API_ACCESS_KEYS
+    if kind == "p"
+}
 WORKFLOW_TABLES = (
     "accounts",
     "sessions",
@@ -77,7 +94,7 @@ _WORKFLOW_COLUMNS: dict[str, tuple[str, ...]] = {
     ),
     "audit_records": (
         "audit_id", "audit_type", "title", "created_by", "created_at", "updated_at",
-        "payload",
+        "payload", "retention_state",
     ),
     "audit_secrets": ("secret_name", "secret_payload", "updated_at"),
 }
@@ -108,19 +125,23 @@ _CANONICAL_JSON_COLUMNS = {
 }
 
 
-def _rows(state: Mapping[str, Any], table: str) -> list[dict[str, Any]]:
-    tables = state.get("workflow_tables")
+def _rows(state: Mapping[str, Any], table: str, *, group: str = "workflow") -> list[dict[str, Any]]:
+    tables = state.get(f"{group}_tables")
     if not isinstance(tables, Mapping):
-        raise PublicationChainRecoveryError("workflow_backup_tables_missing")
+        raise PublicationChainRecoveryError(f"{group}_backup_tables_missing")
     rows = tables.get(table)
     if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
-        raise PublicationChainRecoveryError(f"workflow_backup_table_invalid:{table}")
+        raise PublicationChainRecoveryError(f"{group}_backup_table_invalid:{table}")
     return [dict(row) for row in rows]
 
 
 def _validate_workflow_shape(state: Mapping[str, Any]) -> None:
     if state.get("workflow_recovery_version") == 1:
         raise PublicationChainRecoveryError("workflow_backup_lifecycle_identity_missing:reexport_required")
+    if state.get("workflow_recovery_version") == 2:
+        raise PublicationChainRecoveryError("workflow_backup_api_access_missing:reexport_required")
+    if state.get("workflow_recovery_version") == 3:
+        raise PublicationChainRecoveryError("workflow_backup_audit_retention_missing:reexport_required")
     if int(state.get("workflow_recovery_version") or 0) != WORKFLOW_RECOVERY_VERSION:
         raise PublicationChainRecoveryError("workflow_backup_version_invalid")
     tables = state.get("workflow_tables")
@@ -131,6 +152,36 @@ def _validate_workflow_shape(state: Mapping[str, Any]) -> None:
         raise PublicationChainRecoveryError("workflow_backup_tables_missing:" + ",".join(missing))
     for table in WORKFLOW_TABLES:
         _rows(state, table)
+    _audit_entries_from_state(state)
+
+
+def _validate_api_access(state: Mapping[str, Any]) -> None:
+    """Use the existing access schema contract, without creating new grants."""
+    tables = {table: _rows(state, table, group="api_access") for table in API_ACCESS_TABLES}
+    for table, rows in tables.items():
+        for row in rows:
+            if set(row) != set(API_ACCESS_COLUMNS[table]):
+                raise PublicationChainRecoveryError(f"api_access_backup_columns_invalid:{table}")
+            for column in API_ACCESS_COLUMNS[table]:
+                if row[column] is None and (table, column) not in API_ACCESS_NULLABLE_COLUMNS:
+                    raise PublicationChainRecoveryError(f"api_access_backup_value_missing:{table}:{column}")
+    for table, kind, columns, parent, parent_columns in API_ACCESS_KEYS:
+        values = [tuple(row[column] for column in columns) for row in tables[table]]
+        if kind in {"p", "u"}:
+            if any(any(not isinstance(value, str) or not value for value in key) for key in values):
+                raise PublicationChainRecoveryError(f"api_access_backup_key_invalid:{table}")
+            if len(set(values)) != len(values):
+                raise PublicationChainRecoveryError(f"api_access_backup_key_duplicate:{table}")
+        elif kind == "f":
+            targets = {tuple(row[column] for column in parent_columns) for row in tables[parent]}
+            if any(key not in targets for key in values):
+                raise PublicationChainRecoveryError(f"api_access_backup_reference_missing:{table}:{parent}")
+    for row in tables["credentials"]:
+        digest = row["secret_sha256"]
+        if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+            raise PublicationChainRecoveryError("api_access_backup_credential_hash_invalid")
+    if any(not isinstance(row["details"], dict) for row in tables["audit_events"]):
+        raise PublicationChainRecoveryError("api_access_backup_audit_details_invalid")
 
 
 def _ordered_documents(state: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -185,6 +236,7 @@ def check_workflow_integrity(state: Mapping[str, Any]) -> dict[str, Any]:
     try:
         _validate_workflow_shape(state)
         _ordered_documents(state)
+        _validate_api_access(state)
     except PublicationChainRecoveryError as exc:
         return {"ok": False, "errors": [str(exc)]}
 
@@ -286,6 +338,7 @@ def check_workflow_integrity(state: Mapping[str, Any]) -> dict[str, Any]:
         "review_events": len(_rows(state, "review_events")),
         "authorizations": len(_rows(state, "publish_authorizations")),
         "audits": len(_rows(state, "audit_records")),
+        "api_access": {table: len(_rows(state, table, group="api_access")) for table in API_ACCESS_TABLES},
     }
 
 
@@ -309,6 +362,14 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
     """One logical backup/restore boundary for canonical + workflow PostgreSQL."""
 
     def _verify_workflow_schema(self, con: Any) -> None:
+        # Borrow the same connection/snapshot; the access store's schema check
+        # must not close or commit the surrounding recovery transaction.
+        try:
+            PostgresApiAccessStore(
+                self.store.config, connection_factory=lambda: nullcontext(con)
+            ).verify_schema()
+        except ApiAccessStoreError as exc:
+            raise PublicationChainRecoveryError(str(exc)) from exc
         rows = con.execute(
             "SELECT table_name FROM information_schema.tables WHERE table_schema='workflow'"
         ).fetchall()
@@ -335,6 +396,7 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
             with self.store._connect() as con:
                 with con.transaction():
                     con.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+                    snapshot_at = _json_safe(con.execute("SELECT clock_timestamp() AS moment").fetchone()["moment"])
                     self._verify_workflow_schema(con)
                     tables: dict[str, list[dict[str, Any]]] = {}
                     for table in DB_TABLES:
@@ -352,6 +414,13 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
                             f"SELECT {','.join(select_columns)} FROM workflow.{table} ORDER BY {_WORKFLOW_ORDER_BY[table]}"
                         ).fetchall()
                         workflow_tables[table] = [_json_safe(dict(row)) for row in rows]
+                    access_tables: dict[str, list[dict[str, Any]]] = {}
+                    for table in API_ACCESS_TABLES:
+                        rows = con.execute(
+                            f"SELECT {','.join(API_ACCESS_COLUMNS[table])} FROM api_access.{table} "
+                            f"ORDER BY {_API_ACCESS_ORDER_BY[table]}"
+                        ).fetchall()
+                        access_tables[table] = [_json_safe(dict(row)) for row in rows]
         except PublicationChainRecoveryError:
             raise
         except Exception as exc:
@@ -359,9 +428,11 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
         state = {
             "format": BACKUP_FORMAT,
             "exported_at": _utc_now(),
+            "snapshot_at": snapshot_at,
             "tables": tables,
             "workflow_recovery_version": WORKFLOW_RECOVERY_VERSION,
             "workflow_tables": workflow_tables,
+            "api_access_tables": access_tables,
         }
         report = check_workflow_integrity(state)
         if not report["ok"]:
@@ -370,7 +441,10 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
 
     def _assert_empty(self, con: Any) -> None:
         nonempty: list[str] = []
-        for table in (*DB_TABLES, *(f"workflow.{table}" for table in WORKFLOW_TABLES)):
+        for table in (
+            *DB_TABLES, *(f"workflow.{table}" for table in WORKFLOW_TABLES),
+            *(f"api_access.{table}" for table in API_ACCESS_TABLES),
+        ):
             count = int(con.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"])
             if count:
                 nonempty.append(f"{table}:{count}")
@@ -407,7 +481,10 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
                     # Offline, empty-target import. Locks and trigger DDL share
                     # the data transaction: other writers cannot enter it, and
                     # a failed import restores the allocator automatically.
-                    targets = (*DB_TABLES, *(f"workflow.{table}" for table in WORKFLOW_TABLES))
+                    targets = (
+                        *DB_TABLES, *(f"workflow.{table}" for table in WORKFLOW_TABLES),
+                        *(f"api_access.{table}" for table in API_ACCESS_TABLES),
+                    )
                     con.execute("LOCK TABLE " + ",".join(targets) + " IN ACCESS EXCLUSIVE MODE")
                     self._assert_empty(con)
                     trigger = con.execute(
@@ -451,6 +528,13 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
                             columns=_DB_COLUMNS[table], json_columns=_CANONICAL_JSON_COLUMNS.get(table, set()),
                         )
 
+                    for table in API_ACCESS_TABLES:
+                        _insert_rows(
+                            con, schema="api_access", table=table,
+                            rows=_rows(state, table, group="api_access"), columns=tuple(API_ACCESS_COLUMNS[table]),
+                            json_columns={"details"} if table == "audit_events" else set(),
+                        )
+
                     for table, column in (
                         ("workflow.review_events", "event_id"),
                         ("workflow.publish_authorizations", "authorization_id"),
@@ -483,20 +567,22 @@ def verify_workflow_chain_backup(archive: Any) -> dict[str, Any]:
     return {"ok": not errors, "errors": errors}
 
 
-def backup_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAdapter, source_store: Any, runtime_root: Any = None) -> dict[str, Any]:
-    manifest = _backup_chain(
-        archive,
-        database=database,
-        source_store=source_store,
-        runtime_root=runtime_root,
-    )
+def backup_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAdapter, source_store: Any, runtime_root: Any = None, audit_archive_store: Any = None) -> dict[str, Any]:
+    from src.workflows.workflow_remaining_postgres_v1 import audit_retention_lock
+
+    # Keep archived bytes stable from the database snapshot through Blob read.
+    with audit_retention_lock(database.store._connect):
+        manifest = _backup_chain(
+            archive, database=database, source_store=source_store,
+            runtime_root=runtime_root, audit_archive_store=audit_archive_store,
+        )
     verification = verify_workflow_chain_backup(archive)
     if not verification["ok"]:
         raise PublicationChainRecoveryError("workflow_chain_backup_verification_failed:" + ";".join(verification["errors"]))
     return manifest
 
 
-def restore_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAdapter, source_store: Any, runtime_dest: Any = None) -> dict[str, Any]:
+def restore_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAdapter, source_store: Any, runtime_dest: Any = None, audit_archive_store: Any = None) -> dict[str, Any]:
     verification = verify_workflow_chain_backup(archive)
     if not verification["ok"]:
         raise PublicationChainRecoveryError("workflow_chain_restore_backup_invalid:" + ";".join(verification["errors"]))
@@ -505,8 +591,14 @@ def restore_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAd
         database=database,
         source_store=source_store,
         runtime_dest=runtime_dest,
+        audit_archive_store=audit_archive_store,
     )
     restored = database.export_state()
+    with zipfile.ZipFile(archive) as zipf:
+        expected = json.loads(zipf.read("database.json").decode("utf-8"))
+    for group in ("workflow_tables", "api_access_tables"):
+        if stable_hash(restored[group]) != stable_hash(expected[group]):
+            raise PublicationChainRecoveryError(f"{group}_restore_roundtrip_mismatch")
     workflow = check_workflow_integrity(restored)
     canonical = check_chain_integrity(restored, source_store=source_store, runtime_root=runtime_dest)
     if not workflow["ok"] or not canonical["ok"]:
@@ -517,8 +609,17 @@ def restore_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAd
     return result
 
 
-def live_workflow_chain_integrity(*, database: PostgresWorkflowRecoveryAdapter, source_store: Any, runtime_root: Any = None) -> dict[str, Any]:
-    state = database.export_state()
+def live_workflow_chain_integrity(*, database: PostgresWorkflowRecoveryAdapter, source_store: Any, runtime_root: Any = None, audit_archive_store: Any = None) -> dict[str, Any]:
+    from src.workflows.workflow_remaining_postgres_v1 import audit_retention_lock
+
+    with audit_retention_lock(database.store._connect):
+        state = database.export_state()
+        entries = _audit_entries_from_state(state)
+        audit_archive_store = _audit_store(audit_archive_store, entries)
+        for entry in entries:
+            _verify_audit_data(state, entry, audit_archive_store.load_verified(
+                entry["locator"], expected_sha256=entry["sha256"],
+            ))
     canonical = check_chain_integrity(state, source_store=source_store, runtime_root=runtime_root)
     workflow = check_workflow_integrity(state)
     return {

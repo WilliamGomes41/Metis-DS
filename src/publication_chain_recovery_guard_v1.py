@@ -85,6 +85,7 @@ def restore_publication_chain(
     database: Any,
     source_store: Any,
     runtime_dest: Path | None = None,
+    audit_archive_store: Any = None,
 ) -> dict[str, Any]:
     verification = verify_publication_chain_backup(archive)
     if not verification["ok"]:
@@ -96,4 +97,5 @@ def restore_publication_chain(
         database=database,
         source_store=_ReadbackBeforeCommitStore(source_store),
         runtime_dest=runtime_dest,
+        audit_archive_store=audit_archive_store,
     )
