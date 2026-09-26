@@ -168,6 +168,7 @@ def test_withdrawal_removes_complete_logical_document_without_fallback_or_replay
 
         result = store.withdraw_logical_document(
             logical_document_id=logical_document_id,
+            expected_release_id=release2,
             actor="governance-owner",
             reason="Source withdrawn pending correction",
             withdrawn_at="2026-09-16T18:02:00+00:00",
@@ -207,6 +208,7 @@ def test_withdrawal_removes_complete_logical_document_without_fallback_or_replay
 
         repeated = store.withdraw_logical_document(
             logical_document_id=logical_document_id,
+            expected_release_id=release2,
             actor="governance-owner",
             reason="Source withdrawn pending correction",
             withdrawn_at="2026-09-16T18:02:30+00:00",
@@ -286,6 +288,7 @@ def test_withdrawal_requires_explicit_document_actor_reason_and_unambiguous_acti
         ]:
             with pytest.raises(CanonicalPublicationStoreError, match=error):
                 store.withdraw_logical_document(
+                    expected_release_id=release1,
                     withdrawn_at="2026-09-16T18:02:00+00:00",
                     **kwargs,
                 )
@@ -329,6 +332,7 @@ def test_withdrawal_requires_explicit_document_actor_reason_and_unambiguous_acti
         with pytest.raises(CanonicalPublicationStoreError, match="canonical_active_predecessor_ambiguous"):
             store.withdraw_logical_document(
                 logical_document_id=logical_document_id,
+                expected_release_id=release1,
                 actor="governance-owner",
                 reason="Safety incident",
                 withdrawn_at="2026-09-16T18:02:00+00:00",

@@ -206,6 +206,37 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
         if release is None: return None
         self._apply_local_release_copy(release, self._projection_from_authority()); return release
 
+    def withdraw_document(
+        self, *, actor_id: str, snapshot_id: str, expected_release_id: str, reason: str,
+    ) -> dict[str, Any]:
+        """Commit withdrawal first; a failed projection cannot undo that decision."""
+        with self._store_write_lock():
+            self._reload_store_locked()
+            account = self._require_role(actor_id, "publisher")
+            store = self.canonical_publication_store
+            if store is None:
+                raise ConsoleError("durable_publication_store_required")
+            if not str(expected_release_id or "").strip():
+                raise ConsoleError("canonical_expected_release_required")
+            release = self._durable_release_for_snapshot(snapshot_id)
+            if release is None or release["release_id"] != expected_release_id:
+                raise ConsoleError("canonical_expected_release_changed")
+            try:
+                result = store.withdraw_logical_document(
+                    logical_document_id=str(release.get("logical_document_id") or ""),
+                    expected_release_id=expected_release_id,
+                    actor=str(account["username"]),
+                    reason=reason,
+                    withdrawn_at=datetime.now(timezone.utc).isoformat(),
+                )
+            except CanonicalPublicationStoreError as exc:
+                raise ConsoleError(str(exc)) from exc
+            try:
+                self._sync_snapshot_from_authority(snapshot_id)
+            except Exception:
+                return {**result, "projection_status": "pending"}
+            return {**result, "projection_status": "current"}
+
     def _publish_locked(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         store = self.canonical_publication_store
         if store is None: return super()._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id)

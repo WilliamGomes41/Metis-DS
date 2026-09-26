@@ -231,6 +231,9 @@ class PostgresCanonicalPublicationStore:
         try:
             with self._connect() as con:
                 with con.transaction():
+                    if logical_document_id:
+                        # Shared with withdrawal, including when no active row exists.
+                        con.execute("SELECT pg_advisory_xact_lock(2110023, hashtext(%s))", (logical_document_id,))
                     existing_source = con.execute(
                         "SELECT source_checksum, source_locator FROM source_snapshots WHERE snapshot_id=%s",
                         (snapshot_id,),
@@ -498,16 +501,20 @@ class PostgresCanonicalPublicationStore:
         self,
         *,
         logical_document_id: str,
+        expected_release_id: str,
         actor: str,
         reason: str,
         withdrawn_at: str,
     ) -> dict[str, Any]:
-        """Withdraw the complete active serving release for one LogicalDocument."""
+        """Withdraw exactly the confirmed release, never a newer serving release."""
         logical_document_id = str(logical_document_id or "").strip()
+        expected_release_id = str(expected_release_id or "").strip()
         actor = str(actor or "").strip()
         reason = str(reason or "").strip()
         if not logical_document_id:
             raise CanonicalPublicationStoreError("canonical_logical_document_id_required")
+        if not expected_release_id:
+            raise CanonicalPublicationStoreError("canonical_expected_release_required")
         if not actor:
             raise CanonicalPublicationStoreError("canonical_withdrawal_actor_required")
         if not reason:
@@ -517,6 +524,7 @@ class PostgresCanonicalPublicationStore:
         try:
             with self._connect() as con:
                 with con.transaction():
+                    con.execute("SELECT pg_advisory_xact_lock(2110023, hashtext(%s))", (logical_document_id,))
                     active_rows = con.execute(
                         """
                         SELECT r.object_id,
@@ -556,6 +564,8 @@ class PostgresCanonicalPublicationStore:
                             (logical_document_id,),
                         ).fetchone()
                         if withdrawn:
+                            if str(withdrawn["release_id"]) != expected_release_id:
+                                raise CanonicalPublicationStoreError("canonical_expected_release_changed")
                             return {
                                 "status": "PASS",
                                 "logical_document_id": logical_document_id,
@@ -566,6 +576,8 @@ class PostgresCanonicalPublicationStore:
                         raise CanonicalPublicationStoreError("canonical_active_release_missing")
 
                     release_id = next(iter(active_release_ids))
+                    if release_id != expected_release_id:
+                        raise CanonicalPublicationStoreError("canonical_expected_release_changed")
                     release = active_rows[0]
                     if str(release["status"]) != "published":
                         raise CanonicalPublicationStoreError("canonical_release_status_invalid")
