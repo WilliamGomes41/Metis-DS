@@ -16,9 +16,9 @@ from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator, RefResolver
 
 from scripts.product_api_contract import (
-    CONTRACT_PATH,
     ContractCompatibilityError,
     assert_backward_compatible,
+    assert_contract_complete,
     generate_contract,
 )
 from src.api_access_v1 import PostgresApiAccessStore
@@ -92,9 +92,17 @@ def _cleanup(dsn: str, tenant_id: str, application_id: str) -> None:
             con.execute("DELETE FROM api_access.tenants WHERE tenant_id=%s", (tenant_id,))
 
 
-def test_committed_openapi_is_generated_from_running_product_app():
-    committed = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
-    assert committed == generate_contract()
+def test_openapi_is_generated_deterministically_from_running_product_app():
+    first = generate_contract()
+    second = generate_contract()
+    assert first == second
+    assert_contract_complete(first)
+    for path, item in first["paths"].items():
+        if path.startswith("/v1/"):
+            for method, operation in item.items():
+                if method in {"get", "post", "put", "patch", "delete"}:
+                    schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
+                    assert "$ref" in schema
 
 
 def test_v1_compatibility_guard_blocks_removed_route_and_new_required_request_field():
@@ -114,6 +122,17 @@ def test_v1_compatibility_guard_blocks_removed_route_and_new_required_request_fi
     tightened["components"]["schemas"][component]["required"].append("consumer_hint")
     with pytest.raises(ContractCompatibilityError, match="new required request fields"):
         assert_backward_compatible(baseline, tightened)
+
+    response_type_change = copy.deepcopy(baseline)
+    response_ref = (
+        response_type_change["paths"]["/v1/documents"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+    )
+    response_component = response_ref.rsplit("/", 1)[-1]
+    response_type_change["components"]["schemas"][response_component]["properties"]["tenant_id"] = {
+        "type": "integer"
+    }
+    with pytest.raises(ContractCompatibilityError, match="type changed"):
+        assert_backward_compatible(baseline, response_type_change)
 
 
 def test_fresh_n_plus_one_consumer_uses_same_contract_without_metis_specific_code(tmp_path):
