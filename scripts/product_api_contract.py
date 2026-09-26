@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
-"""Generate and protect the stable Metis Product API v1 OpenAPI contract."""
+"""Generate and protect the stable Metis Product API v1 OpenAPI contract.
+
+The running FastAPI application is the contract authority. CI materializes that
+contract as an artifact and compares it with the contract generated from the
+base revision. No hand-authored duplicate OpenAPI document is maintained.
+"""
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -14,7 +21,7 @@ from src.product_security_v1 import TenantRegistry
 from src.usage_ledger_v1 import UsageLedger
 
 ROOT = Path(__file__).resolve().parents[1]
-CONTRACT_PATH = ROOT / "schemas" / "product_api_v1.openapi.json"
+DEFAULT_OUTPUT = ROOT / "output" / "runtime" / "product_api_v1.openapi.json"
 HISTORICAL_BASELINE_PATH = "output/v2/product_api/openapi-v1.json"
 PUBLIC_METHODS = {"get", "post", "put", "patch", "delete"}
 
@@ -38,6 +45,7 @@ def _paths(tmp: Path) -> ProductPaths:
 
 
 def generate_contract() -> dict[str, Any]:
+    """Generate OpenAPI from the same application factory used at runtime."""
     with tempfile.TemporaryDirectory(prefix="metis-product-contract-") as raw:
         tmp = Path(raw)
         paths = _paths(tmp)
@@ -53,7 +61,6 @@ def generate_contract() -> dict[str, Any]:
 
 
 def _canonical_contract(spec: dict[str, Any]) -> dict[str, Any]:
-    """Keep deterministic public-contract content only."""
     out = json.loads(json.dumps(spec))
     out.pop("servers", None)
     return out
@@ -76,10 +83,87 @@ def _git_show(ref: str, path: str) -> dict[str, Any] | None:
     return json.loads(proc.stdout)
 
 
+def _git_has_path(ref: str, path: str) -> bool:
+    proc = subprocess.run(
+        ["git", "cat-file", "-e", f"{ref}:{path}"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return proc.returncode == 0
+
+
+def _generate_from_ref(ref: str) -> dict[str, Any] | None:
+    """Generate the base contract from base code, not from a copied spec.
+
+    PR3 bootstraps against the historical OpenAPI artifact because main before
+    PR3 has no generator yet. Once PR3 is merged, later changes compare two
+    independently generated runtime contracts.
+    """
+    if not _git_has_path(ref, "scripts/product_api_contract.py"):
+        baseline = _git_show(ref, HISTORICAL_BASELINE_PATH)
+        return _canonical_contract(baseline) if baseline is not None else None
+
+    with tempfile.TemporaryDirectory(prefix="metis-contract-base-") as raw:
+        worktree = Path(raw) / "base"
+        add = subprocess.run(
+            ["git", "worktree", "add", "--detach", str(worktree), ref],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if add.returncode != 0:
+            raise SystemExit("Unable to materialize base revision for Product API contract check")
+        try:
+            env = dict(os.environ)
+            env["PYTHONPATH"] = str(worktree)
+            code = (
+                "import json; "
+                "from scripts.product_api_contract import generate_contract; "
+                "print(json.dumps(generate_contract(), ensure_ascii=False, sort_keys=True))"
+            )
+            run = subprocess.run(
+                [sys.executable, "-c", code],
+                cwd=worktree,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            if run.returncode != 0:
+                raise SystemExit(
+                    "Unable to generate Product API contract from base revision:\n"
+                    + run.stderr
+                )
+            return _canonical_contract(json.loads(run.stdout))
+        finally:
+            subprocess.run(
+                ["git", "worktree", "remove", "--force", str(worktree)],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+
 def _schema_type(schema: dict[str, Any]) -> Any:
+    if "type" in schema:
+        return schema["type"]
+    if "anyOf" in schema:
+        members = []
+        for item in schema.get("anyOf") or []:
+            if "$ref" in item:
+                members.append(("ref", item["$ref"]))
+            elif "type" in item:
+                members.append(item["type"])
+            else:
+                members.append(("schema", json.dumps(item, sort_keys=True)))
+        return ("anyOf", tuple(sorted(members, key=repr)))
     if "$ref" in schema:
         return ("ref", schema["$ref"])
-    return schema.get("type")
+    return None
 
 
 def _resolve(spec: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
@@ -106,7 +190,7 @@ def _compare_schema(
     new = _resolve(new_spec, new_schema)
     old_type = _schema_type(old)
     new_type = _schema_type(new)
-    if old_type and new_type and old_type != new_type:
+    if old_type is not None and new_type is not None and old_type != new_type:
         errors.append(f"{path}: type changed from {old_type!r} to {new_type!r}")
         return
 
@@ -142,6 +226,19 @@ def _compare_schema(
             errors=errors,
         )
 
+    old_items = old.get("items")
+    new_items = new.get("items")
+    if old_items and new_items:
+        _compare_schema(
+            old_spec,
+            new_spec,
+            old_items,
+            new_items,
+            path=f"{path}[]",
+            request=request,
+            errors=errors,
+        )
+
     if request:
         for key, direction in (
             ("minLength", "increase"),
@@ -159,6 +256,37 @@ def _compare_schema(
                 errors.append(f"{path}: {key} tightened from {old[key]} to {new[key]}")
         if "enum" in old and "enum" in new and not set(old["enum"]).issubset(set(new["enum"])):
             errors.append(f"{path}: enum narrowed")
+
+
+def assert_contract_complete(spec: dict[str, Any]) -> None:
+    errors: list[str] = []
+    paths = spec.get("paths") or {}
+    for path, path_item in paths.items():
+        if not str(path).startswith("/v1/"):
+            continue
+        for method, operation in path_item.items():
+            if method.lower() not in PUBLIC_METHODS:
+                continue
+            response = (
+                operation.get("responses", {})
+                .get("200", {})
+                .get("content", {})
+                .get("application/json", {})
+                .get("schema", {})
+            )
+            if "$ref" not in response:
+                errors.append(f"{method.upper()} {path}: 200 response lacks explicit schema ref")
+            if operation.get("security") and not operation.get("x-metis-required-scope"):
+                errors.append(f"{method.upper()} {path}: secured endpoint lacks x-metis-required-scope")
+    scheme = (
+        spec.get("components", {})
+        .get("securitySchemes", {})
+        .get("VVNApiKeyBearer")
+    )
+    if not scheme or scheme.get("type") != "http" or scheme.get("scheme") != "bearer":
+        errors.append("VVNApiKeyBearer security scheme missing or changed")
+    if errors:
+        raise ContractCompatibilityError("\n".join(errors))
 
 
 def assert_backward_compatible(old: dict[str, Any], new: dict[str, Any]) -> None:
@@ -267,33 +395,27 @@ def assert_backward_compatible(old: dict[str, Any], new: dict[str, Any]) -> None
 
 def check_contract(*, base_ref: str | None = None) -> None:
     generated = generate_contract()
-    if not CONTRACT_PATH.exists():
-        raise SystemExit(f"Committed contract missing: {CONTRACT_PATH.relative_to(ROOT)}")
-    committed = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
-    if committed != generated:
-        raise SystemExit(
-            "Product API OpenAPI drift detected. Run "
-            "'python scripts/product_api_contract.py --write' and review compatibility."
-        )
-
+    assert_contract_complete(generated)
     if base_ref:
-        baseline = _git_show(base_ref, str(CONTRACT_PATH.relative_to(ROOT)))
+        baseline = _generate_from_ref(base_ref)
         if baseline is None:
-            baseline = _git_show(base_ref, HISTORICAL_BASELINE_PATH)
-        if baseline is not None:
-            assert_backward_compatible(_canonical_contract(baseline), generated)
+            raise SystemExit(f"Unable to resolve Product API contract baseline from {base_ref}")
+        assert_backward_compatible(baseline, generated)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--write", action="store_true")
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--base-ref")
     args = parser.parse_args()
 
+    generated: dict[str, Any] | None = None
     if args.write:
-        CONTRACT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CONTRACT_PATH.write_text(_json_text(generate_contract()), encoding="utf-8")
+        generated = generate_contract()
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(_json_text(generated), encoding="utf-8")
     if args.check:
         check_contract(base_ref=args.base_ref)
     if not args.write and not args.check:
