@@ -22,7 +22,8 @@ from typing import Any, Callable
 
 
 def hash_api_key(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+    # High-entropy random API key lookup digest, not a password KDF.
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()  # lgtm[py/weak-sensitive-data-hashing]
 
 
 @dataclass(frozen=True)

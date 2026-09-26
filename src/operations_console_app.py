@@ -3120,14 +3120,14 @@ def create_console_app(
                 application_requests_per_minute=application_requests_per_minute,
                 application_max_top_k=application_max_top_k,
             )
-        except ApiAccessError as exc:
+        except ApiAccessError:
             return HTMLResponse(
                 _page(
                     f"""
                     {_nav(account, "settings", _counts(account))}
                     <section class="room">
                       <h1>API Access</h1>
-                      <div class="banner err">De toegang kon niet worden aangemaakt: {_esc(str(exc))}</div>
+                      <div class="banner err">De toegang kon niet worden aangemaakt. Controleer de ingevulde grenzen en probeer opnieuw.</div>
                       <p><a href="/settings/api-access">Terug</a></p>
                     </section>
                     """
