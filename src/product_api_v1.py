@@ -236,14 +236,26 @@ class HealthResponse(ProductContractModel):
     generation_enabled: bool
 
 
-def _product_error_responses(*status_codes: int) -> dict[int, dict[str, Any]]:
-    return {
-        int(status_code): {
-            "model": ProductErrorResponse,
-            "description": "Product API error with stable detail.code semantics.",
+def _product_responses(
+    success_model: type[BaseModel],
+    *error_status_codes: int,
+) -> dict[int, dict[str, Any]]:
+    responses: dict[int, dict[str, Any]] = {
+        200: {
+            "model": success_model,
+            "description": "Successful Product API response.",
         }
-        for status_code in status_codes
     }
+    responses.update(
+        {
+            int(status_code): {
+                "model": ProductErrorResponse,
+                "description": "Product API error with stable detail.code semantics.",
+            }
+            for status_code in error_status_codes
+        }
+    )
+    return responses
 
 
 @dataclass(frozen=True)
@@ -726,15 +738,14 @@ def create_product_app(
         response.headers["X-VVN-API-Version"] = API_VERSION
         return response
 
-    @app.get("/v1/health", response_model=HealthResponse)
+    @app.get("/v1/health", responses=_product_responses(HealthResponse))
     def health() -> dict[str, Any]:
         state.refresh()
         return {"status": "ok", "api_version": API_VERSION, "service_version": SERVICE_VERSION, "mode": state.mode, "synthetic_fixture": state.synthetic, "published_retrieval_records": len(state.records) if state.synthetic else None, "published_corpus_ready": bool(state.records), "corpus_reload_policy": "postgres_active_registry_plus_blob_readback" if state.mode == "real" else "reload_fixture_on_file_change", "published_corpus_authority": "postgres+azure_blob" if state.mode == "real" else "fixture_jsonl", "generation_enabled": False}
 
     @app.post(
         "/v1/retrieve",
-        response_model=RetrieveResponse,
-        responses=_product_error_responses(400, 401, 403, 429, 503),
+        responses=_product_responses(RetrieveResponse, 400, 401, 403, 429, 503),
         openapi_extra={"x-metis-required-scope": "retrieve"},
     )
     def retrieve(req: RetrieveRequest, request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
@@ -743,8 +754,7 @@ def create_product_app(
 
     @app.get(
         "/v1/knowledge/{object_id}",
-        response_model=KnowledgeResponse,
-        responses=_product_error_responses(401, 403, 404, 429, 503),
+        responses=_product_responses(KnowledgeResponse, 401, 403, 404, 429, 503),
         openapi_extra={"x-metis-required-scope": "knowledge:read"},
     )
     def knowledge(object_id: str, request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
@@ -752,8 +762,7 @@ def create_product_app(
 
     @app.get(
         "/v1/documents",
-        response_model=DocumentsResponse,
-        responses=_product_error_responses(401, 403, 429, 503),
+        responses=_product_responses(DocumentsResponse, 401, 403, 429, 503),
         openapi_extra={"x-metis-required-scope": "documents:read"},
     )
     def documents(request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
@@ -761,8 +770,7 @@ def create_product_app(
 
     @app.get(
         "/v1/documents/{document_id}",
-        response_model=DocumentResponse,
-        responses=_product_error_responses(401, 403, 404, 429, 503),
+        responses=_product_responses(DocumentResponse, 401, 403, 404, 429, 503),
         openapi_extra={"x-metis-required-scope": "documents:read"},
     )
     def document(document_id: str, request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
@@ -772,8 +780,7 @@ def create_product_app(
 
     @app.get(
         "/v1/updates",
-        response_model=UpdatesResponse,
-        responses=_product_error_responses(401, 403, 429, 503),
+        responses=_product_responses(UpdatesResponse, 401, 403, 429, 503),
         openapi_extra={"x-metis-required-scope": "updates:read"},
     )
     def updates(request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
@@ -781,8 +788,7 @@ def create_product_app(
 
     @app.get(
         "/v1/usage",
-        response_model=UsageResponse,
-        responses=_product_error_responses(401, 403, 429, 503),
+        responses=_product_responses(UsageResponse, 401, 403, 429, 503),
         openapi_extra={"x-metis-required-scope": "usage:read"},
     )
     def usage(request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
