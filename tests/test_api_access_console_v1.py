@@ -236,3 +236,28 @@ def test_rotated_credential_response_is_one_time_and_non_cacheable(tmp_path):
 
     listing = client.get("/settings/api-access")
     assert "metis_live_cred_rotated.once-only" not in listing.text
+
+
+
+def test_non_publisher_cannot_change_existing_application_grant(tmp_path):
+    store = FakeAccessStore()
+    client = _logged_in_client(
+        _console(tmp_path),
+        store,
+        "researcher.rik",
+        "researcher-secret",
+    )
+    before = len(store.calls)
+    response = client.post(
+        "/settings/api-access/tenants/ten_test/applications/app_test/grant",
+        data={
+            "expected_version": "1",
+            "content_scope": "RESOURCE_SET",
+            "document_ids": "doc-a",
+            "scopes": ["retrieve"],
+            "requests_per_minute": "50",
+            "max_top_k": "3",
+        },
+    )
+    assert response.status_code == 403
+    assert len(store.calls) == before
