@@ -19,6 +19,7 @@ from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel, ConfigDict, Field
 
 from .abstain_catalog_v1 import sentence_for
@@ -246,15 +247,26 @@ def _product_responses(
             "description": "Successful Product API response.",
         }
     }
-    responses.update(
-        {
-            int(status_code): {
-                "model": ProductErrorResponse,
-                "description": "Product API error with stable detail.code semantics.",
-            }
-            for status_code in error_status_codes
+    for status_code in error_status_codes:
+        response: dict[str, Any] = {
+            "model": ProductErrorResponse,
+            "description": "Product API error with stable detail.code semantics.",
         }
-    )
+        if int(status_code) == 401:
+            response["headers"] = {
+                "WWW-Authenticate": {
+                    "description": "Bearer authentication challenge.",
+                    "schema": {"type": "string"},
+                }
+            }
+        if int(status_code) == 429:
+            response["headers"] = {
+                "Retry-After": {
+                    "description": "Seconds until the application rate-limit window allows retry.",
+                    "schema": {"type": "string"},
+                }
+            }
+        responses[int(status_code)] = response
     return responses
 
 
@@ -720,6 +732,58 @@ def create_product_app(
         contact={"name": "V&VN Data Services"},
     )
     app.state.product = state
+
+    def product_openapi() -> dict[str, Any]:
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            description=app.description,
+            routes=app.routes,
+            contact=app.contact,
+        )
+        schema["x-metis-api-version"] = API_VERSION
+        request_id_parameter = {
+            "name": "X-Request-ID",
+            "in": "header",
+            "required": False,
+            "description": (
+                "Optional consumer correlation id. Metis echoes it in the response; "
+                "otherwise Metis generates one."
+            ),
+            "schema": {"type": "string"},
+        }
+        common_headers = {
+            "X-Request-ID": {
+                "description": "Correlation id for this Product API request.",
+                "schema": {"type": "string"},
+            },
+            "X-VVN-API-Version": {
+                "description": "Stable Product API major contract version.",
+                "schema": {"type": "string", "example": API_VERSION},
+            },
+        }
+        for path, path_item in (schema.get("paths") or {}).items():
+            if not str(path).startswith("/v1/"):
+                continue
+            for method, operation in path_item.items():
+                if method.lower() not in {"get", "post", "put", "patch", "delete"}:
+                    continue
+                params = operation.setdefault("parameters", [])
+                if not any(
+                    item.get("in") == "header" and item.get("name") == "X-Request-ID"
+                    for item in params
+                ):
+                    params.append(dict(request_id_parameter))
+                for response in (operation.get("responses") or {}).values():
+                    headers = response.setdefault("headers", {})
+                    for name, definition in common_headers.items():
+                        headers.setdefault(name, dict(definition))
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = product_openapi
     bearer = HTTPBearer(auto_error=False, scheme_name="VVNApiKeyBearer", description="Tenant API key as Bearer token")
 
     def current_tenant(credentials: HTTPAuthorizationCredentials | None = Security(bearer), header_credential: str | None = Header(default=None, alias="X-API-Key", include_in_schema=False)) -> ProductAccessPrincipal:
