@@ -8,7 +8,7 @@ A consumer needs only:
 
 1. the deployment base URL;
 2. one active Metis API credential for its ConsumerApplication;
-3. the published OpenAPI contract at `schemas/product_api_v1.openapi.json`.
+3. the live OpenAPI contract exposed by the deployment at `/openapi.json`.
 
 No consumer-specific Metis endpoint, schema, deploy, or source-code change is part of the integration contract.
 
@@ -157,22 +157,21 @@ Revocation takes effect on the next Product API request in PostgreSQL access mod
 
 ## Contract source
 
-The checked-in OpenAPI contract is generated from the running FastAPI application:
+The running FastAPI application is the OpenAPI authority. A deployment exposes the current contract at:
 
 ```text
-schemas/product_api_v1.openapi.json
+/openapi.json
 ```
 
-Generation/check command:
+CI independently generates the same contract and publishes it as a build artifact named `product-api-v1-openapi-<python-version>`. This keeps a reviewable contract snapshot without maintaining a second hand-authored OpenAPI authority in Git.
 
-```bash
-python scripts/product_api_contract.py --check --base-ref origin/main
-```
-
-To deliberately regenerate after a compatible contract change:
+Generation/check commands:
 
 ```bash
 python scripts/product_api_contract.py --write
+python scripts/product_api_contract.py --check --base-ref origin/main
 ```
 
-The regenerated diff is part of code review. Consumer-specific contract variants are not supported.
+The compatibility check generates the base revision's contract from the base code and rejects incompatible `/v1` changes. PR3 bootstraps once from the historical OpenAPI artifact because earlier revisions did not yet contain the generator.
+
+Consumer-specific contract variants are not supported.
