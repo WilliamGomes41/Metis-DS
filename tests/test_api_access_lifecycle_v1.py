@@ -427,6 +427,23 @@ def test_same_running_product_api_observes_policy_and_lifecycle_changes_without_
         restored = client.get("/v1/documents", headers=headers)
         assert restored.status_code == 200
         assert restored.json()["documents"] == []
+
+        rotated = store.issue_credential(
+            actor_id="publisher-a",
+            tenant_id=issued.tenant_id,
+            application_id=issued.application_id,
+        )
+        rotated_headers = {"Authorization": f"Bearer {rotated.credential}"}
+        assert client.get("/v1/documents", headers=rotated_headers).status_code == 200
+
+        store.revoke_credential(
+            actor_id="publisher-a",
+            tenant_id=issued.tenant_id,
+            application_id=issued.application_id,
+            credential_id=issued.credential_id,
+        )
+        assert client.get("/v1/documents", headers=headers).status_code == 401
+        assert client.get("/v1/documents", headers=rotated_headers).status_code == 200
     finally:
         _cleanup(issued)
 
