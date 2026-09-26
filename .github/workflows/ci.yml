@@ -59,7 +59,18 @@ jobs:
       - run: python scripts/repository_preflight.py
       - name: Release-control skill mapping
         run: python scripts/release_control_preflight.py --base origin/main
-      - name: Product API v1 contract compatibility
+      - name: Generate Product API v1 contract
+        run: python scripts/product_api_contract.py --write
+      - name: Upload Product API contract evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-api-v1-openapi-${{ matrix.python-version }}
+          path: schemas/product_api_v1.openapi.json
+          if-no-files-found: error
+      - name: Product API v1 contract drift
+        run: git diff --exit-code -- schemas/product_api_v1.openapi.json
+      - name: Product API v1 backward compatibility
         run: python scripts/product_api_contract.py --check --base-ref origin/main
       - run: python -m compileall -q src
       - name: Verify architecture invariants
