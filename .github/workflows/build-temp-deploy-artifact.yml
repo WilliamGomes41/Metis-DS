@@ -1,0 +1,45 @@
+name: Build exact Metis deployment artifact
+
+on:
+  push:
+    branches:
+      - artifact/deploy-afdca284
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact tested main SHA
+        uses: actions/checkout@v4
+        with:
+          ref: afdca2849c71444b8326a33570ec039f533dce0a
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build deploy ZIP with repository packaging route
+        run: |
+          python -m pip install --upgrade pip
+          bash scripts/create_azure_deploy_package.sh metis-console-afdca284-azure.zip
+
+      - name: Verify ZIP and commit marker
+        run: |
+          unzip -t metis-console-afdca284-azure.zip
+          unzip -p metis-console-afdca284-azure.zip config/deployed_commit.txt | tee deployed_commit.txt
+          test "$(tr -d '\r\n' < deployed_commit.txt)" = "afdca2849c71444b8326a33570ec039f533dce0a"
+          sha256sum metis-console-afdca284-azure.zip | tee metis-console-afdca284-azure.zip.sha256
+
+      - name: Upload deployment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: metis-console-afdca284-azure
+          path: |
+            metis-console-afdca284-azure.zip
+            metis-console-afdca284-azure.zip.sha256
+            deployed_commit.txt
+          if-no-files-found: error
