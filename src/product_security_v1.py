@@ -22,6 +22,7 @@ from typing import Any, Callable
 
 
 def hash_api_key(value: str) -> str:
+    # High-entropy random API key lookup digest, not a password KDF.
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
@@ -97,8 +98,8 @@ class TenantRegistry:
             return cls([])
         return cls.from_dict(json.loads(path.read_text(encoding="utf-8")))
 
-    def authenticate(self, api_key: str) -> TenantPolicy | None:
-        supplied = hash_api_key(api_key)
+    def authenticate(self, credential: str) -> TenantPolicy | None:
+        supplied = hash_api_key(credential)
         # Compare all candidates rather than short-circuiting on prefix/string equality.
         match: TenantPolicy | None = None
         for tenant in self.tenants:
