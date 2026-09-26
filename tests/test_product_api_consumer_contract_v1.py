@@ -196,38 +196,46 @@ def test_fresh_n_plus_one_consumer_uses_same_contract_without_metis_specific_cod
         )
         spec = app.openapi()
         client = TestClient(app)
-        headers = {
-            "Authorization": f"Bearer {issued.credential}",
-            "X-Request-ID": "n-plus-one-contract-proof",
-        }
+        def headers(request_id: str) -> dict[str, str]:
+            return {
+                "Authorization": f"Bearer {issued.credential}",
+                "X-Request-ID": request_id,
+            }
 
-        docs = client.get("/v1/documents", headers=headers)
+        docs = client.get("/v1/documents", headers=headers("n-plus-one-documents"))
         assert docs.status_code == 200
-        assert docs.headers["X-Request-ID"] == "n-plus-one-contract-proof"
+        assert docs.headers["X-Request-ID"] == "n-plus-one-documents"
+        assert docs.json()["request_id"] == "n-plus-one-documents"
         _assert_matches_openapi(spec, "/v1/documents", docs.json())
         assert [row["document_id"] for row in docs.json()["documents"]] == [DOC]
 
         retrieved = client.post(
             "/v1/retrieve",
-            headers=headers,
+            headers=headers("n-plus-one-retrieve"),
             json={"query": "Wanneer gebruik je de risicofactorenscore?", "top_k": 3},
         )
         assert retrieved.status_code == 200
         _assert_matches_openapi(spec, "/v1/retrieve", retrieved.json(), method="post")
-        assert retrieved.json()["request_id"] == "n-plus-one-contract-proof"
+        assert retrieved.json()["request_id"] == "n-plus-one-retrieve"
         assert retrieved.json()["results"]
 
         object_id = retrieved.json()["results"][0]["knowledge_object_id"]
-        knowledge = client.get(f"/v1/knowledge/{object_id}", headers=headers)
+        knowledge = client.get(
+            f"/v1/knowledge/{object_id}",
+            headers=headers("n-plus-one-knowledge"),
+        )
         assert knowledge.status_code == 200
+        assert knowledge.json()["request_id"] == "n-plus-one-knowledge"
         _assert_matches_openapi(spec, "/v1/knowledge/{object_id}", knowledge.json())
 
-        updates = client.get("/v1/updates", headers=headers)
+        updates = client.get("/v1/updates", headers=headers("n-plus-one-updates"))
         assert updates.status_code == 200
+        assert updates.json()["request_id"] == "n-plus-one-updates"
         _assert_matches_openapi(spec, "/v1/updates", updates.json())
 
-        usage = client.get("/v1/usage", headers=headers)
+        usage = client.get("/v1/usage", headers=headers("n-plus-one-usage"))
         assert usage.status_code == 200
+        assert usage.json()["request_id"] == "n-plus-one-usage"
         _assert_matches_openapi(spec, "/v1/usage", usage.json())
         assert usage.json()["tenant_id"] == issued.tenant_id
         assert usage.json()["requests"] >= 4
