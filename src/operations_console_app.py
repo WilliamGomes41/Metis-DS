@@ -19,7 +19,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.four_eyes_v1 import requires_four_eyes
-from src.api_access_v1 import ApiAccessError, ApiAccessStoreError, PostgresApiAccessStore, VALID_SCOPES
+from src.api_access_v1 import ApiAccessConflict, ApiAccessError, ApiAccessStoreError, PostgresApiAccessStore, VALID_SCOPES
 from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES, review_path_for_klasse
 from src.klasse_wijzigen_v1 import is_cross_model_class_change
 from src.heading_parent_list_v1 import (
@@ -2984,20 +2984,130 @@ def create_console_app(
                 status_code=503,
             )
 
-        cards = "".join(
-            f"""
-            <article class="doc-card">
-              <p class="doc-title">{_esc(row.get("tenant_name"))} · {_esc(row.get("application_name"))}</p>
-              <p class="meta">
-                <span>omgeving <b>{_esc(row.get("environment"))}</b></span>
-                <span>tenant <b>{_esc(row.get("tenant_id"))}</b></span>
-                <span>app <b>{_esc(row.get("application_id"))}</b></span>
-                <span>actieve credentials <b>{int(row.get("active_credentials") or 0)}</b></span>
-              </p>
-            </article>
+        def _scope_boxes(name: str, selected: list[str]) -> str:
+            chosen = set(selected or [])
+            return "".join(
+                f'<label class="check"><input type="checkbox" name="{_esc(name)}" value="{_esc(scope)}"'
+                + (" checked" if scope in chosen else "")
+                + f'> {_esc(scope)}</label>'
+                for scope in sorted(VALID_SCOPES)
+            )
+
+        def _scope_option(current: str, value: str, label: str) -> str:
+            selected = " selected" if current == value else ""
+            return f'<option value="{value}"{selected}>{_esc(label)}</option>'
+
+        cards = ""
+        for row in consumers:
+            credentials = row.get("credentials") or []
+            credential_rows = "".join(
+                f"""
+                <div class="meta">
+                  <span><b>{_esc(item.get("credential_id"))}</b></span>
+                  <span>{_esc(item.get("state"))}</span>
+                  {
+                    f'<form method="post" action="/settings/api-access/tenants/{_esc(row.get("tenant_id"))}/applications/{_esc(row.get("application_id"))}/credentials/{_esc(item.get("credential_id"))}/revoke" style="display:inline"><button type="submit">Revoken</button></form>'
+                    if "publisher" in account["roles"] and item.get("state") == "ACTIVE"
+                    else ""
+                  }
+                </div>
+                """
+                for item in credentials
+            ) or '<p class="muted">Geen credentials.</p>'
+
+            publisher_controls = ""
+            if "publisher" in account["roles"]:
+                tenant_docs = "\n".join(row.get("tenant_document_ids") or [])
+                app_docs = "\n".join(row.get("application_document_ids") or [])
+                tenant_state_button = (
+                    "SUSPEND"
+                    if row.get("tenant_state") == "ACTIVE"
+                    else "ACTIVATE"
+                )
+                app_state = str(row.get("application_state") or "")
+                application_buttons = ""
+                if app_state != "RETIRED":
+                    app_toggle = "SUSPEND" if app_state == "ACTIVE" else "ACTIVATE"
+                    application_buttons = f"""
+                      <form method="post" action="/settings/api-access/tenants/{_esc(row.get("tenant_id"))}/applications/{_esc(row.get("application_id"))}/state">
+                        <input type="hidden" name="expected_version" value="{int(row.get("application_policy_version") or 0)}">
+                        <input type="hidden" name="target_state" value="{app_toggle}">
+                        <button type="submit">{"Pauzeren" if app_toggle == "SUSPEND" else "Heractiveren"}</button>
+                      </form>
+                      <form method="post" action="/settings/api-access/tenants/{_esc(row.get("tenant_id"))}/applications/{_esc(row.get("application_id"))}/state">
+                        <input type="hidden" name="expected_version" value="{int(row.get("application_policy_version") or 0)}">
+                        <input type="hidden" name="target_state" value="RETIRE">
+                        <button type="submit">Definitief retireren</button>
+                      </form>
+                    """
+
+                publisher_controls = f"""
+                  <details>
+                    <summary>Klanttoegang wijzigen</summary>
+                    <form method="post" action="/settings/api-access/tenants/{_esc(row.get("tenant_id"))}/policy" class="stack">
+                      <input type="hidden" name="expected_version" value="{int(row.get("tenant_policy_version") or 0)}">
+                      <label>Content scope</label>
+                      <select name="content_scope">
+                        {_scope_option(str(row.get("tenant_content_scope")), "ALL_PUBLISHED", "Alle gepubliceerde kennis")}
+                        {_scope_option(str(row.get("tenant_content_scope")), "RESOURCE_SET", "Specifieke documenten")}
+                      </select>
+                      <label>Document-id's</label>
+                      <textarea name="document_ids">{_esc(tenant_docs)}</textarea>
+                      <fieldset><legend>Capabilities</legend>{_scope_boxes("scopes", row.get("tenant_scopes") or [])}</fieldset>
+                      <label>Requests per minuut</label>
+                      <input type="number" name="requests_per_minute" min="1" value="{int(row.get("tenant_requests_per_minute") or 1)}" required>
+                      <label>Max top_k</label>
+                      <input type="number" name="max_top_k" min="1" value="{int(row.get("tenant_max_top_k") or 1)}" required>
+                      <button type="submit">Klanttoegang opslaan</button>
+                    </form>
+                    <form method="post" action="/settings/api-access/tenants/{_esc(row.get("tenant_id"))}/state">
+                      <input type="hidden" name="expected_version" value="{int(row.get("tenant_policy_version") or 0)}">
+                      <input type="hidden" name="target_state" value="{tenant_state_button}">
+                      <button type="submit">{"Klant pauzeren" if tenant_state_button == "SUSPEND" else "Klant heractiveren"}</button>
+                    </form>
+                  </details>
+
+                  <details>
+                    <summary>Applicatietoegang wijzigen</summary>
+                    <form method="post" action="/settings/api-access/tenants/{_esc(row.get("tenant_id"))}/applications/{_esc(row.get("application_id"))}/grant" class="stack">
+                      <input type="hidden" name="expected_version" value="{int(row.get("application_policy_version") or 0)}">
+                      <label>Content scope</label>
+                      <select name="content_scope">
+                        {_scope_option(str(row.get("application_content_scope")), "ALL_PUBLISHED", "Volledige klanttoegang")}
+                        {_scope_option(str(row.get("application_content_scope")), "RESOURCE_SET", "Specifieke documenten")}
+                      </select>
+                      <label>Document-id's</label>
+                      <textarea name="document_ids">{_esc(app_docs)}</textarea>
+                      <fieldset><legend>Capabilities</legend>{_scope_boxes("scopes", row.get("application_scopes") or [])}</fieldset>
+                      <label>Requests per minuut</label>
+                      <input type="number" name="requests_per_minute" min="1" value="{int(row.get("application_requests_per_minute") or 1)}" required>
+                      <label>Max top_k</label>
+                      <input type="number" name="max_top_k" min="1" value="{int(row.get("application_max_top_k") or 1)}" required>
+                      <button type="submit">Applicatietoegang opslaan</button>
+                    </form>
+                    <div class="actions">{application_buttons}</div>
+                  </details>
+
+                  <form method="post" action="/settings/api-access/tenants/{_esc(row.get("tenant_id"))}/applications/{_esc(row.get("application_id"))}/credentials">
+                    <button type="submit"{" disabled" if app_state != "ACTIVE" or row.get("tenant_state") != "ACTIVE" else ""}>Nieuwe credential genereren</button>
+                  </form>
+                """
+
+            cards += f"""
+              <article class="doc-card">
+                <p class="doc-title">{_esc(row.get("tenant_name"))} · {_esc(row.get("application_name"))}</p>
+                <p class="meta">
+                  <span>omgeving <b>{_esc(row.get("environment"))}</b></span>
+                  <span>tenant <b>{_esc(row.get("tenant_state"))}</b> · v{int(row.get("tenant_policy_version") or 0)}</span>
+                  <span>app <b>{_esc(row.get("application_state"))}</b> · v{int(row.get("application_policy_version") or 0)}</span>
+                  <span>actieve credentials <b>{int(row.get("active_credentials") or 0)}</b></span>
+                </p>
+                {publisher_controls}
+                <h4>Credentials</h4>
+                {credential_rows}
+              </article>
             """
-            for row in consumers
-        ) or '<p class="muted">Nog geen API-consumers.</p>'
+        cards = cards or '<p class="muted">Nog geen API-consumers.</p>'
 
         form = ""
         if "publisher" in account["roles"]:
@@ -3170,6 +3280,256 @@ def create_console_app(
             ),
             headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
         )
+
+    def _api_access_parse_ids(raw: str) -> list[str]:
+        return [
+            part.strip()
+            for line in str(raw or "").splitlines()
+            for part in line.split(",")
+            if part.strip()
+        ]
+
+    def _api_access_publisher(request: Request) -> dict[str, Any]:
+        account = _require(request)
+        if "publisher" not in account["roles"]:
+            raise ConsoleError("publisher_role_required")
+        return account
+
+    def _api_access_error_response(
+        account: dict[str, Any],
+        message: str,
+        *,
+        status_code: int,
+    ) -> HTMLResponse:
+        return HTMLResponse(
+            _page(
+                f"""
+                {_nav(account, "settings", _counts(account))}
+                <section class="room">
+                  <p><a href="/settings/api-access">← Terug naar API Access</a></p>
+                  <h1>API Access</h1>
+                  <div class="banner err">{_esc(message)}</div>
+                </section>
+                """,
+                title="API Access — Metis",
+            ),
+            status_code=status_code,
+        )
+
+    @app.post("/settings/api-access/tenants/{tenant_id}/policy")
+    def settings_api_access_tenant_policy(
+        tenant_id: str,
+        request: Request,
+        expected_version: int = Form(...),
+        content_scope: str = Form(...),
+        document_ids: str = Form(""),
+        scopes: list[str] = Form(default=[]),
+        requests_per_minute: int = Form(...),
+        max_top_k: int = Form(...),
+    ):
+        account = _api_access_publisher(request)
+        if access_store is None:
+            return _api_access_error_response(account, "API Access is niet beschikbaar.", status_code=503)
+        try:
+            access_store.set_tenant_entitlement(
+                actor_id=str(account["account_id"]),
+                tenant_id=tenant_id,
+                expected_version=expected_version,
+                content_scope=content_scope,
+                document_ids=_api_access_parse_ids(document_ids),
+                scopes=scopes,
+                requests_per_minute=requests_per_minute,
+                max_top_k=max_top_k,
+            )
+        except ApiAccessConflict:
+            return _api_access_error_response(
+                account,
+                "De klanttoegang is intussen gewijzigd. Herlaad de pagina en probeer opnieuw.",
+                status_code=409,
+            )
+        except ApiAccessError:
+            return _api_access_error_response(
+                account,
+                "De klanttoegang kan niet zo worden gewijzigd. Bestaande applicatiegrants moeten binnen de nieuwe grens blijven.",
+                status_code=400,
+            )
+        except ApiAccessStoreError:
+            return _api_access_error_response(account, "De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.", status_code=503)
+        return RedirectResponse("/settings/api-access", status_code=303)
+
+    @app.post("/settings/api-access/tenants/{tenant_id}/applications/{application_id}/grant")
+    def settings_api_access_application_grant(
+        tenant_id: str,
+        application_id: str,
+        request: Request,
+        expected_version: int = Form(...),
+        content_scope: str = Form(...),
+        document_ids: str = Form(""),
+        scopes: list[str] = Form(default=[]),
+        requests_per_minute: int = Form(...),
+        max_top_k: int = Form(...),
+    ):
+        account = _api_access_publisher(request)
+        if access_store is None:
+            return _api_access_error_response(account, "API Access is niet beschikbaar.", status_code=503)
+        try:
+            access_store.set_application_grant(
+                actor_id=str(account["account_id"]),
+                tenant_id=tenant_id,
+                application_id=application_id,
+                expected_version=expected_version,
+                content_scope=content_scope,
+                document_ids=_api_access_parse_ids(document_ids),
+                scopes=scopes,
+                requests_per_minute=requests_per_minute,
+                max_top_k=max_top_k,
+            )
+        except ApiAccessConflict:
+            return _api_access_error_response(
+                account,
+                "De applicatietoegang is intussen gewijzigd. Herlaad de pagina en probeer opnieuw.",
+                status_code=409,
+            )
+        except ApiAccessError:
+            return _api_access_error_response(
+                account,
+                "De applicatietoegang moet volledig binnen de klanttoegang blijven.",
+                status_code=400,
+            )
+        except ApiAccessStoreError:
+            return _api_access_error_response(account, "De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.", status_code=503)
+        return RedirectResponse("/settings/api-access", status_code=303)
+
+    @app.post("/settings/api-access/tenants/{tenant_id}/state")
+    def settings_api_access_tenant_state(
+        tenant_id: str,
+        request: Request,
+        expected_version: int = Form(...),
+        target_state: str = Form(...),
+    ):
+        account = _api_access_publisher(request)
+        if access_store is None:
+            return _api_access_error_response(account, "API Access is niet beschikbaar.", status_code=503)
+        target = {"SUSPEND": "SUSPENDED", "ACTIVATE": "ACTIVE"}.get(str(target_state).upper())
+        if target is None:
+            return _api_access_error_response(account, "Ongeldige tenanttransitie.", status_code=400)
+        try:
+            access_store.set_tenant_state(
+                actor_id=str(account["account_id"]),
+                tenant_id=tenant_id,
+                expected_version=expected_version,
+                target_state=target,
+            )
+        except ApiAccessConflict:
+            return _api_access_error_response(account, "De tenant is intussen gewijzigd. Herlaad de pagina.", status_code=409)
+        except ApiAccessError:
+            return _api_access_error_response(account, "Deze tenanttransitie is niet toegestaan.", status_code=400)
+        except ApiAccessStoreError:
+            return _api_access_error_response(account, "De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.", status_code=503)
+        return RedirectResponse("/settings/api-access", status_code=303)
+
+    @app.post("/settings/api-access/tenants/{tenant_id}/applications/{application_id}/state")
+    def settings_api_access_application_state(
+        tenant_id: str,
+        application_id: str,
+        request: Request,
+        expected_version: int = Form(...),
+        target_state: str = Form(...),
+    ):
+        account = _api_access_publisher(request)
+        if access_store is None:
+            return _api_access_error_response(account, "API Access is niet beschikbaar.", status_code=503)
+        target = {
+            "SUSPEND": "SUSPENDED",
+            "ACTIVATE": "ACTIVE",
+            "RETIRE": "RETIRED",
+        }.get(str(target_state).upper())
+        if target is None:
+            return _api_access_error_response(account, "Ongeldige applicatietransitie.", status_code=400)
+        try:
+            access_store.set_application_state(
+                actor_id=str(account["account_id"]),
+                tenant_id=tenant_id,
+                application_id=application_id,
+                expected_version=expected_version,
+                target_state=target,
+            )
+        except ApiAccessConflict:
+            return _api_access_error_response(account, "De applicatie is intussen gewijzigd. Herlaad de pagina.", status_code=409)
+        except ApiAccessError:
+            return _api_access_error_response(account, "Deze applicatietransitie is niet toegestaan.", status_code=400)
+        except ApiAccessStoreError:
+            return _api_access_error_response(account, "De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.", status_code=503)
+        return RedirectResponse("/settings/api-access", status_code=303)
+
+    @app.post("/settings/api-access/tenants/{tenant_id}/applications/{application_id}/credentials")
+    def settings_api_access_issue_credential(
+        tenant_id: str,
+        application_id: str,
+        request: Request,
+    ):
+        account = _api_access_publisher(request)
+        if access_store is None:
+            return _api_access_error_response(account, "API Access is niet beschikbaar.", status_code=503)
+        try:
+            result = access_store.issue_credential(
+                actor_id=str(account["account_id"]),
+                tenant_id=tenant_id,
+                application_id=application_id,
+            )
+        except ApiAccessError:
+            return _api_access_error_response(
+                account,
+                "Een nieuwe credential kan alleen voor een actieve tenant en actieve applicatie worden uitgegeven.",
+                status_code=400,
+            )
+        except ApiAccessStoreError:
+            return _api_access_error_response(account, "De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.", status_code=503)
+        return HTMLResponse(
+            _page(
+                f"""
+                {_nav(account, "settings", _counts(account))}
+                <section class="room">
+                  <p><a href="/settings/api-access">← Terug naar API Access</a></p>
+                  <p class="eyebrow">Credential uitgegeven</p>
+                  <h1>Bewaar deze API-key nu</h1>
+                  <div class="banner warn">Deze plaintext key wordt na deze pagina niet opnieuw getoond.</div>
+                  <article class="doc-card">
+                    <p>Tenant <b>{_esc(result.tenant_id)}</b></p>
+                    <p>Applicatie <b>{_esc(result.application_id)}</b></p>
+                    <p>Credential <b>{_esc(result.credential_id)}</b></p>
+                    <label>API-key</label>
+                    <input value="{_esc(result.credential)}" readonly>
+                  </article>
+                </section>
+                """,
+                title="API-key uitgegeven — Metis",
+            ),
+            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+        )
+
+    @app.post("/settings/api-access/tenants/{tenant_id}/applications/{application_id}/credentials/{credential_id}/revoke")
+    def settings_api_access_revoke_credential(
+        tenant_id: str,
+        application_id: str,
+        credential_id: str,
+        request: Request,
+    ):
+        account = _api_access_publisher(request)
+        if access_store is None:
+            return _api_access_error_response(account, "API Access is niet beschikbaar.", status_code=503)
+        try:
+            access_store.revoke_credential(
+                actor_id=str(account["account_id"]),
+                tenant_id=tenant_id,
+                application_id=application_id,
+                credential_id=credential_id,
+            )
+        except ApiAccessError:
+            return _api_access_error_response(account, "Credential niet gevonden binnen deze tenant/applicatie.", status_code=404)
+        except ApiAccessStoreError:
+            return _api_access_error_response(account, "De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.", status_code=503)
+        return RedirectResponse("/settings/api-access", status_code=303)
 
     @app.get("/settings/llm", response_class=HTMLResponse)
     def settings_llm(request: Request) -> str:
