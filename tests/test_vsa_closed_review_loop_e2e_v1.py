@@ -109,7 +109,7 @@ def test_unresolved_closure_gap_is_reachable_instead_of_looking_complete() -> No
     assert item["remaining_review_items"] == 0
     assert item["work_state"] == "disposition"
     assert item["next_task"] == "disposition"
-    assert item["next_href"] == "/review?document=snap-test&object=legacy-open"
+    assert item["next_href"] == "/review?document=snap-test&task=disposition"
     assert console._test_objects == before
 
 

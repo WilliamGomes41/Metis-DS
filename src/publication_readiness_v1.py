@@ -11,6 +11,8 @@ from typing import Any, Iterable
 from src.operations_console_v1 import review_lane
 from src.passage_register_v1 import passage_register_of
 from src.review_disposition_v1 import definitive_review_disposition
+from src.admission_gate_v1 import admission_of
+from src.review_duty_v1 import review_duty_for
 
 REVIEW_WORK_INCOMPLETE = "review_work_incomplete"
 SOURCE_PASSAGE_REVIEW_INCOMPLETE = "source_passage_review_incomplete"
@@ -78,6 +80,34 @@ def source_passage_closure(objects: Iterable[dict[str, Any]]) -> dict[str, Any]:
         "unresolved_source_passage_ids": unresolved_ids,
         "unresolved_source_passage_count": len(unresolved_ids),
     }
+
+
+def review_followup_queues(
+    objects: list[dict[str, Any]],
+    *,
+    review_path: str,
+    bindings: list[dict[str, Any]] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    """Open source work not represented by an existing ReviewDuty.
+
+    Includes missing Admission and invalid disposition; excludes finished work
+    and duties waiting for another reviewer. This is a read-only projection,
+    never a new closure/publication rule.
+    """
+    unresolved = set(source_passage_closure(objects)["unresolved_source_passage_ids"])
+    queues: dict[str, list[dict[str, Any]]] = {"disposition": [], "repair": []}
+    for obj in objects:
+        if str(obj.get("object_id") or "") not in unresolved:
+            continue
+        if review_duty_for(obj, review_path=review_path, bindings=bindings):
+            continue
+        task = (
+            "repair"
+            if review_path != "boom" and admission_of(obj).get("gate_result") == "blocked"
+            else "disposition"
+        )
+        queues[task].append(obj)
+    return queues
 
 
 def _existing_gate_readiness(considered: dict[str, Any]) -> dict[str, Any]:

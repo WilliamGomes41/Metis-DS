@@ -50,7 +50,7 @@ from src.knowledge_relation_review_v1 import (
     has_semantic_relation_review,
     relation_choice_value,
 )
-from src.review_duty_v1 import review_duty_for, review_duty_lane, reviewer_route_for
+from src.review_duty_v1 import authoritative_review_type, review_duty_for, review_duty_lane, reviewer_route_for
 from src.review_interaction_v1 import (
     build_review_interaction_evidence,
     new_review_interaction_id,
@@ -104,6 +104,7 @@ from src.operations_console_v1 import (
 )
 from src.open_original_v1 import researcher_visible_prose
 from src.review_disposition_v1 import definitive_review_disposition
+from src.publication_readiness_v1 import review_followup_queues
 from src.product_security_v1 import SlidingWindowRateLimiter
 from src.proportionate_review_v1 import (
     ProportionateReviewConsole,
@@ -130,6 +131,8 @@ CANONICAL_REVIEW_TASKS = frozenset({
     "repair",
     "history",
     "disposition",
+    "inventory",
+    "waiting",
 })
 LEGACY_REVIEW_TASK_ALIASES = {
     "headings": "structure",
@@ -1836,6 +1839,8 @@ def _review_task_dashboard(
     individual_pending_override: int | None = None,
     individual_total_override: int | None = None,
     second_review_pending: int = 0,
+    disposition_pending: int = 0,
+    waiting_pending: int = 0,
 ) -> str:
     heading_pending = (
         int(heading_pending_override)
@@ -1889,6 +1894,18 @@ def _review_task_dashboard(
             second_review_pending,
         ),
     ]
+    if disposition_pending:
+        tasks.append(("disposition", "Bronpassages afhandelen",
+                      "Bekijk ook passages die nog niet inhoudelijk beoordeelbaar zijn",
+                      f"{disposition_pending} af te handelen", disposition_pending))
+    if blocked_count:
+        tasks.append(("repair", "Technisch herstel nodig",
+                      "Bekijk de reden en de brongebonden vervolgstap",
+                      f"{blocked_count} te herstellen", blocked_count))
+    if waiting_pending:
+        tasks.append(("waiting", "Wacht op andere reviewer",
+                      "Deze passages vragen een onafhankelijke tweede beoordeling",
+                      f"{waiting_pending} wacht op andere reviewer", 0))
     recommended = next((row for row in tasks if row[4]), None)
     if recommended:
         next_step = f'''
@@ -1903,8 +1920,8 @@ def _review_task_dashboard(
         next_step = '''
           <section class="review-next-step review-next-step-complete" aria-labelledby="review-next-title">
             <p class="eyebrow">Reviewtaken</p>
-            <h2 id="review-next-title">Alle reviewtaken zijn afgerond</h2>
-            <p>De publicatiekamer laat zien of er nog publicatievoorwaarden openstaan.</p>
+            <h2 id="review-next-title">Geen uitvoerbare reviewtaken in deze lijst</h2>
+            <p>Bekijk alle passages voor resterend werk. De publicatiekamer controleert de publicatievoorwaarden.</p>
           </section>
         '''
     cards = "".join(
@@ -1931,6 +1948,7 @@ def _review_task_dashboard(
     )
     return f'''
       <section class="review-task-dashboard" aria-labelledby="review-task-title">
+        <p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages en hun afhandeling bekijken</a></p>
         {_review_progress_overview(snapshot_id, progress)}
         {next_step}
         <div class="review-task-heading">
@@ -2251,6 +2269,88 @@ def _lane_total(
     return len(open_rows) + finished
 
 
+def _review_inventory(
+    snapshot_id: str,
+    objects: list[dict[str, Any]],
+    *,
+    review_path: str,
+    bindings: list[dict[str, Any]] | None,
+    reviewer_id: str,
+    task: str,
+) -> str:
+    """Every current passage remains reachable; no admission or finality writes."""
+    followups = review_followup_queues(objects, review_path=review_path, bindings=bindings)
+    followup_tasks = {
+        str(obj["object_id"]): name
+        for name, rows in followups.items() for obj in rows
+    }
+    labels = {
+        "structure": "Structuur beoordelen", "contextual": "In samenhang beoordelen",
+        "batch": "Vergelijkbare passages beoordelen", "second_review": "Tweede beoordeling",
+        "waiting": "Wacht op andere reviewer", "repair": "Technisch herstel nodig",
+        "disposition": "Bronpassage afhandelen", "history": "Status en historie",
+    }
+    outcomes = {
+        "not_yet_assessed": "Nog niet afgehandeld", "candidate_review_open": "Kandidaat nog te beoordelen",
+        "review_open": "Afhandeling nog niet definitief", "approved": "Goedgekeurd",
+        "rejected": "Afgewezen", "superseded": "Vervangen door opvolger",
+        "used_as_context": "Als context gebruikt", "linked_as_support": "Als onderbouwing gebruikt",
+        "excluded_with_reason": "Gemotiveerd uitgesloten",
+        "invalid_register_status": "Afhandelingsstatus ontbreekt of is ongeldig",
+        "invalid_disposition_state": "Afhandeling moet worden uitgezocht",
+    }
+    items = []
+    for obj in objects:
+        if obj.get("object_type") == "document":
+            continue
+        if bindings is None:
+            duty = review_duty_for(obj, review_path=review_path, bindings=None)
+            route_task = ""
+            if duty:
+                route_task = "second_review" if duty["stage"] == "second_review" else str(duty["lane"])
+        else:
+            route = reviewer_route_for(obj, review_path=review_path, bindings=bindings, reviewer_id=reviewer_id)
+            route_task = ""
+            if route:
+                route_task = str(route["canonical_task"]) if route["actionable"] else "waiting"
+        object_id = str(obj.get("object_id") or "")
+        disposition = definitive_review_disposition(obj)
+        category = route_task or followup_tasks.get(object_id) or "history"
+        if task != "inventory" and category != task:
+            continue
+        gate = str(admission_of(obj).get("gate_result") or "")
+        admission_label = {"allowed": "Toegelaten", "blocked": "Technisch geblokkeerd"}.get(gate, "Toelating ontbreekt of is onbekend")
+        if obj.get("object_type") == "heading" or review_path == "boom":
+            admission_label = "Structuur-/boomroute"
+        outcome = outcomes.get(str(disposition.get("outcome") or ""), "Afhandeling controleren")
+        register = (obj.get("metadata") or {}).get("passage_register") or {}
+        origin = "Menselijke review" if register.get("source") == "review" else "Bronverwerking / bestaande registratie"
+        reasons = ", ".join(str(code) for code in admission_of(obj).get("reason_codes") or [])
+        target_task = "second_review" if category == "waiting" else category
+        items.append(
+            f'<li data-passage-id="{_esc(object_id)}" data-passage-category="{_esc(category)}">'
+            f'<a class="review-row-title" href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={_esc(target_task)}">{_esc(review_card_sentence(obj))}</a>'
+            f'<p>{_esc(labels[category])} · {_esc(admission_label)} · {_esc(outcome)}</p>'
+            f'<p class="muted">{_esc(origin)}{": " + _esc(reasons) if reasons else ""}</p></li>'
+        )
+    title = "Alle passages en hun afhandeling" if task == "inventory" else labels[task]
+    repair_copy = ""
+    if task == "repair":
+        title += f" ({len(items)})"
+        repair_copy = '<p>Dit is geen inhoudelijke reviewtaak; inhoudelijk goedkeuren is pas mogelijk na herstel. Open de passage voor brongebonden correctie of gemotiveerde afhandeling. Als de bron niet beschikbaar is, blijft de passage hier staan voor technisch herstel.</p>'
+    panel_class = "review-blocked-audit" if task == "repair" else "review-passage-inventory"
+    return (
+        f'<section class="{panel_class}">'
+        + _review_task_header(snapshot_id, title, "Beoordelingswerk en bronafhandeling zijn afzonderlijke controles; de aantallen mogen overlappen")
+        + repair_copy
+        + f'<p>{len(items)} passages in dit overzicht.</p>'
+        + f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p>'
+        + '<ol class="object-index review-passage-inventory">' + "".join(items) + '</ol>'
+        + ('<p class="review-task-empty">Deze lijst is leeg. Controleer het volledige passage-overzicht voor ander werk.</p>' if not items else '')
+        + '</section>'
+    )
+
+
 def _render_review_index(
     snapshot_id: str,
     snapshot_objects: list[dict[str, Any]],
@@ -2265,6 +2365,10 @@ def _render_review_index(
 ) -> str:
     task = normalize_review_task(task)
     bindings = list(bindings) if bindings is not None else None
+    if task in {"inventory", "disposition", "waiting"}:
+        return _review_inventory(snapshot_id, snapshot_objects, review_path=review_path,
+                                 bindings=bindings, reviewer_id=reviewer_id, task=task)
+    followups = review_followup_queues(snapshot_objects, review_path=review_path, bindings=bindings)
     koppen = _review_route_objects(
         snapshot_objects,
         review_path=review_path,
@@ -2286,7 +2390,7 @@ def _render_review_index(
         reviewer_id=reviewer_id,
         canonical_task="second_review",
     )
-    blocked = processing_issue_objects(snapshot_objects) if review_path != "boom" else []
+    blocked = followups["repair"]
     normal_passages, normal_batches = (0, 0)
     if normal_review_enabled:
         normal_passages, normal_batches = normal_risk_batch_counts(
@@ -2294,15 +2398,6 @@ def _render_review_index(
             review_path=review_path,
             bindings=bindings,
         )
-    blocked_html = ""
-    if blocked:
-        blocked_html = f"""
-          <details class="review-blocked-audit" aria-label="Technisch herstel nodig">
-            <summary>Technisch herstel nodig ({len(blocked)}) — bekijk passages</summary>
-            <p class="lead">Dit is geen inhoudelijke reviewtaak. Laat Metis eerst veilige broncontext aanvullen. Als automatisch herstel niet verantwoord is, blijft de passage geblokkeerd voor technisch herstel.</p>
-            <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, reason="Technische controle heeft deze passage geblokkeerd; inhoudelijk goedkeuren is pas mogelijk na herstel.", task="repair") for obj in blocked)}</ol>
-          </details>
-                    """
     copy = _review_lane_copy(review_path, koppen)
     progress = _review_progress_summary(snapshot_objects)
     if task == "history":
@@ -2330,7 +2425,8 @@ def _render_review_index(
                 snapshot_id,
                 priority_ids={str(obj.get("object_id")) for obj in individual},
                 task="contextual",
-            ) if individual else '<p class="review-task-empty">Deze taak is afgerond.</p>'}
+            ) if individual else '<p class="review-task-empty">Deze beoordelingslijst is leeg. Bekijk alle passages voor resterend werk.</p>'}
+            <p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p>
           </section>
         '''
     if task == "batch":
@@ -2367,11 +2463,11 @@ def _render_review_index(
         return f'''
           {_review_task_header(snapshot_id, "Dekking en technische controle", "Controleer hier de volledigheid en technische blokkades; dit is geen extra inhoudelijke reviewtaak")}
           {_processing_diagnostics_html(snapshot_objects)}
+          {_review_inventory(snapshot_id, snapshot_objects, review_path=review_path, bindings=bindings, reviewer_id=reviewer_id, task="repair")}
           <p>
             <a class="btn-secondary" href="/review/processing-diagnostics?document={_esc(snapshot_id)}">Exporteer diagnostiek als JSON</a>
             <a class="btn-secondary" href="/review/processing-diagnostics-detail?document={_esc(snapshot_id)}">Exporteer detaildiagnostiek als JSON</a>
           </p>
-          {blocked_html}
           {_coverage_panel(snapshot_objects)}
         '''
     return _review_task_dashboard(
@@ -2397,6 +2493,12 @@ def _render_review_index(
             open_rows=individual,
         ),
         second_review_pending=len(second_review),
+        disposition_pending=len(followups["disposition"]),
+        waiting_pending=sum(
+            bool(route and route.get("waiting_for_other_reviewer"))
+            for obj in snapshot_objects
+            for route in [reviewer_route_for(obj, review_path=review_path, reviewer_id=reviewer_id, bindings=bindings)]
+        ) if bindings is not None else 0,
     )
 
 
@@ -2458,6 +2560,14 @@ def _render_review_card(
     except ConsoleError:
         passage_ok = False
     disabled = "" if passage_ok else " disabled"
+    gate = str(admission_of(obj).get("gate_result") or "")
+    admission_notice = "Beoordeel deze passage aan de hand van de oorspronkelijke bron."
+    if review_path != "boom" and gate != "allowed" and authoritative_review_type(obj) != "heading":
+        admission_notice = (
+            "Deze passage is technisch geblokkeerd. Bekijk de bron en kies een brongebonden correctie of gemotiveerde afhandeling; inhoudelijk goedkeuren is nog niet mogelijk."
+            if gate == "blocked" else
+            "De technische toelating van deze passage ontbreekt of is onbekend. Controleer bron en classificatie voordat je een besluit neemt."
+        )
     four_eyes_html = ""
     if requires_four_eyes(obj, confirmed_type=confirmed or None):
         four_eyes_html = (
@@ -2470,7 +2580,7 @@ def _render_review_card(
                 <p><a class="btn-secondary" href="{_review_location(console, snapshot_id, task=task)}">← Terug naar taken</a></p>
                 <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
                   <div class="review-cockpit-copy">
-                    <p>Metis heeft de technische controles uitgevoerd. Beoordeel deze passage aan de hand van de oorspronkelijke bron.</p>
+                    <p>{_esc(admission_notice)}</p>
                     <p>Metis doet een voorstel; jij bepaalt wat met de passage gebeurt. Controleer de gemarkeerde brontekst, de voorgestelde kop en het informatietype voordat je bevestigt of wijzigt.</p>
                   </div>
                   <form class="review-decision-form" method="post" action="/review" data-review-form>

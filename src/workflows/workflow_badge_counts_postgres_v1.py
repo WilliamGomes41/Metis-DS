@@ -12,6 +12,7 @@ from typing import Any
 
 from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError
 from src.document_status_v1 import derive_lifecycle_status
+from src.four_eyes_v1 import HIGH_RISK_FIELDS
 from src.operations_console_v1 import CAPTURED, PRE_REVIEW_BLOCKED, ConsoleError
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
 from src.workflows.workflow_remaining_cutover_v1 import (
@@ -382,13 +383,13 @@ class _PostgresBadgeCountsMixin:
                                COALESCE(o.payload->>'confirmed_object_type','') AS confirmed_type,
                                COALESCE(o.payload->>'proposed_object_type','') AS proposed_type,
                                COALESCE(
-                                   NULLIF(o.payload->>'confirmed_object_type',''),
+                                   NULLIF(BTRIM(o.payload->>'confirmed_object_type'),''),
                                    CASE
-                                       WHEN COALESCE(o.payload->>'object_type','')
+                                       WHEN BTRIM(COALESCE(o.payload->>'object_type',''))
                                             NOT IN ('','unclassified')
-                                       THEN o.payload->>'object_type'
+                                       THEN BTRIM(o.payload->>'object_type')
                                    END,
-                                   NULLIF(o.payload->>'proposed_object_type',''),
+                                   NULLIF(BTRIM(o.payload->>'proposed_object_type'),''),
                                    ''
                                ) AS review_type,
                                COALESCE(
@@ -454,7 +455,10 @@ class _PostgresBadgeCountsMixin:
                                    'approved','rejected','superseded'
                                ) AS review_final,
                                (
-                                   b.validation_status='superseded'
+                                   (b.validation_status='superseded' AND b.register_status IN (
+                                       'selected_as_candidate','used_as_context','linked_as_support',
+                                       'excluded_with_reason','not_yet_assessed'
+                                   ))
                                    OR (
                                        b.register_status IN (
                                            'used_as_context',
@@ -471,22 +475,35 @@ class _PostgresBadgeCountsMixin:
                                        AND b.validation_status IN ('approved','rejected')
                                    )
                                ) AS disposition_final,
-                               (
+                               COALESCE((
                                    b.confirmed_type='exception'
                                    OR COALESCE(
-                                       b.payload->'risk'->>'risk_level',
+                                       NULLIF(b.payload->'risk'->>'risk_level',''),
                                        b.payload->'metadata'->>'risk_level',''
                                    )='high'
-                                   OR COALESCE(
-                                       b.payload->'risk'->>'requires_second_review','false'
-                                   )='true'
-                                   OR (
-                                       jsonb_typeof(b.payload->'risk'->'risk_fields')='array'
-                                       AND jsonb_array_length(
-                                           b.payload->'risk'->'risk_fields'
-                                       )>0
+                                   OR (b.payload->'risk'->'risk_fields') ?| %s::text[]
+                                   OR (b.payload->'logic'->'score_points' IS NOT NULL
+                                       AND b.payload->'logic'->'score_points'<>'null'::jsonb)
+                                   OR (b.payload->'logic'->'result_threshold'->'threshold' IS NOT NULL
+                                       AND b.payload->'logic'->'result_threshold'->'threshold'<>'null'::jsonb)
+                                   OR COALESCE(b.payload->'logic'->'result_threshold'->>'operator','')<>''
+                                   OR COALESCE(b.payload->'logic'->'result_threshold'->>'unit','')<>''
+                                   OR EXISTS (
+                                       SELECT 1 FROM jsonb_array_elements(
+                                           COALESCE(NULLIF(b.payload->'logic'->'predicates','null'::jsonb),'[]'::jsonb)
+                                       ) predicate
+                                       WHERE COALESCE(predicate->>'operator','')<>''
+                                          OR COALESCE(predicate->>'unit','')<>''
+                                          OR position('age' in COALESCE(predicate->>'field',''))>0
+                                          OR position('dose' in COALESCE(predicate->>'field',''))>0
+                                          OR position('dosering' in COALESCE(predicate->>'field',''))>0
                                    )
-                               ) AS four_eyes
+                                   OR EXISTS (
+                                       SELECT 1 FROM unnest(%s::text[]) field
+                                       WHERE b.payload->'metadata'->field NOT IN
+                                           ('null'::jsonb,'""'::jsonb,'false'::jsonb,'0'::jsonb,'[]'::jsonb)
+                                   )
+                               ), FALSE) AS four_eyes
                         FROM base b
                     ),
                     routed AS (
@@ -527,9 +544,13 @@ class _PostgresBadgeCountsMixin:
                                    AND c.object_type<>'document'
                                    AND NOT c.queue_fast
                                    AND c.gate_result='allowed'
-                                   AND c.batch_type IN ('definition','explanation')
+                                   AND c.review_type IN ('definition','explanation')
                                    AND jsonb_typeof(c.section_path)='array'
                                    AND jsonb_array_length(c.section_path)>0
+                                   AND EXISTS (
+                                       SELECT 1 FROM jsonb_array_elements_text(c.section_path) part
+                                       WHERE BTRIM(part)<>''
+                                   )
                                    AND COALESCE(
                                        c.payload->'uncertainty'->>'has_uncertainty','false'
                                    )<>'true'
@@ -538,7 +559,6 @@ class _PostgresBadgeCountsMixin:
                                        c.payload->'risk'->>'requires_second_review','false'
                                    )<>'true'
                                    AND NOT c.four_eyes
-                                   AND c.validation_status IN ('','needs_review')
                                ) AS batch_eligible,
                                (
                                    c.object_type<>'document'
@@ -562,7 +582,11 @@ class _PostgresBadgeCountsMixin:
                                    AND r.validation_status NOT IN (
                                        'rejected','superseded','revise'
                                    )
-                                   AND (r.boom OR r.gate_result<>'blocked')
+                                   AND (
+                                       r.boom OR r.review_type='heading'
+                                       OR r.gate_result='allowed'
+                                       OR (BTRIM(r.confirmed_type)<>'' AND r.gate_result='')
+                                   )
                                    AND r.exact_approver_count=0
                                ) AS first_review_open,
                                (
@@ -570,7 +594,11 @@ class _PostgresBadgeCountsMixin:
                                    AND r.validation_status NOT IN (
                                        'rejected','superseded','revise'
                                    )
-                                   AND (r.boom OR r.gate_result<>'blocked')
+                                   AND (
+                                       r.boom OR r.review_type='heading'
+                                       OR r.gate_result='allowed'
+                                       OR (BTRIM(r.confirmed_type)<>'' AND r.gate_result='')
+                                   )
                                    AND r.four_eyes
                                    AND r.exact_approver_count=1
                                ) AS second_review_open,
@@ -660,22 +688,19 @@ class _PostgresBadgeCountsMixin:
                                    WHERE NOT boom
                                      AND gate_result='blocked'
                                      AND unresolved_closure
+                                     AND NOT review_duty_open
                                ) AS blocked_count,
                                COUNT(*) FILTER (
                                    WHERE unresolved_closure
                                      AND NOT (
-                                         ((slow_duty OR regular_individual)
-                                           AND NOT review_final)
-                                         OR batch_eligible
+                                         review_duty_open
                                          OR (NOT boom AND gate_result='blocked')
                                      )
                                ) AS closure_gap_count,
                                MIN(object_id) FILTER (
                                    WHERE unresolved_closure
                                      AND NOT (
-                                         ((slow_duty OR regular_individual)
-                                           AND NOT review_final)
-                                         OR batch_eligible
+                                         review_duty_open
                                          OR (NOT boom AND gate_result='blocked')
                                      )
                                ) AS closure_gap_first,
@@ -825,7 +850,8 @@ class _PostgresBadgeCountsMixin:
                     LEFT JOIN batch_counts bc ON bc.snapshot_id=a.snapshot_id
                     ORDER BY a.snapshot_id
                     """,
-                    (account_id, snapshot_id or None, PRE_REVIEW_BLOCKED, account_id),
+                    (account_id, snapshot_id or None, PRE_REVIEW_BLOCKED, account_id,
+                     list(HIGH_RISK_FIELDS), list(HIGH_RISK_FIELDS)),
                 ).fetchall()
         except WorkflowDocumentStoreError:
             raise
