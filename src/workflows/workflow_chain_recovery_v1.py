@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import zipfile
+from graphlib import CycleError, TopologicalSorter
 from typing import Any, Mapping
 
 from src.integrity_kernel import stable_hash
@@ -28,7 +29,7 @@ from src.publication_chain_recovery_v1 import (
     check_chain_integrity,
 )
 
-WORKFLOW_RECOVERY_VERSION = 1
+WORKFLOW_RECOVERY_VERSION = 2
 WORKFLOW_TABLES = (
     "accounts",
     "sessions",
@@ -57,6 +58,7 @@ _WORKFLOW_COLUMNS: dict[str, tuple[str, ...]] = {
         "replaces_snapshot_id", "object_diff", "clinical_rereview_required",
         "acquired_at", "console_version", "revision", "updated_at",
         "envelope_payload",
+        "logical_document_id", "working_revision_id", "working_revision_number",
     ),
     "document_reviewers": ("snapshot_id", "account_id", "assigned_at"),
     "document_objects": (
@@ -117,6 +119,8 @@ def _rows(state: Mapping[str, Any], table: str) -> list[dict[str, Any]]:
 
 
 def _validate_workflow_shape(state: Mapping[str, Any]) -> None:
+    if state.get("workflow_recovery_version") == 1:
+        raise PublicationChainRecoveryError("workflow_backup_lifecycle_identity_missing:reexport_required")
     if int(state.get("workflow_recovery_version") or 0) != WORKFLOW_RECOVERY_VERSION:
         raise PublicationChainRecoveryError("workflow_backup_version_invalid")
     tables = state.get("workflow_tables")
@@ -129,10 +133,58 @@ def _validate_workflow_shape(state: Mapping[str, Any]) -> None:
         _rows(state, table)
 
 
+def _ordered_documents(state: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Validate authoritative identities, then order the exact rows for import."""
+    documents = _rows(state, "documents")
+    by_id = {row.get("snapshot_id"): row for row in documents}
+    if len(by_id) != len(documents):
+        raise PublicationChainRecoveryError("workflow_snapshot_id_duplicate")
+    work_ids: set[str] = set()
+    revisions: set[tuple[str, int]] = set()
+    graph: dict[str, set[str]] = {}
+    for row in documents:
+        sid = row.get("snapshot_id")
+        logical = row.get("logical_document_id")
+        work = row.get("working_revision_id")
+        number = row.get("working_revision_number")
+        if any(not isinstance(value, str) or not value.strip() for value in (sid, logical, work)):
+            raise PublicationChainRecoveryError(f"workflow_lifecycle_identity_missing:{sid}")
+        if type(number) is not int or number < 1:
+            raise PublicationChainRecoveryError(f"workflow_revision_number_invalid:{sid}")
+        if work in work_ids or (logical, number) in revisions:
+            raise PublicationChainRecoveryError(f"workflow_lifecycle_identity_duplicate:{sid}")
+        work_ids.add(work)
+        revisions.add((logical, number))
+        envelope = row.get("envelope_payload")
+        projection = {
+            "snapshot_id": sid, "source_snapshot_id": sid,
+            "logical_document_id": logical, "working_revision_id": work,
+            "working_revision_number": number, "source_version": row.get("source_version"),
+            "replaces_snapshot_id": row.get("replaces_snapshot_id"),
+        }
+        if not isinstance(envelope, dict) or any(envelope.get(key) != value for key, value in projection.items()):
+            raise PublicationChainRecoveryError(f"workflow_lifecycle_projection_mismatch:{sid}")
+        predecessor = row.get("replaces_snapshot_id")
+        if row.get("ingest_kind") == "new_version" and not predecessor:
+            raise PublicationChainRecoveryError(f"workflow_document_predecessor_required:{sid}")
+        if predecessor:
+            parent = by_id.get(predecessor)
+            if parent is None:
+                raise PublicationChainRecoveryError(f"workflow_document_replaces_missing:{sid}:{predecessor}")
+            if parent.get("logical_document_id") != logical:
+                raise PublicationChainRecoveryError(f"workflow_document_lineage_mismatch:{sid}")
+        graph[sid] = {predecessor} if predecessor else set()
+    try:
+        return [by_id[sid] for sid in TopologicalSorter(graph).static_order()]
+    except CycleError as exc:
+        raise PublicationChainRecoveryError("workflow_document_lineage_cycle") from exc
+
+
 def check_workflow_integrity(state: Mapping[str, Any]) -> dict[str, Any]:
     errors: list[str] = []
     try:
         _validate_workflow_shape(state)
+        _ordered_documents(state)
     except PublicationChainRecoveryError as exc:
         return {"ok": False, "errors": [str(exc)]}
 
@@ -316,26 +368,25 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
             raise PublicationChainRecoveryError("workflow_backup_integrity_failed:" + ";".join(report["errors"]))
         return state
 
+    def _assert_empty(self, con: Any) -> None:
+        nonempty: list[str] = []
+        for table in (*DB_TABLES, *(f"workflow.{table}" for table in WORKFLOW_TABLES)):
+            count = int(con.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"])
+            if count:
+                nonempty.append(f"{table}:{count}")
+        if nonempty:
+            raise PublicationChainRecoveryError("database_restore_target_not_empty:" + ",".join(nonempty))
+
     def assert_empty(self) -> None:
         try:
             self.store.verify_schema()
             with self.store._connect() as con:
                 self._verify_workflow_schema(con)
-                nonempty: list[str] = []
-                for table in DB_TABLES:
-                    count = int(con.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"])
-                    if count:
-                        nonempty.append(f"{table}:{count}")
-                for table in WORKFLOW_TABLES:
-                    count = int(con.execute(f"SELECT COUNT(*) AS n FROM workflow.{table}").fetchone()["n"])
-                    if count:
-                        nonempty.append(f"workflow.{table}:{count}")
+                self._assert_empty(con)
         except PublicationChainRecoveryError:
             raise
         except Exception as exc:
             raise PublicationChainRecoveryError("workflow_database_restore_preflight_failed") from exc
-        if nonempty:
-            raise PublicationChainRecoveryError("database_restore_target_not_empty:" + ",".join(nonempty))
 
     def restore_state(self, state: Mapping[str, Any]) -> None:
         from src.publication_chain_recovery_v1 import _validate_database_backup_shape, _table_rows
@@ -353,6 +404,21 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
             with self.store._connect() as con:
                 with con.transaction():
                     self._verify_workflow_schema(con)
+                    # Offline, empty-target import. Locks and trigger DDL share
+                    # the data transaction: other writers cannot enter it, and
+                    # a failed import restores the allocator automatically.
+                    targets = (*DB_TABLES, *(f"workflow.{table}" for table in WORKFLOW_TABLES))
+                    con.execute("LOCK TABLE " + ",".join(targets) + " IN ACCESS EXCLUSIVE MODE")
+                    self._assert_empty(con)
+                    trigger = con.execute(
+                        "SELECT tgenabled FROM pg_trigger WHERE tgrelid='workflow.documents'::regclass "
+                        "AND tgname='trg_workflow_documents_lifecycle_identity'"
+                    ).fetchone()
+                    if not trigger or trigger["tgenabled"] != "O":
+                        raise PublicationChainRecoveryError("workflow_restore_identity_trigger_invalid")
+                    con.execute(
+                        "ALTER TABLE workflow.documents DISABLE TRIGGER trg_workflow_documents_lifecycle_identity"
+                    )
                     _insert_rows(
                         con, schema="workflow", table="accounts", rows=workflow_rows["accounts"],
                         columns=_WORKFLOW_COLUMNS["accounts"], json_columns=set(),
@@ -362,21 +428,13 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
                         columns=_WORKFLOW_COLUMNS["sessions"], json_columns=set(),
                     )
 
-                    document_rows = workflow_rows["documents"]
-                    document_columns = _WORKFLOW_COLUMNS["documents"]
-                    for row in document_rows:
-                        first = dict(row)
-                        first["replaces_snapshot_id"] = None
-                        _insert_rows(
-                            con, schema="workflow", table="documents", rows=[first],
-                            columns=document_columns, json_columns=_WORKFLOW_JSON_COLUMNS["documents"],
-                        )
-                    for row in document_rows:
-                        if row.get("replaces_snapshot_id"):
-                            con.execute(
-                                "UPDATE workflow.documents SET replaces_snapshot_id=%s WHERE snapshot_id=%s",
-                                (row["replaces_snapshot_id"], row["snapshot_id"]),
-                            )
+                    _insert_rows(
+                        con, schema="workflow", table="documents", rows=_ordered_documents(state),
+                        columns=_WORKFLOW_COLUMNS["documents"], json_columns=_WORKFLOW_JSON_COLUMNS["documents"],
+                    )
+                    con.execute(
+                        "ALTER TABLE workflow.documents ENABLE TRIGGER trg_workflow_documents_lifecycle_identity"
+                    )
 
                     for table in (
                         "document_reviewers", "document_objects", "review_events",

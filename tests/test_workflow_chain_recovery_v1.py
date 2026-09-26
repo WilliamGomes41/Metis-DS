@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import zipfile
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,8 @@ from src.canonical_publication_postgres_v1 import (
     PostgresCanonicalPublicationStore,
 )
 from src.integrity_kernel import stable_hash
+from src.publication_chain_recovery_v1 import PublicationChainRecoveryError
+from src.workflows import workflow_chain_recovery_v1 as recovery
 from src.workflows.workflow_chain_recovery_v1 import (
     PostgresWorkflowRecoveryAdapter,
     backup_workflow_chain,
@@ -33,34 +36,17 @@ from src.workflows.workflow_chain_recovery_v1 import (
 from src.workflows.workflow_identity_cutover_v1 import CutoverPostgresWorkflowIdentityStore
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW_MIGRATIONS = (
-    "002_workflow_schema.sql",
-    "003_workflow_document_envelope_payload.sql",
-    "004_workflow_review_authority.sql",
-    "005_workflow_remaining_authority.sql",
-    "006_workflow_authorization_payload.sql",
-)
-
-
-def _statements(text: str) -> list[str]:
-    sql = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("--"))
-    return [statement.strip() for statement in sql.split(";") if statement.strip()]
-
-
 def _install_schema(dsn: str) -> None:
     import psycopg
 
     with psycopg.connect(dsn, autocommit=True) as con:
         con.execute("DROP SCHEMA IF EXISTS workflow CASCADE")
+        con.execute("DROP SCHEMA IF EXISTS api_access CASCADE")
         con.execute("DROP SCHEMA IF EXISTS public CASCADE")
         con.execute("CREATE SCHEMA public")
-        for path in (ROOT / "db" / "schema_v2.sql", ROOT / "db" / "migrations" / "001_canonical_source_lineage.sql"):
-            for statement in _statements(path.read_text(encoding="utf-8")):
-                con.execute(statement)
-        for migration in WORKFLOW_MIGRATIONS:
-            text = (ROOT / "db" / "migrations" / migration).read_text(encoding="utf-8")
-            for statement in _statements(text):
-                con.execute(statement)
+        paths = [ROOT / "db" / "schema_v2.sql", *sorted((ROOT / "db" / "migrations").glob("*.sql"))]
+        for path in paths:
+            con.execute(path.read_text(encoding="utf-8"))
 
 
 @pytest.fixture()
@@ -250,3 +236,133 @@ def test_identity_migration_is_explicit_operator_command() -> None:
     assert "migrate_legacy_if_empty" in script
     assert "store = CutoverPostgresWorkflowIdentityStore()" in asgi
     assert "store = PostgresWorkflowIdentityStore()" not in asgi
+
+
+def _successor(config: PostgresCanonicalConfig, sid: str, predecessor: str, *, number: int | None = None) -> None:
+    import psycopg
+
+    with psycopg.connect(config.dsn, autocommit=True) as con:
+        con.execute(
+            """INSERT INTO workflow.documents SELECT (jsonb_populate_record(
+                NULL::workflow.documents, to_jsonb(d) || jsonb_build_object(
+                    'snapshot_id', %s::text, 'ingest_kind', 'new_version',
+                    'replaces_snapshot_id', %s::text,
+                    'working_revision_id', %s::text, 'working_revision_number', %s::integer,
+                    'envelope_payload', d.envelope_payload || jsonb_build_object(
+                        'snapshot_id', %s::text, 'replaces_snapshot_id', %s::text)
+                ))).* FROM workflow.documents d WHERE snapshot_id=%s""",
+            (sid, predecessor, f"original-work-{sid}", number, sid, predecessor, predecessor),
+        )
+
+
+def _identity_trigger_enabled(config: PostgresCanonicalConfig) -> bool:
+    import psycopg
+
+    with psycopg.connect(config.dsn) as con:
+        return con.execute(
+            "SELECT tgenabled='O' FROM pg_trigger WHERE tgrelid='workflow.documents'::regclass "
+            "AND tgname='trg_workflow_documents_lifecycle_identity'"
+        ).fetchone()[0]
+
+
+def test_restore_preserves_successors_custom_identity_and_revision_gaps(recovery_postgres: PostgresCanonicalConfig) -> None:
+    import psycopg
+
+    _seed_workflow(recovery_postgres)
+    _successor(recovery_postgres, "deleted-work", "snap-1")
+    _successor(recovery_postgres, "sorts-before-parent", "snap-1")
+    _successor(recovery_postgres, "another-successor", "snap-1")
+    with psycopg.connect(recovery_postgres.dsn, autocommit=True) as con:
+        con.execute("DELETE FROM workflow.documents WHERE snapshot_id='deleted-work'")
+    adapter = PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(recovery_postgres))
+    before = adapter.export_state()
+    _install_schema(recovery_postgres.dsn)
+    adapter.restore_state(before)
+    after = adapter.export_state()
+    assert after["workflow_tables"] == before["workflow_tables"]
+    assert after["tables"] == before["tables"]
+    assert _identity_trigger_enabled(recovery_postgres)
+    _successor(recovery_postgres, "next-work", "sorts-before-parent")
+    with psycopg.connect(recovery_postgres.dsn, autocommit=True) as con:
+        assert con.execute("SELECT working_revision_number FROM workflow.documents WHERE snapshot_id='next-work'").fetchone()[0] == 5
+        with pytest.raises(psycopg.Error, match="lifecycle_identity_immutable"):
+            con.execute("UPDATE workflow.documents SET working_revision_number=99 WHERE snapshot_id='snap-1'")
+    with pytest.raises(psycopg.Error, match="working_revision_number_mismatch"):
+        _successor(recovery_postgres, "invalid-work", "snap-1", number=99)
+    with pytest.raises(PublicationChainRecoveryError, match="target_not_empty"):
+        adapter.restore_state(before)
+
+
+def test_restore_rollback_restores_allocator_and_empty_target(recovery_postgres: PostgresCanonicalConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+    _seed_workflow(recovery_postgres)
+    adapter = PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(recovery_postgres))
+    state = adapter.export_state()
+    _install_schema(recovery_postgres.dsn)
+    original = recovery._insert_rows
+
+    def interrupted(con, **kwargs):
+        original(con, **kwargs)
+        if kwargs["table"] == "documents":
+            raise RuntimeError("interrupted after identity import")
+
+    monkeypatch.setattr(recovery, "_insert_rows", interrupted)
+    with pytest.raises(PublicationChainRecoveryError, match="workflow_database_restore_failed"):
+        adapter.restore_state(state)
+    adapter.assert_empty()
+    assert _identity_trigger_enabled(recovery_postgres)
+    monkeypatch.setattr(recovery, "_insert_rows", original)
+    adapter.restore_state(state)
+    assert adapter.export_state()["workflow_tables"] == state["workflow_tables"]
+
+
+@pytest.mark.parametrize("fault", ["projection", "duplicate", "missing_predecessor", "cycle", "legacy"])
+def test_invalid_lifecycle_archive_fails_before_writes(recovery_postgres: PostgresCanonicalConfig, fault: str) -> None:
+    _seed_workflow(recovery_postgres)
+    _successor(recovery_postgres, "snap-2", "snap-1")
+    adapter = PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(recovery_postgres))
+    state = deepcopy(adapter.export_state())
+    root, child = state["workflow_tables"]["documents"]
+    if fault == "projection":
+        child["envelope_payload"]["working_revision_id"] = "untrusted-projection"
+    elif fault == "duplicate":
+        child["working_revision_id"] = root["working_revision_id"]
+        child["envelope_payload"]["working_revision_id"] = root["working_revision_id"]
+    elif fault == "missing_predecessor":
+        child["replaces_snapshot_id"] = "absent"
+        child["envelope_payload"]["replaces_snapshot_id"] = "absent"
+    elif fault == "cycle":
+        root["replaces_snapshot_id"] = "snap-2"
+        root["envelope_payload"]["replaces_snapshot_id"] = "snap-2"
+    else:
+        state["workflow_recovery_version"] = 1
+    _install_schema(recovery_postgres.dsn)
+    assert check_workflow_integrity(state)["ok"] is False
+    with pytest.raises(PublicationChainRecoveryError):
+        adapter.restore_state(state)
+    adapter.assert_empty()
+    assert _identity_trigger_enabled(recovery_postgres)
+
+
+def test_restore_rechecks_nonempty_destination_inside_lock(recovery_postgres: PostgresCanonicalConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+    import psycopg
+
+    _seed_workflow(recovery_postgres)
+    adapter = PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(recovery_postgres))
+    state = adapter.export_state()
+    _install_schema(recovery_postgres.dsn)
+    original = adapter.assert_empty
+
+    def concurrent_write_after_preflight():
+        original()
+        with psycopg.connect(recovery_postgres.dsn, autocommit=True) as con:
+            con.execute(
+                "INSERT INTO workflow.accounts VALUES('other','other','Other',ARRAY['researcher'],'salt','hash',now())"
+            )
+
+    monkeypatch.setattr(adapter, "assert_empty", concurrent_write_after_preflight)
+    with pytest.raises(PublicationChainRecoveryError, match="target_not_empty"):
+        adapter.restore_state(state)
+    after = adapter.export_state()
+    assert [row["account_id"] for row in after["workflow_tables"]["accounts"]] == ["other"]
+    assert not after["workflow_tables"]["documents"]
+    assert _identity_trigger_enabled(recovery_postgres)

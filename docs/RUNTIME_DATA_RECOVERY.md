@@ -74,6 +74,25 @@ De database-export bevat nu twee delen in dezelfde `database.json`:
 
 De export gebeurt in één `REPEATABLE READ, READ ONLY` PostgreSQL-transactie. Daardoor horen workflow- en publicatiestate bij exact dezelfde databasesnapshot.
 
+Workflow recovery v2 bewaart `logical_document_id`, `working_revision_id` en
+`working_revision_number` expliciet uit de authority-kolommen. De verifier
+controleert hun overeenkomst met de envelope, unieke revisies en acyclische
+voorgangerrelaties. Revisienummergaten en oorspronkelijke werk-ID's blijven bij
+restore behouden. Een v1-archive zonder deze authority-identiteiten wordt voor
+volledig herstel afgewezen met `workflow_backup_lifecycle_identity_missing`;
+maak een nieuwe export uit de oorspronkelijke authority.
+
+Restore vereist een lege, geïsoleerde doelomgeving en database-ownerrechten.
+De import neemt exclusieve locks op de doeltabellen en controleert daarna opnieuw
+dat ze leeg zijn. Alleen de identiteitstoekenningstrigger op `workflow.documents`
+wordt binnen die transactie tijdelijk opgeschort, omdat nieuwe nummeruitgifte geen
+herstel van een bestaande identiteit is. Voorgangers worden vóór opvolgers
+ingevoegd; FK's, unieke constraints en alle overige triggers blijven actief.
+De allocator wordt vóór commit weer ingeschakeld. Bij een fout rolt PostgreSQL
+zowel de rows als deze trigger-DDL terug; er blijft geen herstelmodus achter.
+Normale ingest en UPDATE-immutability veranderen niet. Een niet-lege bestemming
+of een vooraf al uitgeschakelde allocator wordt geweigerd.
+
 De restorevolgorde blijft fail-closed:
 
 1. backup-archive en hashes controleren;
