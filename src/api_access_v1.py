@@ -833,9 +833,10 @@ class PostgresApiAccessStore:
                         int(application["policy_version"]),
                         int(expected_version),
                     )
-                    if str(application["state"]) == "RETIRED":
-                        raise ApiAccessError("application_retired")
-
+                    # RETIRED is terminal for lifecycle transitions, not an
+                    # immutable policy snapshot. Its stored grant must remain
+                    # within the current tenant entitlement, so publishers may
+                    # narrow it before shrinking the parent entitlement.
                     tenant_scopes = self._scopes_for_tenant(con, tenant_key)
                     tenant_docs = self._documents_for_tenant(con, tenant_key)
                     validate_grant_subset(
