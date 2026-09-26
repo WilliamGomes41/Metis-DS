@@ -42,6 +42,55 @@ REQUIRED_TABLES = frozenset(
     }
 )
 
+# Migration 010's authority-bearing shape. This is inspected, never repaired here.
+REQUIRED_COLUMNS = {
+    "tenants": {"tenant_id": "text", "name": "text", "state": "text", "content_scope": "text", "requests_per_minute": "integer", "max_top_k": "integer", "policy_version": "bigint", "created_at": "timestamp with time zone"},
+    "tenant_scopes": {"tenant_id": "text", "scope": "text"},
+    "tenant_resources": {"tenant_id": "text", "resource_type": "text", "resource_id": "text"},
+    "applications": {"application_id": "text", "tenant_id": "text", "name": "text", "environment": "text", "state": "text", "content_scope": "text", "requests_per_minute": "integer", "max_top_k": "integer", "policy_version": "bigint", "created_at": "timestamp with time zone"},
+    "application_scopes": {"application_id": "text", "scope": "text"},
+    "application_resources": {"application_id": "text", "resource_type": "text", "resource_id": "text"},
+    "credentials": {"credential_id": "text", "application_id": "text", "secret_sha256": "character", "state": "text", "created_at": "timestamp with time zone", "revoked_at": "timestamp with time zone"},
+    "audit_events": {"event_id": "text", "event_type": "text", "actor_id": "text", "tenant_id": "text", "application_id": "text", "credential_id": "text", "event_at": "timestamp with time zone", "details": "jsonb"},
+}
+NULLABLE_COLUMNS = {("credentials", "revoked_at"), ("audit_events", "tenant_id"), ("audit_events", "application_id"), ("audit_events", "credential_id")}
+REQUIRED_KEYS = {
+    ("tenants", "p", ("tenant_id",), None, None),
+    ("tenant_scopes", "p", ("tenant_id", "scope"), None, None),
+    ("tenant_resources", "p", ("tenant_id", "resource_type", "resource_id"), None, None),
+    ("applications", "p", ("application_id",), None, None),
+    ("application_scopes", "p", ("application_id", "scope"), None, None),
+    ("application_resources", "p", ("application_id", "resource_type", "resource_id"), None, None),
+    ("credentials", "p", ("credential_id",), None, None),
+    ("credentials", "u", ("secret_sha256",), None, None),
+    ("audit_events", "p", ("event_id",), None, None),
+    ("tenant_scopes", "f", ("tenant_id",), "tenants", ("tenant_id",)),
+    ("tenant_resources", "f", ("tenant_id",), "tenants", ("tenant_id",)),
+    ("applications", "f", ("tenant_id",), "tenants", ("tenant_id",)),
+    ("application_scopes", "f", ("application_id",), "applications", ("application_id",)),
+    ("application_resources", "f", ("application_id",), "applications", ("application_id",)),
+    ("credentials", "f", ("application_id",), "applications", ("application_id",)),
+}
+REQUIRED_CHECKS = {
+    ("tenants", "state=ANYARRAY['ACTIVE','SUSPENDED','CLOSED']"),
+    ("tenants", "content_scope=ANYARRAY['ALL_PUBLISHED','RESOURCE_SET']"),
+    ("tenants", "requests_per_minute>0"), ("tenants", "max_top_k>0"), ("tenants", "policy_version>0"),
+    ("tenant_resources", "resource_type='DOCUMENT'"),
+    ("applications", "state=ANYARRAY['ACTIVE','SUSPENDED','RETIRED']"),
+    ("applications", "content_scope=ANYARRAY['ALL_PUBLISHED','RESOURCE_SET']"),
+    ("applications", "requests_per_minute>0"), ("applications", "max_top_k>0"), ("applications", "policy_version>0"),
+    ("application_resources", "resource_type='DOCUMENT'"),
+    ("credentials", "state=ANYARRAY['ACTIVE','REVOKED']"),
+}
+
+
+def _check_signature(definition: str) -> str:
+    """Normalize PostgreSQL's rendering of migration 010 CHECK expressions."""
+    value = definition.removeprefix("CHECK")
+    for token in ("::text", "::integer", " ", "\n", "(", ")"):
+        value = value.replace(token, "")
+    return value
+
 
 class ApiAccessError(RuntimeError):
     """Domain validation failure for API access commands."""
@@ -275,6 +324,32 @@ class PostgresApiAccessStore:
                     WHERE table_schema = 'api_access'
                     """
                 ).fetchall()
+                columns = con.execute(
+                    """
+                    SELECT table_name, column_name, data_type, is_nullable,
+                           character_maximum_length
+                    FROM information_schema.columns
+                    WHERE table_schema = 'api_access'
+                    """
+                ).fetchall()
+                constraints = con.execute(
+                    """
+                    SELECT rel.relname AS table_name, c.contype, c.convalidated,
+                           c.confdeltype, foreign_rel.relname AS foreign_table,
+                           pg_get_constraintdef(c.oid) AS definition,
+                           ARRAY(SELECT a.attname FROM unnest(c.conkey) WITH ORDINALITY AS k(n, ord)
+                                 JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.n
+                                 ORDER BY k.ord) AS key_columns,
+                           ARRAY(SELECT a.attname FROM unnest(c.confkey) WITH ORDINALITY AS k(n, ord)
+                                 JOIN pg_attribute a ON a.attrelid = c.confrelid AND a.attnum = k.n
+                                 ORDER BY k.ord) AS foreign_columns
+                    FROM pg_constraint c
+                    JOIN pg_class rel ON rel.oid = c.conrelid
+                    JOIN pg_namespace ns ON ns.oid = rel.relnamespace
+                    LEFT JOIN pg_class foreign_rel ON foreign_rel.oid = c.confrelid
+                    WHERE ns.nspname = 'api_access'
+                    """
+                ).fetchall()
         except ApiAccessStoreError:
             raise
         except Exception as exc:
@@ -283,6 +358,34 @@ class PostgresApiAccessStore:
         missing = sorted(REQUIRED_TABLES - found)
         if missing:
             raise ApiAccessStoreError("api_access_schema_missing:" + ",".join(missing))
+        found_columns = {(row["table_name"], row["column_name"]): row for row in columns}
+        defects = []
+        for table, expected in REQUIRED_COLUMNS.items():
+            for name, data_type in expected.items():
+                row = found_columns.get((table, name))
+                if row is None:
+                    defects.append(f"{table}.{name}:missing")
+                elif (row["data_type"] != data_type or
+                      row["is_nullable"] != ("YES" if (table, name) in NULLABLE_COLUMNS else "NO") or
+                      (table, name) == ("credentials", "secret_sha256") and row["character_maximum_length"] != 64):
+                    defects.append(f"{table}.{name}:type_or_nullability")
+        found_keys = {
+            (row["table_name"], row["contype"], tuple(row["key_columns"] or ()),
+             row["foreign_table"] if row["contype"] == "f" else None,
+             tuple(row["foreign_columns"] or ()) if row["contype"] == "f" else None)
+            for row in constraints if row["convalidated"] and
+            (row["contype"] != "f" or row["confdeltype"] == "r")
+        }
+        for key in sorted(REQUIRED_KEYS - found_keys):
+            defects.append(f"{key[0]}:{key[1]}:{','.join(key[2])}")
+        found_checks = {
+            (row["table_name"], _check_signature(row["definition"]))
+            for row in constraints if row["contype"] == "c" and row["convalidated"]
+        }
+        for table, signature in sorted(REQUIRED_CHECKS - found_checks):
+            defects.append(f"{table}:check:{signature}")
+        if defects:
+            raise ApiAccessStoreError("api_access_schema_invalid:" + ",".join(defects))
 
     @staticmethod
     def _audit(
