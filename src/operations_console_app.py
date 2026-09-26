@@ -949,6 +949,7 @@ def _unpublished_delete_control(
     account: dict[str, Any] | None,
     console: OperationsConsole,
     next_path: str,
+    mutable: bool | None = None,
 ) -> str:
     """Researcher Dutch delete control. Documenten room (/tree) only. Type-to-confirm title."""
     if next_path != "/tree":
@@ -958,11 +959,14 @@ def _unpublished_delete_control(
     snap = str(row.get("snapshot_id") or "")
     if not snap:
         return ""
-    try:
-        if console.snapshot_is_published(snap):
-            return ""
-    except ConsoleError:
+    if mutable is False:
         return ""
+    if mutable is None:
+        try:
+            if console.snapshot_is_published(snap):
+                return ""
+        except ConsoleError:
+            return ""
     title = str(row.get("title") or "")
     target = next_path if next_path in ALLOWED_DELETE_NEXT else "/tree"
     return f"""
@@ -3926,8 +3930,16 @@ def create_console_app(
             cards = []
             for child in node["children"]:
                 actions = []
+                try:
+                    mutable = not state.snapshot_is_published(child["snapshot_id"])
+                except ConsoleError:
+                    mutable = False
+                if not mutable:
+                    actions.append('<p class="muted">Voor deze versie zijn wijzigacties niet beschikbaar. Gepubliceerde versies blijven ongewijzigd.</p>')
+                    if "researcher" in account["roles"]:
+                        actions.append('<a class="btn-secondary" href="/ingest">Nieuwe bronversie inleveren</a>')
                 if (
-                    child.get("publication_eligibility") == PRE_REVIEW_BLOCKED
+                    mutable and child.get("publication_eligibility") == PRE_REVIEW_BLOCKED
                     and ("researcher" in account["roles"] or "reviewer" in account["roles"])
                 ):
                     actions.append(
@@ -3938,7 +3950,7 @@ def create_console_app(
                         </form>
                         """
                     )
-                if can_move:
+                if can_move and mutable:
                     actions.append(
                         f"""
                         <form method="post" action="/tree/move">
@@ -3953,7 +3965,7 @@ def create_console_app(
                         </form>
                         """
                     )
-                if can_promote:
+                if can_promote and mutable:
                     actions.append(
                         f"""
                         <form method="post" action="/tree/promote">
@@ -3982,7 +3994,7 @@ def create_console_app(
                     <article class="doc-card">
                       {_document_card_heading(child)}
                       <div class="doc-actions">{"".join(actions)}</div>
-                      {_unpublished_delete_control(child, account=account, console=state, next_path="/tree")}
+                      {_unpublished_delete_control(child, account=account, console=state, next_path="/tree", mutable=mutable)}
                     </article>
                     """
                 )

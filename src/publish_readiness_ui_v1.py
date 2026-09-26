@@ -10,8 +10,11 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import quote
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse
+
+from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
+from src.durable_publication_console_v1 import DurablePublicationConsole
 
 from src.operations_console_app import (
     BLOCKER_LABELS,
@@ -143,11 +146,34 @@ def _blocker_list(items: list[dict[str, Any]]) -> str:
 
 
 def _render_publish_state(view: dict[str, Any]) -> str:
-    if view["overall_state"] == "published":
+    historical = {
+        "withdrawn": "Ingetrokken. Deze versie is niet beschikbaar via de API.",
+        "superseded": "Vervangen door een opvolgende publicatie. Deze versie is historisch.",
+        "inactive": "Historisch gepubliceerd. Deze versie is niet actief beschikbaar via de API.",
+        "authority_unavailable": "De actuele publicatiestatus kon niet worden gelezen. Ververs deze pagina voordat je een actie uitvoert.",
+    }
+    if view["overall_state"] in historical:
         return (
+            f'<div class="banner warn" data-publication-state="{_esc(view["overall_state"])}">'
+            f'{_esc(historical[view["overall_state"]])}</div>'
+        )
+    if view["overall_state"] == "published":
+        banner = (
             '<div class="banner ok" data-publication-state="published">'
             "Gepubliceerd. Dit document staat in de publicatieprojectie.</div>"
         )
+        if not view.get("withdraw_release_id"):
+            return banner
+        return banner + f'''
+          <form method="post" action="/publish/withdraw" class="stack" data-withdraw-form>
+            <input type="hidden" name="snapshot_id" value="{_esc(view['snapshot_id'])}">
+            <input type="hidden" name="expected_release_id" value="{_esc(view['withdraw_release_id'])}">
+            <label>Reden voor intrekking <textarea name="reason" required></textarea></label>
+            <label class="check"><input type="checkbox" name="withdraw_confirmed" value="yes" required>
+              Ik bevestig intrekking van deze publicatie. Een oudere versie wordt niet opnieuw actief.</label>
+            <button type="submit" class="btn-secondary">Trek publicatie in</button>
+          </form>
+        '''
 
     if view["publish_form_allowed"]:
         count = int(view["publishable_object_count"])
@@ -214,8 +240,20 @@ def _publisher_account(console: OperationsConsole, request: Request) -> dict[str
     return account
 
 
+def _withdrawal_retry_form(snapshot_id: str, release_id: str, reason: str) -> str:
+    return f'''
+      <form method="post" action="/publish/withdraw">
+        <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
+        <input type="hidden" name="expected_release_id" value="{_esc(release_id)}">
+        <input type="hidden" name="reason" value="{_esc(reason)}">
+        <input type="hidden" name="withdraw_confirmed" value="yes">
+        <button type="submit">Controleer en voltooi dezelfde intrekking</button>
+      </form>
+    '''
+
+
 def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> None:
-    """Replace only the legacy GET /publish presentation; keep POST unchanged."""
+    """Present readiness and explicit withdrawal; keep publication POST unchanged."""
     if getattr(app.state, "publish_readiness_ui_v1", False):
         return
 
@@ -258,10 +296,30 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
                 envelope_state=str(envelope.get("state") or ""),
                 considered=considered,
             )
+            if isinstance(console, DurablePublicationConsole) and isinstance(
+                console.canonical_publication_store, PostgresCanonicalPublicationStore,
+            ):
+                try:
+                    release = console.canonical_publication_store.release_for_snapshot(envelope["snapshot_id"])
+                    if release:
+                        lifecycle = console.document_release_serving_status(envelope["snapshot_id"])
+                        if lifecycle["serving_status"] == "active":
+                            view["overall_state"] = "published"
+                            if release.get("logical_document_id"):
+                                view["withdraw_release_id"] = release["release_id"]
+                        else:
+                            state = lifecycle["release_status"]
+                            view["overall_state"] = state if state in {"withdrawn", "superseded"} else "inactive"
+                except (ConsoleError, CanonicalPublicationStoreError):
+                    view["overall_state"] = "authority_unavailable"
+            display_status = {
+                "published": "published", "withdrawn": "Ingetrokken", "superseded": "Vervangen",
+                "inactive": "Niet actief", "authority_unavailable": "Publicatiestatus onbekend",
+            }.get(view["overall_state"], envelope["state"])
             rows.append(
                 f'''
                 <article class="doc-card" data-publish-document="{_esc(envelope['snapshot_id'])}">
-                  {_document_card_heading({**envelope, "status": envelope["state"]})}
+                  {_document_card_heading({**envelope, "status": display_status})}
                   {_render_publish_state(view)}
                 </article>
                 '''
@@ -285,5 +343,53 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
             </section>
             '''
         )
+
+    @app.post("/publish/withdraw", response_class=HTMLResponse)
+    def withdraw_post(
+        request: Request,
+        snapshot_id: str = Form(""),
+        expected_release_id: str = Form(""),
+        reason: str = Form(""),
+        withdraw_confirmed: str = Form(""),
+    ) -> HTMLResponse:
+        account = _publisher_account(console, request)
+        try:
+            if withdraw_confirmed != "yes":
+                raise ConsoleError("withdrawal_confirmation_required")
+            if not isinstance(console, DurablePublicationConsole):
+                raise ConsoleError("durable_publication_store_required")
+            result = console.withdraw_document(
+                actor_id=account["account_id"], snapshot_id=snapshot_id,
+                expected_release_id=expected_release_id, reason=reason,
+            )
+        except ConsoleError as exc:
+            messages = {
+                "withdrawal_confirmation_required": "Bevestig expliciet welke publicatie je wilt intrekken.",
+                "canonical_expected_release_required": "De te bevestigen publicatie ontbreekt. Open Publiceren opnieuw.",
+                "canonical_expected_release_changed": "De publicatie is gewijzigd. Er is niets ingetrokken; open Publiceren opnieuw.",
+                "canonical_withdrawal_reason_required": "Vul een reden voor intrekking in.",
+                "canonical_postgres_write_failed": "De uitkomst kon niet worden bevestigd. Controleer de actuele status of herhaal dezelfde intrekking.",
+            }
+            uncertain = exc.code == "canonical_postgres_write_failed"
+            title = "Uitkomst niet bevestigd" if uncertain else "Intrekking niet uitgevoerd"
+            message = messages.get(exc.code, "Intrekking is niet beschikbaar. Controleer de publicatiestatus.")
+            retry = _withdrawal_retry_form(snapshot_id, expected_release_id, reason) if uncertain else ""
+            return HTMLResponse(_page(
+                f'<section class="room"><h1>{title}</h1><p>{_esc(message)}</p>'
+                f'<p class="muted">{_esc(exc.code)}</p>{retry}<p><a href="/publish">Naar Publiceren</a></p></section>'
+            ), status_code=503 if uncertain else 409 if exc.code == "canonical_expected_release_changed" else 400)
+        pending = result["projection_status"] == "pending"
+        detail = (
+            "De intrekking is vastgelegd. De Console-weergave moet nog worden ververst; herhaal dezelfde intrekking om dit opnieuw te proberen."
+            if pending else "Deze publicatie is ingetrokken. Een oudere versie is niet opnieuw actief gemaakt."
+        )
+        # No authority reads after commit: a follow-up read failure must never
+        # turn a committed withdrawal into an apparent failed command.
+        retry = _withdrawal_retry_form(snapshot_id, expected_release_id, reason) if pending else ""
+        return HTMLResponse(_page(
+            '<section class="room"><h1>Publicatie ingetrokken</h1>'
+            f'<div class="banner ok" data-withdrawal-result="{_esc(result["projection_status"])}">{_esc(detail)}</div>'
+            f'{retry}<p><a href="/publish">Naar Publiceren</a></p></section>'
+        ))
 
     app.state.publish_readiness_ui_v1 = True

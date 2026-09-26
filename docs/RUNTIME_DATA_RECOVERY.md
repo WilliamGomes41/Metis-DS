@@ -202,6 +202,46 @@ Voor gepubliceerde kennis blijft de kern dezelfde:
 
 `DurablePublicationConsole` reconcilieert release manifests en de Product API-projectie vanuit PostgreSQL. In de volledige workflowmodus wordt ook de gepubliceerde envelope-status teruggeschreven naar de PostgreSQL workflow-authority. De lokale `envelopes.json` blijft daarbij alleen mirror.
 
+## Publicatie intrekken via de Console
+
+Een publisher kan in **Publiceren** een actieve release intrekken met een reden
+en expliciete bevestiging. Het formulier legt de getoonde release-ID vast. De
+canonical transactie vergelijkt die ID opnieuw met de actieve release en
+vergrendelt hetzelfde logische document als de publicatietransactie. Een oud
+formulier voor R1 kan daardoor R2 niet intrekken. Intrekking zet de bestaande
+registry inactief en legt release-status, actor, reden en tijd atomair vast;
+historische objecten en open opvolgerwerk blijven ongewijzigd.
+
+Na een verloren antwoord is dezelfde opdracht veilig herhaalbaar. Bij een
+mislukte projectieverversing meldt de Console dat de intrekking is vastgelegd
+maar de weergave nog moet worden ververst; dezelfde opdracht probeert alleen
+het bestaande resultaat opnieuw te projecteren. Bij een onbekende database-
+uitkomst meldt de route dit expliciet. Lees de actuele publicatiestatus of
+herhaal dezelfde opdracht. Maak geen nieuwe publicatie om de UI te herstellen.
+
+De volledige herstelarchive bewaart ook de inactieve registry en de intrekkings-
+audit. Herstel en startup-reconciliatie activeren geen oudere release. De
+Product API blijft de registry lezen, onafhankelijk van een oude lokale cache.
+Historische releases zonder duurzame logische-documentidentiteit krijgen geen
+intrekknop op basis van een gegokte koppeling.
+
+Voor deze uitbreiding is geen nieuwe database-migratie nodig. Stop bij handmatige
+ZIP-cutover de oude writers voordat de nieuwe versie start: een oudere writer
+neemt de gedeelde publicatie-/intrekkingslock nog niet. De bestaande grens van
+één instance en maximaal twee workers bij volledige PostgreSQL-cutover blijft
+gelden. Rol alleen terug naar een versie die bestaande withdrawn/registry-state
+respecteert, met alle writers gestopt; zet geen oude database terug om een
+intrekking ongedaan te maken. De strengere rollbackbeperking voor auditretentie
+elders in dit document blijft gelden.
+
+De gecombineerde test in `tests/test_lifecycle_withdrawal_recovery_v1.py` gebruikt
+de productieklasse met alle PostgreSQL-workflowstores: R1 wordt door R2 vervangen,
+R2 wordt via HTTP ingetrokken terwijl W3 open blijft, en een ander document blijft
+actief. Na backup verdwijnen database en oorspronkelijke Console-bestanden;
+restore naar lege database en Blob-teststores bewaart exacte IDs, hashes, audit
+en API-toegang. Een verse Console hervat vervolgens W3 zonder oude broncache.
+Dit is gecontroleerd testbewijs; de afzonderlijke Azure-herstelproef blijft nodig.
+
 ## `--clean true`
 
 `az webapp deploy --clean true` wist de deployment-managed `wwwroot`, niet `/home/data`. Dat blijft nuttig omdat lokale caches/mirrors niet bij iedere deployment hoeven te verdwijnen. Hun voortbestaan is echter niet meer vereist voor correctness wanneer alle workflow stores zijn geactiveerd.
