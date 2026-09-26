@@ -1,6 +1,7 @@
 """Document actions share the existing publication-history guard.
 
 # release-control-evidence: scope/belofte
+# release-control-evidence: opslag concurrent stale recovery
 # release-control-evidence: toegang
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
