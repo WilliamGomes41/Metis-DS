@@ -96,6 +96,7 @@ def test_openapi_is_generated_deterministically_from_running_product_app():
     first = generate_contract()
     second = generate_contract()
     assert first == second
+    assert first["x-metis-api-version"] == "v1"
     assert_contract_complete(first)
     for path, item in first["paths"].items():
         if path.startswith("/v1/"):
@@ -103,6 +104,22 @@ def test_openapi_is_generated_deterministically_from_running_product_app():
                 if method in {"get", "post", "put", "patch", "delete"}:
                     schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
                     assert "$ref" in schema
+                    request_ids = [
+                        parameter
+                        for parameter in operation.get("parameters") or []
+                        if parameter.get("in") == "header"
+                        and parameter.get("name") == "X-Request-ID"
+                    ]
+                    assert len(request_ids) == 1
+                    assert request_ids[0]["required"] is False
+                    for response in operation["responses"].values():
+                        assert "X-Request-ID" in response["headers"]
+                        assert "X-VVN-API-Version" in response["headers"]
+
+    retrieve = first["paths"]["/v1/retrieve"]["post"]
+    assert retrieve["x-metis-required-scope"] == "retrieve"
+    assert "WWW-Authenticate" in retrieve["responses"]["401"]["headers"]
+    assert "Retry-After" in retrieve["responses"]["429"]["headers"]
 
 
 def test_v1_compatibility_guard_blocks_removed_route_and_new_required_request_field():
