@@ -98,7 +98,8 @@ class ProvisionedConsumer:
 
 def hash_api_key(value: str) -> str:
     # High-entropy random API key lookup digest, not a password KDF.
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()  # lgtm[py/weak-sensitive-data-hashing]
+    # codeql[py/weak-sensitive-data-hashing]
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _clean_text(value: str, *, code: str) -> str:
