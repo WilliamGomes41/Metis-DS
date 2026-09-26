@@ -3162,7 +3162,7 @@ def create_console_app(
                     <p>Applicatie <b>{_esc(result.application_id)}</b></p>
                     <p>Credential <b>{_esc(result.credential_id)}</b></p>
                     <label>API-key</label>
-                    <input value="{_esc(result.api_key)}" readonly>
+                    <input value="{_esc(result.credential)}" readonly>
                   </article>
                 </section>
                 """,

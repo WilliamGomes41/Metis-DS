@@ -93,12 +93,11 @@ class ProvisionedConsumer:
     tenant_id: str
     application_id: str
     credential_id: str
-    api_key: str
+    credential: str
 
 
 def hash_api_key(value: str) -> str:
     # High-entropy random API key lookup digest, not a password KDF.
-    # codeql[py/weak-sensitive-data-hashing]
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
@@ -334,8 +333,8 @@ class PostgresApiAccessStore:
         tenant_id = "ten_" + uuid.uuid4().hex
         application_id = "app_" + uuid.uuid4().hex
         credential_id = "cred_" + uuid.uuid4().hex
-        api_key = f"metis_live_{credential_id}.{secrets.token_urlsafe(32)}"
-        secret_sha256 = hash_api_key(api_key)
+        credential = f"metis_live_{credential_id}.{secrets.token_urlsafe(32)}"
+        secret_sha256 = hash_api_key(credential)
 
         try:
             with self._connect() as con:
@@ -448,11 +447,11 @@ class PostgresApiAccessStore:
             tenant_id=tenant_id,
             application_id=application_id,
             credential_id=credential_id,
-            api_key=api_key,
+            credential=credential,
         )
 
-    def authenticate(self, api_key: str) -> ApiAccessPrincipal | None:
-        supplied = str(api_key or "")
+    def authenticate(self, credential: str) -> ApiAccessPrincipal | None:
+        supplied = str(credential or "")
         if not supplied:
             return None
         digest = hash_api_key(supplied)

@@ -50,7 +50,7 @@ def test_provisioned_credential_survives_fresh_store_and_plaintext_is_not_persis
 
     # Fresh process/store semantics: authorization is reconstructed from durable state.
     fresh = PostgresApiAccessStore(config)
-    principal = fresh.authenticate(issued.api_key)
+    principal = fresh.authenticate(issued.credential)
     assert principal is not None
     assert principal.tenant_id == issued.tenant_id
     assert principal.application_id == issued.application_id
@@ -73,8 +73,8 @@ def test_provisioned_credential_survives_fresh_store_and_plaintext_is_not_persis
             ).fetchall()
             assert credential is not None
             assert len(str(credential["secret_sha256"])) == 64
-            assert issued.api_key not in str(credential["secret_sha256"])
-            assert all(issued.api_key not in str(row["details"]) for row in audit)
+            assert issued.credential not in str(credential["secret_sha256"])
+            assert all(issued.credential not in str(row["details"]) for row in audit)
     finally:
         with psycopg.connect(dsn) as con:
             with con.transaction():
@@ -139,14 +139,14 @@ def test_authentication_rechecks_current_credential_application_and_tenant_state
     import psycopg
 
     try:
-        assert store.authenticate(issued.api_key) is not None
+        assert store.authenticate(issued.credential) is not None
         with psycopg.connect(dsn) as con:
             with con.transaction():
                 con.execute(
                     "UPDATE api_access.credentials SET state='REVOKED', revoked_at=now() WHERE credential_id=%s",
                     (issued.credential_id,),
                 )
-        assert store.authenticate(issued.api_key) is None
+        assert store.authenticate(issued.credential) is None
 
         with psycopg.connect(dsn) as con:
             with con.transaction():
@@ -158,7 +158,7 @@ def test_authentication_rechecks_current_credential_application_and_tenant_state
                     "UPDATE api_access.applications SET state='SUSPENDED' WHERE application_id=%s",
                     (issued.application_id,),
                 )
-        assert store.authenticate(issued.api_key) is None
+        assert store.authenticate(issued.credential) is None
 
         with psycopg.connect(dsn) as con:
             with con.transaction():
@@ -170,7 +170,7 @@ def test_authentication_rechecks_current_credential_application_and_tenant_state
                     "UPDATE api_access.tenants SET state='SUSPENDED' WHERE tenant_id=%s",
                     (issued.tenant_id,),
                 )
-        assert store.authenticate(issued.api_key) is None
+        assert store.authenticate(issued.credential) is None
     finally:
         with psycopg.connect(dsn) as con:
             with con.transaction():

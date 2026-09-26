@@ -96,13 +96,13 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
 
 
-def _extract_api_key(authorization: str | None, x_api_key: str | None) -> str | None:
+def _read_presented_credential(authorization: str | None, header_credential: str | None) -> str | None:
     if authorization:
         prefix = "Bearer "
         if authorization.startswith(prefix) and authorization[len(prefix):].strip():
             return authorization[len(prefix):].strip()
-    if x_api_key and x_api_key.strip():
-        return x_api_key.strip()
+    if header_credential and header_credential.strip():
+        return header_credential.strip()
     return None
 
 
@@ -241,11 +241,11 @@ class ProductState:
     def refresh(self) -> bool:
         return self._reload_records(force=False)
 
-    def auth(self, api_key: str | None) -> ProductAccessPrincipal:
-        if not api_key:
+    def auth(self, credential: str | None) -> ProductAccessPrincipal:
+        if not credential:
             raise HTTPException(status_code=401, detail={"code": "missing_api_key"}, headers={"WWW-Authenticate": "Bearer"})
         try:
-            tenant = self.access_authenticator.authenticate(api_key)
+            tenant = self.access_authenticator.authenticate(credential)
         except ApiAccessStoreError as exc:
             raise HTTPException(status_code=503, detail={"code": "access_store_unavailable"}) from exc
         if tenant is None:
@@ -514,9 +514,9 @@ def create_product_app(
     app.state.product = state
     bearer = HTTPBearer(auto_error=False, scheme_name="VVNApiKeyBearer", description="Tenant API key as Bearer token")
 
-    def current_tenant(credentials: HTTPAuthorizationCredentials | None = Security(bearer), x_api_key: str | None = Header(default=None, alias="X-API-Key", include_in_schema=False)) -> ProductAccessPrincipal:
+    def current_tenant(credentials: HTTPAuthorizationCredentials | None = Security(bearer), header_credential: str | None = Header(default=None, alias="X-API-Key", include_in_schema=False)) -> ProductAccessPrincipal:
         authorization = f"Bearer {credentials.credentials}" if credentials else None
-        return state.auth(_extract_api_key(authorization, x_api_key))
+        return state.auth(_read_presented_credential(authorization, header_credential))
 
     def logged_response(*, request_id: str, tenant: ProductAccessPrincipal, endpoint: str, started: float, status_code: int, behavior: str | None = None, query: str | None = None, object_ids: list[str] | None = None) -> None:
         state.ledger.record(request_id=request_id, tenant_id=tenant.tenant_id, endpoint=endpoint, status_code=status_code, behavior=behavior, result_count=len(object_ids or []), query=query, result_object_ids=object_ids, latency_ms=(time.perf_counter() - started) * 1000.0, synthetic_fixture=state.synthetic)

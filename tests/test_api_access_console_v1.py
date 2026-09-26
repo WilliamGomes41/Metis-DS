@@ -34,7 +34,7 @@ class FakeAccessStore:
             tenant_id="ten_test",
             application_id="app_test",
             credential_id="cred_test",
-            api_key=self.secret,
+            credential=self.secret,
         )
 
 
