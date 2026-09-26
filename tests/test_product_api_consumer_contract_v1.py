@@ -66,9 +66,19 @@ def _response_schema(spec: dict, path: str, method: str = "get", status: str = "
     )
 
 
-def _assert_matches_openapi(spec: dict, path: str, payload: dict, *, method: str = "get") -> None:
+def _assert_matches_openapi(
+    spec: dict,
+    path: str,
+    payload: dict,
+    *,
+    method: str = "get",
+    status: str = "200",
+) -> None:
     resolver = RefResolver.from_schema(spec)
-    Draft202012Validator(_response_schema(spec, path, method), resolver=resolver).validate(payload)
+    Draft202012Validator(
+        _response_schema(spec, path, method, status),
+        resolver=resolver,
+    ).validate(payload)
 
 
 def _cleanup(dsn: str, tenant_id: str, application_id: str) -> None:
