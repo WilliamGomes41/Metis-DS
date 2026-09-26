@@ -47,6 +47,10 @@ class ApiAccessError(RuntimeError):
     """Domain validation failure for API access commands."""
 
 
+class ApiAccessConflict(ApiAccessError):
+    """Optimistic concurrency or dependent-policy conflict."""
+
+
 class ApiAccessStoreError(RuntimeError):
     """Fail-closed durable API access store failure."""
 
@@ -94,6 +98,38 @@ class ProvisionedConsumer:
     application_id: str
     credential_id: str
     credential: str
+
+
+@dataclass(frozen=True)
+class PolicyMutationResult:
+    entity_id: str
+    policy_version: int
+    changed: bool
+
+
+@dataclass(frozen=True)
+class LifecycleMutationResult:
+    entity_id: str
+    state: str
+    policy_version: int
+    changed: bool
+
+
+@dataclass(frozen=True)
+class CredentialIssueResult:
+    tenant_id: str
+    application_id: str
+    credential_id: str
+    credential: str
+
+
+@dataclass(frozen=True)
+class CredentialRevokeResult:
+    tenant_id: str
+    application_id: str
+    credential_id: str
+    state: str
+    changed: bool
 
 
 def hash_api_key(value: str) -> str:
@@ -450,6 +486,717 @@ class PostgresApiAccessStore:
             credential=credential,
         )
 
+    @staticmethod
+    def _policy_details(
+        *,
+        content_scope: str,
+        scopes: Iterable[str],
+        document_ids: Iterable[str],
+        requests_per_minute: int,
+        max_top_k: int,
+    ) -> dict[str, Any]:
+        return {
+            "content_scope": str(content_scope),
+            "scopes": sorted(str(value) for value in scopes),
+            "document_ids": sorted(str(value) for value in document_ids),
+            "requests_per_minute": int(requests_per_minute),
+            "max_top_k": int(max_top_k),
+        }
+
+    @staticmethod
+    def _tenant_policy_for_update(con: Any, tenant_id: str) -> dict[str, Any]:
+        row = con.execute(
+            """
+            SELECT tenant_id,name,state,content_scope,requests_per_minute,max_top_k,policy_version
+            FROM api_access.tenants
+            WHERE tenant_id=%s
+            FOR UPDATE
+            """,
+            (tenant_id,),
+        ).fetchone()
+        if row is None:
+            raise ApiAccessError("tenant_not_found")
+        return dict(row)
+
+    @staticmethod
+    def _application_policy_for_update(
+        con: Any,
+        *,
+        tenant_id: str,
+        application_id: str,
+    ) -> dict[str, Any]:
+        row = con.execute(
+            """
+            SELECT application_id,tenant_id,name,environment,state,content_scope,
+                   requests_per_minute,max_top_k,policy_version
+            FROM api_access.applications
+            WHERE application_id=%s AND tenant_id=%s
+            FOR UPDATE
+            """,
+            (application_id, tenant_id),
+        ).fetchone()
+        if row is None:
+            raise ApiAccessError("application_not_found")
+        return dict(row)
+
+    @staticmethod
+    def _scopes_for_tenant(con: Any, tenant_id: str) -> frozenset[str]:
+        return frozenset(
+            str(row["scope"])
+            for row in con.execute(
+                "SELECT scope FROM api_access.tenant_scopes WHERE tenant_id=%s",
+                (tenant_id,),
+            ).fetchall()
+        )
+
+    @staticmethod
+    def _documents_for_tenant(con: Any, tenant_id: str) -> frozenset[str]:
+        return frozenset(
+            str(row["resource_id"])
+            for row in con.execute(
+                """
+                SELECT resource_id
+                FROM api_access.tenant_resources
+                WHERE tenant_id=%s AND resource_type='DOCUMENT'
+                """,
+                (tenant_id,),
+            ).fetchall()
+        )
+
+    @staticmethod
+    def _scopes_for_application(con: Any, application_id: str) -> frozenset[str]:
+        return frozenset(
+            str(row["scope"])
+            for row in con.execute(
+                "SELECT scope FROM api_access.application_scopes WHERE application_id=%s",
+                (application_id,),
+            ).fetchall()
+        )
+
+    @staticmethod
+    def _documents_for_application(con: Any, application_id: str) -> frozenset[str]:
+        return frozenset(
+            str(row["resource_id"])
+            for row in con.execute(
+                """
+                SELECT resource_id
+                FROM api_access.application_resources
+                WHERE application_id=%s AND resource_type='DOCUMENT'
+                """,
+                (application_id,),
+            ).fetchall()
+        )
+
+    @staticmethod
+    def _check_expected_version(current: int, expected: int) -> None:
+        if int(current) != int(expected):
+            raise ApiAccessConflict(
+                f"policy_version_mismatch:expected={int(expected)}:current={int(current)}"
+            )
+
+    @staticmethod
+    def _replace_tenant_policy(
+        con: Any,
+        *,
+        tenant_id: str,
+        content_scope: str,
+        document_ids: frozenset[str],
+        scopes: frozenset[str],
+        requests_per_minute: int,
+        max_top_k: int,
+        next_version: int,
+    ) -> None:
+        con.execute("DELETE FROM api_access.tenant_scopes WHERE tenant_id=%s", (tenant_id,))
+        con.execute("DELETE FROM api_access.tenant_resources WHERE tenant_id=%s", (tenant_id,))
+        for scope in sorted(scopes):
+            con.execute(
+                "INSERT INTO api_access.tenant_scopes(tenant_id,scope) VALUES (%s,%s)",
+                (tenant_id, scope),
+            )
+        for document_id in sorted(document_ids):
+            con.execute(
+                """
+                INSERT INTO api_access.tenant_resources(tenant_id,resource_type,resource_id)
+                VALUES (%s,'DOCUMENT',%s)
+                """,
+                (tenant_id, document_id),
+            )
+        con.execute(
+            """
+            UPDATE api_access.tenants
+            SET content_scope=%s, requests_per_minute=%s, max_top_k=%s, policy_version=%s
+            WHERE tenant_id=%s
+            """,
+            (content_scope, requests_per_minute, max_top_k, next_version, tenant_id),
+        )
+
+    @staticmethod
+    def _replace_application_policy(
+        con: Any,
+        *,
+        application_id: str,
+        content_scope: str,
+        document_ids: frozenset[str],
+        scopes: frozenset[str],
+        requests_per_minute: int,
+        max_top_k: int,
+        next_version: int,
+    ) -> None:
+        con.execute(
+            "DELETE FROM api_access.application_scopes WHERE application_id=%s",
+            (application_id,),
+        )
+        con.execute(
+            "DELETE FROM api_access.application_resources WHERE application_id=%s",
+            (application_id,),
+        )
+        for scope in sorted(scopes):
+            con.execute(
+                """
+                INSERT INTO api_access.application_scopes(application_id,scope)
+                VALUES (%s,%s)
+                """,
+                (application_id, scope),
+            )
+        for document_id in sorted(document_ids):
+            con.execute(
+                """
+                INSERT INTO api_access.application_resources(
+                    application_id,resource_type,resource_id
+                ) VALUES (%s,'DOCUMENT',%s)
+                """,
+                (application_id, document_id),
+            )
+        con.execute(
+            """
+            UPDATE api_access.applications
+            SET content_scope=%s, requests_per_minute=%s, max_top_k=%s, policy_version=%s
+            WHERE application_id=%s
+            """,
+            (
+                content_scope,
+                requests_per_minute,
+                max_top_k,
+                next_version,
+                application_id,
+            ),
+        )
+
+    def set_tenant_entitlement(
+        self,
+        *,
+        actor_id: str,
+        tenant_id: str,
+        expected_version: int,
+        content_scope: str,
+        document_ids: Iterable[str],
+        scopes: Iterable[str],
+        requests_per_minute: int,
+        max_top_k: int,
+    ) -> PolicyMutationResult:
+        actor = _clean_text(actor_id, code="actor_id_missing")
+        tenant_key = _clean_text(tenant_id, code="tenant_id_missing")
+        mode, docs = validate_content_scope(content_scope, document_ids)
+        scope_set = _scope_set(scopes)
+        rpm = int(requests_per_minute)
+        top_k = int(max_top_k)
+        if min(rpm, top_k) < 1:
+            raise ApiAccessError("access_limit_must_be_positive")
+
+        try:
+            with self._connect() as con:
+                with con.transaction():
+                    tenant = self._tenant_policy_for_update(con, tenant_key)
+                    self._check_expected_version(
+                        int(tenant["policy_version"]),
+                        int(expected_version),
+                    )
+                    if str(tenant["state"]) == "CLOSED":
+                        raise ApiAccessError("tenant_closed")
+
+                    application_rows = con.execute(
+                        """
+                        SELECT application_id,state,content_scope,requests_per_minute,max_top_k
+                        FROM api_access.applications
+                        WHERE tenant_id=%s
+                        ORDER BY application_id
+                        FOR UPDATE
+                        """,
+                        (tenant_key,),
+                    ).fetchall()
+                    for app_row in application_rows:
+                        app_id = str(app_row["application_id"])
+                        validate_grant_subset(
+                            tenant_content_scope=mode,
+                            tenant_document_ids=docs,
+                            tenant_scopes=scope_set,
+                            tenant_requests_per_minute=rpm,
+                            tenant_max_top_k=top_k,
+                            application_content_scope=str(app_row["content_scope"]),
+                            application_document_ids=self._documents_for_application(con, app_id),
+                            application_scopes=self._scopes_for_application(con, app_id),
+                            application_requests_per_minute=int(app_row["requests_per_minute"]),
+                            application_max_top_k=int(app_row["max_top_k"]),
+                        )
+
+                    current_scopes = self._scopes_for_tenant(con, tenant_key)
+                    current_docs = self._documents_for_tenant(con, tenant_key)
+                    before = self._policy_details(
+                        content_scope=str(tenant["content_scope"]),
+                        scopes=current_scopes,
+                        document_ids=current_docs,
+                        requests_per_minute=int(tenant["requests_per_minute"]),
+                        max_top_k=int(tenant["max_top_k"]),
+                    )
+                    after = self._policy_details(
+                        content_scope=mode,
+                        scopes=scope_set,
+                        document_ids=docs,
+                        requests_per_minute=rpm,
+                        max_top_k=top_k,
+                    )
+                    if before == after:
+                        return PolicyMutationResult(
+                            entity_id=tenant_key,
+                            policy_version=int(tenant["policy_version"]),
+                            changed=False,
+                        )
+
+                    next_version = int(tenant["policy_version"]) + 1
+                    self._replace_tenant_policy(
+                        con,
+                        tenant_id=tenant_key,
+                        content_scope=mode,
+                        document_ids=docs,
+                        scopes=scope_set,
+                        requests_per_minute=rpm,
+                        max_top_k=top_k,
+                        next_version=next_version,
+                    )
+                    self._audit(
+                        con,
+                        event_type="tenant.entitlement.changed",
+                        actor_id=actor,
+                        tenant_id=tenant_key,
+                        details={
+                            "old_policy_version": int(tenant["policy_version"]),
+                            "new_policy_version": next_version,
+                            "before": before,
+                            "after": after,
+                        },
+                    )
+                    return PolicyMutationResult(
+                        entity_id=tenant_key,
+                        policy_version=next_version,
+                        changed=True,
+                    )
+        except (ApiAccessError, ApiAccessConflict):
+            raise
+        except ApiAccessStoreError:
+            raise
+        except Exception as exc:
+            raise ApiAccessStoreError("api_access_tenant_policy_update_failed") from exc
+
+    def set_application_grant(
+        self,
+        *,
+        actor_id: str,
+        tenant_id: str,
+        application_id: str,
+        expected_version: int,
+        content_scope: str,
+        document_ids: Iterable[str],
+        scopes: Iterable[str],
+        requests_per_minute: int,
+        max_top_k: int,
+    ) -> PolicyMutationResult:
+        actor = _clean_text(actor_id, code="actor_id_missing")
+        tenant_key = _clean_text(tenant_id, code="tenant_id_missing")
+        application_key = _clean_text(application_id, code="application_id_missing")
+        mode, docs = validate_content_scope(content_scope, document_ids)
+        scope_set = _scope_set(scopes)
+        rpm = int(requests_per_minute)
+        top_k = int(max_top_k)
+        if min(rpm, top_k) < 1:
+            raise ApiAccessError("access_limit_must_be_positive")
+
+        try:
+            with self._connect() as con:
+                with con.transaction():
+                    tenant = self._tenant_policy_for_update(con, tenant_key)
+                    application = self._application_policy_for_update(
+                        con,
+                        tenant_id=tenant_key,
+                        application_id=application_key,
+                    )
+                    self._check_expected_version(
+                        int(application["policy_version"]),
+                        int(expected_version),
+                    )
+                    if str(application["state"]) == "RETIRED":
+                        raise ApiAccessError("application_retired")
+
+                    tenant_scopes = self._scopes_for_tenant(con, tenant_key)
+                    tenant_docs = self._documents_for_tenant(con, tenant_key)
+                    validate_grant_subset(
+                        tenant_content_scope=str(tenant["content_scope"]),
+                        tenant_document_ids=tenant_docs,
+                        tenant_scopes=tenant_scopes,
+                        tenant_requests_per_minute=int(tenant["requests_per_minute"]),
+                        tenant_max_top_k=int(tenant["max_top_k"]),
+                        application_content_scope=mode,
+                        application_document_ids=docs,
+                        application_scopes=scope_set,
+                        application_requests_per_minute=rpm,
+                        application_max_top_k=top_k,
+                    )
+
+                    current_scopes = self._scopes_for_application(con, application_key)
+                    current_docs = self._documents_for_application(con, application_key)
+                    before = self._policy_details(
+                        content_scope=str(application["content_scope"]),
+                        scopes=current_scopes,
+                        document_ids=current_docs,
+                        requests_per_minute=int(application["requests_per_minute"]),
+                        max_top_k=int(application["max_top_k"]),
+                    )
+                    after = self._policy_details(
+                        content_scope=mode,
+                        scopes=scope_set,
+                        document_ids=docs,
+                        requests_per_minute=rpm,
+                        max_top_k=top_k,
+                    )
+                    if before == after:
+                        return PolicyMutationResult(
+                            entity_id=application_key,
+                            policy_version=int(application["policy_version"]),
+                            changed=False,
+                        )
+
+                    next_version = int(application["policy_version"]) + 1
+                    self._replace_application_policy(
+                        con,
+                        application_id=application_key,
+                        content_scope=mode,
+                        document_ids=docs,
+                        scopes=scope_set,
+                        requests_per_minute=rpm,
+                        max_top_k=top_k,
+                        next_version=next_version,
+                    )
+                    self._audit(
+                        con,
+                        event_type="application.grant.changed",
+                        actor_id=actor,
+                        tenant_id=tenant_key,
+                        application_id=application_key,
+                        details={
+                            "old_policy_version": int(application["policy_version"]),
+                            "new_policy_version": next_version,
+                            "before": before,
+                            "after": after,
+                        },
+                    )
+                    return PolicyMutationResult(
+                        entity_id=application_key,
+                        policy_version=next_version,
+                        changed=True,
+                    )
+        except (ApiAccessError, ApiAccessConflict):
+            raise
+        except ApiAccessStoreError:
+            raise
+        except Exception as exc:
+            raise ApiAccessStoreError("api_access_application_policy_update_failed") from exc
+
+    def set_tenant_state(
+        self,
+        *,
+        actor_id: str,
+        tenant_id: str,
+        expected_version: int,
+        target_state: str,
+    ) -> LifecycleMutationResult:
+        actor = _clean_text(actor_id, code="actor_id_missing")
+        tenant_key = _clean_text(tenant_id, code="tenant_id_missing")
+        target = str(target_state or "").strip().upper()
+        if target not in {"ACTIVE", "SUSPENDED"}:
+            raise ApiAccessError("unsupported_tenant_transition")
+
+        try:
+            with self._connect() as con:
+                with con.transaction():
+                    tenant = self._tenant_policy_for_update(con, tenant_key)
+                    self._check_expected_version(
+                        int(tenant["policy_version"]),
+                        int(expected_version),
+                    )
+                    current = str(tenant["state"])
+                    if current == "CLOSED":
+                        raise ApiAccessError("tenant_closed")
+                    if current == target:
+                        return LifecycleMutationResult(
+                            entity_id=tenant_key,
+                            state=current,
+                            policy_version=int(tenant["policy_version"]),
+                            changed=False,
+                        )
+                    if {current, target} != {"ACTIVE", "SUSPENDED"}:
+                        raise ApiAccessError("unsupported_tenant_transition")
+                    next_version = int(tenant["policy_version"]) + 1
+                    con.execute(
+                        """
+                        UPDATE api_access.tenants
+                        SET state=%s, policy_version=%s
+                        WHERE tenant_id=%s
+                        """,
+                        (target, next_version, tenant_key),
+                    )
+                    self._audit(
+                        con,
+                        event_type=(
+                            "tenant.suspended"
+                            if target == "SUSPENDED"
+                            else "tenant.reactivated"
+                        ),
+                        actor_id=actor,
+                        tenant_id=tenant_key,
+                        details={
+                            "old_state": current,
+                            "new_state": target,
+                            "old_policy_version": int(tenant["policy_version"]),
+                            "new_policy_version": next_version,
+                        },
+                    )
+                    return LifecycleMutationResult(
+                        entity_id=tenant_key,
+                        state=target,
+                        policy_version=next_version,
+                        changed=True,
+                    )
+        except (ApiAccessError, ApiAccessConflict):
+            raise
+        except ApiAccessStoreError:
+            raise
+        except Exception as exc:
+            raise ApiAccessStoreError("api_access_tenant_state_update_failed") from exc
+
+    def set_application_state(
+        self,
+        *,
+        actor_id: str,
+        tenant_id: str,
+        application_id: str,
+        expected_version: int,
+        target_state: str,
+    ) -> LifecycleMutationResult:
+        actor = _clean_text(actor_id, code="actor_id_missing")
+        tenant_key = _clean_text(tenant_id, code="tenant_id_missing")
+        application_key = _clean_text(application_id, code="application_id_missing")
+        target = str(target_state or "").strip().upper()
+        if target not in {"ACTIVE", "SUSPENDED", "RETIRED"}:
+            raise ApiAccessError("unsupported_application_transition")
+
+        try:
+            with self._connect() as con:
+                with con.transaction():
+                    self._tenant_policy_for_update(con, tenant_key)
+                    application = self._application_policy_for_update(
+                        con,
+                        tenant_id=tenant_key,
+                        application_id=application_key,
+                    )
+                    self._check_expected_version(
+                        int(application["policy_version"]),
+                        int(expected_version),
+                    )
+                    current = str(application["state"])
+                    if current == target:
+                        return LifecycleMutationResult(
+                            entity_id=application_key,
+                            state=current,
+                            policy_version=int(application["policy_version"]),
+                            changed=False,
+                        )
+                    if current == "RETIRED":
+                        raise ApiAccessError("application_retired")
+                    if target not in {"ACTIVE", "SUSPENDED", "RETIRED"}:
+                        raise ApiAccessError("unsupported_application_transition")
+                    next_version = int(application["policy_version"]) + 1
+                    con.execute(
+                        """
+                        UPDATE api_access.applications
+                        SET state=%s, policy_version=%s
+                        WHERE application_id=%s AND tenant_id=%s
+                        """,
+                        (target, next_version, application_key, tenant_key),
+                    )
+                    event_type = {
+                        "ACTIVE": "application.reactivated",
+                        "SUSPENDED": "application.suspended",
+                        "RETIRED": "application.retired",
+                    }[target]
+                    self._audit(
+                        con,
+                        event_type=event_type,
+                        actor_id=actor,
+                        tenant_id=tenant_key,
+                        application_id=application_key,
+                        details={
+                            "old_state": current,
+                            "new_state": target,
+                            "old_policy_version": int(application["policy_version"]),
+                            "new_policy_version": next_version,
+                        },
+                    )
+                    return LifecycleMutationResult(
+                        entity_id=application_key,
+                        state=target,
+                        policy_version=next_version,
+                        changed=True,
+                    )
+        except (ApiAccessError, ApiAccessConflict):
+            raise
+        except ApiAccessStoreError:
+            raise
+        except Exception as exc:
+            raise ApiAccessStoreError("api_access_application_state_update_failed") from exc
+
+    def issue_credential(
+        self,
+        *,
+        actor_id: str,
+        tenant_id: str,
+        application_id: str,
+    ) -> CredentialIssueResult:
+        actor = _clean_text(actor_id, code="actor_id_missing")
+        tenant_key = _clean_text(tenant_id, code="tenant_id_missing")
+        application_key = _clean_text(application_id, code="application_id_missing")
+        credential_id = "cred_" + uuid.uuid4().hex
+        credential = f"metis_live_{credential_id}.{secrets.token_urlsafe(32)}"
+        secret_sha256 = hash_api_key(credential)
+
+        try:
+            with self._connect() as con:
+                with con.transaction():
+                    tenant = self._tenant_policy_for_update(con, tenant_key)
+                    application = self._application_policy_for_update(
+                        con,
+                        tenant_id=tenant_key,
+                        application_id=application_key,
+                    )
+                    if str(tenant["state"]) != "ACTIVE":
+                        raise ApiAccessError("tenant_not_active")
+                    if str(application["state"]) != "ACTIVE":
+                        raise ApiAccessError("application_not_active")
+                    con.execute(
+                        """
+                        INSERT INTO api_access.credentials(
+                            credential_id,application_id,secret_sha256,state
+                        ) VALUES (%s,%s,%s,'ACTIVE')
+                        """,
+                        (credential_id, application_key, secret_sha256),
+                    )
+                    self._audit(
+                        con,
+                        event_type="credential.issued",
+                        actor_id=actor,
+                        tenant_id=tenant_key,
+                        application_id=application_key,
+                        credential_id=credential_id,
+                        details={},
+                    )
+        except ApiAccessError:
+            raise
+        except ApiAccessStoreError:
+            raise
+        except Exception as exc:
+            raise ApiAccessStoreError("api_access_credential_issue_failed") from exc
+
+        return CredentialIssueResult(
+            tenant_id=tenant_key,
+            application_id=application_key,
+            credential_id=credential_id,
+            credential=credential,
+        )
+
+    def revoke_credential(
+        self,
+        *,
+        actor_id: str,
+        tenant_id: str,
+        application_id: str,
+        credential_id: str,
+    ) -> CredentialRevokeResult:
+        actor = _clean_text(actor_id, code="actor_id_missing")
+        tenant_key = _clean_text(tenant_id, code="tenant_id_missing")
+        application_key = _clean_text(application_id, code="application_id_missing")
+        credential_key = _clean_text(credential_id, code="credential_id_missing")
+
+        try:
+            with self._connect() as con:
+                with con.transaction():
+                    self._tenant_policy_for_update(con, tenant_key)
+                    self._application_policy_for_update(
+                        con,
+                        tenant_id=tenant_key,
+                        application_id=application_key,
+                    )
+                    row = con.execute(
+                        """
+                        SELECT c.credential_id,c.state
+                        FROM api_access.credentials c
+                        JOIN api_access.applications a ON a.application_id=c.application_id
+                        WHERE c.credential_id=%s
+                          AND c.application_id=%s
+                          AND a.tenant_id=%s
+                        FOR UPDATE
+                        """,
+                        (credential_key, application_key, tenant_key),
+                    ).fetchone()
+                    if row is None:
+                        raise ApiAccessError("credential_not_found")
+                    current = str(row["state"])
+                    if current == "REVOKED":
+                        return CredentialRevokeResult(
+                            tenant_id=tenant_key,
+                            application_id=application_key,
+                            credential_id=credential_key,
+                            state="REVOKED",
+                            changed=False,
+                        )
+                    con.execute(
+                        """
+                        UPDATE api_access.credentials
+                        SET state='REVOKED', revoked_at=now()
+                        WHERE credential_id=%s
+                        """,
+                        (credential_key,),
+                    )
+                    self._audit(
+                        con,
+                        event_type="credential.revoked",
+                        actor_id=actor,
+                        tenant_id=tenant_key,
+                        application_id=application_key,
+                        credential_id=credential_key,
+                        details={"old_state": current, "new_state": "REVOKED"},
+                    )
+                    return CredentialRevokeResult(
+                        tenant_id=tenant_key,
+                        application_id=application_key,
+                        credential_id=credential_key,
+                        state="REVOKED",
+                        changed=True,
+                    )
+        except ApiAccessError:
+            raise
+        except ApiAccessStoreError:
+            raise
+        except Exception as exc:
+            raise ApiAccessStoreError("api_access_credential_revoke_failed") from exc
+
     def authenticate(self, credential: str) -> ApiAccessPrincipal | None:
         supplied = str(credential or "")
         if not supplied:
@@ -552,22 +1299,61 @@ class PostgresApiAccessStore:
                         t.tenant_id,
                         t.name AS tenant_name,
                         t.state AS tenant_state,
+                        t.content_scope AS tenant_content_scope,
+                        t.requests_per_minute AS tenant_requests_per_minute,
+                        t.max_top_k AS tenant_max_top_k,
+                        t.policy_version AS tenant_policy_version,
                         a.application_id,
                         a.name AS application_name,
                         a.environment,
                         a.state AS application_state,
-                        count(c.credential_id) FILTER (WHERE c.state='ACTIVE') AS active_credentials
+                        a.content_scope AS application_content_scope,
+                        a.requests_per_minute AS application_requests_per_minute,
+                        a.max_top_k AS application_max_top_k,
+                        a.policy_version AS application_policy_version
                     FROM api_access.tenants t
                     JOIN api_access.applications a ON a.tenant_id=t.tenant_id
-                    LEFT JOIN api_access.credentials c ON c.application_id=a.application_id
-                    GROUP BY
-                        t.tenant_id,t.name,t.state,
-                        a.application_id,a.name,a.environment,a.state
                     ORDER BY t.name,a.name,a.environment
                     """
                 ).fetchall()
+                result: list[dict[str, Any]] = []
+                for raw in rows:
+                    row = dict(raw)
+                    tenant_id = str(row["tenant_id"])
+                    application_id = str(row["application_id"])
+                    row["tenant_scopes"] = sorted(self._scopes_for_tenant(con, tenant_id))
+                    row["tenant_document_ids"] = sorted(
+                        self._documents_for_tenant(con, tenant_id)
+                    )
+                    row["application_scopes"] = sorted(
+                        self._scopes_for_application(con, application_id)
+                    )
+                    row["application_document_ids"] = sorted(
+                        self._documents_for_application(con, application_id)
+                    )
+                    row["credentials"] = [
+                        {
+                            "credential_id": str(item["credential_id"]),
+                            "state": str(item["state"]),
+                            "created_at": item["created_at"],
+                            "revoked_at": item["revoked_at"],
+                        }
+                        for item in con.execute(
+                            """
+                            SELECT credential_id,state,created_at,revoked_at
+                            FROM api_access.credentials
+                            WHERE application_id=%s
+                            ORDER BY created_at,credential_id
+                            """,
+                            (application_id,),
+                        ).fetchall()
+                    ]
+                    row["active_credentials"] = sum(
+                        1 for item in row["credentials"] if item["state"] == "ACTIVE"
+                    )
+                    result.append(row)
         except ApiAccessStoreError:
             raise
         except Exception as exc:
             raise ApiAccessStoreError("api_access_list_failed") from exc
-        return [dict(row) for row in rows]
+        return result
