@@ -4,6 +4,12 @@ import pytest
 
 from scripts.product_api_contract import ContractCompatibilityError, assert_backward_compatible
 
+pytestmark = [
+    pytest.mark.release_control_scope_belofte,
+    pytest.mark.release_control_slop,
+    pytest.mark.release_control_releasebewijs,
+]
+
 
 def spec():
     return {"paths": {"/v1/example": {"post": {
