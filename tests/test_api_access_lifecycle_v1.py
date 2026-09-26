@@ -577,3 +577,40 @@ def test_retired_application_grant_can_be_narrowed_before_parent_entitlement_shr
         assert store.authenticate(issued.credential) is None
     finally:
         _cleanup(issued)
+
+
+
+def test_tenant_policy_stale_version_is_rejected_without_overwrite():
+    store = _store()
+    issued = _provision(store, name="PR2 tenant stale version")
+    try:
+        first = store.set_tenant_entitlement(
+            actor_id="publisher-a",
+            tenant_id=issued.tenant_id,
+            expected_version=1,
+            content_scope="RESOURCE_SET",
+            document_ids=["doc-a", "doc-b", "doc-c"],
+            scopes=["retrieve", "documents:read", "knowledge:read"],
+            requests_per_minute=200,
+            max_top_k=10,
+        )
+        assert first.policy_version == 2
+
+        with pytest.raises(ApiAccessConflict, match="policy_version_mismatch"):
+            store.set_tenant_entitlement(
+                actor_id="publisher-b",
+                tenant_id=issued.tenant_id,
+                expected_version=1,
+                content_scope="RESOURCE_SET",
+                document_ids=["doc-a", "doc-b"],
+                scopes=["retrieve", "documents:read", "knowledge:read"],
+                requests_per_minute=200,
+                max_top_k=10,
+            )
+
+        rows = store.list_consumers()
+        row = next(item for item in rows if item["tenant_id"] == issued.tenant_id)
+        assert int(row["tenant_policy_version"]) == 2
+        assert row["tenant_document_ids"] == ["doc-a", "doc-b", "doc-c"]
+    finally:
+        _cleanup(issued)
