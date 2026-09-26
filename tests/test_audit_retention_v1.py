@@ -136,8 +136,8 @@ class _ReplaceFailsOnce:
         self.registry = registry
         self.failures = 1
 
-    def get_audit(self, audit_id: str) -> dict | None:
-        return self.registry.get_audit(audit_id)
+    def __getattr__(self, name):
+        return getattr(self.registry, name)
 
     def replace_with_archived_ref(self, audit_id: str, reference: dict) -> None:
         if self.failures:
@@ -249,7 +249,7 @@ def test_restore_returns_exact_archived_record_to_live_and_removes_blob(
     assert restarted_registry.get_audit(original["audit_id"]) == original
 
 
-def test_restore_delete_failure_rolls_back_to_archived_without_data_loss(
+def test_restore_delete_failure_preserves_committed_live_and_retry_cleans(
     tmp_path: Path,
 ) -> None:
     runtime = tmp_path / "runtime"
@@ -264,12 +264,14 @@ def test_restore_delete_failure_rolls_back_to_archived_without_data_loss(
     service.archive(original["audit_id"], actor_id="acct-researcher")
     archive.fail_delete = True
 
-    with pytest.raises(ConsoleError, match="audit_restore_archive_delete_failed"):
+    with pytest.raises(ConsoleError, match="audit_restore_cleanup_pending"):
         service.restore(original["audit_id"], actor_id="acct-researcher")
 
-    assert registry.get_audit(original["audit_id"]) is None
-    assert service.load_archived(original["audit_id"]) == original
-    assert len(service.list_archived()) == 1
+    assert registry.get_audit(original["audit_id"]) == original
+    assert service.list_archived() == []
+    archive.fail_delete = False
+    assert service.restore(original["audit_id"], actor_id="acct-researcher") == original
+    assert archive.data == {}
 
 
 def test_restore_retry_cleans_orphan_blob_after_completed_local_flip(
@@ -369,7 +371,10 @@ def test_purge_azure_failure_keeps_archived_reference_and_content(
         )
 
     assert registry.get_audit(original["audit_id"]) is None
-    assert service.load_archived(original["audit_id"]) == original
+    assert service.get_archived_index(original["audit_id"])["purge_requested_by"] == "acct-researcher"
+    with pytest.raises(ConsoleError, match="audit_purge_in_progress"):
+        service.restore(original["audit_id"], actor_id="acct-researcher")
+    assert archive.data
     assert len(service.list_archived()) == 1
 
 

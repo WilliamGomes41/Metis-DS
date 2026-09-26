@@ -29,6 +29,53 @@ Na de volledige workflow-cut-over bestaat de authority uit:
 
 De actieve LLM-providerconfig (`METIS_LLM_API_KEY` en `METIS_LLM_MODEL`) blijft deployment-owned en buiten de database. Bestaande versleutelde Audit-secretpayloads kunnen voor rollback/recovery bewaard blijven, maar worden niet meer als runtime-providerauthority gelezen.
 
+## Auditretentie na migratie 011
+
+In volledige PostgreSQL-modus zijn `workflow.audit_records` en de bestaande
+Azure auditcontainer samen de duurzame auditopslag. De kolom `retention_state`
+onderscheidt `LIVE`, `ARCHIVED` en `PURGING`; de bestaande payload bevat bij
+non-LIVE uitsluitend de compacte archiefreferentie. Lijst, detail en acties
+lezen dezelfde PostgreSQL-registry, zonder lokale fallback. De auditinhoud,
+identiteit en oorspronkelijke metadata veranderen niet bij archive/restore.
+
+Archiveren verifieert Blobbytes vóór de DB-overgang. Een onzekere commituitkomst
+geeft geen toestemming de Blob te wissen. Herstellen commit eerst de exacte
+LIVE-inhoud. Mislukte Blob-opruiming laat die audit beschikbaar; de Console toont
+dat herstel is geslaagd en biedt dezelfde opdracht voor een opruimretry.
+Purge vereist de bestaande researcherrol en exacte titelbevestiging, commit
+eerst actor/tijd van het verwijderbesluit en verwijdert daarna Blob en referentie.
+Een onderbreking blijft zichtbaar als `PURGING`; restore is dan geblokkeerd en
+dezelfde purge-opdracht kan afronden, ook als de Blob al weg is. Na afronding
+blijft geen payload-tombstone achter.
+
+Retentieacties gebruiken een PostgreSQL-lock per audit over de Blob- en
+DB-grenzen. Volledige backup houdt de bijbehorende exclusieve auditlock vanaf
+de databasesnapshot tot alle archiefbytes zijn gelezen. Een archive bevat de
+exacte `ARCHIVED` bytes in `audit_blobs`; `PURGING` bewaart het geautoriseerde
+verwijderbesluit zonder reeds verwijderde inhoud terug te halen. Restore schrijft
+en verifieert alle audit-Blobs vóór de databasecommit. Verificatie vergelijkt
+manifest, verwijzingen, recordmetadata en checksums. De Azure auditconfiguratie
+wordt pas benodigd wanneer er archiefbytes zijn; dezelfde account/container-
+coördinaten blijven vereist, zoals bij bronnen. `check-live` leest ook auditbytes.
+
+Voer deze cutover offline uit: stop oude writers, maak een gecontroleerde
+veiligheidskopie, pas migratie 011 toe en voer de bestaande remaining-migratie
+uit met toegang tot de auditcontainer. De importer vergelijkt lokale refs met
+exacte Blobbytes en bestaande PG-records vóór schrijven. Een conflict blokkeert;
+lokale bestanden worden niet verwijderd. Nieuwe lokale `PURGING`-gevallen moeten
+bij ontbrekende bytes eerst in de oorspronkelijke omgeving worden afgerond.
+Bestaande live records krijgen automatisch `LIVE`. Activeer daarna de nieuwe
+readers en controleer lijst/detail/restore vanuit een verse runtime.
+
+Rollback naar oude readers is alleen veilig zolang geen ARCHIVED/PURGING-data
+is aangemaakt: oude code kent de betekenis van die payloads niet. Na gebruik
+van retentie: nieuwe code behouden of een bewezen herstelpunt geïsoleerd
+herstellen. Geen gemengde oude/nieuwe writers tijdens de cutover.
+
+Volledige workflowarchives gebruiken versie 4 (inclusief retentie). Oudere
+onvolledige formaten blijven bewaard maar worden niet als volledige herstelset
+geaccepteerd; exporteer opnieuw vanuit de oorspronkelijke database.
+
 ## Expliciete workflow-migratie
 
 Startup importeert geen lokale authority-state meer stil in PostgreSQL. De migratievolgorde is expliciet:
@@ -36,7 +83,8 @@ Startup importeert geen lokale authority-state meer stil in PostgreSQL. De migra
 1. `002_workflow_schema.sql`;
 2. `003_workflow_document_envelope_payload.sql`;
 3. `004_workflow_review_authority.sql`;
-4. `005_workflow_remaining_authority.sql`;
+4. `005_workflow_remaining_authority.sql` en daarna de actuele workflowmigraties,
+   inclusief `011_workflow_audit_retention.sql` vóór remaining-cutover;
 5. `scripts/migrate_workflow_identity_postgres.py --runtime <runtime>` voor accounts/sessies;
 6. `scripts/migrate_workflow_documents_postgres.py --runtime <runtime>` en daarna document-cut-over voorbereiden;
 7. review ledger + publish authorizations expliciet migreren;
@@ -67,20 +115,37 @@ Na volledige cut-over mogen deze bestanden niet worden gebruikt als fallback wan
 
 De operator-CLI `scripts/publication_chain_recovery.py` gebruikt de bestaande publication-chain archive en Blob restore-guard, uitgebreid met de volledige `workflow`-authority.
 
-De database-export bevat nu twee delen in dezelfde `database.json`:
+De database-export bevat drie delen in dezelfde `database.json`:
 
 - `tables`: canonical/publication PostgreSQL;
 - `workflow_tables`: accounts, sessies, documenten, reviewers, objects, review-events, authorizations, audits en Audit-secretpayloads.
+- `api_access_tables`: consumers, applicaties, scopes/resources, credentialhashes,
+  lifecycle-/policyversies en toegangs-audit uit alle acht migratie-010-tabellen.
 
 De export gebeurt in één `REPEATABLE READ, READ ONLY` PostgreSQL-transactie. Daardoor horen workflow- en publicatiestate bij exact dezelfde databasesnapshot.
 
-Workflow recovery v2 bewaart `logical_document_id`, `working_revision_id` en
+Workflow recovery v4 bewaart `logical_document_id`, `working_revision_id` en
 `working_revision_number` expliciet uit de authority-kolommen. De verifier
 controleert hun overeenkomst met de envelope, unieke revisies en acyclische
 voorgangerrelaties. Revisienummergaten en oorspronkelijke werk-ID's blijven bij
 restore behouden. Een v1-archive zonder deze authority-identiteiten wordt voor
 volledig herstel afgewezen met `workflow_backup_lifecycle_identity_missing`;
 maak een nieuwe export uit de oorspronkelijke authority.
+Een v2-archive mist de expliciete toegangsdekking en wordt met
+`workflow_backup_api_access_missing` afgewezen voor volledig herstel. De nieuwe
+export neemt toegang mee in dezelfde repeatable-read snapshot. Herstel schrijft
+de drie onderdelen in één transactie terug en vergelijkt ze exact. Ook een doel
+met uitsluitend bestaande `api_access`-gegevens geldt als niet leeg. Er worden
+geen nieuwe credentials of grants gegenereerd; ingetrokken/geschorste toegang
+blijft geweigerd. Archives bevatten credentialhashes en moeten als gevoelige
+hersteldata worden behandeld.
+
+Een archive bewijst de toestand op haar herstelpunt. Latere intrekkingen,
+revocations en verwijderingen staan niet vanzelf in een oudere backup. Houd een
+herstelbestemming geïsoleerd totdat relevante latere besluiten uit een geldige
+duurzame bron zijn meegenomen; geef bij ontbrekend bewijs geen productie-serving
+of toegang vrij. Deze procedure belooft geen nul dataverlies/PITR zonder bewezen
+operationele backupconfiguratie.
 
 Restore vereist een lege, geïsoleerde doelomgeving en database-ownerrechten.
 De import neemt exclusieve locks op de doeltabellen en controleert daarna opnieuw
@@ -103,6 +168,14 @@ De restorevolgorde blijft fail-closed:
 6. canonical/publication-integriteit én workflow-integriteit opnieuw bewijzen.
 
 PostgreSQL wordt dus pas authoritative nadat de bronbytes aanwezig en gecontroleerd zijn.
+
+Het Blobmanifest omvat zowel canonical `source_snapshots` als de immutable
+bronverwijzingen uit alle `workflow.documents`. Dat geldt ook voor ongepubliceerd
+werk, opvolgversies in review en geblokkeerde documenten zonder objecten. Gelijke
+locator/hash-verwijzingen worden gededupliceerd. Een ontbrekende/verkeerde bron
+of ontbrekend manifestitem blokkeert volledig herstel; lokale freezes zijn geen
+vervanging voor deze dekking. De bestaande G2-account/containercoördinaten moeten
+bij het herstel overeenkomen; deze route verhuist historische locators niet.
 
 ## Workflow-integriteitsbewijs
 

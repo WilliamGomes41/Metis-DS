@@ -28,6 +28,14 @@ ARCHIVE_REFERENCE_KIND = "archived_audit_ref"
 class LiveAuditStore(Protocol):
     def get_audit(self, audit_id: str) -> dict[str, Any] | None: ...
 
+    def get_archived_reference(self, audit_id: str) -> dict[str, Any] | None: ...
+
+    def list_archived_references(self) -> list[dict[str, Any]]: ...
+
+    def retention_lock(self, audit_id: str) -> ContextManager[Any]: ...
+
+    def mark_purge(self, audit_id: str, reference: dict[str, Any], *, actor_id: str) -> dict[str, Any]: ...
+
     def replace_with_archived_ref(
         self,
         audit_id: str,
@@ -88,7 +96,24 @@ def is_archived_reference(row: Any) -> bool:
         and bool(str(row.get("archive_locator") or "").strip())
         and SHA256_RE.fullmatch(str(row.get("checksum_sha256") or "")) is not None
         and "payload" not in row
+        and (not {"purge_requested_at", "purge_requested_by"}.intersection(row) or (
+            bool(str(row.get("purge_requested_at") or "").strip())
+            and bool(str(row.get("purge_requested_by") or "").strip())
+        ))
     )
+
+
+def is_purging(reference: dict[str, Any]) -> bool:
+    return bool(reference.get("purge_requested_at"))
+
+
+def validate_archived_record(reference: dict[str, Any], record: dict[str, Any]) -> None:
+    if not is_archived_reference(reference) or not valid_audit_record(record):
+        raise ConsoleError("audit_archive_record_invalid")
+    if any(reference[key] != record[key] for key in ("audit_id", "audit_type", "title", "created_at")):
+        raise ConsoleError("audit_archive_record_mismatch")
+    if hashlib.sha256(canonical_audit_bytes(record)).hexdigest() != reference["checksum_sha256"]:
+        raise ConsoleError("audit_archive_record_mismatch")
 
 
 class AuditArchiveIndex:
@@ -147,19 +172,20 @@ class AuditRetentionService:
     ) -> None:
         self.live_store = live_store
         self.archive_store = archive_store
-        self.index = AuditArchiveIndex(runtime)
         self._write_lock = write_lock or nullcontext
 
     def list_archived(self) -> list[dict[str, Any]]:
-        return self.index.list()
+        return self.live_store.list_archived_references()
 
     def get_archived_index(self, audit_id: str) -> dict[str, Any] | None:
-        return self.index.get(audit_id)
+        return self.live_store.get_archived_reference(audit_id)
 
     def load_archived(self, audit_id: str) -> dict[str, Any] | None:
-        row = self.index.get(audit_id)
+        row = self.get_archived_index(audit_id)
         if row is None:
             return None
+        if is_purging(row):
+            raise ConsoleError("audit_purge_in_progress")
         try:
             data = self.archive_store.load_verified(
                 str(row["archive_locator"]),
@@ -171,10 +197,7 @@ class AuditRetentionService:
             record = json.loads(data.decode("utf-8"))
         except (UnicodeError, json.JSONDecodeError) as exc:
             raise ConsoleError("audit_archive_record_invalid") from exc
-        if not valid_audit_record(record):
-            raise ConsoleError("audit_archive_record_invalid")
-        if str(record["audit_id"]) != str(row["audit_id"]):
-            raise ConsoleError("audit_archive_record_mismatch")
+        validate_archived_record(row, record)
         return record
 
     def restore(self, audit_id: str, *, actor_id: str) -> dict[str, Any]:
@@ -185,9 +208,9 @@ class AuditRetentionService:
         if not safe_actor:
             raise ConsoleError("audit_actor_required")
 
-        with self._write_lock():
+        with self._write_lock(), self.live_store.retention_lock(safe_id):
             active = self.live_store.get_audit(safe_id)
-            reference = self.index.get(safe_id)
+            reference = self.get_archived_index(safe_id)
 
             if active is not None:
                 if reference is not None:
@@ -195,7 +218,7 @@ class AuditRetentionService:
                 try:
                     self.archive_store.delete_audit(safe_id)
                 except AuditArchiveStoreError as exc:
-                    raise ConsoleError("audit_restore_cleanup_failed") from exc
+                    raise ConsoleError("audit_restore_cleanup_pending") from exc
                 return active
 
             if reference is None:
@@ -212,16 +235,11 @@ class AuditRetentionService:
             )
 
             try:
-                self.archive_store.delete_audit(safe_id)
+                self.archive_store.delete_verified(reference["archive_locator"])
             except AuditArchiveStoreError as exc:
-                try:
-                    self.live_store.replace_with_archived_ref(
-                        safe_id,
-                        reference,
-                    )
-                except Exception as rollback_exc:
-                    raise ConsoleError("audit_restore_recovery_required") from rollback_exc
-                raise ConsoleError("audit_restore_archive_delete_failed") from exc
+                # The verified LIVE record has committed. Do not reverse that
+                # durable outcome because cleanup failed (or its ACK was lost).
+                raise ConsoleError("audit_restore_cleanup_pending") from exc
             return record
 
     def purge(
@@ -239,9 +257,9 @@ class AuditRetentionService:
         if not safe_actor:
             raise ConsoleError("audit_actor_required")
 
-        with self._write_lock():
+        with self._write_lock(), self.live_store.retention_lock(safe_id):
             active = self.live_store.get_audit(safe_id)
-            reference = self.index.get(safe_id)
+            reference = self.get_archived_index(safe_id)
 
             if active is not None:
                 raise ConsoleError("audit_purge_requires_archived")
@@ -255,8 +273,10 @@ class AuditRetentionService:
             if confirmation != str(reference.get("title") or ""):
                 raise ConsoleError("audit_purge_confirmation_mismatch")
 
+            reference = self.live_store.mark_purge(safe_id, reference, actor_id=safe_actor)
+
             try:
-                self.archive_store.delete_audit(safe_id)
+                self.archive_store.delete_verified(reference["archive_locator"])
             except AuditArchiveStoreError as exc:
                 raise ConsoleError("audit_purge_archive_delete_failed") from exc
 
@@ -277,12 +297,14 @@ class AuditRetentionService:
         if not safe_actor:
             raise ConsoleError("audit_actor_required")
 
-        with self._write_lock():
+        with self._write_lock(), self.live_store.retention_lock(safe_id):
             active = self.live_store.get_audit(safe_id)
-            existing = self.index.get(safe_id)
+            existing = self.get_archived_index(safe_id)
 
             if active is None:
                 if existing is not None:
+                    if is_purging(existing):
+                        raise ConsoleError("audit_purge_in_progress")
                     return existing
                 raise ConsoleError("unknown_audit")
             if existing is not None:
@@ -325,12 +347,16 @@ class AuditRetentionService:
             try:
                 self.live_store.replace_with_archived_ref(safe_id, reference)
             except Exception:
-                # Before the atomic local replacement succeeds, LIVE remains
-                # authoritative. Remove the staged blob when possible; if a
-                # process crash prevented cleanup, a retry is idempotent.
+                # A failed response does not prove the commit failed. Resolve
+                # authority while still holding the per-audit lock. If the DB
+                # cannot answer, retain the Blob for a safe retry.
                 try:
-                    self.archive_store.delete_verified(locator)
-                except AuditArchiveStoreError:
+                    committed = self.get_archived_index(safe_id)
+                    if committed == reference:
+                        return committed
+                    if committed is None and self.live_store.get_audit(safe_id) == active:
+                        self.archive_store.delete_verified(locator)
+                except Exception:
                     pass
                 raise
             return reference

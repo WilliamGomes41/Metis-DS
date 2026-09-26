@@ -23,8 +23,11 @@ from src.admission_gate_v1 import blocked_audit_lane
 from src.audit_archive_store_v1 import AuditArchiveStore
 from src.audit_retention_v1 import (
     ARCHIVE_REFERENCE_KIND,
+    AuditArchiveIndex,
     AuditRetentionService,
     is_archived_reference,
+    is_purging,
+    validate_archived_record,
 )
 from src.audit_semantic_safety_v1 import (
     load_frozen_safety_suite,
@@ -87,7 +90,27 @@ class AuditRegistry:
     def __init__(self, runtime: Path) -> None:
         self.root = Path(runtime) / "audits"
         self.root.mkdir(parents=True, exist_ok=True)
-        self._write_lock = threading.Lock()
+        self._write_lock = threading.RLock()
+        self._archive_index = AuditArchiveIndex(runtime)
+
+    def retention_lock(self, audit_id: str) -> Any:
+        return self._write_lock
+
+    def get_archived_reference(self, audit_id: str) -> dict[str, Any] | None:
+        return self._archive_index.get(audit_id)
+
+    def list_archived_references(self) -> list[dict[str, Any]]:
+        return self._archive_index.list()
+
+    def mark_purge(self, audit_id: str, reference: dict[str, Any], *, actor_id: str) -> dict[str, Any]:
+        with self._write_lock:
+            if not actor_id or self.get_archived_reference(audit_id) != reference:
+                raise ConsoleError("audit_archive_reference_changed")
+            if is_purging(reference):
+                return reference
+            pending = {**reference, "purge_requested_at": _now(), "purge_requested_by": actor_id}
+            _atomic_write(self.root / f"{audit_id}.json", pending)
+            return pending
 
     def list_audits(self) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
@@ -156,6 +179,9 @@ class AuditRegistry:
                 raise ConsoleError("audit_record_corrupt") from exc
             if not self._valid_record(current):
                 raise ConsoleError("audit_not_live")
+            validate_archived_record(reference, current)
+            if is_purging(reference):
+                raise ConsoleError("audit_purge_in_progress")
             _atomic_write(path, reference)
 
     def replace_archived_ref_with_live(
@@ -175,6 +201,9 @@ class AuditRegistry:
             raise ConsoleError("audit_archive_record_mismatch")
         if str(record.get("audit_id") or "") != safe_id:
             raise ConsoleError("audit_archive_record_mismatch")
+        validate_archived_record(reference, record)
+        if is_purging(reference):
+            raise ConsoleError("audit_purge_in_progress")
         path = self.root / f"{safe_id}.json"
         with self._write_lock:
             if not path.is_file():
@@ -199,6 +228,8 @@ class AuditRegistry:
             raise ConsoleError("audit_archive_reference_invalid")
         if str(reference.get("audit_id") or "") != safe_id:
             raise ConsoleError("audit_archive_record_mismatch")
+        if not is_purging(reference):
+            raise ConsoleError("audit_purge_intent_required")
         path = self.root / f"{safe_id}.json"
         with self._write_lock:
             if not path.is_file():
@@ -328,6 +359,7 @@ def _archive_rows(retention: AuditRetentionService | None) -> str:
               <p class="meta">
                 <span>type <b>{_esc(audit_type.get("label") or audit.get("audit_type"))}</b></span>
                 <span>gearchiveerd <b>{_esc(audit.get("archived_at"))}</b></span>
+                <span>{"Verwijdering wacht op afronding" if is_purging(audit) else "Gearchiveerd"}</span>
               </p>
             </article>
             """
@@ -693,7 +725,9 @@ def install_audit_routes(
                 status_code=503,
             )
         try:
-            audit = retention.load_archived(audit_id)
+            index = retention.get_archived_index(audit_id) or {}
+            pending_purge = is_purging(index)
+            audit = index if pending_purge else retention.load_archived(audit_id)
         except ConsoleError as exc:
             return HTMLResponse(
                 _chrome(console, account, f'<h1>Archief niet beschikbaar</h1><p>{_esc(exc.code)}</p>'),
@@ -704,16 +738,20 @@ def install_audit_routes(
                 _chrome(console, account, '<h1>Audit niet gevonden</h1><p><a href="/audit/archive">Terug naar Archief</a></p>'),
                 status_code=404,
             )
-        index = retention.get_archived_index(audit_id) or {}
-        detail = render_audit(audit)
+        detail = (
+            f'<h1>{_esc(index["title"])}</h1><p>Definitieve verwijdering is vastgelegd en wacht op afronding. Herstellen is niet meer mogelijk.</p>'
+            if pending_purge else render_audit(audit)
+        )
         actions = ""
         if "researcher" in set(account.get("roles") or []):
+            restore_action = "" if pending_purge else f'''
+                <form method="post" action="/audit/archive/{_esc(audit_id)}/restore">
+                  <button class="btn-primary" type="submit">Herstellen</button>
+                </form>'''
             actions = f"""
               <section class="section" aria-labelledby="archive-actions-title">
                 <h2 id="archive-actions-title">Beheer</h2>
-                <form method="post" action="/audit/archive/{_esc(audit_id)}/restore">
-                  <button class="btn-primary" type="submit">Herstellen</button>
-                </form>
+                {restore_action}
                 <hr>
                 <h3>Definitief verwijderen</h3>
                 <p class="muted">Dit verwijdert het auditbewijs uit Azure en kan niet ongedaan worden gemaakt.</p>
@@ -745,11 +783,17 @@ def install_audit_routes(
         try:
             audit = retention.restore(audit_id, actor_id=account["account_id"])
         except ConsoleError as exc:
+            if exc.code == "audit_restore_cleanup_pending":
+                return HTMLResponse(_chrome(console, account, f'''
+                  <h1>Audit is hersteld</h1>
+                  <p>De audit is beschikbaar. Het opruimen van de archiefkopie moet nog worden herhaald.</p>
+                  <p><a href="/audit/{_esc(audit_id)}">Open de herstelde audit</a></p>
+                  <form method="post" action="/audit/archive/{_esc(audit_id)}/restore">
+                    <button class="btn-secondary" type="submit">Opruimen opnieuw proberen</button>
+                  </form>'''), status_code=503)
             status = 503 if exc.code in {
                 "audit_archive_unavailable",
-                "audit_restore_cleanup_failed",
-                "audit_restore_archive_delete_failed",
-                "audit_restore_recovery_required",
+                "audit_store_unavailable",
             } else 409
             return HTMLResponse(
                 _chrome(
