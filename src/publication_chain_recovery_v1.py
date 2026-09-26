@@ -476,10 +476,27 @@ def check_chain_integrity(
 
 def _blob_entries_from_state(database_state: Mapping[str, Any]) -> list[dict[str, str]]:
     entries: dict[str, dict[str, str]] = {}
-    for snapshot in _table_rows(database_state, "source_snapshots"):
-        snapshot_id = str(snapshot.get("snapshot_id") or "")
-        checksum = str(snapshot.get("source_checksum") or "").lower()
-        locator = str(snapshot.get("source_locator") or "")
+    snapshot_sources: dict[str, tuple[str, str]] = {}
+    sources = [
+        (row.get("snapshot_id"), row.get("source_checksum"), row.get("source_locator"))
+        for row in _table_rows(database_state, "source_snapshots")
+    ]
+    if "workflow_tables" in database_state:
+        workflow = database_state["workflow_tables"]
+        documents = workflow.get("documents") if isinstance(workflow, Mapping) else None
+        if not isinstance(documents, list) or any(not isinstance(row, Mapping) for row in documents):
+            raise PublicationChainRecoveryError("workflow_backup_documents_invalid")
+        sources.extend(
+            (row.get("snapshot_id"), row.get("source_sha256"), row.get("immutable_storage_locator"))
+            for row in documents
+        )
+    for snapshot_id, raw_checksum, raw_locator in sources:
+        checksum = str(raw_checksum or "").lower()
+        locator = str(raw_locator or "")
+        source = (checksum, locator)
+        if snapshot_id in snapshot_sources and snapshot_sources[snapshot_id] != source:
+            raise PublicationChainRecoveryError(f"source_snapshot_reference_conflict:{snapshot_id}")
+        snapshot_sources[snapshot_id] = source
         parsed = parse_g2_locator(locator)
         if parsed is None or parsed["sha256"] != checksum:
             raise PublicationChainRecoveryError(f"source_snapshot_locator_invalid:{snapshot_id}")
