@@ -4,6 +4,7 @@ import pytest
 
 from src.api_access_v1 import (
     ApiAccessStoreError, NULLABLE_COLUMNS, REQUIRED_CHECKS, REQUIRED_COLUMNS,
+    REQUIRED_DEFAULTS,
     REQUIRED_KEYS, PostgresApiAccessStore,
 )
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
@@ -37,7 +38,8 @@ def schema_rows():
     columns = [
         {"table_name": table, "column_name": name, "data_type": kind,
          "is_nullable": "YES" if (table, name) in NULLABLE_COLUMNS else "NO",
-         "character_maximum_length": 64 if (table, name) == ("credentials", "secret_sha256") else None}
+         "character_maximum_length": 64 if (table, name) == ("credentials", "secret_sha256") else None,
+         "column_default": next(iter(REQUIRED_DEFAULTS[(table, name)])) if (table, name) in REQUIRED_DEFAULTS else None}
         for table, names in REQUIRED_COLUMNS.items() for name, kind in names.items()
     ]
     constraints = [
@@ -66,6 +68,21 @@ def verify(rows):
 
 def test_migration_010_shape_passes_read_only_preflight():
     verify(schema_rows())
+
+
+@pytest.mark.parametrize("table,name", sorted(REQUIRED_DEFAULTS))
+def test_preflight_rejects_missing_write_required_default(table, name):
+    tables, columns, constraints = copy.deepcopy(schema_rows())
+    next(row for row in columns if (row["table_name"], row["column_name"]) == (table, name))["column_default"] = None
+    with pytest.raises(ApiAccessStoreError, match=rf"{table}\.{name}:default"):
+        verify((tables, columns, constraints))
+
+
+def test_preflight_rejects_wrong_policy_version_default():
+    tables, columns, constraints = copy.deepcopy(schema_rows())
+    next(row for row in columns if (row["table_name"], row["column_name"]) == ("tenants", "policy_version"))["column_default"] = "0"
+    with pytest.raises(ApiAccessStoreError, match=r"tenants\.policy_version:default"):
+        verify((tables, columns, constraints))
 
 
 @pytest.mark.parametrize("damage,expected", [

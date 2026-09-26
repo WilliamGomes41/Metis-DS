@@ -54,6 +54,15 @@ REQUIRED_COLUMNS = {
     "audit_events": {"event_id": "text", "event_type": "text", "actor_id": "text", "tenant_id": "text", "application_id": "text", "credential_id": "text", "event_at": "timestamp with time zone", "details": "jsonb"},
 }
 NULLABLE_COLUMNS = {("credentials", "revoked_at"), ("audit_events", "tenant_id"), ("audit_events", "application_id"), ("audit_events", "credential_id")}
+REQUIRED_DEFAULTS = {
+    ("tenants", "policy_version"): frozenset({"1", "1::bigint"}),
+    ("tenants", "created_at"): frozenset({"now()"}),
+    ("applications", "policy_version"): frozenset({"1", "1::bigint"}),
+    ("applications", "created_at"): frozenset({"now()"}),
+    ("credentials", "created_at"): frozenset({"now()"}),
+    ("audit_events", "event_at"): frozenset({"now()"}),
+    ("audit_events", "details"): frozenset({"'{}'::jsonb"}),
+}
 REQUIRED_KEYS = {
     ("tenants", "p", ("tenant_id",), None, None),
     ("tenant_scopes", "p", ("tenant_id", "scope"), None, None),
@@ -327,7 +336,7 @@ class PostgresApiAccessStore:
                 columns = con.execute(
                     """
                     SELECT table_name, column_name, data_type, is_nullable,
-                           character_maximum_length
+                           character_maximum_length, column_default
                     FROM information_schema.columns
                     WHERE table_schema = 'api_access'
                     """
@@ -369,6 +378,8 @@ class PostgresApiAccessStore:
                       row["is_nullable"] != ("YES" if (table, name) in NULLABLE_COLUMNS else "NO") or
                       (table, name) == ("credentials", "secret_sha256") and row["character_maximum_length"] != 64):
                     defects.append(f"{table}.{name}:type_or_nullability")
+                elif (table, name) in REQUIRED_DEFAULTS and row["column_default"] not in REQUIRED_DEFAULTS[(table, name)]:
+                    defects.append(f"{table}.{name}:default")
         found_keys = {
             (row["table_name"], row["contype"], tuple(row["key_columns"] or ()),
              row["foreign_table"] if row["contype"] == "f" else None,

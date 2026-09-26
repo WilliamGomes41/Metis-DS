@@ -41,6 +41,14 @@ def test_new_request_constraint_is_breaking_even_when_old_constraint_absent(key,
         assert_backward_compatible(old, new)
 
 
+@pytest.mark.parametrize("key,field", [("minLength", "name"), ("minItems", "tags")])
+def test_explicit_zero_lower_bound_is_equivalent_to_absent_constraint(key, field):
+    old = spec()
+    new = copy.deepcopy(old)
+    new["paths"]["/v1/example"]["post"]["requestBody"]["content"]["application/json"]["schema"]["properties"][field][key] = 0
+    assert_backward_compatible(old, new)
+
+
 def test_narrowed_existing_enum_and_nested_item_constraint_are_breaking():
     old = spec()
     old["paths"]["/v1/example"]["post"]["requestBody"]["content"]["application/json"]["schema"]["properties"]["mode"]["enum"] = ["A", "B"]

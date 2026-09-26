@@ -250,6 +250,8 @@ def _compare_schema(
         ):
             if key not in new:
                 continue
+            if key in {"minLength", "minItems"} and key not in old and new[key] == 0:
+                continue
             if key not in old or (direction == "increase" and new[key] > old[key]) or (
                 direction == "decrease" and new[key] < old[key]
             ):
