@@ -511,3 +511,52 @@ def test_duplicate_suspend_is_noop_and_does_not_duplicate_audit_transition():
         assert int(row["n"]) == 1
     finally:
         _cleanup(issued)
+
+
+
+def test_retired_application_grant_can_be_narrowed_before_parent_entitlement_shrinks():
+    store = _store()
+    issued = _provision(
+        store,
+        name="PR2 retired grant shrink",
+        tenant_docs=("doc-a", "doc-b"),
+        app_docs=("doc-a", "doc-b"),
+    )
+    try:
+        store.set_application_state(
+            actor_id="publisher-a",
+            tenant_id=issued.tenant_id,
+            application_id=issued.application_id,
+            expected_version=1,
+            target_state="RETIRED",
+        )
+
+        narrowed = store.set_application_grant(
+            actor_id="publisher-a",
+            tenant_id=issued.tenant_id,
+            application_id=issued.application_id,
+            expected_version=2,
+            content_scope="RESOURCE_SET",
+            document_ids=["doc-b"],
+            scopes=["retrieve"],
+            requests_per_minute=50,
+            max_top_k=3,
+        )
+        assert narrowed.changed is True
+        assert narrowed.policy_version == 3
+
+        tenant = store.set_tenant_entitlement(
+            actor_id="publisher-a",
+            tenant_id=issued.tenant_id,
+            expected_version=1,
+            content_scope="RESOURCE_SET",
+            document_ids=["doc-b"],
+            scopes=["retrieve"],
+            requests_per_minute=100,
+            max_top_k=5,
+        )
+        assert tenant.changed is True
+        assert tenant.policy_version == 2
+        assert store.authenticate(issued.credential) is None
+    finally:
+        _cleanup(issued)
