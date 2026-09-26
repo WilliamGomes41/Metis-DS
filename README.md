@@ -56,6 +56,8 @@ The researcher path for Continentie (bron 2) is the operations console mailbox, 
 
 The Product API uses `SafeRetrievalIndex`: hybrid search produces candidates, after which a deterministic Answerability/Evidence Gate checks concept coverage, requested relations and explicit numeric constraints. A high similarity score alone never establishes answerability.
 
+External consumers integrate against the generated stable `/v1` OpenAPI contract exposed by the running Product API at `/openapi.json`; CI publishes the same generated contract as evidence. The minimal onboarding and error/versioning rules are documented in `docs/product-api/CONSUMER_GUIDE_V1.md`.
+
 `POST /v1/retrieve` returns `answerability=supported` only when the evidence gate passes; otherwise it returns `status=abstain` with an explicit reason.
 
 Current v2.1 development metrics: 100% expected-object hit@5, 100% no-answer abstention, FAR 0% on the development/golden set. Independent acceptance is still pending a new holdout B.

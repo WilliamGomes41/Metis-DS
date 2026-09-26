@@ -19,7 +19,8 @@ from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field
+from fastapi.openapi.utils import get_openapi
+from pydantic import BaseModel, ConfigDict, Field
 
 from .abstain_catalog_v1 import sentence_for
 from .api_access_v1 import ApiAccessPrincipal, ApiAccessStoreError, PostgresApiAccessStore
@@ -57,6 +58,216 @@ class RetrieveRequest(BaseModel):
     query: str = Field(min_length=1, max_length=2000)
     top_k: int = Field(default=5, ge=1, le=20)
     filters: RetrieveFilters = Field(default_factory=RetrieveFilters)
+
+
+class ProductContractModel(BaseModel):
+    """Schema-only base for public v1 responses.
+
+    Runtime payloads remain ordinary dictionaries. Extra fields are allowed so
+    additive response evolution stays compatible inside the v1 major contract.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+
+class ProductErrorDetail(ProductContractModel):
+    code: str
+    required_scope: str | None = None
+    document_id: str | None = None
+    max_top_k: int | None = None
+    reason: str | None = None
+    status: str | None = None
+    answerability: str | None = None
+    abstain_sentence: str | None = None
+
+
+class ProductErrorResponse(ProductContractModel):
+    detail: ProductErrorDetail
+
+
+class SourcePayload(ProductContractModel):
+    title: str | None = None
+    url: str | None = None
+    page: int | None = None
+    version: str | None = None
+    locator: dict[str, Any] | str | None = None
+
+
+class ReleasePayload(ProductContractModel):
+    release_id: str | None = None
+    release_version: str | None = None
+    published_at: str | None = None
+
+
+class ScorePayload(ProductContractModel):
+    hybrid_rrf: float | None = None
+    lexical: float | None = None
+    vector: float | None = None
+
+
+class AdviceBoundPayload(ProductContractModel):
+    knowledge_object_id: str | None = None
+    object_version: str | None = None
+    object_type: str | None = None
+    content: str | None = None
+    advice_weight: bool = False
+    labels: list[str] = Field(default_factory=list)
+
+
+class RetrieveResultPayload(ProductContractModel):
+    knowledge_object_id: str
+    object_version: str | None = None
+    document_id: str | None = None
+    object_type: str | None = None
+    content: str | None = None
+    structured_logic: dict[str, Any] | None = None
+    source: SourcePayload
+    release: ReleasePayload
+    scores: ScorePayload
+    content_hash: str | None = None
+    projection_hash: str | None = None
+    chunk_readiness: dict[str, Any] | None = None
+    advice_weight: bool
+    labels: list[str]
+    recommendation_semantics: dict[str, Any] | None = None
+    knowledge_relations: list[dict[str, Any]] | None = None
+    applies_if: list[AdviceBoundPayload] = Field(default_factory=list)
+    except_if: list[AdviceBoundPayload] = Field(default_factory=list)
+
+
+class RetrieveResponse(ProductContractModel):
+    api_version: str
+    service_version: str
+    synthetic_fixture: bool
+    status: str | None = None
+    answerability: str | None = None
+    reason: str | None = None
+    false_positive_class: str | None = None
+    labels: list[str]
+    advice_weight: bool
+    abstain_sentence: str | None = None
+    results: list[RetrieveResultPayload]
+    result_count: int
+    request_id: str
+    tenant_id: str
+
+
+class KnowledgeResponse(ProductContractModel):
+    api_version: str
+    synthetic_fixture: bool
+    knowledge_object_id: str
+    object_version: str | None = None
+    document_id: str | None = None
+    object_type: str | None = None
+    content: str | None = None
+    structured_logic: dict[str, Any] | None = None
+    source: SourcePayload
+    release: ReleasePayload
+    content_hash: str | None = None
+    projection_hash: str | None = None
+    chunk_readiness: dict[str, Any] | None = None
+    recommendation_semantics: dict[str, Any] | None = None
+    knowledge_relations: list[dict[str, Any]] | None = None
+    request_id: str
+
+
+class DocumentPayload(ProductContractModel):
+    document_id: str
+    title: str | None = None
+    version: str | None = None
+    source_url: str | None = None
+    published_at: str | None = None
+    knowledge_object_count: int
+
+
+class DocumentsResponse(ProductContractModel):
+    api_version: str
+    request_id: str
+    tenant_id: str
+    documents: list[DocumentPayload]
+
+
+class DocumentResponse(DocumentPayload):
+    api_version: str
+    request_id: str
+    tenant_id: str
+
+
+class UpdatePayload(ProductContractModel):
+    release_id: str
+    release_version: str | None = None
+    published_at: str | None = None
+    documents: list[str]
+    knowledge_object_count: int
+
+
+class UpdatesResponse(ProductContractModel):
+    api_version: str
+    request_id: str
+    tenant_id: str
+    updates: list[UpdatePayload]
+
+
+class UsageEndpointCount(ProductContractModel):
+    endpoint: str
+    requests: int
+
+
+class UsageResponse(ProductContractModel):
+    api_version: str
+    request_id: str
+    tenant_id: str
+    requests: int
+    retrieves: int
+    abstains: int
+    results_returned: int
+    by_endpoint: list[UsageEndpointCount]
+
+
+class HealthResponse(ProductContractModel):
+    status: str
+    api_version: str
+    service_version: str
+    mode: str
+    synthetic_fixture: bool
+    published_retrieval_records: int | None = None
+    published_corpus_ready: bool
+    corpus_reload_policy: str
+    published_corpus_authority: str
+    generation_enabled: bool
+
+
+def _product_responses(
+    success_model: type[BaseModel],
+    *error_status_codes: int,
+) -> dict[int, dict[str, Any]]:
+    responses: dict[int, dict[str, Any]] = {
+        200: {
+            "model": success_model,
+            "description": "Successful Product API response.",
+        }
+    }
+    for status_code in error_status_codes:
+        response: dict[str, Any] = {
+            "model": ProductErrorResponse,
+            "description": "Product API error with stable detail.code semantics.",
+        }
+        if int(status_code) == 401:
+            response["headers"] = {
+                "WWW-Authenticate": {
+                    "description": "Bearer authentication challenge.",
+                    "schema": {"type": "string"},
+                }
+            }
+        if int(status_code) == 429:
+            response["headers"] = {
+                "Retry-After": {
+                    "description": "Seconds until the application rate-limit window allows retry.",
+                    "schema": {"type": "string"},
+                }
+            }
+        responses[int(status_code)] = response
+    return responses
 
 
 @dataclass(frozen=True)
@@ -510,8 +721,69 @@ def create_product_app(
         if source_store is None and canonical_publication_store is None:
             source_store = AzureBlobSourceStore()
     state = ProductState(mode, p, registry, access_authenticator=access_authenticator, canonical_publication_store=store, immutable_source_store=source_store, usage_ledger=usage_ledger, rate_limiter=rate_limiter)
-    app = FastAPI(title="V&VN Data Services API", version=SERVICE_VERSION, description="Machine-to-machine access to published V&VN knowledge. This API does not generate clinical answers.")
+    app = FastAPI(
+        title="V&VN Data Services API",
+        version=SERVICE_VERSION,
+        description=(
+            "Machine-to-machine access to published V&VN knowledge. "
+            "This API does not generate clinical answers. "
+            "The /v1 major contract is stable independently of knowledge and release versions."
+        ),
+        contact={"name": "V&VN Data Services"},
+    )
     app.state.product = state
+
+    def product_openapi() -> dict[str, Any]:
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            description=app.description,
+            routes=app.routes,
+            contact=app.contact,
+        )
+        schema["x-metis-api-version"] = API_VERSION
+        request_id_parameter = {
+            "name": "X-Request-ID",
+            "in": "header",
+            "required": False,
+            "description": (
+                "Optional consumer correlation id. Metis echoes it in the response; "
+                "otherwise Metis generates one."
+            ),
+            "schema": {"type": "string"},
+        }
+        common_headers = {
+            "X-Request-ID": {
+                "description": "Correlation id for this Product API request.",
+                "schema": {"type": "string"},
+            },
+            "X-VVN-API-Version": {
+                "description": "Stable Product API major contract version.",
+                "schema": {"type": "string", "example": API_VERSION},
+            },
+        }
+        for path, path_item in (schema.get("paths") or {}).items():
+            if not str(path).startswith("/v1/"):
+                continue
+            for method, operation in path_item.items():
+                if method.lower() not in {"get", "post", "put", "patch", "delete"}:
+                    continue
+                params = operation.setdefault("parameters", [])
+                if not any(
+                    item.get("in") == "header" and item.get("name") == "X-Request-ID"
+                    for item in params
+                ):
+                    params.append(dict(request_id_parameter))
+                for response in (operation.get("responses") or {}).values():
+                    headers = response.setdefault("headers", {})
+                    for name, definition in common_headers.items():
+                        headers.setdefault(name, dict(definition))
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = product_openapi
     bearer = HTTPBearer(auto_error=False, scheme_name="VVNApiKeyBearer", description="Tenant API key as Bearer token")
 
     def current_tenant(credentials: HTTPAuthorizationCredentials | None = Security(bearer), header_credential: str | None = Header(default=None, alias="X-API-Key", include_in_schema=False)) -> ProductAccessPrincipal:
@@ -530,35 +802,65 @@ def create_product_app(
         response.headers["X-VVN-API-Version"] = API_VERSION
         return response
 
-    @app.get("/v1/health")
+    @app.get("/v1/health", response_model=None, responses=_product_responses(HealthResponse))
     def health() -> dict[str, Any]:
         state.refresh()
         return {"status": "ok", "api_version": API_VERSION, "service_version": SERVICE_VERSION, "mode": state.mode, "synthetic_fixture": state.synthetic, "published_retrieval_records": len(state.records) if state.synthetic else None, "published_corpus_ready": bool(state.records), "corpus_reload_policy": "postgres_active_registry_plus_blob_readback" if state.mode == "real" else "reload_fixture_on_file_change", "published_corpus_authority": "postgres+azure_blob" if state.mode == "real" else "fixture_jsonl", "generation_enabled": False}
 
-    @app.post("/v1/retrieve")
+    @app.post(
+        "/v1/retrieve",
+        response_model=None,
+        responses=_product_responses(RetrieveResponse, 400, 401, 403, 429, 503),
+        openapi_extra={"x-metis-required-scope": "retrieve"},
+    )
     def retrieve(req: RetrieveRequest, request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
         started = time.perf_counter(); result = state.retrieve(tenant, req); result["request_id"] = request.state.request_id; result["tenant_id"] = tenant.tenant_id
         ids = [x["knowledge_object_id"] for x in result["results"]]; logged_response(request_id=request.state.request_id, tenant=tenant, endpoint="/v1/retrieve", started=started, status_code=200, behavior=result["status"], query=req.query, object_ids=ids); return result
 
-    @app.get("/v1/knowledge/{object_id}")
+    @app.get(
+        "/v1/knowledge/{object_id}",
+        response_model=None,
+        responses=_product_responses(KnowledgeResponse, 401, 403, 404, 429, 503),
+        openapi_extra={"x-metis-required-scope": "knowledge:read"},
+    )
     def knowledge(object_id: str, request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
         started = time.perf_counter(); result = state.knowledge(tenant, object_id); result["request_id"] = request.state.request_id; logged_response(request_id=request.state.request_id, tenant=tenant, endpoint="/v1/knowledge/{id}", started=started, status_code=200, behavior="read", object_ids=[object_id]); return result
 
-    @app.get("/v1/documents")
+    @app.get(
+        "/v1/documents",
+        response_model=None,
+        responses=_product_responses(DocumentsResponse, 401, 403, 429, 503),
+        openapi_extra={"x-metis-required-scope": "documents:read"},
+    )
     def documents(request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
         started = time.perf_counter(); docs = state.documents(tenant); logged_response(request_id=request.state.request_id, tenant=tenant, endpoint="/v1/documents", started=started, status_code=200, behavior="read", object_ids=[]); return {"api_version": API_VERSION, "request_id": request.state.request_id, "tenant_id": tenant.tenant_id, "documents": docs}
 
-    @app.get("/v1/documents/{document_id}")
+    @app.get(
+        "/v1/documents/{document_id}",
+        response_model=None,
+        responses=_product_responses(DocumentResponse, 401, 403, 404, 429, 503),
+        openapi_extra={"x-metis-required-scope": "documents:read"},
+    )
     def document(document_id: str, request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
         started = time.perf_counter(); docs = [d for d in state.documents(tenant) if d["document_id"] == document_id]
         if not docs: raise HTTPException(status_code=404, detail={"code": "document_not_found"})
         logged_response(request_id=request.state.request_id, tenant=tenant, endpoint="/v1/documents/{id}", started=started, status_code=200, behavior="read", object_ids=[]); return {"api_version": API_VERSION, "request_id": request.state.request_id, "tenant_id": tenant.tenant_id, **docs[0]}
 
-    @app.get("/v1/updates")
+    @app.get(
+        "/v1/updates",
+        response_model=None,
+        responses=_product_responses(UpdatesResponse, 401, 403, 429, 503),
+        openapi_extra={"x-metis-required-scope": "updates:read"},
+    )
     def updates(request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
         started = time.perf_counter(); rows = state.updates(tenant); logged_response(request_id=request.state.request_id, tenant=tenant, endpoint="/v1/updates", started=started, status_code=200, behavior="read", object_ids=[]); return {"api_version": API_VERSION, "request_id": request.state.request_id, "tenant_id": tenant.tenant_id, "updates": rows}
 
-    @app.get("/v1/usage")
+    @app.get(
+        "/v1/usage",
+        response_model=None,
+        responses=_product_responses(UsageResponse, 401, 403, 429, 503),
+        openapi_extra={"x-metis-required-scope": "usage:read"},
+    )
     def usage(request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
         started = time.perf_counter(); state.require_scope(tenant, "usage:read"); summary = state.ledger.summary(tenant.tenant_id); logged_response(request_id=request.state.request_id, tenant=tenant, endpoint="/v1/usage", started=started, status_code=200, behavior="read", object_ids=[]); return {"api_version": API_VERSION, "request_id": request.state.request_id, **summary}
 
