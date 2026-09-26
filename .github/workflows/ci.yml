@@ -59,6 +59,8 @@ jobs:
       - run: python scripts/repository_preflight.py
       - name: Release-control skill mapping
         run: python scripts/release_control_preflight.py --base origin/main
+      - name: Product API v1 contract compatibility
+        run: python scripts/product_api_contract.py --check --base-ref origin/main
       - run: python -m compileall -q src
       - name: Verify architecture invariants
         run: pytest -q tests/test_architecture_invariants.py
