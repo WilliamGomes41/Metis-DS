@@ -104,6 +104,14 @@ De restorevolgorde blijft fail-closed:
 
 PostgreSQL wordt dus pas authoritative nadat de bronbytes aanwezig en gecontroleerd zijn.
 
+Het Blobmanifest omvat zowel canonical `source_snapshots` als de immutable
+bronverwijzingen uit alle `workflow.documents`. Dat geldt ook voor ongepubliceerd
+werk, opvolgversies in review en geblokkeerde documenten zonder objecten. Gelijke
+locator/hash-verwijzingen worden gededupliceerd. Een ontbrekende/verkeerde bron
+of ontbrekend manifestitem blokkeert volledig herstel; lokale freezes zijn geen
+vervanging voor deze dekking. De bestaande G2-account/containercoördinaten moeten
+bij het herstel overeenkomen; deze route verhuist historische locators niet.
+
 ## Workflow-integriteitsbewijs
 
 `src/workflows/workflow_chain_recovery_v1.py` controleert aanvullend:

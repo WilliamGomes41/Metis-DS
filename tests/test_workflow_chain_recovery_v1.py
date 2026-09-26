@@ -34,8 +34,12 @@ from src.workflows.workflow_chain_recovery_v1 import (
     verify_workflow_chain_backup,
 )
 from src.workflows.workflow_identity_cutover_v1 import CutoverPostgresWorkflowIdentityStore
+from tests.test_publication_chain_recovery_v1 import FakeBlobStore
 
 ROOT = Path(__file__).resolve().parents[1]
+SOURCE_BYTES = b"immutable workflow-only source"
+SOURCE_SHA = hashlib.sha256(SOURCE_BYTES).hexdigest()
+SOURCE_LOCATOR = f"azure://aidataservice/canonical-sources/{SOURCE_SHA}/source.pdf"
 def _install_schema(dsn: str) -> None:
     import psycopg
 
@@ -58,14 +62,6 @@ def recovery_postgres() -> PostgresCanonicalConfig:
     config = PostgresCanonicalConfig(dsn=dsn)
     yield config
     _install_schema(dsn)
-
-
-class EmptyBlobStore:
-    def load_verified(self, locator: str) -> bytes:  # pragma: no cover - no canonical blobs in fixture
-        raise KeyError(locator)
-
-    def store_verified(self, *, data: bytes, sha256: str, filename: str) -> str:  # pragma: no cover
-        return f"azure://aidataservice/canonical-sources/{sha256}/{filename}"
 
 
 def _seed_workflow(config: PostgresCanonicalConfig) -> None:
@@ -95,9 +91,9 @@ def _seed_workflow(config: PostgresCanonicalConfig) -> None:
         "ingest_kind": "upload",
         "version": "1.0",
         "date": "2026-09-12",
-        "sha256": "a" * 64,
+        "sha256": SOURCE_SHA,
         "locator": "source://snap-1",
-        "immutable_storage_locator": "azure://snap-1",
+        "immutable_storage_locator": SOURCE_LOCATOR,
         "live_url": "",
         "uploader_account_id": "acc-uploader",
         "named_reviewers": ["acc-reviewer"],
@@ -130,7 +126,7 @@ def _seed_workflow(config: PostgresCanonicalConfig) -> None:
             VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NULL,NULL,%s,%s,%s,2,%s,%s::jsonb)""",
             (
                 "snap-1", "source-1", "doc-1", "Recovery document", "test", "richtlijn", "review", "eligible",
-                "pdf", "upload", "1.0", "2026-09-12", "a" * 64, "source://snap-1", "azure://snap-1", "",
+                "pdf", "upload", "1.0", "2026-09-12", SOURCE_SHA, "source://snap-1", SOURCE_LOCATOR, "",
                 "acc-uploader", False, "2026-09-12T12:00:00Z", "recovery-test", "2026-09-12T12:01:00Z",
                 json.dumps(envelope, sort_keys=True),
             ),
@@ -177,25 +173,27 @@ def test_workflow_backup_restore_roundtrip_uses_one_database_authority(recovery_
     assert check_workflow_integrity(before)["ok"] is True
 
     archive = tmp_path / "full-chain.zip"
-    backup_workflow_chain(archive, database=source, source_store=EmptyBlobStore())
+    backup_workflow_chain(archive, database=source, source_store=FakeBlobStore({SOURCE_LOCATOR: SOURCE_BYTES}))
     assert verify_workflow_chain_backup(archive)["ok"] is True
 
     _install_schema(recovery_postgres.dsn)
     target = PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(recovery_postgres))
-    result = restore_workflow_chain(archive, database=target, source_store=EmptyBlobStore())
+    restored_blobs = FakeBlobStore()
+    result = restore_workflow_chain(archive, database=target, source_store=restored_blobs)
     after = target.export_state()
 
     assert result["ok"] is True
     assert result["workflow_integrity"]["ok"] is True
     assert after["workflow_tables"] == before["workflow_tables"]
     assert after["tables"] == before["tables"]
+    assert restored_blobs.load_verified(SOURCE_LOCATOR) == SOURCE_BYTES
 
 
 def test_resealed_review_chain_tamper_is_rejected(recovery_postgres: PostgresCanonicalConfig, tmp_path: Path) -> None:
     _seed_workflow(recovery_postgres)
     adapter = PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(recovery_postgres))
     archive = tmp_path / "full-chain.zip"
-    backup_workflow_chain(archive, database=adapter, source_store=EmptyBlobStore())
+    backup_workflow_chain(archive, database=adapter, source_store=FakeBlobStore({SOURCE_LOCATOR: SOURCE_BYTES}))
 
     broken = tmp_path / "broken.zip"
     with zipfile.ZipFile(archive) as src:
