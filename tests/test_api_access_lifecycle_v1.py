@@ -346,3 +346,86 @@ def test_policy_mutation_and_audit_roll_back_together():
         assert int(row["application_policy_version"]) == 1
     finally:
         _cleanup(issued)
+
+
+
+def test_same_running_product_api_observes_policy_and_lifecycle_changes_without_restart(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from src.product_api_v1 import ProductPaths, create_product_app
+    from src.usage_ledger_v1 import UsageLedger
+
+    fixture_doc = "vvn-osteoporose-fractuurpreventie-2024"
+    store = _store()
+    issued = _provision(
+        store,
+        name="PR2 running API",
+        tenant_docs=(fixture_doc, "not-present-document"),
+        app_docs=(fixture_doc,),
+    )
+    try:
+        defaults = ProductPaths.defaults(ROOT)
+        paths = ProductPaths(
+            real_records=defaults.real_records,
+            fixture_records=defaults.fixture_records,
+            real_published=defaults.real_published,
+            lexical_config=defaults.lexical_config,
+            vector_config=defaults.vector_config,
+            hybrid_config=defaults.hybrid_config,
+            tenant_config=tmp_path / "unused.json",
+            usage_db=tmp_path / "usage.sqlite",
+        )
+        app = create_product_app(
+            "fixture",
+            paths=paths,
+            api_access_store=store,
+            api_access_mode="postgres",
+            usage_ledger=UsageLedger(paths.usage_db),
+            allow_fixture=True,
+        )
+        client = TestClient(app)
+        headers = {"Authorization": f"Bearer {issued.credential}"}
+
+        visible = client.get("/v1/documents", headers=headers)
+        assert visible.status_code == 200
+        assert [row["document_id"] for row in visible.json()["documents"]] == [fixture_doc]
+
+        grant = store.set_application_grant(
+            actor_id="publisher-a",
+            tenant_id=issued.tenant_id,
+            application_id=issued.application_id,
+            expected_version=1,
+            content_scope="RESOURCE_SET",
+            document_ids=["not-present-document"],
+            scopes=["retrieve", "documents:read"],
+            requests_per_minute=100,
+            max_top_k=5,
+        )
+        assert grant.policy_version == 2
+
+        changed = client.get("/v1/documents", headers=headers)
+        assert changed.status_code == 200
+        assert changed.json()["documents"] == []
+
+        store.set_application_state(
+            actor_id="publisher-a",
+            tenant_id=issued.tenant_id,
+            application_id=issued.application_id,
+            expected_version=2,
+            target_state="SUSPENDED",
+        )
+        denied = client.get("/v1/documents", headers=headers)
+        assert denied.status_code == 401
+
+        store.set_application_state(
+            actor_id="publisher-a",
+            tenant_id=issued.tenant_id,
+            application_id=issued.application_id,
+            expected_version=3,
+            target_state="ACTIVE",
+        )
+        restored = client.get("/v1/documents", headers=headers)
+        assert restored.status_code == 200
+        assert restored.json()["documents"] == []
+    finally:
+        _cleanup(issued)
