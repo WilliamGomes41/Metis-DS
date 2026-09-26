@@ -67,20 +67,37 @@ Na volledige cut-over mogen deze bestanden niet worden gebruikt als fallback wan
 
 De operator-CLI `scripts/publication_chain_recovery.py` gebruikt de bestaande publication-chain archive en Blob restore-guard, uitgebreid met de volledige `workflow`-authority.
 
-De database-export bevat nu twee delen in dezelfde `database.json`:
+De database-export bevat drie delen in dezelfde `database.json`:
 
 - `tables`: canonical/publication PostgreSQL;
 - `workflow_tables`: accounts, sessies, documenten, reviewers, objects, review-events, authorizations, audits en Audit-secretpayloads.
+- `api_access_tables`: consumers, applicaties, scopes/resources, credentialhashes,
+  lifecycle-/policyversies en toegangs-audit uit alle acht migratie-010-tabellen.
 
 De export gebeurt in één `REPEATABLE READ, READ ONLY` PostgreSQL-transactie. Daardoor horen workflow- en publicatiestate bij exact dezelfde databasesnapshot.
 
-Workflow recovery v2 bewaart `logical_document_id`, `working_revision_id` en
+Workflow recovery v3 bewaart `logical_document_id`, `working_revision_id` en
 `working_revision_number` expliciet uit de authority-kolommen. De verifier
 controleert hun overeenkomst met de envelope, unieke revisies en acyclische
 voorgangerrelaties. Revisienummergaten en oorspronkelijke werk-ID's blijven bij
 restore behouden. Een v1-archive zonder deze authority-identiteiten wordt voor
 volledig herstel afgewezen met `workflow_backup_lifecycle_identity_missing`;
 maak een nieuwe export uit de oorspronkelijke authority.
+Een v2-archive mist de expliciete toegangsdekking en wordt met
+`workflow_backup_api_access_missing` afgewezen voor volledig herstel. De nieuwe
+export neemt toegang mee in dezelfde repeatable-read snapshot. Herstel schrijft
+de drie onderdelen in één transactie terug en vergelijkt ze exact. Ook een doel
+met uitsluitend bestaande `api_access`-gegevens geldt als niet leeg. Er worden
+geen nieuwe credentials of grants gegenereerd; ingetrokken/geschorste toegang
+blijft geweigerd. Archives bevatten credentialhashes en moeten als gevoelige
+hersteldata worden behandeld.
+
+Een archive bewijst de toestand op haar herstelpunt. Latere intrekkingen,
+revocations en verwijderingen staan niet vanzelf in een oudere backup. Houd een
+herstelbestemming geïsoleerd totdat relevante latere besluiten uit een geldige
+duurzame bron zijn meegenomen; geef bij ontbrekend bewijs geen productie-serving
+of toegang vrij. Deze procedure belooft geen nul dataverlies/PITR zonder bewezen
+operationele backupconfiguratie.
 
 Restore vereist een lege, geïsoleerde doelomgeving en database-ownerrechten.
 De import neemt exclusieve locks op de doeltabellen en controleert daarna opnieuw
