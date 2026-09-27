@@ -20,6 +20,7 @@ MIGRATION_NAMES = (
     "009_console_hotpath_indexes.sql",
     "011_workflow_audit_retention.sql",
     "012_console_entra_identity.sql",
+    "013_quality_measurements.sql",
 )
 REQUIRED_TABLES = frozenset(
     {
