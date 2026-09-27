@@ -1,9 +1,8 @@
-"""Reviewer workboard over the existing review queues.
+"""Direct reviewer workspace over the existing review queues.
 
-This slice adds no review state, priority store, assignment model or mutation.
-It only summarizes the queues already used by the in-document Review dashboard
-and replaces the empty `/review` landing page. Selecting a document continues
-to use the existing review room unchanged.
+The assigned-document projection supplies inline document choice and opens
+available work directly. No review state, priority store or assignment model
+is added; explicit task links continue to use the existing review room.
 """
 from __future__ import annotations
 
