@@ -1,4 +1,13 @@
-"""Current governance boundaries; old V3 wording is preserved as an archive snapshot."""
+"""Current governance boundaries; old V3 wording is preserved as an archive snapshot.
+
+Storage concurrency and stale-write behavior remain covered by
+`test_workflow_postgres_concurrency.py` and `test_stale_write_ux.py`.
+
+# release-control-evidence: opslag concurrent stale
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+"""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
