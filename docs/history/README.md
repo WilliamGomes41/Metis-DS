@@ -32,3 +32,5 @@ Current protocol and technical documentation stays in `docs/`. New step, audit o
 | `PRODUCT_API_V1_REPORT.md` | Product API report |
 
 Protocol v3 is bevroren in `protocol-v3/`. De classificatie van oude bestanden en nog actieve operatorpaden staat in `LEGACY_CLASSIFICATION_2026-09-27.md`.
+
+De voormalige Step 10-fixturebouwer en het bijbehorende handmatige smoke-script zijn als niet-uitvoerbare tekst bewaard in `step10-code/`. Hun oorspronkelijke actieve paden zijn verwijderd nadat runtime-, test- en buildaanroepen waren gecontroleerd.
