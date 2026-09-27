@@ -34,7 +34,7 @@ def test_default_review_page_is_a_clickable_task_dashboard():
     assert "Passages afzonderlijk beoordelen" in html
     assert "Passages selecteren en bevestigen" in html
     assert "Verder beoordelen" in html
-    assert "review-task-grid" not in html
+    assert 'class="review-task-grid"' in html
     assert "Een onafhankelijke tweede beoordeling geven" not in html
     assert html.count("task=repair") == 1
     assert 'href="/review?document=snap-1&amp;task=structure"' in html
@@ -69,10 +69,11 @@ def test_control_information_is_secondary_to_review_tasks():
     control = _render_review_index("snap-1", objects, "richtlijn", task="control")
 
     assert "Controle en uitzonderingen" in dashboard
-    assert "Dekking en technische controle" in dashboard
+    assert "Beheer en technische controle" in dashboard
+    assert dashboard.index("Jouw open werk") < dashboard.index('class="review-management"')
     assert "Geen technische blokkades" in dashboard
-    assert "Open technische controle" in dashboard
-    assert "review-control-card-clear" in dashboard
+    assert "Bekijk technische controle" in dashboard
+    assert 'class="review-management"' in dashboard
     assert 'href="/review?document=snap-1&amp;task=repair"' in dashboard
     assert "Controleoverzicht per kop" not in dashboard
     assert "Dekking en technische controle" in control
@@ -89,7 +90,8 @@ def test_control_card_highlights_blocked_passages_as_work():
 
     assert "1 passage vereist technisch herstel" in dashboard
     assert "Metis kon deze passages niet veilig verwerken" in dashboard
-    assert "review-control-card-alert" in dashboard
+    assert 'class="review-management"' in dashboard
+    assert 'task=repair' in dashboard
 
 
 
@@ -155,11 +157,12 @@ def test_review_dashboard_projects_distinct_final_dispositions_and_revision_work
     dashboard = _render_review_index("snap-1", objects, "richtlijn")
 
     assert "Reviewvoortgang" in dashboard
-    assert "5 van 7 bronpassages afgehandeld (71%)" in dashboard
-    assert "<strong>2</strong> nog te beoordelen" in dashboard
-    assert "<strong>1</strong> goedgekeurd" in dashboard
-    assert "<strong>1</strong> afgewezen" in dashboard
-    assert "<strong>1</strong> niet opgenomen" in dashboard
+    assert "5 van 7 bronpassages afgehandeld" in dashboard
+    assert 'class="review-progress-number">71<span>%</span>' in dashboard
+    assert "<dt>Nog te beoordelen</dt><dd>2</dd>" in dashboard
+    assert "<dt>Goedgekeurd</dt><dd>1</dd>" in dashboard
+    assert "<dt>Afgewezen</dt><dd>1</dd>" in dashboard
+    assert "<dt>Niet opgenomen</dt><dd>1</dd>" in dashboard
     assert "<strong>1</strong> context" in dashboard
     assert "<strong>1</strong> onderbouwing" in dashboard
     assert "<strong>1</strong> herzien na correctie" in dashboard
@@ -337,7 +340,7 @@ def test_dashboard_accounts_for_every_passage_without_hiding_followup_work():
     inventory = _render_review_index('snap-430', rows, 'richtlijn', task='inventory')
     followup = _render_review_index('snap-430', rows, 'richtlijn', task='disposition')
     assert '6 van 436 bronpassages afgehandeld' in dashboard
-    assert '<strong>430</strong> nog te beoordelen' in dashboard
+    assert '<dt>Nog te beoordelen</dt><dd>430</dd>' in dashboard
     assert inventory.count('data-passage-id=') == 436
     assert followup.count('data-passage-id=') == 338
     assert 'Metis heeft nog niet vastgesteld' in followup

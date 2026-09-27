@@ -908,13 +908,13 @@ def test_block_b_live_ui_appears_and_disappears_before_submit(tmp_path: Path) ->
     ).text
     assert "data-stamp-block" in html
     assert "data-review-form" in html
-    script = re.search(
+    scripts = re.findall(
         r"<script[^>]*>([\s\S]*?)</script[^>]*>",
         html,
         flags=re.IGNORECASE,
     )
-    assert script
-    body = script.group(1)
+    body = next((script for script in scripts if "data-stamp-block" in script), "")
+    assert body
     assert "confirmed_object_type" in body or "type.value" in body
     assert "hidden" in body
     assert "recommendation" in body
