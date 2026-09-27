@@ -90,7 +90,7 @@ def test_real_page_links_to_cards_sources_and_writes_exact_object_bindings(revie
     for oid in ids:
         card = f"/review?document={sid}&object={oid}&task=batch"
         source = f"/review/bronpassage?document={sid}&object={oid}"
-        assert card in page.links and source in page.links
+        assert f"{card}#classification-{oid}" in page.links and source in page.links
         assert client.get(card).status_code == 200
         assert client.get(source).status_code == 200
     response = client.post(form["action"], data={**form["fields"], "object_ids": ids}, follow_redirects=False)

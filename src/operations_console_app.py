@@ -2552,6 +2552,12 @@ def _render_review_card(
         )
     path_text = found_under_path(obj)
     proposed_label = _object_type_label(proposed or confirmable)
+    classification_note = (
+        f'Eerder bevestigd type: <b>{_esc(_object_type_label(str(confirmed)))}</b>. '
+        f'Oorspronkelijk voorstel van Metis: {_esc(proposed_label)}.'
+        if confirmed else
+        f'Metis stelt voor: <b>{_esc(proposed_label)}</b>. Dit type is nog niet door jou bevestigd.'
+    )
     return f"""
                 <p><a class="btn-secondary" href="{_review_location(console, snapshot_id, task=task)}">← Terug naar taken</a></p>
                 <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
@@ -2601,9 +2607,11 @@ def _render_review_card(
                       <label class="check"><input type="radio" name="documentpositie_action" value="andere_kop"{_checked(draft.get("documentpositie_action", ""), "andere_kop")}> Andere kop kiezen</label>
                       {_heading_chooser(obj, snapshot_objects, snapshot_id)}
                     </section>
-                    <section class="review-step" data-review-step="e">
+                    <section class="review-step" data-review-step="e" id="classification-{_esc(obj["object_id"])}">
                       <h4>Wat voor informatie is dit?</h4>
-                      <p>Metis stelt voor: <b>{_esc(proposed_label)}</b>. Jij kunt dit aanpassen.</p>
+                      <p>{classification_note}</p>
+                      <p>Controleer wat de tekst doet: een definitie legt een begrip uit; een toelichting beschrijft of verklaart iets; een advies zegt wat iemand zou moeten doen. Kies bij een verkeerd voorstel <b>Type wijzigen</b>.</p>
+                      <p class="field-help">Een type kiezen is nog geen goedkeuring. Je legt hieronder afzonderlijk vast hoe de passage gebruikt mag worden.</p>
                       <label class="check"><input type="radio" name="type_action" value="dit_klopt"{_checked(draft.get("type_action", ""), "dit_klopt")}> Dit klopt</label>
                       <label class="check"><input type="radio" name="type_action" value="type_wijzigen"{_checked(draft.get("type_action", ""), "type_wijzigen")}> Type wijzigen</label>
                       <div data-type-chooser hidden>
