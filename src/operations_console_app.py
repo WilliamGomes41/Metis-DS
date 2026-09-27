@@ -379,6 +379,13 @@ def _page(body: str, *, title: str | None = None) -> str:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{page_title}</title>
+<script>
+try {{
+  const saved = localStorage.getItem('metis-theme');
+  document.documentElement.dataset.theme = saved === 'light' || saved === 'dark'
+    ? saved : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+}} catch (_) {{ document.documentElement.dataset.theme = 'light'; }}
+</script>
 <link rel="stylesheet" href="{stylesheet_url}">
 </head>
 <body>
@@ -388,10 +395,31 @@ def _page(body: str, *, title: str | None = None) -> str:
 </div>
 </div>
 <script>
+document.querySelectorAll('[data-theme-toggle]').forEach((button) => {{
+  const sync = () => {{
+    const dark = document.documentElement.dataset.theme === 'dark';
+    button.textContent = dark ? 'Lichte modus' : 'Donkere modus';
+    button.setAttribute('aria-pressed', String(dark));
+  }};
+  button.addEventListener('click', () => {{
+    const dark = document.documentElement.dataset.theme === 'dark';
+    document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+    try {{ localStorage.setItem('metis-theme', document.documentElement.dataset.theme); }} catch (_) {{}}
+    sync();
+  }});
+  sync();
+}});
 document.querySelectorAll('[data-select-review-batch]').forEach((button) => {{
   button.addEventListener('click', () => {{
     button.closest('form').querySelectorAll('[name="object_ids"]').forEach((input) => {{
       input.checked = true;
+    }});
+  }});
+}});
+document.querySelectorAll('[data-clear-review-batch]').forEach((button) => {{
+  button.addEventListener('click', () => {{
+    button.closest('form').querySelectorAll('[name="object_ids"]').forEach((input) => {{
+      input.checked = false;
     }});
   }});
 }});
@@ -565,6 +593,7 @@ def _nav(account: dict[str, Any] | None, current: str = "", counts: dict[str, in
         </span>
       </a>
       <nav class="rooms">{"".join(links)}</nav>
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="Wissel tussen lichte en donkere modus">Donkere modus</button>
       <div class="who">{who}</div>
     </header>
     """
@@ -1350,8 +1379,9 @@ def _review_index_item(
     if checkbox:
         return (
             '<li class="review-row">'
-            f'<label class="check"><input type="checkbox" name="object_ids" '
-            f'value="{_esc(obj["object_id"])}">{link}{status_html}</label>'
+            f'<label class="review-select-target"><input type="checkbox" name="object_ids" '
+            f'value="{_esc(obj["object_id"])}"><span class="visually-hidden">Selecteer {_esc(title)}</span></label>'
+            f'{link}{status_html}'
             "</li>"
         )
     return f'<li class="review-row">{link}{status_html}</li>'
@@ -1857,6 +1887,7 @@ def _review_task_dashboard(
     second_review_pending: int = 0,
     disposition_pending: int = 0,
     waiting_pending: int = 0,
+    management_details: str = "",
 ) -> str:
     heading_pending = (
         int(heading_pending_override)
@@ -1909,8 +1940,10 @@ def _review_task_dashboard(
         "disposition": f"{disposition_pending} af te handelen",
     }
     rows = "".join(
-        f'<li><a href="/review?document={_esc(snapshot_id)}&amp;task={task}">{_esc(title)}</a>'
-        f' <strong>{_esc(statuses[task])}</strong><p class="muted">{_esc(description)}.</p></li>'
+        _review_task_card(
+            snapshot_id, task=task, title=title,
+            description=description + ".", status=statuses[task],
+        )
         for task, title, description, count in available
     )
     waiting = (
@@ -1930,16 +1963,24 @@ def _review_task_dashboard(
       <section class="review-task-dashboard" aria-labelledby="review-task-title">
         {_review_progress_overview(snapshot_id, progress)}
         {next_step}
-        <h2 id="review-task-title">Jouw open werk</h2>
-        <p>De voortgang hierboven telt bronpassages. Hieronder staan de beschikbare handelingen; tel deze aantallen niet bij de voortgang op.</p>
-        <ul class="object-index review-work-actions">{rows}</ul>
+        <div class="review-work-header">
+          <div>
+            <h2 id="review-task-title">Jouw open werk</h2>
+            <p>Kies een taak om verder te gaan. De aantallen hieronder zijn handelingen en tellen niet mee in de reviewvoortgang.</p>
+          </div>
+          <a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a>
+        </div>
+        <div class="review-task-grid">{rows}</div>
         {waiting}
-        <p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages en hun afhandeling bekijken</a></p>
-        <details class="review-control-card review-control-card-{'alert' if blocked_count else 'clear'}" {'open' if blocked_count else ''}>
-          <summary>Controle en uitzonderingen — {_esc(control_status)}</summary>
-          <p>{_esc(control_copy)}</p>
-          <a href="/review?document={_esc(snapshot_id)}&amp;task=repair">Dekking en technische controle — Open technische controle →</a>
-        </details>
+        <aside class="review-management" aria-label="Beheer en technische controle">
+          <div>
+            <span class="review-control-card-label">Beheer en technische controle</span>
+            <h2>Controle en uitzonderingen</h2>
+            <p><strong>{_esc(control_status)}.</strong> {_esc(control_copy)}</p>
+          </div>
+          <a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=repair">Bekijk technische controle →</a>
+          {management_details}
+        </aside>
       </section>
     '''
 
@@ -1947,7 +1988,7 @@ def _review_task_dashboard(
 def _review_task_header(snapshot_id: str, title: str, description: str) -> str:
     return f'''
       <header class="review-task-workspace">
-        <a class="review-task-back" href="/review?document={_esc(snapshot_id)}">← Terug naar taken</a>
+        <a class="btn-secondary review-task-back" href="/review?document={_esc(snapshot_id)}">← Terug naar taken</a>
         <h2>{_esc(title)}</h2>
         <p>{_esc(description)}</p>
       </header>
@@ -2433,7 +2474,12 @@ def _render_review_index(
               <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
               <input type="hidden" name="interaction_id" value="{_esc(new_review_interaction_id())}">
               {_snapshot_revision_input(snapshot_revision)}
-              <ol class="object-index">{"".join(_review_index_item(obj, snapshot_id, checkbox=True, task="structure") for obj in koppen)}</ol>
+              <div class="review-batch-tools">
+                <span>Selecteer alleen koppen die je hebt gecontroleerd.</span>
+                <button class="btn-secondary" type="button" data-select-review-batch>Selecteer alles</button>
+                <button class="btn-secondary" type="button" data-clear-review-batch>Selectie wissen</button>
+              </div>
+              <ol class="object-index review-heading-list">{"".join(_review_index_item(obj, snapshot_id, checkbox=True, task="structure") for obj in koppen)}</ol>
               <button class="btn-primary" type="submit">{copy["fast_button"]}</button>
             </form>
           </section>
@@ -2717,24 +2763,12 @@ def _render_review_room(
     snapshot_revision = ""
     envelopes = console.list_envelopes()
     chosen_row = next((row for row in envelopes if row["snapshot_id"] == chosen), None)
-    picker = ""
-    if chosen_row:
-        picker = f"""
-              <div class="review-document-context">
-                <span>Document</span>
-                <b>{_esc(chosen_row["title"])}</b>
-                <span>versie {_esc(chosen_row["version"])}</span>
-                <span>onderwerp {_esc(chosen_row["family"])}</span>
-                <span>klasse {_esc(chosen_row["class"])}</span>
-                <a href="/review">Ander document kiezen</a>
-              </div>
-            """
     cards = []
     if not chosen:
         for row in envelopes:
             cards.append(
                 f"""
-                    <article class="doc-card">
+                    <article class="doc-card review-document-card">
                       {_document_card_heading({**row, "status": row["state"]})}
                       <p class="lead">Beoordeel passages stap voor stap, met de oorspronkelijke bron als uitgangspunt.</p>
                       <p><a class="btn-primary" href="/review?document={_esc(row["snapshot_id"])}">Beoordeel</a></p>
@@ -2744,7 +2778,10 @@ def _render_review_room(
     objects_html = ""
     if chosen_row:
         objects_html = (
-            f'<div class="doc-card">{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}'
+            f'<div class="doc-card review-document-card">'
+            '<div class="review-document-card-top"><span class="review-document-kicker">Document in review</span>'
+            '<a class="btn-secondary" href="/review">Ander document kiezen</a></div>'
+            f'{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}'
             "</div>"
         )
         history_enabled = chosen_task == "history"
@@ -2862,7 +2899,6 @@ def _render_review_room(
               <h1>Review</h1>
               <p class="lead">Beoordeel passages stap voor stap, met de oorspronkelijke bron als uitgangspunt.</p>
               {conflict_html if not chosen_object_id else ""}
-              {picker}
               {"".join(cards) if not chosen else ""}
               {objects_html or empty}
             </section>

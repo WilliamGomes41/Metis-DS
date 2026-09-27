@@ -34,7 +34,7 @@ def test_default_review_page_is_a_clickable_task_dashboard():
     assert "Passages afzonderlijk beoordelen" in html
     assert "Passages selecteren en bevestigen" in html
     assert "Verder beoordelen" in html
-    assert "review-task-grid" not in html
+    assert 'class="review-task-grid"' in html
     assert "Een onafhankelijke tweede beoordeling geven" not in html
     assert html.count("task=repair") == 1
     assert 'href="/review?document=snap-1&amp;task=structure"' in html
@@ -69,10 +69,10 @@ def test_control_information_is_secondary_to_review_tasks():
     control = _render_review_index("snap-1", objects, "richtlijn", task="control")
 
     assert "Controle en uitzonderingen" in dashboard
-    assert "Dekking en technische controle" in dashboard
+    assert "Beheer en technische controle" in dashboard
     assert "Geen technische blokkades" in dashboard
-    assert "Open technische controle" in dashboard
-    assert "review-control-card-clear" in dashboard
+    assert "Bekijk technische controle" in dashboard
+    assert 'class="review-management"' in dashboard
     assert 'href="/review?document=snap-1&amp;task=repair"' in dashboard
     assert "Controleoverzicht per kop" not in dashboard
     assert "Dekking en technische controle" in control
@@ -89,7 +89,7 @@ def test_control_card_highlights_blocked_passages_as_work():
 
     assert "1 passage vereist technisch herstel" in dashboard
     assert "Metis kon deze passages niet veilig verwerken" in dashboard
-    assert "review-control-card-alert" in dashboard
+    assert 'class="review-management"' in dashboard
 
 
 

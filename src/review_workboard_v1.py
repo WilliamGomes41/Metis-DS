@@ -522,7 +522,7 @@ def _workboard_card(item: dict[str, Any]) -> str:
     )
 
     return f'''
-      <article class="doc-card" data-workboard-document="{_esc(item['snapshot_id'])}" data-workboard-state="{_esc(item['work_state'])}" data-workflow-status="{_esc(lifecycle['workflow_status'])}" data-release-status="{_esc(lifecycle['release_status'])}" data-serving-status="{_esc(lifecycle['serving_status'])}">
+      <article class="doc-card{' review-document-card' if item['work_state'] == 'review' else ''}" data-workboard-document="{_esc(item['snapshot_id'])}" data-workboard-state="{_esc(item['work_state'])}" data-workflow-status="{_esc(lifecycle['workflow_status'])}" data-release-status="{_esc(lifecycle['release_status'])}" data-serving-status="{_esc(lifecycle['serving_status'])}">
         {console_ui._document_card_heading({**envelope, "meaningful_status": item["meaningful_status"]})}
         <p class="lead">{_esc(_work_summary(item))}</p>
         {detail_html}
@@ -659,6 +659,20 @@ def _projected_document_dashboard(
         else int(summary.get("normal_passages") or 0)
     )
     actionable_second = int(summary.get("actionable_second_review_duties") or 0)
+    ledger_path = getattr(console, "_ledger_path", None)
+    burden = review_burden_projection(
+        read_events(ledger_path) if ledger_path is not None else [],
+        snapshot_id=snapshot_id,
+    )
+    burden_html = (
+        '<details class="review-burden">'
+        '<summary>Reviewinteracties</summary>'
+        f'<p><b>{int(burden["review_interactions"])}</b> gemeten menselijke interacties voor '
+        f'<b>{int(burden["object_decisions"])}</b> objectbesluiten.</p>'
+        f'<p class="muted">Historische besluiten zonder gemeten interactie: '
+        f'{int(burden["legacy_unmeasured_decisions"])}.</p>'
+        '</details>'
+    )
     dashboard = console_ui._review_task_dashboard(
         snapshot_id,
         koppen=[],
@@ -678,33 +692,10 @@ def _projected_document_dashboard(
         second_review_pending=actionable_second,
         disposition_pending=int(summary.get("closure_gap_count") or 0),
         waiting_pending=int(summary.get("waiting_for_reviewer_duties") or 0),
+        management_details=burden_html,
     )
-    picker = f"""
-      <div class="review-document-context">
-        <span>Document</span>
-        <b>{_esc(envelope.get("title") or "")}</b>
-        <span>versie {_esc(envelope.get("version") or "")}</span>
-        <span>onderwerp {_esc(envelope.get("family") or "")}</span>
-        <span>klasse {_esc(envelope.get("class") or "")}</span>
-        <a href="/review">Ander document kiezen</a>
-      </div>
-    """
     heading = console_ui._document_card_heading(
         {**envelope, "status": envelope.get("state") or ""}
-    )
-    ledger_path = getattr(console, "_ledger_path", None)
-    burden = review_burden_projection(
-        read_events(ledger_path) if ledger_path is not None else [],
-        snapshot_id=snapshot_id,
-    )
-    burden_html = (
-        '<details class="review-burden">'
-        '<summary>Beheerdetails: reviewinteracties</summary>'
-        f'<p><b>{int(burden["review_interactions"])}</b> gemeten menselijke interacties voor '
-        f'<b>{int(burden["object_decisions"])}</b> objectbesluiten.</p>'
-        f'<p class="muted">Historische besluiten zonder gemeten interactie: '
-        f'{int(burden["legacy_unmeasured_decisions"])}.</p>'
-        '</details>'
     )
     return _page(
         f"""
@@ -712,10 +703,13 @@ def _projected_document_dashboard(
         <section class="room">
           <h1>Review</h1>
           <p class="lead">Beoordeel passages stap voor stap, met de oorspronkelijke bron als uitgangspunt.</p>
-          {picker}
-          <div class="doc-card">{heading}</div>
+          <div class="doc-card review-document-card">
+            <div class="review-document-card-top"><span class="review-document-kicker">Document in review</span>
+              <a class="btn-secondary" href="/review">Ander document kiezen</a>
+            </div>
+            {heading}
+          </div>
           {dashboard}
-          {burden_html}
         </section>
         """
     )
