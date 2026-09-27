@@ -280,7 +280,7 @@ def test_selected_document_keeps_existing_review_dashboard(tmp_path: Path) -> No
 
     assert page.status_code == 200
     assert "data-review-workboard" not in page.text
-    assert "Alle taken" in page.text
+    assert "Jouw open werk" in page.text
     assert "Document A" in page.text
 
 
@@ -315,7 +315,7 @@ def test_heading_batch_success_returns_to_live_document_dashboard(tmp_path: Path
 
     page = client.get(response.headers["location"])
     assert page.status_code == 200
-    assert "Alle taken" in page.text
+    assert "Jouw open werk" in page.text
     assert (
         f'href="/review?document={snapshot_id}&amp;task=structure">Ga verder</a>'
         not in page.text

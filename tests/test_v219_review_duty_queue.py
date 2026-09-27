@@ -554,7 +554,7 @@ def test_console_inhoud_lists_only_slow_duty_cards(tmp_path: Path) -> None:
         assert card.count('class="review-decision-form"') == 1
         assert "batch-confirm" not in card
     visible = _visible_text(html)
-    assert "Belangrijke passages beoordelen" in visible
+    assert "Passages afzonderlijk beoordelen" in visible
     assert "oorspronkelijke bron" in visible
     assert leftover
     control = client.get(f"/review?document={receipt['snapshot_id']}&task=control").text

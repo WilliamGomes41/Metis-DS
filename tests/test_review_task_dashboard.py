@@ -30,10 +30,13 @@ def test_default_review_page_is_a_clickable_task_dashboard():
     html = _render_review_index("snap-1", objects, "richtlijn")
 
     assert "Volgende stap" in html
-    assert "Koppen controleren" in html
-    assert "In samenhang beoordelen" in html
-    assert "Vergelijkbare passages beoordelen" in html
-    assert "1 te beoordelen · 1 afgerond" in html
+    assert "Documentindeling controleren" in html
+    assert "Passages afzonderlijk beoordelen" in html
+    assert "Passages selecteren en bevestigen" in html
+    assert "Verder beoordelen" in html
+    assert "review-task-grid" not in html
+    assert "Een onafhankelijke tweede beoordeling geven" not in html
+    assert html.count("task=repair") == 1
     assert 'href="/review?document=snap-1&amp;task=structure"' in html
     assert 'href="/review?document=snap-1&amp;task=contextual"' in html
     assert 'href="/review?document=snap-1&amp;task=batch"' in html
@@ -313,3 +316,30 @@ def test_object_history_reuses_one_document_read_and_shows_stored_version_diff()
     assert "Versie 1.0.1" in html
     assert "huidige versie" in html
     assert '<form class="review-decision-form"' not in html
+
+
+def test_dashboard_accounts_for_every_passage_without_hiding_followup_work():
+    from copy import deepcopy
+    rows = [_obj(f'h{i}', 'heading') for i in range(56)]
+    rows += [_obj(f'r{i}', 'recommendation') for i in range(5)]
+    rows += [_obj(f'd{i}', 'definition') for i in range(8)]
+    for i in range(338):
+        obj = _obj(f'u{i}', 'unclassified')
+        obj['metadata'] = {'passage_register': {'status': 'not_yet_assessed'}}
+        rows.append(obj)
+    for i in range(23):
+        obj = _obj(f'b{i}', 'definition')
+        obj['metadata']['admission']['gate_result'] = 'blocked'
+        rows.append(obj)
+    rows += [_with_register(_obj(f'c{i}', 'explanation', status='approved'), 'used_as_context') for i in range(6)]
+    before = deepcopy(rows)
+    dashboard = _render_review_index('snap-430', rows, 'richtlijn')
+    inventory = _render_review_index('snap-430', rows, 'richtlijn', task='inventory')
+    followup = _render_review_index('snap-430', rows, 'richtlijn', task='disposition')
+    assert '6 van 436 bronpassages afgehandeld' in dashboard
+    assert '<strong>430</strong> nog te beoordelen' in dashboard
+    assert inventory.count('data-passage-id=') == 436
+    assert followup.count('data-passage-id=') == 338
+    assert 'Metis heeft nog niet vastgesteld' in followup
+    assert dashboard.count('task=repair') == 1
+    assert rows == before

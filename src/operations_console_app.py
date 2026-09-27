@@ -1800,7 +1800,7 @@ def _review_progress_overview(
           <span class="review-control-card-body">
             <span class="review-control-card-label">Besluiten en historie</span>
             <span class="review-control-card-title">Bekijk wat is goedgekeurd, afgewezen, anders gebruikt of herzien</span>
-            <span class="review-control-card-copy">Dit overzicht is read-only en gebruikt alleen bestaande review- en revisiegegevens.</span>
+            <span class="review-control-card-copy">Bekijk eerdere besluiten en de redenen daarvoor.</span>
           </span>
           <span class="review-control-card-meta">
             <span class="review-control-card-status">{done} afgehandeld</span>
@@ -1868,109 +1868,66 @@ def _review_task_dashboard(
         else len(individual)
     )
     individual_done = max(individual_total - individual_pending, 0)
+    # Navigation is a projection of existing duties, never a second review policy.
     tasks = [
-        (
-            "structure",
-            "Koppen controleren",
-            "Controleer de indeling van het document",
-            f"{heading_pending} te controleren · {heading_done} afgerond",
-            heading_pending,
-        ),
-        (
-            "contextual",
-            "In samenhang beoordelen",
-            "Beoordeel advies, voorwaarden, uitzonderingen en relationele context",
-            f"{individual_pending} te beoordelen · {individual_done} afgerond",
-            individual_pending,
-        ),
-        (
-            "batch",
-            "Vergelijkbare passages beoordelen",
-            "Beoordeel onafhankelijke passages uit hetzelfde brononderdeel in overzichtelijke groepen",
-            f"{normal_batches} groepen · {normal_passages} passages",
-            normal_passages,
-        ),
-        (
-            "second_review",
-            "Tweede beoordelingen",
-            "Beoordeel onafhankelijk exact dezelfde goedgekeurde objectversie",
-            f"{second_review_pending} te beoordelen",
-            second_review_pending,
-        ),
+        ("structure", "Documentindeling controleren", "Controleer koppen en hun plaats in de bron", heading_pending),
+        ("contextual", "Passages afzonderlijk beoordelen", "Controleer inhoud, type en benodigde broncontext", individual_pending),
+        ("batch", "Passages selecteren en bevestigen", "Bekijk iedere passage; bevestig alleen geschikte selecties samen", normal_passages),
+        ("second_review", "Een onafhankelijke tweede beoordeling geven", "Beoordeel dezelfde versie zonder het eerdere besluit over te nemen", second_review_pending),
+        ("disposition", "Gebruik van bronpassages bepalen", "Bekijk per passage wat ontbreekt en welke afhandeling mogelijk is", disposition_pending),
     ]
-    if disposition_pending:
-        tasks.append(("disposition", "Bronpassages afhandelen",
-                      "Bekijk ook passages die nog niet inhoudelijk beoordeelbaar zijn",
-                      f"{disposition_pending} af te handelen", disposition_pending))
-    if blocked_count:
-        tasks.append(("repair", "Technisch herstel nodig",
-                      "Bekijk de reden en de brongebonden vervolgstap",
-                      f"{blocked_count} te herstellen", blocked_count))
-    if waiting_pending:
-        tasks.append(("waiting", "Wacht op andere reviewer",
-                      "Deze passages vragen een onafhankelijke tweede beoordeling",
-                      f"{waiting_pending} wacht op andere reviewer", 0))
-    recommended = next((row for row in tasks if row[4]), None)
+    available = [row for row in tasks if row[3]]
+    recommended = available[0] if available else None
     if recommended:
         next_step = f'''
           <section class="review-next-step" aria-labelledby="review-next-title">
             <p class="eyebrow">Volgende stap</p>
             <h2 id="review-next-title">{_esc(recommended[1])}</h2>
             <p>{_esc(recommended[2])}.</p>
-            <a class="btn-primary" href="/review?document={_esc(snapshot_id)}&amp;task={_esc(recommended[0])}">Ga verder</a>
+            <a class="btn-primary" href="/review?document={_esc(snapshot_id)}&amp;task={recommended[0]}">Verder beoordelen</a>
           </section>
         '''
     else:
-        next_step = '''
-          <section class="review-next-step review-next-step-complete" aria-labelledby="review-next-title">
-            <p class="eyebrow">Reviewtaken</p>
-            <h2 id="review-next-title">Geen uitvoerbare reviewtaken in deze lijst</h2>
-            <p>Bekijk alle passages voor resterend werk. De publicatiekamer controleert de publicatievoorwaarden.</p>
-          </section>
-        '''
-    cards = "".join(
-        _review_task_card(
-            snapshot_id,
-            task=task,
-            title=title,
-            description=description,
-            status=status,
-        )
-        for task, title, description, status, _pending in tasks
+        next_step = '<p class="review-task-empty">Geen inhoudelijke beoordeling voor jou beschikbaar. Bekijk hieronder wat nog nodig is; dit betekent niet automatisch dat publicatie mogelijk is.</p>'
+    statuses = {
+        "structure": f"{heading_pending} te controleren · {heading_done} afgerond",
+        "contextual": f"{individual_pending} te beoordelen · {individual_done} afgerond",
+        "batch": f"{normal_passages} passages · {normal_batches} selecties",
+        "second_review": f"{second_review_pending} te beoordelen",
+        "disposition": f"{disposition_pending} af te handelen",
+    }
+    rows = "".join(
+        f'<li><a href="/review?document={_esc(snapshot_id)}&amp;task={task}">{_esc(title)}</a>'
+        f' <strong>{_esc(statuses[task])}</strong><p class="muted">{_esc(description)}.</p></li>'
+        for task, title, description, count in available
     )
-    control_state = "alert" if blocked_count else "clear"
-    if blocked_count == 1:
-        control_status = "1 passage vereist technisch herstel"
-    elif blocked_count:
-        control_status = f"{blocked_count} passages vereisen technisch herstel"
-    else:
-        control_status = "Geen technische blokkades"
+    waiting = (
+        f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=waiting">'
+        f'{waiting_pending} wachten op een andere beoordelaar</a>. Jij kunt deze tweede beoordeling niet overnemen.</p>'
+        if waiting_pending else ''
+    )
+    control_status = (
+        f'{blocked_count} passages vereisen technisch herstel' if blocked_count != 1
+        else '1 passage vereist technisch herstel'
+    ) if blocked_count else 'Geen technische blokkades'
     control_copy = (
-        "Metis kon deze passages niet veilig verwerken. Controleer het herstel en bekijk daarnaast de dekking per hoofdstuk."
-        if blocked_count
-        else "Bekijk de dekking per hoofdstuk en controleer of alle brononderdelen zijn verwerkt."
+        'Metis kon deze passages niet veilig verwerken. Bekijk per passage de oorzaak en herstelactie.'
+        if blocked_count else 'Bekijk of alle brononderdelen zijn verwerkt.'
     )
     return f'''
       <section class="review-task-dashboard" aria-labelledby="review-task-title">
-        <p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages en hun afhandeling bekijken</a></p>
         {_review_progress_overview(snapshot_id, progress)}
         {next_step}
-        <div class="review-task-heading">
-          <h2 id="review-task-title">Alle taken</h2>
-          <p>Kies een taak om het bijbehorende werk af te ronden.</p>
-        </div>
-        <div class="review-task-grid">{cards}</div>
-        <a class="review-control-card review-control-card-{control_state}" href="/review?document={_esc(snapshot_id)}&amp;task=repair">
-          <span class="review-control-card-body">
-            <span class="review-control-card-label">Controle en uitzonderingen</span>
-            <span class="review-control-card-title">Dekking en technische controle</span>
-            <span class="review-control-card-copy">{_esc(control_copy)}</span>
-          </span>
-          <span class="review-control-card-meta">
-            <span class="review-control-card-status">{_esc(control_status)}</span>
-            <span class="review-control-card-action">Open technische controle <span aria-hidden="true">→</span></span>
-          </span>
-        </a>
+        <h2 id="review-task-title">Jouw open werk</h2>
+        <p>De voortgang hierboven telt bronpassages. Hieronder staan de beschikbare handelingen; tel deze aantallen niet bij de voortgang op.</p>
+        <ul class="object-index review-work-actions">{rows}</ul>
+        {waiting}
+        <p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages en hun afhandeling bekijken</a></p>
+        <details class="review-control-card review-control-card-{'alert' if blocked_count else 'clear'}" {'open' if blocked_count else ''}>
+          <summary>Controle en uitzonderingen — {_esc(control_status)}</summary>
+          <p>{_esc(control_copy)}</p>
+          <a href="/review?document={_esc(snapshot_id)}&amp;task=repair">Dekking en technische controle — Open technische controle →</a>
+        </details>
       </section>
     '''
 
@@ -2331,10 +2288,25 @@ def _review_inventory(
         origin = "Menselijke review" if register.get("source") == "review" else "Bronverwerking / bestaande registratie"
         reasons = ", ".join(str(code) for code in admission_of(obj).get("reason_codes") or [])
         target_task = "second_review" if category == "waiting" else category
+        next_action = "Open de passage en controleer het voorstel met de bron."
+        if category == "waiting":
+            next_action = "Een andere bevoegde reviewer moet deze versie onafhankelijk beoordelen."
+        elif category == "repair":
+            next_action = "Controleer de bron en herstel het verwerkingsprobleem voordat je goedkeurt."
+        elif category == "history":
+            next_action = "Bekijk het vastgelegde besluit; dit is geen nieuwe beoordelingsopdracht."
+        elif category == "disposition":
+            if not disposition.get("valid"):
+                next_action = "De opgeslagen afhandeling is ongeldig. Open de passage om het conflict te onderzoeken; keur niet automatisch goed."
+            elif gate != "allowed":
+                next_action = "Metis heeft nog niet vastgesteld of deze passage inhoudelijk beoordeelbaar is. Open de bron en bepaal het gebruik of herstel de verwerking."
+            else:
+                next_action = "Er ontbreekt een definitieve afhandeling. Open de passage en bepaal of zij kennis, context, onderbouwing of niet op te nemen tekst is."
         items.append(
             f'<li data-passage-id="{_esc(object_id)}" data-passage-category="{_esc(category)}">'
             f'<a class="review-row-title" href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={_esc(target_task)}">{_esc(review_card_sentence(obj))}</a>'
             f'<p>{_esc(labels[category])} · {_esc(admission_label)} · {_esc(outcome)}</p>'
+            f'<p class="review-next-action">{_esc(next_action)}</p>'
             f'<p class="muted">{_esc(origin)}{": " + _esc(reasons) if reasons else ""}</p></li>'
         )
     title = "Alle passages en hun afhandeling" if task == "inventory" else labels[task]
@@ -2422,7 +2394,7 @@ def _render_review_index(
         '''
     if task == "contextual":
         return f'''
-          {_review_task_header(snapshot_id, "Belangrijke passages beoordelen", "Open iedere passage en vergelijk haar met de oorspronkelijke bron")}
+          {_review_task_header(snapshot_id, "Passages afzonderlijk beoordelen", "Controleer iedere passage met de bron; passages staan hieronder per brononderdeel, niet per inhoudelijke relatie")}
           <section class="review-lane-slow">
             {_review_section_groups(
                 individual,

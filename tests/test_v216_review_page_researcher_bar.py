@@ -327,9 +327,10 @@ def test_koppen_and_inhoud_stacks_show_counts(tmp_path: Path) -> None:
     headings = client.get(f"/review?document={receipt['snapshot_id']}&task=headings").text
     individual = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
     assert f"{len(koppen)} te controleren" in dashboard
-    assert f"{len(duty)} te beoordelen" in dashboard
-    assert "Koppen controleren" in dashboard
-    assert "In samenhang beoordelen" in dashboard
+    assert not duty
+    assert "0 te beoordelen" not in dashboard
+    assert "Documentindeling controleren" in dashboard
+    assert "Passages afzonderlijk beoordelen" not in dashboard
     assert "review-lane-fast" in headings
     assert "review-lane-slow" in individual
     assert "/review/headings/batch-confirm" in headings

@@ -304,5 +304,24 @@ def test_legacy_individual_url_redirects_into_contextual_surface(tmp_path: Path)
 
     response = client.get(f"/review?document={snapshot_id}&task=individual")
     assert response.status_code == 200
-    assert "In samenhang" in response.text or "Belangrijke passages beoordelen" in response.text
+    assert "In samenhang" in response.text or "Passages afzonderlijk beoordelen" in response.text
     assert "task=individual" not in response.text
+
+
+def test_dashboard_routes_waiting_reviewer_without_mutating_decisions(tmp_path: Path) -> None:
+    console, accounts, snapshot_id, object_id = _console(tmp_path)
+    app = create_console_app(console)
+    install_review_workboard(app, console)
+    client = TestClient(app)
+    assert client.get(f'/review?document={snapshot_id}', follow_redirects=False).status_code == 401
+    client.post('/login', data={'username': accounts['reviewer_a']['username'], 'password': PASSWORD})
+    before = console.object_review_bindings(snapshot_id)
+    page = client.get(f'/review?document={snapshot_id}')
+    assert page.status_code == 200
+    assert 'wachten op een andere beoordelaar' in page.text
+    assert 'review-task-grid' not in page.text
+    inventory = client.get(f'/review?document={snapshot_id}&task=waiting')
+    assert inventory.status_code == 200
+    assert f'data-passage-id="{object_id}"' in inventory.text
+    assert 'Een andere bevoegde reviewer' in inventory.text
+    assert console.object_review_bindings(snapshot_id) == before
