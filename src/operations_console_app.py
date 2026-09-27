@@ -3083,6 +3083,7 @@ def create_console_app(
         account = _require(request)
         cards = """
           <div class="doc-list">
+            <a class="doc-card" href="/settings/quality"><p class="doc-title">Kwaliteit &amp; werkproces</p><p>Bekijk bruikbaarheid, herstelwerk en open werk op basis van bestaande handelingen.</p></a>
             <a class="doc-card" href="/accounts" style="text-decoration:none;">
               <p class="doc-title">Accounts</p>
               <p>Beheer interne gebruikers en rollen.</p>
@@ -4859,6 +4860,8 @@ def create_console_app(
             "nurse_frontend": False,
         }
 
+    from src.quality_metrics_app_v1 import install_quality_routes
+    install_quality_routes(app, state, _require, _page)
     return app
 
 

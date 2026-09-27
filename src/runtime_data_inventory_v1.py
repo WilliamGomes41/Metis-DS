@@ -36,7 +36,8 @@ _CATEGORY_PATHS: dict[str, tuple[str, ...]] = {
     "canonical_objects": ("output/runtime/operations-console/objects",),
     "publication_authorizations": ("output/runtime/operations-console/publish_authorizations.json",),
     "release_manifests": ("output/runtime/operations-console/release_manifests",),
-    "derived_projections": ("output/runtime/operations-console/published_projection.jsonl",),
+    "derived_projections": ("output/runtime/operations-console/published_projection.jsonl",
+                            "output/runtime/operations-console/quality_reports"),
 }
 
 _SAFE_PART = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-")

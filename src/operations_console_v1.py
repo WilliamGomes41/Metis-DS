@@ -109,6 +109,7 @@ from src.revision_workflow import bump_patch, create_revision
 from src.retrieval.retrieval_projection_v2 import build_projection
 from src.published_projection_v1 import atomic_replace_projection
 from src.semantic_replay_v1 import SEMANTIC_REPLAY_SPEC_KEY
+from src.quality_evidence_v1 import record_processing, review_evidence, instant as quality_instant
 from src.semantic_transform_generic_v1 import transform as transform_generic
 from src.serving_relations_v1 import (
     binding_relations,
@@ -1597,6 +1598,7 @@ class OperationsConsole:
             "console_version": CONSOLE_VERSION,
         }
 
+        processing_started = quality_instant()
         try:
             fragments, spec = self._fragments_and_spec(
                 kind,
@@ -1619,6 +1621,8 @@ class OperationsConsole:
             blocked_envelope = deepcopy(envelope)
             blocked_envelope["publication_eligibility"] = PRE_REVIEW_BLOCKED
             blocked_envelope["processing_blocker"] = exc.code
+            record_processing(blocked_envelope, [], fragments=[], replay=None,
+                              started_at=processing_started, outcome="blocked", reason=exc.code)
             self._commit_prepared_store(
                 envelopes={snapshot_id: blocked_envelope},
                 snapshot_id=snapshot_id,
@@ -1662,6 +1666,8 @@ class OperationsConsole:
                 self.snapshot_objects(previous["snapshot_id"]),
                 objects,
             )
+        record_processing(envelope, objects, fragments=fragments, replay=replay_record,
+                          started_at=processing_started)
         prepared_envelopes = {snapshot_id: envelope}
         self._commit_prepared_store(
             objects=(snapshot_id, objects),
@@ -1680,6 +1686,7 @@ class OperationsConsole:
             raise ConsoleError("researcher_role_required")
         envelope = self._envelope(snapshot_id)
         _, expected_revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
+        processing_started = quality_instant()
         if self.snapshot_is_published(snapshot_id):
             raise ConsoleError("published_objects_must_not_be_rewritten")
         freeze_path, freeze_bytes = self._verified_source_bytes(envelope)
@@ -1738,6 +1745,8 @@ class OperationsConsole:
             else "blocked_pending_immutable_storage"
         )
         prepared_envelope.pop("processing_blocker", None)
+        record_processing(prepared_envelope, objects, fragments=fragments, replay=replay_record,
+                          started_at=processing_started)
         replaces_snapshot_id = str(prepared_envelope.get("replaces_snapshot_id") or "")
         if replaces_snapshot_id:
             prepared_envelope["object_diff"] = self._diff_objects(
@@ -2314,7 +2323,10 @@ class OperationsConsole:
             if not reextract:
                 raise ConsoleError("cross_model_direct_change_blocked")
             prior = deepcopy(original_rows)
+            processing_started = quality_instant()
             new_objects = self._reextract_objects_for_klasse(envelope, new_class, freeze_bytes)
+            record_processing(envelope, new_objects, fragments=[], replay=None,
+                              started_at=processing_started)
             with self._store_write_lock():
                 self._reload_store_locked()
                 self._require_role(actor_id, "reviewer")
@@ -2445,6 +2457,7 @@ class OperationsConsole:
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
+        quality_before = deepcopy(target)
         if not rejecting and type_action == "dit_klopt" and not confirmed_object_type:
             confirmed_object_type = confirmable_proposed_type(target) or None
         parent_id = ""
@@ -2940,6 +2953,7 @@ class OperationsConsole:
                 "proposed_correction": str(proposed_correction or ""),
                 "snapshot_id": snapshot_id,
                 "review_interaction": deepcopy(interaction_evidence),
+                "quality_evidence": review_evidence(envelope, quality_before, updated_target),
             }
             ledger_fn = lambda: append_event(
                 self._ledger_path,
@@ -3216,6 +3230,13 @@ class OperationsConsole:
             objects=(snapshot_id, history),
             envelopes=new_envelopes,
             bindings=new_bindings,
+            snapshot_id=snapshot_id,
+            ledger_fn=lambda: append_event(
+                self._ledger_path, event_type="quality_object_corrected", object_id=object_id,
+                object_version=str(revised.get("object_version") or ""), actor=account["username"],
+                details={"snapshot_id": snapshot_id,
+                         "quality_evidence": review_evidence(envelope, target, revised)},
+            ),
         )
         return deepcopy(revised)
 
