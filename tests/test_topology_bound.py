@@ -304,6 +304,6 @@ def test_two_worker_extension_requires_durable_authority_without_protocol_delta(
     assert "multi_worker_durable_authority_required" in module
     assert "SUPPORTED_WORKERS = (1, 2)" in module
     root_protocol = (ROOT / "PROTOCOL.md").read_text(encoding="utf-8")
-    assert root_protocol.count("# V&VN Data Services — Protocol v3") == 1
+    assert root_protocol.count("# V&VN Data Services — Protocol v4") == 1
     assert not (ROOT / "docs" / "PROTOCOL_V2_32_TOPOLOGY_BOUND_DELTA.md").exists()
     assert not (ROOT / "HANDOFF.md").exists()
