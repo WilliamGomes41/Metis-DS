@@ -221,7 +221,7 @@ Alle Metis-LLM-capabilities delen één deployment-owned providercredential en m
 
 Productie- en testomgevingen, credentials en opslagrechten zijn zodanig gescheiden dat een fout in een niet-productieroute geen impliciete productierechten oplevert.
 
-De huidige ondersteunde console-topologie blijft single-worker/single-instance met sequentiële writes zolang geen afzonderlijke, geteste multi-writerarchitectuur is vastgesteld. Een schaalwijziging mag niet stilzwijgend de consistency- of reviewgaranties veranderen.
+De standaardtopologie is één Gunicorn-worker op één instance met sequentiële writes. Twee workers op diezelfde instance zijn uitsluitend ondersteund wanneer alle door de topologiepoort vereiste mutable authorities in PostgreSQL en de immutable source store in Azure zijn geconfigureerd; een process-shared commit lock en PostgreSQL-concurrency bewaken de writes. Meer dan twee workers, meer dan één instance of een andere write mode vallen buiten de ondersteunde grens en falen gesloten. Een schaalwijziging mag niet stilzwijgend de consistentie- of reviewgaranties veranderen.
 
 Deployment gebeurt vanaf een identificeerbare gecontroleerde commit en met een reproduceerbaar pakket. Deployment mag runtime-data niet wissen en mag geen publicatierechten openen doordat applicatiecode of configuratie aanwezig is.
 

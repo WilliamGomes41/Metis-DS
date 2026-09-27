@@ -31,6 +31,7 @@ def test_v4_retains_safety_and_describes_actual_modes() -> None:
         "G2-publicatie is conditioneel beschikbaar **per snapshot**",
         "SHA-256 van de gezaghebbende bronbytes", "gezaghebbende commit",
         "publication_registry", "METIS_CONSOLE_AUTH=entra",
+        "Twee workers op diezelfde instance",
         "brongebonden semantische route", "geen stille terugval",
         "afgeleide, rebuildable projectie", "READY FOR IMPLEMENTATION",
     ):
