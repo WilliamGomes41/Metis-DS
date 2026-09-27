@@ -319,7 +319,8 @@ def test_dashboard_routes_waiting_reviewer_without_mutating_decisions(tmp_path: 
     page = client.get(f'/review?document={snapshot_id}')
     assert page.status_code == 200
     assert 'wachten op een andere beoordelaar' in page.text
-    assert 'review-task-grid' not in page.text
+    assert '<div class="review-task-grid"></div>' in page.text
+    assert 'review-task-card' not in page.text
     inventory = client.get(f'/review?document={snapshot_id}&task=waiting')
     assert inventory.status_code == 200
     assert f'data-passage-id="{object_id}"' in inventory.text
