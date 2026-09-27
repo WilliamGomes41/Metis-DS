@@ -1363,6 +1363,8 @@ def _review_section_groups(
     *,
     priority_ids: set[str] | None = None,
     task: str = "contextual",
+    context_objects: list[dict[str, Any]] | None = None,
+    review_path: str = "richtlijn",
 ) -> str:
     """Presentation only: preserve exact source paths and existing object links."""
     priority_ids = priority_ids or set()
@@ -1371,6 +1373,24 @@ def _review_section_groups(
         raw_path = admission_of(obj).get("section_path") or (obj.get("structure") or {}).get("section_path") or []
         key = tuple(str(part).strip() for part in raw_path if str(part).strip())
         groups.setdefault(key, []).append(obj)
+    context_objects = objects if context_objects is None else context_objects
+
+    def passage_row(obj: dict[str, Any]) -> str:
+        item = _review_index_item(
+            obj, snapshot_id,
+            reason=_individual_review_reason(obj, priority=str(obj.get("object_id")) in priority_ids),
+            task=task,
+        )
+        context = _review_context_block(
+            obj, context_objects, snapshot_id=snapshot_id, review_path=review_path, task=task,
+        )
+        if context:
+            item = item.removesuffix("</li>") + (
+                '<details class="review-queue-context"><summary>Bekijk verbonden passages</summary>'
+                + context + "</details></li>"
+            )
+        return item
+
     panels = []
     for index, (key, rows) in enumerate(groups.items()):
         path = " › ".join(key)
@@ -1384,15 +1404,7 @@ def _review_section_groups(
             f'<p>{_esc(path or "Geen bronpad beschikbaar")}</p></details>'
             '<ol class="object-index">'
             + "".join(
-                _review_index_item(
-                    obj,
-                    snapshot_id,
-                    reason=_individual_review_reason(
-                        obj,
-                        priority=str(obj.get("object_id")) in priority_ids,
-                    ),
-                    task=task,
-                )
+                passage_row(obj)
                 for obj in rows
             )
             + '</ol></details>'
@@ -2401,13 +2413,15 @@ def _render_review_index(
                 snapshot_id,
                 priority_ids={str(obj.get("object_id")) for obj in individual},
                 task="contextual",
+                context_objects=snapshot_objects,
+                review_path=review_path,
             ) if individual else '<p class="review-task-empty">Deze beoordelingslijst is leeg. Bekijk alle passages voor resterend werk.</p>'}
             <p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p>
           </section>
         '''
     if task == "batch":
         return f'''
-          {_review_task_header(snapshot_id, "Vergelijkbare passages samen beoordelen", "Bevestig alleen passages waarover je op basis van de bron zeker bent")}
+          {_review_task_header(snapshot_id, "Passages selecteren en bevestigen", "Selecteer alleen passages die je hebt gecontroleerd; hetzelfde brononderdeel en type betekenen niet dezelfde inhoud")}
           {normal_content_html or '<p class="review-task-empty">Deze taak is afgerond.</p>'}
         '''
     if task == "structure":
@@ -2432,6 +2446,8 @@ def _render_review_index(
                 snapshot_id,
                 priority_ids=set(),
                 task="second_review",
+                context_objects=snapshot_objects,
+                review_path=review_path,
             ) if second_review else '<p class="review-task-empty">Deze taak is afgerond of wacht op een andere reviewer.</p>'}
           </section>
         '''

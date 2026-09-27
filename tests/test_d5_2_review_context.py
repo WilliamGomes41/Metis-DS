@@ -351,3 +351,28 @@ def test_review_context_ui_marks_stale_version_and_does_not_change_relation_choi
     assert "Deze relatie is niet automatisch aangepast." in review_html
     assert relation["target_object_version"] == "1.0"
     assert relation["target_object_id"] in review_html
+
+
+def test_queue_context_resolves_outside_task_and_preserves_stale_warning():
+    from src.operations_console_app import _review_section_groups
+
+    rec = _obj("rec", "recommendation")
+    condition = _obj("condition", "condition", version="1.0")
+    rec["proposed_knowledge_relations"] = [_edge(rec, "applies_if", condition)]
+    condition["object_version"] = "2.0"
+    before = deepcopy([rec, condition])
+    html = _review_section_groups([rec], "snapshot", context_objects=[rec, condition])
+    assert "Bekijk verbonden passages" in html
+    assert "Tekst van condition." in html
+    assert 'data-relation-authority="proposed"' in html
+    assert 'data-relation-resolution="version_mismatch"' in html
+    assert "Alleen de geselecteerde passage" in html
+    assert [rec, condition] == before
+
+
+def test_queue_without_relations_does_not_invent_semantic_group():
+    from src.operations_console_app import _review_section_groups
+
+    html = _review_section_groups([_obj("a", "recommendation")], "snapshot")
+    assert "hetzelfde opgeslagen bronpad" in html
+    assert "Bekijk verbonden passages" not in html
