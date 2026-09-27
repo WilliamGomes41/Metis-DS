@@ -21,10 +21,11 @@ from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
 from src.review_closure_v1 import ReviewClosureConsole, harden_legacy_repair_routes
 from src.review_ledger import read_events
+from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
 
 
-def _system(tmp_path):
-    console = ReviewClosureConsole(
+def _system(tmp_path, console=None):
+    console = console or ReviewClosureConsole(
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",
@@ -195,3 +196,65 @@ def test_startup_migration_reopens_legacy_revise_without_editing_content(tmp_pat
     assert current["governance"]["validation_status"] == "needs_review"
     assert str((current.get("content") or {}).get("clean_text") or "") == before_text
     assert console.migrate_legacy_revise_to_review() == 0
+
+
+@pytest.mark.parametrize("backend", ["local", "postgres"])
+def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_path, backend, request):
+    from html.parser import HTMLParser
+    from tests.test_deterministic_review_repair_v1 import _review_payload
+
+    class Inputs(HTMLParser):
+        def __init__(self, text):
+            super().__init__()
+            self.inputs = []
+            self.feed(text)
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "input":
+                self.inputs.append(dict(attrs))
+
+    from tests.test_review_batch_atomic_postgres import _console
+    config = request.getfixturevalue("workflow_postgres") if backend == "postgres" else None
+    runtime = _console(tmp_path, config) if config else None
+    console, client, _researcher, _reviewer, sid, objects = _system(tmp_path, runtime)
+    obj = objects[0]
+    rows = console._load_objects(sid)
+    target = next(row for row in rows if row["object_id"] == obj["object_id"])
+    target.setdefault("metadata", {}).setdefault("admission", {}).update(
+        gate_result="blocked", reason_codes=["source_context_incomplete"]
+    )
+    console._save_objects(sid, rows)
+    before = console.snapshot_objects(sid)
+    card = client.get(f'/review?document={sid}&object={obj["object_id"]}&task=repair')
+    assert card.status_code == 200
+    assert "Eerst de passage herstellen" in card.text
+    inputs = Inputs(card.text).inputs
+    approval = next(row for row in inputs if row.get("name") == "eindoordeel" and row.get("value") == "goedkeuren")
+    correction = next(row for row in inputs if row.get("name") == "eindoordeel" and row.get("value") == "goedkeuren_na_correctie")
+    assert "disabled" in approval
+    assert "disabled" not in correction
+    assert console.snapshot_objects(sid) == before
+    inventory = client.get(f'/review?document={sid}&task=repair')
+    assert "Bekijk bronpassage" in inventory.text
+
+    approval_payload = _review_payload(console, sid, target)
+    approval_payload.update(suitability="ja", eindoordeel="goedkeuren")
+    rejected = client.post("/review", data=approval_payload)
+    assert rejected.status_code == 400
+    assert "blocked_candidate_not_reviewable" in rejected.text
+    assert console.snapshot_objects(sid) == before
+    specification = client.post("/review", data=_review_payload(console, sid, target))
+    assert specification.status_code == 200
+    assert "Er is nog niets gewijzigd" in specification.text
+    assert console.snapshot_objects(sid) == before
+    payload = {row["name"]: row.get("value", "") for row in Inputs(specification.text).inputs if row.get("type") == "hidden"}
+    fragments = {str(ref.get("raw_object_id") or "") for ref in obj["provenance"]["source_fragments"]}
+    payload["source_unit_ids"] = [unit["unit_id"] for unit in console.source_units(snapshot_id=sid, object_id=obj["object_id"]) if unit["fragment_id"] in fragments]
+    assert payload["source_unit_ids"]
+    response = client.post("/review/resolve", data=payload, follow_redirects=False)
+    assert response.status_code == 303, response.text
+    repaired = console._current_object(sid, obj["object_id"])
+    assert repaired["object_version"] != obj["object_version"]
+    assert repaired["governance"]["validation_status"] == "needs_review"
+    restarted = _console(tmp_path, config) if config else ReviewClosureConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    assert restarted._current_object(sid, obj["object_id"]) == repaired
