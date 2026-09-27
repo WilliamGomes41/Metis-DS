@@ -19,6 +19,7 @@ MIGRATION_NAMES = (
     "008_workflow_lifecycle_identity.sql",
     "009_console_hotpath_indexes.sql",
     "011_workflow_audit_retention.sql",
+    "012_console_entra_identity.sql",
 )
 REQUIRED_TABLES = frozenset(
     {
@@ -31,6 +32,9 @@ REQUIRED_TABLES = frozenset(
         "publish_authorizations",
         "audit_records",
         "audit_secrets",
+        "entra_identities",
+        "entra_sessions",
+        "entra_flows",
     }
 )
 REQUIRED_COLUMNS = frozenset(

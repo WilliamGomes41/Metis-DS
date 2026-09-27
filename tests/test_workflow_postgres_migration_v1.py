@@ -59,10 +59,11 @@ class Rows:
 def test_plan_digest_binds_exact_ordered_migration_bytes() -> None:
     paths = migration_paths(ROOT)
     assert tuple(path.name for path in paths) == MIGRATION_NAMES
-    assert MIGRATION_NAMES[-3:] == (
+    assert MIGRATION_NAMES[-4:] == (
         "008_workflow_lifecycle_identity.sql",
         "009_console_hotpath_indexes.sql",
         "011_workflow_audit_retention.sql",
+        "012_console_entra_identity.sql",
     )
     digest = migration_digest(paths)
     assert len(digest) == 64

@@ -204,6 +204,8 @@ def _audit_archive_store() -> AzureAuditArchiveStore | None:
 
 
 def bootstrap_accounts(console: OperationsConsole) -> None:
+    if os.getenv("METIS_CONSOLE_AUTH", "local").strip().lower() == "entra":
+        return
     username = os.environ.get("CONSOLE_BOOTSTRAP_USERNAME", "").strip()
     password = os.environ.get("CONSOLE_BOOTSTRAP_PASSWORD", "")
     if username and password:
