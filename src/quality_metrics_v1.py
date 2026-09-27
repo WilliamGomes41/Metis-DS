@@ -162,7 +162,10 @@ def build_report(documents: list[dict[str, Any]], *, as_of: str,
             if authoritative_review_type(obj) in {"heading", "path"}:
                 continue
             stage = review_stage(obj, review_path=review_path_for_klasse(env.get("class", "richtlijn")), bindings=doc.get("bindings"))
-            if not definitive_review_disposition(obj)["final"] or stage is not None:
+            disposition_state = definitive_review_disposition(obj)
+            pending_approval = (disposition_state["register_status"] == "selected_as_candidate"
+                                and disposition_state["review_status"] == "approved" and stage is not None)
+            if not disposition_state["final"] or pending_approval:
                 open_ids.append(obj.get("object_id"))
         pending_total += len(open_ids)
         acquired, now = parse_time(env.get("acquired_at")), parse_time(as_of)
@@ -203,6 +206,7 @@ def build_report(documents: list[dict[str, Any]], *, as_of: str,
             "clinical_errors": {"coverage": "not_measurable", "reason": "Reviewafwijzing is geen bewezen klinische fout; bestaande redenen zijn niet uniform gecodeerd."},
             "limitations": ["Vergelijking betreft een ingestcohort; gebeurtenissen beslaan het werk aan deze bronnen tot de gegevensgrens.",
                 "Open werk is een momentopname. Ouderdom betreft de bron, niet het ontstaan van een individuele taak.",
+                "Veldverschillen tellen per vastgelegd besluit of correctie; dit is geen telling van unieke inhoudelijke fouten.",
                 "Onbekende herkomst/vergelijking blijft zichtbaar. Geen werktijdmeting of bewijs van klinische correctheid.",
                 "Gemengde bronnen worden niet volledig aan één route toegeschreven. Verschillen bewijzen geen causaliteit.",
                 "Afstamming bij splitsen/samenvoegen wordt niet geraden; niet-gekoppelde besluiten blijven onbekend."],

@@ -172,3 +172,16 @@ def test_postgres_concurrent_reports_restart_retry_and_no_local_fallback(tmp_pat
     finally:
         with connect() as con:
             con.execute('DELETE FROM workflow.quality_measurements WHERE owner_account_id=%s', (owner,))
+
+
+def test_final_context_stays_closed_but_second_review_remains_open():
+    doc = fixture()
+    obj = doc['objects'][0]
+    obj['metadata']['passage_register'] = {'status': 'used_as_context', 'source': 'extract'}
+    obj['metadata']['admission'] = {'gate_result': 'allowed'}
+    assert build_report([doc], as_of=NOW)['open_passages'] == 0
+    obj['metadata']['passage_register']['status'] = 'selected_as_candidate'
+    obj['governance'] = {'validation_status': 'approved', 'second_review': {'required': True, 'status': 'pending'}}
+    assert build_report([doc], as_of=NOW)['open_passages'] == 1
+    obj['governance']['second_review']['status'] = 'approved'
+    assert build_report([doc], as_of=NOW)['open_passages'] == 0
