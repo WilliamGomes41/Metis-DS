@@ -63,7 +63,7 @@ SUITABILITY_LABELS = (
 )
 EINDOORDEEL_LABELS = (
     "Goedkeuren",
-    "Goedkeuren na correctie",
+    "Correctie specificeren",
     "Afwijzen",
     "Later beoordelen",
 )
