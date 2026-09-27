@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from contextlib import contextmanager
 from copy import deepcopy
 from threading import Event
+from html.parser import HTMLParser
 import shutil
 
 import pytest
@@ -101,6 +102,38 @@ def _documents(api, consumer):
     return response.status_code, sorted(row["document_id"] for row in response.json().get("documents", []))
 
 
+class _PassageInventory(HTMLParser):
+    def __init__(self, text):
+        super().__init__()
+        self.rows = []
+        self.feed(text)
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "li" and "data-passage-id" in attrs:
+            self.rows.append((attrs["data-passage-id"], attrs["data-passage-category"]))
+
+
+def _assert_review_projection(console, client, snapshot_id):
+    before = deepcopy(console.snapshot_objects(snapshot_id))
+    bindings = deepcopy(console.object_review_bindings(snapshot_id))
+    dashboard = client.get("/review", params={"document": snapshot_id})
+    assert dashboard.status_code == 200
+    assert "Jouw open werk" in dashboard.text
+    assert "review-task-grid" not in dashboard.text
+    assert dashboard.text.count("Open technische controle") == 1
+    inventory = client.get("/review", params={"document": snapshot_id, "task": "inventory"})
+    assert inventory.status_code == 200
+    rows = _PassageInventory(inventory.text).rows
+    expected = {obj["object_id"] for obj in before if obj.get("object_type") != "document"}
+    assert len(rows) == len(expected)
+    assert {oid for oid, _ in rows} == expected
+    assert all(category in {"structure", "contextual", "batch", "second_review", "waiting", "repair", "disposition", "history"} for _, category in rows)
+    assert console.snapshot_objects(snapshot_id) == before
+    assert console.object_review_bindings(snapshot_id) == bindings
+    return sorted(rows)
+
+
 def test_http_withdrawal_complete_recovery_and_open_work_resume(recovery_postgres, tmp_path, monkeypatch):
     config = recovery_postgres
     source = FakeBlobStore()
@@ -116,8 +149,15 @@ def test_http_withdrawal_complete_recovery_and_open_work_resume(recovery_postgre
     }
     client = _client(console)
     v1 = _ingest(console, accounts, "document-a", "1.0")
+    review_client = _client(console, "reviewer.bert")
+    _assert_review_projection(console, review_client, v1["snapshot_id"])
     r1 = _publish_http(console, client, accounts, v1)
+    published_v1 = deepcopy(console.snapshot_objects(v1["snapshot_id"]))
+    console.migrate_legacy_revise_to_review()
+    assert console.snapshot_objects(v1["snapshot_id"]) == published_v1
     v2 = _ingest(console, accounts, "document-a", "2.0", v1["snapshot_id"])
+    _assert_review_projection(console, review_client, v2["snapshot_id"])
+    assert console.snapshot_objects(v1["snapshot_id"]) == published_v1
     assert console.document_release_serving_status(v1["snapshot_id"])["serving_status"] == "active"
     r2 = _publish_http(console, client, accounts, v2)
     v3 = _ingest(console, accounts, "document-a", "3.0", v2["snapshot_id"])
@@ -169,6 +209,11 @@ def test_http_withdrawal_complete_recovery_and_open_work_resume(recovery_postgre
     archive = Archive()
     retention = AuditRetentionService(live_store=registry, archive_store=archive, runtime=console.runtime)
     retention.archive(archived["audit_id"], actor_id=accounts["publisher"]["account_id"])
+    inventories_before = {
+        receipt["snapshot_id"]: _assert_review_projection(console, review_client, receipt["snapshot_id"])
+        for receipt in (v1, v2, other)
+    }
+    review_client.close()
     adapter = PostgresWorkflowRecoveryAdapter(console.canonical_publication_store)
     before = adapter.export_state()
     path = tmp_path / "complete-lifecycle.zip"
@@ -189,6 +234,10 @@ def test_http_withdrawal_complete_recovery_and_open_work_resume(recovery_postgre
     fresh = _console(tmp_path / "restored", config, target_sources)
     fresh.reconcile_durable_publications()
     restarted_client = _client(fresh)
+    restored_review_client = _client(fresh, "reviewer.bert")
+    for sid, inventory in inventories_before.items():
+        assert _assert_review_projection(fresh, restored_review_client, sid) == inventory
+    restored_review_client.close()
     restarted_api = _api(tmp_path / "api-restored", config, target_sources)
     assert _documents(restarted_api, active) == (200, [other["document_id"]])
     assert _documents(restarted_api, revoked) == (401, [])
@@ -206,6 +255,7 @@ def test_http_withdrawal_complete_recovery_and_open_work_resume(recovery_postgre
     resumed = researcher_client.post("/tree/reprocess", data={"snapshot_id": v3["snapshot_id"]}, follow_redirects=False)
     assert resumed.status_code == 303, resumed.text
     assert fresh.snapshot_objects(v3["snapshot_id"])
+    _assert_review_projection(fresh, researcher_client, v3["snapshot_id"])
     resumed_envelope = fresh._envelope(v3["snapshot_id"])
     for key in ("snapshot_id", "logical_document_id", "working_revision_id", "working_revision_number", "sha256"):
         assert resumed_envelope[key] == pending[key]
