@@ -140,3 +140,16 @@ def test_waiting_duties_are_not_counted_as_completed_work():
     assert '3 te controleren · 2 afgerond' in response.text
     assert '3 te controleren · 7 afgerond' not in response.text
     assert '5 wachten op een andere beoordelaar' in response.text
+
+
+def test_task_page_keeps_inline_document_switcher(monkeypatch):
+    def render(console, account, document, object='', *, task='', counts=None):
+        assert document == 'two' and task == 'structure'
+        return '<h1>Koppen controleren</h1><a class="btn-secondary" href="/review">Ander document kiezen</a>'
+    monkeypatch.setattr('src.review_workboard_v1._render_review_room', render)
+    console = Console(documents=[('one', document('One')), ('two', document('Two'))])
+    response = client(console).get('/review?document=two&task=structure')
+    assert response.status_code == 200
+    assert 'Koppen controleren' in response.text
+    assert 'href="/review?document=two" aria-current="page"' in response.text
+    assert 'href="/review?document=one"' in response.text

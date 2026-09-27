@@ -412,6 +412,7 @@ def review_workboard_items(
                     ),
                 )
             )
+            items[-1]["summary"] = summary
         return items
 
     return [
@@ -592,6 +593,7 @@ def _workboard_page(
         )
     page = _projected_document_dashboard(
         console, account=account, snapshot_id=chosen, counts=counts,
+        summary=selected.get("summary"),
     )
     if page is None:
         page = _render_review_room(console, account, chosen, counts=counts)
@@ -606,16 +608,17 @@ def _projected_document_dashboard(
     account: dict[str, Any],
     snapshot_id: str,
     counts: dict[str, int],
+    summary: dict[str, Any] | None = None,
 ) -> str | None:
     """Render the default selected-document dashboard without materializing objects."""
-    summary_reader = getattr(console, "review_workboard_summaries", None)
-    if not callable(summary_reader):
-        return None
-    account_id = str(account.get("account_id") or "")
-    if not account_id:
-        return None
-    summaries = summary_reader(account_id, snapshot_id)
-    summary = summaries.get(snapshot_id)
+    if summary is None:
+        summary_reader = getattr(console, "review_workboard_summaries", None)
+        if not callable(summary_reader):
+            return None
+        account_id = str(account.get("account_id") or "")
+        if not account_id:
+            return None
+        summary = summary_reader(account_id, snapshot_id).get(snapshot_id)
     if not isinstance(summary, dict):
         return None
     envelope = summary.get("envelope")
@@ -750,13 +753,18 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         if not chosen or (not object.strip() and not chosen_task):
             return _workboard_page(console, account=account, snapshot_id=chosen)
         counts = console.waiting_task_counts(str(account["account_id"]))
-        return _render_review_room(
+        page = _render_review_room(
             console,
             account,
             html.escape(document, quote=True),
             html.escape(object, quote=True),
             task=html.escape(chosen_task, quote=True),
             counts=counts,
+        )
+
+        return page.replace(
+            '<a class="btn-secondary" href="/review">Ander document kiezen</a>',
+            _document_picker(review_workboard_items(console, account=account), chosen),
         )
 
     @app.post("/review/headings/batch-confirm")
