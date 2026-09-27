@@ -488,3 +488,36 @@ def test_review_evidence_is_visible_in_read_only_audit_route(tmp_path):
     assert sid in response.text
     obj = next(row for row in console.snapshot_objects(sid) if row["object_id"] == ids[0])
     assert obj["governance"]["validation_status"] == "revise"
+
+
+def test_batch_failure_rolls_back_all_selected_decisions_and_restart(tmp_path, monkeypatch):
+    from copy import deepcopy
+
+    console, _researcher, reviewer, sid, ids = _system(tmp_path)
+    before = deepcopy(console.snapshot_objects(sid))
+    bindings = deepcopy(console.object_review_bindings(sid))
+    events = read_events(console._ledger_path)
+    original = console.review_object
+
+    def fail_second(**kwargs):
+        if kwargs["object_id"] == ids[1]:
+            raise RuntimeError("second_member_failure")
+        return original(**kwargs)
+
+    monkeypatch.setattr(console, "review_object", fail_second)
+    with pytest.raises(RuntimeError, match="second_member_failure"):
+        console.batch_review_normal_risk(actor_id=reviewer["account_id"], snapshot_id=sid, object_ids=ids[:2])
+    assert console.snapshot_objects(sid) == before
+    assert console.object_review_bindings(sid) == bindings
+    assert read_events(console._ledger_path) == events
+    restarted = ClosedLoopReviewConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    assert restarted.snapshot_objects(sid) == before
+    assert restarted.object_review_bindings(sid) == bindings
+    assert read_events(restarted._ledger_path) == events
+    updated = restarted.batch_review_normal_risk(actor_id=reviewer["account_id"], snapshot_id=sid, object_ids=ids[:2])
+    assert len(updated) == 2
+    assert all(row["governance"]["validation_status"] == "approved" for row in updated)
+    successful_events = read_events(restarted._ledger_path)
+    with pytest.raises(ConsoleError, match="normal_risk_batch_ineligible"):
+        restarted.batch_review_normal_risk(actor_id=reviewer["account_id"], snapshot_id=sid, object_ids=ids[:2])
+    assert read_events(restarted._ledger_path) == successful_events

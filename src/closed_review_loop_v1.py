@@ -125,6 +125,11 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                 self.refresh_objects_expected_revision(snapshot_id)
                 raise
 
+    def batch_review_normal_risk(self, **kwargs: Any) -> list[dict[str, Any]]:
+        """Commit the selected decisions and their evidence as one command."""
+        with self._atomic_snapshot_mutation(str(kwargs.get("snapshot_id") or "")):
+            return super().batch_review_normal_risk(**kwargs)
+
     def _has_inbound_support(self, snapshot_id: str, support_object_id: str) -> bool:
         return any(
             obj.get("object_id") != support_object_id
