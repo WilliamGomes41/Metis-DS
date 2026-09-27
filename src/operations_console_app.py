@@ -1904,7 +1904,7 @@ def _review_task_dashboard(
     statuses = {
         "structure": f"{heading_pending} te controleren · {heading_done} afgerond",
         "contextual": f"{individual_pending} te beoordelen · {individual_done} afgerond",
-        "batch": f"{normal_passages} passages · {normal_batches} selecties",
+        "batch": f"{normal_passages} passages",
         "second_review": f"{second_review_pending} te beoordelen",
         "disposition": f"{disposition_pending} af te handelen",
     }

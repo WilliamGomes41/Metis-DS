@@ -343,3 +343,11 @@ def test_dashboard_accounts_for_every_passage_without_hiding_followup_work():
     assert 'Metis heeft nog niet vastgesteld' in followup
     assert dashboard.count('task=repair') == 1
     assert rows == before
+
+
+def test_dashboard_counts_passages_without_implying_semantic_or_selected_groups():
+    rows = [_obj("d1", "definition"), _obj("d2", "definition")]
+    html = _render_review_index("snap-1", rows, "richtlijn", normal_review_enabled=True)
+    assert "Passages selecteren en bevestigen" in html
+    assert "2 passages" in html
+    assert "1 selecties" not in html
