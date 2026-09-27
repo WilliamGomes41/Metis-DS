@@ -1823,32 +1823,27 @@ def _review_progress_overview(
         extras.append(f'<strong>{progress["superseded"]}</strong> vervangen')
     if progress["revised"]:
         extras.append(f'<strong>{progress["revised"]}</strong> herzien na correctie')
-    extras_html = (" · " + " · ".join(extras)) if extras else ""
+    extras_html = '<p class="review-progress-extra">' + " · ".join(extras) + '</p>' if extras else ""
     return f"""
       <section class="review-progress-overview" aria-labelledby="review-progress-title">
         <div class="review-task-heading">
           <h2 id="review-progress-title">Reviewvoortgang</h2>
-          <p>{done} van {total} bronpassages afgehandeld ({percent}%). Afwijzen, context, onderbouwing en bewust niet opnemen tellen als afhandeling.</p>
+          <p class="review-progress-number">{percent}<span>%</span></p>
+          <p>{done} van {total} bronpassages afgehandeld</p>
         </div>
-        <progress value="{done}" max="{max(total, 1)}">{percent}%</progress>
-        <p class="review-work-queues">
-          <strong>{progress["open"]}</strong> nog te beoordelen ·
-          <strong>{progress["approved"]}</strong> goedgekeurd ·
-          <strong>{progress["rejected"]}</strong> afgewezen ·
-          <strong>{progress["not_included"]}</strong> niet opgenomen
-          {extras_html}
-        </p>
-        <a class="review-control-card" href="/review?document={_esc(snapshot_id)}&amp;task=history">
-          <span class="review-control-card-body">
-            <span class="review-control-card-label">Besluiten en historie</span>
-            <span class="review-control-card-title">Bekijk wat is goedgekeurd, afgewezen, anders gebruikt of herzien</span>
-            <span class="review-control-card-copy">Bekijk eerdere besluiten en de redenen daarvoor.</span>
-          </span>
-          <span class="review-control-card-meta">
-            <span class="review-control-card-status">{done} afgehandeld</span>
-            <span class="review-control-card-action">Open besluiten <span aria-hidden="true">→</span></span>
-          </span>
-        </a>
+        <progress aria-label="Afgehandelde bronpassages" value="{done}" max="{max(total, 1)}">{percent}%</progress>
+        <dl class="review-progress-counts">
+          <div><dt>Nog te beoordelen</dt><dd>{progress["open"]}</dd></div>
+          <div><dt>Goedgekeurd</dt><dd>{progress["approved"]}</dd></div>
+          <div><dt>Afgewezen</dt><dd>{progress["rejected"]}</dd></div>
+          <div><dt>Niet opgenomen</dt><dd>{progress["not_included"]}</dd></div>
+        </dl>
+        {extras_html}
+        <details class="review-progress-help">
+          <summary>Wat telt mee in de voortgang?</summary>
+          <p>Afwijzen, context, onderbouwing en bewust niet opnemen tellen als afhandeling. De taakkaarten tellen handelingen; tel die aantallen hier niet bij op.</p>
+        </details>
+        <a class="review-history-link" href="/review?document={_esc(snapshot_id)}&amp;task=history">Besluiten en historie <span aria-hidden="true">→</span></a>
       </section>
     """
 
@@ -1961,18 +1956,22 @@ def _review_task_dashboard(
     )
     return f'''
       <section class="review-task-dashboard" aria-labelledby="review-task-title">
-        {_review_progress_overview(snapshot_id, progress)}
+        <div class="review-workspace-layout">
+        <div class="review-work-main">
         {next_step}
         <div class="review-work-header">
           <div>
             <h2 id="review-task-title">Jouw open werk</h2>
-            <p>Kies een taak om verder te gaan. De aantallen hieronder zijn handelingen en tellen niet mee in de reviewvoortgang.</p>
+            <p>Kies wat je wilt beoordelen.</p>
           </div>
           <a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a>
         </div>
         <div class="review-task-grid">{rows}</div>
         {waiting}
-        <aside class="review-management" aria-label="Beheer en technische controle">
+        </div>
+        <aside class="review-sidebar" aria-label="Voortgang en beheer">
+        {_review_progress_overview(snapshot_id, progress)}
+        <section class="review-management" aria-label="Beheer en technische controle">
           <div>
             <span class="review-control-card-label">Beheer en technische controle</span>
             <h2>Controle en uitzonderingen</h2>
@@ -1980,7 +1979,9 @@ def _review_task_dashboard(
           </div>
           <a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=repair">Bekijk technische controle →</a>
           {management_details}
+        </section>
         </aside>
+        </div>
       </section>
     '''
 
@@ -2895,7 +2896,7 @@ def _render_review_room(
     return _page(
         f"""
             {_nav(account, "review", counts)}
-            <section class="room">
+            <section class="room review-room">
               <h1>Review</h1>
               <p class="lead">Beoordeel passages stap voor stap, met de oorspronkelijke bron als uitgangspunt.</p>
               {conflict_html if not chosen_object_id else ""}

@@ -1486,14 +1486,32 @@ mark.broncontext-marked {
 @media (max-width: 860px) { .dictionary-section { grid-template-columns: 1fr; gap: 22px; } }
 @media (max-width: 560px) { .dictionary-chain { margin-bottom: 3rem; } .dictionary-chain ol { display: grid; gap: 4px; } .dictionary-chain li:not(:last-child)::after { content: "↓"; } .dictionary-example { grid-template-columns: 1fr; gap: 3px; } }
 
-/* Review: a document, the review tally, your next tasks, and technical control. */
+/* Review workspace: tasks first, with a compact document and status column. */
+.review-room { max-width: 1240px; margin-inline: auto; }
+.review-room > h1 { color: var(--text); font-size: 1.65rem; margin-bottom: 6px; }
+.review-room > .lead { color: var(--muted); margin: 0 0 22px; }
 .review-document-card {
   border: 1px solid var(--line);
   border-left: 5px solid var(--rood);
   background: var(--review-tint);
   padding: 18px 20px;
-  margin: 18px 0 24px;
+  margin: 18px 0 28px;
 }
+
+.review-room > .review-document-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 24px;
+  background: var(--wit);
+  border-left-width: 3px;
+}
+.review-room > .review-document-card .review-document-card-top { display: contents; }
+.review-room > .review-document-card .review-document-kicker { grid-column: 1; }
+.review-room > .review-document-card .review-document-card-top > a {
+  grid-column: 2; grid-row: 1 / 4; align-self: center;
+}
+.review-room > .review-document-card header,
+.review-room > .review-document-card .meta { grid-column: 1; margin: 0; }
 
 .review-document-card .doc-title { color: var(--review-red); font-size: 1.2rem; }
 .review-document-card .meta { margin-bottom: 0; }
@@ -1520,23 +1538,64 @@ mark.broncontext-marked {
   background: var(--surface-soft);
 }
 .review-next-step { margin-bottom: 30px; }
-.review-work-header { align-items: end; margin: 18px 0 16px; }
+.review-workspace-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 32px;
+  align-items: start;
+}
+.review-work-main, .review-sidebar { min-width: 0; }
+.review-work-header { align-items: end; margin: 0 0 20px; }
 .review-work-header h2 { margin: 0 0 6px; }
 .review-work-header p { margin: 0; max-width: 52rem; color: var(--muted); }
-.review-task-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
-.review-task-card { min-height: 12rem; background: var(--surface-soft); }
-.review-task-card:hover { border-color: var(--water); }
+.review-work-header h2, .review-sidebar h2 { color: var(--text); }
+.review-work-header > .btn-secondary {
+  padding: 6px 0; min-height: 44px; border: 0; border-radius: 0; font-size: 0.875rem;
+}
+.review-task-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.review-task-card {
+  min-height: 224px; padding: 24px; background: var(--wit);
+  border: 1px solid var(--line); border-radius: 16px;
+  box-shadow: 0 3px 14px rgba(20, 42, 66, 0.04);
+}
+.review-task-card-title { font-size: 1.125rem; line-height: 1.4; color: var(--text); }
+.review-task-card-copy { color: var(--muted); font-size: 0.94rem; line-height: 1.55; }
+.review-task-card-status { font-size: 0.9rem; }
+.review-task-card-action { text-decoration: none; font-size: 0.9rem; }
+.review-task-card:hover { border-color: var(--paars); }
+.review-task-card:hover .review-task-card-action { text-decoration: underline; }
+.review-sidebar .review-progress-overview { margin: 0; padding: 24px; border: 0; }
+.review-sidebar .review-task-heading h2 { font-size: 1rem; }
+.review-progress-number { font-size: 3rem; font-weight: 750; line-height: 1.1; letter-spacing: -0.04em; color: var(--text); }
+.review-progress-number span { font-size: 1.25rem; margin-left: 3px; letter-spacing: 0; color: var(--muted); }
+.review-sidebar .review-task-heading p { font-size: 0.875rem; color: var(--muted); margin-bottom: 0; }
+.review-sidebar .review-task-heading .review-progress-number { font-size: 3rem; margin: 16px 0 8px; color: var(--text); }
+.review-progress-counts { margin: 20px 0 12px; font-size: 0.875rem; }
+.review-progress-counts > div { display: flex; justify-content: space-between; gap: 16px; margin: 9px 0; }
+.review-progress-counts dt { color: var(--muted); }
+.review-progress-counts dd { margin: 0; font-weight: 700; }
+.review-progress-extra { font-size: 0.875rem; color: var(--muted); }
+.review-progress-help { margin: 16px 0; font-size: 0.8125rem; color: var(--muted); line-height: 1.5; }
+.review-progress-help summary { cursor: pointer; padding: 8px 0; }
+.review-history-link { display: flex; justify-content: space-between; gap: 12px; padding: 16px 0 0; border-top: 1px solid var(--line); font-weight: 700; font-size: 0.875rem; text-decoration: none; }
+.review-history-link:hover { text-decoration: underline; }
+.review-history-link:focus-visible, .review-progress-help summary:focus-visible,
+.review-burden summary:focus-visible { outline: 3px solid var(--rood); outline-offset: 3px; }
 .review-management {
   align-items: center;
   max-width: 72rem;
-  padding: 20px 22px;
-  margin: 36px 0 0;
-  border: 1px solid var(--line);
+  padding: 24px 0 0;
+  margin: 24px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
   border-radius: 14px;
-  background: var(--surface-soft);
+  background: transparent;
 }
 .review-management h2 { margin: 4px 0 6px; font-size: 1.1rem; color: var(--text); }
-.review-management p { margin: 0; line-height: 1.5; }
+.review-management p { margin: 0; line-height: 1.6; font-size: 0.875rem; color: var(--muted); }
+.review-management .review-control-card-label { font-size: 0.7rem; }
+.review-management > .btn-secondary { font-size: 0.8125rem; width: 100%; }
+.review-management .review-burden { font-size: 0.8125rem; color: var(--muted); }
 .review-management .review-burden {
   flex-basis: 100%;
   padding-top: 14px;
@@ -1599,6 +1658,26 @@ mark.broncontext-marked {
 @media (max-width: 560px) {
   .review-heading-list .review-row { grid-template-columns: 44px minmax(0, 1fr); }
   .review-heading-list .review-row-status { grid-column: 2; margin-top: -8px; }
+}
+
+@media (max-width: 1000px) {
+  .review-workspace-layout { grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; }
+  .review-task-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .review-workspace-layout { grid-template-columns: 1fr; }
+  .review-task-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .review-sidebar { margin-top: 8px; }
+  .review-room > .review-document-card { grid-template-columns: 1fr; }
+  .review-room > .review-document-card .review-document-card-top > a { grid-column: 1; grid-row: 4; justify-self: start; margin-top: 8px; }
+}
+@media (max-width: 520px) {
+  .review-task-grid { grid-template-columns: 1fr; }
+  .review-task-card { min-height: 0; padding: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .review-task-card { transition: none; }
+  .review-task-card:hover { transform: none; }
 }
 
 /* Secondary surfaces previously used fixed light colors. */

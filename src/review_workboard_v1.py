@@ -700,7 +700,7 @@ def _projected_document_dashboard(
     return _page(
         f"""
         {_nav(account, "review", counts)}
-        <section class="room">
+        <section class="room review-room">
           <h1>Review</h1>
           <p class="lead">Beoordeel passages stap voor stap, met de oorspronkelijke bron als uitgangspunt.</p>
           <div class="doc-card review-document-card">
