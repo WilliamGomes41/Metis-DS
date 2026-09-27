@@ -1,8 +1,8 @@
-# V&VN Data Services — Protocol v4
+# V&VN Data Services — Protocol v3
 
 **Status:** Actief  
-**Versie:** 4.0.0  
-**Datum:** 2026-09-27  
+**Versie:** 3.0.0  
+**Datum:** 2026-09-10  
 **Functie:** één actuele norm voor Metis. Historische besluiten, implementatiegolven en supersessies zijn auditbewijs en geen aanvullende stuurlaag.
 
 ## 1. Normatieve hiërarchie
@@ -84,7 +84,7 @@ Een nieuw taalgeval leidt niet automatisch tot een nieuwe lexicale uitzonderings
 
 Deterministische controles blijven de autoriteit voor harde veiligheids- en publicatievoorwaarden.
 
-Deterministische passagevorming is de standaardroute. Een afzonderlijk geconfigureerde brongebonden semantische route mag vóór Review kandidaatobjecten vormen. Bij ontbrekende providerconfiguratie, fout, weigering, timeout, ongeldig schema of ongeldige bronspan faalt die route gesloten; er is geen stille terugval. Metis reconstrueert kandidaattekst uit exacte bronspans. Een model schrijft niet rechtstreeks canonieke kennis en krijgt geen review- of publicatierechten. Audit-resultaten activeren deze route niet. `PROCEED` is geen Metis-productievervangingsbesluit. Audit-eindstatus is `READY FOR IMPLEMENTATION`; ontwikkeling gebeurt buiten Metis. Er is geen APPLY-executor.
+De bestaande productiepassagevorming blijft leidend tot een afzonderlijk extern ontwikkelde, geautoriseerde en gereleasete vervanging. Een experimenteel semantisch model mag voorstellen doen, maar niet zelfstandig canonieke kennis schrijven of publiceren. `PROCEED` is geen Metis-productievervangingsbesluit. Audit-eindstatus is `READY FOR IMPLEMENTATION`; ontwikkeling gebeurt buiten Metis. Er is geen APPLY-executor.
 
 ## 6. Review
 
@@ -131,14 +131,14 @@ Een app-setting, locator-achtige string, UI-status, reviewflag in een envelope o
 
 Een succesvolle publicatie:
 
-- legt een immutabele release-identiteit, protocolversie, bronidentiteit en exacte gepubliceerde object-ID's/hashes vast;
-- commit de release en de actieve serving-set atomair in de PostgreSQL-publicatieautoriteit;
-- legt de bijbehorende publicatiegebeurtenis duurzaam vast;
-- werkt daarna afgeleide manifests, lokale auditkopieën en retrievalprojecties bij of herbouwt ze vanuit de autoriteit.
+- maakt een immutabel release-manifest met release-identiteit, protocolversie, bronidentiteit en exacte gepubliceerde object-ID's/hashes;
+- bouwt en wisselt de retrievalprojectie atomair;
+- schrijft een append-only `release_published` auditgebeurtenis;
+- markeert de snapshot pas bij geslaagde cutover als gepubliceerd.
 
 ### 7.3 Mislukte cutover
 
-Bij een fout vóór de gezaghebbende commit blijft de vorige actieve serving-set behouden. Een fout bij een afgeleide lokale kopie na de commit mag de gezaghebbende release niet terugdraaien of een andere serving-authority creëren; herstel reconcilieert die kopie vanuit PostgreSQL. Een incompleet release-manifest of onterechte lokale `release_published`-gebeurtenis mag niet als gezaghebbend bewijs dienen.
+Bij een mislukte cutover wordt fail-closed teruggerold naar de vorige geldige projectie en envelopestatus. Een incompleet release-manifest of onterechte `release_published`-gebeurtenis mag niet achterblijven.
 
 Herpublicatie van een reeds gepubliceerde snapshot faalt gesloten. Canonieke objecten en bronbytes worden niet stilzwijgend herschreven.
 
@@ -183,8 +183,6 @@ Voor onverifieerbare toevoegingen die als brongebonden kennis zouden kunnen door
 
 De operations console is het menselijke werkoppervlak voor ingest, review, documentbeheer, audit en gecontroleerde publicatiehandelingen. De primaire consolevolgorde blijft herkenbaar als **Inleveren → Review → Publiceren → Documenten**.
 
-Bij `METIS_CONSOLE_AUTH=entra` bepaalt Microsoft Entra de identiteit en app-rollen; PostgreSQL bewaart de stabiele Metis-accountbinding, sessies en lokale blokkering. Een e-mailadres of weergavenaam is geen bewijs voor koppeling aan een bestaand account. Bestaande revieweridentiteit mag bij een gecontroleerde omschakeling niet verloren gaan. De lokale authenticatieroute is alleen toegestaan wanneer zij expliciet als configuratiemodus is gekozen. De code voor Entra is geen bewijs dat de omgeving al is geconfigureerd of uitgerold.
-
 De console blijft server-rendered en gebruikt browser-native formulieren waar dat volstaat. Een SPA, frontendframework of vergelijkbare complexiteitslaag wordt alleen toegevoegd na een aantoonbare productbehoefte.
 
 ### 11.2 Product API
@@ -200,8 +198,6 @@ Ongepubliceerde reviewdata en console-accounts mogen niet via Product API-creden
 De console-runtime haalt geen zware retrieval-/embeddingdependencies binnen wanneer die voor de reviewtaak niet nodig zijn.
 
 ## 12. Retrieval en externe distributie
-
-De `publication_registry` in de gezaghebbende PostgreSQL-publicatiestore bepaalt de actieve serving-set. Een lokale projectie, manifest, auditrecord of consolestatus is afgeleid bewijs en mag deze autoriteit niet vervangen. Opvolging en intrekking moeten de actieve set atomair wijzigen; oude, ingetrokken of tegenstrijdige releases blijven buiten distributie, ook na herstart en herstel.
 
 Retrieval mag uitsluitend uitgeven wat volgens de geldige gepubliceerde projectie beschikbaar is.
 
@@ -221,7 +217,7 @@ Alle Metis-LLM-capabilities delen één deployment-owned providercredential en m
 
 Productie- en testomgevingen, credentials en opslagrechten zijn zodanig gescheiden dat een fout in een niet-productieroute geen impliciete productierechten oplevert.
 
-De standaardtopologie is één Gunicorn-worker op één instance met sequentiële writes. Twee workers op diezelfde instance zijn uitsluitend ondersteund wanneer alle door de topologiepoort vereiste mutable authorities in PostgreSQL en de immutable source store in Azure zijn geconfigureerd; een process-shared commit lock en PostgreSQL-concurrency bewaken de writes. Meer dan twee workers, meer dan één instance of een andere write mode vallen buiten de ondersteunde grens en falen gesloten. Een schaalwijziging mag niet stilzwijgend de consistentie- of reviewgaranties veranderen.
+De huidige ondersteunde console-topologie blijft single-worker/single-instance met sequentiële writes zolang geen afzonderlijke, geteste multi-writerarchitectuur is vastgesteld. Een schaalwijziging mag niet stilzwijgend de consistency- of reviewgaranties veranderen.
 
 Deployment gebeurt vanaf een identificeerbare gecontroleerde commit en met een reproduceerbaar pakket. Deployment mag runtime-data niet wissen en mag geen publicatierechten openen doordat applicatiecode of configuratie aanwezig is.
 
@@ -235,9 +231,9 @@ Tests bewijzen primair gedrag en veiligheidsgrenzen. Tests die uitsluitend histo
 
 Historische protocoltests mogen historische artefacten en approval-manifests blijven verifiëren, maar mogen niet vereisen dat V2-tekst in `PROTOCOL.md` of `ROADMAP.md` blijft staan.
 
-## 15. Wijzigingsgovernance vanaf V4
+## 15. Wijzigingsgovernance vanaf V3
 
-Voor normale productontwikkeling wordt geen nieuwe keten van protocoldelta's opgebouwd.
+Vanaf V3 wordt voor normale productontwikkeling geen nieuwe keten van `PROTOCOL_V3_x_DELTA.md`-bestanden opgebouwd.
 
 Een blijvende wijziging in product- of veiligheidsinvarianten volgt deze route:
 
@@ -249,12 +245,10 @@ Een blijvende wijziging in product- of veiligheidsinvarianten volgt deze route:
 
 Implementatiegeschiedenis, incidentdetails, tijdelijke volgordes en uitgevoerde golven horen in changelog, auditrapport of `docs/history/`, niet in het actuele protocol.
 
-## 16. Eerdere protocolversies zijn historie
+## 16. Protocol V2 is historie
 
-Protocol V4 bouwt voort op V3, dat de blijvende product-, veiligheids- en governancegrenzen uit de V2-reeks. De V2-documenten en approval-manifests blijven onveranderbaar auditbewijs, maar vormen geen aanvullende actuele stuurlaag.
+Protocol V3 consolideert de blijvende product-, veiligheids- en governancegrenzen uit de V2-reeks. De V2-documenten en approval-manifests blijven onveranderbaar auditbewijs, maar vormen geen aanvullende actuele stuurlaag.
 
 De volledige pre-V3 rootstanden zijn bevroren onder `docs/history/protocol-v2/`. Oude V2-bestanden mogen op hun oorspronkelijke paden blijven wanneer approval-manifests of historische tests hun exacte bytes of paden nodig hebben. Dat maakt ze niet opnieuw normatief.
 
 Om te bepalen wat Metis nu moet doen, hoeft de V2-deltaketen niet meer te worden gelezen.
-
-De ongewijzigde V3-stand vóór deze wijziging is bewaard onder `docs/history/protocol-v3/`. Versienummers in bestaande releases en historische fixtures worden nooit achteraf herschreven; nieuwe releases registreren de geldende publicatieprotocolversie.

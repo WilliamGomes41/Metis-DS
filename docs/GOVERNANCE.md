@@ -1,7 +1,7 @@
 # Metis governance
 
-**Status:** actief onder Protocol v3.0.0  
-**Datum:** 2026-09-10
+**Status:** actief onder Protocol v4.0.0  
+**Datum:** 2026-09-27
 
 Dit bestand is het compacte operationele governance-register. Het is geen tweede protocol, geen geschiedenislog en geen vijfde stuurlaag.
 
@@ -18,14 +18,14 @@ Daarbij geldt:
 3. acceptatie- en regressietests — uitvoerbaar bewijs;
 4. code, configuratie en infrastructuur — implementatie.
 
-Protocol-v2-delta's, oude roadmaps, approval-manifests en de pre-v3 governance blijven auditbewijs. Zij zijn niet aanvullend normatief onder V3. De volledige pre-v3 governance staat in `docs/history/protocol-v2/GOVERNANCE_PRE_V3_2026-09-10.md`.
+Protocol-v2-delta's, oude roadmaps, approval-manifests en de pre-v3 governance blijven auditbewijs. Zij zijn niet aanvullend normatief onder V4. De volledige pre-v3 governance staat in `docs/history/protocol-v2/GOVERNANCE_PRE_V3_2026-09-10.md`.
 
 ## Besluitdiscipline
 
 - Een blijvende product- of veiligheidsinvariant wordt rechtstreeks in `PROTOCOL.md` verwerkt en waar mogelijk door een gedragstest bewezen.
 - Een nog open wijziging, experiment of beslispoort staat in `ROADMAP.md`.
 - Afgeronde of gesupersedeerde besluitgeschiedenis gaat naar `docs/history/`, changelog of auditrapport; niet naar de actuele roadmap.
-- Er wordt geen nieuwe keten van Protocol-v3-delta's opgebouwd.
+- Er wordt geen nieuwe keten van protocoldelta's opgebouwd.
 - Een tijdelijke deployment- of incidentworkaround wordt niet automatisch architectuurwet.
 - Een experiment mag geen canonieke publicatie uitvoeren. `KEEP`, `ITERATE` en `PROCEED` zijn geen implementatie-autorisatie. De Audit-eindstatus is `READY FOR IMPLEMENTATION`; ontwikkeling, GitHub, merge, deploy en publicatie blijven buiten Metis. Er is geen APPLY-executor.
 

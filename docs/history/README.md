@@ -30,3 +30,5 @@ Current protocol and technical documentation stays in `docs/`. New step, audit o
 | `REPAIR45_REPORT.md` | Repair report |
 | `INTEGRITY_REPAIR_SPRINT_REPORT.md` | Repair sprint report |
 | `PRODUCT_API_V1_REPORT.md` | Product API report |
+
+Protocol v3 is bevroren in `protocol-v3/`. De classificatie van oude bestanden en nog actieve operatorpaden staat in `LEGACY_CLASSIFICATION_2026-09-27.md`.
