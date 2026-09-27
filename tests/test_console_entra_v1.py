@@ -314,3 +314,27 @@ def test_postgres_outage_cannot_fall_back_to_local_session(recovery_postgres, tm
     response = client.get('/auth/microsoft/callback', params={'state': 'state', 'code': 'SECRET-CODE'}, follow_redirects=False)
     assert response.status_code == 503
     assert 'SECRET-CODE' not in response.text and 'database down' not in response.text
+
+
+def test_navigation_return_replay_and_expired_handshake(recovery_postgres, tmp_path, monkeypatch):
+    from src.workflows.workflow_identity_postgres_v1 import _token_hash
+    state = console(tmp_path, recovery_postgres)
+    client, _ = app_client(monkeypatch, state)
+    response = client.get('/review?document=example', follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers['location'].startswith('/auth/microsoft?next=')
+    for target, expected in [('/accounts', '/accounts'), ('https://evil.example', '/'), ('//evil.example', '/'), ('/\\evil.example', '/')]:
+        assert client.get('/auth/microsoft', params={'next': target}, follow_redirects=False).status_code == 303
+        handle = client.cookies[FLOW_COOKIE]
+        with state.workflow_identity_store._connect() as con:
+            flow = con.execute('SELECT payload FROM workflow.entra_flows WHERE browser_hash=%s', (_token_hash(handle),)).fetchone()['payload']
+        response = client.get('/auth/microsoft/callback', params={'state': flow['state'], 'code': 'code'}, follow_redirects=False)
+        assert response.status_code == 303 and response.headers['location'] == expected
+        client.cookies.set(FLOW_COOKIE, handle)
+        assert client.get('/auth/microsoft/callback', params={'state': flow['state'], 'code': 'code'}, follow_redirects=False).status_code == 403
+        client.cookies.clear()
+    nonce = begin(client, state.workflow_identity_store)
+    with state.workflow_identity_store._connect() as con:
+        con.execute("UPDATE workflow.entra_flows SET expires_at=CURRENT_TIMESTAMP - interval '1 second'")
+    assert client.get('/auth/microsoft/callback', params={'state': nonce, 'code': 'code'}, follow_redirects=False).status_code == 403
+    assert len(state.list_accounts()) == 1
