@@ -227,13 +227,11 @@ def render_normal_risk_batch_panel(
     selected = set(selected_ids)
     panels: list[str] = [
         '<section class="review-normal-risk" aria-labelledby="normal-risk-title">',
-        '<h2 id="normal-risk-title">Vergelijkbare passages beoordelen</h2>',
-        '<p><span class="info-tip" tabindex="0" aria-label="Deze passages staan in dezelfde sectie en zijn van hetzelfde soort.">ⓘ'
-        '<span class="info-tip-text">Deze passages staan in dezelfde sectie en zijn van hetzelfde soort.</span></span> '
-        'Deze passages staan in dezelfde sectie en zijn van hetzelfde soort. '
-        'Lees ze als groep en bevestig alleen de passages waarover je zeker bent. '
-        f'Een groep bevat maximaal {NORMAL_RISK_BATCH_MAX} passages; batches van maximaal {NORMAL_RISK_BATCH_MAX} '
-        'houden de controle overzichtelijk.</p>',
+        '<h2 id="normal-risk-title">Passages selecteren en bevestigen</h2>',
+        '<p>Passages staan hieronder per brononderdeel en typevoorstel. '
+        'Dat betekent niet dat ze inhoudelijk hetzelfde zeggen. Controleer iedere passage met de bron. '
+        'Selecteer daarna alleen de passages die je wilt goedkeuren. '
+        f'Je kunt maximaal {NORMAL_RISK_BATCH_MAX} passages tegelijk bevestigen.</p>',
     ]
     batch_index = 0
     for (section, proposed), group_objects in groups.items():
@@ -242,6 +240,19 @@ def render_normal_risk_batch_panel(
         for start in range(0, len(group_objects), NORMAL_RISK_BATCH_MAX):
             batch = group_objects[start : start + NORMAL_RISK_BATCH_MAX]
             batch_index += 1
+            if len(batch) == 1:
+                obj = batch[0]
+                object_id = escape(str(obj.get("object_id") or ""), quote=True)
+                type_origin = "Bevestigd type" if obj.get("confirmed_object_type") else "Voorstel van Metis"
+                panels.append(
+                    '<article class="normal-risk-single">'
+                    f'<h3>{escape(section[-1])}</h3>'
+                    f'<p><strong>{type_origin}: {type_label}</strong> — {escape(_object_text(obj))}</p>'
+                    f'<a href="/review?document={safe_snapshot}&amp;object={object_id}&amp;task=batch#classification-{object_id}">Type of gebruik controleren</a> · '
+                    f'<a href="/review?document={safe_snapshot}&amp;object={object_id}&amp;task=batch">Passage beoordelen</a>'
+                    '</article>'
+                )
+                continue
             panels.append(
                 f'<form method="post" action="/review/normal-risk/batch-confirm" class="normal-risk-batch">'
                 f'<input type="hidden" name="snapshot_id" value="{safe_snapshot}">'

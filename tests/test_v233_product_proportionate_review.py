@@ -246,11 +246,12 @@ def test_rendered_batch_panel_splits_large_groups_by_type_and_maximum() -> None:
     rows += [_obj("e1", "explanation"), _obj("r1", "recommendation"), _obj("u1", "definition", uncertain=True)]
     console = _BatchHarness(rows)
     html = render_normal_risk_batch_panel(console, "snap-1")
-    assert html.count('action="/review/normal-risk/batch-confirm"') == 3
-    assert f"batches van maximaal {NORMAL_RISK_BATCH_MAX}" in html
+    assert html.count('action="/review/normal-risk/batch-confirm"') == 1
+    assert html.count('class="normal-risk-single"') == 2
+    assert f"maximaal {NORMAL_RISK_BATCH_MAX} passages tegelijk" in html
     assert f"Definitie ({NORMAL_RISK_BATCH_MAX})" in html
-    assert "Definitie (1)" in html
-    assert "Toelichting (1)" in html
+    assert "Voorstel van Metis: Definitie" in html
+    assert "Voorstel van Metis: Toelichting" in html
     assert 'value="r1"' not in html
     assert 'value="u1"' not in html
 
@@ -278,7 +279,7 @@ def test_nonbatch_content_and_batch_members_have_individual_routes() -> None:
             _obj("s1", "definition", section=())]
     panel = render_normal_risk_batch_panel(_BatchHarness(rows), "snap-1")
     for row in rows:
-        assert f'&amp;object={row["object_id"]}"' in panel
+        assert f'&amp;object={row["object_id"]}' in panel
     assert 'value="u1"' not in panel
     assert 'value="s1"' not in panel
 
@@ -310,3 +311,11 @@ def test_batch_type_is_a_proposal_and_correction_does_not_confirm_it() -> None:
     html = render_normal_risk_batch_panel(_BatchHarness([row]), 'snap-1', snapshot=([row], 'rev-1'))
     assert 'Bevestigd type: Toelichting' in html
     assert 'Voorstel van Metis: Definitie' not in html
+
+
+def test_singleton_has_individual_review_without_batch_controls():
+    html = render_normal_risk_batch_panel(_BatchHarness([_obj("single", "definition")]), "snap-1")
+    assert "Passage beoordelen" in html
+    assert 'name="object_ids"' not in html
+    assert "data-select-review-batch" not in html
+    assert 'action="/review/normal-risk/batch-confirm"' not in html
