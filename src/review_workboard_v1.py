@@ -698,13 +698,13 @@ def _projected_document_dashboard(
         snapshot_id=snapshot_id,
     )
     burden_html = (
-        '<section class="review-burden" aria-labelledby="review-burden-title">'
-        '<h3 id="review-burden-title">Reviewinteracties</h3>'
+        '<details class="review-burden">'
+        '<summary>Beheerdetails: reviewinteracties</summary>'
         f'<p><b>{int(burden["review_interactions"])}</b> gemeten menselijke interacties voor '
         f'<b>{int(burden["object_decisions"])}</b> objectbesluiten.</p>'
-        f'<p class="muted">Historische besluiten zonder D5.4-interactiebewijs: '
+        f'<p class="muted">Historische besluiten zonder gemeten interactie: '
         f'{int(burden["legacy_unmeasured_decisions"])}.</p>'
-        '</section>'
+        '</details>'
     )
     return _page(
         f"""
