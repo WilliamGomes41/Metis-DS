@@ -1686,3 +1686,24 @@ html[data-theme="dark"] .home-tile-now { background: var(--water-light); color: 
 html[data-theme="dark"] .review-control-card-alert { background: var(--alert-bg); }
 html[data-theme="dark"] .info-tip-text { background: #0d1520; }
 html[data-theme="dark"] .metis-mark-frame { background: #fff; }
+
+/* Document selection is part of the review workspace, not a separate landing. */
+.review-document-picker { grid-column: 2; grid-row: 1 / 4; align-self: center; position: relative; }
+.review-document-picker summary {
+  cursor: pointer; min-height: 44px; padding: 12px 16px; color: var(--paars);
+  border: 1px solid var(--paars); border-radius: 10px; font-weight: 700; font-size: 0.875rem;
+}
+.review-document-picker nav {
+  position: absolute; z-index: 10; right: 0; top: calc(100% + 8px);
+  width: min(440px, 80vw); max-height: 360px; overflow-y: auto;
+  background: var(--wit); border: 1px solid var(--line); border-radius: 12px;
+  padding: 8px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+}
+.review-document-picker nav a { display: grid; gap: 6px; padding: 12px; border-radius: 8px; text-decoration: none; }
+.review-document-picker nav a span { font-size: 0.8125rem; color: var(--muted); line-height: 1.5; }
+.review-document-picker nav a:hover, .review-document-picker nav a[aria-current] { background: var(--surface-soft); }
+.review-document-picker summary:focus-visible, .review-document-picker a:focus-visible { outline: 3px solid var(--rood); outline-offset: 2px; }
+@media (max-width: 720px) {
+  .review-document-picker { grid-column: 1 / -1; grid-row: auto; width: 100%; }
+  .review-document-picker nav { position: static; width: 100%; margin-top: 8px; box-shadow: none; }
+}

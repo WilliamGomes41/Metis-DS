@@ -1855,13 +1855,15 @@ def _review_task_card(
     title: str,
     description: str,
     status: str,
+    recommended: bool = False,
 ) -> str:
+    action = "Ga verder" if recommended else "Open taak"
     return f'''
       <a class="review-task-card" href="/review?document={_esc(snapshot_id)}&amp;task={_esc(task)}">
         <span class="review-task-card-title">{_esc(title)}</span>
         <span class="review-task-card-copy">{_esc(description)}</span>
         <span class="review-task-card-status">{_esc(status)}</span>
-        <span class="review-task-card-action">Open taak <span aria-hidden="true">→</span></span>
+        <span class="review-task-card-action">{action} <span aria-hidden="true">→</span></span>
       </a>
     '''
 
@@ -1883,6 +1885,8 @@ def _review_task_dashboard(
     disposition_pending: int = 0,
     waiting_pending: int = 0,
     management_details: str = "",
+    heading_done_override: int | None = None,
+    individual_done_override: int | None = None,
 ) -> str:
     heading_pending = (
         int(heading_pending_override)
@@ -1894,7 +1898,7 @@ def _review_task_dashboard(
         if heading_total_override is not None
         else len(koppen)
     )
-    heading_done = max(heading_total - heading_pending, 0)
+    heading_done = max(heading_total - heading_pending, 0) if heading_done_override is None else heading_done_override
     individual_pending = (
         int(individual_pending_override)
         if individual_pending_override is not None
@@ -1905,7 +1909,7 @@ def _review_task_dashboard(
         if individual_total_override is not None
         else len(individual)
     )
-    individual_done = max(individual_total - individual_pending, 0)
+    individual_done = max(individual_total - individual_pending, 0) if individual_done_override is None else individual_done_override
     # Navigation is a projection of existing duties, never a second review policy.
     tasks = [
         ("structure", "Documentindeling controleren", "Controleer koppen en hun plaats in de bron", heading_pending),
@@ -1938,6 +1942,7 @@ def _review_task_dashboard(
         _review_task_card(
             snapshot_id, task=task, title=title,
             description=description + ".", status=statuses[task],
+            recommended=bool(recommended and task == recommended[0]),
         )
         for task, title, description, count in available
     )
