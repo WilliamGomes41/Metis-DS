@@ -2878,6 +2878,8 @@ def create_console_app(
 ) -> FastAPI:
     state = console or OperationsConsole(root=REPO_ROOT)
     install_ingest_limits(state)
+    from src.console_entra_v1 import install_entra
+    entra = install_entra(state, trusted_origin)
     access_store = api_access_store
     access_store_error = ""
     selected_access_mode = str(os.getenv("METIS_API_ACCESS_STORE", "legacy") or "legacy").strip().lower()
@@ -2921,6 +2923,10 @@ def create_console_app(
                 )
         return await call_next(request)
 
+    if entra is not None:
+        from src.console_entra_routes_v1 import install_entra_routes
+        install_entra_routes(app, state, entra, render_page=_page)
+
     login_limiter = SlidingWindowRateLimiter()
     login_attempts_per_minute = 10
 
@@ -2944,7 +2950,7 @@ def create_console_app(
 
     @app.exception_handler(ConsoleError)
     async def console_errors(_request: Request, exc: ConsoleError) -> HTMLResponse:
-        status = 401 if exc.code in {"not_authenticated", "invalid_credentials"} else 403 if "role_required" in exc.code else 400
+        status = 401 if exc.code in {"not_authenticated", "invalid_credentials"} else 403 if "role_required" in exc.code or exc.code in {"entra_access_denied", "entra_local_auth_disabled"} else 400
         message = ERROR_COPY.get(exc.code, "Deze actie is niet toegestaan.")
         account = _current(_request)
         filename_error = exc.code == "invalid_store_path" and _request.url.path == "/ingest"
@@ -3697,6 +3703,14 @@ def create_console_app(
 
     @app.get("/login", response_class=HTMLResponse)
     def login_form() -> str:
+        if entra is not None:
+            return _page(f"""
+                <section class="room login-card">{_login_brand()}
+                <h1>Aanmelden bij Metis</h1>
+                <p>Gebruik je werkaccount. Je organisatie bepaalt of je toegang hebt.</p>
+                <a class="btn-primary" href="/auth/microsoft">Inloggen met Microsoft</a>
+                <p>Je hebt geen apart Metis-wachtwoord nodig. Geen toegang? Neem contact op met je Metis-beheerder.</p>
+                </section>""")
         return _page(
             f"""
             <section class="room login-card">
@@ -3716,6 +3730,8 @@ def create_console_app(
 
     @app.post("/login")
     def login(username: str = Form(...), password: str = Form(...)):
+        if entra is not None:
+            raise ConsoleError("entra_local_auth_disabled")
         login_key = str(username or "").strip()
         allowed, retry_after = login_limiter.allow(login_key, login_attempts_per_minute)
         if not allowed:
@@ -3741,7 +3757,11 @@ def create_console_app(
     @app.post("/logout")
     def logout(request: Request) -> RedirectResponse:
         state.logout(request.cookies.get(COOKIE))
-        response = RedirectResponse("/login", status_code=303)
+        destination = "/login"
+        if entra is not None:
+            from urllib.parse import urlencode
+            destination = entra.config.authority + "/oauth2/v2.0/logout?" + urlencode({"post_logout_redirect_uri": entra.config.origin + "/login"})
+        response = RedirectResponse(destination, status_code=303)
         response.delete_cookie(COOKIE, httponly=True, samesite="lax", secure=True)
         return response
 
@@ -4668,6 +4688,7 @@ def create_console_app(
     def accounts_get(request: Request) -> str:
         account = _require(request)
         rows = []
+        access_rows = entra.access_rows() if entra is not None else {}
         for public in sorted(state.list_accounts(), key=lambda item: item["username"]):
             role_boxes = "".join(
                 f'<label class="check"><input type="checkbox" name="roles" value="{name}"'
@@ -4675,7 +4696,7 @@ def create_console_app(
                 for name in ("researcher", "reviewer", "publisher")
             )
             role_form = ""
-            if "publisher" in account["roles"]:
+            if "publisher" in account["roles"] and entra is None:
                 role_form = f"""
                   <form method="post" action="/accounts/roles">
                     <input type="hidden" name="account_id" value="{_esc(public["account_id"])}">
@@ -4684,12 +4705,20 @@ def create_console_app(
                     <button class="btn-secondary" type="submit">Rollen wijzigen</button>
                   </form>
                 """
+            if entra is not None:
+                blocked = access_rows.get(public["account_id"], True)
+                role_form = '<p>' + ('Geblokkeerd in Metis' if blocked else 'Microsoft-aanmelding vereist') + '</p>'
+                if "publisher" in account["roles"] and public["account_id"] != account["account_id"]:
+                    role_form += f"""<form method="post" action="/accounts/access">
+                    <input type="hidden" name="account_id" value="{_esc(public['account_id'])}">
+                    <input type="hidden" name="blocked" value="{'false' if blocked else 'true'}">
+                    <button class="btn-secondary" type="submit">{'Blokkering opheffen' if blocked else 'Toegang direct blokkeren'}</button></form>"""
             rows.append(
                 f"""
                 <article class="doc-card">
                   <p class="doc-title">{_esc(public["display_name"])}</p>
                   <p class="meta">
-                    <span>gebruikersnaam <b>{_esc(public["username"])}</b></span>
+                    <span>{"Microsoft-werkaccount" if entra is not None else "gebruikersnaam " + _esc(public["username"])}</span>
                     <span>rollen <b>{", ".join(_esc(r) for r in public["roles"])}</b></span>
                   </p>
                   {role_form}
@@ -4697,7 +4726,7 @@ def create_console_app(
                 """
             )
         form = ""
-        if "publisher" in account["roles"]:
+        if "publisher" in account["roles"] and entra is None:
             form = """
               <form method="post" action="/accounts">
                 <div class="sections">
@@ -4720,12 +4749,18 @@ def create_console_app(
                 </div>
               </form>
             """
+        account_lead = (
+            "Toegang en rollen worden toegekend in Microsoft Entra. Gebruikers verschijnen hier na hun eerste aanmelding. "
+            "Een blokkering in Metis beëindigt hun toegang direct; opheffen geeft alleen toegang als Microsoft die nog toestaat. "
+            "Rollen hieronder zijn laatst gecontroleerd bij aanmelding; Microsoft-toegang wordt na maximaal vijf minuten opnieuw gecontroleerd."
+            if entra is not None else "Interne gebruikers. Alleen een publisher maakt accounts en wijzigt rollen."
+        )
         return _page(
             f"""
             {_nav(account, "accounts", _counts(account))}
             <section class="room">
               <h1>Accounts</h1>
-              <p class="lead">Interne gebruikers. Alleen een publisher maakt accounts en wijzigt rollen.</p>
+              <p class="lead">{account_lead}</p>
               {form}
               <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen accounts.</p>'}</div>
             </section>

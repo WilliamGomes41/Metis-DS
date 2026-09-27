@@ -11,6 +11,7 @@ import zipfile
 from contextlib import nullcontext
 from graphlib import CycleError, TopologicalSorter
 from typing import Any, Mapping
+from uuid import UUID
 
 from src.api_access_v1 import (
     NULLABLE_COLUMNS as API_ACCESS_NULLABLE_COLUMNS,
@@ -243,6 +244,25 @@ def check_workflow_integrity(state: Mapping[str, Any]) -> dict[str, Any]:
     accounts = {str(row.get("account_id") or "") for row in _rows(state, "accounts")}
     if "" in accounts:
         errors.append("workflow_account_id_missing")
+    entra_rows = state.get("entra_identities", [])
+    if not isinstance(entra_rows, list):
+        errors.append("entra_identity_backup_invalid")
+        entra_rows = []
+    seen_accounts, seen_principals = set(), set()
+    for row in entra_rows:
+        if not isinstance(row, dict):
+            errors.append("entra_identity_backup_invalid")
+            continue
+        aid = row.get("account_id")
+        try:
+            principal = (str(UUID(row["tenant_id"])), str(UUID(row["object_id"])))
+            if (not isinstance(aid, str) or aid not in accounts or aid in seen_accounts or principal in seen_principals
+                    or not isinstance(row.get("blocked"), bool) or not isinstance(row.get("evidence"), list)):
+                raise ValueError()
+            seen_accounts.add(aid)
+            seen_principals.add(principal)
+        except (KeyError, ValueError, TypeError, AttributeError):
+            errors.append("entra_identity_backup_invalid")
     snapshots = {str(row.get("snapshot_id") or "") for row in _rows(state, "documents")}
     if "" in snapshots:
         errors.append("workflow_snapshot_id_missing")
@@ -414,6 +434,11 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
                             f"SELECT {','.join(select_columns)} FROM workflow.{table} ORDER BY {_WORKFLOW_ORDER_BY[table]}"
                         ).fetchall()
                         workflow_tables[table] = [_json_safe(dict(row)) for row in rows]
+                    entra_rows = []
+                    if con.execute("SELECT to_regclass('workflow.entra_identities') AS name").fetchone()["name"]:
+                        entra_rows = [_json_safe(dict(r)) for r in con.execute(
+                            "SELECT tenant_id::text AS tenant_id,object_id::text AS object_id,account_id,blocked,evidence FROM workflow.entra_identities ORDER BY account_id"
+                        ).fetchall()]
                     access_tables: dict[str, list[dict[str, Any]]] = {}
                     for table in API_ACCESS_TABLES:
                         rows = con.execute(
@@ -433,6 +458,7 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
             "workflow_recovery_version": WORKFLOW_RECOVERY_VERSION,
             "workflow_tables": workflow_tables,
             "api_access_tables": access_tables,
+            "entra_identities": entra_rows,
         }
         report = check_workflow_integrity(state)
         if not report["ok"]:
@@ -478,6 +504,14 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
             with self.store._connect() as con:
                 with con.transaction():
                     self._verify_workflow_schema(con)
+                    has_entra = bool(con.execute("SELECT to_regclass('workflow.entra_identities') AS name").fetchone()["name"])
+                    if state.get("entra_identities") and not has_entra:
+                        raise PublicationChainRecoveryError("entra_restore_schema_required")
+                    if has_entra:
+                        con.execute("LOCK TABLE workflow.entra_identities,workflow.entra_sessions,workflow.entra_flows IN ACCESS EXCLUSIVE MODE")
+                        for table in ("entra_identities", "entra_sessions", "entra_flows"):
+                            if con.execute(f"SELECT 1 FROM workflow.{table} LIMIT 1").fetchone():
+                                raise PublicationChainRecoveryError("entra_restore_target_not_empty")
                     # Offline, empty-target import. Locks and trigger DDL share
                     # the data transaction: other writers cannot enter it, and
                     # a failed import restores the allocator automatically.
@@ -500,6 +534,12 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
                         con, schema="workflow", table="accounts", rows=workflow_rows["accounts"],
                         columns=_WORKFLOW_COLUMNS["accounts"], json_columns=set(),
                     )
+                    if state.get("entra_identities"):
+                        _insert_rows(
+                            con, schema="workflow", table="entra_identities", rows=state["entra_identities"],
+                            columns=("tenant_id", "object_id", "account_id", "blocked", "evidence"), json_columns={"evidence"},
+                        )
+                    # No Entra handshake/session markers restored: fresh sign-in required.
                     _insert_rows(
                         con, schema="workflow", table="sessions", rows=workflow_rows["sessions"],
                         columns=_WORKFLOW_COLUMNS["sessions"], json_columns=set(),

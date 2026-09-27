@@ -64,6 +64,7 @@ ALLOWED_CONSOLE_PACKAGES = frozenset(
         "python-multipart",
         "gunicorn",
         "azure-identity",
+        "msal",
         "azure-storage-blob",
         "cryptography",
         "psycopg",
