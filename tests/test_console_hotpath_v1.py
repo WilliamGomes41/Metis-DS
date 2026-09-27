@@ -386,7 +386,9 @@ def test_authenticated_tree_and_review_gets_use_production_list_installers(
     assert review.status_code == 200
     assert "Published fixture" in review.text
     assert "Unpublished fixture" in review.text
-    assert "data-review-workboard" in review.text
+    assert "data-review-workboard" not in review.text
+    assert "Jouw open werk" in review.text
+    assert 'class="review-document-picker"' in review.text
     assert console.list_status_calls == 2
     assert console.workboard_summary_calls == 1
     assert console.snapshot_object_reads == 0
@@ -605,3 +607,4 @@ def test_status_offload_preserves_tree_publication_batch_context(tmp_path: Path)
 
     asyncio.run(_run())
     assert console.fallback_publication_reads == 0
+
