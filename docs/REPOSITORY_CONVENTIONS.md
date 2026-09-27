@@ -16,7 +16,7 @@ It is **not** the authoritative store for canonical clinical source binaries, pr
 | `data/` | Specs, manifests, golden/holdout definitions and safe fixtures | yes |
 | `tests/` | Automated regression tests | yes |
 | `docs/` | Protocol and technical documentation | yes |
-| `docs/history/` | Historical step, audit and repair reports; not steering documents | yes |
+| `docs/history/` | Historical reports and inert source snapshots; not runtime or steering documents | yes |
 | `db/` | Database schemas/migrations | yes |
 | `examples/` | Safe client examples | yes |
 | `scripts/` | Build, audit and repository tooling | yes |
