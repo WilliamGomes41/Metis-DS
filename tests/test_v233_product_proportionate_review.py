@@ -296,3 +296,17 @@ def test_source_contains_no_new_store_or_review_tier() -> None:
     assert "light/standard/strict" not in source
     assert "use_scope" not in source
     assert "new database" not in source.lower()
+
+
+def test_batch_type_is_a_proposal_and_correction_does_not_confirm_it() -> None:
+    row = _obj('definition', 'definition')
+    before = deepcopy(row)
+    html = render_normal_risk_batch_panel(_BatchHarness([row]), 'snap-1', snapshot=([row], 'rev-1'))
+    assert 'Voorstel van Metis: Definitie' in html
+    assert '#classification-definition' in html
+    assert 'Type of gebruik controleren' in html
+    assert row == before
+    row['confirmed_object_type'] = 'explanation'
+    html = render_normal_risk_batch_panel(_BatchHarness([row]), 'snap-1', snapshot=([row], 'rev-1'))
+    assert 'Bevestigd type: Toelichting' in html
+    assert 'Voorstel van Metis: Definitie' not in html

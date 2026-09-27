@@ -255,13 +255,14 @@ def render_normal_risk_batch_panel(
                 object_id = escape(str(obj.get("object_id") or ""), quote=True)
                 text = escape(_object_text(obj))
                 checked = " checked" if str(obj.get("object_id")) in selected else ""
+                type_origin = "Bevestigd type" if obj.get("confirmed_object_type") else "Voorstel van Metis"
                 panels.append(
                     '<div class="normal-risk-row">'
                     '<label class="normal-risk-item">'
                     f'<input type="checkbox" name="object_ids" value="{object_id}"{checked}> '
-                    f'<strong>{type_label}</strong> — {text}'
+                    f'<strong>{type_origin}: {type_label}</strong> — {text}'
                     '</label>'
-                    f' <a href="/review?document={safe_snapshot}&amp;object={object_id}&amp;task=batch">Afzonderlijk beoordelen</a>'
+                    f' <a href="/review?document={safe_snapshot}&amp;object={object_id}&amp;task=batch#classification-{object_id}">Type of gebruik controleren</a>'
                     f' <a href="/review/bronpassage?document={safe_snapshot}&amp;object={object_id}">Bronpassage</a>'
                     '</div>'
                 )
