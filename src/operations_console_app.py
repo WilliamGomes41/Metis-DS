@@ -37,7 +37,7 @@ from src.object_taxonomy_v1 import (
     recommendation_strength_ui_applies,
     review_priority_rank,
 )
-from src.admission_gate_v1 import admission_of
+from src.admission_gate_v1 import admission_of, is_admission_blocked
 from src.recommendation_semantics_v1 import (
     confirmed_recommendation_semantics_of,
     proposed_recommendation_semantics_of,
@@ -2562,15 +2562,14 @@ def _render_review_card(
             "De technische toelating van deze passage ontbreekt of is onbekend. Controleer bron en classificatie voordat je een besluit neemt."
         )
     approval_disabled = disabled or (
-        " disabled" if review_path != "boom" and gate != "allowed"
-        and authoritative_review_type(obj) != "heading" else ""
+        " disabled" if is_admission_blocked(obj, review_path=review_path) else ""
     )
     repair_guidance = (
         '<aside class="banner warn"><b>Eerst de passage herstellen.</b> '
         'Kies hieronder wat ontbreekt en vervolgens <b>Correctie specificeren</b>. '
         'Je kiest daarna de oorspronkelijke bronfragmenten of de passende structurele correctie. '
         'De herstelde passage wordt een nieuw voorstel dat opnieuw beoordeeld moet worden.</aside>'
-        if gate == "blocked" else ""
+        if is_admission_blocked(obj, review_path=review_path) else ""
     )
     four_eyes_html = ""
     if requires_four_eyes(obj, confirmed_type=confirmed or None):

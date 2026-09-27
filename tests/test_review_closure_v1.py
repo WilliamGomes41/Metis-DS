@@ -258,3 +258,24 @@ def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_p
     assert repaired["governance"]["validation_status"] == "needs_review"
     restarted = _console(tmp_path, config) if config else ReviewClosureConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert restarted._current_object(sid, obj["object_id"]) == repaired
+
+
+@pytest.mark.parametrize("gate", [None, "allowed", "blocked"])
+def test_approval_ui_uses_existing_admission_policy(tmp_path, gate):
+    import re
+
+    console, client, _researcher, _reviewer, sid, objects = _system(tmp_path)
+    obj = objects[0]
+    rows = console._load_objects(sid)
+    target = next(row for row in rows if row["object_id"] == obj["object_id"])
+    admission = target.setdefault("metadata", {}).setdefault("admission", {})
+    if gate is None:
+        admission.pop("gate_result", None)
+    else:
+        admission["gate_result"] = gate
+    console._save_objects(sid, rows)
+    page = client.get(f'/review?document={sid}&object={obj["object_id"]}')
+    assert page.status_code == 200
+    approval = re.search(r'<input[^>]*name="eindoordeel"[^>]*value="goedkeuren"[^>]*>', page.text)
+    assert approval
+    assert ("disabled" in approval.group()) == (gate == "blocked")
