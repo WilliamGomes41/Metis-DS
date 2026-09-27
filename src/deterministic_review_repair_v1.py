@@ -23,6 +23,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from src.closed_review_loop_v1 import ClosedLoopReviewConsole
 from src.integrity_kernel import schema_errors, sha256_bytes, stable_hash, stamp_canonical_hashes
 from src.operations_console_v1 import ConsoleError, OperationsConsole, SNAPSHOT_OBJECT_WRITE_CONFLICT
+from src.admission_gate_v1 import is_admission_blocked
+from src.beslisboom_path_v1 import review_path_for_klasse
 from src.publish_authorization_v1 import invalidate_for_object
 from src.review_cockpit_v1 import map_eindoordeel
 from src.serving_relations_v1 import binding_relations
@@ -672,6 +674,12 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
                     SNAPSHOT_OBJECT_WRITE_CONFLICT,
                     current_revision=self.objects_revision(snapshot_id),
                 )
+            # A repair request is not type confirmation. In particular a blocked
+            # proposal must reach source repair without passing the approval gate.
+            blocked = is_admission_blocked(
+                self._current_object(snapshot_id, object_id),
+                review_path=review_path_for_klasse(self._envelope(snapshot_id)["class"]),
+            )
             with _allow_revise_write():
                 super().review_object(
                     actor_id=actor_id,
@@ -680,14 +688,14 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
                     decision="revise",
                     comment=comment.strip(),
                     proposed_correction=proposed_correction.strip(),
-                    confirmed_object_type=confirmed_object_type.strip() or None,
+                    confirmed_object_type=None if blocked else (confirmed_object_type.strip() or None),
                     recommendation_strength=recommendation_strength.strip() or None,
                     suitability=suitability.strip(),
                     eindoordeel="goedkeuren_na_correctie",
                     documentpositie_action=documentpositie_action.strip() or None,
                     found_under=found_under.strip() or None,
                     parent_choice=parent_choice.strip() or None,
-                    type_action=type_action.strip() or None,
+                    type_action=None if blocked else (type_action.strip() or None),
                     expected_revision=expected_revision,
                 )
 

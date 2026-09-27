@@ -37,7 +37,7 @@ from src.object_taxonomy_v1 import (
     recommendation_strength_ui_applies,
     review_priority_rank,
 )
-from src.admission_gate_v1 import admission_of
+from src.admission_gate_v1 import admission_of, is_admission_blocked
 from src.recommendation_semantics_v1 import (
     confirmed_recommendation_semantics_of,
     proposed_recommendation_semantics_of,
@@ -492,7 +492,7 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
     const hasRelationReview = !needsRelationReview || Boolean(relationAck && relationAck.checked);
     if (submit) {{
       submit.disabled = !value || !hasType || !hasComment || !hasSuitability || !hasRecommendationSemantics || !hasRelationReview;
-      submit.textContent = 'Review opslaan en volgende';
+      submit.textContent = mapped === 'revise' ? 'Correctie specificeren' : 'Review opslaan en volgende';
     }}
     if (hint) {{
       if (!value) hint.textContent = 'Kies een eindoordeel.';
@@ -2258,10 +2258,10 @@ def _review_inventory(
         for name, rows in followups.items() for obj in rows
     }
     labels = {
-        "structure": "Structuur beoordelen", "contextual": "In samenhang beoordelen",
-        "batch": "Vergelijkbare passages beoordelen", "second_review": "Tweede beoordeling",
+        "structure": "Documentindeling controleren", "contextual": "Passage afzonderlijk beoordelen",
+        "batch": "Passages selecteren en bevestigen", "second_review": "Tweede beoordeling",
         "waiting": "Wacht op andere reviewer", "repair": "Technisch herstel nodig",
-        "disposition": "Bronpassage afhandelen", "history": "Status en historie",
+        "disposition": "Gebruik van bronpassage bepalen", "history": "Status en historie",
     }
     outcomes = {
         "not_yet_assessed": "Nog niet afgehandeld", "candidate_review_open": "Kandidaat nog te beoordelen",
@@ -2319,6 +2319,7 @@ def _review_inventory(
             f'<a class="review-row-title" href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={_esc(target_task)}">{_esc(review_card_sentence(obj))}</a>'
             f'<p>{_esc(labels[category])} · {_esc(admission_label)} · {_esc(outcome)}</p>'
             f'<p class="review-next-action">{_esc(next_action)}</p>'
+            f'<a href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={_esc(target_task)}">Bekijk bronpassage</a>'
             f'<p class="muted">{_esc(origin)}{": " + _esc(reasons) if reasons else ""}</p></li>'
         )
     title = "Alle passages en hun afhandeling" if task == "inventory" else labels[task]
@@ -2560,6 +2561,16 @@ def _render_review_card(
             if gate == "blocked" else
             "De technische toelating van deze passage ontbreekt of is onbekend. Controleer bron en classificatie voordat je een besluit neemt."
         )
+    approval_disabled = disabled or (
+        " disabled" if is_admission_blocked(obj, review_path=review_path) else ""
+    )
+    repair_guidance = (
+        '<aside class="banner warn"><b>Eerst de passage herstellen.</b> '
+        'Kies hieronder wat ontbreekt en vervolgens <b>Correctie specificeren</b>. '
+        'Je kiest daarna de oorspronkelijke bronfragmenten of de passende structurele correctie. '
+        'De herstelde passage wordt een nieuw voorstel dat opnieuw beoordeeld moet worden.</aside>'
+        if is_admission_blocked(obj, review_path=review_path) else ""
+    )
     four_eyes_html = ""
     if requires_four_eyes(obj, confirmed_type=confirmed or None):
         four_eyes_html = (
@@ -2579,6 +2590,7 @@ def _render_review_card(
                 <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
                   <div class="review-cockpit-copy">
                     <p>{_esc(admission_notice)}</p>
+                    {repair_guidance}
                     <p>Metis doet een voorstel; jij bepaalt wat met de passage gebeurt. Controleer de gemarkeerde brontekst, de voorgestelde kop en het informatietype voordat je bevestigt of wijzigt.</p>
                   </div>
                   <form class="review-decision-form" method="post" action="/review" data-review-form>
@@ -2655,8 +2667,8 @@ def _render_review_card(
                     <section class="review-step" data-review-step="f">
                       <h4>Wat is je besluit?</h4>
                       <fieldset id="decision-{_esc(obj["object_id"])}">
-                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren"{disabled}{_checked(draft.get("eindoordeel", ""), "goedkeuren")}> Goedkeuren — inhoud en indeling kloppen</label>
-                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren_na_correctie"{_checked(draft.get("eindoordeel", ""), "goedkeuren_na_correctie")}> Goedkeuren na correctie — beschrijf wat moet veranderen</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren"{approval_disabled}{_checked(draft.get("eindoordeel", ""), "goedkeuren")}> Goedkeuren — inhoud en indeling kloppen</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren_na_correctie"{_checked(draft.get("eindoordeel", ""), "goedkeuren_na_correctie")}> Correctie specificeren — maak een nieuw voorstel voor beoordeling</label>
                       <label class="check"><input type="radio" name="eindoordeel" value="afwijzen"{_checked(draft.get("eindoordeel", ""), "afwijzen")}> Afwijzen — niet gebruiken als kennisobject</label>
                       <label class="check"><input type="radio" name="eindoordeel" value="later_beoordelen"{_checked(draft.get("eindoordeel", ""), "later_beoordelen")}> Later beoordelen — nog geen besluit</label>
                       </fieldset>
