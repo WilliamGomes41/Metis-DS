@@ -381,7 +381,7 @@ def _page(body: str, *, title: str | None = None) -> str:
 <title>{page_title}</title>
 <script>
 try {{
-  const saved = localStorage.getItem('metis-theme');
+  const saved = location.pathname === '/login' ? 'light' : localStorage.getItem('metis-theme');
   document.documentElement.dataset.theme = saved === 'light' || saved === 'dark'
     ? saved : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 }} catch (_) {{ document.documentElement.dataset.theme = 'light'; }}
