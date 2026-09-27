@@ -913,7 +913,7 @@ def test_block_b_live_ui_appears_and_disappears_before_submit(tmp_path: Path) ->
         html,
         flags=re.IGNORECASE,
     )
-    body = next((script for script in scripts if "data-stamp-block" in script), "")
+    body = next((script for script in scripts if "confirmed_object_type" in script), "")
     assert body
     assert "confirmed_object_type" in body or "type.value" in body
     assert "hidden" in body

@@ -354,3 +354,4 @@ def test_dashboard_counts_passages_without_implying_semantic_or_selected_groups(
     assert "Passages selecteren en bevestigen" in html
     assert "2 passages" in html
     assert "1 selecties" not in html
+

@@ -25,9 +25,9 @@ def test_css_drops_a4_shell_and_keeps_water_light_edges() -> None:
     assert "max-width: 1120px" not in css
     assert re.search(r"\.shell\s*\{[^}]*max-width:\s*none", css)
     assert re.search(r"\.canvas\s*\{[^}]*background:\s*var\(--wit\)", css)
+    assert re.search(r":root\s*\{[^}]*--page:\s*#eaf8f8", css)
+    assert re.search(r"html\[data-theme=\"dark\"\]\s*\{[^}]*--page:\s*#101a27", css)
     assert re.search(r"body\s*\{[^}]*background:\s*var\(--page\)", css)
-    assert re.search(r":root\s*\{[^}]*--page:\s*#eaf8f8", css, re.I)
-    assert re.search(r'html\[data-theme="dark"\]\s*\{[^}]*--page:\s*#101a27', css, re.I)
     assert not re.search(r"body\s*\{[^}]*background:\s*#E23100", css)
     assert not re.search(r"body\s*\{[^}]*background:\s*#000000", css)
     assert not re.search(r"\.metis-mark-frame\s*\{[^}]*background:\s*var\(--zwart\)", css)

@@ -334,3 +334,4 @@ def test_withdrawal_audit_failure_rolls_back_release_registry_and_evidence(recov
         _kernel_withdraw(store)
     assert adapter.export_state()["tables"] == before["tables"]
     assert _active_object_ids(store) == {"o1"}
+

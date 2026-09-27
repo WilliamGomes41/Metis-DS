@@ -8,12 +8,13 @@ De code op `main` is het implementatiebewijs. Een aanwezige route, test of GitHu
 
 ## R4.1 Huidige en historische code scheiden
 
-**Status:** gedeeltelijk uitgevoerd; verdere verwijdering vereist aanroepbewijs.
+**Status:** gedeeltelijk uitgevoerd; Step 10-fixtureroute als historische code gearchiveerd. Verdere verwijdering vereist aanroepbewijs.
 
 - Inventariseer voor elke kandidaat voor verwijdering de imports, CLI-oproepen, scripts, tests, deployment en herstelprocedure.
 - Behoud `src/legacy_canonical_recovery_v1.py` zolang `scripts/publication_chain_recovery.py recover-legacy-release` hem gebruikt. Behoud `src/azure_step9_cutover_v1.py` zolang het operatorcommando `scripts/azure_step9_cutover.py` bestaat.
 - `config/pipeline.v2.yaml`, historische `output/v2/`-bewijzen en V2-goedkeuringsbestanden zijn geen actuele runtimeconfiguratie. Maak geen nieuwe runtimeafhankelijkheid van die bestanden.
 - Oude V2-delta's blijven op hun oorspronkelijke paden wegens hash-, pad- en regressiebindingen. Hun archiefstatus staat in `docs/history/protocol-v2/README.md`; V3 is bevroren onder `docs/history/protocol-v3/`.
+- De oude Step 10-fixturebouwer en het bijbehorende handmatige smoke-script zijn buiten de actieve codeboom bewaard onder `docs/history/step10-code/`; ze hadden geen aanroepen vanuit huidige runtime, tests, packaging of deployment.
 - Verwijder alleen aantoonbaar onbereikbare code met een gerichte gedragsproef. Geen brede bestandsverplaatsing of refactor onder het mom van archivering.
 
 **Klaar wanneer:** iedere nog aanwezige legacy-entrypoint een benoemde eigenaar/gebruik of een bewezen verwijderpad heeft; actuele runtime en herstel zijn getest.

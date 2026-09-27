@@ -859,9 +859,8 @@ def test_brand_css_uses_venvn_tokens_and_one_secondary_family(tmp_path: Path) ->
     assert "#5D3297" in css
     assert "#45AAC7" in css
     assert "#EAF8F8" in css
+    assert re.search(r":root\s*\{[^}]*--page:\s*#eaf8f8", css)
     assert re.search(r"body\s*\{[^}]*background:\s*var\(--page\)", css)
-    assert re.search(r":root\s*\{[^}]*--page:\s*#eaf8f8", css, re.I)
-    assert re.search(r'html\[data-theme="dark"\]\s*\{[^}]*--page:\s*#101a27', css, re.I)
     assert not re.search(r"body\s*\{[^}]*background:\s*#E23100", css)
     assert not re.search(r"body\s*\{[^}]*background:\s*#000000", css)
     for other_family in ("#E28080", "#FDEFEB", "#6FA57D", "#EDFAF0", "#E2A659", "#FCF8EA"):

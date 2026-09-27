@@ -1,6 +1,10 @@
 """Code-surface cleanup: obsolete zero-caller modules stay deleted; fixtures remain."""
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 
@@ -71,3 +75,17 @@ def test_v223_integrity_sprint_uses_committed_fixtures_not_v21() -> None:
 
 def test_v223_does_not_recreate_handoff() -> None:
     assert not (ROOT / "HANDOFF.md").exists()
+
+
+def test_step10_archives_exact_source_without_active_entrypoints() -> None:
+    archived = {
+        "build_synthetic_fixture.py.txt": "badc507fbb42668a24b0b1cf771af322c42bec1c",
+        "run_step10_checks.sh.txt": "04510f6f10460e344818f85dde353933669d37d8",
+    }
+    for name, expected_blob_sha in archived.items():
+        payload = (ROOT / "docs/history/step10-code" / name).read_bytes()
+        git_blob = b"blob " + str(len(payload)).encode("ascii") + bytes([0]) + payload
+        assert hashlib.sha1(git_blob).hexdigest() == expected_blob_sha
+
+    assert not (ROOT / "src/build_synthetic_fixture.py").exists()
+    assert not (ROOT / "scripts/run_step10_checks.sh").exists()
