@@ -1,4 +1,8 @@
 """Full isolated comparison lifecycle with retry and stale-write boundaries."""
+# release-control-evidence: scope/belofte
+# release-control-evidence: opslag concurrent stale
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 
