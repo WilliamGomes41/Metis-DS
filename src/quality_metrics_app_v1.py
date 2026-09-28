@@ -66,7 +66,7 @@ def install_quality_routes(app, state, require, page):
                 raise ValueError("date_order")
         except ValueError:
             return HTMLResponse(page('<h1>Ongeldige periode</h1><a href="/settings/quality">Terug</a>'), status_code=400)
-        body = '<p><a href="/settings">← Instellingen</a></p><h1>Kwaliteit &amp; werkproces</h1><p>Automatisch afgeleid uit bestaande verwerking en review, voor bronnen waarvan je uploader of aangewezen reviewer bent.</p>'
+        body = '<p><a href="/settings">← Instellingen</a></p><h1>Kwaliteit &amp; werkproces</h1><p>Automatisch afgeleid uit bestaande verwerking en review, voor bronnen waarvan je uploader of aangewezen reviewer bent.</p><p><a href="/settings/quality/compare">Routevergelijking op dezelfde bron</a> · afzonderlijke experimentele resultaten</p>'
         try:
             inputs = capture(state, account)
             inputs["filters"] = filters
