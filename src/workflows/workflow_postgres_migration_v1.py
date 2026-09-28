@@ -21,6 +21,7 @@ MIGRATION_NAMES = (
     "011_workflow_audit_retention.sql",
     "012_console_entra_identity.sql",
     "013_quality_measurements.sql",
+    "014_route_comparisons.sql",
 )
 REQUIRED_TABLES = frozenset(
     {
@@ -36,6 +37,7 @@ REQUIRED_TABLES = frozenset(
         "entra_identities",
         "entra_sessions",
         "entra_flows",
+        "route_comparisons",
     }
 )
 REQUIRED_COLUMNS = frozenset(

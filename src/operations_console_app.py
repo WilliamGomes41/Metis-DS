@@ -4862,6 +4862,8 @@ def create_console_app(
 
     from src.quality_metrics_app_v1 import install_quality_routes
     install_quality_routes(app, state, _require, _page)
+    from src.route_comparison_app_v1 import install_route_comparison_routes
+    install_route_comparison_routes(app, state, _require, _page)
     return app
 
 

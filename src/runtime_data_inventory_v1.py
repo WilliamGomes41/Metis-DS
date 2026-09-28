@@ -24,6 +24,7 @@ INVENTORY_CATEGORIES = (
     "publication_authorizations",
     "release_manifests",
     "derived_projections",
+    "experimental_evidence",
 )
 
 _CATEGORY_PATHS: dict[str, tuple[str, ...]] = {
@@ -38,6 +39,7 @@ _CATEGORY_PATHS: dict[str, tuple[str, ...]] = {
     "release_manifests": ("output/runtime/operations-console/release_manifests",),
     "derived_projections": ("output/runtime/operations-console/published_projection.jsonl",
                             "output/runtime/operations-console/quality_reports"),
+    "experimental_evidence": ("output/runtime/operations-console/route_comparisons",),
 }
 
 _SAFE_PART = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-")
