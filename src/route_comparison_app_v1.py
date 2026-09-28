@@ -157,8 +157,9 @@ def install_route_comparison_routes(app, state, require, page) -> None:
                 if owner_view:
                     for route, arm in row["arms"].items():
                         body += f'<p>{escape(route)}: {escape(arm["status"])}'
-                        if arm["status"] in {"pending", "failed"}:
-                            body += f' <form method="post" action="{action}/run/{route}"><input type="hidden" name="version" value="{version}"><button>Uitvoeren</button></form>'
+                        if arm["status"] in {"pending", "failed", "running"}:
+                            button = "Opnieuw proberen na onderbreking" if arm["status"] == "running" else "Uitvoeren"
+                            body += f' <form method="post" action="{action}/run/{route}"><input type="hidden" name="version" value="{version}"><button>{button}</button></form>'
                         body += '</p>'
             elif row["state"] in {"output_ready", "assessing", "assessed"}:
                 view = blind_view(row)
@@ -262,7 +263,7 @@ def install_route_comparison_routes(app, state, require, page) -> None:
                                                                  route=route, attempt_id=attempt,
                                                                  output=output, execution=execution))
             except Exception as exc:
-                code = str(getattr(exc, "code", type(exc).__name__))
+                code = str(exc) if isinstance(exc, ComparisonError) else type(exc).__name__
                 latest = store.get(comparison_id, allowed_scope=set(scope(account)))
                 if latest is None:
                     raise ComparisonError("comparison_not_found") from exc
