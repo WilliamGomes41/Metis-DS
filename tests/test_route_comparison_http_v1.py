@@ -1,4 +1,6 @@
 """One real Settings flow proves that experimental evidence stays outside Review."""
+# release-control-evidence: toegang
+# release-control-evidence: metrics teller noemer score-must-drop
 import re
 
 from fastapi.testclient import TestClient
@@ -6,6 +8,8 @@ from fastapi.testclient import TestClient
 from src.operations_console_app import create_console_app
 from src.review_ledger import read_events
 from src.integrity_kernel import stable_hash
+from src.quality_metrics_app_v1 import capture
+from src.quality_metrics_v1 import build_report
 from test_d5_4_review_interaction_evidence import _system, PASSWORD
 
 
@@ -26,6 +30,7 @@ def test_settings_paired_route_flow_keeps_canonical_state_unchanged(tmp_path, mo
     monkeypatch.setattr("src.route_comparison_app_v1.execute_arm", fake_execute)
     before_objects = stable_hash(console.snapshot_objects(snapshot_id))
     before_events = read_events(console._ledger_path)
+    before_quality = build_report(capture(console, users["researcher"])["documents"], as_of="2026-09-28T00:00:00+00:00")
     client = TestClient(create_console_app(console))
     assert client.get("/settings/quality/compare").status_code == 401
     client.post("/login", data={"username": users["researcher"]["username"], "password": PASSWORD})
@@ -63,3 +68,7 @@ def test_settings_paired_route_flow_keeps_canonical_state_unchanged(tmp_path, mo
     assert "Resultaten per route" in report.text
     assert stable_hash(console.snapshot_objects(snapshot_id)) == before_objects
     assert read_events(console._ledger_path) == before_events
+    # Teller and noemer for normal workflow evidence must stay equal; an
+    # experimental score-must-drop judgment cannot leak into Quality metrics.
+    after_quality = build_report(capture(console, users["researcher"])["documents"], as_of="2026-09-28T00:00:00+00:00")
+    assert after_quality == before_quality
