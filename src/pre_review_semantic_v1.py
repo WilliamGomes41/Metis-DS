@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
+import time
+import uuid
 from contextvars import ContextVar
 from typing import Any, Callable, Mapping
 from urllib.error import HTTPError, URLError
@@ -65,7 +68,8 @@ from src.source_reconstruction_v1 import RECONSTRUCTION_VERSION
 
 
 PASSAGE_FORMATION_MODE_ENV = "METIS_PASSAGE_FORMATION_MODE"
-DEFAULT_TIMEOUT_SECONDS = 60
+DEFAULT_TIMEOUT_SECONDS = 180
+LOGGER = logging.getLogger("metis.provider")
 SEMANTIC_PROVIDER_ID = "openai-responses-v1"
 SEMANTIC_DEVELOPER_PROMPT = (
     "Form meaning units for human review by selecting only exact source spans. "
@@ -145,11 +149,25 @@ def _post_json(
         headers=headers,
         method="POST",
     )
+    call_id = uuid.uuid4().hex[:12]
+    started = time.monotonic()
+    LOGGER.info("METIS_PROVIDER start id=%s timeout=%s", call_id, timeout)
     try:
         with urlopen(request, timeout=timeout) as response:
             raw = response.read()
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
+        LOGGER.error(
+            "METIS_PROVIDER failure id=%s type=%s http=%s elapsed=%.2f reason_type=%s",
+            call_id, type(exc).__name__,
+            exc.code if isinstance(exc, HTTPError) else "-",
+            time.monotonic() - started,
+            type(exc.reason).__name__ if isinstance(exc, URLError) else "-",
+        )
         raise ConsoleError("pre_review_llm_provider_unavailable") from exc
+    LOGGER.info(
+        "METIS_PROVIDER success id=%s http=%s elapsed=%.2f",
+        call_id, response.status, time.monotonic() - started,
+    )
     try:
         decoded = json.loads(raw.decode("utf-8"))
     except (UnicodeError, json.JSONDecodeError) as exc:
@@ -579,6 +597,7 @@ def _semantic_execution_before_review(
                 allowed_candidate_block_ids=allowed_candidate_block_ids,
             )
         except SemanticPassageError as exc:
+            LOGGER.error("METIS_VALIDATION rejected code=%s", exc.code)
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
         execution = EXECUTION_INFERENCE
         if identity is not None:
