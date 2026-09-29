@@ -73,6 +73,7 @@ from src.processing_diagnostics_v1 import (
     processing_diagnostic_rows,
     processing_diagnostics,
 )
+from src.processing_evidence_export_v1 import processing_evidence_zip
 from src.extract_coverage_v1 import coverage_panel_rows
 from src.review_cockpit_v1 import (
     SUITABILITY_VALUES,
@@ -3192,6 +3193,7 @@ def create_console_app(
                   <a href="/review/passages-export?document={snapshot}&amp;format=json">JSON</a></li>
                 <li><a href="/review/processing-diagnostics?document={snapshot}">Diagnostiek (JSON)</a></li>
                 <li><a href="/review/processing-diagnostics-detail?document={snapshot}">Detaildiagnostiek (JSON)</a></li>
+                <li><a href="/review/processing-evidence-export?document={snapshot}">Download verwerkingsbewijs als CSV-pakket</a></li>
               </ul>
             </details>''')
         return _page(f'''{_nav(account, "settings", _counts(account))}
@@ -4323,6 +4325,24 @@ def create_console_app(
             "passage_count": len(rows),
             "rows": rows,
         }, headers=headers)
+
+    @app.get("/review/processing-evidence-export")
+    def review_processing_evidence_export(request: Request, document: str = "") -> Response:
+        account = _require(request)
+        if "reviewer" not in set(account.get("roles") or []):
+            raise ConsoleError("reviewer_role_required")
+        snapshot_id = document.strip()
+        envelope = state._envelope(snapshot_id)
+        if account["account_id"] not in (envelope.get("named_reviewers") or []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        objects, revision = state.snapshot_objects_and_revision(snapshot_id)
+        payload = processing_evidence_zip(snapshot_id=snapshot_id, revision=revision,
+                                          envelope=envelope, objects=objects)
+        filename = re.sub(r"[^A-Za-z0-9_-]", "_", snapshot_id)
+        return Response(payload, media_type="application/zip", headers={
+            "Content-Disposition": f'attachment; filename="{filename}-processing-evidence.zip"',
+            "Cache-Control": "no-store",
+        })
 
     @app.get("/review/processing-diagnostics", response_class=JSONResponse)
     def review_processing_diagnostics(request: Request, document: str = "") -> JSONResponse:
