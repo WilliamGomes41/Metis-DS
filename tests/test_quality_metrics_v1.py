@@ -116,6 +116,8 @@ def test_settings_and_capture_do_not_expand_document_access(tmp_path):
     response = client.post('/login', data={'username': users['researcher']['username'], 'password': PASSWORD})
     assert response.status_code == 200
     response = client.get('/settings/quality')
+    assert 'href="/settings/technical"' in response.text
+    assert 'href="/settings/quality/compare"' not in response.text
     assert response.status_code == 200, response.text
     assert 'Kwaliteit &amp; werkproces' in response.text
     assert 'Niet volledig meetbaar' in response.text
