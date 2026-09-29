@@ -978,6 +978,8 @@ def test_phase3_does_not_mutate_passage_register_or_add_gold_metrics() -> None:
     for blob in (cockpit, app):
         assert "selected_as_candidate" not in blob
         assert "coverage vs gold" not in blob
-        assert "review_burden" not in blob
+        # Interaction measurements are now under technical management (#454).
+        if blob == cockpit:
+            assert "review_burden" not in blob
         # Inventory may read the existing register, but must not recompute/write it.
         assert "apply_passage_register(" not in blob

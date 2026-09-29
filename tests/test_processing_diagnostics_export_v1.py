@@ -257,18 +257,18 @@ def test_export_unknown_snapshot_fails_and_control_page_links_to_export(tmp_path
         assert missing.status_code == 400
         assert "unknown_snapshot" in missing.text
 
-    control = client.get(f"/settings/technical?document={snapshot_id}")
+    control = client.get(f"/settings/technical/exports?document={snapshot_id}")
     assert control.status_code == 200
     assert (
         f'href="/review/processing-diagnostics?document={snapshot_id}"'
         in control.text
     )
-    assert "Exporteer diagnostiek als JSON" in control.text
+    assert "Diagnostiek (JSON)" in control.text
     assert (
         f'href="/review/processing-diagnostics-detail?document={snapshot_id}"'
         in control.text
     )
-    assert "Exporteer detaildiagnostiek als JSON" in control.text
+    assert "Detaildiagnostiek (JSON)" in control.text
 
 
 def test_all_passages_export_includes_every_current_passage_and_evidence(tmp_path):
@@ -300,8 +300,8 @@ def test_all_passages_export_includes_every_current_passage_and_evidence(tmp_pat
     assert [row["candidate_text"] for row in exported] == [row["candidate_text"] for row in payload["rows"]]
     assert json.loads(exported[0]["admission"]) == payload["rows"][0]["admission"]
     assert client.get(url + "&format=xml").status_code == 400
-    page = client.get(f"/review?document={snapshot_id}")
-    assert "Alle bronpassages downloaden" in page.text
+    page = client.get(f"/settings/technical/exports?document={snapshot_id}")
+    assert "Bronpassages:" in page.text
     assert "&amp;format=csv" in page.text
     assert "&amp;format=json" in page.text
     assert console.snapshot_objects(snapshot_id) == objects

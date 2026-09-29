@@ -12,7 +12,7 @@ import html
 import os
 import re
 from typing import Any
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, urlencode, urlsplit
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -54,7 +54,9 @@ from src.review_duty_v1 import authoritative_review_type, review_duty_for, revie
 from src.review_interaction_v1 import (
     build_review_interaction_evidence,
     new_review_interaction_id,
+    review_burden_projection,
 )
+from src.review_ledger import read_events
 from src.review_context_v1 import (
     AUTHORITY_CONFIRMED,
     DIRECTION_INCOMING,
@@ -955,6 +957,37 @@ def _coverage_panel(objects: list[dict[str, Any]]) -> str:
     """
 
 
+def _document_list_page(rows: list[dict[str, Any]], *, q: str, page: int, path: str) -> tuple[list[dict[str, Any]], str]:
+    """Bound rendered document lists; search the complete authorized collection."""
+    query = q.strip()
+    terms = query.casefold().split()
+    matches = [row for row in rows if all(term in (
+        str(row.get("title") or "") + " " + str(row.get("family") or "")
+    ).casefold() for term in terms)]
+    size = 25
+    pages = max(1, (len(matches) + size - 1) // size)
+    page = max(1, min(page, pages))
+    links = []
+    for number, label in ((page - 1, "Vorige"), (page + 1, "Volgende")):
+        if 1 <= number <= pages:
+            links.append(f'<a href="{path}?{_esc(urlencode({"q": query, "page": number}))}">{label}</a>')
+    controls = f'''<form method="get" action="{path}" class="document-search">
+      <label>Zoek documenten<input type="search" name="q" value="{_esc(query)}" placeholder="Titel of onderwerp"></label>
+      <button class="btn-secondary" type="submit">Zoeken</button>
+    </form><nav class="document-pagination" aria-label="Documentpagina’s">
+      <span>{len(matches)} documenten · pagina {page} van {pages}</span> {" · ".join(links)}</nav>'''
+    return matches[(page - 1) * size:page * size], controls
+
+
+def _document_summary(row: dict[str, Any]) -> str:
+    from src.document_status_ui_v1 import current_document_lifecycle_status
+    lifecycle = current_document_lifecycle_status(str(row.get("snapshot_id") or "")) or {}
+    status = row.get("meaningful_status") or lifecycle.get("presentation_status") or row.get("status") or row.get("state") or ""
+    return (f'<span class="doc-title">{_esc(row["title"])}</span>'
+            f'<span class="meta">Versie {_esc(row["version"])} · {_esc(row.get("family"))} · '
+            f'{_esc(row.get("class"))} · status <b>{_esc(_status_label(status))}</b></span>')
+
+
 def _document_card_heading(row: dict[str, Any]) -> str:
     return f"""
       <header>
@@ -1018,28 +1051,6 @@ def _unpublished_delete_control(
         <button class="btn-secondary" type="submit">Verwijder unpublished document</button>
       </form>
     """
-
-
-def _ingested_document_list(
-    console: OperationsConsole,
-    documents: list[dict[str, Any]],
-    account: dict[str, Any],
-) -> str:
-    if not documents:
-        return (
-            "<h2>Ingeleverde documenten</h2>"
-            '<p class="muted">Nog geen documenten.</p>'
-        )
-    cards = []
-    for row in documents:
-        cards.append(
-            f"""
-            <article class="doc-card">
-              {_document_card_heading({**row, "status": row["state"]})}
-            </article>
-            """
-        )
-    return f"<h2>Ingeleverde documenten</h2><div class=\"doc-list\">{''.join(cards)}</div>"
 
 
 def _strength_options(selected: str | None) -> str:
@@ -1886,7 +1897,6 @@ def _review_task_dashboard(
     second_review_pending: int = 0,
     disposition_pending: int = 0,
     waiting_pending: int = 0,
-    management_details: str = "",
     heading_done_override: int | None = None,
     individual_done_override: int | None = None,
 ) -> str:
@@ -1953,13 +1963,10 @@ def _review_task_dashboard(
         f'{waiting_pending} wachten op een andere beoordelaar</a>. Jij kunt deze tweede beoordeling niet overnemen.</p>'
         if waiting_pending else ''
     )
-    control_status = (
-        f'{blocked_count} passages vereisen technisch herstel' if blocked_count != 1
-        else '1 passage vereist technisch herstel'
-    ) if blocked_count else 'Geen technische blokkades'
-    control_copy = (
-        'Metis kon deze passages niet veilig verwerken. Bekijk per passage de oorzaak en herstelactie.'
-        if blocked_count else 'Bekijk of alle brononderdelen zijn verwerkt.'
+    repair_notice = (
+        f'<p class="review-blocked-notice">{blocked_count} {"passage wacht" if blocked_count == 1 else "passages wachten"} op technisch herstel. '
+        f'<a href="/settings/technical?document={_esc(snapshot_id)}">Bekijk verwerkingsproblemen</a></p>'
+        if blocked_count else ''
     )
     return f'''
       <section class="review-task-dashboard" aria-labelledby="review-task-title">
@@ -1976,17 +1983,9 @@ def _review_task_dashboard(
         <div class="review-task-grid">{rows}</div>
         {waiting}
         </div>
-        <aside class="review-sidebar" aria-label="Voortgang en passageherstel">
+        <aside class="review-sidebar" aria-label="Reviewvoortgang">
         {_review_progress_overview(snapshot_id, progress)}
-        <section class="review-management" aria-label="Passages herstellen">
-          <div>
-            <span class="review-control-card-label">Passages herstellen</span>
-            <h2>Controle en uitzonderingen</h2>
-            <p><strong>{_esc(control_status)}.</strong> {_esc(control_copy)}</p>
-          </div>
-          <a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=repair">Bekijk geblokkeerde passages →</a>
-          {management_details}
-        </section>
+        {repair_notice}
         </aside>
         </div>
       </section>
@@ -2785,9 +2784,6 @@ def _render_review_room(
             '<div class="review-document-card-top"><span class="review-document-kicker">Document in review</span>'
             '<a class="btn-secondary" href="/review">Ander document kiezen</a></div>'
             f'{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}'
-            f'<p>Alle bronpassages downloaden: '
-            f'<a class="btn-secondary" href="/review/passages-export?document={_esc(chosen)}&amp;format=json">JSON</a> '
-            f'<a class="btn-secondary" href="/review/passages-export?document={_esc(chosen)}&amp;format=csv">CSV</a></p>'
             "</div>"
         )
         history_enabled = chosen_task == "history"
@@ -3112,7 +3108,7 @@ def create_console_app(
         )
 
     @app.get("/settings/technical", response_class=HTMLResponse)
-    def technical_management(request: Request, document: str = "") -> str:
+    def technical_management(request: Request, document: str = "", q: str = "", page: int = 1) -> str:
         account = _require(request)
         document_panel = ""
         if document:
@@ -3122,16 +3118,25 @@ def create_console_app(
             if account["account_id"] not in (envelope.get("named_reviewers") or []):
                 raise ConsoleError("reviewer_not_named_on_snapshot")
             objects = state.snapshot_objects(document)
+            burden = review_burden_projection(read_events(state._ledger_path), snapshot_id=document)
             document_panel = f'''
-              <h2>Diagnostiek: {_esc(envelope.get("title"))}</h2>
-              <p><a href="/review?document={_esc(document)}&amp;task=repair">Terug naar passageherstel</a></p>
-              {_processing_diagnostics_html(objects)}
-              <p><a href="/review/processing-diagnostics?document={_esc(document)}">Exporteer diagnostiek als JSON</a>
-              · <a href="/review/processing-diagnostics-detail?document={_esc(document)}">Exporteer detaildiagnostiek als JSON</a></p>
+              <h2>Verwerkingsproblemen herstellen: {_esc(envelope.get("title"))}</h2>
+              <p><a href="/review?document={_esc(document)}">Naar inhoudelijke review</a>
+              · <a href="/settings/technical/exports?document={_esc(document)}">Exports</a></p>
+              {_review_inventory(document, objects, review_path=review_path_for_klasse(envelope["class"]), bindings=_review_bindings(state, document), reviewer_id=account["account_id"], task="repair")}
+              <details><summary>Diagnostiek en brondekking</summary>
+                {_processing_diagnostics_html(objects)}{_coverage_panel(objects)}
+              </details>
+              <details class="review-burden"><summary>Reviewinteracties</summary>
+                <p>{int(burden["review_interactions"])} gemeten menselijke interacties voor
+                {int(burden["object_decisions"])} objectbesluiten.</p>
+                <p>Historische besluiten zonder gemeten interactie: {int(burden["legacy_unmeasured_decisions"])}.</p>
+              </details>
             '''
         assigned = [row for row in state.list_envelopes()
                     if "reviewer" in set(account.get("roles") or [])
                     and account["account_id"] in (row.get("named_reviewers") or [])]
+        assigned, list_controls = _document_list_page(assigned, q=q, page=page, path="/settings/technical")
         documents = "".join(
             f'<li><a href="/settings/technical?document={_esc(row["snapshot_id"])}">{_esc(row.get("title"))} · {_esc(row.get("version"))}</a></li>'
             for row in assigned
@@ -3153,12 +3158,46 @@ def create_console_app(
               <a class="doc-card" href="/audit"><p class="doc-title">Audit &amp; diagnostiek</p><p>Open controles, experimenten en bewaarde resultaten.</p></a>
               <a class="doc-card" href="/settings/quality/compare"><p class="doc-title">Routevergelijking</p><p>Vergelijk verwerkingsroutes op dezelfde bron.</p></a>
             </div>
-            <h2>Documentdiagnostiek</h2>
-            <p>Kies een document waarvoor je als reviewer bent aangewezen. Broninhoud en reviewbesluiten blijven in Review.</p>
-            <ul>{documents or '<li>Geen documenten voor jouw revieweraccount.</li>'}</ul>
+            <h2>Exports</h2>
+            <a class="doc-card" href="/settings/technical/exports">Alle exports</a>
+            <h2>Verwerkingsproblemen herstellen</h2>
+            {list_controls}
+            <ul>{documents or '<li>Geen documenten gevonden.</li>'}</ul>
             {document_panel}
           </section>
         ''', title="Technisch beheer — Metis")
+
+    @app.get("/settings/technical/exports", response_class=HTMLResponse)
+    def technical_exports(request: Request, document: str = "", q: str = "", page: int = 1) -> str:
+        account = _require(request)
+        if "reviewer" not in set(account.get("roles") or []):
+            raise ConsoleError("reviewer_role_required")
+        assigned = [row for row in state.list_envelopes()
+                    if account["account_id"] in (row.get("named_reviewers") or [])]
+        if document and not any(row["snapshot_id"] == document for row in assigned):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        visible, controls = _document_list_page(assigned, q=q, page=page, path="/settings/technical/exports")
+        if document:
+            visible = [row for row in assigned if row["snapshot_id"] == document]
+            controls = '<p><a href="/settings/technical/exports">Alle documenten</a></p>'
+        cards = []
+        for row in visible:
+            snapshot = _esc(quote(row["snapshot_id"], safe=""))
+            opened = " open" if document else ""
+            cards.append(f'''<details class="doc-card document-disclosure"{opened}>
+              <summary>{_document_summary(row)}</summary>
+              <ul class="export-options">
+                <li>Bronpassages:
+                  <a href="/review/passages-export?document={snapshot}&amp;format=csv">CSV</a> ·
+                  <a href="/review/passages-export?document={snapshot}&amp;format=json">JSON</a></li>
+                <li><a href="/review/processing-diagnostics?document={snapshot}">Diagnostiek (JSON)</a></li>
+                <li><a href="/review/processing-diagnostics-detail?document={snapshot}">Detaildiagnostiek (JSON)</a></li>
+              </ul>
+            </details>''')
+        return _page(f'''{_nav(account, "settings", _counts(account))}
+          <section class="room"><p><a href="/settings/technical">← Technisch beheer</a></p>
+          <h1>Exports</h1>{controls}<div class="doc-list">
+          {"".join(cards) or "<p>Geen documenten gevonden.</p>"}</div></section>''', title="Exports — Metis")
 
     @app.get("/settings/api-access", response_class=HTMLResponse)
     def settings_api_access(request: Request) -> str:
@@ -3931,7 +3970,6 @@ def create_console_app(
                 </div>
                 <button class="btn-primary" type="submit">Inleveren</button>
               </form>
-              {_ingested_document_list(state, documents, account)}
             </section>
             <script>
             (function () {{
@@ -4028,7 +4066,7 @@ def create_console_app(
         )
 
     @app.get("/tree", response_class=HTMLResponse)
-    def tree(request: Request) -> str:
+    def tree(request: Request, q: str = "", page: int = 1) -> str:
         account = _require(request)
         can_move = "researcher" in account["roles"] or "publisher" in account["roles"]
         can_promote = "reviewer" in account["roles"]
@@ -4037,10 +4075,17 @@ def create_console_app(
             f'<option value="{_esc(family)}"></option>'
             for family in sorted(payload["families"], key=str.casefold)
         )
+        visible, list_controls = _document_list_page(
+            [child for node in payload["families"].values() for child in node["children"]],
+            q=q, page=page, path="/tree",
+        )
+        visible_ids = {row["snapshot_id"] for row in visible}
         blocks: list[str] = []
         for family, node in payload["families"].items():
             cards = []
             for child in node["children"]:
+                if child["snapshot_id"] not in visible_ids:
+                    continue
                 actions = []
                 try:
                     mutable = not state.snapshot_is_published(child["snapshot_id"])
@@ -4089,9 +4134,8 @@ def create_console_app(
                             <select name="new_class">{_class_options(child["class"])}</select>
                           </label>
                           <div class="klasse-wijzigen-consequence">
-                            <p>De bron blijft ongewijzigd: freeze-bytes, SHA-256, titel, versie en herkomst wijzigen niet.</p>
-                            <p>Same-model (richtlijn-pad onderling): objecten blijven; in deze golf geldt volle herreview.</p>
-                            <p>Cross-model (niet-boom ↔ beslisboom): directe wijziging is geblokkeerd; re-extract van dezelfde freeze is vereist; nieuwe objectgrafiek; volle herreview; eerdere objecten blijven als audithistorie.</p>
+                            <p>De bron blijft ongewijzigd. Deze wijziging vereist een nieuwe beoordeling.
+                            Bij een overstap van of naar een beslisboom wordt de bron opnieuw verwerkt.</p>
                           </div>
                           <label class="check">
                             <input type="checkbox" name="confirm" value="1">
@@ -4103,13 +4147,15 @@ def create_console_app(
                     )
                 cards.append(
                     f"""
-                    <article class="doc-card">
-                      {_document_card_heading(child)}
+                    <details class="doc-card document-disclosure">
+                      <summary>{_document_summary(child)}</summary>
                       <div class="doc-actions">{"".join(actions)}</div>
                       {_unpublished_delete_control(child, account=account, console=state, next_path="/tree", mutable=mutable)}
-                    </article>
+                    </details>
                     """
                 )
+            if not cards:
+                continue
             blocks.append(
                 f'<h2>Onderwerp {_esc(family)}</h2><div class="doc-list">{"".join(cards)}</div>'
             )
@@ -4120,8 +4166,8 @@ def create_console_app(
             <section class="room">
               <h1>Documenten</h1>
               <datalist id="move-family-options">{move_family_options}</datalist>
-              <p class="lead">Documenten per onderwerp en klasse. Verplaatsen of klasse wijzigen vanaf het document.</p>
-              {"".join(blocks) or empty}
+              {list_controls}
+              {"".join(blocks) or ('<p>Geen documenten gevonden.</p>' if q else empty)}
             </section>
             """,
             title="Documenten — V&amp;VN Data Services",

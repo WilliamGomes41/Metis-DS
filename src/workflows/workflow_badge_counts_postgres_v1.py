@@ -750,6 +750,13 @@ class _PostgresBadgeCountsMixin:
                                COUNT(*) FILTER (
                                    WHERE object_type<>'document'
                                ) AS progress_total,
+                               BOOL_OR(
+                                   LOWER(BTRIM(COALESCE(payload#>>'{governance,validated_by}', ''))) NOT IN (
+                                       '', 'ai', 'grok bot', 'grok', 'metis',
+                                       'implementation engineer', 'auditor'
+                                   )
+                                   AND BTRIM(COALESCE(payload#>>'{governance,review_snapshot_hash}', ''))<>''
+                               ) AS has_review_decision,
                                COUNT(*) FILTER (
                                    WHERE object_type<>'document'
                                      AND disposition_final
@@ -836,6 +843,7 @@ class _PostgresBadgeCountsMixin:
                            COALESCE(c.actionable_contextual_duties,0) AS actionable_contextual_duties,
                            COALESCE(c.actionable_batch_duties,0) AS actionable_batch_duties,
                            COALESCE(c.actionable_second_review_duties,0) AS actionable_second_review_duties,
+                           COALESCE(c.has_review_decision,false) AS has_review_decision,
                            COALESCE(c.progress_total,0) AS progress_total,
                            COALESCE(c.progress_done,0) AS progress_done,
                            COALESCE(c.progress_rejected,0) AS progress_rejected,
@@ -908,6 +916,7 @@ class _PostgresBadgeCountsMixin:
                 "actionable_second_review_duties": int(
                     row.get("actionable_second_review_duties") or 0
                 ),
+                "has_review_decision": bool(row.get("has_review_decision")),
                 "progress_total": int(row.get("progress_total") or 0),
                 "progress_done": int(row.get("progress_done") or 0),
                 "progress_approved": int(row.get("progress_approved") or 0),

@@ -306,14 +306,11 @@ def test_preconfirm_consequence_shown_on_documentenhierarchie(tmp_path: Path) ->
     html = client.get("/tree").text
     lower = html.lower()
     assert "bron blijft ongewijzigd" in lower or "bron ongewijzigd" in lower
-    assert "sha-256" in lower
-    assert "titel" in lower
-    assert "versie" in lower
-    assert "same-model" in lower
-    assert "cross-model" in lower
-    assert "volle herreview" in lower
-    assert "re-extract" in lower
-    assert "objecten blijven" in lower or "objecten blijven" in html.lower()
+    assert "deze wijziging vereist een nieuwe beoordeling" in lower
+    assert "van of naar een beslisboom wordt de bron opnieuw verwerkt" in lower
+    assert "sha-256" not in lower
+    assert "same-model" not in lower
+    assert "cross-model" not in lower
     assert "envelope" not in lower
     assert re.search(r'name=["\']confirm["\']', html, flags=re.I)
 

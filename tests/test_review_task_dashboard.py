@@ -36,7 +36,7 @@ def test_default_review_page_is_a_clickable_task_dashboard():
     assert "Verder beoordelen" in html
     assert 'class="review-task-grid"' in html
     assert "Een onafhankelijke tweede beoordeling geven" not in html
-    assert html.count("task=repair") == 1
+    assert "task=repair" not in html
     assert 'href="/review?document=snap-1&amp;task=structure"' in html
     assert 'href="/review?document=snap-1&amp;task=contextual"' in html
     assert 'href="/review?document=snap-1&amp;task=batch"' in html
@@ -68,13 +68,10 @@ def test_control_information_is_secondary_to_review_tasks():
     dashboard = _render_review_index("snap-1", objects, "richtlijn")
     control = _render_review_index("snap-1", objects, "richtlijn", task="control")
 
-    assert "Controle en uitzonderingen" in dashboard
-    assert "Passages herstellen" in dashboard
-    assert dashboard.index("Jouw open werk") < dashboard.index('class="review-management"')
-    assert "Geen technische blokkades" in dashboard
-    assert "Bekijk geblokkeerde passages" in dashboard
-    assert 'class="review-management"' in dashboard
-    assert 'href="/review?document=snap-1&amp;task=repair"' in dashboard
+    assert "Controle en uitzonderingen" not in dashboard
+    assert "Passages herstellen" not in dashboard
+    assert 'class="review-management"' not in dashboard
+    assert 'class="review-blocked-notice"' not in dashboard
     assert "Controleoverzicht per kop" not in dashboard
     assert "Geblokkeerde passages herstellen" in control
     assert "Controleoverzicht per kop" in control
@@ -88,10 +85,10 @@ def test_control_card_highlights_blocked_passages_as_work():
 
     dashboard = _render_review_index("snap-1", [blocked], "richtlijn")
 
-    assert "1 passage vereist technisch herstel" in dashboard
-    assert "Metis kon deze passages niet veilig verwerken" in dashboard
-    assert 'class="review-management"' in dashboard
-    assert 'task=repair' in dashboard
+    assert "1 passage wacht op technisch herstel" in dashboard
+    assert "Bekijk verwerkingsproblemen" in dashboard
+    assert 'class="review-blocked-notice"' in dashboard
+    assert '/settings/technical?document=snap-1' in dashboard
 
 
 
@@ -344,7 +341,7 @@ def test_dashboard_accounts_for_every_passage_without_hiding_followup_work():
     assert inventory.count('data-passage-id=') == 436
     assert followup.count('data-passage-id=') == 338
     assert 'Metis heeft nog niet vastgesteld' in followup
-    assert dashboard.count('task=repair') == 1
+    assert dashboard.count('/settings/technical?document=snap-430') == 1
     assert rows == before
 
 

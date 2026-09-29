@@ -483,8 +483,7 @@ def test_g2_still_blocks_publish_after_v227_delete_surface(tmp_path: Path) -> No
 
 def test_app_source_does_not_offer_delete_outside_tree() -> None:
     source = APP_SOURCE.read_text(encoding="utf-8")
-    ingest_list = source.split("def _ingested_document_list", 1)[1].split("\ndef ", 1)[0]
-    assert "_unpublished_delete_control" not in ingest_list
+    assert "def _ingested_document_list" not in source
     ingest_get = source.split("def ingest_get", 1)[1].split("\n    @app.", 1)[0]
     assert "_unpublished_delete_control" not in ingest_get
     ingest_post = source.split("def ingest_post", 1)[1].split("\n    @app.", 1)[0]

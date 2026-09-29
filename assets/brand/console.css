@@ -1707,3 +1707,14 @@ html[data-theme="dark"] .metis-mark-frame { background: #fff; }
   .review-document-picker { grid-column: 1 / -1; grid-row: auto; width: 100%; }
   .review-document-picker nav { position: static; width: 100%; margin-top: 8px; box-shadow: none; }
 }
+.document-disclosure > summary { cursor: pointer; padding: 8px 0; }
+.document-disclosure > summary .doc-title,
+.document-disclosure > summary .meta,
+.document-work-summary { display: block; margin: 4px 0; }
+.document-disclosure > summary:focus-visible { outline: 3px solid var(--paars); outline-offset: 4px; }
+.document-disclosure[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 20px; padding-bottom: 16px; }
+.review-status { display: inline-block; font-weight: 700; padding: 4px 0; }
+.document-search { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 16px 0; }
+.document-search label { flex: 1 1 240px; }
+.document-pagination { display: flex; flex-wrap: wrap; gap: 16px; margin: 16px 0; }
+.export-options li { margin: 12px 0; }

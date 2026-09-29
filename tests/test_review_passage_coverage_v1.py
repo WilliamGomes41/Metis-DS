@@ -64,7 +64,7 @@ def test_followup_counts_lists_and_final_blocked_history_are_disjoint():
     dashboard = _render_review_index("snap", objects, "tekst", bindings=[])
     assert "Alle reviewtaken zijn afgerond" not in dashboard
     assert 'task=disposition' in dashboard
-    assert 'task=repair' in dashboard
+    assert '/settings/technical?document=snap' in dashboard
     inventory = _render_review_index("snap", objects, "tekst", task="inventory", bindings=[])
     assert set(_inventory_ids(inventory)) == {"blocked", "excluded", "unknown"}
     assert 'object=excluded&amp;task=history' in inventory

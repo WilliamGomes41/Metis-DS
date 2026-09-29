@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import html
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 import src.operations_console_app as console_ui
 from src.beslisboom_path_v1 import review_path_for_klasse
+from src.four_eyes_v1 import is_forbidden_reviewer
 from src.document_status_ui_v1 import current_document_lifecycle_status
 from src.operations_console_app import (
     COOKIE,
@@ -34,7 +35,7 @@ from src.proportionate_review_v1 import (
 )
 from src.publication_readiness_v1 import source_passage_closure, review_followup_queues
 from src.review_duty_v1 import review_duty_counts, reviewer_route_counts
-from src.review_interaction_v1 import review_burden_projection
+from src.review_interaction_v1 import _is_decision_event
 from src.review_ledger import read_events
 
 
@@ -303,7 +304,7 @@ def review_work_item(
             bindings=bindings,
         )
 
-    return _work_item_from_counts(
+    item = _work_item_from_counts(
         envelope=envelope,
         snapshot_id=snapshot_id,
         lifecycle_status=_lifecycle_for_work_item(console, snapshot_id),
@@ -318,6 +319,15 @@ def review_work_item(
         **duty_counts,
         **route_counts,
     )
+    item["progress"] = console_ui._review_progress_summary(objects)
+    item["has_review_decision"] = any(
+        str((obj.get("governance") or {}).get("validated_by") or "").strip()
+        and not is_forbidden_reviewer(str(obj["governance"]["validated_by"]))
+        and (obj.get("governance") or {}).get("review_snapshot_hash")
+        for obj in objects
+    )
+    return item
+
 
 
 def review_workboard_items(
@@ -332,7 +342,7 @@ def review_workboard_items(
         summaries = summary_reader(account_id)
         items: list[dict[str, Any]] = []
         for snapshot_id, summary in summaries.items():
-            envelope = dict(summary["envelope"])
+            envelope = {"snapshot_id": snapshot_id, **summary["envelope"]}
             if str(envelope.get("publication_eligibility") or "") == PRE_REVIEW_BLOCKED:
                 continue
             closure_gap_count = int(summary.get("closure_gap_count") or 0)
@@ -531,25 +541,17 @@ def _workboard_card(item: dict[str, Any]) -> str:
     '''
 
 
-def _document_picker(items: list[dict[str, Any]], selected: str) -> str:
-    if len(items) < 2:
-        return ""
-    options = []
-    for item in items:
-        snapshot = str(item["snapshot_id"])
-        envelope = item["envelope"]
-        current = ' aria-current="page"' if snapshot == selected else ''
-        options.append(
-            f'<a href="/review?document={quote(snapshot, safe="")}"{current}>'
-            f'<strong>{_esc(envelope.get("title") or snapshot)}</strong>'
-            f'<span>Versie {_esc(envelope.get("version") or "—")} · '
-            f'{_esc(_work_summary(item))}</span></a>'
-        )
-    return (
-        '<details class="review-document-picker">'
-        f'<summary>Ander document kiezen ({len(items)})</summary>'
-        '<nav aria-label="Jouw reviewdocumenten">' + ''.join(options) + '</nav></details>'
-    )
+def _review_activity_status(item: dict[str, Any], started: set[str]) -> str:
+    # Display only: completion remains a projection of the existing closure/duties.
+    if item["lifecycle_status"]["workflow_status"] == "closed" or (
+        item["source_passage_review_complete"]
+        and not item["review_duties"] and not item["closure_gap_count"]
+        and not item["blocked_count"]
+    ):
+        return "Afgerond"
+    has_human_review = (item["snapshot_id"] in started or item.get("has_review_decision")
+                        or (item.get("summary") or {}).get("has_review_decision"))
+    return "Gestart" if has_human_review else "Nog niet gestart"
 
 
 def _workboard_page(
@@ -557,48 +559,72 @@ def _workboard_page(
     *,
     account: dict[str, Any],
     snapshot_id: str = "",
+    q: str = "",
+    page: int = 1,
 ) -> str:
-    """Open assigned work directly; document selection stays in the workspace."""
+    """Compact document disclosures over existing, authorized review projections."""
     if "reviewer" not in set(account.get("roles") or []):
         raise ConsoleError("reviewer_role_required")
     items = review_workboard_items(console, account=account)
+    by_id = {item["snapshot_id"]: item for item in items}
+    if snapshot_id and snapshot_id not in by_id:
+        raise ConsoleError("reviewer_not_named_on_snapshot")
     counts = console.waiting_task_counts(str(account["account_id"]))
-    if snapshot_id:
-        selected = next((item for item in items if item["snapshot_id"] == snapshot_id), None)
-        if selected is None:
-            raise ConsoleError("reviewer_not_named_on_snapshot")
-    else:
-        selected = next((item for item in items if item["next_task"]), items[0] if items else None)
-    if selected is None:
-        return _page(
-            _nav(account, "review", counts) + '<section class="room review-room">'
-            '<h1>Review</h1><h2>Jouw open werk</h2>'
-            '<p>Geen aan jou toegewezen reviewdocumenten.</p></section>'
-        )
-    chosen = str(selected["snapshot_id"])
-    picker = _document_picker(items, chosen)
-    if selected["lifecycle_status"]["workflow_status"] == "closed":
-        heading = console_ui._document_card_heading(
-            {**selected["envelope"], "meaningful_status": selected["meaningful_status"]}
-        )
-        return _page(
-            _nav(account, "review", counts) + '<section class="room review-room">'
-            '<h1>Review</h1><div class="doc-card review-document-card">'
-            '<div class="review-document-card-top"><span class="review-document-kicker">'
-            'Document</span>' + picker + '</div>' + heading + '</div>'
-            '<h2>Jouw open werk</h2><p>' + _esc(_work_summary(selected)) + '</p>'
-            f'<a class="btn-secondary" href="/review?document={quote(chosen, safe="")}&amp;task=history">'
-            'Besluiten en historie</a></section>'
-        )
-    page = _projected_document_dashboard(
-        console, account=account, snapshot_id=chosen, counts=counts,
-        summary=selected.get("summary"),
+    visible, controls = console_ui._document_list_page(
+        [item["envelope"] for item in items], q=q, page=page, path="/review",
     )
-    if page is None:
-        page = _render_review_room(console, account, chosen, counts=counts)
-    return page.replace(
-        '<a class="btn-secondary" href="/review">Ander document kiezen</a>', picker,
-    )
+    if snapshot_id and not any(row["snapshot_id"] == snapshot_id for row in visible):
+        visible = [by_id[snapshot_id]["envelope"], *visible]
+    ledger_path = getattr(console, "_ledger_path", None)
+    events = [event for event in (read_events(ledger_path) if ledger_path is not None else [])
+              if str(event.get("actor") or "").strip()
+              and not is_forbidden_reviewer(str(event["actor"]))]
+    started = {
+        str((event.get("details") or {}).get("snapshot_id") or "")
+        for event in events
+        if _is_decision_event(event) or event.get("event_type") == "review_audit_evidence"
+    }
+    cards = []
+    for envelope in visible:
+        chosen = str(envelope["snapshot_id"])
+        item = by_id[chosen]
+        status = _review_activity_status(item, started)
+        if item["lifecycle_status"]["workflow_status"] == "closed":
+            dashboard = ('<h2>Jouw open werk</h2><p>' + _esc(_work_summary(item)) + '</p>'
+                         f'<a href="/review?document={quote(chosen, safe="")}&amp;task=history">Besluiten en historie</a>')
+        else:
+            dashboard = _projected_document_dashboard(
+                console, account=account, snapshot_id=chosen, counts=counts,
+                summary=item.get("summary"), content_only=True,
+            ) if item.get("summary") else None
+            if dashboard is None:
+                dashboard = console_ui._review_task_dashboard(
+                    chosen, koppen=[], individual=[],
+                    normal_passages=item["actionable_batch_duties"],
+                    normal_batches=item["normal_batches"], blocked_count=item["blocked_count"],
+                    progress=item["progress"],
+                    heading_pending_override=item["actionable_structure_duties"],
+                    individual_pending_override=item["actionable_contextual_duties"],
+                    second_review_pending=item["actionable_second_review_duties"],
+                    disposition_pending=item["closure_gap_count"],
+                    waiting_pending=item["waiting_for_reviewer_duties"],
+                )
+        # IDs must remain unique when several workspaces share one page.
+        for element_id in ("review-task-title", "review-next-title", "review-progress-title"):
+            dashboard = dashboard.replace(element_id, element_id + "-" + _esc(chosen))
+        context = _esc(urlencode({"q": q, "page": page}))
+        dashboard = dashboard.replace(f'/review?document={_esc(chosen)}&amp;task=',
+                                      f'/review?document={_esc(chosen)}&amp;{context}&amp;task=')
+        opened = " open" if chosen == snapshot_id else ""
+        cards.append(f'''<details class="doc-card document-disclosure review-document-card"{opened}>
+          <summary>{console_ui._document_summary({**envelope, "meaningful_status": item["meaningful_status"]})}
+            <span class="review-status">Review: {_esc(status)}</span>
+            <span class="document-work-summary">{_esc(_work_summary(item))}</span>
+          </summary>{dashboard}</details>''')
+    return _page(_nav(account, "review", counts) + '<section class="room review-room"><h1>Review</h1>'
+                 + controls + '<div class="doc-list">' + ''.join(cards)
+                 + (('<p>Geen documenten gevonden.</p>' if q else '<p>Geen aan jou toegewezen reviewdocumenten.</p>') if not cards else '')
+                 + '</div></section>', title="Review — Metis")
 
 
 def _projected_document_dashboard(
@@ -608,6 +634,7 @@ def _projected_document_dashboard(
     snapshot_id: str,
     counts: dict[str, int],
     summary: dict[str, Any] | None = None,
+    content_only: bool = False,
 ) -> str | None:
     """Render the default selected-document dashboard without materializing objects."""
     if summary is None:
@@ -654,20 +681,6 @@ def _projected_document_dashboard(
         else int(summary.get("normal_passages") or 0)
     )
     actionable_second = int(summary.get("actionable_second_review_duties") or 0)
-    ledger_path = getattr(console, "_ledger_path", None)
-    burden = review_burden_projection(
-        read_events(ledger_path) if ledger_path is not None else [],
-        snapshot_id=snapshot_id,
-    )
-    burden_html = (
-        '<details class="review-burden">'
-        '<summary>Reviewinteracties</summary>'
-        f'<p><b>{int(burden["review_interactions"])}</b> gemeten menselijke interacties voor '
-        f'<b>{int(burden["object_decisions"])}</b> objectbesluiten.</p>'
-        f'<p class="muted">Historische besluiten zonder gemeten interactie: '
-        f'{int(burden["legacy_unmeasured_decisions"])}.</p>'
-        '</details>'
-    )
     dashboard = console_ui._review_task_dashboard(
         snapshot_id,
         koppen=[],
@@ -689,8 +702,9 @@ def _projected_document_dashboard(
         second_review_pending=actionable_second,
         disposition_pending=int(summary.get("closure_gap_count") or 0),
         waiting_pending=int(summary.get("waiting_for_reviewer_duties") or 0),
-        management_details=burden_html,
     )
+    if content_only:
+        return dashboard
     heading = console_ui._document_card_heading(
         {**envelope, "status": envelope.get("state") or ""}
     )
@@ -745,14 +759,18 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         document: str = "",
         object: str = "",
         task: str = "",
+        q: str = "",
+        page: int = 1,
     ) -> str:
         account = _current_account(console, request)
         chosen = document.strip()
         chosen_task = normalize_review_task(task)
+        if chosen_task == "repair" and chosen and not object.strip():
+            return RedirectResponse("/settings/technical?" + urlencode({"document": chosen}), status_code=303)
         if not chosen or (not object.strip() and not chosen_task):
-            return _workboard_page(console, account=account, snapshot_id=chosen)
+            return _workboard_page(console, account=account, snapshot_id=chosen, q=q, page=page)
         counts = console.waiting_task_counts(str(account["account_id"]))
-        page = _render_review_room(
+        rendered = _render_review_room(
             console,
             account,
             html.escape(document, quote=True),
@@ -761,9 +779,10 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             counts=counts,
         )
 
-        return page.replace(
+        back = "/review?" + urlencode({"document": chosen, "q": q, "page": page})
+        return rendered.replace(
             '<a class="btn-secondary" href="/review">Ander document kiezen</a>',
-            _document_picker(review_workboard_items(console, account=account), chosen),
+            f'<a class="btn-secondary" href="{_esc(back)}">Terug naar documenten</a>',
         )
 
     @app.post("/review/headings/batch-confirm")

@@ -388,7 +388,7 @@ def test_authenticated_tree_and_review_gets_use_production_list_installers(
     assert "Unpublished fixture" in review.text
     assert "data-review-workboard" not in review.text
     assert "Jouw open werk" in review.text
-    assert 'class="review-document-picker"' in review.text
+    assert review.text.count('class="doc-card document-disclosure review-document-card"') == 2
     assert console.list_status_calls == 2
     assert console.workboard_summary_calls == 1
     assert console.snapshot_object_reads == 0
