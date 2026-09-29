@@ -13,11 +13,16 @@ Important boundaries:
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from copy import deepcopy
+import csv
+import io
+import json
 from typing import Any, Iterable
 
 from src.admission_gate_v1 import admission_of
 from src.domain_dimensions_v1 import processing_issue_objects
 from src.object_taxonomy_v1 import section_role_for_path
+from src.review_disposition_v1 import definitive_review_disposition
 
 
 SOURCE_BINDING = "source_binding"
@@ -192,6 +197,68 @@ def processing_diagnostic_rows(
             }
         )
     return rows
+
+
+def passage_export_rows(objects: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Export the current inventory, including headings and blocked passages.
+
+    Preserve stored evidence rather than reconstructing missing evidence or
+    rerunning admission. The document container is not a source passage.
+    """
+    rows = []
+    for obj in objects:
+        if obj.get("object_type") == "document":
+            continue
+        admission = admission_of(obj)
+        disposition = definitive_review_disposition(obj)
+        rows.append(deepcopy({
+            "object_id": obj.get("object_id", ""),
+            "object_version": obj.get("object_version", ""),
+            "object_type": obj.get("object_type", ""),
+            "candidate_text": _candidate_text(obj),
+            "proposed_type": _proposed_type(obj),
+            "section_path": _section_path(obj),
+            "section_role": _section_role(obj),
+            "formation_strategy": _formation_strategy(obj),
+            "selection_origin": _selection_origin(obj),
+            "gate_result": admission.get("gate_result", ""),
+            "reason_codes": admission.get("reason_codes", []),
+            "review_status": disposition.get("review_status", ""),
+            "disposition": disposition,
+            "content": obj.get("content", {}),
+            "source": obj.get("source", {}),
+            "provenance": obj.get("provenance", {}),
+            "source_locator_start": admission.get("source_locator_start", ""),
+            "source_locator_end": admission.get("source_locator_end", ""),
+            "structure": obj.get("structure", {}),
+            "admission": admission,
+            "semantic_passage": _metadata(obj, "semantic_passage"),
+            "passage_formation": _metadata(obj, "passage_formation"),
+            "passage_register": _metadata(obj, "passage_register"),
+            "proposed_recommendation_semantics": obj.get("proposed_recommendation_semantics", {}),
+            "confirmed_recommendation_semantics": obj.get("confirmed_recommendation_semantics", {}),
+            "recommendation_semantics_evidence": _metadata(obj, "recommendation_semantics_evidence"),
+            "proposed_knowledge_relations": obj.get("proposed_knowledge_relations", []),
+            "knowledge_relation_evidence": _metadata(obj, "knowledge_relation_evidence"),
+        }))
+    return rows
+
+
+def passage_export_csv(rows: list[dict[str, Any]]) -> str:
+    """Excel-friendly CSV; nested evidence stays JSON and formulas stay text."""
+    output = io.StringIO(newline="")
+    fields = list(rows[0]) if rows else ["object_id", "candidate_text"]
+    writer = csv.DictWriter(output, fieldnames=fields)
+    writer.writeheader()
+    for row in rows:
+        cells = {}
+        for key, value in row.items():
+            cell = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value or "")
+            if cell.lstrip().startswith(("=", "+", "-", "@")) or cell.startswith(("\t", "\r", "\n")):
+                cell = "'" + cell
+            cells[key] = cell
+        writer.writerow(cells)
+    return "\ufeff" + output.getvalue()
 
 
 def processing_diagnostics(
