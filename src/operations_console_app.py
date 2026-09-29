@@ -15,7 +15,7 @@ from typing import Any
 from urllib.parse import quote, urlsplit
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from src.four_eyes_v1 import requires_four_eyes
@@ -66,6 +66,8 @@ from src.review_context_v1 import (
 )
 from src.domain_dimensions_v1 import processing_issue_objects
 from src.processing_diagnostics_v1 import (
+    passage_export_rows,
+    passage_export_csv,
     processing_diagnostic_rows,
     processing_diagnostics,
 )
@@ -2788,6 +2790,9 @@ def _render_review_room(
             '<div class="review-document-card-top"><span class="review-document-kicker">Document in review</span>'
             '<a class="btn-secondary" href="/review">Ander document kiezen</a></div>'
             f'{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}'
+            f'<p>Alle bronpassages downloaden: '
+            f'<a class="btn-secondary" href="/review/passages-export?document={_esc(chosen)}&amp;format=json">JSON</a> '
+            f'<a class="btn-secondary" href="/review/passages-export?document={_esc(chosen)}&amp;format=csv">CSV</a></p>'
             "</div>"
         )
         history_enabled = chosen_task == "history"
@@ -4205,6 +4210,37 @@ def create_console_app(
             task=html.escape(task, quote=True),
             counts=_counts(account),
         )
+
+    @app.get("/review/passages-export")
+    def review_passages_export(request: Request, document: str = "", format: str = "json") -> Response:
+        account = _require(request)
+        if "reviewer" not in set(account.get("roles") or []):
+            raise ConsoleError("reviewer_role_required")
+        snapshot_id = document.strip()
+        envelope = state._envelope(snapshot_id)
+        if account["account_id"] not in (envelope.get("named_reviewers") or []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        if format not in {"json", "csv"}:
+            return JSONResponse({"error": "unsupported_export_format"}, status_code=400)
+        objects, revision = state.snapshot_objects_and_revision(snapshot_id)
+        rows = passage_export_rows(objects)
+        filename = re.sub(r"[^A-Za-z0-9_-]", "_", snapshot_id)
+        headers = {
+            "Content-Disposition": f'attachment; filename="{filename}-passages.{format}"',
+            "Cache-Control": "no-store",
+        }
+        if format == "csv":
+            return Response(passage_export_csv(rows), media_type="text/csv", headers=headers)
+        return JSONResponse({
+            "schema_version": "passage-export-v1",
+            "snapshot_id": snapshot_id,
+            "document_id": str(envelope.get("document_id") or ""),
+            "title": str(envelope.get("title") or ""),
+            "version": str(envelope.get("version") or ""),
+            "objects_revision": revision,
+            "passage_count": len(rows),
+            "rows": rows,
+        }, headers=headers)
 
     @app.get("/review/processing-diagnostics", response_class=JSONResponse)
     def review_processing_diagnostics(request: Request, document: str = "") -> JSONResponse:
