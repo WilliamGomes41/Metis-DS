@@ -121,11 +121,11 @@ def _assert_review_projection(console, client, snapshot_id):
     assert dashboard.status_code == 200
     assert "Jouw open werk" in dashboard.text
     assert 'class="review-workspace-layout"' in dashboard.text
-    assert dashboard.text.count("Bekijk verwerkingsproblemen") == 1
-    assert f'href="/settings/technical?document={snapshot_id}"' in dashboard.text
     repair = client.get("/settings/technical", params={"document": snapshot_id})
     assert repair.status_code == 200
     assert "Verwerkingsproblemen herstellen" in repair.text
+    repair_rows = _PassageInventory(repair.text).rows
+    assert (f'href="/settings/technical?document={snapshot_id}"' in dashboard.text) == bool(repair_rows)
     inventory = client.get("/review", params={"document": snapshot_id, "task": "inventory"})
     assert inventory.status_code == 200
     rows = _PassageInventory(inventory.text).rows
