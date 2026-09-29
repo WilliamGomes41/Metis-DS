@@ -176,3 +176,34 @@ def test_transform_rechecks_source_instead_of_trusting_derived_metadata(corrupti
                                   'source_level':'national','canonicality':'canonical','integrity_status':'verified'}}
     with pytest.raises(ValueError, match='source_bound_candidate_text_mismatch|source_bound_field_bounds_invalid'):
         transform(changed, manifest, [fragment()])
+
+
+def test_unclassified_v2_preserves_bound_type_and_evidence():
+    def unclassified(p):
+        p['objects'][0]['proposed_object_type'] = 'unclassified'
+        p['objects'][0]['recommendation_semantics'] = None
+    _, rows, _ = prepare(unclassified)
+    obj = rows[1]
+    assert obj['proposed_object_type'] == 'unclassified'
+    admission = obj['metadata']['admission']
+    assert admission['proposed_type'] == 'unclassified'
+    assert 'source_bound_fields_stale' not in admission['reason_codes']
+    assert admission['subject_span'] == 'Screening van ouderen'
+    assert not obj.get('confirmed_object_type')  # human classification remains pending
+
+
+@pytest.mark.parametrize('corruption', ['text', 'type', 'hash'])
+def test_export_marks_stale_or_invalid_evidence(corruption):
+    _, rows, _ = prepare()
+    obj = rows[1]
+    if corruption == 'text':
+        obj['content']['clean_text'] = 'Screening is zinvol.'
+    elif corruption == 'type':
+        obj['proposed_object_type'] = 'definition'
+    else:
+        obj['metadata'][KEY]['binding_hash'] = 'invalid'
+    rows = apply_admission_gate(rows, klasse='richtlijn', fragments=[fragment()], document_version='1', source_hash='a'*64)
+    tables, _ = processing_evidence_tables(snapshot_id='snap', revision='r2', envelope={}, objects=rows)
+    field = next(r for r in tables['proposal_fields'] if r['field']=='recommended_action' and r['object_id']==obj['object_id'])
+    assert field['value'] == ''
+    assert field['producer_status'] == ('invalid_source_bound_proposal' if corruption == 'hash' else 'stale_source_bound_proposal')

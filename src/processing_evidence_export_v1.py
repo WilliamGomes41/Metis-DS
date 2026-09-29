@@ -9,6 +9,7 @@ from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from src.processing_diagnostics_v1 import passage_export_rows
+from src.source_bound_fields_v2 import bound_values
 
 
 VERSION = "processing-evidence-export-v2"
@@ -51,6 +52,17 @@ def _csv(fields: tuple[str, ...], rows: list[dict[str, Any]]) -> bytes:
             cells[field] = cell
         writer.writerow(cells)
     return output.getvalue().encode("utf-8-sig")
+
+
+def _field_producer_status(bound: dict, obj: dict) -> str:
+    if not bound:
+        return "not_recorded"
+    try:
+        bound_values(bound, text=str((obj.get("content") or {}).get("clean_text") or ""),
+                     proposed_type=str(obj.get("proposed_object_type") or "unclassified"))
+    except ValueError as exc:
+        return "stale_source_bound_proposal" if str(exc) == "source_bound_fields_stale" else "invalid_source_bound_proposal"
+    return "source_bound_proposal"
 
 
 def processing_evidence_tables(
@@ -104,11 +116,12 @@ def processing_evidence_tables(
                 bbox=fragment.get("bbox"), raw_content_hash=fragment.get("raw_content_hash"))
         from src.source_bound_fields_v2 import KEY, FIELDS as BOUND_FIELDS
         bound = (obj.get("metadata") or {}).get(KEY) or {}
+        producer_status = _field_producer_status(bound, obj)
         for field in dict.fromkeys((*FIELDS, *(BOUND_FIELDS if bound else ()))):
             evidence = (bound.get("evidence") or {}).get(field) or {}
             add("proposal_fields", **keys, field=field, value=admission.get(field),
                 value_status="recorded" if field in admission else "not_recorded",
-                stage="stored_admission", producer_status="source_bound_proposal" if bound else "not_recorded",
+                stage="stored_admission", producer_status=producer_status,
                 contract_version=bound.get("version"), source_span=evidence.get("span"),
                 missing_reason=evidence.get("missing_reason"))
         if admission:

@@ -746,7 +746,7 @@ def semantic_units_from_proposal(
                                        candidate_text=candidate_text, proposed_type=proposed_type)
             except ValueError as exc:
                 _fail(str(exc))
-        if proposed_type != DEFAULT_OBJECT_TYPE:
+        if field_contract_v2 or proposed_type != DEFAULT_OBJECT_TYPE:
             unit["proposed_object_type"] = proposed_type
         if semantics is not None:
             unit[PROPOSED_FIELD] = semantics
