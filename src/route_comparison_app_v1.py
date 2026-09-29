@@ -75,7 +75,7 @@ def install_route_comparison_routes(app, state, require, page) -> None:
         return account, allowed, row
 
     def render(request: Request, body: str, *, status: int = 200) -> HTMLResponse:
-        return HTMLResponse(page('<section class="room"><p><a href="/settings/quality">← Kwaliteit &amp; werkproces</a></p>'
+        return HTMLResponse(page('<section class="room"><p><a href="/settings/technical">← Technisch beheer</a></p>'
                                  + body + '</section>', title="Routevergelijking — Metis"), status_code=status)
 
     def error(request: Request, exc: Exception) -> HTMLResponse:
