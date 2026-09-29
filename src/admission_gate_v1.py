@@ -26,6 +26,11 @@ from src.recommendation_semantics_v1 import (
     validate_recommendation_semantics,
 )
 from src.knowledge_relation_proposal_v1 import relation_proposal_admission_codes
+from src.source_bound_fields_v2 import (
+    TYPE_FIELDS as TYPE_CONTRACT_FIELDS,
+    KEY as FIELD_EVIDENCE_KEY,
+    apply_bound_fields,
+)
 
 
 GATE_ALLOWED = "allowed"
@@ -69,19 +74,6 @@ DUTCH_TYPE_NAMES = {
     "Toelichting": "explanation",
 }
 
-TYPE_CONTRACT_FIELDS = {
-    "recommendation": (
-        "actor_of_scope",
-        "recommended_action",
-        "action_object_or_goal",
-        "recommendation_evidence_span",
-    ),
-    "definition": ("defined_term", "definiens_span"),
-    "condition": ("condition_span", "condition_target"),
-    "exception": ("exception_span", "exception_target"),
-    "factual_finding": ("factual_claim_span",),
-    "explanation": ("support_span", "supported_object"),
-}
 
 FACTUAL_FINDING_SERVING_TYPE = "explanation"
 
@@ -555,6 +547,15 @@ def _recommendation_semantics_codes(
     return codes
 
 
+def _recommendation_evidence_missing(row: dict[str, Any], proposed: str, source: str) -> bool:
+    """V2 uses validated field evidence; legacy also requires its lexical cue."""
+    if proposed != "recommendation":
+        return False
+    return not _present(row.get("recommendation_evidence_span")) or (
+        FIELD_EVIDENCE_KEY not in row and not _has_recommendation_evidence(source)
+    )
+
+
 def admit_candidate(
     candidate: dict[str, Any],
     *,
@@ -572,8 +573,10 @@ def admit_candidate(
         if field not in candidate and field not in {"gate_result", "reason_codes"}
     ]
     row = build_candidate_record(**{k: v for k, v in candidate.items() if k != "skip_context_scan"})
-    _enrich_from_text(row)
-    codes: list[str] = []
+    v2 = FIELD_EVIDENCE_KEY in row
+    codes: list[str] = apply_bound_fields(row) if v2 else []
+    if not v2:
+        _enrich_from_text(row)
     if skip_context_scan:
         codes.append("context_scan_not_done")
         row["context_scan_done"] = False
@@ -631,9 +634,7 @@ def admit_candidate(
             codes.extend(extra)
             break
 
-    if proposed == "recommendation" and (
-        not _has_recommendation_evidence(source) or not _present(row.get("recommendation_evidence_span"))
-    ):
+    if _recommendation_evidence_missing(row, proposed, source):
         codes.append("recommendation_evidence_missing")
 
     codes.extend(_recommendation_semantics_codes(row, proposed))
@@ -824,6 +825,10 @@ def candidate_from_object(
         fields["supported_object"] = target
     if proposed == "factual_finding":
         fields["factual_claim_span"] = text
+    metadata = obj.get("metadata") or {}
+    from src.source_bound_fields_v2 import MODE
+    if FIELD_EVIDENCE_KEY in metadata or (metadata.get("semantic_passage") or {}).get("formation_mode") == MODE:
+        fields[FIELD_EVIDENCE_KEY] = metadata.get(FIELD_EVIDENCE_KEY)
     return build_candidate_record(**fields)
 
 

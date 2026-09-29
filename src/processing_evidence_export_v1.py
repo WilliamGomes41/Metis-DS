@@ -11,7 +11,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from src.processing_diagnostics_v1 import passage_export_rows
 
 
-VERSION = "processing-evidence-export-v1"
+VERSION = "processing-evidence-export-v2"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
     "runs": ("run_id", "source_hash", "started_at", "finished_at", "outcome", "reason", "extractor_versions", "execution", "semantic_identity", "production_commit_status"),
@@ -19,7 +19,7 @@ SCHEMAS = {
     "semantic_proposals": ("proposal_hash", "identity", "validation", "semantic_execution", "origin_execution", "replay_from_proposal_hash", "proposal", "evidence_kind"),
     "source_stages": ("object_id", "object_version", "stage", "text", "section_path", "source_checksum", "text_status"),
     "coverage": ("object_id", "object_version", "block_id", "start", "end", "selection_origin", "register_status", "gate_result", "model_decision_status", "offset_text_status"),
-    "proposal_fields": ("object_id", "object_version", "field", "value", "value_status", "stage", "producer_status"),
+    "proposal_fields": ("object_id", "object_version", "field", "value", "value_status", "stage", "producer_status", "contract_version", "source_span", "missing_reason"),
     "validation_findings": ("object_id", "object_version", "gate_result", "reason_code", "evidence_kind", "admission", "rule_execution_trace_status"),
     "context_evidence": ("object_id", "object_version", "context_scan", "expand_merge", "necessary_context_disposition", "evidence_kind"),
     "lineage": ("object_id", "object_version", "relation", "target_id", "start", "end", "locator", "page", "bbox", "raw_content_hash"),
@@ -102,11 +102,15 @@ def processing_evidence_tables(
             add("lineage", **keys, relation="stored_source_fragment", target_id=fragment.get("raw_object_id"),
                 locator=fragment.get("source_locator"), page=fragment.get("page"),
                 bbox=fragment.get("bbox"), raw_content_hash=fragment.get("raw_content_hash"))
-        for field in FIELDS:
-            # Admission is exported literally, including missing or empty fields.
+        from src.source_bound_fields_v2 import KEY, FIELDS as BOUND_FIELDS
+        bound = (obj.get("metadata") or {}).get(KEY) or {}
+        for field in dict.fromkeys((*FIELDS, *(BOUND_FIELDS if bound else ()))):
+            evidence = (bound.get("evidence") or {}).get(field) or {}
             add("proposal_fields", **keys, field=field, value=admission.get(field),
                 value_status="recorded" if field in admission else "not_recorded",
-                stage="stored_admission", producer_status="not_recorded")
+                stage="stored_admission", producer_status="source_bound_proposal" if bound else "not_recorded",
+                contract_version=bound.get("version"), source_span=evidence.get("span"),
+                missing_reason=evidence.get("missing_reason"))
         if admission:
             for reason in admission.get("reason_codes") or [None]:
                 add("validation_findings", **keys, gate_result=admission.get("gate_result"),
