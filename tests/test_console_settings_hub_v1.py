@@ -60,10 +60,10 @@ def test_settings_is_single_top_level_door_for_accounts_llm_and_about(tmp_path: 
     assert 'href="/over-console"' not in nav
 
     assert 'href="/accounts"' in response.text
-    assert 'href="/settings/llm"' in response.text
+    assert 'href="/settings/technical"' in response.text
     assert 'href="/over-console"' in response.text
     assert "Accounts" in response.text
-    assert "LLM-instellingen" in response.text
+    assert "Technisch beheer" in response.text
     assert "Over Metis" in response.text
 
 

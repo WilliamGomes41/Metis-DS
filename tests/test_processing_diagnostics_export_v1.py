@@ -217,6 +217,7 @@ def test_detail_export_preserves_candidate_combinations_and_does_not_mutate_stat
 def test_export_requires_authentication_reviewer_role_and_assignment(tmp_path) -> None:
     console, _reviewer, _other, _publisher, snapshot_id = _system(tmp_path)
     paths = (
+        "/settings/technical",
         "/review/passages-export",
         "/review/processing-diagnostics",
         "/review/processing-diagnostics-detail",
@@ -247,6 +248,7 @@ def test_export_unknown_snapshot_fails_and_control_page_links_to_export(tmp_path
     _login(client, "reviewer.d2a1")
 
     for path in (
+        "/settings/technical",
         "/review/passages-export",
         "/review/processing-diagnostics",
         "/review/processing-diagnostics-detail",
@@ -255,7 +257,7 @@ def test_export_unknown_snapshot_fails_and_control_page_links_to_export(tmp_path
         assert missing.status_code == 400
         assert "unknown_snapshot" in missing.text
 
-    control = client.get(f"/review?document={snapshot_id}&task=control")
+    control = client.get(f"/settings/technical?document={snapshot_id}")
     assert control.status_code == 200
     assert (
         f'href="/review/processing-diagnostics?document={snapshot_id}"'
@@ -315,3 +317,26 @@ def test_csv_preserves_quotes_newlines_unicode_and_neutralizes_formulas():
     ]).lstrip('\ufeff'))))
     assert exported[0]["candidate_text"] == texts[0]
     assert [row["candidate_text"] for row in exported[1:]] == ["'" + text for text in texts[1:]]
+
+
+def test_technical_management_collects_tools_and_keeps_repair_actionable(tmp_path):
+    console, _, _, _, snapshot_id = _system(tmp_path)
+    client = _client(console)
+    _login(client, "reviewer.d2a1")
+    settings = client.get("/settings")
+    assert 'href="/settings/technical"' in settings.text
+    assert 'href="/audit"' not in settings.text
+    assert 'href="/settings/llm"' not in settings.text
+    hub = client.get("/settings/technical")
+    assert hub.status_code == 200
+    for target in ["/settings/llm", "/settings/api-access", "/audit", "/audit/semantic-safety", "/settings/quality/compare"]:
+        assert f'href="{target}"' in hub.text
+    assert snapshot_id in hub.text
+    repair = client.get(f"/review?document={snapshot_id}&task=repair")
+    assert "Bekijk bronpassage" in repair.text
+    assert "Technische diagnose en exports" in repair.text
+    assert "Signalen per diagnostische familie" not in repair.text
+    assert "Exporteer detaildiagnostiek" not in repair.text
+    other = _client(console)
+    _login(other, "reviewer.other")
+    assert snapshot_id not in other.get("/settings/technical").text

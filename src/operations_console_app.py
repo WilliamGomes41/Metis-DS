@@ -1976,15 +1976,15 @@ def _review_task_dashboard(
         <div class="review-task-grid">{rows}</div>
         {waiting}
         </div>
-        <aside class="review-sidebar" aria-label="Voortgang en beheer">
+        <aside class="review-sidebar" aria-label="Voortgang en passageherstel">
         {_review_progress_overview(snapshot_id, progress)}
-        <section class="review-management" aria-label="Beheer en technische controle">
+        <section class="review-management" aria-label="Passages herstellen">
           <div>
-            <span class="review-control-card-label">Beheer en technische controle</span>
+            <span class="review-control-card-label">Passages herstellen</span>
             <h2>Controle en uitzonderingen</h2>
             <p><strong>{_esc(control_status)}.</strong> {_esc(control_copy)}</p>
           </div>
-          <a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=repair">Bekijk technische controle →</a>
+          <a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=repair">Bekijk geblokkeerde passages →</a>
           {management_details}
         </section>
         </aside>
@@ -2347,7 +2347,6 @@ def _review_inventory(
         outcome = outcomes.get(str(disposition.get("outcome") or ""), "Afhandeling controleren")
         register = (obj.get("metadata") or {}).get("passage_register") or {}
         origin = "Menselijke review" if register.get("source") == "review" else "Bronverwerking / bestaande registratie"
-        reasons = ", ".join(str(code) for code in admission_of(obj).get("reason_codes") or [])
         target_task = "second_review" if category == "waiting" else category
         next_action = "Open de passage en controleer het voorstel met de bron."
         if category == "waiting":
@@ -2369,7 +2368,7 @@ def _review_inventory(
             f'<p>{_esc(labels[category])} · {_esc(admission_label)} · {_esc(outcome)}</p>'
             f'<p class="review-next-action">{_esc(next_action)}</p>'
             f'<a href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={_esc(target_task)}">Bekijk bronpassage</a>'
-            f'<p class="muted">{_esc(origin)}{": " + _esc(reasons) if reasons else ""}</p></li>'
+            f'<p class="muted">{_esc(origin)}</p></li>'
         )
     title = "Alle passages en hun afhandeling" if task == "inventory" else labels[task]
     repair_copy = ""
@@ -2508,13 +2507,9 @@ def _render_review_index(
         '''
     if task == "repair":
         return f'''
-          {_review_task_header(snapshot_id, "Dekking en technische controle", "Controleer hier de volledigheid en technische blokkades; dit is geen extra inhoudelijke reviewtaak")}
-          {_processing_diagnostics_html(snapshot_objects)}
+          {_review_task_header(snapshot_id, "Geblokkeerde passages herstellen", "Controleer de bron en handel verwerkingsproblemen af voordat je inhoudelijk beoordeelt")}
           {_review_inventory(snapshot_id, snapshot_objects, review_path=review_path, bindings=bindings, reviewer_id=reviewer_id, task="repair")}
-          <p>
-            <a class="btn-secondary" href="/review/processing-diagnostics?document={_esc(snapshot_id)}">Exporteer diagnostiek als JSON</a>
-            <a class="btn-secondary" href="/review/processing-diagnostics-detail?document={_esc(snapshot_id)}">Exporteer detaildiagnostiek als JSON</a>
-          </p>
+          <p><a class="btn-secondary" href="/settings/technical?document={_esc(snapshot_id)}">Technische diagnose en exports →</a></p>
           {_coverage_panel(snapshot_objects)}
         '''
     return _review_task_dashboard(
@@ -3093,17 +3088,9 @@ def create_console_app(
               <p class="doc-title">Accounts</p>
               <p>Beheer interne gebruikers en rollen.</p>
             </a>
-            <a class="doc-card" href="/settings/api-access" style="text-decoration:none;">
-              <p class="doc-title">API Access</p>
-              <p>Beheer klanten, consumer-applicaties en eenmalig getoonde API-credentials.</p>
-            </a>
-            <a class="doc-card" href="/settings/llm" style="text-decoration:none;">
-              <p class="doc-title">LLM-instellingen</p>
-              <p>Bekijk de gedeelde provider- en modelconfiguratie van Metis.</p>
-            </a>
-            <a class="doc-card" href="/audit" style="text-decoration:none;">
-              <p class="doc-title">Audit &amp; diagnostiek</p>
-              <p>Voer controles uit en beheer actieve en gearchiveerde auditbewijzen.</p>
+            <a class="doc-card" href="/settings/technical">
+              <p class="doc-title">Technisch beheer</p>
+              <p>Modelconfiguratie, API-toegang, veiligheidstests, experimenten en documentdiagnostiek.</p>
             </a>
             <a class="doc-card" href="/over-console" style="text-decoration:none;">
               <p class="doc-title">Over Metis</p>
@@ -3117,12 +3104,61 @@ def create_console_app(
             <section class="room">
               <p class="eyebrow">Beheer</p>
               <h1>Instellingen</h1>
-              <p class="lead">Accounts, API Access, gedeelde LLM-configuratie, auditdiagnostiek en informatie over Metis op één plek.</p>
+              <p class="lead">Accounts, werkproces, technisch beheer en informatie over Metis.</p>
               {cards}
             </section>
             """,
             title="Instellingen — Metis",
         )
+
+    @app.get("/settings/technical", response_class=HTMLResponse)
+    def technical_management(request: Request, document: str = "") -> str:
+        account = _require(request)
+        document_panel = ""
+        if document:
+            if "reviewer" not in set(account.get("roles") or []):
+                raise ConsoleError("reviewer_role_required")
+            envelope = state._envelope(document)
+            if account["account_id"] not in (envelope.get("named_reviewers") or []):
+                raise ConsoleError("reviewer_not_named_on_snapshot")
+            objects = state.snapshot_objects(document)
+            document_panel = f'''
+              <h2>Diagnostiek: {_esc(envelope.get("title"))}</h2>
+              <p><a href="/review?document={_esc(document)}&amp;task=repair">Terug naar passageherstel</a></p>
+              {_processing_diagnostics_html(objects)}
+              <p><a href="/review/processing-diagnostics?document={_esc(document)}">Exporteer diagnostiek als JSON</a>
+              · <a href="/review/processing-diagnostics-detail?document={_esc(document)}">Exporteer detaildiagnostiek als JSON</a></p>
+            '''
+        assigned = [row for row in state.list_envelopes()
+                    if "reviewer" in set(account.get("roles") or [])
+                    and account["account_id"] in (row.get("named_reviewers") or [])]
+        documents = "".join(
+            f'<li><a href="/settings/technical?document={_esc(row["snapshot_id"])}">{_esc(row.get("title"))} · {_esc(row.get("version"))}</a></li>'
+            for row in assigned
+        )
+        return _page(f'''
+          {_nav(account, "settings", _counts(account))}
+          <section class="room">
+            <p><a href="/settings">← Instellingen</a></p>
+            <h1>Technisch beheer</h1>
+            <p class="lead">Configuratie, technische controles en experimenten op één plek. Testresultaten zijn geen inhoudelijke beoordeling van documenten.</p>
+            <h2>Configuratie en koppelingen</h2>
+            <div class="doc-list">
+              <a class="doc-card" href="/settings/llm"><p class="doc-title">Modelconfiguratie</p><p>Bekijk de ingestelde provider en het model.</p></a>
+              <a class="doc-card" href="/settings/api-access"><p class="doc-title">API-toegang</p><p>Beheer koppelingen en toegangsgegevens.</p></a>
+            </div>
+            <h2>Tests en experimenten</h2>
+            <div class="doc-list">
+              <a class="doc-card" href="/audit/semantic-safety"><p class="doc-title">Semantische veiligheidstests</p><p>Controleer vaste testgevallen voor weglatingen, voorwaarden, uitzonderingen en ontkenningen.</p></a>
+              <a class="doc-card" href="/audit"><p class="doc-title">Audit &amp; diagnostiek</p><p>Open controles, experimenten en bewaarde resultaten.</p></a>
+              <a class="doc-card" href="/settings/quality/compare"><p class="doc-title">Routevergelijking</p><p>Vergelijk verwerkingsroutes op dezelfde bron.</p></a>
+            </div>
+            <h2>Documentdiagnostiek</h2>
+            <p>Kies een document waarvoor je als reviewer bent aangewezen. Broninhoud en reviewbesluiten blijven in Review.</p>
+            <ul>{documents or '<li>Geen documenten voor jouw revieweraccount.</li>'}</ul>
+            {document_panel}
+          </section>
+        ''', title="Technisch beheer — Metis")
 
     @app.get("/settings/api-access", response_class=HTMLResponse)
     def settings_api_access(request: Request) -> str:
@@ -3133,7 +3169,7 @@ def create_console_app(
                 f"""
                 {_nav(account, "settings", _counts(account))}
                 <section class="room">
-                  <p><a href="/settings">← Terug naar Instellingen</a></p>
+                  <p><a href="/settings/technical">← Terug naar Technisch beheer</a></p>
                   <p class="eyebrow">Instellingen · API Access</p>
                   <h1>API Access</h1>
                   <div class="banner warn">{_esc(reason)}</div>
@@ -3150,7 +3186,7 @@ def create_console_app(
                     f"""
                     {_nav(account, "settings", _counts(account))}
                     <section class="room">
-                      <p><a href="/settings">← Terug naar Instellingen</a></p>
+                      <p><a href="/settings/technical">← Terug naar Technisch beheer</a></p>
                       <h1>API Access</h1>
                       <div class="banner err">De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.</div>
                     </section>
@@ -3343,7 +3379,7 @@ def create_console_app(
             f"""
             {_nav(account, "settings", _counts(account))}
             <section class="room">
-              <p><a href="/settings">← Terug naar Instellingen</a></p>
+              <p><a href="/settings/technical">← Terug naar Technisch beheer</a></p>
               <p class="eyebrow">Instellingen · API Access</p>
               <h1>API Access</h1>
               <p class="lead">Een credential identificeert een consumer-applicatie; tenant- en applicatiebeleid bepalen de effectieve toegang.</p>
@@ -3717,7 +3753,7 @@ def create_console_app(
             f"""
             {_nav(account, "llm-settings", _counts(account))}
             <section class="room">
-              <p><a href="/settings">← Terug naar Instellingen</a></p>
+              <p><a href="/settings/technical">← Terug naar Technisch beheer</a></p>
               <p class="eyebrow">Instellingen · LLM</p>
               <h1>LLM-instellingen</h1>
               <p class="lead">Metis gebruikt één gedeelde deploymentconfiguratie voor alle toegestane LLM-capabilities.</p>

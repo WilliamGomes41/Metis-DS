@@ -271,14 +271,7 @@ def test_control_diagnostics_stay_on_the_existing_read_path() -> None:
     html = _render_review_index("snap-1", objects, "richtlijn", task="control")
 
     assert objects == before
-    start = html.find('class="processing-diagnostics"')
-    end = html.find("</section>", start)
-    panel = html[start:end]
-    assert start != -1 and end != -1
-    assert "<form" not in panel.lower()
-    assert 'method="post"' not in panel.lower()
-    assert "Passage allowed." not in panel
-    assert "Waarom passages technisch geblokkeerd zijn" in panel
+    assert 'class="processing-diagnostics"' not in html
+    assert '/settings/technical?document=snap-1' in html
     assert "Technisch herstel nodig (1)" in html
-    assert 'action="/review' not in panel
-
+    assert "source_fidelity_failure" not in html

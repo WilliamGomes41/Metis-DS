@@ -69,14 +69,14 @@ def test_control_information_is_secondary_to_review_tasks():
     control = _render_review_index("snap-1", objects, "richtlijn", task="control")
 
     assert "Controle en uitzonderingen" in dashboard
-    assert "Beheer en technische controle" in dashboard
+    assert "Passages herstellen" in dashboard
     assert dashboard.index("Jouw open werk") < dashboard.index('class="review-management"')
     assert "Geen technische blokkades" in dashboard
-    assert "Bekijk technische controle" in dashboard
+    assert "Bekijk geblokkeerde passages" in dashboard
     assert 'class="review-management"' in dashboard
     assert 'href="/review?document=snap-1&amp;task=repair"' in dashboard
     assert "Controleoverzicht per kop" not in dashboard
-    assert "Dekking en technische controle" in control
+    assert "Geblokkeerde passages herstellen" in control
     assert "Controleoverzicht per kop" in control
 
 

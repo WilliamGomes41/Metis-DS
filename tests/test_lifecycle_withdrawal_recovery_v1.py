@@ -121,7 +121,7 @@ def _assert_review_projection(console, client, snapshot_id):
     assert dashboard.status_code == 200
     assert "Jouw open werk" in dashboard.text
     assert 'class="review-workspace-layout"' in dashboard.text
-    assert dashboard.text.count("Bekijk technische controle") == 1
+    assert dashboard.text.count("Bekijk geblokkeerde passages") == 1
     inventory = client.get("/review", params={"document": snapshot_id, "task": "inventory"})
     assert inventory.status_code == 200
     rows = _PassageInventory(inventory.text).rows

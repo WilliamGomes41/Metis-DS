@@ -114,7 +114,7 @@ def _provision_payload():
     }
 
 
-def test_settings_exposes_api_access_as_first_class_settings_room(tmp_path):
+def test_settings_exposes_api_access_through_technical_management(tmp_path):
     store = FakeAccessStore()
     client = _logged_in_client(
         _console(tmp_path),
@@ -124,8 +124,12 @@ def test_settings_exposes_api_access_as_first_class_settings_room(tmp_path):
     )
     response = client.get("/settings")
     assert response.status_code == 200
-    assert 'href="/settings/api-access"' in response.text
-    assert "API Access" in response.text
+    assert 'href="/settings/technical"' in response.text
+    assert 'href="/settings/api-access"' not in response.text
+    technical = client.get("/settings/technical")
+    assert technical.status_code == 200
+    assert 'href="/settings/api-access"' in technical.text
+    assert "API-toegang" in technical.text
 
 
 def test_publisher_can_provision_consumer_and_secret_is_only_in_issue_response(tmp_path):
