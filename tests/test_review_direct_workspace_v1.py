@@ -83,7 +83,7 @@ def client(console, *, login=True):
     return result
 
 
-def test_single_document_opens_work_without_landing_or_selector_and_is_read_only():
+def test_single_document_contains_collapsed_work_and_is_read_only():
     console = Console(documents=[('one', document('Document A'))])
     before = deepcopy(console.documents)
     response = client(console).get('/review')
@@ -97,22 +97,23 @@ def test_single_document_opens_work_without_landing_or_selector_and_is_read_only
     assert console.documents == before
 
 
-def test_multiple_documents_choose_actionable_and_switch_inline_without_leaking_assignments():
+def test_multiple_documents_expand_without_leaking_assignments():
     console = Console(documents=[('wait', document('Waiting', waiting=True)),
                                  ('active', document('Active <safe>')),
                                  ('private', document('Private', reviewers=('other',)))])
     browser = client(console)
     response = browser.get('/review')
     assert response.status_code == 200
-    assert '<details class="review-document-picker">' in response.text
+    assert response.text.count('<details class="doc-card document-disclosure review-document-card"') == 2
     assert 'Active &lt;safe&gt;' in response.text
-    assert 'href="/review?document=active" aria-current="page"' in response.text
+    assert 'review-document-card" open' not in response.text
     assert 'wacht op een andere onafhankelijke reviewer' in response.text
     assert 'Private' not in response.text
     waiting = browser.get('/review?document=wait')
     assert waiting.status_code == 200
     assert '8 wachten op een andere beoordelaar' in waiting.text
-    assert 'class="review-task-card"' not in waiting.text
+    selected = waiting.text.split('review-document-card" open>', 1)[1].split('</details>', 1)[0]
+    assert 'class="review-task-card"' not in selected
     assert 'task=waiting' in waiting.text
     assert browser.get('/review?document=private').status_code == 403
 
@@ -142,7 +143,7 @@ def test_waiting_duties_are_not_counted_as_completed_work():
     assert '5 wachten op een andere beoordelaar' in response.text
 
 
-def test_task_page_keeps_inline_document_switcher(monkeypatch):
+def test_task_page_returns_to_selected_document(monkeypatch):
     def render(console, account, document, object='', *, task='', counts=None):
         assert document == 'two' and task == 'structure'
         return '<h1>Koppen controleren</h1><a class="btn-secondary" href="/review">Ander document kiezen</a>'
@@ -151,5 +152,34 @@ def test_task_page_keeps_inline_document_switcher(monkeypatch):
     response = client(console).get('/review?document=two&task=structure')
     assert response.status_code == 200
     assert 'Koppen controleren' in response.text
-    assert 'href="/review?document=two" aria-current="page"' in response.text
-    assert 'href="/review?document=one"' in response.text
+    assert 'href="/review?document=two&amp;q=&amp;page=1"' in response.text
+    assert "Terug naar documenten" in response.text
+
+
+def test_hundreds_of_documents_are_paged_searchable_and_have_unique_workspace_ids():
+    import re
+    docs = [(f'snap-{i}', document(f'Document {i:03}')) for i in range(103)]
+    docs.append(('private', document('Private', reviewers=('other',))))
+    console = Console(documents=docs)
+    browser = client(console)
+    response = browser.get('/review?page=2')
+    assert response.status_code == 200
+    assert response.text.count('class="doc-card document-disclosure review-document-card"') == 25
+    assert '103 documenten' in response.text and 'pagina 2 van 5' in response.text
+    assert 'Document 025' in response.text and 'Document 000' not in response.text
+    ids = re.findall(r'\bid="([^"]+)"', response.text)
+    assert len(ids) == len(set(ids))
+    found = browser.get('/review?q=Document+102')
+    assert 'Document 102' in found.text and 'Document 025' not in found.text
+    assert 'Private' not in response.text and 'Private' not in found.text
+    assert not hasattr(console, 'snapshot_objects')  # Projection-only rendering.
+
+
+def test_projected_legacy_human_review_stamp_starts_review_but_context_count_does_not():
+    value = document('Legacy')
+    value['progress_context'] = 2
+    console = Console(documents=[('legacy', value)])
+    browser = client(console)
+    assert 'Review: Nog niet gestart' in browser.get('/review').text
+    value['has_review_decision'] = True
+    assert 'Review: Gestart' in browser.get('/review').text

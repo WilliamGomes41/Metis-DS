@@ -59,21 +59,22 @@ def test_workspace_preserves_task_destinations_and_passage_progress():
     projection = Projection()
     html = render(projection)
     hrefs = Links(html).hrefs
-    for task in ('structure', 'contextual', 'batch', 'disposition', 'history', 'repair', 'inventory'):
+    for task in ('structure', 'contextual', 'batch', 'disposition', 'history', 'inventory'):
         assert f'/review?document=snapshot-1&task={task}' in hrefs
     assert projection.calls == [('reviewer-1', 'snapshot-1')]
     assert html.count('Document &lt;voorbeeld&gt;') == 1
     assert '6 van 430 bronpassages afgehandeld' in html
     assert '56 te controleren' in html and '338 af te handelen' in html
     assert html.index('Jouw open werk') < html.index('Reviewvoortgang')
-    assert 'review-burden' in html
+    assert 'review-burden' not in html
+    assert '/settings/technical?document=snapshot-1' in hrefs
 
 
 def test_workspace_empty_work_does_not_imply_publication_readiness():
     html = render(Projection(empty=True))
     assert 'dit betekent niet automatisch dat publicatie mogelijk is' in html
     assert '/review?document=snapshot-1&task=structure' not in Links(html).hrefs
-    assert '/review?document=snapshot-1&task=repair' in Links(html).hrefs
+    assert '/settings/technical?document=snapshot-1' in Links(html).hrefs
 
 
 def test_workboard_still_requires_reviewer_role():

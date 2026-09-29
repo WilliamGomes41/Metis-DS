@@ -121,7 +121,11 @@ def _assert_review_projection(console, client, snapshot_id):
     assert dashboard.status_code == 200
     assert "Jouw open werk" in dashboard.text
     assert 'class="review-workspace-layout"' in dashboard.text
-    assert dashboard.text.count("Bekijk geblokkeerde passages") == 1
+    repair = client.get("/settings/technical", params={"document": snapshot_id})
+    assert repair.status_code == 200
+    assert "Verwerkingsproblemen herstellen" in repair.text
+    repair_rows = _PassageInventory(repair.text).rows
+    assert (f'href="/settings/technical?document={snapshot_id}"' in dashboard.text) == bool(repair_rows)
     inventory = client.get("/review", params={"document": snapshot_id, "task": "inventory"})
     assert inventory.status_code == 200
     rows = _PassageInventory(inventory.text).rows
@@ -334,4 +338,3 @@ def test_withdrawal_audit_failure_rolls_back_release_registry_and_evidence(recov
         _kernel_withdraw(store)
     assert adapter.export_state()["tables"] == before["tables"]
     assert _active_object_ids(store) == {"o1"}
-

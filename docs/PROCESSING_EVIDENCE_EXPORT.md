@@ -1,6 +1,6 @@
 # Verwerkingsbewijs downloaden
 
-Open **Instellingen > Technisch beheer**, kies het document en gebruik
+Open **Instellingen > Technisch beheer > Exports**, kies het document en gebruik
 **Download verwerkingsbewijs als CSV-pakket**. Alleen een ingelogde reviewer die
 aan het snapshot is toegewezen kan dit pakket downloaden.
 
