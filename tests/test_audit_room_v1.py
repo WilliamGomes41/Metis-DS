@@ -130,6 +130,8 @@ def test_audit_moves_out_of_primary_navigation_and_under_settings(tmp_path):
 
     settings = client.get("/settings")
     assert settings.status_code == 200
+    assert 'href="/settings/technical"' in settings.text
+    settings = client.get("/settings/technical")
     assert 'href="/audit"' in settings.text
     assert "Audit &amp; diagnostiek" in settings.text
 
