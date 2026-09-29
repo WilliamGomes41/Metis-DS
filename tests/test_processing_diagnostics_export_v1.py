@@ -219,6 +219,7 @@ def test_export_requires_authentication_reviewer_role_and_assignment(tmp_path) -
     paths = (
         "/settings/technical",
         "/review/passages-export",
+        "/review/processing-evidence-export",
         "/review/processing-diagnostics",
         "/review/processing-diagnostics-detail",
     )
@@ -250,6 +251,7 @@ def test_export_unknown_snapshot_fails_and_control_page_links_to_export(tmp_path
     for path in (
         "/settings/technical",
         "/review/passages-export",
+        "/review/processing-evidence-export",
         "/review/processing-diagnostics",
         "/review/processing-diagnostics-detail",
     ):
@@ -317,6 +319,84 @@ def test_csv_preserves_quotes_newlines_unicode_and_neutralizes_formulas():
     ]).lstrip('\ufeff'))))
     assert exported[0]["candidate_text"] == texts[0]
     assert [row["candidate_text"] for row in exported[1:]] == ["'" + text for text in texts[1:]]
+
+
+def test_processing_evidence_download_preserves_recorded_and_missing_evidence(tmp_path, monkeypatch):
+    from zipfile import ZipFile
+    from src.processing_evidence_export_v1 import SCHEMAS
+
+    console, _, _, _, snapshot_id = _system(tmp_path)
+    envelope = console._envelope(snapshot_id)
+    envelope["semantic_replay"] = {
+        "proposal_hash": "proposal-1", "validation": "passed",
+        "semantic_execution": "replay", "origin_execution": "inference",
+        "identity": {"components": {"model_id": "recorded-model", "prompt_hash": "original-prompt"}},
+        "proposal": {"objects": [{"spans": [{"block_id": "block-1", "start": 0, "end": 8}]}]},
+    }
+    objects = console.snapshot_objects(snapshot_id)
+    target = next(o for o in objects if o.get("proposed_object_type") == "recommendation")
+    target["metadata"]["semantic_passage"] = {
+        "selection_origin": "coverage_remainder", "spans": [{"block_id": "block-1", "start": 0, "end": 8}],
+    }
+    target["metadata"]["admission"]["context_scan"] = {
+        "necessary_context_disposition": "include", "expand_merge": {"performed": False},
+    }
+    target["metadata"]["admission"]["type_evidence_spans"] = []
+    target["content"]["clean_text"] = '=HYPERLINK("bad")\nEen, "zin".'
+    stamp_canonical_hashes(target)
+    console._save_objects(snapshot_id, objects)
+    envelope["private_configuration"] = "must-not-be-exported"
+    before = deepcopy((console.snapshot_objects(snapshot_id), envelope, console.object_review_bindings(snapshot_id)))
+    monkeypatch.setattr(console, "_extract", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not reextract")))
+    client = _client(console)
+    _login(client, "reviewer.d2a1")
+    response = client.get(f"/review/processing-evidence-export?document={snapshot_id}")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["content-type"] == "application/zip"
+    assert "attachment;" in response.headers["content-disposition"]
+    with ZipFile(io.BytesIO(response.content)) as archive:
+        assert set(archive.namelist()) == {"manifest.csv", "README.txt", *(name + ".csv" for name in SCHEMAS)}
+        def rows(name):
+            data = archive.read(name + ".csv")
+            assert data.startswith(b"\xef\xbb\xbf")
+            return list(csv.DictReader(io.StringIO(data.decode("utf-8-sig"))))
+        manifest = {r["dataset"]: r for r in rows("manifest")}
+        assert manifest["model_calls.csv"]["availability"] == "not_recorded"
+        assert manifest["object_events.csv"]["availability"] == "not_exported"
+        assert rows("model_calls") == []
+        proposal = rows("semantic_proposals")[0]
+        assert json.loads(proposal["proposal"]) == envelope["semantic_replay"]["proposal"]
+        assert "not_raw_response" in proposal["evidence_kind"]
+        selected = next(r for r in rows("coverage") if r["object_id"] == target["object_id"])
+        assert selected["start"] == "0"
+        assert selected["selection_origin"] == "coverage_remainder"
+        assert selected["model_decision_status"] == "not_recorded"
+        fields = {r["field"]: r for r in rows("proposal_fields") if r["object_id"] == target["object_id"]}
+        assert fields["type_evidence_spans"]["value"] == "[]"
+        assert fields["type_evidence_spans"]["value_status"] == "recorded"
+        assert fields["recommended_action"]["value_status"] == "not_recorded"
+        context = next(r for r in rows("context_evidence") if r["object_id"] == target["object_id"])
+        assert json.loads(context["context_scan"])["expand_merge"]["performed"] is False
+        source = next(r for r in rows("source_stages") if r["object_id"] == target["object_id"] and r["stage"] == "current_object_clean_text")
+        assert source["text"] == "'" + target["content"]["clean_text"]
+        assert all("must-not-be-exported" not in archive.read(name).decode("utf-8-sig") for name in archive.namelist())
+    assert (console.snapshot_objects(snapshot_id), console._envelope(snapshot_id), console.object_review_bindings(snapshot_id)) == before
+    page = client.get(f"/settings/technical?document={snapshot_id}")
+    assert f'/review/processing-evidence-export?document={snapshot_id}' in page.text
+
+
+def test_processing_evidence_empty_history_has_headers_and_honest_availability():
+    from zipfile import ZipFile
+    from src.processing_evidence_export_v1 import processing_evidence_tables, processing_evidence_zip
+    kwargs = dict(snapshot_id="snapshot", revision="rev", envelope={}, objects=[])
+    tables, manifest = processing_evidence_tables(**kwargs)
+    assert all(not values for values in tables.values())
+    assert next(r for r in manifest if r["dataset"] == "runs.csv")["availability"] == "not_recorded"
+    _, recorded = processing_evidence_tables(**{**kwargs, "envelope": {"quality_processing_runs": []}})
+    assert next(r for r in recorded if r["dataset"] == "runs.csv")["availability"] == "recorded"
+    with ZipFile(io.BytesIO(processing_evidence_zip(**kwargs))) as archive:
+        assert "call_id" in archive.read("model_calls.csv").decode("utf-8-sig")
 
 
 def test_technical_management_collects_tools_and_keeps_repair_actionable(tmp_path):
