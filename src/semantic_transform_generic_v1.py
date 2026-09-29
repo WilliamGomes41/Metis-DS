@@ -80,7 +80,7 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
         "spans": [dict(span) for span in spans],
     }
     if origin == SELECTION_ORIGIN_PROPOSAL:
-        if str(value.get("formation_mode") or "") != "semantic-source-bound-v1":
+        if str(value.get("formation_mode") or "") not in {"semantic-source-bound-v1", "semantic-source-bound-v2"}:
             raise ValueError("semantic_passage_metadata_invalid")
         if not str(value.get("model") or "").strip():
             raise ValueError("semantic_passage_metadata_invalid")
@@ -89,7 +89,7 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
                 raise ValueError("semantic_passage_metadata_invalid")
         result.update(
             {
-                "formation_mode": "semantic-source-bound-v1",
+                "formation_mode": value["formation_mode"],
                 "model": str(value["model"]),
                 "source_blocks_hash": str(value["source_blocks_hash"]),
                 "proposal_hash": str(value["proposal_hash"]),
@@ -181,6 +181,7 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
     spec_hash = stable_hash(spec)
     raw_extract_hash = hashlib.sha256("".join(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n" for r in raw_rows).encode("utf-8")).hexdigest()
     out: list[dict[str, Any]] = []
+    evidence_blocks = None
     for seq, item in enumerate(spec["objects"], 1):
         refs = []
         for rid in item.get("source_fragment_ids", []):
@@ -194,6 +195,30 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
         page = next((r.get("source_page") for r in (raw_by_id[x] for x in item.get("source_fragment_ids", [])) if r.get("source_page")), None)
         semantic_passage = _semantic_passage_metadata(item)
         system_metadata = _system_candidate_metadata(item)
+        from src.source_bound_fields_v2 import KEY, bind_fields, MODE
+        if semantic_passage and semantic_passage.get("formation_mode") == MODE:
+            from src.semantic_passage_v1 import semantic_source_blocks
+            from src.object_taxonomy_v1 import extract_object_type
+            if evidence_blocks is None:
+                evidence_blocks = {b["block_id"]: b for b in semantic_source_blocks(
+                    r for r in raw_rows if extract_object_type(r)[0] != "heading")}
+            selected = []
+            for span in semantic_passage["spans"]:
+                block = evidence_blocks.get(span["block_id"])
+                if block is None:
+                    raise ValueError("source_bound_field_unknown_block")
+                if span["end"] > len(block["text"]):
+                    raise ValueError("source_bound_field_bounds_invalid")
+                selected.append({**span, "text": block["text"][span["start"]:span["end"]]})
+            record = item.get(KEY)
+            rebuilt = bind_fields(record.get("evidence") if isinstance(record, dict) else None,
+                                  selected=selected, candidate_text=item.get("clean_text", item["text"]),
+                                  proposed_type=item.get("proposed_object_type", "unclassified"))
+            if record != rebuilt:
+                raise ValueError("source_bound_fields_invalid")
+            system_metadata[KEY] = rebuilt
+        elif KEY in item:
+            raise ValueError("source_bound_fields_contract_mismatch")
         if semantic_passage is not None:
             system_metadata["semantic_passage"] = semantic_passage
         obj = {

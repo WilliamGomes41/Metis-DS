@@ -89,7 +89,7 @@ from src.ingest_limits_v1 import (
     read_upload_limited,
 )
 from src.llm_provider_v1 import load_llm_provider_config
-from src.passage_formation_policy_v1 import DETERMINISTIC_MODE, SEMANTIC_MODE
+from src.passage_formation_policy_v1 import DETERMINISTIC_MODE, SEMANTIC_MODE, SEMANTIC_V2_MODE
 from src.operations_console_v1 import (
     ALLOWED_CLASSES,
     ALLOWED_DELETE_NEXT,
@@ -159,8 +159,8 @@ def normalize_review_task(value: str) -> str:
 def _passage_formation_status_html(state: OperationsConsole) -> str:
     reader = getattr(state, "_passage_formation_mode_reader", None)
     mode = reader() if callable(reader) else DETERMINISTIC_MODE
-    if mode == SEMANTIC_MODE:
-        label = "Semantisch"
+    if mode in {SEMANTIC_MODE, SEMANTIC_V2_MODE}:
+        label = "Semantisch met bronbewijs" if mode == SEMANTIC_V2_MODE else "Semantisch"
         detail = (
             "Nieuwe en opnieuw verwerkte passages worden momenteel brongebonden "
             "semantisch gevormd. Review blijft verplicht."
@@ -1210,6 +1210,40 @@ def _semantic_selection_markup(source_text: str, selection_text: str) -> tuple[s
     )
 
 
+def _source_bound_fields_html(obj: dict[str, Any]) -> str:
+    from src.source_bound_fields_v2 import KEY, FIELDS, bound_values
+    record = (obj.get("metadata") or {}).get(KEY)
+    if record is None:
+        return ""
+    labels = {
+        "subject_span": "Onderwerp", "predicate_span": "Gezegde",
+        "type_evidence_spans": "Bewijs voor type", "actor_of_scope": "Actor of doelgroep",
+        "recommended_action": "Handeling", "action_object_or_goal": "Doel of object",
+        "recommendation_evidence_span": "Aanbevelingsbewijs", "defined_term": "Gedefinieerde term",
+        "definiens_span": "Definitie", "condition_span": "Voorwaarde",
+        "condition_target": "Waarvoor geldt de voorwaarde", "exception_span": "Uitzondering",
+        "exception_target": "Waarop geldt de uitzondering", "support_span": "Onderbouwing",
+        "supported_object": "Onderbouwde uitspraak", "factual_claim_span": "Bevinding",
+    }
+    try:
+        values = bound_values(record, text=str((obj.get("content") or {}).get("clean_text") or ""),
+                              proposed_type=str(obj.get("proposed_object_type") or "unclassified"))
+    except ValueError:
+        return '<p class="muted" data-source-bound-fields-invalid>Het veldbewijs past niet meer bij deze passage. Opnieuw controleren is nodig.</p>'
+    rows = []
+    reasons = {"not_stated": "Niet expliciet vermeld", "uncertain": "Onzeker", "not_applicable": "Niet van toepassing"}
+    for field in FIELDS:
+        entry = record["evidence"][field]
+        if entry.get("missing_reason") == "not_applicable" and field not in values:
+            continue
+        value = values.get(field)
+        text = " / ".join(value) if isinstance(value, list) else value
+        rows.append(f'<tr><th>{_esc(labels[field])}</th><td>{_esc(text or reasons.get(entry.get("missing_reason"), "Ontbreekt"))}</td></tr>')
+    return ('<details data-source-bound-fields><summary>Voorgestelde betekenisvelden met bronbewijs</summary>'
+            '<p>Letterlijk uit de geselecteerde bronpassage. Controleer ook betekenis en context; dit is nog geen inhoudelijk akkoord.</p>'
+            '<table><tbody>' + ''.join(rows) + '</tbody></table></details>')
+
+
 def _broncontext_html(
     obj: dict[str, Any],
     snapshot_id: str,
@@ -1268,6 +1302,7 @@ def _broncontext_html(
                     <h4>Broncontext</h4>
                     <div class="broncontext-freeze">{"".join(lines)}</div>
                     {selection_warning}
+                    {_source_bound_fields_html(obj)}
                     {missing}
                     <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}{f'&amp;task={_esc(task)}' if task in REVIEW_TASKS else ''}">Open volledige richtlijn</a></p>
                   </section>

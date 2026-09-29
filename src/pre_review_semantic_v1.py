@@ -65,6 +65,7 @@ from src.semantic_replay_v1 import (
 )
 from src.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
 from src.source_reconstruction_v1 import RECONSTRUCTION_VERSION
+from src.source_bound_fields_v2 import MODE as SEMANTIC_V2_MODE, evidence_schema
 
 
 PASSAGE_FORMATION_MODE_ENV = "METIS_PASSAGE_FORMATION_MODE"
@@ -90,6 +91,14 @@ SEMANTIC_DEVELOPER_PROMPT = (
     "Preserve source order. If no safe source-bound proposal is possible, return "
     "zero objects and a short abstain_reason."
 )
+SEMANTIC_V2_INSTRUCTION = (
+    " For every object return field_evidence for all declared fields. Each field is an exact "
+    "source span wholly within the selected candidate, or null with missing_reason "
+    "not_stated, uncertain or not_applicable. Never invent or paraphrase field text. "
+    "Preserve attribution, uncertainty, negation, conditions, exceptions, numbers and units. "
+    "Field evidence is a proposal for human review, not a confirmation of truth."
+)
+
 SEMANTIC_MODEL_CONFIG = {
     "api": "responses",
     "structured_output": "json_schema",
@@ -177,7 +186,7 @@ def _post_json(
     return decoded
 
 
-def _proposal_schema() -> dict[str, Any]:
+def _proposal_schema(field_contract_v2: bool = False) -> dict[str, Any]:
     span = {
         "type": "object",
         "additionalProperties": False,
@@ -261,6 +270,9 @@ def _proposal_schema() -> dict[str, Any]:
             "recommendation_semantics",
         ],
     }
+    if field_contract_v2:
+        obj["properties"]["field_evidence"] = evidence_schema(span)
+        obj["required"].append("field_evidence")
     return {
         "type": "object",
         "additionalProperties": False,
@@ -301,13 +313,14 @@ def _request_payload(
     model: str,
     blocks: list[dict[str, Any]],
     evidence_blocks: list[dict[str, Any]],
+    field_contract_v2: bool = False,
 ) -> dict[str, Any]:
     return {
         "model": model,
         "input": [
             {
                 "role": "developer",
-                "content": SEMANTIC_DEVELOPER_PROMPT,
+                "content": SEMANTIC_DEVELOPER_PROMPT + (SEMANTIC_V2_INSTRUCTION if field_contract_v2 else ""),
             },
             {
                 "role": "user",
@@ -325,7 +338,7 @@ def _request_payload(
                 "type": "json_schema",
                 "name": "pre_review_semantic_passage_proposal",
                 "strict": True,
-                "schema": _proposal_schema(),
+                "schema": _proposal_schema(field_contract_v2),
             }
         },
     }
@@ -440,6 +453,7 @@ def _replay_identity(
     evidence_blocks: list[dict[str, Any]],
     source_fragments: list[dict[str, Any]],
     formation_context: Mapping[str, Any] | None,
+    field_contract_v2: bool = False,
 ) -> dict[str, Any] | None:
     if not formation_context:
         return None
@@ -459,9 +473,9 @@ def _replay_identity(
         extractor_version=_extractor_contract(source_fragments),
         reconstruction_version=RECONSTRUCTION_VERSION,
         formation_policy_version=PASSAGE_FORMATION_POLICY_VERSION,
-        semantic_contract_version=SEMANTIC_PASSAGE_VERSION,
-        prompt_hash=_stable_json_hash(SEMANTIC_DEVELOPER_PROMPT),
-        schema_hash=_stable_json_hash(_proposal_schema()),
+        semantic_contract_version=("source-bound-fields-v2" if field_contract_v2 else SEMANTIC_PASSAGE_VERSION),
+        prompt_hash=_stable_json_hash(SEMANTIC_DEVELOPER_PROMPT + (SEMANTIC_V2_INSTRUCTION if field_contract_v2 else "")),
+        schema_hash=_stable_json_hash(_proposal_schema(field_contract_v2)),
         provider_id=SEMANTIC_PROVIDER_ID,
         model_id=model,
         model_config_hash=_stable_json_hash(SEMANTIC_MODEL_CONFIG),
@@ -474,6 +488,7 @@ def _provider_proposal(
     blocks: list[dict[str, Any]],
     evidence_blocks: list[dict[str, Any]],
     post_json: PostJson | None,
+    field_contract_v2: bool = False,
 ) -> dict[str, Any]:
     safe_key = str(api_key or "").strip()
     if not safe_key:
@@ -488,6 +503,7 @@ def _provider_proposal(
             model=model,
             blocks=blocks,
             evidence_blocks=evidence_blocks,
+            field_contract_v2=field_contract_v2,
         ),
         DEFAULT_TIMEOUT_SECONDS,
     )
@@ -511,6 +527,7 @@ def _semantic_execution_before_review(
     model: str,
     formation_context: Mapping[str, Any] | None = None,
     post_json: PostJson | None = None,
+    field_contract_v2: bool = False,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     safe_key = str(api_key or "").strip()
     safe_model = str(model or "").strip()
@@ -545,6 +562,7 @@ def _semantic_execution_before_review(
         blocks=blocks,
         evidence_blocks=evidence_blocks,
         source_fragments=fragments,
+        field_contract_v2=field_contract_v2,
         formation_context=formation_context,
     )
     existing_replay = (
@@ -566,6 +584,7 @@ def _semantic_execution_before_review(
                     proposal=lookup.proposal,
                     evidence_fragments=evidence_fragments,
                     allowed_candidate_block_ids=allowed_candidate_block_ids,
+                    field_contract_v2=field_contract_v2,
                 )
             except SemanticPassageError as exc:
                 replay_rejection_reason = exc.code
@@ -587,6 +606,7 @@ def _semantic_execution_before_review(
             blocks=blocks,
             evidence_blocks=evidence_blocks,
             post_json=post_json,
+            field_contract_v2=field_contract_v2,
         )
         try:
             content_units = semantic_units_from_proposal(
@@ -595,6 +615,7 @@ def _semantic_execution_before_review(
                 proposal=proposal,
                 evidence_fragments=evidence_fragments,
                 allowed_candidate_block_ids=allowed_candidate_block_ids,
+                field_contract_v2=field_contract_v2,
             )
         except SemanticPassageError as exc:
             LOGGER.error("METIS_VALIDATION rejected code=%s", exc.code)
@@ -626,7 +647,7 @@ def _semantic_execution_before_review(
             ):
                 semantic_passage.update(
                     {
-                        "formation_mode": SEMANTIC_MODE,
+                        "formation_mode": SEMANTIC_V2_MODE if field_contract_v2 else SEMANTIC_MODE,
                         "model": safe_model,
                         "source_blocks_hash": source_blocks_hash,
                         "proposal_hash": proposal_hash,
@@ -658,6 +679,7 @@ def semantic_units_before_review(
     model: str,
     formation_context: Mapping[str, Any] | None = None,
     post_json: PostJson | None = None,
+    field_contract_v2: bool = False,
 ) -> list[dict[str, Any]]:
     """Return deterministic headings plus source-reconstructed semantic candidates."""
 
@@ -668,6 +690,7 @@ def semantic_units_before_review(
         model=model,
         formation_context=formation_context,
         post_json=post_json,
+        field_contract_v2=field_contract_v2,
     )
     return units
 
@@ -684,6 +707,7 @@ def semantic_spec_from_fragments(
     model: str,
     formation_context: Mapping[str, Any] | None = None,
     post_json: PostJson | None = None,
+    field_contract_v2: bool = False,
 ) -> dict[str, Any]:
     units, replay_record = _semantic_execution_before_review(
         fragments,
@@ -692,6 +716,7 @@ def semantic_spec_from_fragments(
         model=model,
         formation_context=formation_context,
         post_json=post_json,
+        field_contract_v2=field_contract_v2,
     )
     objects: list[dict[str, Any]] = [
         {
@@ -813,6 +838,7 @@ def bind_pre_review_semantic_processing(
             model=provider.model,
             formation_context=formation_context,
             post_json=post_json,
+            field_contract_v2=(mode == SEMANTIC_V2_MODE),
         )
         return fragments, _stamp_passage_formation(spec, decision)
 

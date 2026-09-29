@@ -1,0 +1,15 @@
+{
+  "version": "legacy-processing-routes-v1",
+  "cutover_enabled": false,
+  "issue": 455,
+  "routes": [
+    {"id":"L01","status":"LEGACY-FROZEN","path":"src/operations_console_v1.py","symbol":"_spec_from_fragments","replacement":"shared v2 proposal contract","removal_gate":"G0-G5; headings, repair and comparisons detached"},
+    {"id":"L02","status":"LEGACY-FROZEN","path":"src/pre_review_semantic_v1.py","symbol":"_proposal_schema(false)","replacement":"_proposal_schema(true)","removal_gate":"G0-G5 and compatible historical readers"},
+    {"id":"L03","status":"LEGACY-FROZEN","path":"src/admission_gate_v1.py","symbol":"_enrich_from_text","replacement":"source_bound_fields_v2.bound_values for v2 only","removal_gate":"no necessary v1 admission callers"},
+    {"id":"L04","status":"LEGACY-FROZEN","path":"src/passage_formation_policy_v1.py","symbol":"v1 production mode selection","replacement":"shared processing policy after evaluation","removal_gate":"G0-G5 and rollback window closed"},
+    {"id":"L05","status":"LEGACY-FROZEN","path":"src/pre_review_semantic_v1.py","symbol":"semantic_suppressed catalog detour","replacement":"direct read-only source catalog","removal_gate":"catalog no longer calls full spec creation"},
+    {"id":"L06","status":"LEGACY-FROZEN","path":"src/route_comparison_app_v1.py","symbol":"execute_arm v1 adapters","replacement":"versioned shared producers","removal_gate":"historical baseline remains reproducible"},
+    {"id":"L07","status":"LEGACY-FROZEN","path":"src/semantic_replay_v1.py","symbol":"v1 contract replay writes","replacement":"same replay mechanism with v2 identity","removal_gate":"no new v1 writes; historical readers remain"},
+    {"id":"L08","status":"LEGACY-FROZEN","path":"src/operations_console_v1.py","symbol":"_reextract_objects_for_klasse direct prose conversion","replacement":"shared versioned dispatcher","removal_gate":"class conversion and lifecycle regression proof"}
+  ]
+}

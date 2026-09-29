@@ -559,6 +559,7 @@ def semantic_units_from_proposal(
     proposal: dict[str, Any],
     evidence_fragments: Iterable[dict[str, Any]] | None = None,
     allowed_candidate_block_ids: set[str] | None = None,
+    field_contract_v2: bool = False,
 ) -> list[dict[str, Any]]:
     """Validate provider proposal and reconstruct source-bound candidate data."""
 
@@ -598,7 +599,7 @@ def semantic_units_from_proposal(
     for raw_object in raw_objects:
         if not isinstance(raw_object, dict):
             _fail("semantic_object_invalid")
-        _require_only_keys(raw_object, _OBJECT_KEYS, "semantic_object_contains_untrusted_fields")
+        _require_only_keys(raw_object, _OBJECT_KEYS | ({"field_evidence"} if field_contract_v2 else set()), "semantic_object_contains_untrusted_fields")
 
         proposed_type = str(
             raw_object.get("proposed_object_type") or DEFAULT_OBJECT_TYPE
@@ -738,7 +739,14 @@ def semantic_units_from_proposal(
                 ],
             },
         }
-        if proposed_type != DEFAULT_OBJECT_TYPE:
+        if field_contract_v2:
+            from src.source_bound_fields_v2 import KEY, bind_fields
+            try:
+                unit[KEY] = bind_fields(raw_object.get("field_evidence"), selected=selected,
+                                       candidate_text=candidate_text, proposed_type=proposed_type)
+            except ValueError as exc:
+                _fail(str(exc))
+        if field_contract_v2 or proposed_type != DEFAULT_OBJECT_TYPE:
             unit["proposed_object_type"] = proposed_type
         if semantics is not None:
             unit[PROPOSED_FIELD] = semantics
