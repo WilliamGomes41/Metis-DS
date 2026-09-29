@@ -9,6 +9,9 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import csv
+import io
+import json
 
 from fastapi.testclient import TestClient
 
@@ -214,6 +217,7 @@ def test_detail_export_preserves_candidate_combinations_and_does_not_mutate_stat
 def test_export_requires_authentication_reviewer_role_and_assignment(tmp_path) -> None:
     console, _reviewer, _other, _publisher, snapshot_id = _system(tmp_path)
     paths = (
+        "/review/passages-export",
         "/review/processing-diagnostics",
         "/review/processing-diagnostics-detail",
     )
@@ -243,6 +247,7 @@ def test_export_unknown_snapshot_fails_and_control_page_links_to_export(tmp_path
     _login(client, "reviewer.d2a1")
 
     for path in (
+        "/review/passages-export",
         "/review/processing-diagnostics",
         "/review/processing-diagnostics-detail",
     ):
@@ -262,3 +267,51 @@ def test_export_unknown_snapshot_fails_and_control_page_links_to_export(tmp_path
         in control.text
     )
     assert "Exporteer detaildiagnostiek als JSON" in control.text
+
+
+def test_all_passages_export_includes_every_current_passage_and_evidence(tmp_path):
+    console, _, _, _, snapshot_id = _system(tmp_path)
+    client = _client(console)
+    _login(client, "reviewer.d2a1")
+    objects = deepcopy(console.snapshot_objects(snapshot_id))
+    envelope = deepcopy(console._envelope(snapshot_id))
+    bindings = deepcopy(console.object_review_bindings(snapshot_id))
+    expected = [obj for obj in objects if obj["object_type"] != "document"]
+    url = f"/review/passages-export?document={snapshot_id}"
+    response = client.get(url)
+    assert response.status_code == 200
+    assert "attachment;" in response.headers["content-disposition"]
+    assert response.headers["cache-control"] == "no-store"
+    payload = response.json()
+    assert payload["passage_count"] == len(expected)
+    assert [row["object_id"] for row in payload["rows"]] == [obj["object_id"] for obj in expected]
+    assert any(row["object_type"] == "heading" for row in payload["rows"])
+    assert any(row["gate_result"] == "blocked" for row in payload["rows"])
+    for row, obj in zip(payload["rows"], expected):
+        assert row["admission"] == obj.get("metadata", {}).get("admission", {})
+        assert row["source"] == obj.get("source", {})
+    csv_response = client.get(url + "&format=csv")
+    assert csv_response.status_code == 200
+    assert csv_response.content.startswith(b"\xef\xbb\xbf")
+    exported = list(csv.DictReader(io.StringIO(csv_response.content.decode("utf-8-sig"))))
+    assert len(exported) == len(expected)
+    assert [row["candidate_text"] for row in exported] == [row["candidate_text"] for row in payload["rows"]]
+    assert json.loads(exported[0]["admission"]) == payload["rows"][0]["admission"]
+    assert client.get(url + "&format=xml").status_code == 400
+    page = client.get(f"/review?document={snapshot_id}")
+    assert "Alle bronpassages downloaden" in page.text
+    assert "&amp;format=csv" in page.text
+    assert "&amp;format=json" in page.text
+    assert console.snapshot_objects(snapshot_id) == objects
+    assert console._envelope(snapshot_id) == envelope
+    assert console.object_review_bindings(snapshot_id) == bindings
+
+
+def test_csv_preserves_quotes_newlines_unicode_and_neutralizes_formulas():
+    from src.processing_diagnostics_v1 import passage_export_csv
+    texts = ['Zeg "nee",\nook bij ouderen: één.', '=HYPERLINK("bad")', '  +SUM(1,2)', '@SUM(1)', '\tformula']
+    exported = list(csv.DictReader(io.StringIO(passage_export_csv([
+        {"candidate_text": text} for text in texts
+    ]).lstrip('\ufeff'))))
+    assert exported[0]["candidate_text"] == texts[0]
+    assert [row["candidate_text"] for row in exported[1:]] == ["'" + text for text in texts[1:]]
