@@ -505,7 +505,9 @@ def _render_semantic_safety_experiment(audit: dict[str, Any]) -> str:
     return f"""
       <p class="eyebrow">Experiment · {_esc(audit["audit_id"])}</p>
       <h1>{_esc(audit["title"])}</h1>
-      <p class="lead">Frozen semantic safety audit. Dit is machinebewijs en geen activatiebesluit.</p>
+      <p class="lead">{_esc(report.get("candidate_pass_count"))} van {_esc(report.get("case_count"))} veiligheidstests geslaagd. Dit beoordeelt vaste testgevallen, niet je ingeleverde documenten. Dit is geen activatiebesluit.</p>
+      <p>{"Alle automatische testcriteria zijn gehaald; menselijke beoordeling blijft vereist." if report.get("machine_safety_pass") else "Niet alle testcriteria zijn gehaald. Onderzoek de gevallen met REVIEW. Een geblokkeerd voorstel kan een ingreep van de beveiliging zijn; het is geen geslaagd verwerkingsresultaat."}</p>
+      <details><summary>Technische testdetails</summary>
       <div class="sections">
         <div class="section">
           <h3>Suite</h3>
@@ -521,6 +523,7 @@ def _render_semantic_safety_experiment(audit: dict[str, Any]) -> str:
           <p><b>{"Machinecheck PASS" if report.get("machine_safety_pass") else "Menselijke beoordeling vereist"}</b></p>
         </div>
       </div>
+      </details>
       <h2>Veiligheidscases</h2>
       <ul>{"".join(rows)}</ul>
       <p class="muted">Menselijke beoordeling blijft vereist. Dit auditrecord activeert semantic mode niet en wijzigt geen Review- of publicatiestatus.</p>
@@ -595,7 +598,7 @@ def install_audit_routes(
     def audit_home(request: Request) -> HTMLResponse:
         account = account_for(request)
         body = f"""
-          <p><a class="btn-secondary" href="/settings">← Terug naar Instellingen</a></p>
+          <p><a class="btn-secondary" href="/settings/technical">← Terug naar Technisch beheer</a></p>
           <p class="eyebrow">Instellingen · Audit</p>
           <h1>Audit &amp; diagnostiek</h1>
           <p class="lead">Controleer hoe Metis werkt en leg bewijs vast. Audits veranderen geen canonieke kennis en publiceren niets.</p>
