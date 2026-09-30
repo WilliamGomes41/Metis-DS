@@ -225,3 +225,25 @@ def test_unpublished_delete_keeps_blob_when_same_digest_is_still_referenced(tmp_
     assert result["deleted"] is True
     assert result["freeze_bytes_removed"] is False
     assert blob_name in service.data
+
+
+def test_cleanup_io_failure_does_not_undo_committed_deletion(tmp_path, monkeypatch):
+    service = _BlobService()
+    store = AzureBlobSourceStore(blob_service_client=service)
+    console, accounts = _console(tmp_path, store)
+    receipt = _ingest(console, accounts)
+    sid = str(receipt['snapshot_id'])
+    locator = str(receipt['immutable_storage_locator'])
+
+    def fail_cleanup(envelope):
+        raise OSError('injected_cache_cleanup_failure')
+
+    monkeypatch.setattr(console, '_maybe_remove_unpublished_freeze_bytes', fail_cleanup)
+    result = console.delete_unpublished_snapshot(actor_id=accounts['researcher'], snapshot_id=sid,
+                                                confirmed=True, confirm_title='Canonical source')
+    assert result['deleted'] is True
+    assert result['freeze_bytes_removed'] is False
+    assert store.load_verified(locator) == HTML_FIXTURE.read_bytes()
+    restarted = OperationsConsole(root=tmp_path, source_store=tmp_path/'source-cache',
+                                  runtime=tmp_path/'runtime', immutable_source_store=store)
+    assert restarted.list_envelopes() == []

@@ -120,9 +120,12 @@ def test_console_opt_in_persists_evidence_replays_and_survives_restart(tmp_path)
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV
     from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
     calls=[]
+    response_status = ['completed']
     def post(url, headers, payload, timeout):
         calls.append(payload)
-        return {"output": [{"type": "message", "content": [{"type": "output_text", "text": json.dumps(proposal(payload))}]}]}
+        return {"id": "response-origin", "status": response_status[0], "usage": {"input_tokens": 123, "output_tokens": 45},
+                "private_provider_metadata": "must-not-persist",
+                "output": [{"type": "message", "content": [{"type": "output_text", "text": ' '+json.dumps(proposal(payload))+'\n'}]}]}
     console=OperationsConsole(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
     env={PASSAGE_FORMATION_MODE_ENV: MODE, LLM_API_KEY_ENV: 'test', LLM_MODEL_ENV: 'test-model'}
     bind_pre_review_semantic_processing(console, environ=env, post_json=post)
@@ -137,17 +140,61 @@ def test_console_opt_in_persists_evidence_replays_and_survives_restart(tmp_path)
     target=next(o for o in persisted if KEY in (o.get('metadata') or {}))
     assert target['metadata']['admission']['gate_result']=='allowed'
     assert len(calls)==1
+    from copy import deepcopy
+    evidence = deepcopy(console._envelope(sid)['semantic_replay']['provider_evidence'])
+    assert evidence['request'] == calls[0]
+    assert evidence['response']['id'] == 'response-origin'
+    assert evidence['response']['input_tokens'] == 123
+    assert evidence['response']['output_text'] == ' '+json.dumps(proposal(calls[0]))+'\n'
+    assert 'Authorization' not in json.dumps(evidence)
+    assert 'must-not-persist' not in json.dumps(evidence)
     restarted=OperationsConsole(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
     bind_pre_review_semantic_processing(restarted, environ=env, post_json=post)
+    assert restarted._envelope(sid)['semantic_replay']['provider_evidence'] == evidence
     assert any(KEY in (o.get('metadata') or {}) for o in restarted.snapshot_objects(sid, include_blocked=True))
     restarted.reextract_unpublished(actor_id=author['account_id'], snapshot_id=sid)
     assert len(calls)==1  # exact v2 identity reuses only validated v2 proposal
+    assert restarted._envelope(sid)['semantic_replay']['provider_evidence'] == evidence
+    # The authorized HTTP download resolves its compact revision and contains the
+    # origin call, without mutating the current document or inventing a new call.
+    import csv, io
+    from zipfile import ZipFile
+    from fastapi.testclient import TestClient
+    from src.operations_console_app import create_console_app, COOKIE
+    client = TestClient(create_console_app(restarted))
+    session = restarted.authenticate('reviewer', 'strong-test-password')
+    client.cookies.set(COOKIE, session['token'])
+    before = deepcopy(restarted._envelope(sid)), restarted.objects_revision(sid)
+    response = client.get('/review/processing-evidence-export', params={'document': sid})
+    assert response.status_code == 200
+    with ZipFile(io.BytesIO(response.content)) as archive:
+        def rows(name):
+            return list(csv.DictReader(io.StringIO(archive.read(name+'.csv').decode('utf-8-sig'))))
+        call = rows('model_calls')[0]
+        assert json.loads(call['request']) == calls[0]
+        assert call['output_text'] == evidence['response']['output_text']
+        assert call['call_id'] == 'response-origin' and call['response_status'] == 'completed'
+        assert call['run_id'] == '' and call['raw_response'] == ''
+        revision = rows('revision')[0]
+        assert revision['objects_revision'] == before[1]
+        assert all(r['revision_id'] == revision['revision_id'] for r in rows('source_stages'))
+        assert 'objects_revision' not in call
+        assert 'processing-evidence-export-v3' in archive.read('README.txt').decode()
+    assert before == (restarted._envelope(sid), restarted.objects_revision(sid))
+    # Even valid JSON from an explicitly incomplete response cannot replace work.
+    from src.operations_console_v1 import ConsoleError
+    response_status[0] = 'incomplete'
+    env[LLM_MODEL_ENV] = 'test-model-next'  # Force a new call, not exact replay.
+    with pytest.raises(ConsoleError, match='pre_review_llm_response_not_completed'):
+        restarted.reextract_unpublished(actor_id=author['account_id'], snapshot_id=sid)
+    assert before == (restarted._envelope(sid), restarted.objects_revision(sid))
+    response_status[0] = 'completed'
     # Changing only the contract mode cannot replay v2 as v1.
     from src.pre_review_semantic_v1 import SEMANTIC_MODE
     env[PASSAGE_FORMATION_MODE_ENV]=SEMANTIC_MODE
     with pytest.raises(ValueError, match='semantic_object_contains_untrusted_fields'):
         restarted.reextract_unpublished(actor_id=author['account_id'], snapshot_id=sid)
-    assert len(calls)==2
+    assert len(calls)==3
     assert any(KEY in (o.get('metadata') or {}) for o in restarted.snapshot_objects(sid, include_blocked=True))
 
 
