@@ -295,7 +295,7 @@ def test_native_context_publication_successor_withdrawal_and_restart(recovery_po
     fresh = _console(fresh_root, recovery_postgres, blobs)
     assert not fresh.canonical_publication_store.active_publication_rows()
     assert fresh.snapshot_objects(sid) == old_objects
-    assert fresh.canonical_publication_store.release_for_snapshot(sid2)['release_status'] == 'withdrawn'
+    assert fresh.document_release_serving_status(sid2) == {'release_status': 'withdrawn', 'serving_status': 'inactive'}
     assert _documents(_api(tmp_path / 'api-restarted', recovery_postgres, blobs), consumer) == (200, [])
 
 
