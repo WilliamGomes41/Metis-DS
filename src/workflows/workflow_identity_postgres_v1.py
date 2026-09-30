@@ -122,6 +122,7 @@ class PostgresWorkflowIdentityStore:
             "roles": list(row["roles"] or []),
             "password_salt": str(row["password_salt"]),
             "password_hash": str(row["password_hash"]),
+            "retirement": row.get("retirement"),
             "created_at": row["created_at"].isoformat() if hasattr(row["created_at"], "isoformat") else str(row["created_at"]),
         }
 
@@ -129,7 +130,7 @@ class PostgresWorkflowIdentityStore:
         try:
             with self._connect() as con:
                 rows = con.execute(
-                    "SELECT account_id,username,display_name,roles,password_salt,password_hash,created_at "
+                    "SELECT account_id,username,display_name,roles,password_salt,password_hash,created_at,to_jsonb(accounts)->'retirement' AS retirement "
                     "FROM workflow.accounts ORDER BY created_at,account_id"
                 ).fetchall()
             return [self._account(row) for row in rows]
@@ -142,7 +143,7 @@ class PostgresWorkflowIdentityStore:
         try:
             with self._connect() as con:
                 row = con.execute(
-                    "SELECT account_id,username,display_name,roles,password_salt,password_hash,created_at "
+                    "SELECT account_id,username,display_name,roles,password_salt,password_hash,created_at,to_jsonb(accounts)->'retirement' AS retirement "
                     "FROM workflow.accounts WHERE account_id=%s",
                     (account_id,),
                 ).fetchone()
@@ -156,7 +157,7 @@ class PostgresWorkflowIdentityStore:
         try:
             with self._connect() as con:
                 row = con.execute(
-                    "SELECT account_id,username,display_name,roles,password_salt,password_hash,created_at "
+                    "SELECT account_id,username,display_name,roles,password_salt,password_hash,created_at,to_jsonb(accounts)->'retirement' AS retirement "
                     "FROM workflow.accounts WHERE username=%s",
                     (username,),
                 ).fetchone()
@@ -191,7 +192,7 @@ class PostgresWorkflowIdentityStore:
         try:
             with self._connect() as con:
                 row = con.execute(
-                    "UPDATE workflow.accounts SET roles=%s WHERE account_id=%s "
+                    "UPDATE workflow.accounts SET roles=%s WHERE account_id=%s AND to_jsonb(accounts)->>'retirement' IS NULL "
                     "RETURNING account_id,username,display_name,roles,password_salt,password_hash,created_at",
                     (roles, account_id),
                 ).fetchone()
@@ -221,9 +222,9 @@ class PostgresWorkflowIdentityStore:
         try:
             with self._connect() as con:
                 row = con.execute(
-                    "SELECT a.account_id,a.username,a.display_name,a.roles,a.password_salt,a.password_hash,a.created_at "
+                    "SELECT a.account_id,a.username,a.display_name,a.roles,a.password_salt,a.password_hash,a.created_at,to_jsonb(a)->'retirement' AS retirement "
                     "FROM workflow.sessions s JOIN workflow.accounts a ON a.account_id=s.account_id "
-                    "WHERE s.token_hash=%s AND s.revoked_at IS NULL AND s.expires_at>CURRENT_TIMESTAMP",
+                    "WHERE s.token_hash=%s AND s.revoked_at IS NULL AND s.expires_at>CURRENT_TIMESTAMP AND to_jsonb(a)->>'retirement' IS NULL",
                     (_token_hash(token),),
                 ).fetchone()
             return self._account(row) if row else None
@@ -310,6 +311,7 @@ class _PostgresIdentityMixin:
             "username": record["username"],
             "display_name": record["display_name"],
             "roles": list(record["roles"]),
+            **({"retirement": record["retirement"]} if record.get("retirement") else {}),
         }
 
     def _account(self, account_id: str) -> dict[str, Any]:
@@ -319,6 +321,12 @@ class _PostgresIdentityMixin:
             raise ConsoleError("workflow_identity_unavailable", str(exc)) from exc
         if account is None:
             raise ConsoleError("unknown_account")
+        return account
+
+    def _require_role(self, account_id: str, role: str) -> dict[str, Any]:
+        account = super()._require_role(account_id, role)
+        if account.get("retirement"):
+            raise ConsoleError("not_authenticated")
         return account
 
     def create_account(
@@ -376,7 +384,7 @@ class _PostgresIdentityMixin:
         return [self._public_account(row) for row in accounts]
 
     def list_reviewer_accounts(self) -> list[dict[str, Any]]:
-        return [row for row in self.list_accounts() if "reviewer" in row["roles"]]
+        return [row for row in self.list_accounts() if "reviewer" in row["roles"] and not row.get("retirement")]
 
     def _resolve_named_reviewers(self, named_reviewers: list[str], uploader_id: str) -> list[str]:
         if not named_reviewers:
@@ -395,7 +403,7 @@ class _PostgresIdentityMixin:
                 (row for row in accounts if row["username"] == value or row["display_name"] == value),
                 None,
             )
-            if account is None:
+            if account is None or account.get("retirement"):
                 raise ConsoleError("unknown_reviewer")
             if _is_forbidden_identity(account["username"]) or _is_forbidden_identity(account["display_name"]):
                 raise ConsoleError("forbidden_reviewer_identity")
@@ -412,7 +420,7 @@ class _PostgresIdentityMixin:
             record = self.workflow_identity_store.account_by_username(username)
         except WorkflowIdentityStoreError as exc:
             raise ConsoleError("workflow_identity_unavailable", str(exc)) from exc
-        if not record:
+        if not record or record.get("retirement"):
             raise ConsoleError("invalid_credentials")
         _, digest = _hash_password(password, record["password_salt"])
         if not secrets.compare_digest(digest, record["password_hash"]):
@@ -438,7 +446,7 @@ class _PostgresIdentityMixin:
             account = self.workflow_identity_store.session_account(token)
         except WorkflowIdentityStoreError as exc:
             raise ConsoleError("workflow_identity_unavailable", str(exc)) from exc
-        if account is None:
+        if account is None or account.get("retirement"):
             raise ConsoleError("not_authenticated")
         return self._public_account(account)
 

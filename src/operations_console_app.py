@@ -5017,6 +5017,8 @@ def create_console_app(
                     <input type="hidden" name="account_id" value="{_esc(public['account_id'])}">
                     <input type="hidden" name="blocked" value="{'false' if blocked else 'true'}">
                     <button class="btn-secondary" type="submit">{'Blokkering opheffen' if blocked else 'Toegang direct blokkeren'}</button></form>"""
+            if public.get("retirement"):
+                role_form = '<p><b>Historisch account — aanmelden uitgeschakeld</b></p><p>Behouden voor eerdere beoordelingen en auditgegevens. Niet beschikbaar voor nieuwe reviewertoewijzingen.</p>'
             rows.append(
                 f"""
                 <article class="doc-card">

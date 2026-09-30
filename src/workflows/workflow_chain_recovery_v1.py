@@ -41,7 +41,7 @@ from src.publication_chain_recovery_v1 import (
     check_chain_integrity,
 )
 
-WORKFLOW_RECOVERY_VERSION = 4
+WORKFLOW_RECOVERY_VERSION = 5
 API_ACCESS_TABLES = tuple(API_ACCESS_COLUMNS)
 _API_ACCESS_ORDER_BY = {
     table: ",".join(columns)
@@ -63,7 +63,7 @@ WORKFLOW_TABLES = (
 _WORKFLOW_COLUMNS: dict[str, tuple[str, ...]] = {
     "accounts": (
         "account_id", "username", "display_name", "roles", "password_salt",
-        "password_hash", "created_at",
+        "password_hash", "created_at", "retirement",
     ),
     "sessions": (
         "token_hash", "account_id", "created_at", "expires_at", "revoked_at",
@@ -143,6 +143,8 @@ def _validate_workflow_shape(state: Mapping[str, Any]) -> None:
         raise PublicationChainRecoveryError("workflow_backup_api_access_missing:reexport_required")
     if state.get("workflow_recovery_version") == 3:
         raise PublicationChainRecoveryError("workflow_backup_audit_retention_missing:reexport_required")
+    if state.get("workflow_recovery_version") == 4:
+        raise PublicationChainRecoveryError("workflow_backup_account_retirement_missing:reexport_required")
     if int(state.get("workflow_recovery_version") or 0) != WORKFLOW_RECOVERY_VERSION:
         raise PublicationChainRecoveryError("workflow_backup_version_invalid")
     tables = state.get("workflow_tables")
@@ -244,6 +246,20 @@ def check_workflow_integrity(state: Mapping[str, Any]) -> dict[str, Any]:
     accounts = {str(row.get("account_id") or "") for row in _rows(state, "accounts")}
     if "" in accounts:
         errors.append("workflow_account_id_missing")
+    retired = set()
+    for row in _rows(state, "accounts"):
+        evidence = row.get("retirement")
+        if "retirement" not in row:
+            errors.append("workflow_account_retirement_missing")
+        if evidence is not None:
+            if (not isinstance(evidence, dict) or evidence.get("actor") not in accounts
+                    or not evidence.get("reason") or not evidence.get("at")
+                    or row.get("password_hash") or row.get("password_salt")):
+                errors.append("workflow_account_retirement_invalid")
+            retired.add(row.get("account_id"))
+    for row in _rows(state, "sessions"):
+        if row.get("account_id") in retired and row.get("revoked_at") is None:
+            errors.append("workflow_retired_account_session_active")
     entra_rows = state.get("entra_identities", [])
     if not isinstance(entra_rows, list):
         errors.append("entra_identity_backup_invalid")
@@ -532,7 +548,7 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
                     )
                     _insert_rows(
                         con, schema="workflow", table="accounts", rows=workflow_rows["accounts"],
-                        columns=_WORKFLOW_COLUMNS["accounts"], json_columns=set(),
+                        columns=_WORKFLOW_COLUMNS["accounts"], json_columns={"retirement"},
                     )
                     if state.get("entra_identities"):
                         _insert_rows(

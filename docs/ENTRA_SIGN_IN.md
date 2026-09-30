@@ -174,3 +174,74 @@ De tweede reviewpass controleert de omzeilingen, niet alleen de happy path:
 
 Open acceptatie blijft echte Microsoft-/Azure-integratie: appregistratie, rolclaims,
 MFA, gasten, beheerrechten, secretbeheer, logging en propagatie bij intrekking.
+
+## Historische testaccounts vóór de omschakeling (migratie 015)
+
+Een testaccount met beoordelingen of auditgegevens wordt niet verwijderd en krijgt
+geen fictieve Microsoft-identiteit. Het wordt expliciet **historisch**: naam,
+accountnummer, rollen en historische verwijzingen blijven behouden. Aanmelden is
+permanent uitgeschakeld. Het account verdwijnt uit nieuwe reviewerkeuzes; bestaande
+toewijzingen en besluiten blijven ongewijzigd. Herverdeling van open werk is een
+aparte handeling. Een historisch account hoeft niet aan Entra gekoppeld te zijn;
+een actief ongekoppeld account blokkeert de omschakeling nog steeds.
+
+1. Houd `METIS_CONSOLE_AUTH=local` totdat de voorbereiding en herstelroute zijn
+   gecontroleerd. Maak een herstelbare back-up en bewaar de huidige configuratie.
+2. Pas `015_historical_accounts.sql` toe als databasebeheerder, met
+   `ON_ERROR_STOP` en één transactie. De migratie voegt alleen ondersteuning toe;
+   zij faseert geen account automatisch uit. Bestaande tabelrechten volstaan.
+3. Installeer de bijbehorende applicatiecode. Voer het onderstaande commando uit
+   vanuit de code-directory in een omgeving met de Python-dependencies en een
+   geautoriseerde Azure-identiteit voor PostgreSQL. Dit is geen SQL-editorcommando.
+   `--actor-id` legt de verantwoordelijke actieve publisher vast; het argument is
+   geen bewijs van diens aanmelding. Databasebeheerrechten autoriseren deze
+   operatorhandeling. Deel geen tokens of wachtwoorden.
+
+```bash
+python scripts/retire_workflow_account.py plan \
+  --host HOST --database DATABASE --user DATABASE_ADMIN \
+  --account-id HISTORISCH_ACCOUNT_ID --actor-id ACTIEVE_PUBLISHER_ID \
+  --reason 'Historisch testaccount; werkelijke gebruiker gebruikt zijn eigen account'
+```
+
+Controleer naam, accountnummer en doel. Voer daarna hetzelfde commando uit met
+`apply` in plaats van `plan` en voeg
+`--confirm-target HOST/DATABASE/HISTORISCH_ACCOUNT_ID` toe. Uitfaseren, wissen van
+het wachtwoord en intrekken van alle sessies worden samen gecommit. Herhalen
+verandert het oorspronkelijke bewijs niet. Zelfuitfasering is geweigerd.
+
+4. Controleer de status **Historisch account — aanmelden uitgeschakeld** onder
+   Accounts. Controleer dat het oude wachtwoord en een oude sessie niet werken.
+5. Koppel uitsluitend actieve accounts aan hun echte tenant/object-identiteit.
+   Controleer een Microsoft-aanmelding en de rollen voordat de lokale
+   herstelmogelijkheid voor het actieve beheerdersaccount wordt opgegeven.
+   Deze wijziging activeert Entra niet automatisch.
+
+### Herstart, terugrollen en herstellen
+
+Migratie 015 blijft staan bij het terugrollen van applicatiecode. Databasetriggers
+voorkomen opnieuw instellen van een historisch wachtwoord, nieuwe/weer actieve
+sessies en verwijderen van de historische status. Oude Entra-code kan bij een
+ongekoppeld historisch account weigeren te starten; dat is geen reden om de status
+of triggers te verwijderen. Lokale toegang voor het actieve beheerdersaccount is
+de voorbereide herstelroute, mits de bijbehorende configuratie en credentials
+vooraf zijn gecontroleerd.
+
+Workflow-back-ups gebruiken voortaan formaatversie **5**, inclusief historische
+accountstatus. Oudere versies van de herstelsoftware weigeren dit formaat;
+herstellen met oude software mag deze status niet stilzwijgend verliezen.
+Versie-4 workflow-archieven moeten opnieuw worden geëxporteerd vóór gebruik met
+de nieuwe herstelsoftware. Azure-herstel naar een tijdstip vóór uitfasering bevat
+uiteraard de toenmalige toegang: pas uitfasering opnieuw toe voordat die database
+voor aanmelding beschikbaar komt. Herstellen betekent geen heractivering.
+
+Het commando werkt uitsluitend op PostgreSQL. Overschakelen op lokale JSON-bestanden
+is geen herstelroute voor deze accountstatus. De databasebeheerder blijft een
+vertrouwde beheergrens: iemand die triggers uitschakelt kan die bescherming omzeilen.
+
+### Begrenzing van de blokkering
+
+Na de commit worden geen sessies van het historische account meer geaccepteerd.
+Een al geautoriseerde, lopende handeling wordt hiermee niet teruggedraaid. Voer de
+omschakeling daarom uit terwijl gebruikers geen werk meer inleveren of beoordelen.
+Bestaande publicatiebesluiten worden niet ingetrokken door accountuitfasering.
