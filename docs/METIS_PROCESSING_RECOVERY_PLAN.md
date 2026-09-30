@@ -56,6 +56,13 @@ van het laatste opgeslagen voorstel. Een nieuw voorstel kan dat vervangen.
 
 ## Vervolg 3 — bronrollen en contextkoppelingen
 
+Eerste presentatieverbetering (#466): passageoverzicht, broncontext en
+passage-export geven bij losstaand DOEN, NIET DOEN en Niveau 1–4 een afgeleide
+hint `possible_source_label`. Dit is geen opgeslagen bronrol, bevestigd besluit
+of koppeling. Tekst, taken, tellingen en toelatingsregels blijven gelijk.
+Andere korte tekst wordt niet verborgen of automatisch als label aangemerkt.
+De duurzame koppeling en het bijbehorende lifecyclebewijs hieronder blijven open.
+
 Bronfragmenten blijven exact behouden. Kop, bronlabel, inhoudelijke passage en
 onbesliste tekst zijn verschillende rollen. Geen minimumwoordenaantal als filter.
 Bronlabel is geen zelfstandig kennistype. DOEN is niet automatisch sterk en NIET

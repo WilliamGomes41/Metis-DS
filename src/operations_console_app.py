@@ -74,6 +74,7 @@ from src.processing_diagnostics_v1 import (
     processing_diagnostics,
 )
 from src.processing_evidence_export_v1 import processing_evidence_zip
+from src.source_label_hint_v1 import source_label_hint
 from src.extract_coverage_v1 import coverage_panel_rows
 from src.review_cockpit_v1 import (
     SUITABILITY_VALUES,
@@ -1265,6 +1266,9 @@ def _broncontext_html(
 ) -> str:
     parts = broncontext_parts(obj)
     lines = []
+    hint = source_label_hint(obj)
+    if hint:
+        lines.append(f'<p data-source-label-hint><strong>{_esc(hint["label"])}</strong> {_esc(hint["guidance"])}</p>')
     for ancestor in parts["ancestor_headings"]:
         lines.append(f'<p class="broncontext-heading">{_esc(ancestor)}</p>')
     if parts["current_heading"]:
@@ -2397,9 +2401,12 @@ def _review_inventory(
                 next_action = "Metis heeft nog niet vastgesteld of deze passage inhoudelijk beoordeelbaar is. Open de bron en bepaal het gebruik of herstel de verwerking."
             else:
                 next_action = "Er ontbreekt een definitieve afhandeling. Open de passage en bepaal of zij kennis, context, onderbouwing of niet op te nemen tekst is."
+        hint = source_label_hint(obj)
+        hint_html = f'<p data-source-label-hint>{_esc(hint["label"])}</p>' if hint else ''
         items.append(
             f'<li data-passage-id="{_esc(object_id)}" data-passage-category="{_esc(category)}">'
             f'<a class="review-row-title" href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={_esc(target_task)}">{_esc(review_card_sentence(obj))}</a>'
+            f'{hint_html}'
             f'<p>{_esc(labels[category])} · {_esc(admission_label)} · {_esc(outcome)}</p>'
             f'<p class="review-next-action">{_esc(next_action)}</p>'
             f'<a href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={_esc(target_task)}">Bekijk bronpassage</a>'

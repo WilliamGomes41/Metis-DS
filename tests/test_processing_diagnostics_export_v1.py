@@ -311,6 +311,51 @@ def test_all_passages_export_includes_every_current_passage_and_evidence(tmp_pat
     assert console.object_review_bindings(snapshot_id) == bindings
 
 
+def test_source_label_guidance_http_and_export_preserve_review_state(tmp_path):
+    console, _, _, _, sid = _system(tmp_path)
+    # Reproduce an already stored standalone label from the reported PDF run.
+    objects = console._load_objects(sid)
+    target = next(o for o in objects if (o.get('metadata') or {}).get('admission', {}).get('gate_result') == 'blocked')
+    target['content']['clean_text'] = target['content']['raw_text'] = 'DOEN'
+    target['metadata']['admission']['candidate_text'] = 'DOEN'
+    target['metadata']['admission']['source_text_exact'] = 'DOEN'
+    stamp_canonical_hashes(target)
+    console._save_objects(sid, objects)
+    client = _client(console)
+    _login(client, 'reviewer.d2a1')
+    before = deepcopy(console.snapshot_objects(sid, include_blocked=True))
+    revision = console.objects_revision(sid)
+    target = next(o for o in before if (o.get('content') or {}).get('clean_text') == 'DOEN')
+    page = client.get(f'/review?document={sid}&task=inventory')
+    assert page.status_code == 200
+    assert 'Mogelijk bronlabel' in page.text
+    detail = client.get(f'/review?document={sid}&object={target["object_id"]}&task=repair')
+    assert detail.status_code == 200
+    assert 'De koppeling en betekenis zijn hiermee niet bevestigd.' in detail.text
+    response = client.get(f'/review/passages-export?document={sid}&format=csv')
+    assert response.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(response.content.decode('utf-8-sig'))))
+    row = next(r for r in rows if r['object_id'] == target['object_id'])
+    hint = json.loads(row['source_label_hint'])
+    assert hint['status'] == 'possible_source_label'
+    assert hint['basis'] == 'derived_from_current_text_not_a_review_decision'
+    assert row['candidate_text'] == 'DOEN'
+    assert len(rows) == sum(o['object_type'] != 'document' for o in before)
+    assert console.snapshot_objects(sid, include_blocked=True) == before
+    assert console.objects_revision(sid) == revision
+
+
+def test_label_shape_is_only_a_hint_and_not_a_short_text_filter():
+    from src.source_label_hint_v1 import source_label_hint
+    for text in ('DOEN', ' NIET\nDOEN ', 'Niveau 3', 'niveau 4'):
+        obj = {'content': {'clean_text': text}}
+        before = deepcopy(obj)
+        assert source_label_hint(obj)['status'] == 'possible_source_label'
+        assert obj == before
+    for text in ('Doen wat nodig is.', 'Niet doen bij koorts.', 'Niveau 3 is bereikt.', 'Pijn', 'Ja', 'Niveau 5', ''):
+        assert source_label_hint({'content': {'clean_text': text}}) == {}
+
+
 def test_csv_preserves_quotes_newlines_unicode_and_neutralizes_formulas():
     from src.processing_diagnostics_v1 import passage_export_csv
     texts = ['Zeg "nee",\nook bij ouderen: één.', '=HYPERLINK("bad")', '  +SUM(1,2)', '@SUM(1)', '\tformula']

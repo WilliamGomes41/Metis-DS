@@ -23,6 +23,7 @@ from src.admission_gate_v1 import admission_of
 from src.domain_dimensions_v1 import processing_issue_objects
 from src.object_taxonomy_v1 import section_role_for_path
 from src.review_disposition_v1 import definitive_review_disposition
+from src.source_label_hint_v1 import source_label_hint
 
 
 SOURCE_BINDING = "source_binding"
@@ -217,6 +218,7 @@ def passage_export_rows(objects: Iterable[dict[str, Any]]) -> list[dict[str, Any
             "object_type": obj.get("object_type", ""),
             "candidate_text": _candidate_text(obj),
             "proposed_type": _proposed_type(obj),
+            "source_label_hint": source_label_hint(obj),
             "section_path": _section_path(obj),
             "section_role": _section_role(obj),
             "formation_strategy": _formation_strategy(obj),
