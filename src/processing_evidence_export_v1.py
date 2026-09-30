@@ -24,7 +24,7 @@ SCHEMAS = {
     "coverage": ("object_id", "object_version", "block_id", "start", "end", "selection_origin", "register_status", "gate_result", "model_decision_status", "offset_text_status"),
     "proposal_fields": ("object_id", "object_version", "field", "value", "value_status", "stage", "producer_status", "contract_version", "source_span", "missing_reason"),
     "validation_findings": ("object_id", "object_version", "gate_result", "reason_code", "evidence_kind", "admission", "rule_execution_trace_status"),
-    "context_evidence": ("object_id", "object_version", "context_scan", "expand_merge", "necessary_context_disposition", "evidence_kind"),
+    "context_evidence": ("object_id", "object_version", "context_scan", "expand_merge", "necessary_context_disposition", "source_context_review", "evidence_kind"),
     "lineage": ("object_id", "object_version", "relation", "target_id", "start", "end", "locator", "page", "bbox", "raw_content_hash"),
     "model_calls": ("run_id", "call_id", "request", "raw_response", "stop_reason", "input_tokens", "output_tokens",
                     "output_text", "response_status", "requested_at", "deployed_commit", "proposal_hash", "evidence_kind"),
@@ -105,6 +105,10 @@ def processing_evidence_tables(
         keys = {"object_id": row["object_id"], "object_version": row["object_version"]}
         content = obj.get("content") or {}
         admission = row["admission"]
+        context_review = row.get("source_context_review") or {}
+        if context_review.get("role") or context_review.get("links") or context_review.get("issues"):
+            add("context_evidence", **keys, source_context_review=context_review,
+                evidence_kind="reviewer_confirmed_literal_source_context")
         for stage, container, field in (
             ("current_object_raw_text", content, "raw_text"),
             ("current_object_clean_text", content, "clean_text"),

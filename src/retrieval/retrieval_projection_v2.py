@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -286,6 +287,21 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             for row in semantic_relations
             if row.get("relation_type") == "except_if"
         ]
+        from src.source_context_review_v1 import links_of, literal_identity, CONTRACT
+        literal_context = links_of(obj)
+        raw_context = (obj.get("metadata") or {}).get("confirmed_source_context")
+        if raw_context is not None and (
+            not isinstance(raw_context, list) or len(literal_context) != len(raw_context)
+            or any(link.get("version") != CONTRACT or link.get("target_object_id") != obj["object_id"]
+                   or link.get("target_literal_hash") != literal_identity(obj)
+                   or link.get("source_sha256") != source.get("source_checksum")
+                   or link.get("role") not in {"label", "context"}
+                   or not isinstance(link.get("text"), str) or not link.get("text")
+                   or not link.get("source_fragments") or not link.get("reviewer_id") or not link.get("reason")
+                   for link in literal_context)
+        ):
+            blocked.append({"object_id": obj["object_id"], "errors": ["source_context_invalid"]})
+            continue
         context_entries = [
             {
                 "object_id": oid,
@@ -312,6 +328,9 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             if entry["text"]:
                 label = CONTEXT_LABELS.get(entry["relation_type"], "Gekoppelde context")
                 text_parts.append(f"{label}: {entry['text']}")
+        for link in literal_context:
+            label = "Bronlabel" if link["role"] == "label" else "Broncontext"
+            text_parts.append(f"{label}: {link['text']}")
         if content.get("clean_text"):
             text_parts.append(content["clean_text"].strip())
         text_parts.extend(_logic_text(obj.get("logic")))
@@ -343,6 +362,7 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             "parent_object_id": obj.get("parent_object_id"),
             "context_object_ids": context_ids,
             "context_relations": context_entries,
+            **({"confirmed_source_context": deepcopy(literal_context)} if literal_context else {}),
             "applies_if_object_ids": applies_ids,
             "except_if_object_ids": except_ids,
             "confirmed_knowledge_relations": semantic_relations,

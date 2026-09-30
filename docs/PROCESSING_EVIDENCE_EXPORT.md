@@ -30,6 +30,12 @@ oorspronkelijke bloktekst; pas die offsets niet toe op huidige objecttekst.
 Een restbereik is geen expliciete modelafwijzing. Een opgeslagen contextstatus
 `include` bewijst niet dat context daadwerkelijk is gekoppeld.
 
+`context_evidence.csv` heeft daarnaast `source_context_review`: uitsluitend
+expliciet opgeslagen bronrol en letterlijke contextkoppelingen, met bronhash,
+bronposities, source/targetversies, reviewer en reden. `issues` meldt een ontbrekende
+of gewijzigde koppeling. Passage-export en MCP lezen hetzelfde bewijs. De labelhint
+blijft een onbeslist voorstel wanneer geen reviewerrol is opgeslagen.
+
 De export voert geen modelaanroepen, extractie, validatie of opslagwijzigingen uit.
 Hij exporteert geen volledige envelopes, accountconfiguratie of credentials.
 Envelopebewijs en objectrevisie worden niet gepresenteerd als één atomische

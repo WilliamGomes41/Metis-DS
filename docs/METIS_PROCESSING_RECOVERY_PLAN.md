@@ -32,9 +32,10 @@ en menselijke vergelijking blijven vereist.
 Integrale vrijgave: #465, #468, #469 en het selectiewerk horen bij één herstel;
 geen van deze afzonderlijke PR's is een deploymentadvies. Eén eindcontrole moet
 inleveren, bronbinding, labelcontext, review, publicatie, herverwerking,
-verwijdering en herstart afdekken. Bronlabelkoppelingen zijn nog niet gebouwd.
-De CI-workflow bevat al PostgreSQL 16; de GitHub-run moet daadwerkelijk starten
-om de nu lokaal overgeslagen PostgreSQL-proeven te kunnen leveren.
+verwijdering en herstart afdekken. Reviewerbevestigde broncontext is nu gebouwd
+onder het contract van #474; native ketenbewijs wordt op het definitieve PR-head
+opnieuw uitgevoerd. De daadwerkelijke modelproef en menselijke referentie staan
+apart beschreven in `docs/EENZAAMHEID_SEMANTIC_ACCEPTANCE.md` en blijven open.
 
 ## Stap 1 — uitgevoerd door #464
 
@@ -84,7 +85,12 @@ passage-export geven bij losstaand DOEN, NIET DOEN en Niveau 1–4 een afgeleide
 hint `possible_source_label`. Dit is geen opgeslagen bronrol, bevestigd besluit
 of koppeling. Tekst, taken, tellingen en toelatingsregels blijven gelijk.
 Andere korte tekst wordt niet verborgen of automatisch als label aangemerkt.
-De duurzame koppeling en het bijbehorende lifecyclebewijs hieronder blijven open.
+Voor onbevestigde fragmenten blijft deze hint bestaan. #474 voegt de expliciete
+reviewerbeslissing toe: label/context/niet opnemen, met letterlijke brontekst,
+bronposities, bronhash, reviewer, reden en exacte doelversies. Veranderde context
+maakt doelpassages opnieuw needs_review en trekt eerdere reviewbindings in.
+CSV, MCP en canonieke publicatie bewaren hetzelfde objectbewijs. Geen aparte
+relatiestore of automatische toekenning. Zie `docs/SOURCE_CONTEXT_REVIEW_CONTRACT.md`.
 
 Bronfragmenten blijven exact behouden. Kop, bronlabel, inhoudelijke passage en
 onbesliste tekst zijn verschillende rollen. Geen minimumwoordenaantal als filter.
@@ -142,12 +148,14 @@ geen definitieve commit. Cache-opruimfouten na commit herstellen geen verwijderd
 document. Een crash tussen commit en cleanup kan ongebruikte bronbytes achterlaten;
 automatische orphan-cleanup of een retry-outbox is hiermee niet geïmplementeerd.
 Geen nieuw deletebeleid, migratie of automatische bronverwijdering bij startup.
-Adapter-/transactiedoubletests bewijzen de volgorde; de echte PostgreSQL-proef
-blijft een vrijgavevoorwaarde zolang geen testdatabase beschikbaar is.
+Adapter-/transactiedoubletests en de eerdere native PostgreSQL-CI bewijzen de
+volgorde; ook de finale gezamenlijke branch moet de native proeven opnieuw halen.
 
 Stap 1 vereist geen databasewijziging. CSV v3 is expliciet versiegebonden: oude
 v2-consumenten moeten de revisiejoin ondersteunen. Bestaande v2-exports blijven
-v2. Rol/koppeling-migraties moeten nog ontworpen en getest worden; geen destructieve
+v2. Bronrol/context is additieve objectmetadata zonder SQL-migratie of historische
+backfill. Bij downgrade mag oude code nieuwe contextrevisies niet publiceren;
+behoud JSONB/auditbewijs en hervat pas onder de nieuwe validator. Geen destructieve
 omzetting. Activeer volgende stappen eerst in een gecontroleerde proef. Rollback
 stopt nieuwe verwerking onder nieuw beleid maar wist geen besluiten of publicaties.
 

@@ -2473,6 +2473,9 @@ class OperationsConsole:
         if target is None:
             raise ConsoleError("unknown_object")
         quality_before = deepcopy(target)
+        from src.source_context_review_v1 import role_of
+        if decision == "approve" and role_of(target):
+            raise ConsoleError("source_context_not_knowledge")
         if not rejecting and type_action == "dit_klopt" and not confirmed_object_type:
             confirmed_object_type = confirmable_proposed_type(target) or None
         parent_id = ""
@@ -3113,6 +3116,10 @@ class OperationsConsole:
         return deepcopy(current_target)
 
 
+    def confirm_source_context(self, **command: Any) -> dict[str, Any]:
+        from src.source_context_review_v1 import confirm_source_context
+        return confirm_source_context(self, **command)
+
     def batch_confirm_headings(
         self,
         *,
@@ -3386,6 +3393,9 @@ class OperationsConsole:
         ]
         blockers: list[str] = []
         independence = bool(others)
+        from src.source_context_review_v1 import context_issues
+        if context_issues(self.snapshot_objects(snapshot_id)):
+            blockers.append("source_context_review_incomplete")
         if not independence:
             blockers.append("second_named_reviewer_required")
         if not bindings:
@@ -3458,6 +3468,17 @@ class OperationsConsole:
 
     def publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         with self._store_write_lock():
+            documents = getattr(self, "workflow_document_store", None)
+            reviews = getattr(self, "workflow_review_store", None)
+            if documents is not None and reviews is not None:
+                from src.workflows.workflow_transaction_v1 import workflow_transaction
+                # Context review and publication share this snapshot barrier.
+                # Keep it through the canonical decision and derived writes.
+                with workflow_transaction(reviews) as connection:
+                    connection.execute("SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
+                                       (snapshot_id,))
+                    self._reload_store_locked()
+                    return self._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id)
             self._reload_store_locked()
             return self._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id)
 

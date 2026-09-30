@@ -6,6 +6,9 @@ from typing import Any
 
 
 def source_label_hint(obj: dict[str, Any]) -> dict[str, str]:
+    from src.source_context_review_v1 import role_of
+    if role_of(obj):
+        return {}
     content = obj.get("content") or {}
     text = str(content.get("clean_text") or content.get("raw_text") or "")
     normalized = " ".join(text.split()).casefold()

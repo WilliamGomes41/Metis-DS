@@ -24,6 +24,7 @@ from src.domain_dimensions_v1 import processing_issue_objects
 from src.object_taxonomy_v1 import section_role_for_path
 from src.review_disposition_v1 import definitive_review_disposition
 from src.source_label_hint_v1 import source_label_hint
+from src.source_context_review_v1 import projections as source_context_projections
 
 
 SOURCE_BINDING = "source_binding"
@@ -206,6 +207,8 @@ def passage_export_rows(objects: Iterable[dict[str, Any]]) -> list[dict[str, Any
     Preserve stored evidence rather than reconstructing missing evidence or
     rerunning admission. The document container is not a source passage.
     """
+    objects = list(objects)
+    context = source_context_projections(objects)
     rows = []
     for obj in objects:
         if obj.get("object_type") == "document":
@@ -219,6 +222,7 @@ def passage_export_rows(objects: Iterable[dict[str, Any]]) -> list[dict[str, Any
             "candidate_text": _candidate_text(obj),
             "proposed_type": _proposed_type(obj),
             "source_label_hint": source_label_hint(obj),
+            "source_context_review": context[str(obj.get("object_id") or "")],
             "section_path": _section_path(obj),
             "section_role": _section_role(obj),
             "formation_strategy": _formation_strategy(obj),
