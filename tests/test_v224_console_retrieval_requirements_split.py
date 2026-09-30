@@ -65,6 +65,7 @@ ALLOWED_CONSOLE_PACKAGES = frozenset(
         "gunicorn",
         "azure-identity",
         "msal",
+        "pyjwt",  # Explicit JWT signature validation for the read-only MCP resource.
         "azure-storage-blob",
         "cryptography",
         "psycopg",

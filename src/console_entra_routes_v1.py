@@ -28,7 +28,7 @@ def install_entra_routes(app, console, identity, *, render_page):
 
     @app.middleware("http")
     async def renew_on_navigation(request: Request, call_next):
-        public = request.url.path in {"/", "/login", "/health", "/auth/microsoft", "/auth/microsoft/callback"} or request.url.path.startswith("/brand/")
+        public = request.url.path in {"/", "/login", "/health", "/auth/microsoft", "/auth/microsoft/callback", "/mcp", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"} or request.url.path.startswith("/brand/")
         if request.method == "GET" and not public:
             from starlette.concurrency import run_in_threadpool
             try:
