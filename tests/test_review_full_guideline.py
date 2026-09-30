@@ -129,7 +129,8 @@ def test_missing_or_corrupt_source_fails_closed(tmp_path, corrupt):
     for route in ("bronpassage", "brondocument"):
         response = client.get(f"/review/{route}?{query}")
         assert response.status_code == 400
-        assert "origineel ontbreekt" in response.text
+        assert "Het oorspronkelijke bronbestand is niet beschikbaar" in response.text
+        assert "freeze_bytes_missing" in response.text
         assert "unverified replacement" not in response.text
 
 
@@ -150,7 +151,8 @@ def test_full_source_does_not_bypass_missing_locator(tmp_path):
     for route in ("bronpassage", "brondocument"):
         response = client.get(f"/review/{route}?{query}")
         assert response.status_code == 400
-        assert "De bronpassage ontbreekt" in response.text
+        assert "De verwijzing naar de oorspronkelijke passage ontbreekt" in response.text
+        assert "source_locator_missing" in response.text
 
 
 def test_boom_projection_escapes_literal_markup_and_downloads_json(tmp_path, monkeypatch):

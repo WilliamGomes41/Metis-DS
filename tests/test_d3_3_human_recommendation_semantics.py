@@ -530,3 +530,110 @@ def test_boom_outcome_legacy_field_remains_outside_new_semantics_kernel() -> Non
     }
     assert CONFIRMED_FIELD not in outcome
     assert outcome["confirmed_recommendation_strength"] == "niet_doen"
+
+
+def test_strength_error_keeps_review_input_without_saving(tmp_path: Path) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    snapshot_id = _ingest(console, accounts)["snapshot_id"]
+    target = _plant_new_format_proposal(console, snapshot_id, _target(console, snapshot_id)["object_id"])
+    before = deepcopy(console.snapshot_objects(snapshot_id))
+    revision = console.objects_revision(snapshot_id)
+    client = TestClient(create_console_app(console))
+    client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
+    response = client.post("/review", data={
+        "snapshot_id": snapshot_id, "object_id": target["object_id"],
+        "snapshot_revision": revision, "proposed_object_type": "recommendation",
+        "type_action": "dit_klopt", "suitability": "ja", "eindoordeel": "goedkeuren",
+        "recommendation_direction": "for", "recommendation_strength_level": "strong",
+        "comment": "Mijn toelichting <behouden>",
+    })
+    assert response.status_code == 400
+    assert "Metis herkent in de bron geen expliciete aanduiding" in response.text
+    assert "Je beoordeling is niet opgeslagen" in response.text
+    assert 'name="recommendation_strength_level" value="strong" checked' in response.text
+    assert "Mijn toelichting &lt;behouden&gt;" in response.text
+    assert "de passage blijft dan een aanbeveling" in response.text
+    assert console.snapshot_objects(snapshot_id) == before
+    assert console.objects_revision(snapshot_id) == revision
+
+
+def test_strength_error_does_not_hide_a_stale_review(tmp_path: Path) -> None:
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    sid = _ingest(console, accounts)['snapshot_id']
+    target = _plant_new_format_proposal(console, sid, _target(console, sid)['object_id'])
+    old_revision = console.objects_revision(sid)
+    # A different reviewer changed the passage after the first form was opened.
+    rows = console._load_objects(sid)
+    for row in rows:
+        if row['object_id'] == target['object_id']:
+            row['content']['clean_text'] += ' Controleer de gewijzigde passage.'
+            stamp_canonical_hashes(row)
+    console._save_objects(sid, rows)
+    before = deepcopy(console.snapshot_objects(sid))
+    latest_revision = console.objects_revision(sid)
+    assert latest_revision != old_revision
+    client = TestClient(create_console_app(console))
+    client.post('/login', data={'username': 'reviewer.bert', 'password': 'bert-secret'})
+    response = client.post('/review', data={
+        'snapshot_id': sid, 'object_id': target['object_id'],
+        'snapshot_revision': old_revision, 'proposed_object_type': 'recommendation',
+        'type_action': 'dit_klopt', 'suitability': 'ja', 'eindoordeel': 'goedkeuren',
+        'recommendation_direction': 'for', 'recommendation_strength_level': 'strong',
+        'comment': 'Beoordeeld op de oude passage',
+    })
+    assert response.status_code == 409
+    assert 'tussentijds gewijzigd' in response.text
+    assert 'Beoordeeld op de oude passage' in response.text
+    assert console.snapshot_objects(sid) == before
+    assert console.objects_revision(sid) == latest_revision
+
+
+def test_strength_retry_preserves_selected_parent(tmp_path: Path) -> None:
+    from html.parser import HTMLParser
+    from src.heading_parent_list_v1 import parent_choice_list
+
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    sid = _ingest(console, accounts)["snapshot_id"]
+    target = _plant_new_format_proposal(console, sid, _target(console, sid)["object_id"])
+    heading = next(row for row in parent_choice_list(console.snapshot_objects(sid))
+                   if "Toelichting" in str(row))
+    parent_id = heading["object_id"]
+    before = deepcopy(console.snapshot_objects(sid))
+    client = TestClient(create_console_app(console))
+    client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
+    data = {
+        "snapshot_id": sid, "object_id": target["object_id"],
+        "snapshot_revision": console.objects_revision(sid),
+        "proposed_object_type": "recommendation", "type_action": "dit_klopt",
+        "suitability": "ja", "eindoordeel": "goedkeuren",
+        "documentpositie_action": "andere_kop", "parent_choice": parent_id,
+        "recommendation_direction": "for", "recommendation_strength_level": "strong",
+    }
+    response = client.post("/review", data=data)
+    assert response.status_code == 400
+    class CheckedInputs(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.values = {}
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == "input" and "checked" in attrs:
+                self.values[attrs.get("name")] = attrs.get("value")
+
+    form = CheckedInputs()
+    form.feed(response.text)
+    assert form.values["parent_choice"] == parent_id
+    assert form.values["documentpositie_action"] == "andere_kop"
+    assert console.snapshot_objects(sid) == before
+    # Retry uses the actual controls returned by the error response, changing
+    # only the invalid strength. The selected heading must reach the command.
+    data["parent_choice"] = form.values["parent_choice"]
+    data["recommendation_strength_level"] = "weak"
+    response = client.post("/review", data=data, follow_redirects=False)
+    assert response.status_code == 303
+    live = _target(console, sid)
+    assert live["parent_object_id"] == parent_id

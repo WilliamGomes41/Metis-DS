@@ -208,98 +208,129 @@ OBJECT_TYPE_LABELS = {
 BLOCKER_LABELS = {
     "second_named_reviewer_required": "Nog een andere benoemde reviewer moet goedkeuren.",
     "blocked_pending_immutable_locator": "Duurzame opslag ontbreekt; publicatie blijft geblokkeerd.",
-    "object_tuple_required": "Publicatie is geblokkeerd totdat review is gebonden aan object, versie, hash, bevestigd type, reviewer en besluit.",
+    "object_tuple_required": "Nog niet alle vereiste passagebeoordelingen zijn afgerond. Ga naar Review en rond de open beoordelingen af.",
     "pre_review_processing_incomplete": "Pre-review is nog niet afgerond; verwerk het document eerst opnieuw vanuit Documenten.",
     "four_eyes_required": "High-risk objecten vereisen four-eyes: een tweede benoemde reviewer op hetzelfde objecttupel.",
     "already_published": "Dit document is al gepubliceerd.",
-    "g2_source_store_unavailable": "De beveiligde bronopslag is niet bereikbaar; publicatie blijft geblokkeerd.",
-    "g2_source_checksum_mismatch": "De opgeslagen bron wijkt af van de gecontroleerde bronhash; publicatie blijft geblokkeerd.",
-    "g2_source_verification_failed": "De opgeslagen bron kon niet betrouwbaar worden geverifieerd; publicatie blijft geblokkeerd.",
-    "prepublication_schema_invalid": "Een goedgekeurd kennisobject voldoet niet aan het publicatieschema.",
-    "prepublication_projection_failed": "De publicatieprojectie kon niet veilig worden opgebouwd.",
+    "g2_source_store_unavailable": "De bronopslag is niet bereikbaar. Publiceren is daarom geblokkeerd. Probeer later opnieuw; meld het bij de beheerder als dit blijft gebeuren.",
+    "g2_source_checksum_mismatch": "Het opgeslagen bronbestand wijkt af van de gecontroleerde versie. Publiceren is geblokkeerd. Laat de beheerder dit onderzoeken.",
+    "g2_source_verification_failed": "Metis kan het opgeslagen bronbestand niet betrouwbaar controleren. Publiceren is geblokkeerd. Meld dit bij de beheerder.",
+    "prepublication_schema_invalid": "Een goedgekeurde passage mist gegevens die nodig zijn voor publicatie. Laat de beheerder controleren welke passage moet worden hersteld.",
+    "prepublication_projection_failed": "Metis kon de publicatie niet voorbereiden. Controleer de publicatiestatus en meld dit bij de beheerder voordat je opnieuw probeert.",
 }
 ERROR_COPY = {
+    "account_fields_required": "Vul alle verplichte accountgegevens in en probeer opnieuw.",
+    "cannot_silently_mutate": "Deze wijziging vereist een nieuwe versie met vastgelegde reden. Gebruik de correctieactie bij de passage.",
+    "class_unchanged": "Het gekozen documenttype is al ingesteld. Kies een ander type als je het wilt wijzigen.",
+    "correction_role_required": "Je account heeft geen rechten om een correctie uit te voeren. Vraag de beheerder om de juiste rol.",
+    "curator_role_required": "Je account heeft geen rechten voor deze beheeractie. Vraag de beheerder om hulp.",
+    "document_not_unique": "Meerdere documenten passen bij deze keuze. Open het bedoelde document via Documenten en voer de actie daar uit.",
+    "immutable_source_recovery_failed": "Metis kan het oorspronkelijke bronbestand niet herstellen. Meld dit bij de beheerder voordat je verdergaat.",
+    "immutable_source_storage_failed": "Het bronbestand kon niet veilig worden opgeslagen. Controleer of het document bij Documenten staat en meld dit bij de beheerder voordat je opnieuw inlevert.",
+    "ingest_fields_required": "Vul de verplichte documentgegevens in: titel, versie, datum en onderwerp.",
+    "invalid_class": "Dit documenttype wordt niet herkend. Kies een type uit de keuzelijst Klasse.",
+    "invalid_ingest_kind": "Kies bij inleveren Nieuw document of Nieuwe versie van een bestaand document.",
+    "multiple_parents_not_allowed": "Een passage kan maar één bovenliggende kop hebben. Kies de kop waaronder deze passage hoort.",
+    "named_reviewer_must_have_reviewer_role": "Een gekozen beoordelaar heeft geen beoordelaarsrechten. Kies een andere beoordelaar of vraag de beheerder de rol te controleren.",
+    "pre_review_reprocess_not_required": "Dit document komt niet in aanmerking voor deze herstelactie. Controleer de huidige status bij Documenten.",
+    "public_signup_forbidden": "Je kunt zelf geen account aanmaken. Vraag de beheerder om toegang tot Metis.",
+    "replaces_snapshot_id_required": "Kies welk bestaand document deze nieuwe versie vervangt.",
+    "review_failed": "De beoordeling kon niet worden afgerond. Controleer de huidige passagestatus en meld dit bij de beheerder als de oorzaak niet zichtbaar is.",
+    "reviewer_not_named_on_snapshot": "Je bent niet aangewezen als beoordelaar voor dit document. Vraag de verantwoordelijke voor het document om je toe te wijzen.",
+    "revision_schema_invalid": "De correctie levert een ongeldige passage op. Controleer je wijziging en meld dit bij de beheerder als opslaan blijft mislukken.",
+    "source_continuation_changed": "De bronaanvulling is tussentijds gewijzigd. Open de passage opnieuw en controleer de actuele aanvulling.",
+    "source_continuation_not_available": "Er is geen bronaanvulling beschikbaar voor deze passage. Open de passage opnieuw om de actuele mogelijkheden te zien.",
+    "source_continuation_not_literal": "De aanvulling komt niet letterlijk overeen met de bron. Controleer de oorspronkelijke tekst voordat je verdergaat.",
+    "unknown_account": "Dit account is niet gevonden. Open de accountlijst opnieuw en controleer je keuze.",
+    "unknown_document": "Dit document is niet gevonden. Kies het opnieuw via Documenten.",
+    "unknown_rereview_scope": "De gekozen omvang van de herbeoordeling wordt niet herkend. Kies een optie uit de keuzelijst.",
+    "unsupported_official_file": "Dit bestandstype wordt niet ondersteund. Lever een PDF, HTML-bestand of ondersteunde beslisboomexport in.",
+    "username_already_exists": "Deze gebruikersnaam bestaat al. Kies een andere naam of gebruik het bestaande account.",
+
     "invalid_store_path": "De bestandsnaam kan niet veilig worden verwerkt. Hernoem het bestand, bijvoorbeeld naar eenzaamheid.pdf, en kies het opnieuw.",
-    "not_authenticated": "Je bent niet aangemeld.",
-    "invalid_credentials": "Gebruikersnaam of wachtwoord is onjuist.",
+    "not_authenticated": "Je sessie is verlopen of je bent nog niet aangemeld. Meld je aan om verder te gaan.",
+    "invalid_credentials": "De gebruikersnaam en het wachtwoord komen niet overeen. Controleer beide en probeer opnieuw.",
     "uploader_cannot_be_sole_required_reviewer": "De uploader mag reviewer zijn, maar niet de enige.",
-    "word_not_first_wave": "Word-bestanden horen niet bij de first wave. Lever HTML of PDF in.",
-    "story_html_boom_player_out_of_first_wave": "Kennisplatform-boomplayers horen niet bij de first wave.",
-    "story_html_alone_insufficient": "story.html alleen is onvoldoende. Lever een gehashte boom-freeze in.",
-    "live_rest_not_sole_source": "Live kennisplatform-REST is niet de bron van waarheid. Lever een gehashte boom-freeze in.",
-    "live_rest_sole_source": "Live kennisplatform-REST is niet de bron van waarheid. Lever een gehashte boom-freeze in.",
-    "outcome_review_failed": "Deze uitkomst kan niet worden bevestigd. Bind via geldt-indien, splits kogels of vul de lege uitkomst.",
-    "outcome_relation_unconfirmed": "Bevestig eerst de geldt-indienrelatie naar een node of pad.",
+    "word_not_first_wave": "Dit Word-bestand kan niet worden verwerkt. Sla het op als PDF en lever die PDF in.",
+    "story_html_boom_player_out_of_first_wave": "Deze interactieve beslisboom kan niet als HTML-pagina worden ingeleverd. Vraag de beheerder om een ondersteunde export.",
+    "story_html_alone_insufficient": "Dit HTML-bestand bevat niet de volledige beslisboom. Vraag de beheerder om een volledige beslisboomexport.",
+    "live_rest_not_sole_source": "Deze koppeling levert geen vaste bronversie op. Vraag de beheerder om een volledige beslisboomexport.",
+    "live_rest_sole_source": "Deze koppeling levert geen vaste bronversie op. Vraag de beheerder om een volledige beslisboomexport.",
+    "outcome_review_failed": "De beslisboomuitkomst is nog niet compleet. Controleer de tekst, afzonderlijke adviezen en de koppeling met de bijbehorende voorwaarde.",
+    "outcome_relation_unconfirmed": "Koppel deze uitkomst eerst aan de bijbehorende voorwaarde met de relatie ‘geldt indien’.",
     "outcome_strength_required": "Kies DOEN, OVERWEEG of NIET DOEN voor een handelingsuitkomst.",
-    "empty_boom_freeze": "De boom-freeze heeft geen nodes en uitkomsten.",
-    "invalid_boom_freeze": "Dit bestand is geen geldige beslisboom-freeze.",
-    "condition_fused_into_outcome": "Een voorwaarde mag niet alleen in de uitkomsttekst zitten. Bind via geldt-indien.",
+    "empty_boom_freeze": "De beslisboomexport bevat geen stappen en uitkomsten. Controleer de export of vraag een nieuwe aan.",
+    "invalid_boom_freeze": "Metis herkent dit bestand niet als beslisboomexport. Controleer of je het juiste bestand hebt gekozen.",
+    "condition_fused_into_outcome": "Leg de voorwaarde ook vast met de relatie ‘geldt indien’, zodat duidelijk is wanneer deze uitkomst geldt.",
     "official_file_or_url_required": "Kies een HTML-, PDF- of boom-freezebestand, of een URL.",
     "named_reviewers_required": "Kies minstens één andere reviewer dan jezelf.",
-    "publisher_role_required": "Publiceren vereist de rol publisher.",
-    "reviewer_role_required": "Review vereist de rol reviewer.",
-    "researcher_role_required": "Inleveren vereist de rol researcher.",
+    "publisher_role_required": "Je account heeft geen rechten om te publiceren. Vraag een bevoegde publiceerder om deze stap uit te voeren.",
+    "reviewer_role_required": "Je account heeft geen rechten om te beoordelen. Vraag de beheerder om de juiste rol.",
+    "researcher_role_required": "Je account heeft geen rechten om documenten in te leveren. Vraag de beheerder om de juiste rol.",
     "live_url_html_not_allowed": "Een live HTML-URL kan niet worden ingeleverd. Lever een HTML-bestand of een PDF-URL in.",
-    "unknown_object_type": "Kies een type uit de gesloten set.",
-    "blocked_candidate_not_reviewable": "Deze kandidaat is geblokkeerd door de toelatingspoort. Bevestigen of goedkeuren kan niet; revisie of afwijzen blijft mogelijk.",
-    "object_type_not_confirmed": "Kies een type uit de gesloten set.",
+    "unknown_object_type": "Het gekozen passagetype is niet beschikbaar. Kies een type uit de keuzelijst.",
+    "blocked_candidate_not_reviewable": "Deze passage voldoet nog niet aan de voorwaarden voor beoordeling. Bekijk de reden bij de passage en kies revisie of afwijzen.",
+    "object_type_not_confirmed": "Bevestig eerst het passagetype met een keuze uit de keuzelijst.",
     "unknown_role": "Alleen researcher, reviewer of publisher zijn toegestaan.",
-    "forbidden_reviewer_identity": "Deze identiteit mag niet als reviewer worden aangemaakt.",
-    "unknown_relation_type": "Kies alleen relaties uit de gesloten set.",
+    "forbidden_reviewer_identity": "Deze identiteit kan niet als beoordelaar worden gebruikt. Kies een persoonlijk account van de beoordelaar.",
+    "unknown_relation_type": "Deze relatie is niet beschikbaar. Kies een relatie uit de keuzelijst.",
     "knowledge_relation_review_required": "Controleer en bevestig eerst de voorgestelde relaties.",
     "knowledge_relation_target_stale": "Een gekoppeld kennisobject is gewijzigd. Controleer de relaties opnieuw.",
-    "knowledge_relation_target_missing": "Een gekoppeld kennisobject bestaat niet meer in deze werkversie.",
-    "knowledge_relation_choice_not_available": "De gekozen relatie hoort niet meer bij de huidige relationele set.",
+    "knowledge_relation_target_missing": "Een gekoppelde passage bestaat niet meer in deze werkversie. Open de beoordeling opnieuw en controleer de koppelingen.",
+    "knowledge_relation_choice_not_available": "De gekozen koppeling is niet meer beschikbaar. Open de beoordeling opnieuw en controleer de huidige koppelingen.",
     "knowledge_relation_source_version_stale": "Het bronobject is gewijzigd. Open de review opnieuw.",
-    "knowledge_relation_endpoint_type_invalid": "Deze relatie past niet bij de huidige typen van bron en doel.",
-    "second_review_not_required": "Voor dit object is geen onafhankelijke tweede beoordeling vereist.",
-    "second_review_not_available": "Deze tweede beoordeling is niet meer actueel.",
-    "first_review_required": "De eerste beoordeling moet eerst zijn afgerond.",
-    "independent_second_reviewer_required": "De tweede beoordeling moet door een andere reviewer worden uitgevoerd.",
-    "second_review_command_required": "Gebruik de aparte tweede-beoordelingsroute voor dit object.",
+    "knowledge_relation_endpoint_type_invalid": "De koppeling past niet bij de typen van de twee passages. Controleer de passagetypen en kies daarna een passende relatie.",
+    "second_review_not_required": "Voor deze passage is geen tweede beoordeling nodig. Ga terug naar Mijn werk voor je open beoordelingen.",
+    "second_review_not_available": "Deze tweede beoordeling is niet meer actueel. Open Mijn werk opnieuw voor de huidige taken.",
+    "first_review_required": "De eerste beoordeling is nog niet afgerond. Laat die afronden voordat je de tweede beoordeling uitvoert.",
+    "independent_second_reviewer_required": "De tweede beoordeling moet door iemand anders dan de eerste beoordelaar worden uitgevoerd. Vraag een andere beoordelaar deze taak op te pakken.",
+    "second_review_command_required": "Open deze passage via de taak voor tweede beoordeling in Mijn werk.",
     "open_original_required": "Open eerst de bronpassage. Type bevestigen zonder het origineel is niet toegestaan.",
-    "source_locator_missing": "De bronpassage ontbreekt; type bevestigen is niet toegestaan.",
-    "freeze_bytes_missing": "Het geüploade origineel ontbreekt; type bevestigen is niet toegestaan.",
-    "locator_kind_mismatch": "De locator past niet bij dit bestand.",
-    "unsupported_locator": "Deze locator kan niet worden geopend.",
+    "source_locator_missing": "De verwijzing naar de oorspronkelijke passage ontbreekt. Laat de beoordeling open en vraag de beheerder om de bronverwijzing te controleren.",
+    "freeze_bytes_missing": "Het oorspronkelijke bronbestand is niet beschikbaar. Laat de beoordeling open en meld dit bij de beheerder.",
+    "locator_kind_mismatch": "De bronverwijzing past niet bij het opgeslagen bestand. Meld dit bij de beheerder zodat de juiste passage kan worden geopend.",
+    "unsupported_locator": "Metis kan deze bronverwijzing niet openen. Laat de beoordeling open en meld dit bij de beheerder.",
     "invalid_review_decision": "Kies een eindoordeel: goedkeuren, goedkeuren na correctie, afwijzen of later beoordelen.",
     "suitability_required": "Kies of de passage geschikt is.",
     "review_comment_required": "Geef een toelichting bij goedkeuren na correctie of afwijzen.",
     "source_date_required": "Vul de publicatiedatum uit het colofon in.",
     "invalid_source_date": "Gebruik een geldige kalenderdatum.",
-    "source_version_required": "Vul de versie van de freeze in.",
+    "source_version_required": "Vul het versienummer van het brondocument in, bijvoorbeeld 1.0.",
     "invalid_source_version": "Versie is alleen getallen met punten, bijvoorbeeld 1.0. Geen jaartal en geen v-voorvoegsel.",
-    "fast_lane_heading_required": "Batch-bevestiging geldt alleen voor koppen.",
+    "fast_lane_heading_required": "Je kunt alleen koppen in één keer bevestigen. Beoordeel andere passages afzonderlijk.",
     "recommendation_strength_requires_recommendation": "Sterkte hoort alleen bij een aanbeveling.",
-    "invalid_parent_structure": "Deze ouder is niet structureel geldig. Kies een kop die hiërarchisch boven dit object staat.",
+    "invalid_parent_structure": "Deze kop kan niet boven deze passage worden geplaatst. Kies een kop die hoger in de documentstructuur staat.",
     "unknown_recommendation_strength": "Kies DOEN, OVERWEEG of NIET DOEN.",
     "recommendation_direction_required": "Kies of de aanbeveling iets aanraadt of afraadt.",
     "recommendation_strength_confirmation_required": "Kies sterk, zwak of niet vermeld in de bron.",
-    "recommendation_direction_evidence_missing": "De brongebonden onderbouwing voor de richting ontbreekt.",
-    "recommendation_strength_evidence_required": "Deze sterkte kan alleen worden bevestigd met een expliciete sterke of zwakke bronaanduiding.",
-    "recommendation_strength_not_stated_conflict": "De bron bevat wel een expliciete sterkteaanduiding; kies sterk of zwak, of corrigeer de bronbinding.",
-    "recommendation_semantics_confirmation_invalid": "De bevestigde richting en sterkte vormen geen geldig aanbevelingscontract.",
+    "recommendation_direction_evidence_missing": "Metis vindt geen bronbewijs voor de gekozen richting. Controleer de oorspronkelijke passage. Laat de beoordeling open als de bron onvoldoende duidelijk is.",
+    "recommendation_strength_evidence_required": "Metis herkent in de bron geen expliciete aanduiding die je keuze Sterk of Zwak ondersteunt. Controleer de oorspronkelijke passage en de context. Vermeldt de bron geen sterkte? Kies Niet vermeld in de bron. Staat de sterkte er wel expliciet? Laat de beoordeling open en meld dit bij de beheerder.",
+    "recommendation_strength_not_stated_conflict": "De bron bevat wel een expliciete sterkteaanduiding; kies sterk of zwak, of laat de beoordeling open als de herkende bronverwijzing niet klopt.",
+    "recommendation_semantics_confirmation_invalid": "De richting en sterkte konden niet samen worden bevestigd. Controleer beide keuzes aan de hand van de oorspronkelijke passage.",
     "legacy_recommendation_strength_not_allowed": "DOEN, OVERWEEG en NIET DOEN zijn voor nieuwe richtlijnaanbevelingen vervangen door aparte richting en sterkte.",
-    "published_objects_must_not_be_rewritten": "Gepubliceerde objecten worden niet herschreven.",
-    "unknown_snapshot": "Dit document is niet gevonden.",
-    "delete_confirmation_required": "Bevestig eerst dat je dit unpublished document wilt verwijderen.",
+    "published_objects_must_not_be_rewritten": "Deze passage is al gepubliceerd. Lever een nieuwe documentversie in om een wijziging te laten beoordelen.",
+    "unknown_object": "Deze passage is niet meer beschikbaar. Open het document opnieuw via Review.",
+    "entra_access_denied": "Je account heeft geen toegang tot Metis. Vraag de beheerder om toegang.",
+    "entra_local_auth_disabled": "Aanmelden met een lokaal wachtwoord is uitgeschakeld. Gebruik de organisatieaanmelding.",
+    "unknown_snapshot": "Dit document is niet meer beschikbaar. Ga naar Documenten en kies het document opnieuw.",
+    "delete_confirmation_required": "Bevestig eerst dat je dit nog niet gepubliceerde document wilt verwijderen.",
     "delete_title_confirmation_required": "Typ de exacte documenttitel om te bevestigen.",
-    "published_projection_must_not_be_deleted": "Een gepubliceerde projectie wordt niet verwijderd.",
+    "published_projection_must_not_be_deleted": "Dit document is gepubliceerd en kan hier niet worden verwijderd. Vraag de beheerder naar de procedure voor intrekken.",
     "publish_confirmation_required": "Bevestig eerst dat je de gereviewde kennisobjecten wilt publiceren.",
-    "already_published": "Dit document is al gepubliceerd.",
-    "g2_source_store_unavailable": "De beveiligde bronopslag is niet bereikbaar; publicatie blijft geblokkeerd.",
-    "g2_source_checksum_mismatch": "De opgeslagen bron wijkt af van de gecontroleerde bronhash; publicatie blijft geblokkeerd.",
-    "g2_source_verification_failed": "De opgeslagen bron kon niet betrouwbaar worden geverifieerd; publicatie blijft geblokkeerd.",
-    "prepublication_schema_invalid": "Een goedgekeurd kennisobject voldoet niet aan het publicatieschema.",
-    "prepublication_projection_failed": "De publicatieprojectie kon niet veilig worden opgebouwd.",
-    "object_tuple_required": "Publicatie is geblokkeerd totdat de objectgebonden review compleet is.",
-    "unpublished_delete_role_required": "Verwijderen van unpublished documenten vereist researcher of reviewer.",
-    "hide_selected_objects_forbidden": "Geselecteerde objecten in een freeze die in Review blijft, worden niet verborgen.",
-    "cross_model_direct_change_blocked": "Directe klassewijziging tussen niet-boom en beslisboom is geblokkeerd. Re-extract van dezelfde freeze is vereist.",
+    "already_published": "Dit document is al gepubliceerd. Controleer de publicatiestatus; opnieuw publiceren is niet nodig.",
+    "g2_source_store_unavailable": "De bronopslag is niet bereikbaar. Publiceren is daarom geblokkeerd. Probeer later opnieuw; meld het bij de beheerder als dit blijft gebeuren.",
+    "g2_source_checksum_mismatch": "Het opgeslagen bronbestand wijkt af van de gecontroleerde versie. Publiceren is geblokkeerd. Laat de beheerder dit onderzoeken.",
+    "g2_source_verification_failed": "Metis kan het opgeslagen bronbestand niet betrouwbaar controleren. Publiceren is geblokkeerd. Meld dit bij de beheerder.",
+    "prepublication_schema_invalid": "Een goedgekeurde passage mist gegevens die nodig zijn voor publicatie. Laat de beheerder controleren welke passage moet worden hersteld.",
+    "prepublication_projection_failed": "Metis kon de publicatie niet voorbereiden. Controleer de publicatiestatus en meld dit bij de beheerder voordat je opnieuw probeert.",
+    "object_tuple_required": "Nog niet alle vereiste passagebeoordelingen zijn afgerond. Ga naar Review en rond de open beoordelingen af.",
+    "unpublished_delete_role_required": "Je account heeft geen rechten om dit document te verwijderen. Vraag een onderzoeker of beoordelaar om deze stap uit te voeren.",
+    "hide_selected_objects_forbidden": "Losse passages kunnen niet worden verborgen terwijl dit document in beoordeling blijft. Rond de beoordeling van deze passages af.",
+    "cross_model_direct_change_blocked": "Omzetten tussen een beslisboom en een ander documenttype vereist opnieuw verwerken. Gebruik de actie voor opnieuw verwerken van dit document.",
     "class_change_confirmation_required": "Bevestig eerst de consequentie van Klasse wijzigen.",
-    "published_class_change_blocked": "Een gepubliceerd document wordt niet herschreven. Klasse wijzigen blijft fail-closed.",
-    "cross_model_reextract_required": "Cross-model vereist re-extract van dezelfde freeze naar een nieuwe objectgrafiek.",
-    "source_identity_must_not_change": "De bron blijft ongewijzigd: SHA-256, titel, versie en herkomst wijzigen niet.",
+    "published_class_change_blocked": "Van een gepubliceerd document kun je het documenttype niet wijzigen. Lever een nieuwe versie in.",
+    "cross_model_reextract_required": "Dit document moet opnieuw worden verwerkt om het naar het gekozen documenttype om te zetten.",
+    "source_identity_must_not_change": "Deze actie mag de oorspronkelijke brongegevens niet wijzigen. Lever een nieuw document of een nieuwe versie in.",
     INGEST_PAYLOAD_TOO_LARGE: "Het bestand of de download is te groot. Lever een kleiner HTML- of PDF-bestand in.",
     URL_DESTINATION_NOT_ALLOWED: "Deze URL wijst naar een interne bestemming en kan niet worden ingeleverd.",
     SNAPSHOT_OBJECT_WRITE_CONFLICT: (
@@ -1146,7 +1177,10 @@ def _recommendation_semantics_block(
                         <label class="check"><input type="radio" name="recommendation_direction" value="against"{disabled_attr}{_checked(direction, "against")}> Afraden</label>
                       </fieldset>
                       <fieldset>
-                        <legend>Sterkte</legend>
+                        <legend>Welke sterkte vermeldt de bron?</legend>
+                        <p class="field-help">Neem de sterkte over uit de oorspronkelijke richtlijn. Je beoordeelt hier niet hoe belangrijk je het advies vindt of hoe zeker je bent van je eigen beoordeling.</p>
+                        <p class="field-help">Kies Sterk of Zwak alleen als de bron de aanbeveling expliciet zo aanduidt. ‘De werkgroep adviseert’ is op zichzelf geen sterkteaanduiding. Kies Niet vermeld in de bron als de bron geen sterkte noemt; de passage blijft dan een aanbeveling.</p>
+                        {('<div class="banner err" role="alert">' + _esc(ERROR_COPY.get(draft.get("validation_error", ""), "")) + '<p>Je beoordeling is niet opgeslagen. Je invoer staat hieronder nog klaar.</p></div>') if draft.get("validation_error") else ""}
                         <label class="check"><input type="radio" name="recommendation_strength_level" value="strong"{disabled_attr}{_checked(strength_level, "strong")}> Sterk</label>
                         <label class="check"><input type="radio" name="recommendation_strength_level" value="weak"{disabled_attr}{_checked(strength_level, "weak")}> Zwak</label>
                         <label class="check"><input type="radio" name="recommendation_strength_level" value="not_stated"{disabled_attr}{_checked(strength_level, "not_stated")}> Niet vermeld in de bron</label>
@@ -1160,6 +1194,7 @@ def _heading_chooser(
     obj: dict[str, Any],
     objects: list[dict[str, Any]],
     snapshot_id: str,
+    selected_parent: str = "",
 ) -> str:
     choice = parent_choice_list(objects)
     snap = quote(str(snapshot_id), safe="")
@@ -1182,7 +1217,7 @@ def _heading_chooser(
         may_select = bool(object_id) and object_id != obj.get("object_id") and not blocked
         radio = (
             f'<label class="heading-select"><input type="radio" name="parent_choice" '
-            f'value="{_esc(object_id)}"> Kies</label>'
+            f'value="{_esc(object_id)}"{_checked(selected_parent, object_id)}> Kies</label>'
         ) * may_select
         choice_items.append(
             f'<li data-heading-role="body"{attrs}>'
@@ -2717,7 +2752,7 @@ def _render_review_card(
                       <p>Gevonden onder: <b>{_esc(path_text or "het document")}</b></p>
                       <label class="check"><input type="radio" name="documentpositie_action" value="dit_klopt"{_checked(draft.get("documentpositie_action", ""), "dit_klopt")}> Dit klopt</label>
                       <label class="check"><input type="radio" name="documentpositie_action" value="andere_kop"{_checked(draft.get("documentpositie_action", ""), "andere_kop")}> Andere kop kiezen</label>
-                      {_heading_chooser(obj, snapshot_objects, snapshot_id)}
+                      {_heading_chooser(obj, snapshot_objects, snapshot_id, draft.get("parent_choice", ""))}
                     </section>
                     <section class="review-step" data-review-step="e" id="classification-{_esc(obj["object_id"])}">
                       <h4>Wat voor informatie is dit?</h4>
@@ -2738,7 +2773,8 @@ def _render_review_card(
                             obj,
                             draft,
                             hidden=not (
-                                (obj.get("confirmed_object_type") or obj.get("object_type"))
+                                draft.get("validation_error")
+                                or (obj.get("confirmed_object_type") or obj.get("object_type"))
                                 == "recommendation"
                             ),
                         )
@@ -2784,6 +2820,7 @@ def _render_review_room(
     conflict: bool = False,
     batch_selection: list[str] | None = None,
     batch_completed: int = 0,
+    snapshot: tuple[list[dict[str, Any]], str] | None = None,
 ) -> str:
     chosen = document.strip()
     chosen_object_id = object.strip()
@@ -2831,7 +2868,9 @@ def _render_review_room(
             all_object_versions = loaded_objects
             snapshot_objects = _current_review_objects(loaded_objects)
         else:
-            snapshot_objects, snapshot_revision = console.snapshot_objects_and_revision(chosen)
+            snapshot_objects, snapshot_revision = (
+                snapshot if snapshot is not None else console.snapshot_objects_and_revision(chosen)
+            )
             all_object_versions = []
         review_path = review_path_for_klasse(chosen_row["class"])
         audit_signals: list[dict[str, Any]] = []
@@ -3028,13 +3067,13 @@ def create_console_app(
     @app.exception_handler(ConsoleError)
     async def console_errors(_request: Request, exc: ConsoleError) -> HTMLResponse:
         status = 401 if exc.code in {"not_authenticated", "invalid_credentials"} else 403 if "role_required" in exc.code or exc.code in {"entra_access_denied", "entra_local_auth_disabled"} else 400
-        message = ERROR_COPY.get(exc.code, "Deze actie is niet toegestaan.")
+        message = ERROR_COPY.get(exc.code, "Metis kon deze actie niet afronden. Controleer de huidige status in Mijn werk voordat je opnieuw probeert. Blijft dit gebeuren? Meld het bij de beheerder met de technische code hieronder.")
         account = _current(_request)
         filename_error = exc.code == "invalid_store_path" and _request.url.path == "/ingest"
         hint = f'<p class="field-help">{_esc(FILENAME_HINT)}</p>' if filename_error else ""
         back = (
             '<p><a href="/ingest">Terug naar Inleveren</a></p>'
-            if filename_error and account
+            if _request.url.path == "/ingest" and account
             else '<p><a href="/">Naar Mijn werk</a></p>' if account
             else '<p><a href="/login">Naar aanmelden</a></p>'
         )
@@ -3045,7 +3084,7 @@ def create_console_app(
               <h1>Actie niet uitgevoerd</h1>
               <div class="banner err">{_esc(message)}</div>
               {hint}
-              <p class="muted">{_esc(exc.code)}</p>
+              <details><summary>Technische informatie voor de beheerder</summary><code>{_esc(exc.code)}</code></details>
               {back}
             </section>
             """
@@ -4009,11 +4048,33 @@ def create_console_app(
                     <p class="muted">De uploader mag reviewer zijn, maar niet de enige.</p>
                   </div>
                 </div>
-                <button class="btn-primary" type="submit">Inleveren</button>
+                <button class="btn-primary" type="submit" id="ingest-submit">Inleveren</button>
+                <p id="ingest-status" role="status" aria-live="polite" aria-atomic="true" hidden></p>
               </form>
             </section>
             <script>
             (function () {{
+              var button = document.getElementById("ingest-submit");
+              var form = button.form;
+              var status = document.getElementById("ingest-status");
+              var submitting = false;
+              form.addEventListener("submit", function (event) {{
+                if (submitting) {{ event.preventDefault(); return; }}
+                submitting = true;
+                form.setAttribute("aria-busy", "true");
+                button.disabled = true;
+                button.textContent = "Bezig met inleveren…";
+                status.hidden = false;
+                status.textContent = "Je document wordt verzonden en verwerkt. Dit kan enkele minuten duren. Houd deze pagina open en lever het document niet opnieuw in. Deze pagina toont het resultaat zodra deze aanvraag is afgerond.";
+              }});
+              window.addEventListener("pageshow", function () {{
+                submitting = false;
+                form.removeAttribute("aria-busy");
+                button.disabled = false;
+                button.textContent = "Inleveren";
+                status.hidden = true;
+                status.textContent = "";
+              }});
               var kind = document.getElementById("ingest_kind");
               var row = document.getElementById("replaces-row");
               function sync() {{ row.hidden = kind.value !== "new_version"; }}
@@ -4629,12 +4690,24 @@ def create_console_app(
                 interaction_evidence=evidence,
             )
         except ConsoleError as exc:
-            if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT:
+            semantic_error = exc.code in {
+                "recommendation_direction_required",
+                "recommendation_strength_confirmation_required",
+                "recommendation_direction_evidence_missing",
+                "recommendation_strength_evidence_required",
+                "recommendation_strength_not_stated_conflict",
+                "recommendation_semantics_confirmation_invalid",
+            }
+            if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT and not semantic_error:
                 raise
-            state.refresh_objects_expected_revision(
-                snapshot_id,
-                exc.current_revision,
-            )
+            # Render the same object set and revision that we compare here. A
+            # second read could silently replace the posted revision after a
+            # semantic validation error, hiding another reviewer's change.
+            review_snapshot = state.snapshot_objects_and_revision(snapshot_id)
+            if semantic_error and snapshot_revision.strip() and snapshot_revision.strip() != review_snapshot[1]:
+                semantic_error = False
+            if not semantic_error:
+                state.refresh_objects_expected_revision(snapshot_id, review_snapshot[1])
             return HTMLResponse(
                 _render_review_room(
                     state,
@@ -4653,15 +4726,17 @@ def create_console_app(
                         "recommendation_strength": recommendation_strength,
                         "recommendation_direction": recommendation_direction,
                         "recommendation_strength_level": recommendation_strength_level,
+                        "validation_error": exc.code if semantic_error else "",
                         "eindoordeel": eindoordeel,
                         "decision": decision,
                         "comment": comment,
                         "proposed_correction": proposed_correction,
                         "proposed_object_type": proposed_object_type,
                     },
-                    conflict=True,
+                    conflict=not semantic_error,
+                    snapshot=review_snapshot,
                 ),
-                status_code=409,
+                status_code=400 if semantic_error else 409,
             )
         if mapped == "revise" and proposed_correction.strip():
             state.correct_object(
