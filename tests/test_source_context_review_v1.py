@@ -204,7 +204,7 @@ def test_native_context_commit_failure_restart_csv_mcp_and_stale_worker(recovery
 
 
 def _close_context_review(state, reviewer, sid, target_id):
-    from src.passage_register_v1 import definitive_review_disposition
+    from src.review_disposition_v1 import definitive_review_disposition
     from src.operations_console_v1 import review_lane
     state.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=target_id,
                         decision='approve', confirmed_object_type='definition', relation_review_ack=True)
@@ -358,3 +358,51 @@ def test_native_context_and_publication_serialize_before_authority_read(recovery
         with pytest.raises(ConsoleError, match='published_working_revision_immutable'):
             context.result(timeout=15)
     assert state.canonical_publication_store.release_for_snapshot(sid) is not None
+
+
+def test_reviewer_can_correct_a_wrong_source_role_without_restoring_old_approval(tmp_path):
+    state, _, reviewer, source, target, command = _system(tmp_path)
+    sid = command['snapshot_id']
+    state.confirm_source_context(**command)
+    state.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=target['object_id'],
+                        decision='approve', confirmed_object_type='definition', relation_review_ack=True)
+    previous = deepcopy(state.snapshot_objects(sid))
+    result = state.confirm_source_context(**{**command, 'role': 'reset', 'target_object_ids': [],
+        'command_id': 'correct-role', 'reason': 'Deze eerdere bronrol was onjuist; opnieuw beoordelen.',
+        'expected_revision': state.objects_revision(sid)})
+    rows = state.snapshot_objects(sid)
+    label = next(row for row in rows if row['object_id'] == source['object_id'])
+    linked = next(row for row in rows if row['object_id'] == target['object_id'])
+    assert 'source_role_review' not in label['metadata']
+    assert LINKS_KEY not in linked['metadata']
+    assert label['content'] == source['content']
+    assert label['governance']['validation_status'] == linked['governance']['validation_status'] == 'needs_review'
+    assert result['affected_target_versions'] == {target['object_id']: linked['object_version']}
+    assert not any(row.get('valid') for row in state.object_review_bindings(sid) if row['object_id'] == target['object_id'])
+    history = state._load_objects(sid, remember=False)
+    assert all(row in history for row in previous)
+
+
+def test_context_closure_helper_and_nonknowledge_approve_guard(tmp_path):
+    state, _, reviewer, source, target, command = _system(tmp_path)
+    state.confirm_source_context(**command)
+    with pytest.raises(ConsoleError, match='source_context_not_knowledge'):
+        state.review_object(actor_id=reviewer['account_id'], snapshot_id=command['snapshot_id'], object_id=source['object_id'],
+                            decision='approve', confirmed_object_type='explanation')
+    _close_context_review(state, reviewer, command['snapshot_id'], target['object_id'])
+    assert source_passage_closure(state.snapshot_objects(command['snapshot_id']))['source_passage_review_complete']
+
+
+def test_named_reviewer_and_source_readback_are_required_before_context_write(tmp_path, monkeypatch):
+    state, _, _, _, _, command = _system(tmp_path)
+    third = state.create_account(username='other-reviewer', password='fixture-secret', roles=('reviewer',))
+    before = deepcopy(state.snapshot_objects(command['snapshot_id']))
+    with pytest.raises(ConsoleError, match='reviewer_not_named_on_snapshot'):
+        state.confirm_source_context(**{**command, 'actor_id': third['account_id']})
+    def unavailable(*args):
+        raise ConsoleError('freeze_bytes_missing')
+    monkeypatch.setattr(state, '_require_open_original', unavailable)
+    with pytest.raises(ConsoleError, match='freeze_bytes_missing'):
+        state.confirm_source_context(**command)
+    assert state.snapshot_objects(command['snapshot_id']) == before
+    assert not [event for event in read_events(state._ledger_path) if event['event_type'] == EVENT]

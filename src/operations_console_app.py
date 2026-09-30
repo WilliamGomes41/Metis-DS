@@ -302,7 +302,7 @@ ERROR_COPY = {
     "invalid_source_version": "Versie is alleen getallen met punten, bijvoorbeeld 1.0. Geen jaartal en geen v-voorvoegsel.",
     "fast_lane_heading_required": "Je kunt alleen koppen in één keer bevestigen. Beoordeel andere passages afzonderlijk.",
     "recommendation_strength_requires_recommendation": "Sterkte hoort alleen bij een aanbeveling.",
-    "source_context_role_invalid": "Kies bronlabel, context of niet opnemen.",
+    "source_context_role_invalid": "Kies bronlabel, context, niet opnemen of de bronrol opheffen.",
     "source_context_reason_required": "Licht toe waarom deze bronrol en koppeling juist zijn.",
     "source_context_command_required": "Het formulier is niet volledig. Open de passage opnieuw en vul de koppeling in.",
     "source_context_command_conflict": "Deze opdracht is al opgeslagen met andere keuzes. Open de passage opnieuw voor een nieuwe opdracht.",
@@ -2514,7 +2514,7 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
         return ''.join(parts)
     role = evidence['role']
     role_options = ''.join(f'<option value="{value}"' + (' selected' if value == role.get('role', 'label') else '') + f'>{label}</option>'
-                           for value, label in [('label', 'Bronlabel'), ('context', 'Contextfragment'), ('excluded', 'Niet opnemen')])
+                           for value, label in [('label', 'Bronlabel'), ('context', 'Contextfragment'), ('excluded', 'Niet opnemen'), ('reset', 'Bronrol opheffen; opnieuw beoordelen')])
     if role:
         labels = {'label': 'Bronlabel', 'context': 'Contextfragment', 'excluded': 'Niet opgenomen, met reden'}
         parts.append(f'<p data-confirmed-source-role><strong>{_esc(labels.get(role.get("role"), "Bronrol"))}</strong> · '
@@ -2536,7 +2536,7 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
         <input type="hidden" name="snapshot_revision" value="{_esc(snapshot_revision)}">
         <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
         <label>Bronrol <select name="role">{role_options}</select></label>
-        <p>Kies alle passages waarvoor het fragment geldt. Bij niet opnemen: geen passages selecteren.</p>
+        <p>Kies alle passages waarvoor het fragment geldt. Bij niet opnemen of bronrol opheffen: geen passages selecteren.</p>
         <div class="source-context-targets">{''.join(options)}</div>
         <label>Toelichting <textarea name="reason" required maxlength="4000">{_esc(role.get('reason'))}</textarea></label>
         <label><input type="checkbox" name="source_checked" value="1" required> Ik heb de bron en de gekozen passage(s) gecontroleerd.</label>

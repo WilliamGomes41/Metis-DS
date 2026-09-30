@@ -55,3 +55,12 @@ Adversarial proof matrix: unauthorized/reviewer not named; direct command; stale
 Context-binding rule: link records source label version and target version at confirmation plus exact text/source-fragment hashes. Classification-only target version changes retain unchanged literal context evidence; a changed target text/source position or source label version invalidates that evidence. A new reviewer context command creates fresh exact object versions and invalidates approval bindings; it never carries an approval to changed context.
 
 Remaining acceptance outside implementation: a reference set must be reviewed by a real human, and the exact Eenzaamheid PDF must undergo an actual provider call. Agent-authored expectations or mock calls MUST NOT be labeled human/model acceptance. These remain merge gates of #471.
+
+Aanvullende correctiegrens: een reviewer kan een eerdere bronrol expliciet
+opheffen (commandrol reset, zonder doelpassages), met reden en exacte revisie.
+De bronrol wordt uit de nieuwe versie verwijderd; bronfragment en eerder
+gekoppelde doelpassages worden opnieuw needs_review, oude bindings vervallen
+en eerdere versies/audit blijven behouden. Dit is geen automatische terugkeer
+naar kennis of goedkeuring. Het command deelt dezelfde transactie-, autorisatie-,
+concurrency- en publicatiegrenzen. Het auditresultaat noemt ook de nieuwe versies
+van verwijderde koppelingen.

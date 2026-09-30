@@ -39,6 +39,7 @@ from src.recommendation_semantics_v1 import (
     recommendation_semantics_errors,
 )
 from src.serving_relations_v1 import HISTORICAL_NON_SERVING_TYPES
+from src.source_context_review_v1 import links_of, literal_identity, role_of, CONTRACT
 
 SEARCHABLE_TYPES = {
     "definition",
@@ -217,6 +218,9 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
     records: list[dict[str, Any]] = []
     for env in valid:
         obj = env["knowledge_object"]
+        if role_of(obj):
+            blocked.append({"object_id": obj["object_id"], "errors": ["source_context_not_knowledge"]})
+            continue
         # Canonical console objects have their own unrelated ``metadata``
         # container. The human confirmation is a top-level canonical field;
         # pass that field explicitly so generic metadata cannot shadow it.
@@ -287,7 +291,6 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             for row in semantic_relations
             if row.get("relation_type") == "except_if"
         ]
-        from src.source_context_review_v1 import links_of, literal_identity, CONTRACT
         literal_context = links_of(obj)
         raw_context = (obj.get("metadata") or {}).get("confirmed_source_context")
         if raw_context is not None and (

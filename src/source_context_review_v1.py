@@ -151,14 +151,14 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
     from src.revision_workflow import bump_patch
     from src.passage_register_v1 import passage_register_record
 
-    if role not in {"label", "context", "excluded"}:
+    if role not in {"label", "context", "excluded", "reset"}:
         raise ConsoleError("source_context_role_invalid")
     if not reason.strip() or len(reason) > 4000:
         raise ConsoleError("source_context_reason_required")
     if not command_id.strip() or len(command_id) > 128 or not expected_revision:
         raise ConsoleError("source_context_command_required")
     targets = sorted(set(str(value).strip() for value in target_object_ids if str(value).strip()))
-    if len(targets) > 100 or (role == "excluded" and targets) or (role != "excluded" and not targets):
+    if len(targets) > 100 or (role in {"excluded", "reset"} and targets) or (role in {"label", "context"} and not targets):
         raise ConsoleError("source_context_target_required")
     payload_hash = stable_hash({"actor_id": actor_id, "snapshot_id": snapshot_id,
                                "source_object_id": source_object_id, "role": role,
@@ -198,19 +198,27 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
         changed: dict[str, dict[str, Any]] = {}
         source_after = deepcopy(source)
         source_after["object_version"] = bump_patch(str(source["object_version"]))
-        source_after.setdefault("metadata", {})[ROLE_KEY] = {
+        metadata = source_after.setdefault("metadata", {})
+        metadata[ROLE_KEY] = {
             "version": CONTRACT, "role": role, "command_id": command_id,
             "reviewer_id": actor_id, "reviewer": reviewer["username"], "reviewed_at": now,
             "reason": reason.strip(), "literal_hash": literal_identity(source),
             "source_sha256": envelope["sha256"],
         }
+        if role == "reset":
+            metadata.pop(ROLE_KEY, None)
         source_after["metadata"]["passage_register"] = passage_register_record(
-            status="excluded_with_reason" if role == "excluded" else "used_as_context",
+            status="not_yet_assessed" if role == "reset" else "excluded_with_reason" if role == "excluded" else "used_as_context",
             reason_codes=["reviewer_confirmed_source_role"], source="review",
         )
         governance = source_after.setdefault("governance", {})
-        governance.update(validation_status="rejected", validated_by=reviewer["username"],
-                          validation_date=now[:10], review_snapshot_hash=None, publication_status="unpublished")
+        governance.update(validation_status="needs_review" if role == "reset" else "rejected",
+                          validated_by=None if role == "reset" else reviewer["username"],
+                          validation_date=None if role == "reset" else now[:10], review_snapshot_hash=None,
+                          publication_status="unpublished")
+        second = governance.get("second_review")
+        if isinstance(second, dict) and second.get("required"):
+            second.update(status="pending", reviewer=None, review_date=None, snapshot_hash=None)
         changed[source_object_id] = source_after
         for oid, original in by_id.items():
             previous = links_of(original)
@@ -253,6 +261,8 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
         result = {"snapshot_id": snapshot_id, "source_object_id": source_object_id,
                   "source_object_version": source_after["object_version"], "role": role,
                   "target_versions": {oid: changed[oid]["object_version"] for oid in targets},
+                  "affected_target_versions": {oid: row["object_version"] for oid, row in changed.items()
+                                               if oid != source_object_id},
                   "command_id": command_id, "idempotent": False}
         console._commit_prepared_store(
             objects=(snapshot_id, history), bindings=bindings, expected_revision=revision,
