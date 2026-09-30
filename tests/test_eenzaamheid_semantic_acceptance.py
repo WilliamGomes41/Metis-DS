@@ -33,6 +33,9 @@ def test_unselected_coverage_does_not_pass_as_a_correct_model_selection():
     spec = {'objects': [{'object_id': 'candidate', 'proposed_object_type': 'recommendation',
         'semantic_passage': {'selection_origin': SELECTION_ORIGIN_PROPOSAL,
                              'spans': [{'block_id': 'b', 'start': 0, 'end': 18}]}}]}
-    assert compare_reference(rows, spec)[0]['passed']
+    objects = [{'object_id': 'candidate', 'metadata': {'admission': {'gate_result': 'allowed'}}}]
+    assert compare_reference(rows, spec, objects)[0]['passed']
+    objects[0]['metadata']['admission'] = {'gate_result': 'blocked', 'reason_codes': ['type_evidence_missing']}
+    assert not compare_reference(rows, spec, objects)[0]['passed']
     spec['objects'][0]['semantic_passage']['selection_origin'] = 'coverage_remainder'
-    assert not compare_reference(rows, spec)[0]['passed']
+    assert not compare_reference(rows, spec, objects)[0]['passed']

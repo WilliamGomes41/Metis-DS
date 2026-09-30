@@ -278,6 +278,10 @@ def test_native_context_publication_successor_withdrawal_and_restart(recovery_po
 
     consumer = _provision(PostgresApiAccessStore(recovery_postgres), name='Context',
         tenant_docs=(target['document_id'], target2['document_id']), app_docs=(target['document_id'], target2['document_id']))
+    PostgresApiAccessStore(recovery_postgres).set_application_grant(
+        actor_id=publisher['account_id'], tenant_id=consumer.tenant_id, application_id=consumer.application_id,
+        expected_version=1, content_scope='RESOURCE_SET', document_ids=(target['document_id'], target2['document_id']),
+        scopes=['retrieve', 'documents:read', 'knowledge:read'], requests_per_minute=100, max_top_k=5)
     api = _api(tmp_path / 'product-api', recovery_postgres, blobs)
     assert _documents(api, consumer) == (200, [target2['document_id']])
     response = api.get('/v1/knowledge/' + target2['object_id'], headers={'Authorization': f'Bearer {consumer.credential}'})

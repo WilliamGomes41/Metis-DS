@@ -39,7 +39,11 @@ aparte tijdelijke werkmap, niet als deployment over de actieve applicatie.
 
 Het resultaat bevat het aangeboden request, de zichtbare providerrespons, de
 brongebonden spec en `acceptance-report.json`. Transportheaders en reasoning
-worden niet opgeslagen. Een leeg/onvolledig referentiebestand wordt vóór een
+worden niet opgeslagen. Ook de bestaande production-transform, admission gate
+en passage-register worden zonder opslag aangeroepen; `review-objects.json`
+bevat de gevormde reviewpassages. Een geselecteerd maar geblokkeerd voorstel
+(bijvoorbeeld type_evidence_missing) telt niet als geslaagde herstelproef.
+Een leeg/onvolledig referentiebestand wordt vóór een
 betaalde modelcall geweigerd. Providerconfiguratie wordt uit bestaande
 omgevingsvariabelen gelezen, niet uit opdrachtargumenten.
 

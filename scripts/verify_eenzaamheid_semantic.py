@@ -20,6 +20,9 @@ from src.pre_review_semantic_v1 import (
 )
 from src.semantic_passage_v1 import semantic_source_blocks, SELECTION_ORIGIN_PROPOSAL
 from src.semantic_replay_v1 import stable_json_hash
+from src.semantic_transform_generic_v1 import transform
+from src.admission_gate_v1 import apply_admission_gate, admission_of, GATE_ALLOWED
+from src.passage_register_v1 import apply_passage_register
 
 SOURCE_HASH = '2185b6502a76b76e942db2352d746a5f1193645091844fd84241dfb94ac51064'
 INPUT_HASH = '5b32b417da3efd05575cdf839375b6f97048a519f6ccfe9dc84e681c2e5213ff'
@@ -82,25 +85,42 @@ def reviewed_reference(path: Path, payload: dict):
     return rows
 
 
-def compare_reference(rows: list[dict], spec: dict):
+def prepare_review_objects(spec: dict, fragments: list[dict]):
+    manifest = {'canonical_source': {
+        'source_id': 'src-2185b6502a76b76e', 'title': 'Eenzaamheid bij ouderen',
+        'publisher': 'V&VN', 'source_url': 'urn:vvn:freeze:' + SOURCE_HASH,
+        'source_type': 'pdf', 'source_level': 1, 'canonicality': 'canonical',
+        'source_checksum': SOURCE_HASH, 'checksum_algorithm': 'sha256',
+        'integrity_status': 'verified', 'publication_date': None, 'version': '1.5',
+    }}
+    production_spec = {key: value for key, value in spec.items() if key != '_semantic_replay'}
+    objects = transform(production_spec, manifest, fragments)
+    return apply_passage_register(apply_admission_gate(objects, klasse='richtlijn', fragments=fragments,
+        document_version='1.5', source_hash=SOURCE_HASH))
+
+
+def compare_reference(rows: list[dict], spec: dict, review_objects: list[dict]):
     selected = [obj for obj in spec['objects']
                 if obj.get('semantic_passage', {}).get('selection_origin') == SELECTION_ORIGIN_PROPOSAL]
     outcomes = []
+    by_id = {obj['object_id']: obj for obj in review_objects}
     for ref in rows:
         matching = [obj for obj in selected if any(span.get('block_id') == ref['block_id']
                     and span.get('start', -1) <= ref['start'] and span.get('end', -1) >= ref['end']
                     for span in obj.get('semantic_passage', {}).get('spans', []))]
         kind = ref['expected_type']
         if kind in KNOWLEDGE_TYPES:
-            ok = any(obj.get('proposed_object_type') == kind for obj in matching)
-            outcome = 'matched' if ok else 'missing_or_wrong_type'
+            typed = [obj for obj in matching if obj.get('proposed_object_type') == kind]
+            ok = any(admission_of(by_id.get(obj['object_id'], {})).get('gate_result') == GATE_ALLOWED for obj in typed)
+            outcome = 'matched_and_admitted' if ok else 'blocked_by_admission' if typed else 'missing_or_wrong_type'
         else:
             # A label/context is not a standalone model-proposed knowledge item.
             ok = not matching
             outcome = 'retained_without_knowledge_proposal' if ok else 'nonknowledge_proposed_as_knowledge'
         outcomes.append({'block_id': ref['block_id'], 'start': ref['start'], 'end': ref['end'],
                          'expected_type': kind, 'outcome': outcome, 'passed': ok,
-                         'matching_object_ids': [obj['object_id'] for obj in matching]})
+                         'matching_object_ids': [obj['object_id'] for obj in matching],
+                         'admission': {obj['object_id']: admission_of(by_id.get(obj['object_id'], {})) for obj in matching}})
     return outcomes
 
 
@@ -146,12 +166,14 @@ def main():
             formation_context={'snapshot_id': 'acceptance-eenzaamheid-2185b650', 'source_sha256': SOURCE_HASH},
             post_json=record_actual_call)
         (args.output / 'source-bound-spec.json').write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding='utf-8')
-        outcomes = compare_reference(reference, spec)
+        objects = prepare_review_objects(spec, fragments)
+        (args.output / 'review-objects.json').write_text(json.dumps(objects, ensure_ascii=False, indent=2), encoding='utf-8')
+        outcomes = compare_reference(reference, spec, objects)
         report.update(status='PASS' if all(row['passed'] for row in outcomes) else 'FAIL',
-                      source_bound_contract='validated', reference_outcomes=outcomes,
+                      source_bound_contract='validated', admission_pipeline='executed', reference_outcomes=outcomes,
                       passed=sum(row['passed'] for row in outcomes), total=len(outcomes))
-    except ConsoleError as exc:
-        report['error'] = exc.code
+    except (ConsoleError, ValueError) as exc:
+        report['error'] = exc.code if isinstance(exc, ConsoleError) else str(exc)
     finally:
         (args.output / 'acceptance-report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
     print(json.dumps({key: value for key, value in report.items() if key != 'reference_outcomes'}))
