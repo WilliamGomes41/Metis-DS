@@ -854,6 +854,7 @@ def _knowledge_relation_review_block(
     objects: list[dict[str, Any]],
     *,
     review_path: str,
+    draft: dict[str, Any] | None = None,
 ) -> str:
     if not has_semantic_relation_review(obj):
         return ""
@@ -888,6 +889,8 @@ def _knowledge_relation_review_block(
         for row in confirmed
     }
 
+    submitted_choices = (draft or {}).get("relation_choice")
+    selected_choices = set(submitted_choices) if isinstance(submitted_choices, list) else None
     rows: list[str] = []
     for relation in basis:
         relation_type = str(relation.get("relation_type") or "")
@@ -907,7 +910,11 @@ def _knowledge_relation_review_block(
                 "current_version": "",
             }
         )
-        checked = " checked" if key in confirmed_keys else ""
+        selected = (
+            relation_choice_value(relation) in selected_choices
+            if selected_choices is not None else key in confirmed_keys
+        )
+        checked = " checked" if selected else ""
         label = RELATION_LABELS.get(relation_type, relation_type)
         stale_note = (
             f' <span class="relation-review-stale">({_esc(resolution_copy)})</span>'
@@ -932,7 +939,7 @@ def _knowledge_relation_review_block(
         </p>
         <div class="relation-review-list">{"".join(rows)}</div>
         <label class="check relation-review-ack">
-          <input type="checkbox" name="relation_review_ack" value="1">
+          <input type="checkbox" name="relation_review_ack" value="1"{_checked((draft or {}).get("relation_review_ack", ""), "1")}>
           <span>Ik heb de voorgestelde relaties gecontroleerd.</span>
         </label>
       </section>
@@ -1118,7 +1125,7 @@ def _stamp_block(obj: dict[str, Any], *, hidden: bool = False) -> str:
 
 def _recommendation_semantics_block(
     obj: dict[str, Any],
-    draft: dict[str, str],
+    draft: dict[str, Any],
     *,
     hidden: bool = False,
 ) -> str:
@@ -1369,11 +1376,17 @@ _REVIEW_DRAFT_DEFAULTS = {
 }
 _RECOMMENDATION_DIRECTION_VALUES = frozenset({"for", "against"})
 _RECOMMENDATION_STRENGTH_LEVEL_VALUES = frozenset({"strong", "weak", "not_stated"})
-def _sanitize_review_draft(draft: dict[str, str] | None) -> dict[str, str]:
+def _sanitize_review_draft(draft: dict[str, Any] | None) -> dict[str, Any]:
     sanitized = {
         key: str(value or "")
         for key, value in (draft or {}).items()
+        if key != "relation_choice"
     }
+    if draft is not None and "relation_choice" in draft:
+        choices = draft["relation_choice"]
+        sanitized["relation_choice"] = (
+            [str(value) for value in choices] if isinstance(choices, list) else []
+        )
     closed_types = frozenset(CLOSED_OBJECT_TYPES) | frozenset(CLOSED_BOOM_TYPES)
     for key, allowed in _REVIEW_DRAFT_SETS.items():
         default = _REVIEW_DRAFT_DEFAULTS.get(key, "")
@@ -1396,7 +1409,7 @@ def _review_conflict_html(
     conflict: bool,
     *,
     current: dict[str, Any] | None = None,
-    draft: dict[str, str] | None = None,
+    draft: dict[str, Any] | None = None,
 ) -> str:
     if not conflict:
         return ""
@@ -2620,7 +2633,7 @@ def _render_review_card(
     obj: dict[str, Any],
     snapshot_objects: list[dict[str, Any]],
     review_path: str,
-    draft: dict[str, str],
+    draft: dict[str, Any],
     conflict_html: str,
     snapshot_revision: str = "",
     task: str = "",
@@ -2783,6 +2796,7 @@ def _render_review_card(
                         obj,
                         snapshot_objects,
                         review_path=review_path,
+                        draft=draft,
                     )}
                     <section class="review-step" data-review-step="f">
                       <h4>Wat is je besluit?</h4>
@@ -2816,7 +2830,7 @@ def _render_review_room(
     *,
     task: str = "",
     counts: dict[str, int] | None = None,
-    draft: dict[str, str] | None = None,
+    draft: dict[str, Any] | None = None,
     conflict: bool = False,
     batch_selection: list[str] | None = None,
     batch_completed: int = 0,
@@ -4726,6 +4740,8 @@ def create_console_app(
                         "recommendation_strength": recommendation_strength,
                         "recommendation_direction": recommendation_direction,
                         "recommendation_strength_level": recommendation_strength_level,
+                        "relation_choice": ([relation_choice] if isinstance(relation_choice, str) else list(relation_choice or [])),
+                        "relation_review_ack": relation_review_ack,
                         "validation_error": exc.code if semantic_error else "",
                         "eindoordeel": eindoordeel,
                         "decision": decision,

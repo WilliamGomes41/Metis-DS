@@ -423,3 +423,62 @@ def test_d43_does_not_make_new_format_relations_serving_authority(tmp_path: Path
 
     # Serving still reads the exact legacy compatibility mirror until D4.4.
     assert binding_relations(live) == live["confirmed_relations"]
+
+
+@pytest.mark.parametrize("choice_count", [0, 1, 2])
+def test_semantic_retry_preserves_relation_decisions(tmp_path: Path, choice_count: int) -> None:
+    from html.parser import HTMLParser
+    from src.recommendation_semantics_v1 import PROPOSED_FIELD as SEMANTICS_FIELD
+    from tests.test_d3_3_human_recommendation_semantics import _proposal
+
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    sid = _ingest(console, accounts)["snapshot_id"]
+    rec, proposals = _plant_proposals(console, sid)
+    semantics = _proposal(strength=None, status="not_stated", label=None)
+    semantics["direction_evidence_span"] = REC
+    rows = console._load_objects(sid)
+    for row in rows:
+        if row["object_id"] == rec["object_id"]:
+            row[SEMANTICS_FIELD] = semantics
+            stamp_canonical_hashes(row)
+    console._save_objects(sid, rows)
+    before = deepcopy(console.snapshot_objects(sid))
+    selected = [relation_choice_value(row) for row in proposals[:choice_count]]
+    client = TestClient(create_console_app(console))
+    client.post("/login", data={"username": "reviewer.d43", "password": "reviewer-secret"})
+    data = {
+        "snapshot_id": sid, "object_id": rec["object_id"],
+        "snapshot_revision": console.objects_revision(sid),
+        "proposed_object_type": "recommendation", "type_action": "dit_klopt",
+        "suitability": "ja", "eindoordeel": "goedkeuren",
+        "recommendation_direction": "for", "recommendation_strength_level": "strong",
+        "relation_choice": selected, "relation_review_ack": "1",
+    }
+    response = client.post("/review", data=data)
+    assert response.status_code == 400
+    class CheckedInputs(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.values = {}
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == "input" and "checked" in attrs:
+                self.values.setdefault(attrs.get("name"), []).append(attrs.get("value"))
+
+    form = CheckedInputs()
+    form.feed(response.text)
+    assert form.values.get("relation_choice", []) == selected
+    assert form.values["relation_review_ack"] == ["1"]
+    assert console.snapshot_objects(sid) == before
+    # Correct only the strength, using the relation controls from the response.
+    data["recommendation_strength_level"] = "not_stated"
+    data["relation_choice"] = form.values.get("relation_choice", [])
+    data["relation_review_ack"] = form.values["relation_review_ack"][0]
+    response = client.post("/review", data=data, follow_redirects=False)
+    assert response.status_code == 303
+    live = _rows(console, sid)[REC]
+    assert {row["target_object_id"] for row in live.get(CONFIRMED_FIELD, [])} == {
+        row["target_object_id"] for row in proposals[:choice_count]
+    }
