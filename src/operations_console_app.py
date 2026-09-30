@@ -107,7 +107,7 @@ from src.operations_console_v1 import (
     review_stacks,
     slow_review_duty,
 )
-from src.open_original_v1 import researcher_visible_prose
+from src.open_original_v1 import OpenOriginalError, full_document_segments, parse_page_bbox, researcher_visible_prose
 from src.review_disposition_v1 import definitive_review_disposition
 from src.publication_readiness_v1 import review_followup_queues
 from src.product_security_v1 import SlidingWindowRateLimiter
@@ -4437,19 +4437,103 @@ def create_console_app(
         safe_task = normalize_review_task(task)
         if not chosen or not object_id:
             raise ConsoleError("unknown_object")
-        opened = state.open_source_passage(snapshot_id=chosen, object_id=object_id)
+        opened = state.open_source_passage(
+            snapshot_id=chosen, object_id=object_id, include_document=True,
+        )
+        source_url = (
+            f"/review/brondocument?document={quote(chosen, safe='')}"
+            f"&amp;object={quote(object_id, safe='')}"
+        )
+        passage = researcher_visible_prose(opened.get("passage") or "")
+        if opened["content_kind"] == "pdf":
+            page, _ = parse_page_bbox(opened["locator_value"])
+            document_html = (
+                f'<p>De PDF opent op pagina {page}. Alle bronfragmenten van de geselecteerde passage zijn gemarkeerd.</p>'
+                f'<object data="{source_url}#page={page}" type="application/pdf" '
+                'style="width:100%;height:80vh" aria-label="Volledige richtlijn">'
+                '<p>De PDF kan hier niet worden weergegeven. Gebruik de downloadlink hieronder.</p>'
+                '</object>'
+            )
+        else:
+            try:
+                segments = full_document_segments(
+                    opened["freeze_bytes"], opened["content_kind"],
+                    opened.get("locators") or [{"locator_type": opened["locator_type"], "locator_value": opened["locator_value"]}],
+                )
+            except OpenOriginalError as exc:
+                raise ConsoleError(exc.code) from exc
+            found = any(selected and text.strip() for text, selected in segments)
+            marked = "".join(
+                '<mark class="broncontext-marked">' + _esc(text) + '</mark>'
+                if selected else _esc(text)
+                for text, selected in segments
+            )
+            warning = "" if found else (
+                '<p class="muted">De geselecteerde passage staat hierboven; '
+                'deze kon niet eenduidig in de volledige tekst worden gemarkeerd.</p>'
+            )
+            document_html = (
+                '<p class="muted">Veilige tekstweergave van het volledige brondocument. Afbeeldingen en oorspronkelijke opmaak staan in de download.</p>' + warning + '<div class="full-source-text" style="white-space:pre-wrap">'
+                + marked + '</div>'
+            )
         return _page(
             f"""
             {_nav(account, "review", _counts(account))}
             <section class="room">
-              <h1>Bronpassage</h1>
-              <p class="lead">Exacte plaats in het geüploade origineel.</p>
+              <h1>Volledige richtlijn</h1>
+              <p class="lead">Het vastgelegde origineel dat bij deze bronpassage hoort.</p>
               <article class="object">
-                <p class="bronpassage-prose">{_esc(researcher_visible_prose(opened.get("passage") or ""))}</p>
+                <h2>Geselecteerde bronpassage</h2>
+                <p class="bronpassage-prose">{_esc(passage)}</p>
               </article>
+              <section aria-label="Volledig brondocument" data-full-source>
+                {document_html}
+              </section>
+              <p><a class="btn-secondary" href="{source_url}&amp;download=true">Download volledig origineel</a></p>
               <p><a class="btn-secondary" href="/review?document={_esc(chosen)}&amp;object={_esc(object_id)}{f'&amp;task={_esc(safe_task)}' if safe_task else ''}">Terug naar review</a></p>
             </section>
             """
+        )
+
+    @app.get("/review/brondocument")
+    def review_brondocument(
+        request: Request, document: str = "", object: str = "", download: bool = False,
+    ) -> Response:
+        _require(request)
+        opened = state.open_source_passage(
+            snapshot_id=document.strip(), object_id=object.strip(), include_document=True,
+        )
+        kind = opened["content_kind"]
+        # Only PDF is displayed inline. Uploaded HTML is always an attachment;
+        # the console displays an escaped, inert text projection instead.
+        extension = {"pdf": "pdf", "html": "html", "boom": "json", "json": "json"}.get(kind, "txt")
+        inline_pdf = kind == "pdf" and not download
+        disposition = "inline" if inline_pdf else "attachment"
+        display_bytes = opened["freeze_bytes"]
+        if inline_pdf:
+            import fitz
+
+            # Highlight every contributing fragment on a disposable display
+            # copy; the immutable source and original download are unchanged.
+            locators = opened.get("locators") or [{"locator_value": opened["locator_value"]}]
+            with fitz.open(stream=display_bytes, filetype="pdf") as pdf:
+                for locator in locators:
+                    page, bbox = parse_page_bbox(locator["locator_value"])
+                    pdf_page = pdf[page - 1]
+                    pdf_page.draw_rect(
+                        fitz.Rect(bbox), color=(1, 0.55, 0), fill=(1, 1, 0),
+                        fill_opacity=0.25, overlay=True,
+                    )
+                display_bytes = pdf.tobytes()
+        return Response(
+            display_bytes,
+            media_type="application/pdf" if inline_pdf else "application/octet-stream",
+            headers={
+                "Content-Disposition": f'{disposition}; filename="richtlijn.{extension}"',
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": "default-src 'none'; frame-ancestors 'self'",
+            },
         )
 
     @app.post("/review")
