@@ -356,7 +356,7 @@ def test_processing_evidence_download_preserves_recorded_and_missing_evidence(tm
     assert response.headers["content-type"] == "application/zip"
     assert "attachment;" in response.headers["content-disposition"]
     with ZipFile(io.BytesIO(response.content)) as archive:
-        assert set(archive.namelist()) == {"manifest.csv", "README.txt", *(name + ".csv" for name in SCHEMAS)}
+        assert set(archive.namelist()) == {"manifest.csv", "revision.csv", "README.txt", *(name + ".csv" for name in SCHEMAS)}
         def rows(name):
             data = archive.read(name + ".csv")
             assert data.startswith(b"\xef\xbb\xbf")
@@ -397,6 +397,36 @@ def test_processing_evidence_empty_history_has_headers_and_honest_availability()
     assert next(r for r in recorded if r["dataset"] == "runs.csv")["availability"] == "recorded"
     with ZipFile(io.BytesIO(processing_evidence_zip(**kwargs))) as archive:
         assert "call_id" in archive.read("model_calls.csv").decode("utf-8-sig")
+
+
+def test_long_revision_is_stored_once_and_resolvable_for_every_dataset():
+    from zipfile import ZipFile
+    from hashlib import sha256
+    from src.processing_evidence_export_v1 import processing_evidence_zip, VERSION
+    revision = 'm2.' + 'A' * 51000
+    envelope = {'quality_processing_runs': [{'run_id': 'run-1', 'candidates': [
+        {'object_id': f'object-{i}', 'object_version': '1.0'} for i in range(300)]}]}
+    payload = processing_evidence_zip(snapshot_id='snap-compact', revision=revision,
+                                      envelope=envelope, objects=[])
+    with ZipFile(io.BytesIO(payload)) as archive:
+        assert sum(info.file_size for info in archive.infolist()) < 150000
+        revision_id = 'sha256:' + sha256(revision.encode()).hexdigest()
+        counts = {}
+        for name in archive.namelist():
+            if not name.endswith('.csv'):
+                continue
+            rows = list(csv.DictReader(io.StringIO(archive.read(name).decode('utf-8-sig'))))
+            counts[name] = len(rows)
+            for row in rows:
+                assert row['revision_id'] == revision_id
+                assert row['snapshot_id'] == 'snap-compact'
+                if name == 'revision.csv':
+                    assert row['objects_revision'] == revision
+                else:
+                    assert 'objects_revision' not in row
+        manifest = list(csv.DictReader(io.StringIO(archive.read('manifest.csv').decode('utf-8-sig'))))
+        assert all(int(r['row_count']) == counts[r['dataset']] for r in manifest)
+        assert all(r['schema_version'] == VERSION for r in manifest)
 
 
 def test_technical_management_collects_tools_and_keeps_repair_actionable(tmp_path):

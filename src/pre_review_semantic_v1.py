@@ -17,6 +17,9 @@ import logging
 import os
 import time
 import uuid
+from copy import deepcopy
+from datetime import datetime, timezone
+from pathlib import Path
 from contextvars import ContextVar
 from typing import Any, Callable, Mapping
 from urllib.error import HTTPError, URLError
@@ -302,8 +305,8 @@ def _extract_output_text(response: dict[str, Any]) -> str:
                 raise ConsoleError("pre_review_llm_refused")
             if part.get("type") == "output_text" and isinstance(part.get("text"), str):
                 texts.append(part["text"])
-    text = "".join(texts).strip()
-    if not text:
+    text = "".join(texts)
+    if not text.strip():
         raise ConsoleError("pre_review_llm_response_empty")
     return text
 
@@ -489,34 +492,52 @@ def _provider_proposal(
     evidence_blocks: list[dict[str, Any]],
     post_json: PostJson | None,
     field_contract_v2: bool = False,
+    evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     safe_key = str(api_key or "").strip()
     if not safe_key:
         raise ConsoleError("pre_review_llm_api_key_required")
+    payload = _request_payload(model=model, blocks=blocks,
+                               evidence_blocks=evidence_blocks,
+                               field_contract_v2=field_contract_v2)
+    request_evidence = deepcopy(payload)
+    requested_at = datetime.now(timezone.utc).isoformat()
     response = (post_json or _post_json)(
         OPENAI_RESPONSES_URL,
         {
             "Authorization": f"Bearer {safe_key}",
             "Content-Type": "application/json",
         },
-        _request_payload(
-            model=model,
-            blocks=blocks,
-            evidence_blocks=evidence_blocks,
-            field_contract_v2=field_contract_v2,
-        ),
+        payload,
         DEFAULT_TIMEOUT_SECONDS,
     )
     if not isinstance(response, dict):
         raise ConsoleError("pre_review_llm_response_invalid")
     try:
-        proposal = json.loads(_extract_output_text(response))
+        output_text = _extract_output_text(response)
+        proposal = json.loads(output_text)
     except json.JSONDecodeError as exc:
         raise ConsoleError("pre_review_llm_response_invalid") from exc
     if not isinstance(proposal, dict):
         raise ConsoleError("pre_review_llm_response_invalid")
     if str(proposal.get("abstain_reason") or "").strip():
         raise ConsoleError("pre_review_llm_abstained")
+    if evidence is not None:
+        # Never persist HTTP headers, credentials, arbitrary provider metadata or
+        # reasoning. This observation travels through the existing run commit.
+        usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
+        try:
+            commit = (Path(__file__).resolve().parents[1] / "config/deployed_commit.txt").read_text().strip()
+        except OSError:
+            commit = ""
+        if len(commit) != 40 or any(c not in "0123456789abcdef" for c in commit):
+            commit = None
+        evidence.update(version="semantic-provider-evidence-v1", requested_at=requested_at,
+                        deployed_commit=commit, request=request_evidence,
+                        response={"id": response.get("id"), "status": response.get("status"),
+                                  "output_text": output_text,
+                                  "input_tokens": usage.get("input_tokens"),
+                                  "output_tokens": usage.get("output_tokens")})
     return proposal
 
 def _semantic_execution_before_review(
@@ -600,6 +621,7 @@ def _semantic_execution_before_review(
             replay_rejection_reason = lookup.reason or "semantic_replay_record_rejected"
 
     if blocks and proposal is None:
+        provider_evidence: dict[str, Any] = {}
         proposal = _provider_proposal(
             api_key=api_key,
             model=safe_model,
@@ -607,6 +629,7 @@ def _semantic_execution_before_review(
             evidence_blocks=evidence_blocks,
             post_json=post_json,
             field_contract_v2=field_contract_v2,
+            evidence=provider_evidence,
         )
         try:
             content_units = semantic_units_from_proposal(
@@ -627,6 +650,7 @@ def _semantic_execution_before_review(
                 proposal=proposal,
                 replay_rejection_reason=replay_rejection_reason,
             )
+            replay_record["provider_evidence"] = provider_evidence
     elif not blocks and not safe_key:
         raise ConsoleError("pre_review_llm_api_key_required")
 
