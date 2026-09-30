@@ -113,6 +113,39 @@ def researcher_visible_prose(passage: str) -> str:
     return re.sub(r"\s+", " ", "".join(parser.parts)).strip()
 
 
+def document_visible_prose(freeze_bytes: bytes, content_kind: str) -> str:
+    """Display the whole frozen text, without executing uploaded HTML.
+
+    Block separators preserve readable paragraphs and table cells. This is a
+    disposable display projection; source bytes and locators are untouched.
+    """
+    text = freeze_bytes.decode("utf-8")
+    if content_kind != "html":
+        return text
+
+    class DocumentParser(_VisibleProseParser):
+        blocks = {"p", "div", "section", "article", "h1", "h2", "h3", "h4",
+                  "h5", "h6", "li", "tr", "td", "th", "br", "hr", "pre"}
+
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+            super().handle_starttag(tag, attrs)
+            if not self._skip and tag.lower() in self.blocks:
+                self.parts.append("\n")
+
+        def handle_endtag(self, tag: str) -> None:
+            super().handle_endtag(tag)
+            if not self._skip and tag.lower() in self.blocks:
+                self.parts.append("\n")
+
+    parser = DocumentParser()
+    parser.feed(text)
+    parser.close()
+    return "\n".join(
+        line for raw in "".join(parser.parts).splitlines()
+        if (line := re.sub(r"\s+", " ", raw).strip())
+    )
+
+
 def passage_from_pdf_freeze(freeze_bytes: bytes, locator_value: str) -> str:
     import fitz
 

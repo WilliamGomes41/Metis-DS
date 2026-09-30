@@ -1440,19 +1440,24 @@ class OperationsConsole:
         if self._envelope(snapshot_id) != envelope or self.objects_revision(snapshot_id) != revision:
             raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=self.objects_revision(snapshot_id))
 
-    def open_source_passage(self, *, snapshot_id: str, object_id: str) -> dict[str, Any]:
+    def open_source_passage(
+        self, *, snapshot_id: str, object_id: str, include_document: bool = False,
+    ) -> dict[str, Any]:
         envelope = self._envelope(snapshot_id)
         target = next((row for row in self.snapshot_objects(snapshot_id) if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
         _, freeze_bytes = self._verified_source_bytes(envelope)
         try:
-            return open_source_passage(
+            opened = open_source_passage(
                 freeze_bytes=freeze_bytes,
                 content_kind=envelope["content_kind"],
                 locator=None,
                 object_record=target,
             )
+            if include_document:
+                opened.update(freeze_bytes=freeze_bytes, content_kind=envelope["content_kind"])
+            return opened
         except OpenOriginalError as exc:
             raise ConsoleError(exc.code) from exc
 
