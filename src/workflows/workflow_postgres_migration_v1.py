@@ -22,6 +22,7 @@ MIGRATION_NAMES = (
     "012_console_entra_identity.sql",
     "013_quality_measurements.sql",
     "014_route_comparisons.sql",
+    "015_historical_accounts.sql",
 )
 REQUIRED_TABLES = frozenset(
     {
@@ -42,6 +43,7 @@ REQUIRED_TABLES = frozenset(
 )
 REQUIRED_COLUMNS = frozenset(
     {
+        ("accounts", "retirement"),
         ("documents", "envelope_payload"),
         ("documents", "logical_document_id"),
         ("documents", "working_revision_id"),

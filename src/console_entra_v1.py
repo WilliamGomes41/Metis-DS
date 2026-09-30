@@ -148,7 +148,7 @@ class EntraIdentity:
                 )
             unbound = con.execute(
                 "SELECT 1 FROM workflow.accounts a LEFT JOIN workflow.entra_identities e ON e.account_id=a.account_id "
-                "WHERE e.account_id IS NULL OR e.tenant_id<>%s LIMIT 1", (self.config.tenant_id,)
+                "WHERE to_jsonb(a)->>'retirement' IS NULL AND (e.account_id IS NULL OR e.tenant_id<>%s) LIMIT 1", (self.config.tenant_id,)
             ).fetchone()
             if unbound:
                 raise ConsoleError("entra_legacy_binding_required")
@@ -193,7 +193,9 @@ class EntraIdentity:
             if row:
                 aid = row["account_id"]
                 # Role changes invalidate older sessions before publishing current rights.
-                old = con.execute("SELECT roles FROM workflow.accounts WHERE account_id=%s", (aid,)).fetchone()
+                old = con.execute("SELECT roles,to_jsonb(accounts)->'retirement' AS retirement FROM workflow.accounts WHERE account_id=%s FOR UPDATE", (aid,)).fetchone()
+                if old["retirement"] is not None:
+                    raise ConsoleError("entra_access_denied")
                 if sorted(old["roles"]) != roles:
                     event = dict(self._event("roles_observed", "Microsoft Entra"), before=old["roles"], after=roles)
                     con.execute("UPDATE workflow.entra_identities SET evidence=evidence || %s WHERE account_id=%s", (Jsonb([event]), aid))
@@ -223,7 +225,7 @@ class EntraIdentity:
                     "SELECT a.* FROM workflow.sessions s JOIN workflow.entra_sessions es USING(token_hash) "
                     "JOIN workflow.entra_identities e ON e.tenant_id=es.tenant_id AND e.object_id=es.object_id "
                     "JOIN workflow.accounts a ON a.account_id=e.account_id AND a.account_id=s.account_id "
-                    "WHERE s.token_hash=%s AND es.tenant_id=%s AND NOT e.blocked AND s.revoked_at IS NULL "
+                    "WHERE s.token_hash=%s AND es.tenant_id=%s AND NOT e.blocked AND to_jsonb(a)->>'retirement' IS NULL AND s.revoked_at IS NULL "
                     "AND s.expires_at>CURRENT_TIMESTAMP AND s.created_at>CURRENT_TIMESTAMP - interval '5 minutes'",
                     (_token_hash(token), self.config.tenant_id),
                 ).fetchone()
@@ -246,7 +248,7 @@ class EntraIdentity:
                 "SELECT a.account_id FROM workflow.accounts a JOIN workflow.sessions s USING(account_id) "
                 "JOIN workflow.entra_sessions es USING(token_hash) "
                 "JOIN workflow.entra_identities e ON e.account_id=a.account_id AND e.tenant_id=es.tenant_id AND e.object_id=es.object_id "
-                "WHERE s.token_hash=%s AND e.tenant_id=%s AND NOT e.blocked AND 'publisher'=ANY(a.roles) "
+                "WHERE s.token_hash=%s AND e.tenant_id=%s AND NOT e.blocked AND to_jsonb(a)->>'retirement' IS NULL AND 'publisher'=ANY(a.roles) "
                 "AND s.revoked_at IS NULL AND s.expires_at>CURRENT_TIMESTAMP "
                 "AND s.created_at>CURRENT_TIMESTAMP - interval '5 minutes'",
                 (_token_hash(actor_token), self.config.tenant_id),
