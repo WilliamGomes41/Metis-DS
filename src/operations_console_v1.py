@@ -1877,12 +1877,22 @@ class OperationsConsole:
             raise ConsoleError("delete_confirmation_required")
         with self._store_write_lock():
             self._reload_store_locked()
-            return self._delete_unpublished_snapshot_locked(
+            envelope = deepcopy(self._envelope(token))
+            result = self._delete_unpublished_snapshot_locked(
                 actor_id=actor_id,
                 token=token,
                 account=account,
                 confirm_title=confirm_title,
             )
+            # Durable implementations commit before returning. Irreversible source
+            # cleanup must never participate in the rollback-capable transition.
+            try:
+                result["freeze_bytes_removed"] = self._maybe_remove_unpublished_freeze_bytes(envelope)
+            except OSError:
+                # The document is already deleted; a cache cleanup failure must
+                # not report a failed domain transition or resurrect the snapshot.
+                result["freeze_bytes_removed"] = False
+            return result
 
     def _delete_unpublished_snapshot_locked(
         self,
@@ -1907,7 +1917,6 @@ class OperationsConsole:
         self._bindings.pop(token, None)
         self._save_envelopes()
         self._save_bindings()
-        freeze_removed = self._maybe_remove_unpublished_freeze_bytes(envelope)
         append_event(
             self._ledger_path,
             event_type=UNPUBLISHED_DELETE_EVENT,
@@ -1928,7 +1937,7 @@ class OperationsConsole:
             "sha256": digest,
             "title": title,
             "actor": account["username"],
-            "freeze_bytes_removed": freeze_removed,
+            "freeze_bytes_removed": False,
             "four_eyes_required": False,
             "second_named_reviewer_required": False,
             "capture_is_publication": False,

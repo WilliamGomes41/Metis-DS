@@ -112,6 +112,16 @@ open werk en geen stilzwijgende overdracht van goedkeuringen bij gewijzigde cont
 Verwijderen/opnieuw uploaden is geen standaard herstelpad. Fysieke bronverwijdering
 moet afzonderlijk via bestaande opslag- en verwijderbewijzen worden geverifieerd.
 
+Herstel #467 verplaatst bronopruiming naar ná de zelfstandige workflowcommit.
+Rollback vóór commit mag nooit externe bronbytes verwijderen. Een bestaande
+buitenste workflowtransactie wordt vóór de delete geweigerd: een savepoint is
+geen definitieve commit. Cache-opruimfouten na commit herstellen geen verwijderd
+document. Een crash tussen commit en cleanup kan ongebruikte bronbytes achterlaten;
+automatische orphan-cleanup of een retry-outbox is hiermee niet geïmplementeerd.
+Geen nieuw deletebeleid, migratie of automatische bronverwijdering bij startup.
+Adapter-/transactiedoubletests bewijzen de volgorde; de echte PostgreSQL-proef
+blijft een vrijgavevoorwaarde zolang geen testdatabase beschikbaar is.
+
 Stap 1 vereist geen databasewijziging. CSV v3 is expliciet versiegebonden: oude
 v2-consumenten moeten de revisiejoin ondersteunen. Bestaande v2-exports blijven
 v2. Rol/koppeling-migraties moeten nog ontworpen en getest worden; geen destructieve

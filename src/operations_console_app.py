@@ -284,6 +284,7 @@ ERROR_COPY = {
     "published_objects_must_not_be_rewritten": "Gepubliceerde objecten worden niet herschreven.",
     "unknown_snapshot": "Dit document is niet gevonden.",
     "delete_confirmation_required": "Bevestig eerst dat je dit unpublished document wilt verwijderen.",
+    "unpublished_delete_requires_independent_transaction": "Het document is niet verwijderd. Rond de andere bewerking eerst af en probeer daarna opnieuw te verwijderen.",
     "delete_title_confirmation_required": "Typ de exacte documenttitel om te bevestigen.",
     "published_projection_must_not_be_deleted": "Een gepubliceerde projectie wordt niet verwijderd.",
     "publish_confirmation_required": "Bevestig eerst dat je de gereviewde kennisobjecten wilt publiceren.",

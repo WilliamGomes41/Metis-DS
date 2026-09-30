@@ -280,3 +280,97 @@ def test_local_only_startup_still_fails_closed_on_corrupt_envelope_json(
             runtime=runtime,
             source_store=tmp_path / "local-sources",
         )
+
+
+@pytest.mark.parametrize('fail_commit', [True, False])
+def test_delete_source_cleanup_follows_transaction_commit_and_restart(tmp_path, fail_commit):
+    """Real console/mixin/transaction code with a rollback-capable store double."""
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+    from src.g2_source_store import build_g2_locator
+    from src.operations_console_v1 import ConsoleError
+    from src.workflows.workflow_transaction_v1 import workflow_transaction, workflow_transaction_active
+
+    class Source:
+        def __init__(self):
+            self.blobs = {}
+            self.deletes = 0
+
+        def store_verified(self, *, data, sha256, filename):
+            locator = build_g2_locator(sha256=sha256, filename=filename)
+            self.blobs[locator] = data
+            return locator
+
+        def load_verified(self, locator):
+            return self.blobs[locator]
+
+        def delete_verified(self, locator):
+            assert not workflow_transaction_active(), 'source deletion before outer commit'
+            self.deletes += 1
+            return self.blobs.pop(locator, None) is not None
+
+    class Store(_SharedDocumentStore):
+        config = SimpleNamespace(dsn='test-double')
+
+        def delete_document(self, snapshot_id):
+            del self.envelopes[snapshot_id]
+            del self.objects[snapshot_id]
+
+        @contextmanager
+        def _connect(self):
+            yield self
+
+        @contextmanager
+        def transaction(self):
+            before = deepcopy(self.envelopes), deepcopy(self.objects)
+            try:
+                yield
+                if fail_commit:
+                    raise RuntimeError('injected_commit_failure')
+            except Exception:
+                self.envelopes, self.objects = before
+                raise
+
+    source = Source()
+    local = OperationsConsole(root=tmp_path, runtime=tmp_path/'runtime', source_store=tmp_path/'sources', immutable_source_store=source)
+    actor = local.create_account('delete-author', 'test-password', ('researcher', 'reviewer'))
+    reviewer = local.create_account('delete-reviewer', 'test-password', ('reviewer',))
+    receipt = local.ingest(actor_id=actor['account_id'], filename='source.html',
+                           data=b'<html><h1>Bron</h1><p>Bespreek passende ondersteuning met de client.</p></html>',
+                           content_type='text/html', ingest_kind='new', title='Bron', version='1.0',
+                           date='2026-09-30', live_url='', class_='richtlijn', family='test',
+                           named_reviewers=[reviewer['account_id']])
+    sid = receipt['snapshot_id']
+    store = Store()
+    store.envelopes = deepcopy(local._envelopes)
+    store.objects = {sid: deepcopy(local._load_objects(sid))}
+    def restart():
+        return _DocumentConsole(root=tmp_path, runtime=tmp_path/'runtime', source_store=tmp_path/'sources',
+                                immutable_source_store=source, workflow_document_store=store)
+    console = restart()
+    locator = console._envelope(sid)['immutable_storage_locator']
+    original = source.load_verified(locator)
+    command = dict(actor_id=actor['account_id'], snapshot_id=sid, confirmed=True, confirm_title='Bron')
+    if fail_commit:
+        with pytest.raises(RuntimeError, match='injected_commit_failure'):
+            console.delete_unpublished_snapshot(**command)
+        assert source.deletes == 0
+        console = restart()
+        assert console._envelope(sid)['snapshot_id'] == sid
+        assert source.load_verified(locator) == original
+        assert console.snapshot_objects(sid)
+    else:
+        # A nested transaction is rejected before it can mutate domain state.
+        with workflow_transaction(store):
+            with pytest.raises(ConsoleError, match='unpublished_delete_requires_independent_transaction'):
+                console.delete_unpublished_snapshot(**command)
+            assert store.get_envelope(sid) is not None
+            assert source.deletes == 0
+        result = console.delete_unpublished_snapshot(**command)
+        assert result['deleted'] and result['freeze_bytes_removed']
+        assert source.deletes == 1 and locator not in source.blobs
+        console = restart()
+        assert console.list_envelopes() == []
+        with pytest.raises(ConsoleError, match='unknown_snapshot'):
+            console.delete_unpublished_snapshot(**command)
+        assert source.deletes == 1

@@ -19,6 +19,11 @@ _BOUND_MARKER = "_metis_workflow_transaction_bound"
 _ORIGINAL_CONNECT = "_metis_workflow_original_connect"
 
 
+def workflow_transaction_active() -> bool:
+    """Whether a caller owns an outer transaction that has not committed yet."""
+    return _ACTIVE_CONNECTION.get() is not None
+
+
 class WorkflowTransactionError(RuntimeError):
     """Fail-closed workflow transaction configuration error."""
 
