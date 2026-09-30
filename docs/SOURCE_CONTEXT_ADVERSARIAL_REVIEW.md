@@ -28,5 +28,6 @@ Onopgelost buiten deze technische review: daadwerkelijke selectiedekking op
 Eenzaamheid. De historische input is exact gereconstrueerd, maar zonder echte
 modelcall en menselijke referentie is een inhoudelijke PASS niet bewezen. Het
 read-only controlescript en formulierbereiding staan in
-`docs/EENZAAMHEID_SEMANTIC_ACCEPTANCE.md`. #471 blijft daarom concept tot deze
-acceptatie is afgerond. Geen deploymentpakket wordt als eindrelease aangemerkt.
+`docs/EENZAAMHEID_SEMANTIC_ACCEPTANCE.md`. Op expliciete gebruikersopdracht wordt
+de technisch geteste implementatie gemergd; inhoudelijke acceptatie blijft open
+in #470. Geen deploymentpakket wordt zonder dat bewijs als eindrelease aangemerkt.

@@ -1,13 +1,16 @@
-# Werkelijke inhoudelijke acceptatie van #471
+# Werkelijke inhoudelijke acceptatie van Eenzaamheid
 
 De technische ketentests gebruiken gecontroleerde providerfixtures. Ze bewijzen
 bronbinding en lifecyclegedrag, geen betere selectiedekking. Een echte menselijke
 referentie en een daadwerkelijke modelcall op de oorspronkelijke PDF blijven
-voorwaarden voor het afronden en mergen van #471.
+voorwaarden om verbeterde selectiedekking en integrale vrijgave te kunnen claimen.
+Op de expliciete opdracht om de code af te ronden en te mergen wordt #471 na de
+technische en lifecyclecontroles geïntegreerd. Het ontbrekende inhoudelijke
+bewijs blijft afzonderlijk open in #470; merge geeft geen deploymentadvies.
 
 Het script `scripts/verify_eenzaamheid_semantic.py` schrijft alleen lokale
 bewijsbestanden. Het verbindt niet met PostgreSQL, maakt geen Metis-accounts en
-verandert geen productiegegevens of publicaties. Gebruik de PR-branch in een
+verandert geen productiegegevens of publicaties. Gebruik de gemergde code in een
 aparte tijdelijke werkmap, niet als deployment over de actieve applicatie.
 
 1. Gebruik de oorspronkelijke PDF met SHA-256
@@ -56,6 +59,7 @@ script verleent geen review- of publicatiegoedkeuring.
 
 Ontbrekend modelbewijs is geen onbekende API-fout: in de ontwikkelomgeving is geen
 modelsleutel beschikbaar. De agent mag eigen beoordelingen of fixtures niet als
-menselijke of werkelijke modelacceptatie aanmerken. Eerst deze proef beoordelen,
-bevindingen herstellen en CI op het definitieve hoofd van #471 controleren; daarna
-mergen en één deploymentpakket van die merge maken.
+menselijke of werkelijke modelacceptatie aanmerken. Voer deze proef uit voordat
+het gehele selectieherstel inhoudelijk wordt vrijgegeven. Herstel eventuele
+bevindingen in een nieuwe geteste wijziging en maak vervolgens één deploymentpakket
+van de geaccepteerde merge. #470 blijft open tot het echte bewijs is beoordeeld.

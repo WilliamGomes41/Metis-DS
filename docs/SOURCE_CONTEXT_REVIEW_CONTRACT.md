@@ -54,7 +54,7 @@ Adversarial proof matrix: unauthorized/reviewer not named; direct command; stale
 
 Context-binding rule: link records source label version and target version at confirmation plus exact text/source-fragment hashes. Classification-only target version changes retain unchanged literal context evidence; a changed target text/source position or source label version invalidates that evidence. A new reviewer context command creates fresh exact object versions and invalidates approval bindings; it never carries an approval to changed context.
 
-Remaining acceptance outside implementation: a reference set must be reviewed by a real human, and the exact Eenzaamheid PDF must undergo an actual provider call. Agent-authored expectations or mock calls MUST NOT be labeled human/model acceptance. These remain merge gates of #471.
+Remaining acceptance outside implementation: a reference set must be reviewed by a real human, and the exact Eenzaamheid PDF must undergo an actual provider call. Agent-authored expectations or mock calls MUST NOT be labeled human/model acceptance. On the user's explicit instruction to finish and merge the implementation, #471 is integrated after technical/lifecycle proof; the outstanding content acceptance remains open in #470 before claiming improved selection or integral release. Repository merge is not production deployment or content approval.
 
 Aanvullende correctiegrens: een reviewer kan een eerdere bronrol expliciet
 opheffen (commandrol reset, zonder doelpassages), met reden en exacte revisie.

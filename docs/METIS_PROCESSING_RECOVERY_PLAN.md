@@ -36,6 +36,10 @@ verwijdering en herstart afdekken. Reviewerbevestigde broncontext is nu gebouwd
 onder het contract van #474; native ketenbewijs wordt op het definitieve PR-head
 opnieuw uitgevoerd. De daadwerkelijke modelproef en menselijke referentie staan
 apart beschreven in `docs/EENZAAMHEID_SEMANTIC_ACCEPTANCE.md` en blijven open.
+De expliciete opdracht om de code af te ronden en te mergen wordt uitgevoerd na
+de technische en lifecyclecontroles. Het ontbrekende inhoudelijke bewijs blijft
+in #470 staan; de code-merge verklaart het selectieherstel niet inhoudelijk
+geaccepteerd en veroorzaakt geen productie-deployment.
 
 ## Stap 1 — uitgevoerd door #464
 
