@@ -54,7 +54,11 @@ def redact(value):
                 'access_token', 'refresh_token', 'authorization', 'connection_string',
                 'binary_path', 'immutable_storage_locator', 'locator', 'token'}
     if isinstance(value, dict):
-        return {k: redact(v) for k, v in value.items() if k.lower() not in excluded}
+        # The export projector names source-fragment provenance `locator` too.
+        # Preserve that evidence; operational storage locators stay excluded.
+        return {k: redact(v) for k, v in value.items()
+                if k.lower() not in excluded
+                or (k == 'locator' and value.get('relation') == 'stored_source_fragment')}
     if isinstance(value, list):
         return [redact(v) for v in value]
     return value

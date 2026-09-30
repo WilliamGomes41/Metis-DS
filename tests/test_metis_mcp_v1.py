@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient
 from src.g2_source_store import AzureBlobSourceStore, build_g2_locator
 from src.metis_mcp_auth_v1 import McpAuthenticator, McpConfig
 from src.metis_mcp_queries_v1 import McpQueries, McpQueryError
-from src.metis_mcp_v1 import TOOLS
+from src.metis_mcp_v1 import TOOLS, redact
 from src.operations_console_app import create_console_app
 from src.processing_evidence_export_v1 import processing_evidence_tables
 from src.review_ledger import read_events
@@ -182,6 +182,28 @@ def test_disabled_endpoint_and_config_fail_closed(tmp_path, monkeypatch):
     assert TestClient(create_console_app(console)).post('/mcp', json={}).status_code == 503
     _login(client, 'publisher.carla')
     assert 'Configuratie voor de beheerder' in client.get('/settings/chatgpt').text
+
+
+def test_lineage_preserves_source_locations_without_exposing_storage(connection):
+    console, accounts, first, second, client, call, store, token = connection
+    sid = first['snapshot_id']
+    objects, revision = console.snapshot_objects_and_revision(sid, include_blocked=True)
+    locator = {'section_path': ['Eenzaamheid', 'Aanbevelingen'], 'paragraph': 3}
+    target = next(obj for obj in objects if obj.get('object_type') != 'document')
+    target.setdefault('provenance', {})['source_fragments'] = [
+        {'raw_object_id': 'raw-source-1', 'source_locator': locator, 'page': 2}]
+    console._save_objects(sid, objects, expected_revision=revision)
+    objects, revision = console.snapshot_objects_and_revision(sid, include_blocked=True)
+    expected, _ = processing_evidence_tables(snapshot_id=sid, revision=revision,
+                                            envelope=console._envelope(sid), objects=objects)
+    evidence = call('get_processing_evidence', {'snapshot_id': sid, 'table': 'lineage',
+                                              'object_id': target['object_id']}).json()['result']['structuredContent']
+    expected_rows = [row for row in expected['lineage'] if row['object_id'] == target['object_id']]
+    assert evidence['items'] == expected_rows[:25]
+    assert any(row.get('locator') == locator for row in evidence['items'])
+    assert console.snapshot_objects_and_revision(sid, include_blocked=True) == (objects, revision)
+    assert redact({'locator': '/private/source.pdf', 'nested': {'token': 'secret',
+                   'immutable_storage_locator': 'private-blob', 'page': 2}}) == {'nested': {'page': 2}}
 
 
 def test_concurrent_probe_reads_and_safe_dependency_failure(monkeypatch):
