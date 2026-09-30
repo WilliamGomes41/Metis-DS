@@ -402,10 +402,14 @@ def test_processing_evidence_empty_history_has_headers_and_honest_availability()
 def test_long_revision_is_stored_once_and_resolvable_for_every_dataset():
     from zipfile import ZipFile
     from hashlib import sha256
-    from src.processing_evidence_export_v1 import processing_evidence_zip, VERSION
+    from src.processing_evidence_export_v1 import processing_evidence_zip, processing_evidence_tables, VERSION
     revision = 'm2.' + 'A' * 51000
     envelope = {'quality_processing_runs': [{'run_id': 'run-1', 'candidates': [
         {'object_id': f'object-{i}', 'object_version': '1.0'} for i in range(300)]}]}
+    tables, projected = processing_evidence_tables(snapshot_id='snap-compact', revision=revision,
+                                                   envelope=envelope, objects=[])
+    assert all(r['schema_version'] == 'processing-evidence-export-v2' for r in projected)
+    assert tables['run_candidates'][0]['objects_revision'] == revision
     payload = processing_evidence_zip(snapshot_id='snap-compact', revision=revision,
                                       envelope=envelope, objects=[])
     with ZipFile(io.BytesIO(payload)) as archive:

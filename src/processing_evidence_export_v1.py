@@ -14,6 +14,7 @@ from src.source_bound_fields_v2 import bound_values
 
 
 VERSION = "processing-evidence-export-v3"
+PROJECTOR_VERSION = "processing-evidence-export-v2"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
     "runs": ("run_id", "source_hash", "started_at", "finished_at", "outcome", "reason", "extractor_versions", "execution", "semantic_identity", "production_commit_status"),
@@ -165,7 +166,7 @@ def processing_evidence_tables(
         "object_events": ("not_exported", "This package does not read the review ledger and does not claim that no historical events exist."),
         "reference_review": ("not_exported", "A human reference assessment must be supplied separately; system review state is not a gold standard."),
     }
-    manifest = [{**common, "schema_version": VERSION, "dataset": name + ".csv",
+    manifest = [{**common, "schema_version": PROJECTOR_VERSION, "dataset": name + ".csv",
                  "row_count": len(tables[name]), "availability": statuses[name][0],
                  "limitation": statuses[name][1]} for name in SCHEMAS]
     return tables, manifest
@@ -181,6 +182,7 @@ def processing_evidence_zip(**kwargs: Any) -> bytes:
 
     def compact(rows):
         return [{**{k: v for k, v in row.items() if k != "objects_revision"},
+                 **({"schema_version": VERSION} if "schema_version" in row else {}),
                  "revision_id": revision_id} for row in rows]
 
     output = io.BytesIO()

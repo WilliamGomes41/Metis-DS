@@ -8,7 +8,11 @@ De GET-route is `/review/processing-evidence-export?document=<snapshot_id>`.
 De bestaande passage- en diagnostiekexports blijven beschikbaar.
 
 Lees eerst `manifest.csv`. Iedere CSV heeft vaste kolommen, ook zonder rijen.
-`snapshot_id` en `objects_revision` identificeren de huidige export. Een
+CSV-pakket v3 gebruikt `snapshot_id` en `revision_id`. Koppel deze twee kolommen
+aan `revision.csv` om de exacte `objects_revision` terug te vinden. De lange
+revisiecode staat daar eenmaal. V2-pakketten bevatten deze code nog op iedere rij;
+v2-consumenten moeten voor v3 de join ondersteunen. De in-memory/MCP-projectie
+behoudt de v2-kolommen en versieaanduiding; de v3-join geldt alleen voor de ZIP. Een
 historische `run_id` is een afzonderlijke sleutel. Koppel historische kandidaten
 alleen aan huidige objecten als ook versie en canonical hash overeenkomen.
 
@@ -31,10 +35,17 @@ Hij exporteert geen volledige envelopes, accountconfiguratie of credentials.
 Envelopebewijs en objectrevisie worden niet gepresenteerd als één atomische
 historische pipelinesnapshot. Het manifest benoemt de grenzen per dataset.
 
-Oorspronkelijke modelrequests/responses, tokengebruik, stopredenen, mislukte
-pogingen, tussenliggende bronstadia en individuele validatie-uitvoering kunnen
-niet achteraf uit deze records worden hersteld. Daarvoor is afzonderlijke
-registratie tijdens toekomstige runs nodig. Reviewgebeurtenissen worden niet uit
+`model_calls.csv` bevat voor nieuwe geslaagde runs met opgeslagen providerbewijs
+het oorspronkelijke requestpayload zonder transportheaders, de samengevoegde
+outputtekst en beschikbare response-ID, status en tokenaantallen. De deployment-
+marker en aanvraagtijd horen bij de oorspronkelijke aanroep. Ook na replay is dit
+geen nieuwe modelcall. Het bewijs hoort via `proposal_hash` bij het laatste
+opgeslagen voorstel; oudere en mislukte pogingen vormen geen volledig archief.
+Historische records zonder dit bewijs blijven `not_recorded`.
+
+Volledige ruwe responses, stopredenen, mislukte pogingen, tussenliggende bronstadia
+en individuele validatie-uitvoering kunnen niet achteraf uit deze records worden
+hersteld. Reviewgebeurtenissen worden niet uit
 de reviewledger opgehaald door deze export; menselijke referentiebeoordeling moet
 afzonderlijk worden toegevoegd.
 
