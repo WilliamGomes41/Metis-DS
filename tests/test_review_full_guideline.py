@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
-from src.open_original_v1 import document_visible_prose
+from src.open_original_v1 import document_visible_prose, parse_page_bbox
 
 HTML = b'''<!doctype html><html><body><h1>Complete guideline</h1>
 <p>Context before the selected recommendation.</p>
@@ -43,7 +43,7 @@ def setup_source(tmp_path: Path, data: bytes = HTML, kind: str = "html"):
     objects = console.snapshot_objects(snapshot)
     target = next(row for row in objects if row["object_type"] != "document"
                   and "Verwijs" in (row.get("content") or {}).get("clean_text", ""))
-    client = TestClient(create_console_app(console))
+    client = TestClient(create_console_app(console), base_url="https://testserver")
     assert client.post("/login", data={"username": "reviewer", "password": "secret"}).status_code == 200
     query = f'document={snapshot}&object={target["object_id"]}'
     return console, client, snapshot, target, query
@@ -78,23 +78,35 @@ def test_click_full_guideline_shows_all_frozen_html_and_returns_to_same_task(tmp
 
 def test_full_pdf_preserves_every_page_and_uses_located_page(tmp_path):
     doc = fitz.open()
-    doc.new_page().insert_text((72, 72), "Verwijs naar de huisarts.")
+    page = doc.new_page()
+    page.insert_text((72, 72), "Verwijs naar de huisarts.")
+    page.insert_text((72, 144), "Verwijs naar de huisarts.")
     doc.new_page().insert_text((72, 72), "Appendix on a second page.")
     data = doc.tobytes()
     doc.close()
-    _, client, _, _, query = setup_source(tmp_path, data, "pdf")
+    console, client, snapshot, target, query = setup_source(tmp_path, data, "pdf")
     response = client.get(f"/review/bronpassage?{query}&task=history")
     assert response.status_code == 200
     assert 'type="application/pdf"' in response.text
     assert "#page=1" in response.text
     assert "task=history" in response.text
     original = client.get(f"/review/brondocument?{query}")
-    assert original.content == data
+    assert original.content != data  # Disposable marked display copy
     assert original.headers["content-type"] == "application/pdf"
     assert original.headers["cache-control"] == "no-store"
     with fitz.open(stream=original.content, filetype="pdf") as full:
         assert len(full) == 2
         assert "Appendix on a second page." in full[1].get_text()
+        selected = console.open_source_passage(snapshot_id=snapshot, object_id=target["object_id"])
+        _, bbox = parse_page_bbox(selected["locator_value"])
+        marked_page = full[0]
+        markers = marked_page.get_drawings()
+        assert len(markers) == 1
+        assert tuple(markers[0]["rect"]) == pytest.approx(tuple(fitz.Rect(bbox)), abs=0.01)
+        assert full[1].get_drawings() == []
+    download = client.get(f"/review/brondocument?{query}&download=true")
+    assert download.content == data
+    assert console._verified_source_bytes(console._envelope(snapshot))[1] == data
     assert client.get(f"/review/brondocument?{query}&download=true").headers["content-disposition"].startswith("attachment;")
 
 
@@ -146,6 +158,7 @@ def test_boom_projection_escapes_literal_markup_and_downloads_json(tmp_path, mon
     original = b'{"text":"<script>alert(1)</script>"}'
     monkeypatch.setattr(console, "open_source_passage", lambda **kwargs: {
         "freeze_bytes": original, "content_kind": "boom", "passage": "a passage",
+        "locator_type": "web_line_range", "locator_value": f"lines:1-1;bytes:0-{len(original)}",
     })
     response = client.get(f"/review/bronpassage?{query}")
     assert response.status_code == 200
@@ -154,3 +167,69 @@ def test_boom_projection_escapes_literal_markup_and_downloads_json(tmp_path, mon
     download = client.get(f"/review/brondocument?{query}")
     assert download.content == original
     assert download.headers["content-disposition"] == 'attachment; filename="richtlijn.json"'
+
+
+def test_duplicate_html_route_marks_the_located_second_occurrence(tmp_path, monkeypatch):
+    console, client, _, _, query = setup_source(tmp_path)
+    paragraph = b'<p>Verwijs naar de huisarts.</p>'
+    original = b'<h1>Richtlijn</h1>\n' + paragraph + b'\n<p>Tussenliggende tekst.</p>\n' + paragraph
+    start = original.rfind(paragraph)
+    monkeypatch.setattr(console, "open_source_passage", lambda **kwargs: {
+        "freeze_bytes": original, "content_kind": "html", "passage": paragraph.decode(),
+        "locator_type": "web_line_range",
+        "locator_value": f"lines:4-4;bytes:{start}-{start + len(paragraph)}",
+    })
+    response = client.get(f"/review/bronpassage?{query}")
+    assert response.status_code == 200
+    full_text = re.search(r'<div class="full-source-text"[^>]*>(.*?)</div>', response.text, re.S)[1]
+    assert full_text.count('<mark') == 1
+    assert full_text.index('Tussenliggende tekst.') < full_text.index('<mark')
+    assert full_text.count('Verwijs naar de huisarts.') == 2
+    assert 'kon niet eenduidig' not in response.text
+
+
+def test_multifragment_pdf_marks_both_pages_without_changing_original(tmp_path):
+    doc = fitz.open()
+    doc.new_page().insert_text((72, 72), "Verwijs naar de huisarts.")
+    doc.new_page().insert_text((72, 144), "Aanvullende broncontext.")
+    second_bbox = doc[1].get_text("blocks")[0][:4]
+    data = doc.tobytes()
+    doc.close()
+    console, client, snapshot, target, query = setup_source(tmp_path, data, "pdf")
+    second_locator = {"locator_type": "page_bbox", "locator_value": "page:2;bbox:" + ",".join(map(str, second_bbox))}
+    rows = console.snapshot_objects(snapshot)
+    row = next(row for row in rows if row["object_id"] == target["object_id"])
+    row.setdefault("provenance", {}).setdefault("source_fragments", []).append({"source_locator": second_locator})
+    console._save_objects(snapshot, rows)
+    opened = console.open_source_passage(snapshot_id=snapshot, object_id=target["object_id"], include_document=True)
+    assert len(opened["locators"]) == 2
+    assert "Aanvullende broncontext." in opened["passage"]
+    response = client.get(f"/review/brondocument?{query}")
+    assert response.status_code == 200
+    with fitz.open(stream=response.content, filetype="pdf") as marked:
+        for locator in opened["locators"]:
+            page, bbox = parse_page_bbox(locator["locator_value"])
+            drawings = marked[page - 1].get_drawings()
+            assert len(drawings) == 1
+            assert tuple(drawings[0]["rect"]) == pytest.approx(bbox, abs=0.01)
+    assert client.get(f"/review/brondocument?{query}&download=true").content == data
+    assert console._verified_source_bytes(console._envelope(snapshot))[1] == data
+
+
+def test_multifragment_html_marks_all_source_fragments(tmp_path, monkeypatch):
+    console, client, _, _, query = setup_source(tmp_path)
+    first, second = b'<p>Eerste bronzin.</p>', b'<p>Tweede bronzin.</p>'
+    original = first + b'\n<p>Niet geselecteerd.</p>\n' + second
+    spans = [(0, len(first)), (original.index(second), len(original))]
+    locators = [{"locator_type": "web_line_range", "locator_value": f"lines:1-3;bytes:{start}-{end}"}
+                for start, end in spans]
+    monkeypatch.setattr(console, "open_source_passage", lambda **kwargs: {
+        "freeze_bytes": original, "content_kind": "html", "passage": "Eerste bronzin. Tweede bronzin.",
+        "locator_type": "web_line_range", "locator_value": locators[0]["locator_value"], "locators": locators,
+    })
+    response = client.get(f"/review/bronpassage?{query}")
+    assert response.status_code == 200
+    full_text = re.search(r'<div class="full-source-text"[^>]*>(.*?)</div>', response.text, re.S)[1]
+    marked = re.findall(r'<mark[^>]*>(.*?)</mark>', full_text, re.S)
+    assert marked == ['Eerste bronzin.', 'Tweede bronzin.']
+    assert 'Niet geselecteerd.' in full_text

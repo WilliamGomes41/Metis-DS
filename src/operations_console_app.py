@@ -107,7 +107,7 @@ from src.operations_console_v1 import (
     review_stacks,
     slow_review_duty,
 )
-from src.open_original_v1 import document_visible_prose, parse_page_bbox, researcher_visible_prose
+from src.open_original_v1 import OpenOriginalError, full_document_segments, parse_page_bbox, researcher_visible_prose
 from src.review_disposition_v1 import definitive_review_disposition
 from src.publication_readiness_v1 import review_followup_queues
 from src.product_security_v1 import SlidingWindowRateLimiter
@@ -4448,15 +4448,26 @@ def create_console_app(
         if opened["content_kind"] == "pdf":
             page, _ = parse_page_bbox(opened["locator_value"])
             document_html = (
-                f'<p>Geselecteerde passage op pagina {page}.</p>'
+                f'<p>De PDF opent op pagina {page}. Alle bronfragmenten van de geselecteerde passage zijn gemarkeerd.</p>'
                 f'<object data="{source_url}#page={page}" type="application/pdf" '
                 'style="width:100%;height:80vh" aria-label="Volledige richtlijn">'
                 '<p>De PDF kan hier niet worden weergegeven. Gebruik de downloadlink hieronder.</p>'
                 '</object>'
             )
         else:
-            full_text = document_visible_prose(opened["freeze_bytes"], opened["content_kind"])
-            marked, found = _semantic_selection_markup(full_text, passage)
+            try:
+                segments = full_document_segments(
+                    opened["freeze_bytes"], opened["content_kind"],
+                    opened.get("locators") or [{"locator_type": opened["locator_type"], "locator_value": opened["locator_value"]}],
+                )
+            except OpenOriginalError as exc:
+                raise ConsoleError(exc.code) from exc
+            found = any(selected and text.strip() for text, selected in segments)
+            marked = "".join(
+                '<mark class="broncontext-marked">' + _esc(text) + '</mark>'
+                if selected else _esc(text)
+                for text, selected in segments
+            )
             warning = "" if found else (
                 '<p class="muted">De geselecteerde passage staat hierboven; '
                 'deze kon niet eenduidig in de volledige tekst worden gemarkeerd.</p>'
@@ -4498,8 +4509,24 @@ def create_console_app(
         extension = {"pdf": "pdf", "html": "html", "boom": "json", "json": "json"}.get(kind, "txt")
         inline_pdf = kind == "pdf" and not download
         disposition = "inline" if inline_pdf else "attachment"
+        display_bytes = opened["freeze_bytes"]
+        if inline_pdf:
+            import fitz
+
+            # Highlight every contributing fragment on a disposable display
+            # copy; the immutable source and original download are unchanged.
+            locators = opened.get("locators") or [{"locator_value": opened["locator_value"]}]
+            with fitz.open(stream=display_bytes, filetype="pdf") as pdf:
+                for locator in locators:
+                    page, bbox = parse_page_bbox(locator["locator_value"])
+                    pdf_page = pdf[page - 1]
+                    pdf_page.draw_rect(
+                        fitz.Rect(bbox), color=(1, 0.55, 0), fill=(1, 1, 0),
+                        fill_opacity=0.25, overlay=True,
+                    )
+                display_bytes = pdf.tobytes()
         return Response(
-            opened["freeze_bytes"],
+            display_bytes,
             media_type="application/pdf" if inline_pdf else "application/octet-stream",
             headers={
                 "Content-Disposition": f'{disposition}; filename="richtlijn.{extension}"',

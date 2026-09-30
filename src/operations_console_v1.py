@@ -1454,6 +1454,7 @@ class OperationsConsole:
                 content_kind=envelope["content_kind"],
                 locator=None,
                 object_record=target,
+                include_locators=include_document,
             )
             if include_document:
                 opened.update(freeze_bytes=freeze_bytes, content_kind=envelope["content_kind"])
