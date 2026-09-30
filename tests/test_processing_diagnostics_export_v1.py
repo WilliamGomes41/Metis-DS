@@ -311,6 +311,51 @@ def test_all_passages_export_includes_every_current_passage_and_evidence(tmp_pat
     assert console.object_review_bindings(snapshot_id) == bindings
 
 
+def test_source_label_guidance_http_and_export_preserve_review_state(tmp_path):
+    console, _, _, _, sid = _system(tmp_path)
+    # Reproduce an already stored standalone label from the reported PDF run.
+    objects = console._load_objects(sid)
+    target = next(o for o in objects if (o.get('metadata') or {}).get('admission', {}).get('gate_result') == 'blocked')
+    target['content']['clean_text'] = target['content']['raw_text'] = 'DOEN'
+    target['metadata']['admission']['candidate_text'] = 'DOEN'
+    target['metadata']['admission']['source_text_exact'] = 'DOEN'
+    stamp_canonical_hashes(target)
+    console._save_objects(sid, objects)
+    client = _client(console)
+    _login(client, 'reviewer.d2a1')
+    before = deepcopy(console.snapshot_objects(sid, include_blocked=True))
+    revision = console.objects_revision(sid)
+    target = next(o for o in before if (o.get('content') or {}).get('clean_text') == 'DOEN')
+    page = client.get(f'/review?document={sid}&task=inventory')
+    assert page.status_code == 200
+    assert 'Mogelijk bronlabel' in page.text
+    detail = client.get(f'/review?document={sid}&object={target["object_id"]}&task=repair')
+    assert detail.status_code == 200
+    assert 'De koppeling en betekenis zijn hiermee niet bevestigd.' in detail.text
+    response = client.get(f'/review/passages-export?document={sid}&format=csv')
+    assert response.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(response.content.decode('utf-8-sig'))))
+    row = next(r for r in rows if r['object_id'] == target['object_id'])
+    hint = json.loads(row['source_label_hint'])
+    assert hint['status'] == 'possible_source_label'
+    assert hint['basis'] == 'derived_from_current_text_not_a_review_decision'
+    assert row['candidate_text'] == 'DOEN'
+    assert len(rows) == sum(o['object_type'] != 'document' for o in before)
+    assert console.snapshot_objects(sid, include_blocked=True) == before
+    assert console.objects_revision(sid) == revision
+
+
+def test_label_shape_is_only_a_hint_and_not_a_short_text_filter():
+    from src.source_label_hint_v1 import source_label_hint
+    for text in ('DOEN', ' NIET\nDOEN ', 'Niveau 3', 'niveau 4'):
+        obj = {'content': {'clean_text': text}}
+        before = deepcopy(obj)
+        assert source_label_hint(obj)['status'] == 'possible_source_label'
+        assert obj == before
+    for text in ('Doen wat nodig is.', 'Niet doen bij koorts.', 'Niveau 3 is bereikt.', 'Pijn', 'Ja', 'Niveau 5', ''):
+        assert source_label_hint({'content': {'clean_text': text}}) == {}
+
+
 def test_csv_preserves_quotes_newlines_unicode_and_neutralizes_formulas():
     from src.processing_diagnostics_v1 import passage_export_csv
     texts = ['Zeg "nee",\nook bij ouderen: één.', '=HYPERLINK("bad")', '  +SUM(1,2)', '@SUM(1)', '\tformula']
@@ -356,7 +401,7 @@ def test_processing_evidence_download_preserves_recorded_and_missing_evidence(tm
     assert response.headers["content-type"] == "application/zip"
     assert "attachment;" in response.headers["content-disposition"]
     with ZipFile(io.BytesIO(response.content)) as archive:
-        assert set(archive.namelist()) == {"manifest.csv", "README.txt", *(name + ".csv" for name in SCHEMAS)}
+        assert set(archive.namelist()) == {"manifest.csv", "revision.csv", "README.txt", *(name + ".csv" for name in SCHEMAS)}
         def rows(name):
             data = archive.read(name + ".csv")
             assert data.startswith(b"\xef\xbb\xbf")
@@ -397,6 +442,40 @@ def test_processing_evidence_empty_history_has_headers_and_honest_availability()
     assert next(r for r in recorded if r["dataset"] == "runs.csv")["availability"] == "recorded"
     with ZipFile(io.BytesIO(processing_evidence_zip(**kwargs))) as archive:
         assert "call_id" in archive.read("model_calls.csv").decode("utf-8-sig")
+
+
+def test_long_revision_is_stored_once_and_resolvable_for_every_dataset():
+    from zipfile import ZipFile
+    from hashlib import sha256
+    from src.processing_evidence_export_v1 import processing_evidence_zip, processing_evidence_tables, VERSION
+    revision = 'm2.' + 'A' * 51000
+    envelope = {'quality_processing_runs': [{'run_id': 'run-1', 'candidates': [
+        {'object_id': f'object-{i}', 'object_version': '1.0'} for i in range(300)]}]}
+    tables, projected = processing_evidence_tables(snapshot_id='snap-compact', revision=revision,
+                                                   envelope=envelope, objects=[])
+    assert all(r['schema_version'] == 'processing-evidence-export-v2' for r in projected)
+    assert tables['run_candidates'][0]['objects_revision'] == revision
+    payload = processing_evidence_zip(snapshot_id='snap-compact', revision=revision,
+                                      envelope=envelope, objects=[])
+    with ZipFile(io.BytesIO(payload)) as archive:
+        assert sum(info.file_size for info in archive.infolist()) < 150000
+        revision_id = 'sha256:' + sha256(revision.encode()).hexdigest()
+        counts = {}
+        for name in archive.namelist():
+            if not name.endswith('.csv'):
+                continue
+            rows = list(csv.DictReader(io.StringIO(archive.read(name).decode('utf-8-sig'))))
+            counts[name] = len(rows)
+            for row in rows:
+                assert row['revision_id'] == revision_id
+                assert row['snapshot_id'] == 'snap-compact'
+                if name == 'revision.csv':
+                    assert row['objects_revision'] == revision
+                else:
+                    assert 'objects_revision' not in row
+        manifest = list(csv.DictReader(io.StringIO(archive.read('manifest.csv').decode('utf-8-sig'))))
+        assert all(int(r['row_count']) == counts[r['dataset']] for r in manifest)
+        assert all(r['schema_version'] == VERSION for r in manifest)
 
 
 def test_technical_management_collects_tools_and_keeps_repair_actionable(tmp_path):

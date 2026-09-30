@@ -57,6 +57,9 @@ class MemorySourceStore:
         except KeyError as exc:
             raise G2SourceStoreError("canonical_source_missing") from exc
 
+    def delete_verified(self, locator: str) -> bool:
+        return self.blobs.pop(locator, None) is not None
+
 
 def _config() -> PostgresCanonicalConfig:
     dsn = os.environ.get("METIS_TEST_POSTGRES_DSN", "").strip()
@@ -418,6 +421,7 @@ def test_unpublished_delete_removes_postgres_authority_and_stays_deleted_after_r
 
 def test_failed_unpublished_delete_rolls_back_postgres_and_local_state(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     config = _config()
     source = MemorySourceStore()
@@ -468,14 +472,10 @@ def test_failed_unpublished_delete_rolls_back_postgres_and_local_state(
             else None,
             "freeze": freeze_path.read_bytes(),
         }
-        original_remove = console._maybe_remove_unpublished_freeze_bytes
-
-        def fail_after_freeze(current: dict[str, Any]) -> bool:
-            removed = original_remove(current)
-            assert removed is True
+        def fail_audit(*args, **kwargs):
             raise RuntimeError("simulated_delete_followup_failure")
 
-        console._maybe_remove_unpublished_freeze_bytes = fail_after_freeze  # type: ignore[method-assign]
+        monkeypatch.setattr("src.operations_console_v1.append_event", fail_audit)
 
         with pytest.raises(RuntimeError, match="simulated_delete_followup_failure"):
             console.delete_unpublished_snapshot(
@@ -496,6 +496,7 @@ def test_failed_unpublished_delete_rolls_back_postgres_and_local_state(
             console._ledger_path.read_bytes() if console._ledger_path.exists() else None
         ) == before["ledger"]
         assert freeze_path.read_bytes() == before["freeze"]
+        assert source.load_verified(envelope["immutable_storage_locator"]) == before["freeze"]
         assert snapshot_id in {row["snapshot_id"] for row in console.list_envelopes()}
     finally:
         _cleanup(

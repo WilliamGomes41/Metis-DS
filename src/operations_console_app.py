@@ -11,6 +11,7 @@ import hashlib
 import html
 import os
 import re
+import uuid
 from typing import Any
 from urllib.parse import quote, urlencode, urlsplit
 
@@ -74,6 +75,8 @@ from src.processing_diagnostics_v1 import (
     processing_diagnostics,
 )
 from src.processing_evidence_export_v1 import processing_evidence_zip
+from src.source_label_hint_v1 import source_label_hint
+from src.source_context_review_v1 import projection as source_context_projection, role_of
 from src.extract_coverage_v1 import coverage_panel_rows
 from src.review_cockpit_v1 import (
     SUITABILITY_VALUES,
@@ -299,6 +302,17 @@ ERROR_COPY = {
     "invalid_source_version": "Versie is alleen getallen met punten, bijvoorbeeld 1.0. Geen jaartal en geen v-voorvoegsel.",
     "fast_lane_heading_required": "Je kunt alleen koppen in één keer bevestigen. Beoordeel andere passages afzonderlijk.",
     "recommendation_strength_requires_recommendation": "Sterkte hoort alleen bij een aanbeveling.",
+    "source_context_role_invalid": "Kies bronlabel, context, niet opnemen of de bronrol opheffen.",
+    "source_context_reason_required": "Licht toe waarom deze bronrol en koppeling juist zijn.",
+    "source_context_command_required": "Het formulier is niet volledig. Open de passage opnieuw en vul de koppeling in.",
+    "source_context_command_conflict": "Deze opdracht is al opgeslagen met andere keuzes. Open de passage opnieuw voor een nieuwe opdracht.",
+    "source_context_target_required": "Kies minstens één passage voor een label of context. Kies bij niet opnemen geen doelpassages.",
+    "source_context_target_invalid": "Kies een inhoudelijke passage uit dit document. Een kop, het label zelf of een ander contextfragment kan hier geen doel zijn.",
+    "source_context_evidence_required": "Het exacte bronbewijs ontbreekt. Laat de koppeling open en vraag de beheerder de bronverwijzing te controleren.",
+    "source_context_not_knowledge": "Dit fragment is bevestigd als bronlabel of context. Het is geen zelfstandige kennispassage; beoordeel de gekoppelde passages.",
+    "source_context_review_incomplete": "Een broncontextkoppeling verwijst naar gewijzigde of ontbrekende tekst. Controleer de koppeling en beoordeel de betrokken passages opnieuw.",
+    "source_context_check_required": "Controleer de bron en bevestig dit voordat je de koppeling opslaat.",
+    "source_context_independent_transaction_required": "De broncontext kon niet als zelfstandige opdracht worden opgeslagen. Er is niets bevestigd; laat de beheerder de workflowopslag controleren.",
     "invalid_parent_structure": "Deze kop kan niet boven deze passage worden geplaatst. Kies een kop die hoger in de documentstructuur staat.",
     "unknown_recommendation_strength": "Kies DOEN, OVERWEEG of NIET DOEN.",
     "recommendation_direction_required": "Kies of de aanbeveling iets aanraadt of afraadt.",
@@ -337,6 +351,8 @@ ERROR_COPY = {
         "Deze beoordeling is niet opgeslagen. Het document is tussentijds gewijzigd. "
         "Je invoer staat nog in het formulier; sla opnieuw op."
     ),
+    "pre_review_llm_response_not_completed": "De semantische verwerking is niet afgerond. Het onvolledige antwoord is niet toegepast. Probeer de verwerking opnieuw; blijft dit gebeuren, laat de beheerder de verwerkingsgegevens controleren.",
+    "unpublished_delete_requires_independent_transaction": "Het document is niet verwijderd. Rond de andere bewerking eerst af en probeer daarna opnieuw te verwijderen.",
 }
 RELATION_LABELS = {
     "applies_if": "geldt indien",
@@ -1307,6 +1323,9 @@ def _broncontext_html(
 ) -> str:
     parts = broncontext_parts(obj)
     lines = []
+    hint = source_label_hint(obj)
+    if hint:
+        lines.append(f'<p data-source-label-hint><strong>{_esc(hint["label"])}</strong> {_esc(hint["guidance"])}</p>')
     for ancestor in parts["ancestor_headings"]:
         lines.append(f'<p class="broncontext-heading">{_esc(ancestor)}</p>')
     if parts["current_heading"]:
@@ -2445,9 +2464,16 @@ def _review_inventory(
                 next_action = "Metis heeft nog niet vastgesteld of deze passage inhoudelijk beoordeelbaar is. Open de bron en bepaal het gebruik of herstel de verwerking."
             else:
                 next_action = "Er ontbreekt een definitieve afhandeling. Open de passage en bepaal of zij kennis, context, onderbouwing of niet op te nemen tekst is."
+        hint = source_label_hint(obj)
+        hint_html = f'<p data-source-label-hint>{_esc(hint["label"])}</p>' if hint else ''
+        source_role = role_of(obj)
+        if source_role:
+            role_label = {"label": "Bevestigd bronlabel", "context": "Bevestigd contextfragment", "excluded": "Niet opgenomen met reden"}.get(source_role.get("role"), "Bronrol controleren")
+            hint_html += f'<p data-confirmed-source-role>{_esc(role_label)} · {_esc(source_role.get("reason"))}</p>'
         items.append(
             f'<li data-passage-id="{_esc(object_id)}" data-passage-category="{_esc(category)}">'
             f'<a class="review-row-title" href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={_esc(target_task)}">{_esc(review_card_sentence(obj))}</a>'
+            f'{hint_html}'
             f'<p>{_esc(labels[category])} · {_esc(admission_label)} · {_esc(outcome)}</p>'
             f'<p class="review-next-action">{_esc(next_action)}</p>'
             f'<a href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={_esc(target_task)}">Bekijk bronpassage</a>'
@@ -2469,6 +2495,55 @@ def _review_inventory(
         + ('<p class="review-task-empty">Deze lijst is leeg. Controleer het volledige passage-overzicht voor ander werk.</p>' if not items else '')
         + '</section>'
     )
+
+
+def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], snapshot_id: str,
+                          snapshot_revision: str) -> str:
+    evidence = source_context_projection(obj, objects)
+    parts: list[str] = []
+    if evidence["links"]:
+        items = ''.join(f'<li><b>{_esc(link.get("text"))}</b> · '
+                        f'<a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(link.get("source_object_id"))}">Bekijk contextbron</a>'
+                        f'<p>{_esc(link.get("reason"))}</p></li>' for link in evidence["links"])
+        parts.append('<section data-confirmed-source-context><h4>Bevestigde broncontext</h4>'
+                     '<p>Dit bevestigt geen aanbevelingssterkte. Controleer de betekenis in de oorspronkelijke bron.</p>'
+                     f'<ul>{items}</ul></section>')
+    if evidence["issues"]:
+        parts.append('<p class="banner warn">Deze contextkoppeling moet opnieuw worden gecontroleerd; tekst of bronverwijzing is gewijzigd.</p>')
+    if obj.get('object_type') == 'document' or evidence['links']:
+        return ''.join(parts)
+    role = evidence['role']
+    role_options = ''.join(f'<option value="{value}"' + (' selected' if value == role.get('role', 'label') else '') + f'>{label}</option>'
+                           for value, label in [('label', 'Bronlabel'), ('context', 'Contextfragment'), ('excluded', 'Niet opnemen'), ('reset', 'Bronrol opheffen; opnieuw beoordelen')])
+    if role:
+        labels = {'label': 'Bronlabel', 'context': 'Contextfragment', 'excluded': 'Niet opgenomen, met reden'}
+        parts.append(f'<p data-confirmed-source-role><strong>{_esc(labels.get(role.get("role"), "Bronrol"))}</strong> · '
+                     f'{_esc(role.get("reviewer"))}<br>{_esc(role.get("reason"))}</p>')
+    options = []
+    selected = set(evidence['target_object_ids'])
+    for row in objects:
+        if row.get('object_id') == obj.get('object_id') or row.get('object_type') in {'document', 'heading', 'path'} or role_of(row):
+            continue
+        text = str((row.get('content') or {}).get('clean_text') or row.get('object_id'))
+        checked = ' checked' if row.get('object_id') in selected else ''
+        options.append(f'<label><input type="checkbox" name="target_object_ids" value="{_esc(row.get("object_id"))}"{checked}> '
+                       f'{_esc(text[:180])} (versie {_esc(row.get("object_version"))})</label>')
+    parts.append(f'''<details class="review-step" data-source-context-form><summary>Bronrol en contextkoppeling</summary>
+      <p>Gebruik dit wanneer dit fragment een label of context bij andere passages is. Nabijheid alleen is onvoldoende: controleer ook tabellen en kolommen in de bron. De tekst blijft exact bewaard.</p>
+      <form method="post" action="/review/source-context">
+        <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
+        <input type="hidden" name="source_object_id" value="{_esc(obj.get('object_id'))}">
+        <input type="hidden" name="snapshot_revision" value="{_esc(snapshot_revision)}">
+        <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
+        <label>Bronrol <select name="role">{role_options}</select></label>
+        <p>Kies alle passages waarvoor het fragment geldt. Bij niet opnemen of bronrol opheffen: geen passages selecteren.</p>
+        <div class="source-context-targets">{''.join(options)}</div>
+        <label>Toelichting <textarea name="reason" required maxlength="4000">{_esc(role.get('reason'))}</textarea></label>
+        <label><input type="checkbox" name="source_checked" value="1" required> Ik heb de bron en de gekozen passage(s) gecontroleerd.</label>
+        <p>Gewijzigde context vraagt opnieuw beoordelen van de betrokken passages. Dit besluit wijzigt geen type, richting of sterkte.</p>
+        <button type="submit">Bronrol en koppeling opslaan</button>
+      </form></details>''')
+    return ''.join(parts)
 
 
 def _render_review_index(
@@ -2970,6 +3045,8 @@ def _render_review_room(
                         reviewer_id=str(account.get("account_id") or ""),
                         snapshot_revision=snapshot_revision,
                     )
+                elif role_of(obj):
+                    objects_html += f'<section data-source-role-card><h3>Bronfragment</h3><p>{_esc((obj.get("content") or {}).get("clean_text"))}</p><p>Deze bronrol is expliciet beoordeeld. Gebruik hieronder Bronrol en contextkoppeling om het besluit te wijzigen. Beoordeel de gekoppelde inhoudelijke passages afzonderlijk.</p></section>'
                 else:
                     objects_html += _render_review_card(
                         console,
@@ -2982,6 +3059,8 @@ def _render_review_room(
                         snapshot_revision,
                         chosen_task,
                     )
+                if 'reviewer' in (account.get('roles') or []) and str(account.get('account_id') or '') in chosen_row.get('named_reviewers', []) and not console.snapshot_is_published(chosen):
+                    objects_html += _source_context_panel(obj, snapshot_objects, chosen, snapshot_revision)
     empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
     return _page(
         f"""
@@ -4812,6 +4891,19 @@ def create_console_app(
             _review_location(state, snapshot_id, task=safe_task),
             status_code=303,
         )
+
+    @app.post("/review/source-context")
+    def review_source_context(request: Request, snapshot_id: str = Form(...), source_object_id: str = Form(...),
+                              role: str = Form(...), target_object_ids: list[str] = Form(default=[]),
+                              reason: str = Form(""), command_id: str = Form(""), snapshot_revision: str = Form(""),
+                              source_checked: str = Form("")) -> RedirectResponse:
+        account = _require(request)
+        if source_checked != "1":
+            raise ConsoleError("source_context_check_required")
+        state.confirm_source_context(actor_id=account['account_id'], snapshot_id=snapshot_id,
+            source_object_id=source_object_id, role=role, target_object_ids=target_object_ids,
+            reason=reason, command_id=command_id, expected_revision=snapshot_revision)
+        return RedirectResponse(_review_location(state, snapshot_id, source_object_id, task="inventory"), status_code=303)
 
     @app.post("/review/context/accept")
     def review_context_accept(

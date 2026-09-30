@@ -256,3 +256,11 @@ def test_all_no_answer_questions_require_abstention():
     no_answer = [q for q in data["questions"] if q["class"] == "no_answer"]
     assert no_answer
     assert all(q["expected_behavior"] == "abstain" and q.get("expected_object_ids") == [] for q in no_answer)
+
+
+def test_confirmed_nonknowledge_role_never_served_even_with_approved_envelope():
+    obj = copy.deepcopy(by_id()['vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus'])
+    obj.setdefault('metadata', {})['source_role_review'] = {'version': 'source-context-review-v1', 'role': 'label'}
+    records, blocked = build_projection([published_envelope(obj)])
+    assert not records
+    assert blocked == [{'object_id': obj['object_id'], 'errors': ['source_context_not_knowledge']}]

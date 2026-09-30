@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from src.source_label_hint_v1 import source_label_hint
 
 from src.admission_gate_v1 import admission_of, ordinary_review_queue, serving_type_for_admission_type
 from src.heading_parent_list_v1 import (
@@ -87,6 +88,9 @@ def semantic_selection_origin(obj: dict[str, Any]) -> str:
 
 
 def why_selected(obj: dict[str, Any]) -> str:
+    hint = source_label_hint(obj)
+    if hint:
+        return hint["guidance"]
     if semantic_selection_origin(obj) == SELECTION_ORIGIN_COVERAGE:
         return (
             "Deze brontekst is nog niet inhoudelijk beoordeeld. "

@@ -18,6 +18,25 @@ TYPE_FIELDS = {
 FIELDS = tuple(dict.fromkeys(("subject_span", "predicate_span", "type_evidence_spans") + tuple(f for fields in TYPE_FIELDS.values() for f in fields)))
 MISSING = ("not_stated", "uncertain", "not_applicable")
 
+FIELD_DESCRIPTIONS = {
+    "subject_span": "Literal subject of the selected statement, preserving attribution where present.",
+    "predicate_span": "Literal predicate of that subject, preserving negation and modality.",
+    "type_evidence_spans": "Literal wording that supports the proposed object type. For a recommendation, select the recommendation cue or normative statement. This is distinct from evidence of strong/weak recommendation strength. Missing type evidence leaves the proposal unclassified or blocked; never invent it.",
+    "actor_of_scope": "Literal actor, target group or scope of the recommendation.",
+    "recommended_action": "Literal action being recommended, including a negation when stated.",
+    "action_object_or_goal": "Literal object or goal of the recommended action.",
+    "recommendation_evidence_span": "Literal wording establishing that the statement is a recommendation; it may overlap other fields.",
+    "defined_term": "Literal term being defined.",
+    "definiens_span": "Literal definition of the term.",
+    "condition_span": "Literal condition, preserving its qualifiers.",
+    "condition_target": "Literal statement or action to which the condition applies.",
+    "exception_span": "Literal exception, preserving its qualifiers.",
+    "exception_target": "Literal statement or action to which the exception applies.",
+    "support_span": "Literal explanation or supporting statement.",
+    "supported_object": "Literal statement being explained or supported.",
+    "factual_claim_span": "Literal factual finding, preserving uncertainty, numbers and attribution.",
+}
+
 
 def evidence_schema(span: dict) -> dict:
     item = {"type": "object", "additionalProperties": False,
@@ -25,7 +44,8 @@ def evidence_schema(span: dict) -> dict:
                            "missing_reason": {"type": ["string", "null"], "enum": [None, *MISSING]}},
             "required": ["span", "missing_reason"]}
     return {"type": "object", "additionalProperties": False,
-            "properties": {field: deepcopy(item) for field in FIELDS}, "required": list(FIELDS)}
+            "properties": {field: {**deepcopy(item), "description": FIELD_DESCRIPTIONS[field]}
+                           for field in FIELDS}, "required": list(FIELDS)}
 
 
 def bind_fields(raw: object, *, selected: list[dict], candidate_text: str, proposed_type: str) -> dict:

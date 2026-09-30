@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 from datetime import datetime, timezone
@@ -12,7 +13,8 @@ from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v2"
+VERSION = "processing-evidence-export-v3"
+PROJECTOR_VERSION = "processing-evidence-export-v2"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
     "runs": ("run_id", "source_hash", "started_at", "finished_at", "outcome", "reason", "extractor_versions", "execution", "semantic_identity", "production_commit_status"),
@@ -22,9 +24,10 @@ SCHEMAS = {
     "coverage": ("object_id", "object_version", "block_id", "start", "end", "selection_origin", "register_status", "gate_result", "model_decision_status", "offset_text_status"),
     "proposal_fields": ("object_id", "object_version", "field", "value", "value_status", "stage", "producer_status", "contract_version", "source_span", "missing_reason"),
     "validation_findings": ("object_id", "object_version", "gate_result", "reason_code", "evidence_kind", "admission", "rule_execution_trace_status"),
-    "context_evidence": ("object_id", "object_version", "context_scan", "expand_merge", "necessary_context_disposition", "evidence_kind"),
+    "context_evidence": ("object_id", "object_version", "context_scan", "expand_merge", "necessary_context_disposition", "source_context_review", "evidence_kind"),
     "lineage": ("object_id", "object_version", "relation", "target_id", "start", "end", "locator", "page", "bbox", "raw_content_hash"),
-    "model_calls": ("run_id", "call_id", "request", "raw_response", "stop_reason", "input_tokens", "output_tokens"),
+    "model_calls": ("run_id", "call_id", "request", "raw_response", "stop_reason", "input_tokens", "output_tokens",
+                    "output_text", "response_status", "requested_at", "deployed_commit", "proposal_hash", "evidence_kind"),
     "object_events": ("run_id", "object_id", "event_id", "timestamp", "event", "reason"),
     "reference_review": ("object_id", "source_range", "expected_type", "expected_context", "reviewer", "judgment"),
 }
@@ -88,11 +91,24 @@ def processing_evidence_tables(
     if replay:
         add("semantic_proposals", **{key: replay.get(key) for key in SCHEMAS["semantic_proposals"] if key != "evidence_kind"},
             evidence_kind="stored_validated_proposal_not_raw_response")
+    provider = replay.get("provider_evidence") or {}
+    if provider.get("version") == "semantic-provider-evidence-v1":
+        response = provider.get("response") or {}
+        add("model_calls", call_id=response.get("id"), request=provider.get("request"),
+            output_text=response.get("output_text"), response_status=response.get("status"),
+            input_tokens=response.get("input_tokens"), output_tokens=response.get("output_tokens"),
+            requested_at=provider.get("requested_at"), deployed_commit=provider.get("deployed_commit"),
+            proposal_hash=replay.get("proposal_hash"),
+            evidence_kind="origin_call_of_latest_saved_proposal_not_all_attempts")
 
     for obj, row in zip([o for o in objects if o.get("object_type") != "document"], passage_export_rows(objects)):
         keys = {"object_id": row["object_id"], "object_version": row["object_version"]}
         content = obj.get("content") or {}
         admission = row["admission"]
+        context_review = row.get("source_context_review") or {}
+        if context_review.get("role") or context_review.get("links") or context_review.get("issues"):
+            add("context_evidence", **keys, source_context_review=context_review,
+                evidence_kind="reviewer_confirmed_literal_source_context")
         for stage, container, field in (
             ("current_object_raw_text", content, "raw_text"),
             ("current_object_clean_text", content, "clean_text"),
@@ -146,11 +162,15 @@ def processing_evidence_tables(
         "validation_findings": ("partial", "Stored results and reasons; no individual execution trace. No reason does not prove all checks passed."),
         "context_evidence": ("partial", "Stored context scan; include does not by itself prove that context was attached."),
         "lineage": ("partial", "Object-to-block and object-to-fragment relations are separate; no inferred block-to-fragment mapping."),
-        "model_calls": ("not_recorded", "Original requests, raw responses, usage, stop reasons and failed attempts are unavailable in these records."),
+        "model_calls": ("partial" if tables["model_calls"] else "not_recorded",
+                        "Origin call of latest saved validated proposal only, also on replay; not a new call. "
+                        "Request payload excludes HTTP headers. Output text is stored; full raw response, failed attempts "
+                        "and stop reasons are not retained. Empty provider fields were not supplied. "
+                        "Deployment identifies the origin call, not the current export or replay."),
         "object_events": ("not_exported", "This package does not read the review ledger and does not claim that no historical events exist."),
         "reference_review": ("not_exported", "A human reference assessment must be supplied separately; system review state is not a gold standard."),
     }
-    manifest = [{**common, "schema_version": VERSION, "dataset": name + ".csv",
+    manifest = [{**common, "schema_version": PROJECTOR_VERSION, "dataset": name + ".csv",
                  "row_count": len(tables[name]), "availability": statuses[name][0],
                  "limitation": statuses[name][1]} for name in SCHEMAS]
     return tables, manifest
@@ -158,15 +178,34 @@ def processing_evidence_tables(
 
 def processing_evidence_zip(**kwargs: Any) -> bytes:
     tables, manifest = processing_evidence_tables(**kwargs)
+    # Keep the projector/MCP contract intact; compact only this versioned CSV
+    # serialization. The opaque concurrency token must be recoverable exactly.
+    revision = kwargs["revision"]
+    revision_id = "sha256:" + hashlib.sha256(revision.encode("utf-8")).hexdigest()
+    common = ("snapshot_id", "revision_id")
+
+    def compact(rows):
+        return [{**{k: v for k, v in row.items() if k != "objects_revision"},
+                 **({"schema_version": VERSION} if "schema_version" in row else {}),
+                 "revision_id": revision_id} for row in rows]
+
     output = io.BytesIO()
     with ZipFile(output, "w", ZIP_DEFLATED) as archive:
-        archive.writestr("manifest.csv", _csv(COMMON + ("schema_version", "dataset", "row_count", "availability", "limitation"), manifest))
+        archive.writestr("revision.csv", _csv(COMMON + ("revision_id",), [
+            {"snapshot_id": kwargs["snapshot_id"], "objects_revision": revision, "revision_id": revision_id}]))
+        revision_manifest = {"snapshot_id": kwargs["snapshot_id"], "revision_id": revision_id,
+                             "schema_version": VERSION, "dataset": "revision.csv", "row_count": 1,
+                             "availability": "recorded", "limitation": "Exact opaque revision token for this export only."}
+        archive.writestr("manifest.csv", _csv(common + ("schema_version", "dataset", "row_count", "availability", "limitation"),
+                                              [revision_manifest, *compact(manifest)]))
         for name, fields in SCHEMAS.items():
-            archive.writestr(name + ".csv", _csv(COMMON + fields, tables[name]))
+            archive.writestr(name + ".csv", _csv(common + fields, compact(tables[name])))
         archive.writestr("README.txt", (
-            "Metis processing evidence export v1\n"
+            f"Metis {VERSION}\n"
             f"Exported at: {datetime.now(timezone.utc).isoformat()}\n"
             "Read manifest.csv first. This is a read-only projection of stored evidence.\n"
+            "CSV v3: join snapshot_id + revision_id to revision.csv for the exact objects_revision.\n"
+            "CSV v2 readers expecting objects_revision on every row must resolve this join.\n"
             "Current object revision is not a run ID or a production commit.\n"
             "No extraction, model inference or validation was rerun. No missing history was invented.\n"
             "Envelope evidence and object revision are not claimed to be an atomic historical pipeline snapshot.\n"

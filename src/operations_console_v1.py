@@ -1877,12 +1877,22 @@ class OperationsConsole:
             raise ConsoleError("delete_confirmation_required")
         with self._store_write_lock():
             self._reload_store_locked()
-            return self._delete_unpublished_snapshot_locked(
+            envelope = deepcopy(self._envelope(token))
+            result = self._delete_unpublished_snapshot_locked(
                 actor_id=actor_id,
                 token=token,
                 account=account,
                 confirm_title=confirm_title,
             )
+            # Durable implementations commit before returning. Irreversible source
+            # cleanup must never participate in the rollback-capable transition.
+            try:
+                result["freeze_bytes_removed"] = self._maybe_remove_unpublished_freeze_bytes(envelope)
+            except OSError:
+                # The document is already deleted; a cache cleanup failure must
+                # not report a failed domain transition or resurrect the snapshot.
+                result["freeze_bytes_removed"] = False
+            return result
 
     def _delete_unpublished_snapshot_locked(
         self,
@@ -1907,7 +1917,6 @@ class OperationsConsole:
         self._bindings.pop(token, None)
         self._save_envelopes()
         self._save_bindings()
-        freeze_removed = self._maybe_remove_unpublished_freeze_bytes(envelope)
         append_event(
             self._ledger_path,
             event_type=UNPUBLISHED_DELETE_EVENT,
@@ -1928,7 +1937,7 @@ class OperationsConsole:
             "sha256": digest,
             "title": title,
             "actor": account["username"],
-            "freeze_bytes_removed": freeze_removed,
+            "freeze_bytes_removed": False,
             "four_eyes_required": False,
             "second_named_reviewer_required": False,
             "capture_is_publication": False,
@@ -2464,6 +2473,9 @@ class OperationsConsole:
         if target is None:
             raise ConsoleError("unknown_object")
         quality_before = deepcopy(target)
+        from src.source_context_review_v1 import role_of
+        if decision == "approve" and role_of(target):
+            raise ConsoleError("source_context_not_knowledge")
         if not rejecting and type_action == "dit_klopt" and not confirmed_object_type:
             confirmed_object_type = confirmable_proposed_type(target) or None
         parent_id = ""
@@ -3104,6 +3116,10 @@ class OperationsConsole:
         return deepcopy(current_target)
 
 
+    def confirm_source_context(self, **command: Any) -> dict[str, Any]:
+        from src.source_context_review_v1 import confirm_source_context
+        return confirm_source_context(self, **command)
+
     def batch_confirm_headings(
         self,
         *,
@@ -3377,6 +3393,9 @@ class OperationsConsole:
         ]
         blockers: list[str] = []
         independence = bool(others)
+        from src.source_context_review_v1 import context_issues
+        if context_issues(self.snapshot_objects(snapshot_id)):
+            blockers.append("source_context_review_incomplete")
         if not independence:
             blockers.append("second_named_reviewer_required")
         if not bindings:
@@ -3449,6 +3468,17 @@ class OperationsConsole:
 
     def publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         with self._store_write_lock():
+            documents = getattr(self, "workflow_document_store", None)
+            reviews = getattr(self, "workflow_review_store", None)
+            if documents is not None and reviews is not None:
+                from src.workflows.workflow_transaction_v1 import workflow_transaction
+                # Context review and publication share this snapshot barrier.
+                # Keep it through the canonical decision and derived writes.
+                with workflow_transaction(reviews) as connection:
+                    connection.execute("SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
+                                       (snapshot_id,))
+                    self._reload_store_locked()
+                    return self._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id)
             self._reload_store_locked()
             return self._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id)
 

@@ -13,6 +13,7 @@ from src.passage_register_v1 import passage_register_of
 from src.review_disposition_v1 import definitive_review_disposition
 from src.admission_gate_v1 import admission_of
 from src.review_duty_v1 import review_duty_for
+from src.source_context_review_v1 import context_issues
 
 REVIEW_WORK_INCOMPLETE = "review_work_incomplete"
 SOURCE_PASSAGE_REVIEW_INCOMPLETE = "source_passage_review_incomplete"
@@ -62,15 +63,16 @@ def source_passage_closure(objects: Iterable[dict[str, Any]]) -> dict[str, Any]:
     """
     required_ids: list[str] = []
     unresolved_ids: list[str] = []
-
+    objects = list(objects)
+    context_conflicts = context_issues(objects)
     for obj in objects:
-        if obj.get("object_type") == "document" or review_lane(obj) == "fast":
+        if obj.get("object_type") == "document" or (review_lane(obj) == "fast" and str(obj.get("object_id") or "") not in context_conflicts):
             continue
         object_id = str(obj.get("object_id") or "")
         if not object_id:
             continue
         required_ids.append(object_id)
-        if not definitive_review_disposition(obj)["final"]:
+        if not definitive_review_disposition(obj)["final"] or object_id in context_conflicts:
             unresolved_ids.append(object_id)
 
     return {
@@ -123,7 +125,8 @@ def _existing_gate_readiness(considered: dict[str, Any]) -> dict[str, Any]:
     inherited_curation = [
         code
         for code in blockers
-        if has_disposition_conflict and code == REVIEW_DISPOSITION_INCONSISTENT
+        if (has_disposition_conflict and code == REVIEW_DISPOSITION_INCONSISTENT)
+        or code == "source_context_review_incomplete"
     ]
     technical_blockers = [code for code in blockers if code not in inherited_curation]
 

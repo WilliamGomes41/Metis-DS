@@ -31,7 +31,7 @@ from src.workflows.workflow_identity_postgres_v1 import (
     PostgresIdentityAzureAuthoritativePublicationConsole,
     PostgresIdentityDurablePublicationConsole,
 )
-from src.workflows.workflow_transaction_v1 import bind_workflow_stores, workflow_transaction
+from src.workflows.workflow_transaction_v1 import bind_workflow_stores, workflow_transaction, workflow_transaction_active
 
 
 class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
@@ -438,6 +438,10 @@ class _PostgresWorkflowDocumentsMixin:
         account: dict[str, Any],
         confirm_title: str,
     ) -> dict[str, Any]:
+        if workflow_transaction_active():
+            # A released savepoint is not a committed deletion; the public command
+            # performs external source cleanup only after an independent commit.
+            raise ConsoleError("unpublished_delete_requires_independent_transaction")
         envelope = deepcopy(self._envelope(token))
         objects_path = self._objects_path(token)
         freeze_raw = str(envelope.get("binary_path") or "")
