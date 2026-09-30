@@ -187,6 +187,17 @@ class AzureBlobSourceStore:
         self._verify(data, parsed["sha256"])
         return data
 
+    def probe(self, locator: str) -> dict[str, Any]:
+        """Read blob properties only. Existence is not checksum verification."""
+        parsed = parse_g2_locator(locator)
+        if parsed is None:
+            return {"status": "invalid_locator"}
+        try:
+            props = self._blob_client(sha256=parsed["sha256"], filename=parsed["filename"]).get_blob_properties(timeout=5)
+            return {"status": "present", "size_bytes": props.size}
+        except Exception as exc:
+            return {"status": "absent" if exc.__class__.__name__ == "ResourceNotFoundError" else "unavailable"}
+
     def delete_verified(self, locator: str) -> bool:
         """Delete one canonical Blob addressed by a validated locator.
 

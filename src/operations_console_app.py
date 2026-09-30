@@ -2988,7 +2988,7 @@ def create_console_app(
 
     @app.middleware("http")
     async def require_same_origin(request: Request, call_next):
-        if expected_origin and request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+        if expected_origin and request.url.path != "/mcp" and request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
             supplied = str(request.headers.get("origin") or "").strip().lower().rstrip("/")
             if supplied != expected_origin:
                 return HTMLResponse(
@@ -3021,6 +3021,9 @@ def create_console_app(
         if not account:
             return {}
         return state.waiting_task_counts(account["account_id"])
+
+    from src.metis_mcp_v1 import install_mcp
+    install_mcp(app, state, entra, expected_origin, require_account=_require, render_page=_page, nav=_nav)
 
     @app.exception_handler(ConsoleError)
     async def console_errors(_request: Request, exc: ConsoleError) -> HTMLResponse:
@@ -3124,6 +3127,7 @@ def create_console_app(
               <p class="doc-title">Technisch beheer</p>
               <p>Modelconfiguratie, API-toegang, veiligheidstests, experimenten en documentdiagnostiek.</p>
             </a>
+            <a class="doc-card" href="/settings/chatgpt"><p class="doc-title">ChatGPT-koppeling</p><p>Verbindingsstatus en toegang tot alleen-lezen onderzoek vanuit ChatGPT.</p></a>
             <a class="doc-card" href="/over-console" style="text-decoration:none;">
               <p class="doc-title">Over Metis</p>
               <p>Lees hoe Metis werkt, welke begrippen het gebruikt en waar de grenzen liggen.</p>
