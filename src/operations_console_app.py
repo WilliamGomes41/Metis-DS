@@ -224,6 +224,15 @@ BLOCKER_LABELS = {
     "prepublication_projection_failed": "Metis kon de publicatie niet voorbereiden. Controleer de publicatiestatus en meld dit bij de beheerder voordat je opnieuw probeert.",
 }
 ERROR_COPY = {
+    "pre_review_llm_proposal_rejected": "De voorcontrole heeft het modelvoorstel afgewezen omdat het niet aan de brongebonden controles voldoet. Er zijn geen nieuwe passages voor Review vrijgegeven. Meld de technische informatie hieronder bij de beheerder.",
+    "pre_review_llm_provider_unavailable": "De modeldienst kon de voorcontrole niet afronden. Meld de technische informatie bij de beheerder om de verbindingsfout te onderzoeken.",
+    "pre_review_llm_api_key_required": "De modeldienst is niet geconfigureerd. Laat de beheerder de configuratie van de voorcontrole controleren.",
+    "pre_review_llm_model_required": "Het model voor de voorcontrole is niet ingesteld. Laat de beheerder de configuratie controleren.",
+    "pre_review_llm_response_invalid": "De modeldienst gaf geen bruikbaar antwoord voor de voorcontrole. Meld dit bij de beheerder.",
+    "pre_review_llm_response_not_completed": "Het antwoord van de modeldienst was niet volledig. De voorcontrole kon daardoor niet worden afgerond.",
+    "pre_review_llm_response_empty": "De modeldienst gaf geen voorstel terug. De voorcontrole kon daardoor niet worden afgerond.",
+    "pre_review_llm_refused": "De modeldienst heeft het verzoek geweigerd. Meld dit bij de beheerder.",
+    "pre_review_llm_abstained": "De modeldienst kon geen veilig voorstel op basis van de bron maken. Meld dit bij de beheerder.",
     "account_fields_required": "Vul alle verplichte accountgegevens in en probeer opnieuw.",
     "cannot_silently_mutate": "Deze wijziging vereist een nieuwe versie met vastgelegde reden. Gebruik de correctieactie bij de passage.",
     "class_unchanged": "Het gekozen documenttype is al ingesteld. Kies een ander type als je het wilt wijzigen.",
@@ -3176,6 +3185,15 @@ def create_console_app(
         account = _current(_request)
         filename_error = exc.code == "invalid_store_path" and _request.url.path == "/ingest"
         hint = f'<p class="field-help">{_esc(FILENAME_HINT)}</p>' if filename_error else ""
+        processing_details = ""
+        if account and exc.code.startswith("pre_review_llm_"):
+            diagnostic = getattr(exc, "pre_review_diagnostics", {})
+            reason = str(diagnostic.get("reason_code") or "")
+            reference = str(diagnostic.get("reference") or "")
+            if re.fullmatch(r"(?:semantic|recommendation|source_bound)_[a-z_]{1,100}", reason):
+                processing_details += f'<p>Validatiereden: <code>{_esc(reason)}</code></p>'
+            if re.fullmatch(r"[a-f0-9]{32}", reference):
+                processing_details += f'<p>Verwerkingsreferentie: <code>{reference}</code></p>'
         back = (
             '<p><a href="/ingest">Terug naar Inleveren</a></p>'
             if _request.url.path == "/ingest" and account
@@ -3194,7 +3212,7 @@ def create_console_app(
               <h1>Actie niet uitgevoerd</h1>
               <div class="banner err">{_esc(message)}</div>
               {hint}
-              <details><summary>Technische informatie voor de beheerder</summary><code>{_esc(exc.code)}</code></details>
+              <details><summary>Technische informatie voor de beheerder</summary><code>{_esc(exc.code)}</code>{processing_details}</details>
               {back}
             </section>
             """
@@ -4285,8 +4303,9 @@ def create_console_app(
                       if "decision_graph" in receipt else "")
         pre_review_blocked = receipt.get("publication_eligibility") == PRE_REVIEW_BLOCKED
         lead = (
-            "Document opgeslagen. De pre-review kon nog niet worden uitgevoerd; "
-            "het document staat veilig vastgelegd en is nog niet beschikbaar voor Review."
+            "Document opgeslagen. De voorcontrole is geblokkeerd; "
+            "het document is nog niet beschikbaar voor Review. "
+            + ERROR_COPY.get(receipt.get("processing_blocker"), "Laat de beheerder de oorzaak van de blokkade onderzoeken.")
             if pre_review_blocked
             else "Vastgelegd en klaar voor review."
         )
@@ -4294,6 +4313,13 @@ def create_console_app(
             '<p><a class="btn-secondary" href="/tree">Naar Documenten</a></p>'
             if pre_review_blocked
             else '<p><a class="btn-secondary" href="/review">Naar review</a> <a class="btn-secondary" href="/tree">Naar Documenten</a></p>'
+        )
+        processing_notice = (
+            '<details><summary>Technische informatie voor de beheerder</summary>'
+            f'<p>Documentreferentie: <code>{_esc(receipt["snapshot_id"])}</code></p>'
+            f'<p>Foutcode: <code>{_esc(receipt.get("processing_blocker", ""))}</code></p>'
+            '<p>De foutcode en eventuele validatiereden staan in de verwerkingslogs bij deze documentreferentie.</p></details>'
+            if pre_review_blocked else ""
         )
         return _page(
             f"""
@@ -4304,7 +4330,7 @@ def create_console_app(
               <div class="doc-card">
                 {_document_card_heading({**receipt, "status": receipt["state"]})}
               </div>
-              {next_actions}{graph_link}
+              {processing_notice}{next_actions}{graph_link}
             </section>
             """
         )
@@ -4331,6 +4357,7 @@ def create_console_app(
                 if child["snapshot_id"] not in visible_ids:
                     continue
                 actions = []
+                pre_review_notice = ""
                 try:
                     mutable = not state.snapshot_is_published(child["snapshot_id"])
                 except ConsoleError:
@@ -4343,6 +4370,12 @@ def create_console_app(
                     mutable and child.get("publication_eligibility") == PRE_REVIEW_BLOCKED
                     and ("researcher" in account["roles"] or "reviewer" in account["roles"])
                 ):
+                    pre_review_notice = '<p class="banner warn">Voorcontrole geblokkeerd. Het document is opgeslagen, maar nog niet beschikbaar voor Review. Alleen wachten lost deze blokkade niet op; laat de beheerder de oorzaak onderzoeken.</p>'
+                    if (
+                        "reviewer" in account["roles"]
+                        and account["account_id"] in (state._envelope(child["snapshot_id"]).get("named_reviewers") or [])
+                    ):
+                        pre_review_notice += f'<p><a href="/review/processing-diagnostics?document={_esc(child["snapshot_id"])}">Technische diagnose bekijken</a></p>'
                     actions.append(
                         f"""
                         <form method="post" action="/tree/reprocess">
@@ -4393,6 +4426,7 @@ def create_console_app(
                     f"""
                     <details class="doc-card document-disclosure">
                       <summary>{_document_summary(child)}</summary>
+                      {pre_review_notice}
                       <div class="doc-actions">{"".join(actions)}</div>
                       {_unpublished_delete_control(child, account=account, console=state, next_path="/tree", mutable=mutable)}
                     </details>
@@ -4598,6 +4632,9 @@ def create_console_app(
         if account["account_id"] not in (envelope.get("named_reviewers") or []):
             raise ConsoleError("reviewer_not_named_on_snapshot")
         objects = state.snapshot_objects(snapshot_id)
+        pre_review_blocked = envelope.get("publication_eligibility") == PRE_REVIEW_BLOCKED
+        blocker = str(envelope.get("processing_blocker") or "")
+        blocker = blocker if blocker.startswith("pre_review_llm_") and blocker in ERROR_COPY else None
         payload = {
             "snapshot_id": snapshot_id,
             "document_id": str(envelope.get("document_id") or ""),
@@ -4605,6 +4642,15 @@ def create_console_app(
             "version": str(envelope.get("version") or ""),
             "objects_revision": state.objects_revision(snapshot_id),
             "diagnostics": processing_diagnostics(objects),
+            "pre_review": {
+                "blocked": pre_review_blocked,
+                "reason_code": blocker if pre_review_blocked else None,
+                "message": (ERROR_COPY.get(blocker, "De voorcontrole is geblokkeerd; laat de beheerder de oorzaak onderzoeken.")
+                            if pre_review_blocked else "Geen opgeslagen voorcontroleblokkade. Dit is geen bewijs van geslaagde verwerking."),
+                "object_count": len(objects),
+                "diagnostics_scope": "stored_objects_only",
+                "note": "De kandidaattellers beschrijven alleen opgeslagen objecten. Nul kandidaten betekent niet dat de voorcontrole is geslaagd. Nieuwe pogingen loggen een verwerkingsreferentie en eventuele validatiereden bij de documentreferentie. Een mislukte herpoging toont die ook in de foutmelding; deze gegevens zijn niet in de documentblokkade opgeslagen.",
+            },
         }
         return JSONResponse(payload)
 

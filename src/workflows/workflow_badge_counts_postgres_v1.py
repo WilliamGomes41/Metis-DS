@@ -117,6 +117,7 @@ class _PostgresBadgeCountsMixin:
                     )
                     SELECT d.snapshot_id,
                            d.state,
+                           d.publication_eligibility,
                            EXISTS (
                                SELECT 1
                                FROM current_objects o
@@ -287,11 +288,20 @@ class _PostgresBadgeCountsMixin:
             readiness: dict[str, Any] = {}
             if release_status == "none" and bool(row.get("has_open_review")):
                 readiness["curation_ready"] = False
-            out[snapshot_id] = derive_lifecycle_status(
+            lifecycle = derive_lifecycle_status(
                 readiness=readiness,
                 release_status=release_status,
                 serving_status=serving_status,
             )
+            # A failed pre-review is a completed, blocked attempt, not ongoing
+            # processing or actionable Review. Preserve canonical release truth.
+            if (
+                release_status == "none"
+                and row.get("publication_eligibility") == PRE_REVIEW_BLOCKED
+            ):
+                lifecycle["workflow_status"] = "blocked"
+                lifecycle["presentation_status"] = "blocked"
+            out[snapshot_id] = lifecycle
         return out
 
     def review_workboard_summaries(
