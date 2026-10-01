@@ -56,8 +56,14 @@ def command(console, accounts, sid, command_id, **extra):
 
 
 @pytest.mark.parametrize("participation", [None, "optional", "required"])
-def test_pdf_requires_passage_and_graph_review_after_restart(tmp_path, participation):
-    console = _console(tmp_path)
+@pytest.mark.parametrize("backend", ["local", "postgres"])
+def test_pdf_requires_passage_and_graph_review_after_restart(tmp_path, participation, backend):
+    if backend == "postgres":
+        from tests.decision_graph_native_support import native_state
+        state, _, _ = native_state(tmp_path)
+    else:
+        state = lambda: _console(tmp_path)
+    console = state()
     accounts = _accounts(console)
     receipt = ingest(console, accounts, participation)
     sid = receipt["snapshot_id"]
@@ -75,9 +81,13 @@ def test_pdf_requires_passage_and_graph_review_after_restart(tmp_path, participa
     console.update_decision_graph(**cmd)
     assert console.update_decision_graph(**cmd)["idempotent"]
     console.confirm_decision_graph(**command(console, accounts, sid, "confirm-1"))
-    console = _console(tmp_path)
+    console = state()
     result = console.consider_publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=sid)
     assert ("decision_graph_review_incomplete" in result["blockers"]) == (participation == "required")
+    if backend == "postgres":
+        assert console.waiting_task_counts(accounts["researcher"]["account_id"])["review"] == 0
+        if participation == "required":
+            assert console.waiting_task_counts(accounts["reviewer"]["account_id"])["review"] == 1
     if participation == "required":
         secondary = accounts["reviewer"]["account_id"]
         cmd = command(console, accounts, sid, "confirm-2")
@@ -247,35 +257,9 @@ def test_ingest_command_deduplicates_and_rejects_changed_payload(tmp_path):
 
 
 def test_native_postgres_graph_publication_restart_and_withdrawal(tmp_path):
-    dsn = os.environ.get("METIS_TEST_POSTGRES_DSN")
-    if not dsn:
-        pytest.skip("METIS_TEST_POSTGRES_DSN required for native graph lifecycle proof")
-    import psycopg
-    from pathlib import Path
-    from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig, PostgresCanonicalPublicationStore
-    from src.workflows.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
-    from src.workflows.workflow_identity_cutover_v1 import CutoverPostgresWorkflowIdentityStore
-    from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-    from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
-    from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
-    from src.workflows.workflow_remaining_cutover_v1 import PostgresCompleteWorkflowDurablePublicationConsole
+    from tests.decision_graph_native_support import native_state
     from src.decision_graph_v1 import read_active_graph
-    from tests.test_durable_publication_console_v1 import MemorySourceStore
-    root = Path(__file__).resolve().parents[1]
-    with psycopg.connect(dsn) as con:
-        con.execute((root / "db/schema_v2.sql").read_text())
-        paths = migration_paths(root)
-        apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))
-    config = PostgresCanonicalConfig(dsn=dsn)
-    store, source = PostgresCanonicalPublicationStore(config), MemorySourceStore()
-    def state():
-        return PostgresCompleteWorkflowDurablePublicationConsole(
-            root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime",
-            immutable_source_store=source, canonical_publication_store=store,
-            workflow_identity_store=CutoverPostgresWorkflowIdentityStore(config),
-            workflow_document_store=PostgresConcurrentWorkflowDocumentStore(config),
-            workflow_review_store=PostgresWorkflowReviewStore(config),
-            workflow_remaining_store=PostgresWorkflowRemainingStore(config))
+    state, store, source = native_state(tmp_path)
     console = state()
     suffix = uuid.uuid4().hex[:10]
     accounts = {name: console.create_account(username=f"{name}-{suffix}", password="test-only-local-secret", roles=roles)

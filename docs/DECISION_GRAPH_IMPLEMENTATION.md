@@ -80,19 +80,67 @@ De oorspronkelijke implementatie is niet gerecupereerd; dit is een herbouw vanaf
 in Library, maar de originele bytes konden niet worden overgedragen. De eerdere
 71 onderdelen en 31 verbindingen zijn niet gereproduceerd. Geen live-cutoveradvies.
 
-De PDF-adapter inventariseert tekstblokken en rechte vectorlijnsegmenten. Raster/OCR,
-gebogen pijlen en automatisch gesplitste samengestelde uitkomsten zijn niet bewezen.
-Menselijke route-invoer is mogelijk; automatische routevoorstellen uit PDF zijn
-nog niet geïmplementeerd. Structurele keuze- en multiselectvalidatie is aanwezig;
-er is geen klinische route-evaluator en de API geeft `applicability=not_evaluated`.
+De PDF-adapter inventariseert tekstblokken, rechte vectorlijnsegmenten en
+Bezier-controlepunten. Hij stelt verbindingen voor op basis van verbonden
+lijnsegmenten, pijlgeometrie en nabije letterlijke antwoordlabels. Ook omgekeerde
+pijlen worden onderscheiden. Voorstellen blijven onbevestigd: ontbrekende richting,
+ambigue endpoints/labels en benaderde krommen houden expliciete onzekerheid.
+Er worden geen Ja/Nee-labels of verbindingen tussen pagina's geraden. Menselijke
+invoer kan expliciete bronverwijzingen over pagina's heen bevestigen. De adapter
+begrenst de geometrische zoekruimte; complexere pagina's blijven handmatig werk.
 
-Een cross-model klassewijziging van een nieuwe graaf wordt vóór schrijven geblokkeerd
-met `decision_graph_class_change_requires_successor`; een opvolgerworkflow voor
-die conversie moet nog worden uitgewerkt. Policywijzigingen van gepubliceerde
-werkrevisies zijn eveneens geblokkeerd. Dit voorkomt verlies van routebewijs.
+Policy- en klasseconversie van nieuwe grafen loopt via `create_review_successor`
+en de knop "Nieuwe werkrevisie maken" op Reviewdeelname. Die hergebruikt exact
+dezelfde bronbytes en bronversie, vereist reden en actuele voorgangerversie,
+maakt nieuwe objectidentiteiten en nieuw reviewbewijs, en gebruikt de bestaande
+`new_version`-lineage. Herhaalde identieke commands maken geen tweede opvolger.
+Directe cross-model herschrijving van een bestaande graaf blijft geblokkeerd.
+Legacy JSON blijft een bronadapter, ook voor een expliciete opvolger met een
+andere klasse. De voorganger wordt nooit herschreven.
 
-Native PostgreSQL-ketenbewijs staat als optionele DSN-test klaar, maar is lokaal
-niet uitgevoerd: de Docker Hub-pull werd geratelimit en het openbare ECR-alternatief
-gaf Forbidden. Browserinteractie is alleen via HTTP-formuliertests gecontroleerd;
-geen visuele acceptatie met de echte Mantelzorg-bron. Uitgebreide native
-concurrency-/rollbackproeven en representatieve bronacceptatie blijven releasegates.
+Lokale native tests gebruiken PostgreSQL 17.11 uit officieel ondertekende Debian-
+pakketten, zonder systeeminstallatie, alleen een privésocket met peer-authenticatie.
+De CI-topologie blijft PostgreSQL16; er is geen productietopologie verruimd.
+Twee onafhankelijke workerruntimes oefenen gelijktijdige ingest en graaf/policy-
+commando's uit. Opslagcomponenten delen de bestaande workflowtransactie; de
+create-only lege expected revision wordt ook in PostgreSQL correct afgehandeld.
+
+Resultaatbundels behouden een brongebonden container en afzonderlijke letterlijke
+bulletleden. Ieder lid krijgt een eigen passagegoedkeuring; routecontext hoort bij
+de bundel. De graafcontrole weigert losgekoppelde leden. Correctie van de bundelroute
+invalideert ook de gekoppelde leden. De volledige release/API bevat de bundelbinding;
+de proseretrieval blijft alle graafobjecten uitsluiten. Dit nieuwe gedrag geldt voor
+PDF en expliciete export-JSON, zonder legacy-multibulletregels te herschrijven.
+
+## Concrete bewijsgevallen en resterende acceptatie
+
+Geautomatiseerde gevallen:
+
+- Echte synthetische PDF: pijl omhoog/omlaag, letterlijk niet-Ja/Nee-label, lijn
+  zonder pijlpunt, los lijnstuk en kromme met bewaarde controlepunten.
+- Single en multiple choice, gedeelde uitkomst, expliciete paginaovergang;
+  ontbrekende antwoorden, verzonnen label en cyclus blijven geblokkeerd.
+- Lokale én native single/optional/required review met herstart, exacte
+  passagegoedkeuring en afzonderlijke graafbevestiging.
+- Native gelijktijdige policy/graafwijziging: één winnaar en één stale conflict;
+  rollback na object-/auditwrites vóór outer commit laat alle oude staat intact.
+- Native gelijktijdige identieke ingest: één snapshot; conflicterende retry faalt.
+- Native v1 blijft actief tijdens v2, mislukte publicatie behoudt v1, geslaagde
+  v2 schakelt de complete graaf om; historische policy/release blijft behouden.
+- HTTP-formulieren voor graaf/policy/opvolger, authenticatie van graafuitlezing,
+  404 na withdrawal en uitsluiting van boomobjecten uit losse proseretrieval.
+
+Nog nodig voor volledige oorspronkelijke bronacceptatie:
+
+1. De originele Mantelzorg-PDF-bytes in deze executor. Library-tekst is aanwezig,
+   maar geen lokale bytes of visueel gecontroleerde pagina's. Geen nieuwe blinde
+   downloadpoging. Kleinste input is de originele PDF hier als ondersteunde bijlage.
+2. Visuele referentiecontrole van gedeelde Ja-uitkomst, Nee-vervolg, leeftijdsvraag,
+   instructiestappen, paginaovergangen, multiselect op pagina4 en evaluatielabels
+   op pagina5; bewijs dat iedere passage en route een disposition heeft.
+3. Representatieve andere bronvarianten en beoordeling van correctiewerk; geen
+   bulkverwerking. Raster/OCR blijft buiten scope. De nieuw toegevoegde splitsing
+   van bulletuitkomsten naar afzonderlijk gereviewde leden van een resultaatbundel
+   moet ook tegen echte bronlay-outs worden gecontroleerd.
+4. Visuele browseracceptatie met de echte bron en PostgreSQL16-CI. Geen
+   productieacceptatie op basis van alleen synthetische fixtures.

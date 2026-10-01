@@ -21,25 +21,31 @@ def pdf_fragments(path: Path, *, document_id: str, source_id: str) -> list[dict[
     for row in fragments:
         row["boom_id"] = row["fragment_id"]
         row["boom_kind"] = "node"
-    return fragments
+    from src.decision_bundles_v1 import split_bundles
+    return split_bundles(fragments)
 
 
 def evidence_inventory(path: Path, fragments: list[dict[str, Any]], source_hash: str) -> dict[str, Any]:
     import fitz
+    from src.decision_bundles_v1 import bundle_evidence
 
     evidence = {r["fragment_id"]: {"kind": "text", "text": r["clean_text"],
-                "locator": deepcopy(r["source_locator"])} for r in fragments}
+                "locator": deepcopy(r["source_locator"]), **bundle_evidence(r)} for r in fragments}
     with fitz.open(path) as doc:
         for number, page in enumerate(doc, 1):
             for index, drawing in enumerate(page.get_drawings()):
                 segments = []
+                curves = []
                 for item in drawing["items"]:
                     if item[0] == "l":
                         segments.append([[float(p.x), float(p.y)] for p in item[1:3]])
-                if segments:
+                    elif item[0] == "c":
+                        curves.append([[float(p.x), float(p.y)] for p in item[1:5]])
+                if segments or curves:
                     evidence[f"p{number}-drawing-{index}"] = {
                         "kind": "graphic", "page": number,
                         "bbox": list(drawing["rect"]), "segments": segments,
+                        **({"curves": curves} if curves else {}),
                     }
     return {"source_sha256": source_hash, "items": evidence}
 
@@ -48,14 +54,16 @@ def prepare_graph(path: Path, data: bytes, kind: str, fragments: list[dict[str, 
                   objects: list[dict[str, Any]], source_hash: str) -> dict[str, Any]:
     """Both adapters emit proposals; missing export routes remain missing."""
     from src.integrity_kernel import stamp_canonical_hashes
+    from src.decision_bundles_v1 import bundle_evidence, stamp_bundles
     if kind == "pdf":
         inventory = evidence_inventory(path, fragments, source_hash)
     else:
         inventory = {"source_sha256": source_hash, "items": {
-            f["fragment_id"]: {"kind": "text", "text": f["clean_text"], "locator": f["source_locator"]}
+            f["fragment_id"]: {"kind": "text", "text": f["clean_text"], "locator": f["source_locator"], **bundle_evidence(f)}
             for f in fragments}}
     graph = {"contract": CONTRACT, "source_sha256": source_hash, "nodes": [], "edges": [],
              "entrypoints": [], "unresolved": ["human_route_reconstruction_required"]}
+    stamp_bundles(fragments, objects)
     for obj in objects:
         obj.setdefault("metadata", {})["decision_graph_contract"] = CONTRACT
         stamp_canonical_hashes(obj)
@@ -77,20 +85,31 @@ def prepare_graph(path: Path, data: bytes, kind: str, fragments: list[dict[str, 
                                        "record": deepcopy(branch), "locator": {"json_pointer": f"/branches/{index}"}}
             graph["edges"].append({"id": eid, "from": src, "to": dest, "label": label,
                                    "kind": "answer" if label else "continue", "evidence_ids": [eid]})
-    return {"decision_graph": graph, "decision_graph_evidence": inventory, "decision_graph_reviews": []}
+    proposals = []
+    if kind == "pdf":
+        from src.pdf_route_proposals_v1 import propose_routes
+        proposals = propose_routes(fragments, objects, inventory)
+        graph["edges"] = [{k: v for k, v in proposal.items() if k != "uncertainties"} for proposal in proposals]
+    return {"decision_graph": graph, "decision_graph_evidence": inventory, "decision_graph_reviews": [],
+            "decision_graph_proposals": proposals}
 
 
 def graph_hash(graph: dict[str, Any]) -> str:
     return stable_hash(graph)
 
 
-def route_contexts(graph: dict[str, Any]) -> dict[str, str]:
+def route_contexts(graph: dict[str, Any], objects: list[dict[str, Any]] | None = None) -> dict[str, str]:
     """Bind each connected route component; unrelated source context stays put."""
     nodes = {n["object_id"]: n for n in graph["nodes"]}
     adjacency = {oid: set() for oid in nodes}
     for edge in graph["edges"]:
         adjacency[edge["from"]].add(edge["to"])
         adjacency[edge["to"]].add(edge["from"])
+    for obj in objects or []:
+        bundle = (obj.get("metadata") or {}).get("result_bundle")
+        if bundle and bundle["role"] == "member" and obj["object_id"] in adjacency and bundle["object_id"] in adjacency:
+            adjacency[obj["object_id"]].add(bundle["object_id"])
+            adjacency[bundle["object_id"]].add(obj["object_id"])
     result = {}
     for oid in nodes:
         component, pending = set(), [oid]
@@ -196,6 +215,8 @@ def graph_issues(graph: Any, objects: list[dict[str, Any]], inventory: dict[str,
             visit(oid)
     if visited != active:
         issues.append("decision_graph_unreachable_nodes")
+    from src.decision_bundles_v1 import bundle_issues
+    issues.extend(bundle_issues(nodes, current, evidence))
     return sorted(set(issues))
 
 
@@ -214,6 +235,8 @@ def verify_source_evidence(console: Any, envelope: dict[str, Any]) -> None:
     path, data = console._verified_source_bytes(envelope)
     args = {"document_id": envelope["document_id"], "source_id": envelope["source_id"]}
     fragments = pdf_fragments(path, **args) if envelope["content_kind"] == "pdf" else extract_boom_fragments(data, **args)
+    from src.decision_bundles_v1 import split_bundles
+    fragments = split_bundles(fragments)
     inventory = prepare_graph(path, data, envelope["content_kind"], fragments, [], envelope["sha256"])["decision_graph_evidence"]
     if inventory != envelope["decision_graph_evidence"]:
         raise ValueError("decision_graph_source_evidence_mismatch")

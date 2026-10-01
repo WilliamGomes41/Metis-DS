@@ -39,15 +39,22 @@ def install_decision_review_routes(app, console, require, page):
         fields = "".join(f'<label>{esc(name)}<input type="hidden" name="reviewer" value="{esc(oid)}">'
                          f'<select name="participation">{options([("none", "Niet toegewezen"), ("optional", "Optioneel"), ("required", "Verplicht")], assignments.get(oid, "none"))}</select></label>'
                          for oid, name in people)
+        from src.operations_console_v1 import ALLOWED_CLASSES
+        successor = (f'<label>Klasse van opvolgende werkrevisie<select name="new_class">'
+                     f'{options([(c, c) for c in sorted(ALLOWED_CLASSES)], env["class"])}</select></label>'
+                     '<button formaction="/review/successor">Nieuwe werkrevisie maken</button>'
+                     if "researcher" in actor["roles"] else '')
+        update = '' if console.snapshot_is_published(document) else '<button>Nieuwe policy toepassen</button>'
         return page(f'<h1>Reviewdeelname wijzigen</h1><p>Een wijziging maakt eerder reviewbewijs onder de oude policy ongeldig. Gepubliceerde historie blijft gesloten.</p>'
                     f'<form method="post"><input type="hidden" name="document" value="{esc(document)}">'
                     f'<input type="hidden" name="expected_revision" value="{esc(console.objects_revision(document))}">'
                     f'<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
                     f'<input type="hidden" name="policy_revision" value="{policy["revision"] + 1}">'
                     f'<label>Primaire reviewer<select name="primary">{options(people, policy["primary"])}</select></label>'
-                    f'{fields}<label>Reden<input name="reason" required></label><button>Nieuwe policy toepassen</button></form>')
+                    f'{fields}<label>Reden<input name="reason" required></label>{update}{successor}</form>')
 
     @app.post("/review/policy")
+    @app.post("/review/successor")
     async def policy_post(request: Request):
         from src.review_policy_v1 import CONTRACT as POLICY_CONTRACT
         form = await request.form()
@@ -64,9 +71,14 @@ def install_decision_review_routes(app, console, require, page):
         policy = {"contract": POLICY_CONTRACT, "revision": revision, "primary": primary,
                   "assignments": [{"reviewer_id": oid, "participation": role} for oid, role in zip(ids, participation)
                                   if role != "none" and oid != primary]}
-        console.change_review_policy(actor_id=actor["account_id"], snapshot_id=sid, policy=policy,
+        command = dict(actor_id=actor["account_id"], snapshot_id=sid, policy=policy,
             command_id=str(form.get("command_id") or ""), expected_revision=str(form.get("expected_revision") or ""),
             reason=str(form.get("reason") or ""))
+        if request.url.path == "/review/successor":
+            receipt = console.create_review_successor(**command, class_=str(form.get("new_class") or ""))
+            sid = receipt["snapshot_id"]
+        else:
+            console.change_review_policy(**command)
         return RedirectResponse(f"/review/policy?document={sid}", status_code=303)
 
     @app.get("/review/decision-graph", response_class=HTMLResponse)
@@ -92,7 +104,11 @@ def install_decision_review_routes(app, console, require, page):
         fields = []
         for o in rows:
             oid = o["object_id"]
+            bundle = (o.get("metadata") or {}).get("result_bundle")
+            bundle_note = ('<small>Onderdeel van een resultaatbundel: kies broncontext; de route hoort bij de bundel.</small>'
+                           if bundle and bundle["role"] == "member" else '')
             fields.append(f'<p>{esc(o["content"]["clean_text"])}<input type="hidden" name="node_id" value="{esc(oid)}">'
+                          f'{bundle_note}'
                           f'<select name="node_mode">{options(modes, nodes.get(oid, {}).get("mode", "unresolved"))}</select>'
                           f'<label><input type="checkbox" name="entrypoint" value="{esc(oid)}" {"checked" if oid in graph["entrypoints"] else ""}>Beginpunt</label></p>')
         edges = []
@@ -114,10 +130,13 @@ def install_decision_review_routes(app, console, require, page):
                 f'<p>{esc(o["content"]["clean_text"])}</p><input type="hidden" name="object_id" value="{esc(o["object_id"])}">'
                 '<button>Deze actuele passage bevestigen</button></form>' for o in rows)
         problems = publication_issues(env, console.snapshot_objects(document))
+        proposals = env.get("decision_graph_proposals", [])
+        proposal_note = (f'<p>{len(proposals)} geometrische routevoorstellen. Richting, antwoordlabel en eindpunten '
+                         'zijn nog niet bevestigd. Controleer ook routes die niet zijn herkend.</p>' if proposals else '')
         original = f'/review/brondocument?document={esc(document)}&amp;object={esc(rows[0]["object_id"])}' if rows else ""
         return page(f'<h1>Beslisroutes controleren</h1><p>Controleer iedere route en ieder antwoord tegen de originele pagina. Extra review vervangt ontbrekend bronbewijs niet.</p>'
                     f'<p><a href="/review?document={esc(document)}">Passages beoordelen</a> · <a href="{original}">Open origineel</a> · <a href="/review/policy?document={esc(document)}">Reviewdeelname</a></p>'
-                    f'<p>Open controles: {esc(", ".join(problems) or "geen")}</p>{co_review}'
+                    f'{proposal_note}<p>Open controles: {esc(", ".join(problems) or "geen")}</p>{co_review}'
                     f'<form method="post">{common}<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
                     + "".join(fields + edges) + '<label>Toelichting<input name="reason" required></label>'
                     '<button name="action" value="graph">Routes opslaan</button></form>'

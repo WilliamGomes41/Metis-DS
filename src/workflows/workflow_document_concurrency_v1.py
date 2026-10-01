@@ -307,6 +307,8 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         try:
             with self._connect() as con:
                 with con.transaction():
+                    if expected_revision == "":
+                        con.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (snapshot_id,))
                     existing = con.execute(
                         "SELECT snapshot_id,envelope_payload FROM workflow.documents "
                         "WHERE snapshot_id=%s FOR UPDATE",
@@ -314,6 +316,8 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                     ).fetchone()
                     current_objects: list[dict[str, Any]] = []
                     if existing is not None:
+                        if expected_revision == "":
+                            raise WorkflowDocumentStoreError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
                         current_objects = self._objects_locked(con, snapshot_id)
                         release_history = self._release_history_locked(con, snapshot_id)
                         if release_history is not None:
@@ -340,7 +344,7 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                         next_objects = self._merge_objects(
                             current=current_objects,
                             submitted=objects,
-                            expected_revision=expected_revision,
+                            expected_revision=None if existing is None and expected_revision == "" else expected_revision,
                         )
                         con.execute("DELETE FROM workflow.document_objects WHERE snapshot_id=%s", (snapshot_id,))
                         for position, obj in enumerate(next_objects):

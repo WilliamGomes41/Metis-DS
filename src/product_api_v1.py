@@ -661,6 +661,7 @@ class ProductState:
                 "applicability": "not_evaluated", "generation_enabled": False,
                 "objects": [{"object_id": o["object_id"], "object_version": o["object_version"],
                              "content": o["content"], "source": o["source"],
+                             "result_bundle": (o.get("metadata") or {}).get("result_bundle"),
                              "source_fragments": o["provenance"]["source_fragments"]} for o in result["objects"]]}
 
     def knowledge(self, tenant: ProductAccessPrincipal, object_id: str) -> dict[str, Any]:

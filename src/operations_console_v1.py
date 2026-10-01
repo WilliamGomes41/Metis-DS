@@ -1522,6 +1522,7 @@ class OperationsConsole:
         review_policy: dict[str, Any] | None = None,
         source_status: str = "unknown",
         command_id: str | None = None,
+        revision_reason: str = "",
     ) -> dict[str, Any]:
         self._require_role(actor_id, "researcher")
         if source_status not in {"unknown", "established", "draft"}:
@@ -1584,6 +1585,8 @@ class OperationsConsole:
             if freeze_errors:
                 raise ConsoleError(freeze_errors[0])
             kind = "boom"
+        elif review_policy is not None and not boom_freeze_errors(data=data, filename=filename, live_url=live_url or ""):
+            kind = "boom"
         else:
             kind = classify_official_file(data, filename, content_type)
         if url and kind == "html":
@@ -1599,7 +1602,7 @@ class OperationsConsole:
                     "title": title.strip(), "version": source_version, "date": source_date,
                     "class": class_, "family": family_hook, "reviewers": reviewers, "policy": review_policy,
                     "source_status": source_status, "live_url": live_url or url or "", "ingest_kind": ingest_kind,
-                    "replaces_snapshot_id": replaces_snapshot_id})}
+                    "replaces_snapshot_id": replaces_snapshot_id, "revision_reason": revision_reason})}
             identity_hash = stable_hash({"actor_id": actor_id, "command_id": command_id})
             command_snapshot = f"snap-{identity_hash[:16]}-{identity_hash[16:24]}"
             self.list_envelopes()
@@ -1630,6 +1633,8 @@ class OperationsConsole:
             if not replaces_snapshot_id:
                 raise ConsoleError("replaces_snapshot_id_required")
             previous = self._envelope(replaces_snapshot_id)
+            if review_policy is not None and document_id == previous["document_id"]:
+                document_id = f"{document_id}-revision-{snapshot_id[5:]}"
 
         envelope = {
             "snapshot_id": snapshot_id,
@@ -1659,6 +1664,7 @@ class OperationsConsole:
             "review_passes": {},
             "is_live_capture": ingest_kind == "new",
             "replaces_snapshot_id": replaces_snapshot_id,
+            "revision_reason": revision_reason,
             "object_diff": None,
             "clinical_rereview_required": False,
             "acquired_at": utc_now(),
@@ -1684,6 +1690,7 @@ class OperationsConsole:
                     "snapshot_id": snapshot_id,
                     "source_sha256": digest,
                     "semantic_replay": None,
+                    "explicit_decision_graph": review_path == "boom" and review_policy is not None,
                 },
             )
         except ConsoleError as exc:
@@ -1761,6 +1768,10 @@ class OperationsConsole:
             raise
         return self._receipt(envelope)
 
+    def create_review_successor(self, **command: Any) -> dict[str, Any]:
+        from src.decision_successor_v1 import execute
+        return execute(self, **command)
+
     def reextract_unpublished(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         """Replace unpublished object identities with a new extract of the same freeze.
 
@@ -1789,6 +1800,7 @@ class OperationsConsole:
                 "snapshot_id": snapshot_id,
                 "source_sha256": envelope["sha256"],
                 "semantic_replay": deepcopy(envelope.get("semantic_replay")),
+                "explicit_decision_graph": "decision_graph" in envelope,
             },
         )
         replay_record = spec.pop(SEMANTIC_REPLAY_SPEC_KEY, None)
@@ -2050,7 +2062,7 @@ class OperationsConsole:
         class_: str,
         formation_context: dict[str, Any] | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        del formation_context
+        explicit_graph = bool((formation_context or {}).get("explicit_decision_graph"))
         if kind == "pdf" and class_ == "beslisboom":
             from src.decision_graph_v1 import pdf_fragments
             try:
@@ -2064,6 +2076,13 @@ class OperationsConsole:
                 fragments = extract_boom_fragments(data, document_id=document_id, source_id=source_id)
             except ValueError as exc:
                 raise ConsoleError("invalid_boom_freeze") from exc
+            if explicit_graph and class_ == "beslisboom":
+                from src.decision_bundles_v1 import split_bundles
+                fragments = split_bundles(fragments)
+            if class_ != "beslisboom":
+                fragments = [{k: v for k, v in f.items() if k != "boom_kind"} for f in fragments]
+                return fragments, _spec_from_fragments(document_id=document_id, title=title, family=family,
+                    class_=class_, fragments=fragments, content_kind=kind)
             spec = boom_spec_from_fragments(
                 document_id=document_id,
                 title=title,

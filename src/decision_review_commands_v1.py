@@ -19,9 +19,11 @@ def execute(console: Any, **command: Any) -> dict[str, Any]:
     reviews = getattr(console, "workflow_review_store", None)
     if documents is None and reviews is None:
         return _execute(console, **command)
-    from src.workflows.workflow_transaction_v1 import workflow_transaction, workflow_transaction_active
+    from src.workflows.workflow_transaction_v1 import bind_workflow_stores, workflow_transaction, workflow_transaction_active
     if documents is None or reviews is None or workflow_transaction_active():
         raise ConsoleError("decision_review_independent_transaction_required")
+    bind_workflow_stores(documents, reviews, getattr(console, "workflow_identity_store", None),
+                         getattr(console, "workflow_remaining_store", None))
     with console._store_write_lock():
         try:
             with workflow_transaction(reviews) as connection:
@@ -109,7 +111,7 @@ def _execute(console: Any, *, action: str, actor_id: str, snapshot_id: str,
             if invalid:
                 raise ConsoleError("decision_graph_invalid", ",".join(invalid))
             from src.decision_graph_v1 import route_contexts
-            contexts = route_contexts(graph)
+            contexts = route_contexts(graph, current)
             changed_routes = {o["object_id"]: contexts[o["object_id"]] for o in current
                               if o["object_id"] in contexts and (o.get("metadata") or {}).get("route_context_hash") != contexts[o["object_id"]]}
             envelope["decision_graph"] = deepcopy(graph)
