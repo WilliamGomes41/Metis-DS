@@ -104,21 +104,23 @@ def test_pdf_requires_passage_and_graph_review_after_restart(tmp_path, participa
 
 
 def test_policy_change_is_versioned_and_replay_safe(tmp_path):
+    from tests.test_review_participation_management import change
+    from src.review_policy_v1 import object_policy
     console = _console(tmp_path)
     accounts = _accounts(console)
     sid = ingest(console, accounts)["snapshot_id"]
-    p = policy(accounts, "required")
-    p["revision"] = 2
-    cmd = command(console, accounts, sid, "policy-1", policy=p)
-    console.change_review_policy(**cmd)
-    assert console.change_review_policy(**cmd)["idempotent"]
-    with pytest.raises(ConsoleError, match="decision_review_command_conflict"):
-        console.change_review_policy(**{**cmd, "reason": "ander besluit"})
+    rev = console.objects_revision(sid)
+    extra = dict(command_id="policy-1", expected_revision=rev)
+    change(console, accounts, sid, "add_required", accounts["reviewer"]["account_id"], **extra)
+    assert change(console, accounts, sid, "add_required", accounts["reviewer"]["account_id"], **extra)["idempotent"]
+    with pytest.raises(ConsoleError, match="participation_command_conflict"):
+        change(console, accounts, sid, "add_optional", accounts["reviewer"]["account_id"], **extra)
     with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
-        console.change_review_policy(**{**cmd, "command_id": "policy-2"})
+        change(console, accounts, sid, "archive", accounts["reviewer"]["account_id"], expected_revision=rev)
     console = _console(tmp_path)
-    assert console._envelope(sid)["review_policy"] == p
-    assert all(o["metadata"]["review_policy"] == p for o in console.snapshot_objects(sid))
+    p = console._envelope(sid)["review_policy"]
+    assert p["revision"] == 2
+    assert all(object_policy(o) == p for o in console.snapshot_objects(sid))
 
 
 def test_text_cannot_replace_graphic_evidence(tmp_path):

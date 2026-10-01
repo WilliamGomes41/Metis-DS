@@ -5344,6 +5344,8 @@ def create_console_app(
     install_route_comparison_routes(app, state, _require, _page)
     from src.decision_review_ui_v1 import install_decision_review_routes
     install_decision_review_routes(app, state, _require, _page)
+    from src.review_participation_ui_v1 import install_routes as install_participation_routes
+    install_participation_routes(app, state, _require, _page)
     return app
 
 

@@ -753,6 +753,23 @@
             "string",
             "null"
           ]
+        },
+        "review_policy": {
+          "type": "object",
+          "required": [
+            "contract",
+            "revision",
+            "primary",
+            "assignments",
+            "review_basis",
+            "minimum_required"
+          ],
+          "properties": {
+            "contract": {
+              "const": "managed-review-v2"
+            }
+          },
+          "description": "Checked projection of the WorkingRevision managed participation policy; never a source of clinical content."
         }
       }
     },

@@ -1,4 +1,4 @@
-"""Policy and graph commands use the existing snapshot transaction and audit log."""
+"""Graph commands use the existing snapshot transaction and audit log."""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -7,7 +7,7 @@ from typing import Any
 from src.decision_graph_v1 import graph_issues, review_target
 from src.integrity_kernel import stable_hash, stamp_canonical_hashes
 from src.review_ledger import append_event, read_events
-from src.review_policy_v1 import participants, project_policy
+from src.review_policy_v1 import project_policy
 from src.revision_workflow import bump_patch
 
 EVENT = "decision_review_command"
@@ -15,6 +15,8 @@ EVENT = "decision_review_command"
 
 def execute(console: Any, **command: Any) -> dict[str, Any]:
     from src.operations_console_v1 import ConsoleError
+    if command.get("action") == "policy":
+        raise ConsoleError("managed_participation_command_required")
     documents = getattr(console, "workflow_document_store", None)
     reviews = getattr(console, "workflow_review_store", None)
     if documents is None and reviews is None:
@@ -64,19 +66,7 @@ def _execute(console: Any, *, action: str, actor_id: str, snapshot_id: str,
             raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=revision)
         old_policy = envelope.get("review_policy")
         prior_graph_hash = stable_hash(envelope.get("decision_graph"))
-        if action == "policy":
-            # Ownership is the current primary; a publisher can also administer
-            # participation, but must still possess reviewer rights here.
-            owner = old_policy["primary"] if old_policy else envelope["uploader_account_id"]
-            if actor_id != owner and "publisher" not in account["roles"]:
-                raise ConsoleError("review_policy_owner_required")
-            policy = console._validated_review_policy(policy)
-            if policy["revision"] != (old_policy["revision"] + 1 if old_policy else 1):
-                raise ConsoleError("review_policy_revision_conflict")
-            envelope["review_policy"] = policy
-            envelope["named_reviewers"] = participants(policy)
-            envelope["decision_graph_reviews"] = []
-        elif action not in {"graph", "confirm"} or not old_policy or "decision_graph" not in envelope:
+        if action not in {"graph", "confirm"} or not old_policy or "decision_graph" not in envelope:
             raise ConsoleError("decision_graph_not_available")
         bindings = deepcopy(console._bindings)
         history = console._load_objects(snapshot_id, remember=False)
@@ -120,7 +110,7 @@ def _execute(console: Any, *, action: str, actor_id: str, snapshot_id: str,
         # concurrent object/review/publication commands on every storage backend.
         updated = []
         for original in current:
-            if action != "policy" and original.get("object_type") != "document" and original["object_id"] not in changed_routes:
+            if original.get("object_type") != "document" and original["object_id"] not in changed_routes:
                 continue
             obj = deepcopy(original)
             obj["object_version"] = bump_patch(obj["object_version"])
@@ -129,8 +119,8 @@ def _execute(console: Any, *, action: str, actor_id: str, snapshot_id: str,
                 for node in envelope["decision_graph"]["nodes"]:
                     if node["object_id"] == obj["object_id"]:
                         node["object_version"] = obj["object_version"]
-            if action == "policy" or obj["object_id"] in changed_routes:
-                project_policy([obj], policy if action == "policy" else old_policy)
+            if obj["object_id"] in changed_routes:
+                project_policy([obj], old_policy)
                 obj["governance"]["validation_status"] = "needs_review"
                 for b in bindings.get(snapshot_id, []):
                     if b["object_id"] == obj["object_id"]:

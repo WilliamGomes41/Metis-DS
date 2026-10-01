@@ -10,6 +10,7 @@ from threading import Barrier
 import pytest
 
 from src.operations_console_v1 import ConsoleError
+from tests.test_review_participation_management import change, person
 from tests.decision_graph_native_support import native_state
 from tests.test_decision_graph_chain import _accounts, ingest, command, complete_graph, policy, source_pdf, _ingest_boom
 
@@ -28,8 +29,9 @@ def test_native_graph_policy_race_and_failure_rollback(tmp_path, monkeypatch):
     def run(index):
         barrier.wait(timeout=5)
         try:
-            fn = workers[index].update_decision_graph if index == 0 else workers[index].change_review_policy
-            return fn(**(graph_command if index == 0 else policy_command))
+            if index == 0:
+                return workers[index].update_decision_graph(**graph_command)
+            return change(workers[index], accounts, sid, "add_required", accounts["reviewer"]["account_id"], expected_revision=policy_command["expected_revision"])
         except ConsoleError as exc:
             return exc.code
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -42,13 +44,14 @@ def test_native_graph_policy_race_and_failure_rollback(tmp_path, monkeypatch):
     events = console.workflow_review_store.read_events()
     p = deepcopy(before["review_policy"])
     p["revision"] += 1
+    extra = person(console, "rollback-extra")
     original = console._commit_prepared_store
     def fail_after_writes(**kwargs):
         original(**kwargs)
         raise RuntimeError("simulated_failure_before_outer_commit")
     monkeypatch.setattr(console, "_commit_prepared_store", fail_after_writes)
     with pytest.raises(RuntimeError, match="simulated_failure"):
-        console.change_review_policy(**command(console, accounts, sid, "rollback", policy=p))
+        change(console, accounts, sid, "add_optional", extra)
     restarted = state("verify")
     assert restarted._envelope(sid) == before
     assert restarted.snapshot_objects(sid) == objects
@@ -89,7 +92,7 @@ def test_native_policy_publication_race_never_publishes_stale_review(tmp_path):
         try:
             if index == 0:
                 return publisher.publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=sid)
-            return editor.change_review_policy(**cmd)
+            return change(editor, accounts, sid, "add_required", accounts["reviewer"]["account_id"], expected_revision=cmd["expected_revision"])
         except ConsoleError as exc:
             return exc.code
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -126,7 +129,8 @@ def test_native_late_extraction_cannot_replace_new_policy(tmp_path, monkeypatch)
         p = policy(accounts, "required")
         p["revision"] = 2
         try:
-            editor.change_review_policy(**command(editor, accounts, sid, "policy-during-extraction", policy=p))
+            change(editor, accounts, sid, "add_required", accounts["reviewer"]["account_id"])
+            p = deepcopy(editor._envelope(sid)["review_policy"])
             expected = deepcopy(editor.snapshot_objects(sid))
         finally:
             proceed.set()

@@ -23,6 +23,12 @@ class Console:
         self.roles = roles
         self.documents = dict(documents)
 
+    def list_envelopes(self):
+        return [{**d['envelope'], 'snapshot_id': sid} for sid, d in self.documents.items()]
+
+    def list_accounts(self):
+        return [{'account_id': i, 'display_name': i} for i in {i for d in self.documents.values() for i in d['envelope']['named_reviewers']}]
+
     def session_account(self, token):
         if not token:
             raise ConsoleError('not_authenticated')
@@ -115,7 +121,9 @@ def test_multiple_documents_expand_without_leaking_assignments():
     selected = waiting.text.split('review-document-card" open>', 1)[1].split('</details>', 1)[0]
     assert 'class="review-task-card"' not in selected
     assert 'task=waiting' in waiting.text
-    assert browser.get('/review?document=private').status_code == 403
+    readonly = browser.get('/review?document=private', follow_redirects=False)
+    assert readonly.status_code == 303
+    assert readonly.headers['location'] == '/review/trajectory?document=private'
 
 
 def test_closed_document_with_stale_duties_has_history_not_continuation():
