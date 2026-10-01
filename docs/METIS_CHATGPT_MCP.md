@@ -13,6 +13,11 @@ De Product API en bestaande sessie-/CSRF-grens blijven ongewijzigd.
 Standaard uit. Installeren van de code alleen maakt nog geen werkende verbinding.
 De status ‘Geconfigureerd’ bewijst geen geslaagde OAuth-/ChatGPT-verbinding.
 
+De gedelegeerde scope heet `Metis.Read2`. Een bestaande app-rol `Metis.Read`
+blijft een afzonderlijke rol en wordt niet hernoemd. Deploy eerst de code die
+`Metis.Read2` ondersteunt; oudere builds vragen en accepteren nog `Metis.Read`.
+Deze scopewijziging vereist geen databasemigratie.
+
 ## Eenmalige inrichting door de beheerder
 
 1. Configureer eerst de bestaande Entra-aanmelding volgens `docs/ENTRA_SIGN_IN.md`.
@@ -21,7 +26,7 @@ De status ‘Geconfigureerd’ bewijst geen geslaagde OAuth-/ChatGPT-verbinding.
    maakt geen accounts of sessies aan: gebruikers moeten eerst in Metis inloggen.
 2. Gebruik een single-tenant Entra API-appregistratie (de console-app kan ook dienen
    als API-resource). Stel `requestedAccessTokenVersion` in op **2**. Exposeer
-   `api://<API-app-ID>/Metis.Read` als **delegated permission** en houd de bestaande
+   `api://<API-app-ID>/Metis.Read2` als **delegated permission** en houd de bestaande
    app-rollen `Metis.Researcher`, `Metis.Reviewer`, `Metis.Publisher` aan. Zorg dat
    gebruikers/groepen de passende rollen op deze resource toegewezen krijgen.
 3. Registreer een aparte vertrouwelijke OAuth-client voor ChatGPT in dezelfde tenant.
@@ -56,7 +61,7 @@ getest. Deze repositorywijziging voert die externe handelingen niet uit.
 ## Toegang en gegevens
 
 - Iedere aanvraag valideert RS256-handtekening, issuer, tenant, audience, tijd,
-  gedelegeerde `Metis.Read` scope en de toegestane OAuth-client (`azp`). ID tokens,
+  gedelegeerde `Metis.Read2` scope en de toegestane OAuth-client (`azp`). ID tokens,
   app-only tokens, Product API-sleutels en consolecookies geven geen MCP-toegang.
 - Het bestaande account moet gekoppeld en niet geblokkeerd zijn. Effectieve rollen
   zijn de doorsnede van tokenrollen en de huidige opgeslagen accountrollen. Verlaagde
