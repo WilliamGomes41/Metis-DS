@@ -259,6 +259,7 @@ def test_ingest_command_deduplicates_and_rejects_changed_payload(tmp_path):
 
 
 def test_native_postgres_graph_publication_restart_and_withdrawal(tmp_path):
+    from datetime import datetime, timedelta
     from tests.decision_graph_native_support import native_state
     from src.decision_graph_v1 import read_active_graph
     state, store, source = native_state(tmp_path)
@@ -275,7 +276,8 @@ def test_native_postgres_graph_publication_restart_and_withdrawal(tmp_path):
     assert restarted._envelope(sid)["review_policy"] == policy(accounts)
     assert read_active_graph(store, source, sid) == before
     env = restarted._envelope(sid)
+    published_at = datetime.fromisoformat(store.release_for_snapshot(sid)["published_at"])
     store.withdraw_logical_document(logical_document_id=env["logical_document_id"], expected_release_id=result["release_id"],
-        actor="test-reviewer", reason="Test withdrawal", withdrawn_at="2026-10-01T18:00:00+00:00")
+        actor="test-reviewer", reason="Test withdrawal", withdrawn_at=(published_at + timedelta(seconds=1)).isoformat())
     assert read_active_graph(store, source, sid) is None
     assert store.release_for_snapshot(sid)["decision_graph_release"]["graph"] == before["graph"]

@@ -67,3 +67,7 @@ UX completion evidence
 - Desktop and 390px viewport screenshots inspected: readable labels/history and no horizontal overflow on the narrow trajectory. Browser JavaScript error log empty. Authentication through local test accounts; no production or Entra browser test.
 - Display-only changes: Dutch lifecycle/status/action/error labels, numbered passage references, standard navigation and return links. Candidate lists use existing reviewer availability validation and existing membership rules; the command service remains authoritative for forged or stale requests.
 - Repository preflight, compilation, API compatibility and diff whitespace checks passed. The prior visual-verification limitation above records the earlier attempt; it is resolved by this follow-up.
+
+CI fixture correction
+
+The first UX CI run exposed a pre-existing fixed withdrawal timestamp in test_native_postgres_graph_publication_restart_and_withdrawal: 2026-10-01 18:00 UTC had passed before its publication. Production correctly rejected withdrawal before publication. The test now derives its withdrawal timestamp from the persisted published_at plus one second. No production lifecycle code or guard changed. The complete graph chain suite passed after the correction; final CI runs on the subsequent commit.
