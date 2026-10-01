@@ -614,6 +614,20 @@ class _PostgresWorkflowDocumentsMixin:
             self._mirror_envelopes()
 
     @contextmanager
+    def _reprocessing_transaction(self, snapshot_id: str) -> Iterator[None]:
+        """Serialize retry reservation/activation against every document writer."""
+        with self._store_write_lock():
+            with workflow_transaction(self.workflow_document_store) as connection:
+                row = connection.execute(
+                    "SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
+                    (snapshot_id,),
+                ).fetchone()
+                if row is None:
+                    raise ConsoleError("unknown_snapshot")
+                self._reload_store_locked()
+                yield
+
+    @contextmanager
     def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
         """Preserve current rollback behavior while documents/objects are PostgreSQL-backed."""
         with self._store_write_lock():

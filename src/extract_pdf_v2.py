@@ -7,7 +7,7 @@ from typing import Any
 import fitz
 from src.integrity_kernel import stable_hash, schema_errors
 
-PARSER_VERSION='pdf-fragments-v2.2.0'
+PARSER_VERSION='pdf-fragments-v2.3.0'
 _HEADING_SIZE_TOLERANCE=0.5
 _OUTLINE_HEADING_RE=re.compile(r'^\s*(?P<number>\d+(?:\.\d+)*)(?:[.)])?\s+\S')
 _TOC_HEADINGS=frozenset({'inhoud','inhoudsopgave'})
@@ -89,7 +89,20 @@ def extract(pdf:Path, *, document_id:str, source_id:str, pages:list[int]|None=No
             else: path=[text for _,text,_ in stack]
             seq+=1; fid=f'{document_id}-p{page_no:03d}-f{seq:03d}'
             x={'fragment_id':fid,'document_id':document_id,'source_id':source_id,'source_page':page_no,'bbox':bbox,'source_locator':page_bbox_locator(page_no,bbox),'raw_text':raw,'clean_text':c,'section_path':path,'heading':heading,'sequence':seq,'parser_version':PARSER_VERSION,'fragment_hash':'0'*64}
+            span_rows=[]; offset=0
+            leading=len('\n'.join(lines))-len('\n'.join(lines).lstrip())
+            for line in block.get('lines',[]):
+                for span in line.get('spans',[]):
+                    value=span.get('text','')
+                    start=offset-leading; end=start+len(value)
+                    if start>=0 and end<=len(raw):
+                        span_rows.append({'text':value,'raw_start':start,'raw_end':end,'bbox':list(span['bbox'])})
+                    offset+=len(value)
+                offset+=1
+            x['_pdf_spans']=span_rows
             x['fragment_hash']=stable_hash(fragment_payload(x)); out.append(x)
+    from src.source_layout_v1 import mark_pdf_layout
+    mark_pdf_layout(out)
     return out
 
 def main()->int:

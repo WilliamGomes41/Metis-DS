@@ -247,6 +247,16 @@ ERROR_COPY = {
     "multiple_parents_not_allowed": "Een passage kan maar één bovenliggende kop hebben. Kies de kop waaronder deze passage hoort.",
     "named_reviewer_must_have_reviewer_role": "Een gekozen beoordelaar heeft geen beoordelaarsrechten. Kies een andere beoordelaar of vraag de beheerder de rol te controleren.",
     "pre_review_reprocess_not_required": "Dit document komt niet in aanmerking voor deze herstelactie. Controleer de huidige status bij Documenten.",
+    "pre_review_retry_requires_postgres": "Veilige herverwerking vereist de duurzame workflowopslag. Laat de beheerder de configuratie controleren.",
+    "pre_review_retry_existing_work": "Dit document bevat al passages of beoordelingen. Deze herstelactie vervangt die niet.",
+    "processing_attempt_in_progress": "Er loopt al een verwerkingspoging voor dit document. Bekijk de technische diagnose voor de voortgang.",
+    "processing_attempt_expired": "De vorige verwerkingspoging is onderbroken of verlopen. Start een nieuwe poging vanuit Documenten.",
+    "processing_attempt_not_active": "Deze verwerkingspoging is niet meer actief. Het resultaat is niet toegepast.",
+    "processing_command_id_invalid": "De verwerkingsopdracht is ongeldig. Open Documenten opnieuw en probeer het nogmaals.",
+    "processing_command_conflict": "Deze opdracht hoort bij een andere verwerkingspoging. Open Documenten opnieuw.",
+    "processing_dependency_failed": "De verwerking kon niet worden afgerond door een technische fout. Het bestaande werk is behouden.",
+    "processing_timeout": "De verwerking is niet op tijd afgerond. Het bestaande werk is behouden; start zo nodig een nieuwe poging.",
+    "pre_review_no_reviewable_candidates": "De voorcontrole heeft geen passages vrijgegeven die de toelatingscontroles doorstaan. Bekijk de technische diagnose.",
     "public_signup_forbidden": "Je kunt zelf geen account aanmaken. Vraag de beheerder om toegang tot Metis.",
     "replaces_snapshot_id_required": "Kies welk bestaand document deze nieuwe versie vervangt.",
     "review_failed": "De beoordeling kon niet worden afgerond. Controleer de huidige passagestatus en meld dit bij de beheerder als de oorzaak niet zichtbaar is.",
@@ -4403,6 +4413,7 @@ def create_console_app(
                         f"""
                         <form method="post" action="/tree/reprocess">
                           <input type="hidden" name="snapshot_id" value="{_esc(child["snapshot_id"])}">
+                          <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
                           <button class="btn-primary" type="submit">Pre-review opnieuw uitvoeren</button>
                         </form>
                         """
@@ -4478,14 +4489,13 @@ def create_console_app(
     def tree_reprocess(
         request: Request,
         snapshot_id: str = Form(...),
+        command_id: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
-        envelope = state._envelope(snapshot_id)
-        if envelope.get("publication_eligibility") != PRE_REVIEW_BLOCKED:
-            raise ConsoleError("pre_review_reprocess_not_required")
-        state.reextract_unpublished(
+        state.retry_pre_review(
             actor_id=account["account_id"],
             snapshot_id=snapshot_id,
+            command_id=command_id or uuid.uuid4().hex,
         )
         return RedirectResponse(
             f"/review?document={quote(snapshot_id, safe='')}",
@@ -4664,6 +4674,7 @@ def create_console_app(
             "title": str(envelope.get("title") or ""),
             "version": str(envelope.get("version") or ""),
             "objects_revision": state.objects_revision(snapshot_id),
+            "processing_attempts": envelope.get("processing_attempts", []),
             "diagnostics": processing_diagnostics(objects),
             "pre_review": {
                 "blocked": pre_review_blocked,
@@ -4672,7 +4683,7 @@ def create_console_app(
                             if pre_review_blocked else "Geen opgeslagen voorcontroleblokkade. Dit is geen bewijs van geslaagde verwerking."),
                 "object_count": len(objects),
                 "diagnostics_scope": "stored_objects_only",
-                "note": "De kandidaattellers beschrijven alleen opgeslagen objecten. Nul kandidaten betekent niet dat de voorcontrole is geslaagd. Nieuwe pogingen loggen een verwerkingsreferentie en eventuele validatiereden bij de documentreferentie. Een mislukte herpoging toont die ook in de foutmelding; deze gegevens zijn niet in de documentblokkade opgeslagen.",
+                "note": "De kandidaattellers beschrijven alleen opgeslagen objecten. Nul kandidaten betekent niet dat de voorcontrole is geslaagd. Nieuwe herstelpogingen bewaren hun uitkomst, veilige foutcode en eventuele validatiereden en verwerkingsreferentie. Historische ontbrekende gegevens worden niet achteraf ingevuld.",
             },
         }
         return JSONResponse(payload)

@@ -101,6 +101,42 @@
           "minLength": 1
         }
       }
+    },
+    "source_text_view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "text",
+        "mapping",
+        "exclusions"
+      ],
+      "properties": {
+        "version": {
+          "const": "source-layout-v1"
+        },
+        "text": {
+          "type": "string"
+        },
+        "mapping": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "exclusions": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "source_layout_findings": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
     }
   }
 }

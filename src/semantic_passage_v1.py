@@ -27,6 +27,7 @@ from src.recommendation_semantics_v1 import (
     validate_recommendation_semantics,
 )
 from src.source_reconstruction_v1 import reconstruct_source_fragments, source_fragment_ids_for_text
+from src.source_layout_v1 import mapped_raw_spans
 
 
 SEMANTIC_PASSAGE_VERSION = "semantic-passage-v1.0.0"
@@ -174,6 +175,7 @@ def _coverage_remainders(
                             "end": end,
                         }
                     ],
+                    "source_mapping": mapped_raw_spans(source, start=start, end=end),
                 },
             }
             out.append(((int(public["position"]), start), unit))
@@ -744,6 +746,8 @@ def semantic_units_from_proposal(
                     }
                     for row in selected
                 ],
+                "source_mapping": [mapped for row in selected
+                    for mapped in mapped_raw_spans(by_id[row["block_id"]][1], start=row["start"], end=row["end"])],
             },
         }
         if field_contract_v2:

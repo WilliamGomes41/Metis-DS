@@ -17,6 +17,8 @@ VERSION = "processing-evidence-export-v3"
 PROJECTOR_VERSION = "processing-evidence-export-v2"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
+    "processing_attempts": ("attempt_id", "command_id", "actor_id", "source_hash", "state", "started_at", "expires_at", "finished_at", "phase", "error_code", "validation_code", "processing_reference"),
+    "source_views": ("run_id", "fragment_id", "fragment_hash", "source_page", "bbox", "source_locator", "raw_text", "clean_text", "source_text_view", "source_layout_findings"),
     "runs": ("run_id", "source_hash", "started_at", "finished_at", "outcome", "reason", "extractor_versions", "execution", "semantic_identity", "production_commit_status"),
     "run_candidates": ("run_id", "object_id", "object_version", "canonical_hash", "origin", "structural"),
     "semantic_proposals": ("proposal_hash", "identity", "validation", "semantic_execution", "origin_execution", "replay_from_proposal_hash", "proposal", "evidence_kind"),
@@ -80,7 +82,11 @@ def processing_evidence_tables(
         tables[name].append({**common, **values})
 
     runs = envelope.get("quality_processing_runs") or []
+    for attempt in envelope.get("processing_attempts") or []:
+        add("processing_attempts", **{key: attempt.get(key) for key in SCHEMAS["processing_attempts"]})
     for run in runs:
+        for fragment in run.get("source_fragments") or []:
+            add("source_views", run_id=run.get("run_id"), **{key: fragment.get(key) for key in SCHEMAS["source_views"] if key != "run_id"})
         add("runs", **{key: run.get(key) for key in SCHEMAS["runs"] if key != "production_commit_status"},
             production_commit_status="not_recorded")
         for candidate in run.get("candidates") or []:
@@ -118,6 +124,9 @@ def processing_evidence_tables(
                 text_status="recorded" if field in container else "not_recorded",
                 section_path=row["section_path"], source_checksum=row["source"].get("source_checksum"))
         semantic = row["semantic_passage"]
+        for mapped in semantic.get("source_mapping") or []:
+            add("lineage", **keys, relation="selected_raw_fragment_range", target_id=mapped.get("fragment_id"),
+                start=mapped.get("raw_start"), end=mapped.get("raw_end"), page=mapped.get("source_page"), bbox=mapped.get("bbox"))
         for span in semantic.get("spans") or [{}]:
             add("coverage", **keys, **{k: span.get(k) for k in ("block_id", "start", "end")},
                 selection_origin=row["selection_origin"], register_status=row["passage_register"].get("status"),
@@ -153,6 +162,8 @@ def processing_evidence_tables(
                     evidence_kind="stored_scan_not_verified_dependency_resolution")
 
     statuses = {
+        "processing_attempts": ("recorded" if "processing_attempts" in envelope else "not_recorded", "Durable retry outcomes; historical missing attempts are not reconstructed."),
+        "source_views": ("recorded" if any("source_fragments" in run for run in runs) else "not_recorded", "Recorded original extraction and derived source views; no inferred historical layout evidence."),
         "runs": ("recorded" if "quality_processing_runs" in envelope else "not_recorded", "Stored processing runs; objects_revision identifies this export, not a historical run."),
         "run_candidates": ("recorded" if "quality_processing_runs" in envelope else "not_recorded", "Historical candidate identity; compare object_version AND canonical_hash before linking to current state."),
         "semantic_proposals": ("recorded" if replay else "not_recorded", "Latest saved replay record only; not the raw provider response or every attempt."),

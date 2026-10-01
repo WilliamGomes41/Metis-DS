@@ -16,7 +16,6 @@ from threading import Barrier
 import pytest
 from fastapi.testclient import TestClient
 
-from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.document_status_ui_v1 import install_document_status_ui
 from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
 from src.operations_console_app import create_console_app
@@ -26,13 +25,14 @@ from src.pre_review_semantic_v1 import (
     bind_pre_review_semantic_processing,
     semantic_spec_from_fragments,
 )
+from tests.test_review_batch_atomic_postgres import _console
+from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
 
 
-def fixture_console(tmp_path, failure):
-    console = DurablePublicationConsole(root=tmp_path / "root", source_store=tmp_path / "sources",
-                                        runtime=tmp_path / "runtime")
-    fragment = dict(fragment_id="p1", fragment_hash="hash-p1", raw_text="Bespreek de private-brontekst.",
-                    clean_text="Bespreek de private-brontekst.", section_path=["Behandeling"],
+def fixture_console(tmp_path, failure, config):
+    console = _console(tmp_path, config)
+    fragment = dict(fragment_id="p1", fragment_hash="hash-p1", raw_text="Een private-brontekst is een afgeschermde bron.",
+                    clean_text="Een private-brontekst is een afgeschermde bron.", section_path=["Begrippen"],
                     source_locator={"locator_type": "web_line_range", "locator_value": "lines:1-1"})
     console._extract = lambda *_a, **_kw: [fragment]
 
@@ -42,7 +42,7 @@ def fixture_console(tmp_path, failure):
         block = json.loads(payload["input"][1]["content"])["source_blocks"][0]
         obj = {"spans": [{"block_id": block["block_id"], "start": 0,
                           "end": len(block["text"]) + (failure["kind"] == "bounds")}],
-               "proposed_object_type": "recommendation", "recommendation_semantics": None}
+               "proposed_object_type": "definition", "recommendation_semantics": None}
         return {"output": [{"type": "message", "content": [{"type": "output_text", "text": json.dumps(
             {"objects": [obj], "abstain_reason": None})}]}]}
 
@@ -55,10 +55,10 @@ def fixture_console(tmp_path, failure):
     ("bounds", "pre_review_llm_proposal_rejected", "semantic_span_bounds_invalid"),
     ("provider", "pre_review_llm_provider_unavailable", ""),
 ])
-def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(tmp_path, caplog, kind, code, reason):
+def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_postgres, tmp_path, caplog, kind, code, reason):
     caplog.set_level(logging.INFO, logger="metis.provider")
     failure = {"kind": kind}
-    console = fixture_console(tmp_path, failure)
+    console = fixture_console(tmp_path, failure, workflow_postgres)
     actor = console.create_account(username="researcher", password="researcher-secret", roles=("researcher", "reviewer"))
     other = console.create_account(username="other", password="other-secret", roles=("reviewer",))
     app = create_console_app(console)
@@ -113,7 +113,9 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(tmp_path, 
     assert "private-" not in caplog.text and "private-" not in response.text
     assert _PROCESSING_REFERENCE.get() == "-"
 
-    assert console._envelope(sid) == before
+    after_failure = deepcopy(console._envelope(sid))
+    assert after_failure.pop("processing_attempts")[-1]["state"] == "failed"
+    assert after_failure == before
     assert console.objects_revision(sid) == before_revision
     assert console.object_review_bindings(sid) == before_bindings
 
@@ -123,14 +125,15 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(tmp_path, 
     client.post("/logout")
     assert client.get(f"/review/processing-diagnostics?document={sid}").status_code == 401
 
-    restarted = fixture_console(tmp_path, failure)
-    assert restarted._envelope(sid) == before
+    restarted = fixture_console(tmp_path, failure, workflow_postgres)
+    assert restarted._envelope(sid)["processing_attempts"][-1]["processing_reference"] == reference
     failure["kind"] = "valid"
     recovered = restarted.reextract_unpublished(actor_id=actor["account_id"], snapshot_id=sid)
     assert recovered["snapshot_id"] == sid and recovered["sha256"] == before["sha256"]
     assert "processing_blocker" not in recovered
     assert recovered["publication_eligibility"] != PRE_REVIEW_BLOCKED
-    assert len(recovered["quality_processing_runs"]) == 2  # diagnostic logging adds no durable writes
+    assert len(recovered["quality_processing_runs"]) == 2  # failed retry remains separate from candidate provenance
+    assert [attempt["state"] for attempt in recovered["processing_attempts"]] == ["failed", "succeeded"]
     assert restarted.waiting_task_counts(actor["account_id"])["review"] == 1
     assert _PROCESSING_REFERENCE.get() == "-"
     with TestClient(create_console_app(restarted), base_url="https://testserver") as recovered_client:

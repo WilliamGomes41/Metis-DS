@@ -105,8 +105,12 @@ def test_change_during_blob_read_is_not_overwritten(tmp_path, monkeypatch, actio
     assert console.snapshot_objects(sid, include_blocked=True) == winner["objects"]
 
 
-def test_http_zero_object_blocked_work_can_reprocess_from_blob(tmp_path):
-    console, source, accounts, receipt = _system(tmp_path)
+def test_http_zero_object_blocked_work_can_reprocess_from_blob(recovery_postgres, tmp_path):
+    source = MemorySourceStore()
+    canonical = PostgresCanonicalPublicationStore(recovery_postgres)
+    console = pg_console(tmp_path, recovery_postgres, canonical, source, runtime_name="runtime")
+    accounts = _accounts(console)
+    receipt = _ingest_richtlijn(console, accounts)
     sid = receipt["snapshot_id"]
     console._envelopes[sid]["publication_eligibility"] = PRE_REVIEW_BLOCKED
     console._envelopes[sid]["processing_blocker"] = {"code": "empty_test_extract"}
