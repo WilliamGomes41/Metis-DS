@@ -114,7 +114,6 @@ def why_selected(obj: dict[str, Any], *, content_kind: str = "") -> str:
             "Deze brontekst is nog niet inhoudelijk beoordeeld. "
             "Bepaal aan de hand van de bron wat ermee moet gebeuren."
         )
-    proposed = proposed_type_of(obj)
     if proposed in WHY_SELECTED:
         return WHY_SELECTED[proposed]
     return "Metis stelt voor deze passage te beoordelen. Controleer dit aan de hand van de bron."
