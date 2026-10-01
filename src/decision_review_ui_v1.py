@@ -119,10 +119,10 @@ def install_decision_review_routes(app, console, require, page):
         for i, edge in enumerate([*graph["edges"], {}, {}, {}]):
             evidence = edge.get("evidence_ids", [])
             label_id = next((k for k, text in text_evidence if k in evidence and text == edge.get("label")), "")
-            edges.append(f'<fieldset><legend>Route {i + 1}</legend>'
-                         f'<label>Van<select name="from">{options([("", "Geen route"), *names], edge.get("from"))}</select></label>'
+            edges.append(f'<fieldset><legend>Verbinding {i + 1}</legend>'
+                         f'<label>Van<select name="from">{options([("", "Geen verbinding"), *names], edge.get("from"))}</select></label>'
                          f'<label>Naar<select name="to">{options(names, edge.get("to"))}</select></label>'
-                         f'<label>Routevorm<select name="kind">{options([("continue", "Onvoorwaardelijk vervolg"), ("answer", "Antwoord")], edge.get("kind"))}</select></label>'
+                         f'<label>Soort verbinding<select name="kind">{options([("continue", "Onvoorwaardelijk vervolg"), ("answer", "Antwoord")], edge.get("kind"))}</select></label>'
                          f'<label>Letterlijk antwoord<select name="label">{options(text_evidence, label_id)}</select></label>'
                          f'<label>Lijnbewijs<select name="evidence-{i}" multiple>{"".join(options([(k, v)], k if k in evidence else "") for k,v in graphic_evidence)}</select></label></fieldset>')
         revision = console.objects_revision(document)
@@ -135,15 +135,16 @@ def install_decision_review_routes(app, console, require, page):
                 '<button>Deze actuele passage bevestigen</button></form>' for o in rows)
         problems = publication_issues(env, console.snapshot_objects(document))
         proposals = env.get("decision_graph_proposals", [])
-        proposal_note = (f'<p>{len(proposals)} geometrische routevoorstellen. Richting, antwoordlabel en eindpunten '
-                         'zijn nog niet bevestigd. Controleer ook routes die niet zijn herkend.</p>' if proposals else '')
+        proposal_note = (f'<p>{len(proposals)} geometrische verbindingsvoorstellen. Richting, antwoordlabel en eindpunten '
+                         'zijn nog niet bevestigd. Controleer ook verbindingen die niet zijn herkend.</p>' if proposals else '')
         original = f'/review/brondocument?document={esc(document)}&amp;object={esc(rows[0]["object_id"])}' if rows else ""
         return page(f'<h1>Beslisroutes controleren</h1><p>Controleer iedere route en ieder antwoord tegen de originele pagina. Extra review vervangt ontbrekend bronbewijs niet.</p>'
+                    '<p>Een verbinding legt één stap vast van het ene onderdeel naar het volgende, bijvoorbeeld van een vraag via “Ja” naar een advies. Een route bestaat uit opeenvolgende stappen. Het passagetype Pad kan ook een resultaatbundel aanduiden; dat is geen losse verbinding.</p>'
                     f'<p><a href="/review?document={esc(document)}">Passages beoordelen</a> · <a href="{original}">Open origineel</a> · <a href="/review/policy?document={esc(document)}">Reviewdeelname</a></p>'
                     f'{proposal_note}<p>Open controles: {esc(", ".join(problems) or "geen")}</p>{co_review}'
                     f'<form method="post">{common}<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
                     + "".join(fields + edges) + '<label>Toelichting<input name="reason" required></label>'
-                    '<button name="action" value="graph">Routes opslaan</button></form>'
+                    '<button name="action" value="graph">Verbindingen opslaan</button></form>'
                     f'<form method="post">{common}<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
                     '<label>Verklaring broncontrole<input name="reason" required></label><button name="action" value="confirm">Actuele volledige graaf bevestigen</button></form>')
 

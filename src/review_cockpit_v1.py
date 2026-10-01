@@ -59,9 +59,9 @@ WHY_SELECTED = {
     "explanation": "Metis stelt voor deze passage als toelichting te beoordelen. Controleer dit aan de hand van de bron.",
     "factual_finding": "Metis stelt voor deze passage als feitelijke constatering te beoordelen. Controleer dit aan de hand van de bron.",
     "heading": "Metis stelt voor deze passage als kop in de documentstructuur te beoordelen. Controleer de plaatsing aan de hand van de bron.",
-    "path": "Metis stelt voor deze passage als pad te beoordelen. Controleer dit aan de hand van de bron.",
-    "node": "Metis stelt voor deze passage als knoop te beoordelen. Controleer dit aan de hand van de bron.",
-    "outcome": "Metis stelt voor deze passage als uitkomst te beoordelen. Controleer dit aan de hand van de bron.",
+    "path": "Deze passage is ingedeeld als pad: structuur voor een route of resultaatbundel. Controleer dit aan de hand van de bron.",
+    "node": "Deze passage is ingedeeld als knoop. Controleer of dit een vraag, beslispunt, vertakkingskeuze of scorelijstitem is.",
+    "outcome": "Deze passage is ingedeeld als uitkomst. Controleer of dit het afsluitende advies is en bij welke voorwaarden het hoort.",
 }
 
 
@@ -87,7 +87,25 @@ def semantic_selection_origin(obj: dict[str, Any]) -> str:
     return ""
 
 
-def why_selected(obj: dict[str, Any]) -> str:
+def why_selected(obj: dict[str, Any], *, content_kind: str = "") -> str:
+    proposed = proposed_type_of(obj)
+    bundle = (obj.get("metadata") or {}).get("result_bundle") or {}
+    if proposed in {"path", "node", "outcome"}:
+        if bundle.get("role") == "container":
+            return (
+                "Deze opsomming is automatisch gegroepeerd als resultaatbundel (type Pad). "
+                "Beoordeel hier de samenhang; beoordeel ieder onderdeel afzonderlijk op inhoud."
+            )
+        if bundle.get("role") == "member":
+            return (
+                "Dit onderdeel is automatisch afgesplitst uit een resultaatbundel (type Uitkomst). "
+                "Controleer het advies en de voorwaarden van de bundel aan de hand van de bron."
+            )
+        if content_kind == "pdf" and proposed == "node":
+            return (
+                "Dit PDF-fragment heeft standaard het type Knoop gekregen bij het inlezen. "
+                "Dit is geen inhoudelijke classificatie. Bepaal het juiste type aan de hand van de bron."
+            )
     hint = source_label_hint(obj)
     if hint:
         return hint["guidance"]

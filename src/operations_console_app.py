@@ -206,9 +206,9 @@ OBJECT_TYPE_LABELS = {
     "condition": "Voorwaarde",
     "exception": "Uitzondering",
     "recommendation": "Aanbeveling",
-    "path": "Pad",
-    "node": "Knoop",
-    "outcome": "Uitkomst",
+    "path": "Pad — route of resultaatbundel",
+    "node": "Knoop — vraag of beslispunt",
+    "outcome": "Uitkomst — afsluitend advies",
 }
 BLOCKER_LABELS = {
     "second_named_reviewer_required": "Nog een andere benoemde reviewer moet goedkeuren.",
@@ -2804,13 +2804,36 @@ def _render_review_card(
         if confirmed else
         f'Metis stelt voor: <b>{_esc(proposed_label)}</b>. Dit type is nog niet door jou bevestigd.'
     )
+    classification_help = (
+        '<p>Controleer wat de tekst doet: een definitie legt een begrip uit; een toelichting beschrijft of verklaart iets; '
+        'een advies zegt wat iemand zou moeten doen. Kies bij een verkeerd voorstel <b>Type wijzigen</b>.</p>'
+    )
+    review_intro = 'Metis doet een voorstel; jij bepaalt wat met de passage gebeurt. Controleer de gemarkeerde brontekst, de voorgestelde kop en het informatietype voordat je bevestigt of wijzigt.'
+    selection_note = why_selected(obj)
+    if review_path == "boom":
+        selection_note = why_selected(obj, content_kind=console._envelope(snapshot_id).get("content_kind", ""))
+        classification_note = (
+            f'Eerder bevestigd type: <b>{_esc(_object_type_label(str(confirmed)))}</b>.'
+            if confirmed else
+            f'Huidige indeling: <b>{_esc(proposed_label)}</b>. Dit type is nog niet door jou bevestigd.'
+        )
+        review_intro = 'Jij bepaalt de betekenis van deze passage in de beslisboom. Controleer de brontekst, de plaats in de boom en het type voordat je bevestigt of wijzigt.'
+        classification_help = (
+            '<ul><li><b>Pad</b>: structuur voor een geordende route, bijvoorbeeld vraag → antwoord → advies, '
+            'of een resultaatbundel met afzonderlijk te beoordelen onderdelen. Een pad is zelf geen advies.</li>'
+            '<li><b>Knoop</b>: een vraag, beslispunt, vertakkingskeuze of scorelijstitem, bijvoorbeeld “Is er valrisico?”.</li>'
+            '<li><b>Uitkomst</b>: een afsluitend advies, bijvoorbeeld “Verwijs naar de valpoli”, of “Geen actie nodig”. '
+            'Controleer ook onder welke voorwaarden het advies geldt.</li></ul>'
+            '<p>Een verbinding tussen twee onderdelen controleer je bij <b>Beslisroutes controleren</b>. '
+            'Kies bij een verkeerde indeling <b>Type wijzigen</b>.</p>'
+        )
     return f"""
                 <p><a class="btn-secondary" href="{_review_location(console, snapshot_id, task=task)}">← Terug naar taken</a></p>
                 <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
                   <div class="review-cockpit-copy">
                     <p>{_esc(admission_notice)}</p>
                     {repair_guidance}
-                    <p>Metis doet een voorstel; jij bepaalt wat met de passage gebeurt. Controleer de gemarkeerde brontekst, de voorgestelde kop en het informatietype voordat je bevestigt of wijzigt.</p>
+                    <p>{review_intro}</p>
                   </div>
                   <form class="review-decision-form" method="post" action="/review" data-review-form>
                     <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
@@ -2826,7 +2849,7 @@ def _render_review_card(
                     <section class="review-card-object review-step" data-review-step="a" aria-label="Geselecteerde passage">
                       <p class="eyebrow">Te beoordelen passage</p>
                       <h3>{_esc(heading)}</h3>
-                      <p class="why-selected">{_esc(why_selected(obj))}</p>
+                      <p class="why-selected">{_esc(selection_note)}</p>
                       <p class="meta"><span>status <b>{_esc(review_row_status(obj))}</b></span></p>
                       {object_text_html}
                     </section>
@@ -2857,7 +2880,7 @@ def _render_review_card(
                     <section class="review-step" data-review-step="e" id="classification-{_esc(obj["object_id"])}">
                       <h4>Wat voor informatie is dit?</h4>
                       <p>{classification_note}</p>
-                      <p>Controleer wat de tekst doet: een definitie legt een begrip uit; een toelichting beschrijft of verklaart iets; een advies zegt wat iemand zou moeten doen. Kies bij een verkeerd voorstel <b>Type wijzigen</b>.</p>
+                      {classification_help}
                       <p class="field-help">Een type kiezen is nog geen goedkeuring. Je legt hieronder afzonderlijk vast hoe de passage gebruikt mag worden.</p>
                       <label class="check"><input type="radio" name="type_action" value="dit_klopt"{_checked(draft.get("type_action", ""), "dit_klopt")}> Dit klopt</label>
                       <label class="check"><input type="radio" name="type_action" value="type_wijzigen"{_checked(draft.get("type_action", ""), "type_wijzigen")}> Type wijzigen</label>
