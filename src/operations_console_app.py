@@ -19,6 +19,7 @@ from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from src.document_status_v1 import DOCUMENT_STATUS_LABELS
 from src.four_eyes_v1 import requires_four_eyes
 from src.api_access_v1 import ApiAccessConflict, ApiAccessError, ApiAccessStoreError, PostgresApiAccessStore, VALID_SCOPES
 from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES, review_path_for_klasse
@@ -195,6 +196,7 @@ STATUS_LABELS = {
     "rejected": "afgewezen",
     "published": "gepubliceerd",
 }
+STATUS_LABELS.update(DOCUMENT_STATUS_LABELS)
 OBJECT_TYPE_LABELS = {
     "unclassified": "Nog niet geclassificeerd",
     "factual_finding": "Feitelijke constatering",
@@ -240,6 +242,16 @@ ERROR_COPY = {
     "replaces_snapshot_id_required": "Kies welk bestaand document deze nieuwe versie vervangt.",
     "review_failed": "De beoordeling kon niet worden afgerond. Controleer de huidige passagestatus en meld dit bij de beheerder als de oorzaak niet zichtbaar is.",
     "reviewer_not_named_on_snapshot": "Je bent niet aangewezen als beoordelaar voor dit document. Vraag de verantwoordelijke voor het document om je toe te wijzen.",
+    "primary_replacement_required": "Je kunt de primaire reviewer niet archiveren. Kies ‘Reviewer vervangen’ en wijs in dezelfde handeling een vervanger aan.",
+    "reviewer_already_assigned": "Deze reviewer neemt al deel aan dit traject. Kies een andere reviewer.",
+    "independent_replacement_required": "Kies een andere, beschikbare reviewer die nog geen actieve of verplichte plek in dit traject heeft.",
+    "required_participation_cannot_be_downgraded": "Deze reviewer heeft nog een verplichte plek. Heractiveer die als verplicht of wijs een vervanger aan.",
+    "active_participation_required": "Deze deelname is niet meer actief. Open het deelnemersbeheer opnieuw om de actuele mogelijkheden te zien.",
+    "participation_not_found": "Deze deelname is niet gevonden. Open het deelnemersbeheer opnieuw.",
+    "reviewer_unavailable": "Dit account is niet beschikbaar als reviewer. Kies een actieve menselijke reviewer.",
+    "participation_publisher_required": "Voor deze wijziging is een publisher nodig. Een toegewezen reviewer mag alleen een andere optionele reviewer toevoegen.",
+    "legacy_participation_activation_requires_publisher": "Een publisher moet het deelnemersbeheer voor dit bestaande traject eerst activeren.",
+    "snapshot_object_write_conflict": "Dit traject is intussen gewijzigd. Open de pagina opnieuw en controleer de actuele situatie voordat je de handeling herhaalt.",
     "revision_schema_invalid": "De correctie levert een ongeldige passage op. Controleer je wijziging en meld dit bij de beheerder als opslaan blijft mislukken.",
     "source_continuation_changed": "De bronaanvulling is tussentijds gewijzigd. Open de passage opnieuw en controleer de actuele aanvulling.",
     "source_continuation_not_available": "Er is geen bronaanvulling beschikbaar voor deze passage. Open de passage opnieuw om de actuele mogelijkheden te zien.",
@@ -3170,6 +3182,11 @@ def create_console_app(
             else '<p><a href="/">Naar Mijn werk</a></p>' if account
             else '<p><a href="/login">Naar aanmelden</a></p>'
         )
+        if account and _request.url.path == "/review/participants":
+            document = _request.query_params.get("document") or getattr(_request.state, "review_participation_document", "")
+            back = '<p><a href="/review?work=all">Terug naar reviewoverzicht</a></p>'
+            if document:
+                back += f'<p><a href="/review/participants?{_esc(urlencode({"document": document}))}">Terug naar deelnemersbeheer</a></p>'
         body = _page(
             f"""
             {_nav(account)}

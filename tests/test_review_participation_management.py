@@ -255,3 +255,110 @@ def test_managed_route_correction_invalidates_evidence(setup):
     assert console._envelope(sid)['decision_graph_reviews']==[]
     result = console.consider_publish(actor_id=accounts['publisher']['account_id'],snapshot_id=sid)
     assert any(b.startswith('decision_graph_') for b in result['blockers'])
+
+
+def _participant_forms(html):
+    from html.parser import HTMLParser
+
+    class Forms(HTMLParser):
+        def __init__(self):
+            super().__init__(); self.forms=[]; self.current=None; self.select=None
+        def handle_starttag(self, tag, attrs):
+            a=dict(attrs)
+            if tag=='form':
+                self.current={'inputs':{},'choices':{}}; self.forms.append(self.current)
+            elif self.current is not None:
+                if tag=='input':
+                    self.current['inputs'][a.get('name')]=a.get('value','')
+                elif tag=='select':
+                    self.select=a.get('name'); self.current['choices'][self.select]=[]
+                elif tag=='option' and self.select:
+                    self.current['choices'][self.select].append(a.get('value'))
+        def handle_endtag(self, tag):
+            if tag=='form': self.current=None
+            if tag=='select': self.select=None
+    parser=Forms();parser.feed(html)
+    return [f for f in parser.forms if 'action' in f['inputs']]
+
+
+def test_participant_forms_offer_only_available_allowed_choices(tmp_path):
+    from src.operations_console_app import create_console_app
+    console=_console(tmp_path); accounts=_accounts(console); sid=ingest(console,accounts)['snapshot_id']
+    primary=accounts['researcher']['account_id']; secondary=accounts['reviewer']['account_id']
+    change(console,accounts,sid,'add_required',secondary)
+    change(console,accounts,sid,'archive',secondary)
+    optional=person(console,'archived.optional')
+    change(console,accounts,sid,'add_optional',optional)
+    change(console,accounts,sid,'archive',optional)
+    available=person(console,'available')
+    unavailable=[]
+    for flag in ('retirement','blocked','disabled'):
+        actor=person(console,flag);console._accounts[actor][flag]=True;unavailable.append(actor)
+    console._save_accounts()
+    with TestClient(create_console_app(console),base_url='https://testserver') as client:
+        client.post('/login',data={'username':'publisher.carla','password':'carla-secret'})
+        page=client.get('/review/participants',params={'document':sid})
+        forms=_participant_forms(page.text)
+        optional_add=next(f for f in forms if f['inputs']['action']=='add_optional')
+        required_add=next(f for f in forms if f['inputs']['action']=='add_required')
+        assert set(optional_add['choices']['reviewer_id'])=={optional,available}
+        assert set(required_add['choices']['reviewer_id'])=={optional,available,secondary}
+        assert not any(f['inputs']['action']=='archive' for f in forms)
+        for f in forms:
+            for ids in f['choices'].values():
+                assert not set(ids)&set(unavailable+[accounts['publisher']['account_id'],primary])
+            if f['inputs']['action']=='replace':
+                target=f['inputs']['reviewer_id']
+                assert set(f['choices']['replacement_id'])=={optional,available}-{target}
+        # Crafted submissions still reach the authoritative command guard.
+        before=deepcopy(console._envelope(sid))
+        denied=client.post('/review/participants',data={**required_add['inputs'],'reviewer_id':primary,'reason':'already assigned'})
+        assert denied.status_code==400 and 'neemt al deel' in denied.text
+        assert console._envelope(sid)==before
+        client.post('/login',data={'username':'researcher.anne','password':'anne-secret'})
+        mine=_participant_forms(client.get('/review/participants',params={'document':sid}).text)
+        assert [f['inputs']['action'] for f in mine]==['add_optional']
+
+
+def test_trajectory_readable_history_navigation_and_archive_error(tmp_path):
+    from src.operations_console_app import create_console_app
+    console=_console(tmp_path);accounts=_accounts(console);sid=ingest(console,accounts)['snapshot_id'];finish(console,accounts,sid)
+    primary=accounts['researcher']['account_id']; secondary=accounts['reviewer']['account_id']
+    change(console,accounts,sid,'add_required',secondary);approve_all(console,accounts,sid,secondary)
+    change(console,accounts,sid,'archive',secondary)
+    replacement=person(console,'Daan Vervanger')
+    change(console,accounts,sid,'replace',secondary,replacement_id=replacement)
+    before=deepcopy(console._envelope(sid));bindings=deepcopy(console.object_review_bindings(sid))
+    with TestClient(create_console_app(console),base_url='https://testserver') as client:
+        client.post('/login',data={'username':'publisher.carla','password':'carla-secret'})
+        trajectory=client.get('/review/trajectory',params={'document':sid})
+        assert trajectory.status_code==200
+        assert '2 goedgekeurd' in trajectory.text and 'Passage 1 (versie ' in trajectory.text
+        assert 'Verplichte reviewer toegevoegd' in trajectory.text and 'Deelname gearchiveerd' in trajectory.text
+        assert 'Reviewer vervangen' in trajectory.text and 'Daan Vervanger' in trajectory.text
+        assert 'Bert Reviewer: Goedgekeurd' in trajectory.text and 'historisch' in trajectory.text
+        assert 'Terug naar reviewoverzicht' in trajectory.text
+        assert 'add_required' not in trajectory.text and "{'approved'" not in trajectory.text
+        assert not any(o['object_id'] in trajectory.text for o in passages(console,sid))
+        manage=client.get('/review/participants',params={'document':sid})
+        assert 'Terug naar traject' in manage.text
+        denied=client.post('/review/participants',data={'document':sid,'action':'archive','reviewer_id':primary,
+            'reason':'test','command_id':uuid4().hex,'expected_revision':console.objects_revision(sid)})
+        assert denied.status_code==400
+        assert 'primaire reviewer niet archiveren' in denied.text and 'Reviewer vervangen' in denied.text
+        assert '/review/participants?document='+sid in denied.text
+        assert 'Terug naar deelnemersbeheer' in denied.text
+        assert console._envelope(sid)==before and console.object_review_bindings(sid)==bindings
+
+
+def test_participant_page_has_no_submit_when_no_candidate_available(tmp_path):
+    from src.operations_console_app import create_console_app
+    console=_console(tmp_path);accounts=_accounts(console);sid=ingest(console,accounts)['snapshot_id']
+    change(console,accounts,sid,'add_required',accounts['reviewer']['account_id'])
+    with TestClient(create_console_app(console),base_url='https://testserver') as client:
+        client.post('/login',data={'username':'publisher.carla','password':'carla-secret'})
+        page=client.get('/review/participants',params={'document':sid})
+        forms=_participant_forms(page.text)
+        assert [f['inputs']['action'] for f in forms]==['archive']
+        assert forms[0]['choices']['reviewer_id']==[accounts['reviewer']['account_id']]
+        assert 'Geen beschikbare reviewers voor deze handeling.' in page.text

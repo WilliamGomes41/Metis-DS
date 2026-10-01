@@ -55,3 +55,15 @@ Verification (2026-10-01)
 Operational compatibility
 
 Existing v1 and legacy records stay readable. Participation changes explicitly opt unpublished records into managed-review-v2. Generic change_review_policy commands now reject with managed_participation_command_required; clients must use manage_review_participation with command ID, expected revision and reason. After activation, keep a compatible binary or restore a consistent backup; an older binary must not write managed records.
+
+UX completion scope (2026-10-01)
+
+This follow-up is Class B, rewrite risk none: presentation/navigation only, with no new durable transition or authority. Existing participation commands remain the sole writer and authorization boundary. The UI reads accounts, envelope policy and bindings, offers only choices allowed by those existing rules, translates labels/errors and restores navigation. Source, identities, approvals, history and command semantics remain unchanged. Proof: rendered-form choices and forged-request rejection, readable detail/history labels and links, followed by browser actions on synthetic data.
+
+UX completion evidence
+
+- Full local suite: 2441 passed, 5 dependency warnings, 166.52 seconds; targeted participation/workspace/workboard tests: 33 passed. Native PostgreSQL enabled.
+- Browser download blocker resolved by using installed Chromium 151 through agent-browser. Local synthetic data only. Verified all/theme selection, read-only trajectory, publisher required add/archive/replace, reviewer optional add, reason validation, permitted dropdown choices, specific primary-archive rejection and return navigation.
+- Desktop and 390px viewport screenshots inspected: readable labels/history and no horizontal overflow on the narrow trajectory. Browser JavaScript error log empty. Authentication through local test accounts; no production or Entra browser test.
+- Display-only changes: Dutch lifecycle/status/action/error labels, numbered passage references, standard navigation and return links. Candidate lists use existing reviewer availability validation and existing membership rules; the command service remains authoritative for forged or stale requests.
+- Repository preflight, compilation, API compatibility and diff whitespace checks passed. The prior visual-verification limitation above records the earlier attempt; it is resolved by this follow-up.
