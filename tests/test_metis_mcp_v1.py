@@ -56,7 +56,7 @@ class IdentityStore:
 def signed():
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     claims = dict(tid=TENANT, oid=OID, aud=AUDIENCE, iss=CONFIG.issuer, ver='2.0',
-                  azp=CLIENT, scp='Metis.Read', iat=int(time.time()), nbf=int(time.time())-1,
+                  azp=CLIENT, scp='Metis.Read2', iat=int(time.time()), nbf=int(time.time())-1,
                   exp=int(time.time())+300, roles=['Metis.Reviewer', 'Metis.Publisher'])
     return key, claims
 
@@ -71,7 +71,9 @@ def authenticator(account, signed):
 
 @pytest.mark.parametrize('change', [
     {'aud': CLIENT}, {'iss': 'https://evil.example'}, {'tid': CLIENT}, {'azp': AUDIENCE},
-    {'scp': ''}, {'ver': '1.0'}, {'exp': 1}, {'nbf': int(time.time())+10000},
+    {'scp': ''}, {'scp': 'Metis.Read'}, {'scp': 'Metis.Read20'},
+    {'scp': 'Metis.Read2.extra'},
+    {'ver': '1.0'}, {'exp': 1}, {'nbf': int(time.time())+10000},
     {'oid': 'not-an-identity'}, {'roles': 'Metis.Publisher'},
 ])
 def test_signed_tokens_enforce_resource_delegation_and_time(signed, change):
@@ -119,8 +121,13 @@ def connection(tmp_path, monkeypatch, signed):
 def test_protocol_auth_settings_and_unchanged_csrf(connection):
     console, accounts, first, second, client, call, store, token = connection
     assert client.post('/mcp', json={}).status_code == 401
-    assert 'resource_metadata=' in client.post('/mcp', json={}).headers['www-authenticate']
-    assert client.get('/.well-known/oauth-protected-resource/mcp').json()['resource'] == CONFIG.resource
+    challenge = client.post('/mcp', json={}).headers['www-authenticate']
+    assert 'resource_metadata=' in challenge
+    expected_scope = f'api://{AUDIENCE}/Metis.Read2'
+    assert f'scope="{expected_scope}"' in challenge
+    metadata = client.get('/.well-known/oauth-protected-resource/mcp').json()
+    assert metadata['resource'] == CONFIG.resource
+    assert metadata['scopes_supported'] == [expected_scope]
     headers = {'Authorization': 'Bearer '+token}
     response = client.post('/mcp', headers=headers, json={'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {'protocolVersion': '2025-06-18'}})
     assert response.json()['result']['protocolVersion'] == '2025-06-18'
@@ -181,7 +188,9 @@ def test_disabled_endpoint_and_config_fail_closed(tmp_path, monkeypatch):
     monkeypatch.setenv('METIS_MCP_ENABLED', '1')
     assert TestClient(create_console_app(console)).post('/mcp', json={}).status_code == 503
     _login(client, 'publisher.carla')
-    assert 'Configuratie voor de beheerder' in client.get('/settings/chatgpt').text
+    settings = client.get('/settings/chatgpt').text
+    assert 'Configuratie voor de beheerder' in settings
+    assert 'API-scope Metis.Read2 ' in settings
 
 
 def test_lineage_preserves_source_locations_without_exposing_storage(connection):

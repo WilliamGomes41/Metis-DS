@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from jsonschema import Draft202012Validator
 from starlette.concurrency import run_in_threadpool
 
-from src.metis_mcp_auth_v1 import configuration, McpAuthenticator
+from src.metis_mcp_auth_v1 import configuration, McpAuthenticator, DELEGATED_READ_SCOPE
 from src.metis_mcp_queries_v1 import McpQueries, McpQueryError, TABLES
 from src.product_security_v1 import SlidingWindowRateLimiter
 
@@ -77,8 +77,8 @@ def install_mcp(app, console, identity, origin, *, require_account, render_page,
         functions = ''.join(f'<li><b>{escape(tool["name"])}</b> — {escape(tool["description"])}</li>' for tool in TOOLS)
         setup = ''
         if 'publisher' in account.get('roles', []):
-            setup = '''<details><summary>Configuratie voor de beheerder</summary>
-              <p>Gebruik de bestaande Microsoft-aanmelding. Configureer een gedelegeerde Entra API-scope Metis.Read en een aparte OAuth-client voor ChatGPT, met dezelfde Metis-app-rollen.</p>
+            setup = f'''<details><summary>Configuratie voor de beheerder</summary>
+              <p>Gebruik de bestaande Microsoft-aanmelding. Configureer een gedelegeerde Entra API-scope {DELEGATED_READ_SCOPE} en een aparte OAuth-client voor ChatGPT, met dezelfde Metis-app-rollen.</p>
               <p>Deploymentinstellingen: METIS_MCP_ENABLED=1, METIS_MCP_AUDIENCE (API-app-ID), METIS_MCP_CLIENT_ID (ChatGPT OAuth-client-ID). Herstart na wijzigen.</p>
               <p>De volledige procedure staat in docs/METIS_CHATGPT_MCP.md in de repository. Bewaar het clientgeheim uitsluitend in de beveiligde OAuth-configuratie van ChatGPT.</p></details>'''
         return render_page(f'''{nav(account, 'settings')}
