@@ -1149,6 +1149,33 @@ class OperationsConsole:
             raise ConsoleError("uploader_cannot_be_sole_required_reviewer")
         return unique
 
+    def change_review_policy(self, **command: Any) -> dict[str, Any]:
+        from src.decision_review_commands_v1 import execute
+        return execute(self, action="policy", **command)
+
+    def update_decision_graph(self, **command: Any) -> dict[str, Any]:
+        from src.decision_review_commands_v1 import execute
+        return execute(self, action="graph", **command)
+
+    def confirm_decision_graph(self, **command: Any) -> dict[str, Any]:
+        from src.decision_review_commands_v1 import execute
+        return execute(self, action="confirm", **command)
+
+    def _validated_review_policy(self, value: dict[str, Any]) -> dict[str, Any]:
+        from src.review_policy_v1 import validate_policy, participants
+        try:
+            policy = validate_policy(value)
+        except ValueError as exc:
+            raise ConsoleError(str(exc)) from exc
+        for actor_id in participants(policy):
+            account = self._require_role(actor_id, "reviewer")
+            if account.get("retirement") or any(
+                _is_forbidden_identity(str(account.get(key) or ""))
+                for key in ("username", "display_name")
+            ):
+                raise ConsoleError("forbidden_reviewer_identity")
+        return policy
+
     def create_managed_account(
         self,
         *,
@@ -1492,8 +1519,14 @@ class OperationsConsole:
         content_type: str | None = None,
         url: str | None = None,
         replaces_snapshot_id: str | None = None,
+        review_policy: dict[str, Any] | None = None,
+        source_status: str = "unknown",
+        command_id: str | None = None,
+        revision_reason: str = "",
     ) -> dict[str, Any]:
         self._require_role(actor_id, "researcher")
+        if source_status not in {"unknown", "established", "draft"}:
+            raise ConsoleError("invalid_source_status")
         if ingest_kind not in {"new", "new_version"}:
             raise ConsoleError("invalid_ingest_kind")
         if class_ not in ALLOWED_CLASSES:
@@ -1513,7 +1546,14 @@ class OperationsConsole:
             pattern=ISO_DATE_RE,
             code="invalid_source_date",
         )
-        reviewers = self._resolve_named_reviewers(named_reviewers, actor_id)
+        if review_policy is None:
+            reviewers = self._resolve_named_reviewers(named_reviewers, actor_id)
+        else:
+            review_policy = self._validated_review_policy(review_policy)
+            from src.review_policy_v1 import participants
+            reviewers = participants(review_policy)
+            if named_reviewers and set(named_reviewers) != set(reviewers):
+                raise ConsoleError("review_policy_membership_conflict")
         review_path = review_path_for_klasse(class_)
         candidate_url = url or live_url or ""
         if review_path == "boom" and is_live_rest_url(candidate_url):
@@ -1530,7 +1570,9 @@ class OperationsConsole:
         if data is None:
             raise ConsoleError("official_file_or_url_required")
         filename = normalize_upload_filename(filename)
-        if review_path == "boom":
+        if review_path == "boom" and review_policy is not None and data.startswith(b"%PDF-"):
+            kind = classify_official_file(data, filename, content_type)
+        elif review_path == "boom":
             freeze_errors = boom_freeze_errors(
                 data=data,
                 filename=filename,
@@ -1543,11 +1585,32 @@ class OperationsConsole:
             if freeze_errors:
                 raise ConsoleError(freeze_errors[0])
             kind = "boom"
+        elif review_policy is not None and not boom_freeze_errors(data=data, filename=filename, live_url=live_url or ""):
+            kind = "boom"
         else:
             kind = classify_official_file(data, filename, content_type)
         if url and kind == "html":
             raise ConsoleError("live_url_html_not_allowed")
         digest = safe_path_token(sha256_bytes(data), pattern=STORE_DIGEST_RE)
+        ingest_command = None
+        if command_id is not None:
+            if not command_id.strip() or len(command_id) > 128:
+                raise ConsoleError("ingest_command_invalid")
+            from src.integrity_kernel import stable_hash
+            ingest_command = {"id": command_id, "actor_id": actor_id,
+                "payload_hash": stable_hash({"digest": digest, "filename": filename, "kind": kind,
+                    "title": title.strip(), "version": source_version, "date": source_date,
+                    "class": class_, "family": family_hook, "reviewers": reviewers, "policy": review_policy,
+                    "source_status": source_status, "live_url": live_url or url or "", "ingest_kind": ingest_kind,
+                    "replaces_snapshot_id": replaces_snapshot_id, "revision_reason": revision_reason})}
+            identity_hash = stable_hash({"actor_id": actor_id, "command_id": command_id})
+            command_snapshot = f"snap-{identity_hash[:16]}-{identity_hash[16:24]}"
+            self.list_envelopes()
+            prior = self._envelopes.get(command_snapshot)
+            if prior is not None:
+                if prior.get("ingest_command") != ingest_command:
+                    raise ConsoleError("ingest_command_conflict")
+                return self._receipt(prior)
         immutable_locator = None
         if self.immutable_source_store is not None:
             try:
@@ -1562,7 +1625,7 @@ class OperationsConsole:
         stored_path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write_bytes(stored_path, data)
         locator = immutable_locator or f"g0-local:sources/private/{digest}/{filename}"
-        snapshot_id = f"snap-{digest[:16]}-{uuid.uuid4().hex[:8]}"
+        snapshot_id = command_snapshot if ingest_command else f"snap-{digest[:16]}-{uuid.uuid4().hex[:8]}"
         document_id = f"console-{_slug(family_hook)}-{_slug(title)}-{_slug(source_version)}-{digest[:8]}"
         source_id = f"src-{digest[:16]}"
         previous = None
@@ -1570,6 +1633,8 @@ class OperationsConsole:
             if not replaces_snapshot_id:
                 raise ConsoleError("replaces_snapshot_id_required")
             previous = self._envelope(replaces_snapshot_id)
+            if review_policy is not None and document_id == previous["document_id"]:
+                document_id = f"{document_id}-revision-{snapshot_id[5:]}"
 
         envelope = {
             "snapshot_id": snapshot_id,
@@ -1595,15 +1660,21 @@ class OperationsConsole:
             "family": family_hook,
             "named_reviewers": reviewers,
             "uploader_account_id": actor_id,
+            "source_declaration": {"status": source_status, "declared_by": actor_id, "declared_at": utc_now()},
             "review_passes": {},
             "is_live_capture": ingest_kind == "new",
             "replaces_snapshot_id": replaces_snapshot_id,
+            "revision_reason": revision_reason,
             "object_diff": None,
             "clinical_rereview_required": False,
             "acquired_at": utc_now(),
             "console_version": CONSOLE_VERSION,
         }
 
+        if ingest_command:
+            envelope["ingest_command"] = ingest_command
+        if review_policy is not None:
+            envelope["review_policy"] = deepcopy(review_policy)
         processing_started = quality_instant()
         try:
             fragments, spec = self._fragments_and_spec(
@@ -1619,6 +1690,7 @@ class OperationsConsole:
                     "snapshot_id": snapshot_id,
                     "source_sha256": digest,
                     "semantic_replay": None,
+                    "explicit_decision_graph": review_path == "boom" and review_policy is not None,
                 },
             )
         except ConsoleError as exc:
@@ -1656,7 +1728,7 @@ class OperationsConsole:
             }
         }
         objects = transform_generic(spec, manifest, fragments)
-        if kind == "boom":
+        if review_path == "boom":
             stamp_boom_flags(objects, fragments)
         else:
             objects = apply_admission_gate(
@@ -1667,6 +1739,12 @@ class OperationsConsole:
                 source_hash=digest,
             )
         objects = apply_passage_register(objects)
+        if review_policy is not None:
+            from src.review_policy_v1 import project_policy
+            project_policy(objects, review_policy)
+        if review_path == "boom" and review_policy is not None:
+            from src.decision_graph_v1 import prepare_graph
+            envelope.update(prepare_graph(stored_path, data, kind, fragments, objects, digest))
         if previous:
             envelope["object_diff"] = self._diff_objects(
                 self.snapshot_objects(previous["snapshot_id"]),
@@ -1675,11 +1753,24 @@ class OperationsConsole:
         record_processing(envelope, objects, fragments=fragments, replay=replay_record,
                           started_at=processing_started)
         prepared_envelopes = {snapshot_id: envelope}
-        self._commit_prepared_store(
-            objects=(snapshot_id, objects),
-            envelopes=prepared_envelopes,
-        )
+        try:
+            self._commit_prepared_store(
+                objects=(snapshot_id, objects), envelopes=prepared_envelopes,
+                expected_revision="" if ingest_command else None,
+            )
+        except ConsoleError:
+            if not ingest_command:
+                raise
+            self.list_envelopes()
+            prior = self._envelopes.get(snapshot_id)
+            if prior and prior.get("ingest_command") == ingest_command:
+                return self._receipt(prior)
+            raise
         return self._receipt(envelope)
+
+    def create_review_successor(self, **command: Any) -> dict[str, Any]:
+        from src.decision_successor_v1 import execute
+        return execute(self, **command)
 
     def reextract_unpublished(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         """Replace unpublished object identities with a new extract of the same freeze.
@@ -1709,6 +1800,7 @@ class OperationsConsole:
                 "snapshot_id": snapshot_id,
                 "source_sha256": envelope["sha256"],
                 "semantic_replay": deepcopy(envelope.get("semantic_replay")),
+                "explicit_decision_graph": "decision_graph" in envelope,
             },
         )
         replay_record = spec.pop(SEMANTIC_REPLAY_SPEC_KEY, None)
@@ -1729,7 +1821,7 @@ class OperationsConsole:
             }
         }
         objects = transform_generic(spec, manifest, fragments)
-        if envelope["content_kind"] == "boom":
+        if envelope["class"] == "beslisboom":
             stamp_boom_flags(objects, fragments)
         else:
             objects = apply_admission_gate(
@@ -1741,6 +1833,12 @@ class OperationsConsole:
             )
         objects = apply_passage_register(objects)
         prepared_envelope = deepcopy(envelope)
+        if envelope.get("review_policy"):
+            from src.review_policy_v1 import project_policy
+            project_policy(objects, envelope["review_policy"])
+        if "decision_graph" in envelope:
+            from src.decision_graph_v1 import prepare_graph
+            prepared_envelope.update(prepare_graph(freeze_path, freeze_bytes, envelope["content_kind"], fragments, objects, envelope["sha256"]))
         if isinstance(replay_record, dict):
             prepared_envelope["semantic_replay"] = deepcopy(replay_record)
         prepared_envelope["review_passes"] = {}
@@ -1964,12 +2062,27 @@ class OperationsConsole:
         class_: str,
         formation_context: dict[str, Any] | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        del formation_context
+        explicit_graph = bool((formation_context or {}).get("explicit_decision_graph"))
+        if kind == "pdf" and class_ == "beslisboom":
+            from src.decision_graph_v1 import pdf_fragments
+            try:
+                fragments = pdf_fragments(path, document_id=document_id, source_id=source_id)
+            except Exception as exc:
+                raise ConsoleError("invalid_decision_pdf") from exc
+            return fragments, boom_spec_from_fragments(document_id=document_id, title=title,
+                                                      family=family, class_=class_, fragments=fragments)
         if kind == "boom":
             try:
                 fragments = extract_boom_fragments(data, document_id=document_id, source_id=source_id)
             except ValueError as exc:
                 raise ConsoleError("invalid_boom_freeze") from exc
+            if explicit_graph and class_ == "beslisboom":
+                from src.decision_bundles_v1 import split_bundles
+                fragments = split_bundles(fragments)
+            if class_ != "beslisboom":
+                fragments = [{k: v for k, v in f.items() if k != "boom_kind"} for f in fragments]
+                return fragments, _spec_from_fragments(document_id=document_id, title=title, family=family,
+                    class_=class_, fragments=fragments, content_kind=kind)
             spec = boom_spec_from_fragments(
                 document_id=document_id,
                 title=title,
@@ -2328,6 +2441,8 @@ class OperationsConsole:
         from_class = live["class"]
         if new_class == from_class:
             raise ConsoleError("class_unchanged")
+        if live.get("decision_graph") and is_cross_model_class_change(from_class, new_class):
+            raise ConsoleError("decision_graph_class_change_requires_successor")
         identity_before = source_identity_fields(live)
         original_rows, expected_revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
         _, freeze_bytes = self._verified_source_bytes(live)
@@ -2472,6 +2587,12 @@ class OperationsConsole:
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
+        from src.review_policy_v1 import object_policy
+        policy = object_policy(target)
+        if policy != envelope.get("review_policy"):
+            raise ConsoleError("review_policy_projection_mismatch")
+        if policy is not None and decision == "approve" and actor_id != policy["primary"]:
+            raise ConsoleError("primary_review_required")
         quality_before = deepcopy(target)
         from src.source_context_review_v1 import role_of
         if decision == "approve" and role_of(target):
@@ -3030,7 +3151,11 @@ class OperationsConsole:
         target = next((row for row in objects if row.get("object_id") == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
-        if not requires_four_eyes(
+        from src.review_policy_v1 import object_policy, required_reviewers
+        policy = object_policy(target)
+        if policy != envelope.get("review_policy"):
+            raise ConsoleError("review_policy_projection_mismatch")
+        if policy is None and not requires_four_eyes(
             target,
             confirmed_type=str(target.get("confirmed_object_type") or "") or None,
         ):
@@ -3038,7 +3163,12 @@ class OperationsConsole:
 
         bindings = self.object_review_bindings(snapshot_id)
         approvers = exact_current_approver_ids(target, bindings)
-        if len(approvers) >= 2:
+        if policy is not None:
+            if policy["primary"] not in approvers:
+                raise ConsoleError("first_review_required")
+            if actor_id in approvers:
+                return deepcopy(target)
+        elif len(approvers) >= 2:
             return deepcopy(target)
         if not approvers:
             raise ConsoleError("first_review_required")
@@ -3393,6 +3523,32 @@ class OperationsConsole:
         ]
         blockers: list[str] = []
         independence = bool(others)
+        from src.review_policy_v1 import participants, object_policy, validate_policy
+        policy = envelope.get("review_policy")
+        if policy is not None:
+            try:
+                from src.review_policy_v1 import required_reviewers
+                policy = validate_policy(policy)
+                for reviewer_id in required_reviewers(policy):
+                    account = self._require_role(reviewer_id, "reviewer")
+                    if account.get("retirement") or _is_forbidden_identity(account["username"]):
+                        raise ConsoleError("invalid_review_policy")
+                if set(envelope["named_reviewers"]) != set(participants(policy)):
+                    blockers.append("review_policy_membership_conflict")
+                if any(object_policy(obj) != policy for obj in objects):
+                    blockers.append("review_policy_projection_mismatch")
+            except (ValueError, ConsoleError):
+                blockers.append("invalid_review_policy")
+            independence = True
+        from src.decision_graph_v1 import publication_issues
+        blockers.extend(publication_issues(envelope, objects))
+        if any((o.get("metadata") or {}).get("decision_graph_contract") for o in objects) and "decision_graph" not in envelope:
+            blockers.append("decision_graph_missing")
+        try:
+            from src.decision_graph_v1 import verify_source_evidence
+            verify_source_evidence(self, envelope)
+        except (ValueError, OSError):
+            blockers.append("decision_graph_source_evidence_mismatch")
         from src.source_context_review_v1 import context_issues
         if context_issues(self.snapshot_objects(snapshot_id)):
             blockers.append("source_context_review_incomplete")
@@ -3564,6 +3720,9 @@ class OperationsConsole:
                 for obj in objects
             ],
         }
+        if "decision_graph" in envelope:
+            from src.decision_graph_v1 import release_graph
+            manifest["decision_graph_release"] = release_graph(envelope, self.snapshot_objects(snapshot_id))
         manifest_path = self.runtime / RELEASE_MANIFEST_DIRNAME / f"{release_id}.json"
         ledger_size = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
         previous_envelopes = self._envelopes_path.read_bytes() if self._envelopes_path.exists() else None

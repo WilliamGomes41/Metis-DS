@@ -152,6 +152,21 @@ class RetrieveResponse(ProductContractModel):
     tenant_id: str
 
 
+class DecisionGraphResponse(ProductContractModel):
+    api_version: str
+    request_id: str
+    snapshot_id: str
+    release_id: str
+    release_version: str
+    graph: dict[str, Any]
+    graph_hash: str
+    source_sha256: str
+    evidence: dict[str, Any]
+    objects: list[dict[str, Any]]
+    applicability: Literal["not_evaluated"]
+    generation_enabled: bool
+
+
 class KnowledgeResponse(ProductContractModel):
     api_version: str
     synthetic_fixture: bool
@@ -623,6 +638,32 @@ class ProductState:
             return {"api_version": API_VERSION, "service_version": SERVICE_VERSION, "synthetic_fixture": self.synthetic, "status": "abstain", "answerability": "insufficient_evidence", "reason": "advice_bounds_missing", "false_positive_class": "relation_mismatch", "labels": [], "advice_weight": False, "abstain_sentence": sentence_for("advice_bounds_missing"), "results": [], "result_count": 0}
         return {"api_version": API_VERSION, "service_version": SERVICE_VERSION, "synthetic_fixture": self.synthetic, "status": raw.get("behavior"), "answerability": raw.get("answerability"), "reason": raw.get("reason"), "false_positive_class": raw.get("false_positive_class"), "labels": raw.get("labels") or [], "advice_weight": bool(raw.get("advice_weight")), "abstain_sentence": raw.get("abstain_sentence"), "results": results, "result_count": len(results)}
 
+    def decision_graph(self, tenant: ProductAccessPrincipal, snapshot_id: str) -> dict[str, Any]:
+        self.require_scope(tenant, "knowledge:read")
+        store = self.canonical_publication_store
+        if store is None:
+            raise HTTPException(status_code=404, detail={"code": "decision_graph_not_found"})
+        from src.decision_graph_v1 import read_active_graph
+        try:
+            result = read_active_graph(store, self.immutable_source_store, snapshot_id)
+        except (ValueError, CanonicalPublicationStoreError) as exc:
+            raise ProductCorpusError("decision_graph_unavailable") from exc
+        if result is None or any(
+            not tenant.allows_document(o.get("document_id")) or not tenant.allows_topics((o.get("content") or {}).get("topic") or [])
+            for o in result["objects"]
+        ):
+            raise HTTPException(status_code=404, detail={"code": "decision_graph_not_found"})
+        # The public read carries source/route context, not reviewer identities.
+        return {"api_version": API_VERSION, "snapshot_id": snapshot_id,
+                "release_id": result["release_id"], "release_version": result["release_version"],
+                "graph": result["graph"], "graph_hash": result["graph_hash"],
+                "source_sha256": result["source_sha256"], "evidence": result["evidence"],
+                "applicability": "not_evaluated", "generation_enabled": False,
+                "objects": [{"object_id": o["object_id"], "object_version": o["object_version"],
+                             "content": o["content"], "source": o["source"],
+                             "result_bundle": (o.get("metadata") or {}).get("result_bundle"),
+                             "source_fragments": o["provenance"]["source_fragments"]} for o in result["objects"]]}
+
     def knowledge(self, tenant: ProductAccessPrincipal, object_id: str) -> dict[str, Any]:
         self.require_scope(tenant, "knowledge:read")
         self.refresh()
@@ -816,6 +857,17 @@ def create_product_app(
     def retrieve(req: RetrieveRequest, request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
         started = time.perf_counter(); result = state.retrieve(tenant, req); result["request_id"] = request.state.request_id; result["tenant_id"] = tenant.tenant_id
         ids = [x["knowledge_object_id"] for x in result["results"]]; logged_response(request_id=request.state.request_id, tenant=tenant, endpoint="/v1/retrieve", started=started, status_code=200, behavior=result["status"], query=req.query, object_ids=ids); return result
+
+    @app.get("/v1/decision-graphs/{snapshot_id}", response_model=None,
+             responses=_product_responses(DecisionGraphResponse, 401, 403, 404, 429, 503),
+             openapi_extra={"x-metis-required-scope": "knowledge:read"})
+    def decision_graph(snapshot_id: str, request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
+        started = time.perf_counter()
+        result = state.decision_graph(tenant, snapshot_id)
+        result["request_id"] = request.state.request_id
+        logged_response(request_id=request.state.request_id, tenant=tenant, endpoint="/v1/decision-graphs/{snapshot_id}",
+                        started=started, status_code=200, behavior="read", object_ids=[o["object_id"] for o in result["objects"]])
+        return result
 
     @app.get(
         "/v1/knowledge/{object_id}",

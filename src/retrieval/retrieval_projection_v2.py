@@ -112,7 +112,9 @@ def publication_errors(envelope: dict[str, Any]) -> list[str]:
         errors.append("content_hash_missing")
     if not obj.get("object_version"):
         errors.append("object_version_missing")
-    if obj.get("object_type") not in SEARCHABLE_TYPES | NON_SEARCHABLE_TYPES:
+    from src.decision_graph_v1 import CONTRACT as GRAPH_CONTRACT
+    graph_object = (obj.get("metadata") or {}).get("decision_graph_contract") == GRAPH_CONTRACT
+    if obj.get("object_type") not in SEARCHABLE_TYPES | NON_SEARCHABLE_TYPES and not graph_object:
         errors.append("unknown_object_type")
     if (
         CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD in obj
@@ -218,6 +220,10 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
     records: list[dict[str, Any]] = []
     for env in valid:
         obj = env["knowledge_object"]
+        if (obj.get("metadata") or {}).get("decision_graph_contract") == "source-decision-graph-v1":
+            # Decision content is served through the complete release graph,
+            # never as a detached prose recommendation.
+            continue
         if role_of(obj):
             blocked.append({"object_id": obj["object_id"], "errors": ["source_context_not_knowledge"]})
             continue

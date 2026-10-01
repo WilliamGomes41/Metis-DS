@@ -253,7 +253,7 @@ ERROR_COPY = {
     "invalid_store_path": "De bestandsnaam kan niet veilig worden verwerkt. Hernoem het bestand, bijvoorbeeld naar eenzaamheid.pdf, en kies het opnieuw.",
     "not_authenticated": "Je sessie is verlopen of je bent nog niet aangemeld. Meld je aan om verder te gaan.",
     "invalid_credentials": "De gebruikersnaam en het wachtwoord komen niet overeen. Controleer beide en probeer opnieuw.",
-    "uploader_cannot_be_sole_required_reviewer": "De uploader mag reviewer zijn, maar niet de enige.",
+    "uploader_cannot_be_sole_required_reviewer": "Bij de expliciete policy kan een bevoegde uploader zelf afronden. Iedere verplicht gekozen reviewer moet onafhankelijk deelnemen. PDF-beslisbomen gebruiken de expliciete policy.",
     "word_not_first_wave": "Dit Word-bestand kan niet worden verwerkt. Sla het op als PDF en lever die PDF in.",
     "story_html_boom_player_out_of_first_wave": "Deze interactieve beslisboom kan niet als HTML-pagina worden ingeleverd. Vraag de beheerder om een ondersteunde export.",
     "story_html_alone_insufficient": "Dit HTML-bestand bevat niet de volledige beslisboom. Vraag de beheerder om een volledige beslisboomexport.",
@@ -4082,6 +4082,7 @@ def create_console_app(
               <p class="lead">Lever HTML, PDF of een gehashte beslisboom-freeze in. Klasse bepaalt het reviewpad.</p>
               {_passage_formation_status_html(state)}
               <form method="post" action="/ingest" enctype="multipart/form-data">
+                <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
                 <div class="sections">
                   <div class="section">
                     <h3>Bron</h3>
@@ -4136,7 +4137,18 @@ def create_console_app(
                   </div>
                   <div class="section">
                     <h3>Reviewers</h3>
-                    <label for="named_reviewers">Benoemde reviewers</label>
+                    <label for="review_mode">Reviewdeelname</label>
+                    <select id="review_mode" name="review_mode">
+                      <option value="legacy">Bestaande reviewregels</option>
+                      <option value="single">Enkelvoudig — expliciete policy</option>
+                      <option value="optional">Optionele co-review — expliciete policy</option>
+                      <option value="required">Verplichte onafhankelijke review — expliciete policy</option>
+                    </select>
+                    <label for="primary_reviewer">Primaire reviewer (leeg: uploader indien bevoegd)</label>
+                    <select id="primary_reviewer" name="primary_reviewer"><option value="">Uploader</option>{options}</select>
+                    <label for="source_status">Vaststellingsstatus volgens de bron</label>
+                    <select id="source_status" name="source_status"><option value="unknown">Niet opgegeven</option><option value="established">Vastgesteld</option><option value="draft">Concept</option></select>
+                    <label for="named_reviewers">Extra reviewers</label>
                     <select id="named_reviewers" name="named_reviewers" multiple size="6">{options}</select>
                     <p class="muted">De uploader mag reviewer zijn, maar niet de enige.</p>
                   </div>
@@ -4205,6 +4217,10 @@ def create_console_app(
         url: str = Form("") ,
         replaces_document: str = Form(""),
         named_reviewers: list[str] = Form(default=[]),
+        review_mode: str = Form("legacy"),
+        primary_reviewer: str = Form(""),
+        source_status: str = Form("unknown"),
+        command_id: str = Form(""),
         file: UploadFile | None = File(None),
     ) -> str:
         account = _require(request)
@@ -4217,6 +4233,17 @@ def create_console_app(
             content_type = file.content_type
         if isinstance(named_reviewers, str):
             named_reviewers = [named_reviewers] if named_reviewers.strip() else []
+        policy = None
+        if review_mode != "legacy":
+            if review_mode not in {"single", "optional", "required"}:
+                raise ConsoleError("invalid_review_policy")
+            primary = primary_reviewer.strip() or account["account_id"]
+            extras = [i for i in named_reviewers if i != primary]
+            if (review_mode == "single" and extras) or (review_mode == "required" and not extras):
+                raise ConsoleError("invalid_review_assignment")
+            from src.review_policy_v1 import CONTRACT
+            policy = {"contract": CONTRACT, "revision": 1, "primary": primary,
+                      "assignments": [{"reviewer_id": i, "participation": review_mode} for i in extras]}
         receipt = await asyncio.to_thread(
             state.ingest,
             actor_id=account["account_id"],
@@ -4231,9 +4258,14 @@ def create_console_app(
             live_url=live_url,
             class_=class_,
             family=family,
-            named_reviewers=named_reviewers,
+            named_reviewers=[] if policy else named_reviewers,
+            review_policy=policy,
+            source_status=source_status,
+            command_id=command_id or None,
             replaces_snapshot_id=replaces_document.strip() or None,
         )
+        graph_link = (f'<p><a href="/review/decision-graph?document={_esc(receipt["snapshot_id"])}">Controleer beslisroutes</a></p>'
+                      if "decision_graph" in receipt else "")
         pre_review_blocked = receipt.get("publication_eligibility") == PRE_REVIEW_BLOCKED
         lead = (
             "Document opgeslagen. De pre-review kon nog niet worden uitgevoerd; "
@@ -4255,7 +4287,7 @@ def create_console_app(
               <div class="doc-card">
                 {_document_card_heading({**receipt, "status": receipt["state"]})}
               </div>
-              {next_actions}
+              {next_actions}{graph_link}
             </section>
             """
         )
@@ -5310,6 +5342,8 @@ def create_console_app(
     install_quality_routes(app, state, _require, _page)
     from src.route_comparison_app_v1 import install_route_comparison_routes
     install_route_comparison_routes(app, state, _require, _page)
+    from src.decision_review_ui_v1 import install_decision_review_routes
+    install_decision_review_routes(app, state, _require, _page)
     return app
 
 

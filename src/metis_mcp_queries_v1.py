@@ -10,7 +10,7 @@ from src.review_ledger import read_events
 
 DOCUMENT_FIELDS = ('snapshot_id', 'document_id', 'source_id', 'title', 'version', 'date', 'family',
                    'class', 'sha256', 'acquired_at', 'state', 'publication_eligibility',
-                   'processing_blocker', 'replaces_snapshot_id')
+                   'processing_blocker', 'replaces_snapshot_id', 'review_policy', 'source_declaration')
 PASSAGE_FIELDS = ('object_id', 'object_version', 'object_type', 'proposed_object_type',
                   'confirmed_object_type', 'content', 'structure', 'provenance', 'metadata',
                   'relations', 'confirmed_relations', 'governance', 'canonical_hash',
@@ -134,6 +134,9 @@ class McpQueries:
                 for r in store.active_publication_rows() if r.get('snapshot_id') == sid]
             return {**result, 'recorded_state': pick(envelope, ('state', 'publication_eligibility', 'processing_blocker', 'published')),
                     'review_status_counts': dict(Counter(str((r.get('governance') or {}).get('validation_status') or 'not_recorded') for r in current)),
+                    'decision_graph': envelope.get('decision_graph'),
+                    'decision_graph_evidence': envelope.get('decision_graph_evidence'),
+                    'decision_graph_reviews': envelope.get('decision_graph_reviews'),
                     'active_registry_object_count': None if active is None else len(active),
                     'active_registry_rows': None if active is None else page(active, args),
                     'note': 'Active rows come only from the publication registry, or null if unavailable. No publication preflight or repair runs.'}

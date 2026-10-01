@@ -326,6 +326,20 @@ def review_work_item(
         and (obj.get("governance") or {}).get("review_snapshot_hash")
         for obj in objects
     )
+    if "decision_graph" in envelope and not console.snapshot_is_published(snapshot_id):
+        from src.decision_graph_v1 import publication_issues, review_target
+        graph_issues = publication_issues(envelope, objects)
+        target = review_target(envelope["decision_graph"], objects, envelope["review_policy"])
+        actor_confirmed = any(r["reviewer_id"] == account_id and r.get("target") == target
+                              for r in envelope.get("decision_graph_reviews", []))
+        if graph_issues == ["decision_graph_review_incomplete"] and actor_confirmed:
+            item["work_state"] = "waiting_for_reviewer"
+            item["next_href"] = ""
+            item["next_title"] = "Wachten op vereiste mede-review"
+        elif graph_issues:
+            item["work_state"] = "review"
+            item["next_href"] = f"/review/decision-graph?document={quote(snapshot_id, safe='')}"
+            item["next_title"] = "Beslisroutes controleren"
     return item
 
 
@@ -344,6 +358,11 @@ def review_workboard_items(
         for snapshot_id, summary in summaries.items():
             envelope = {"snapshot_id": snapshot_id, **summary["envelope"]}
             if str(envelope.get("publication_eligibility") or "") == PRE_REVIEW_BLOCKED:
+                continue
+            if envelope.get("review_policy"):
+                item = review_work_item(console, envelope=envelope, account=account)
+                if item is not None:
+                    items.append(item)
                 continue
             closure_gap_count = int(summary.get("closure_gap_count") or 0)
             closure_gap_first = str(summary.get("closure_gap_first") or "")

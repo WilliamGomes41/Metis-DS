@@ -45,6 +45,7 @@ class _PostgresBadgeCountsMixin:
                                d.state,
                                d.publication_eligibility,
                                d.clinical_rereview_required,
+                               d.envelope_payload->'review_policy' IS NOT NULL AS has_explicit_policy,
                                EXISTS (
                                    SELECT 1
                                    FROM current_objects o
@@ -66,6 +67,9 @@ class _PostgresBadgeCountsMixin:
                                WHERE r.snapshot_id IS NOT NULL
                                  AND (s.has_needs_review OR s.has_revise)
                            ) AS review,
+                           COUNT(*) FILTER (
+                               WHERE r.snapshot_id IS NOT NULL AND s.has_explicit_policy
+                           ) AS explicit_review_documents,
                            COUNT(*) FILTER (
                                WHERE s.clinical_rereview_required
                            ) AS tree,
@@ -927,6 +931,12 @@ class _PostgresBadgeCountsMixin:
                 "progress_superseded": int(row.get("progress_superseded") or 0),
                 "progress_revised": int(row.get("progress_revised") or 0),
             }
+        from src.review_workboard_v1 import review_work_item
+        for sid, summary in out.items():
+            if summary["envelope"].get("review_policy"):
+                item = review_work_item(self, account=self._account(account_id), envelope=summary["envelope"])
+                if item:
+                    summary.update({k: v for k, v in item.items() if k in summary})
         return out
 
     def _published_snapshot_ids(self, snapshot_ids: list[str]) -> set[str]:
@@ -1022,12 +1032,17 @@ class _PostgresBadgeCountsMixin:
                     raise ConsoleError("durable_publication_lookup_failed", str(exc)) from exc
             publish = len(candidates - published)
 
+        review_count = int(row.get("review") or 0)
+        if row.get("explicit_review_documents") and "reviewer" in roles:
+            from src.review_workboard_v1 import review_workboard_items
+            review_count = sum(i["work_state"] in {"review", "disposition", "technical_repair"}
+                               for i in review_workboard_items(self, account=account))
         return {
             "ingest": int(row.get("ingest") or 0) if "researcher" in roles else 0,
             "tree": int(row.get("tree") or 0)
             if roles & {"researcher", "reviewer", "publisher"}
             else 0,
-            "review": int(row.get("review") or 0) if "reviewer" in roles else 0,
+            "review": review_count if "reviewer" in roles else 0,
             "publish": publish,
             "accounts": 0,
         }
