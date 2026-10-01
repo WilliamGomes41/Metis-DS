@@ -15,6 +15,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from copy import deepcopy
@@ -24,6 +25,9 @@ from contextvars import ContextVar
 from typing import Any, Callable, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+# Per execution, including worker threads; never persisted as document authority.
+_PROCESSING_REFERENCE: ContextVar[str] = ContextVar("pre_review_processing_reference", default="-")
 
 from src.context_aware_split_v1 import split_context_aware_units
 from src.llm_provider_v1 import OPENAI_RESPONSES_URL, load_llm_provider_config
@@ -168,22 +172,23 @@ def _post_json(
     )
     call_id = uuid.uuid4().hex[:12]
     started = time.monotonic()
-    LOGGER.info("METIS_PROVIDER start id=%s timeout=%s", call_id, timeout)
+    LOGGER.info("METIS_PROVIDER start id=%s timeout=%s reference=%s", call_id, timeout, _PROCESSING_REFERENCE.get())
     try:
         with urlopen(request, timeout=timeout) as response:
             raw = response.read()
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
         LOGGER.error(
-            "METIS_PROVIDER failure id=%s type=%s http=%s elapsed=%.2f reason_type=%s",
+            "METIS_PROVIDER failure id=%s type=%s http=%s elapsed=%.2f reason_type=%s reference=%s",
             call_id, type(exc).__name__,
             exc.code if isinstance(exc, HTTPError) else "-",
             time.monotonic() - started,
             type(exc.reason).__name__ if isinstance(exc, URLError) else "-",
+            _PROCESSING_REFERENCE.get(),
         )
         raise ConsoleError("pre_review_llm_provider_unavailable") from exc
     LOGGER.info(
-        "METIS_PROVIDER success id=%s http=%s elapsed=%.2f",
-        call_id, response.status, time.monotonic() - started,
+        "METIS_PROVIDER success id=%s http=%s elapsed=%.2f reference=%s",
+        call_id, response.status, time.monotonic() - started, _PROCESSING_REFERENCE.get(),
     )
     try:
         decoded = json.loads(raw.decode("utf-8"))
@@ -648,7 +653,7 @@ def _semantic_execution_before_review(
                 field_contract_v2=field_contract_v2,
             )
         except SemanticPassageError as exc:
-            LOGGER.error("METIS_VALIDATION rejected code=%s", exc.code)
+            LOGGER.error("METIS_VALIDATION rejected code=%s reference=%s", exc.code, _PROCESSING_REFERENCE.get())
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
         execution = EXECUTION_INFERENCE
         if identity is not None:
@@ -740,15 +745,39 @@ def semantic_spec_from_fragments(
     post_json: PostJson | None = None,
     field_contract_v2: bool = False,
 ) -> dict[str, Any]:
-    units, replay_record = _semantic_execution_before_review(
-        fragments,
-        document_id=document_id,
-        api_key=api_key,
-        model=model,
-        formation_context=formation_context,
-        post_json=post_json,
-        field_contract_v2=field_contract_v2,
-    )
+    reference = uuid.uuid4().hex
+    snapshot_id = str((formation_context or {}).get("snapshot_id") or "")
+    # Do not log document titles, source prose, credentials or provider messages.
+    snapshot_id = snapshot_id if re.fullmatch(r"snap-[A-Za-z0-9_-]{1,100}", snapshot_id) else "-"
+    token = _PROCESSING_REFERENCE.set(reference)
+    started = time.monotonic()
+    LOGGER.info("METIS_PRE_REVIEW start reference=%s snapshot_id=%s", reference, snapshot_id)
+    try:
+        units, replay_record = _semantic_execution_before_review(
+            fragments,
+            document_id=document_id,
+            api_key=api_key,
+            model=model,
+            formation_context=formation_context,
+            post_json=post_json,
+            field_contract_v2=field_contract_v2,
+        )
+    except ConsoleError as exc:
+        reason = str(exc) if exc.code == "pre_review_llm_proposal_rejected" else ""
+        reason = reason if re.fullmatch(r"(?:semantic|recommendation|source_bound)_[a-z_]{1,100}", reason) else ""
+        code = exc.code if re.fullmatch(r"[a-z_]{1,120}", exc.code) else "processing_failed"
+        # Transient error metadata only: failed retries leave persisted state intact.
+        exc.pre_review_diagnostics = {"reference": reference, "reason_code": reason}
+        LOGGER.error(
+            "METIS_PRE_REVIEW blocked reference=%s snapshot_id=%s code=%s reason=%s elapsed=%.2f",
+            reference, snapshot_id, code, reason or "-", time.monotonic() - started,
+        )
+        raise
+    else:
+        LOGGER.info("METIS_PRE_REVIEW prepared reference=%s snapshot_id=%s elapsed=%.2f",
+                    reference, snapshot_id, time.monotonic() - started)
+    finally:
+        _PROCESSING_REFERENCE.reset(token)
     objects: list[dict[str, Any]] = [
         {
             "object_id": f"{document_id}-document",

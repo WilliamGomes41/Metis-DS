@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.operations_console_v1 import PRE_REVIEW_BLOCKED
 from src.workflows.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin
 from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
 from src.workflows.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
@@ -201,6 +202,45 @@ class _ListReadSubject(_PostgresBadgeCountsMixin):
             "account_id": account_id,
             "roles": ["researcher", "reviewer", "publisher"],
         }
+
+
+def test_pre_review_blocked_list_status_uses_durable_eligibility_without_review_work() -> None:
+    store = PostgresWorkflowDocumentRuntimeStore(PostgresCanonicalConfig(dsn=_dsn()))
+    with store._connect() as con:
+        paths = migration_paths(ROOT)
+        apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))
+
+    token = uuid.uuid4().hex
+    account_id = f"acc-blocked-{token[:12]}"
+    snapshots = [f"snap-blocked-{token[:12]}-{index}" for index in range(2)]
+    with store._connect() as con:
+        con.execute(
+            "INSERT INTO workflow.accounts(account_id,username,display_name,roles,password_salt,password_hash,created_at) "
+            "VALUES(%s,%s,%s,%s,%s,%s,CURRENT_TIMESTAMP)",
+            (account_id, f"blocked-{token}", "Blocked Test", ["researcher", "reviewer"], "salt", "hash"),
+        )
+    try:
+        object_sets = [[], [_object(snapshots[1], 1, object_type="recommendation", validation_status="needs_review")]]
+        for snapshot_id, objects in zip(snapshots, object_sets, strict=True):
+            envelope = _envelope(snapshot_id, token, account_id)
+            envelope["publication_eligibility"] = PRE_REVIEW_BLOCKED
+            envelope["processing_blocker"] = "pre_review_llm_proposal_rejected"
+            store.write_bundle(envelope=envelope, objects=objects)
+
+        subject = _ListReadSubject(store, account_id)
+        rows = subject._workflow_list_status_rows(snapshots)
+        assert all(row["publication_eligibility"] == PRE_REVIEW_BLOCKED for row in rows.values())
+        assert rows[snapshots[0]]["has_open_review"] is False
+        assert rows[snapshots[1]]["has_open_review"] is True
+        assert all(status["presentation_status"] == "blocked" for status in subject.list_document_lifecycle_statuses(snapshots).values())
+        assert subject.review_workboard_summaries(account_id) == {}
+        for snapshot_id, objects in zip(snapshots, object_sets, strict=True):
+            assert store.list_document_objects(snapshot_id) == objects
+    finally:
+        with store._connect() as con:
+            for snapshot_id in reversed(snapshots):
+                con.execute("DELETE FROM workflow.documents WHERE snapshot_id=%s", (snapshot_id,))
+            con.execute("DELETE FROM workflow.accounts WHERE account_id=%s", (account_id,))
 
 
 def test_list_status_and_workboard_are_set_based_at_pilot_scale() -> None:
