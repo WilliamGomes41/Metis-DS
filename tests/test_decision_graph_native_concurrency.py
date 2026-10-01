@@ -70,3 +70,69 @@ def test_native_identical_ingest_retry_has_one_snapshot(tmp_path):
         results = list(pool.map(run, range(2)))
     assert results[0] == results[1]
     assert len(state("restart").list_envelopes()) == 1
+
+
+def test_native_policy_publication_race_never_publishes_stale_review(tmp_path):
+    from tests.test_decision_graph_chain import finish
+    state, store, _ = native_state(tmp_path)
+    console = state("setup")
+    accounts = _accounts(console)
+    sid = ingest(console, accounts)["snapshot_id"]
+    finish(console, accounts, sid)
+    publisher, editor = state("publisher"), state("editor")
+    p = policy(accounts, "required")
+    p["revision"] = 2
+    cmd = command(editor, accounts, sid, "policy-vs-publish", policy=p)
+    barrier = Barrier(2)
+    def run(index):
+        barrier.wait(timeout=5)
+        try:
+            if index == 0:
+                return publisher.publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=sid)
+            return editor.change_review_policy(**cmd)
+        except ConsoleError as exc:
+            return exc.code
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        published, changed = list(pool.map(run, range(2)))
+    release = store.release_for_snapshot(sid)
+    if release:
+        assert published["status"] == "PASS"
+        assert changed == "published_working_revision_immutable"
+        assert release["decision_graph_release"]["policy"]["revision"] == 1
+    else:
+        assert published["status"] == "BLOCKED"
+        assert isinstance(changed, dict)
+        assert state("verify")._envelope(sid)["review_policy"]["revision"] == 2
+
+
+def test_native_late_extraction_cannot_replace_new_policy(tmp_path, monkeypatch):
+    from threading import Event
+    state, _, _ = native_state(tmp_path)
+    setup = state("setup")
+    accounts = _accounts(setup)
+    sid = ingest(setup, accounts)["snapshot_id"]
+    worker, editor = state("worker"), state("editor")
+    started, proceed = Event(), Event()
+    original = worker._fragments_and_spec
+    def delayed(*args, **kwargs):
+        started.set()
+        assert proceed.wait(timeout=5)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(worker, "_fragments_and_spec", delayed)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(worker.reextract_unpublished,
+            actor_id=accounts["researcher"]["account_id"], snapshot_id=sid)
+        assert started.wait(timeout=5)
+        p = policy(accounts, "required")
+        p["revision"] = 2
+        try:
+            editor.change_review_policy(**command(editor, accounts, sid, "policy-during-extraction", policy=p))
+            expected = deepcopy(editor.snapshot_objects(sid))
+        finally:
+            proceed.set()
+        with pytest.raises(ConsoleError) as failure:
+            future.result(timeout=10)
+        assert failure.value.code == "snapshot_object_write_conflict"
+    restarted = state("verify")
+    assert restarted._envelope(sid)["review_policy"] == p
+    assert restarted.snapshot_objects(sid) == expected

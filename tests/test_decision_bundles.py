@@ -13,12 +13,18 @@ from src.operations_console_v1 import ConsoleError
 from tests.test_decision_graph_chain import _console, _accounts, _ingest_boom, policy, command
 
 
-def test_pdf_bundle_needs_each_member_review_and_preserves_source(tmp_path):
+@pytest.mark.parametrize("backend", ["local", "postgres"])
+def test_pdf_bundle_needs_each_member_review_and_preserves_source(tmp_path, backend):
     with fitz.open() as doc:
         page = doc.new_page()
         page.insert_text((70, 80), "Plan:\n- Neem contact op.\n- Maak een afspraak.")
         data = doc.tobytes()
-    console = _console(tmp_path)
+    if backend == "postgres":
+        from tests.decision_graph_native_support import native_state
+        state, store, source = native_state(tmp_path)
+        console = state()
+    else:
+        console = _console(tmp_path)
     accounts = _accounts(console)
     sid = _ingest_boom(console, accounts, data=data, filename="bundle.pdf", content_type="application/pdf",
         named_reviewers=[], review_policy=policy(accounts))["snapshot_id"]
@@ -56,6 +62,13 @@ def test_pdf_bundle_needs_each_member_review_and_preserves_source(tmp_path):
     detached = deepcopy(env["decision_graph"])
     next(n for n in detached["nodes"] if n["object_id"] == members[0]["object_id"])["mode"] = "terminal"
     assert "decision_graph_bundle_context_missing" in graph_issues(detached, console.snapshot_objects(sid), env["decision_graph_evidence"])
+    if backend == "postgres":
+        from src.decision_graph_v1 import read_active_graph
+        result = console.publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=sid)
+        assert result["status"] == "PASS", result
+        release = read_active_graph(store, source, sid)
+        assert len([o for o in release["objects"] if o.get("metadata", {}).get("result_bundle", {}).get("role") == "member"]) == 2
+        assert state()._projection_from_authority() == []
 
 
 def test_explicit_json_bundle_preserves_legacy_source_adapter(tmp_path):

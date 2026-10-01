@@ -24,7 +24,7 @@ controleerbare projecties, geen tweede beleidsbron.
 
 De graaf onderscheidt entrypoints, antwoordkeuzes (single/multiple), onvoorwaardelijk
 vervolg, routebewijs en terminale stappen. Bronvorm kiest de adapter, klasse de
-interpretatie. Tekst zonder grafisch bewijs bevestigt geen route. Onopgeloste
+interpretatie. Bij PDF bevestigt tekst zonder grafisch bewijs geen route; export-JSON gebruikt expliciete bronedges. Onopgeloste
 routes, onbekende doelen en onverklaarde cycli blokkeren publicatie. Review bindt
 exacte objectversies en graafhash; correcties invalideren geraakt bewijs.
 
@@ -142,5 +142,8 @@ Nog nodig voor volledige oorspronkelijke bronacceptatie:
    bulkverwerking. Raster/OCR blijft buiten scope. De nieuw toegevoegde splitsing
    van bulletuitkomsten naar afzonderlijk gereviewde leden van een resultaatbundel
    moet ook tegen echte bronlay-outs worden gecontroleerd.
-4. Visuele browseracceptatie met de echte bron en PostgreSQL16-CI. Geen
-   productieacceptatie op basis van alleen synthetische fixtures.
+4. Visuele browseracceptatie met de echte bron. PostgreSQL16-CI is inmiddels groen
+   op Python 3.12 en 3.13. Geen productieacceptatie op basis van alleen synthetische fixtures.
+
+Actuele negenpoortenmatrix, exacte testuitslagen, grenzen van native foutinjectie
+en overdrachtsinformatie: [verificatierapport](DECISION_GRAPH_VERIFICATION.md).
