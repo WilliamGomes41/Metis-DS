@@ -11,6 +11,8 @@ from fastapi import HTTPException
 
 from src.console_entra_v1 import ROLE_MAP
 
+DELEGATED_READ_SCOPE = 'Metis.Read2'
+
 
 @dataclass(frozen=True)
 class McpConfig:
@@ -25,7 +27,7 @@ class McpConfig:
 
     @property
     def scope(self):
-        return f"api://{self.audience}/Metis.Read"
+        return f"api://{self.audience}/{DELEGATED_READ_SCOPE}"
 
 
 def configuration(identity, origin):
@@ -57,7 +59,7 @@ class McpAuthenticator:
                                 options={'require': ['exp', 'iat', 'nbf', 'oid', 'tid', 'scp', 'azp']})
             if (claims.get('ver') != '2.0' or claims['tid'] != self.config.tenant
                     or claims['azp'] != self.config.client
-                    or 'Metis.Read' not in str(claims['scp']).split()):
+                    or DELEGATED_READ_SCOPE not in str(claims['scp']).split()):
                 raise ValueError('invalid_claims')
             oid = str(UUID(claims['oid']))
             # A token alone never provisions an identity or overrides a local deny.
