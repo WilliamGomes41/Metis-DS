@@ -100,7 +100,7 @@ Review is proportioneel aan risico en disposition. Structurele/contextuele passa
 
 ### 6.3 Four-eyes
 
-High-risk inhoud en andere door de geldende reviewpolicy aangewezen gevallen vereisen onafhankelijke tweede beoordeling. De tweede reviewer moet onafhankelijk identificeerbaar zijn en hetzelfde exacte object/snapshot beoordelen.
+Historische reviewpolicies behouden de onafhankelijke tweede beoordeling voor high-risk inhoud. Onder de expliciet gekozen, versiegebonden `explicit-review-v1`-policy bepaalt uitsluitend de primaire reviewer plus optional/required assignments de vereiste deelname. Iedere required deelnemer beoordeelt onafhankelijk de exacte actuele objectversies en, bij beslisbomen, de graaf. Risicosignalen blijven zichtbaar en auditeerbaar maar voegen onder deze policy geen verborgen reviewplicht toe. Een extra reviewer vervangt nooit ontbrekend bronbewijs. Vaststellingsstatus is een bronverklaring met herkomst, geen universele aanname en geen vervanging van transformatie-review.
 
 ### 6.4 Correcties
 
@@ -118,7 +118,7 @@ Een snapshot mag uitsluitend worden gepubliceerd wanneer alle volgende voorwaard
 
 1. de actor heeft de `publisher`-rol en geeft expliciete bevestiging;
 2. ten minste één niet-documentair kennisobject heeft een actuele `approve`-reviewbinding aan exact object-ID, versie/canonieke hash, bevestigd type, reviewer en beslissing;
-3. alle vereiste onafhankelijke review en high-risk four-eyes zijn geslaagd;
+3. alle volgens de versiegebonden policy vereiste onafhankelijke review, inclusief graafreview waar van toepassing, is geslaagd;
 4. ieder voor publicatie geselecteerd object is goedgekeurd en schema-valide;
 5. ieder geselecteerd object heeft een geldige immutable G2 Azure Blob-bronlocator;
 6. de geconfigureerde immutable source store kan de betreffende blob op het publicatiemoment daadwerkelijk lezen;

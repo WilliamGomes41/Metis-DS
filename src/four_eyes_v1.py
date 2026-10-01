@@ -86,6 +86,10 @@ def present_risk_fields(obj: dict[str, Any]) -> list[str]:
 
 
 def requires_four_eyes(obj: dict[str, Any], *, confirmed_type: str | None = None) -> bool:
+    from src.review_policy_v1 import object_policy, required_reviewers
+    policy = object_policy(obj)
+    if policy is not None:
+        return len(required_reviewers(policy)) > 1
     confirmed = confirmed_type or obj.get("confirmed_object_type")
     if confirmed == "exception":
         return True
@@ -130,7 +134,15 @@ def mark_four_eyes_on_object(obj: dict[str, Any], *, confirmed_type: str | None 
             second["status"] = "pending"
     else:
         risk.setdefault("risk_level", "standard")
-        risk.setdefault("requires_second_review", False)
+        from src.review_policy_v1 import object_policy
+        if object_policy(obj) is not None:
+            risk["requires_second_review"] = False
+            obj.setdefault("governance", {})["second_review"] = {
+                "required": False, "status": "not_required", "reviewer": None,
+                "review_date": None, "snapshot_hash": None,
+            }
+        else:
+            risk.setdefault("requires_second_review", False)
 
 
 def eligible_tuple_reviewers(
@@ -186,12 +198,21 @@ def publish_authorization_contract(
     object_id = obj.get("object_id") or ""
     eligible = eligible_tuple_reviewers(bindings, object_id=object_id, uploader_id=uploader_id)
     independence = any(str(row.get("reviewer_id")) != str(uploader_id) for row in eligible)
+    from src.review_policy_v1 import object_policy, missing_reviewers
+    policy = object_policy(obj)
+    if policy is not None:
+        missing = missing_reviewers(obj, list(bindings))
+        independence = not missing
+        if missing:
+            blockers.append("required_policy_review_missing")
     if not eligible:
         blockers.append("object_tuple_required")
-    if not independence:
+    if policy is None and not independence:
         blockers.append("second_named_reviewer_required")
     four_eyes_needed = requires_four_eyes(obj)
     four_ok = four_eyes_satisfied(bindings, object_id=object_id, uploader_id=uploader_id) if four_eyes_needed else True
+    if policy is not None:
+        four_ok = not missing
     if four_eyes_needed and not four_ok:
         blockers.append("four_eyes_required")
     # Envelope ticks never authorize publish, even when present.

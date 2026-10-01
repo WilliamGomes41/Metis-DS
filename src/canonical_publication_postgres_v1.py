@@ -211,6 +211,7 @@ class PostgresCanonicalPublicationStore:
         logical_document_id: str = "",
         working_revision_id: str = "",
         preserve_newer_registry: bool = False,
+        decision_graph_release: dict[str, Any] | None = None,
     ) -> None:
         """Atomically persist one authorized publication and its Azure lineage."""
         if not objects:
@@ -490,6 +491,7 @@ class PostgresCanonicalPublicationStore:
                                 "source_locator": source_locator,
                                 "logical_document_id": logical_document_id,
                                 "working_revision_id": working_revision_id,
+                                **({"decision_graph_release": decision_graph_release} if decision_graph_release else {}),
                             },
                         )
         except CanonicalPublicationStoreError:
@@ -762,4 +764,5 @@ class PostgresCanonicalPublicationStore:
             "logical_document_id": str(details.get("logical_document_id") or ""),
             "working_revision_id": str(details.get("working_revision_id") or ""),
             "objects": objects,
+            **({"decision_graph_release": details["decision_graph_release"]} if "decision_graph_release" in details else {}),
         }

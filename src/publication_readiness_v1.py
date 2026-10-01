@@ -127,6 +127,8 @@ def _existing_gate_readiness(considered: dict[str, Any]) -> dict[str, Any]:
         for code in blockers
         if (has_disposition_conflict and code == REVIEW_DISPOSITION_INCONSISTENT)
         or code == "source_context_review_incomplete"
+        or code.startswith("decision_graph_")
+        or code == "required_policy_review_missing"
     ]
     technical_blockers = [code for code in blockers if code not in inherited_curation]
 

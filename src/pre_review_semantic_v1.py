@@ -815,7 +815,7 @@ def bind_pre_review_semantic_processing(
         class_: str,
         formation_context: Mapping[str, Any] | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        if semantic_suppressed.get():
+        if semantic_suppressed.get() or (kind == "pdf" and class_ == "beslisboom"):
             return original_fragments_and_spec(
                 kind,
                 path,

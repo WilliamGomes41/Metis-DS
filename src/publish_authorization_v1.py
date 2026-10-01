@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.object_taxonomy_v1 import is_closed_confirmed_type
+from src.beslisboom_path_v1 import is_closed_boom_type
 
 
 def tuple_record(
@@ -28,7 +29,7 @@ def tuple_record(
         object_id
         and object_version
         and canonical_object_hash
-        and is_closed_confirmed_type(confirmed_object_type)
+        and (is_closed_confirmed_type(confirmed_object_type) or is_closed_boom_type(confirmed_object_type))
         and reviewer
         and reviewer_id
         and decision
@@ -54,7 +55,7 @@ def still_matches(binding: dict[str, Any], obj: dict[str, Any]) -> bool:
         and binding.get("object_version") == obj.get("object_version")
         and binding.get("canonical_object_hash") == hash_now
         and binding.get("confirmed_object_type") == obj.get("confirmed_object_type")
-        and is_closed_confirmed_type(binding.get("confirmed_object_type"))
+        and (is_closed_confirmed_type(binding.get("confirmed_object_type")) or is_closed_boom_type(binding.get("confirmed_object_type")))
     )
 
 

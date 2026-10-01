@@ -139,6 +139,12 @@ def review_stage(
         return None
 
     approvers = exact_current_approver_ids(obj, bindings)
+    from src.review_policy_v1 import object_policy, required_reviewers
+    policy = object_policy(obj)
+    if policy is not None:
+        if policy["primary"] not in approvers:
+            return FIRST_REVIEW
+        return SECOND_REVIEW if required_reviewers(policy) - set(approvers) else None
     four_eyes = requires_four_eyes(
         obj,
         confirmed_type=str(obj.get("confirmed_object_type") or "") or None,
@@ -348,6 +354,10 @@ def reviewer_route_for(
     already_approved = reviewer_id in set(approvers)
     stage = str(duty["stage"])
     actionable = not already_approved
+    from src.review_policy_v1 import object_policy, required_reviewers
+    policy = object_policy(obj)
+    if policy is not None:
+        actionable = actionable and (reviewer_id == policy["primary"] if stage == FIRST_REVIEW else reviewer_id in required_reviewers(policy))
     canonical_task = (
         "second_review"
         if stage == SECOND_REVIEW

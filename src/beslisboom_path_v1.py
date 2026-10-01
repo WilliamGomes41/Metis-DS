@@ -115,6 +115,9 @@ def outcome_review_errors(obj: dict[str, Any], peers: Iterable[dict[str, Any]] |
         errors.append("empty_or_placeholder_outcome")
     if _is_multi_bullet_outcome(text):
         errors.append("multi_bullet_outcome")
+    if (obj.get("metadata") or {}).get("decision_graph_contract") == "source-decision-graph-v1":
+        # Route evidence and exact graph confirmation are checked at publication.
+        return errors
     binds = _confirmed_applies_if(obj)
     peer_ids = {
         row.get("object_id")

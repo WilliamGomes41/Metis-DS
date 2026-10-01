@@ -48,13 +48,15 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
 
     @staticmethod
     def _manifest_from_release(release: dict[str, Any]) -> dict[str, Any]:
-        return {"release_id": str(release["release_id"]), "release_version": str(release["release_version"]), "release_owner": str(release["release_owner"]), "published_at": str(release["published_at"]), "protocol_version": PUBLICATION_PROTOCOL_VERSION, "snapshot_id": str(release["snapshot_id"]), "source_sha256": str(release["source_sha256"]), "immutable_storage_locator": str(release["source_locator"]), "objects": deepcopy(release["objects"])}
+        return {"release_id": str(release["release_id"]), "release_version": str(release["release_version"]), "release_owner": str(release["release_owner"]), "published_at": str(release["published_at"]), "protocol_version": PUBLICATION_PROTOCOL_VERSION, "snapshot_id": str(release["snapshot_id"]), "source_sha256": str(release["source_sha256"]), "immutable_storage_locator": str(release["source_locator"]), "objects": deepcopy(release["objects"]), **({"decision_graph_release": deepcopy(release["decision_graph_release"])} if "decision_graph_release" in release else {})}
 
     def _projection_from_authority(self) -> list[dict[str, Any]]:
         store = self.canonical_publication_store
         if store is None: raise ConsoleError("durable_publication_store_required")
         try: authority_rows = store.active_publication_rows()
         except CanonicalPublicationStoreError as exc: raise ConsoleError("durable_publication_projection_read_failed", str(exc)) from exc
+        authority_rows = [row for row in authority_rows if
+            (row["knowledge_object"].get("metadata") or {}).get("decision_graph_contract") != "source-decision-graph-v1"]
         projected, blocked = build_projection([{"knowledge_object": deepcopy(row["knowledge_object"]), "publication": deepcopy(row["publication"])} for row in authority_rows])
         if blocked: raise ConsoleError("durable_publication_projection_invalid", json.dumps(blocked, sort_keys=True))
         if len(projected) != len(authority_rows): raise ConsoleError("durable_publication_projection_incomplete")
@@ -268,7 +270,9 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
         release_id = f"release-{uuid.uuid4().hex}"; release_version = f"{envelope['version']}-{release_id[-8:]}"
         _candidate_projection, blocked = build_projection([{"knowledge_object":deepcopy(obj),"publication":{"release_id":release_id,"release_version":release_version,"published_at":published_at}} for obj in objects])
         if blocked: return {"status":"BLOCKED","state":envelope["state"],"snapshot_id":snapshot_id,"blockers":["prepublication_projection_failed"],"projection_errors":blocked,"g2":"PASS","cutover":False}
-        try: store.persist_published_release(logical_document_id=logical_document_id,working_revision_id=working_revision_id,snapshot_id=snapshot_id,source_sha256=str(envelope.get("sha256") or ""),source_locator=str(envelope.get("immutable_storage_locator") or ""),release_id=release_id,release_version=release_version,release_owner=str(account["username"]),published_at=published_at,objects=objects)
+        from src.decision_graph_v1 import release_graph
+        graph_args = {"decision_graph_release": release_graph(envelope, self.snapshot_objects(snapshot_id))} if "decision_graph" in envelope else {}
+        try: store.persist_published_release(**graph_args,logical_document_id=logical_document_id,working_revision_id=working_revision_id,snapshot_id=snapshot_id,source_sha256=str(envelope.get("sha256") or ""),source_locator=str(envelope.get("immutable_storage_locator") or ""),release_id=release_id,release_version=release_version,release_owner=str(account["username"]),published_at=published_at,objects=objects)
         except CanonicalPublicationStoreError as exc: raise ConsoleError("durable_publication_store_failed", str(exc)) from exc
         release = self._durable_release_for_snapshot(snapshot_id)
         if release is None or str(release.get("release_id") or "") != release_id: raise ConsoleError("durable_publication_commit_not_readable")
