@@ -27,6 +27,10 @@ SOURCE_LITERAL_WEAK_RE = re.compile(
     r"\b(?:aanbeveling|advies)\s*[:\-]\s*zwak\b",
     re.I,
 )
+SOURCE_DIRECTIONAL_LABEL_RE = re.compile(
+    r"\b(?P<strength>sterk|zwak)\s*[-–—:]\s*(?P<direction>voor|tegen)\b",
+    re.I,
+)
 
 PROPOSED_FIELD = "proposed_recommendation_semantics"
 CONFIRMED_FIELD = "confirmed_recommendation_semantics"
@@ -174,8 +178,9 @@ def source_literal_strength(text: str) -> str | None:
     """
 
     blob = str(text or "")
-    strong = bool(SOURCE_LITERAL_STRONG_RE.search(blob))
-    weak = bool(SOURCE_LITERAL_WEAK_RE.search(blob))
+    labels = {match["strength"].casefold() for match in SOURCE_DIRECTIONAL_LABEL_RE.finditer(blob)}
+    strong = bool(SOURCE_LITERAL_STRONG_RE.search(blob)) or "sterk" in labels
+    weak = bool(SOURCE_LITERAL_WEAK_RE.search(blob)) or "zwak" in labels
     if strong == weak:
         return None
     return "strong" if strong else "weak"
@@ -183,6 +188,22 @@ def source_literal_strength(text: str) -> str | None:
 
 def has_source_literal_strength(text: str) -> bool:
     return source_literal_strength(text) is not None
+
+
+def is_source_strength_label(text: str) -> bool:
+    """Recognize a standalone label without excluding mixed advice blocks."""
+    blob = str(text or "").strip().rstrip(".!?:;").strip()
+    return any(pattern.fullmatch(blob) for pattern in (
+        SOURCE_LITERAL_STRONG_RE, SOURCE_LITERAL_WEAK_RE, SOURCE_DIRECTIONAL_LABEL_RE,
+    ))
+
+
+def source_label_direction(text: str) -> str | None:
+    """Read direction only from an unambiguous explicit directional label."""
+    directions = {match["direction"].casefold() for match in SOURCE_DIRECTIONAL_LABEL_RE.finditer(str(text or ""))}
+    if len(directions) != 1:
+        return None
+    return "for" if directions == {"voor"} else "against"
 
 
 def _review_direction_evidence(obj: dict[str, Any]) -> str:

@@ -22,6 +22,7 @@ from src.knowledge_relation_proposal_v1 import (
 from src.recommendation_semantics_v1 import (
     PROPOSED_FIELD,
     RECOMMENDATION_SEMANTICS_VERSION,
+    source_label_direction,
     source_literal_strength,
     validate_recommendation_semantics,
 )
@@ -275,6 +276,9 @@ def _recommendation_semantics_from_proposal(
     )
     if not _direction_ref_within_candidate(direction_evidence, selected):
         _fail("recommendation_direction_evidence_outside_candidate")
+    literal_direction = source_label_direction(direction_text)
+    if literal_direction is not None and literal_direction != direction:
+        _fail("recommendation_direction_literal_mismatch")
 
     status = str(raw_semantics.get("strength_status") or "").strip()
     if status not in {"explicit", "not_stated", "unmapped"}:
@@ -295,6 +299,9 @@ def _recommendation_semantics_from_proposal(
         literal = source_literal_strength(strength_text)
         if literal != strength:
             _fail("recommendation_strength_literal_mismatch")
+        label_direction = source_label_direction(strength_text)
+        if label_direction is not None and label_direction != direction:
+            _fail("recommendation_direction_literal_mismatch")
     elif status == "not_stated":
         if strength is not None or raw_semantics.get("strength_evidence") is not None:
             _fail("recommendation_strength_not_stated_invalid")

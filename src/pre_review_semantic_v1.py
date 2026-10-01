@@ -37,7 +37,7 @@ from src.object_taxonomy_v1 import (
     is_strength_stamp,
 )
 from src.operations_console_v1 import ConsoleError
-from src.recommendation_semantics_v1 import source_literal_strength
+from src.recommendation_semantics_v1 import is_source_strength_label
 from src.passage_formation_policy_v1 import (
     DETERMINISTIC_MODE,
     SEMANTIC_MODE,
@@ -90,6 +90,8 @@ SEMANTIC_DEVELOPER_PROMPT = (
     "evidence must come from the selected recommendation text. Strength evidence "
     "may reference evidence_blocks. Treat only explicit strong/weak source wording "
     "as explicit strength; conditional/voorwaardelijk alone never means weak. "
+    "Labels Sterk - voor/tegen and Zwak - voor/tegen state recommendation strength "
+    "and direction, not evidence quality. Keep advice and conditions in mixed blocks. "
     "For knowledge relations return only source-bound relation proposals between "
     "objects selected in this same proposal. Use only applies_if, except_if, defines, "
     "explains, supported_by or supersedes. Identify source and target by their exact "
@@ -379,7 +381,7 @@ def _candidate_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]
         text = str(fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
         if (
             is_strength_stamp(text)
-            or source_literal_strength(text) is not None
+            or is_source_strength_label(text)
             or is_kennisplatform_chrome_text(text)
         ):
             continue
