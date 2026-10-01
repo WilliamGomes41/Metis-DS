@@ -105,6 +105,8 @@ def requires_four_eyes(obj: dict[str, Any], *, confirmed_type: str | None = None
 
 
 def mark_four_eyes_on_object(obj: dict[str, Any], *, confirmed_type: str | None = None) -> None:
+    from src.review_policy_v1 import object_policy, MANAGED_CONTRACT
+    policy = object_policy(obj)
     confirmed = confirmed_type or obj.get("confirmed_object_type")
     needed = requires_four_eyes(obj, confirmed_type=confirmed)
     risk = obj.setdefault("risk", {})
@@ -112,6 +114,10 @@ def mark_four_eyes_on_object(obj: dict[str, Any], *, confirmed_type: str | None 
     if confirmed == "exception" and "exception" not in fields:
         fields.append("exception")
     risk["risk_fields"] = fields
+    if policy and policy["contract"] == MANAGED_CONTRACT:
+        # Risk facts still follow content/type changes. Membership itself does
+        # not rewrite hash-bound risk flags; gates read effective governance.
+        return
     if needed:
         if confirmed == "exception" or risk.get("risk_level") == "high":
             risk["risk_level"] = "high"

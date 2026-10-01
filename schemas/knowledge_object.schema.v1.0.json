@@ -196,6 +196,7 @@
         "release_date", "superseded_by"
       ],
       "properties": {
+        "review_policy": {"type": "object", "required": ["contract", "revision", "primary", "assignments", "review_basis", "minimum_required"], "properties": {"contract": {"const": "managed-review-v2"}}},
         "validation_status": {
           "type": "string",
           "enum": ["draft", "needs_review", "revise", "rejected", "approved", "superseded"]

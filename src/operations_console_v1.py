@@ -1149,9 +1149,14 @@ class OperationsConsole:
             raise ConsoleError("uploader_cannot_be_sole_required_reviewer")
         return unique
 
+    def manage_review_participation(self, **command: Any) -> dict[str, Any]:
+        from src.review_participation_v1 import execute
+        return execute(self, **command)
+
     def change_review_policy(self, **command: Any) -> dict[str, Any]:
-        from src.decision_review_commands_v1 import execute
-        return execute(self, action="policy", **command)
+        if self.snapshot_is_published(command["snapshot_id"]):
+            raise ConsoleError("published_working_revision_immutable")
+        raise ConsoleError("managed_participation_command_required")
 
     def update_decision_graph(self, **command: Any) -> dict[str, Any]:
         from src.decision_review_commands_v1 import execute
@@ -3529,6 +3534,9 @@ class OperationsConsole:
             try:
                 from src.review_policy_v1 import required_reviewers
                 policy = validate_policy(policy)
+                from src.review_policy_v1 import archived_required
+                if archived_required(policy):
+                    blockers.append("archived_required_review_unfilled")
                 for reviewer_id in required_reviewers(policy):
                     account = self._require_role(reviewer_id, "reviewer")
                     if account.get("retirement") or _is_forbidden_identity(account["username"]):

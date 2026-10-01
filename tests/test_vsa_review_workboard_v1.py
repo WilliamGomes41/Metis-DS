@@ -339,13 +339,15 @@ def test_workboard_read_does_not_persist_progress_or_change_objects(tmp_path: Pa
     assert all("review_progress" not in row for row in console.list_envelopes())
 
 
-def test_non_reviewer_cannot_open_reviewer_workboard(tmp_path: Path) -> None:
+def test_publisher_can_open_readonly_team_workboard(tmp_path: Path) -> None:
     console, _accounts, _first, _second = _system(tmp_path)
     client = _client(console)
     _login(client, "publisher.carla")
 
     page = client.get("/review")
 
-    assert page.status_code == 403
-    assert "reviewer_role_required" in page.text
+    assert page.status_code == 200
+    assert "Alle reviewtrajecten" in page.text
+    assert "Alleen lezen" in page.text
+    assert "reviewer_role_required" not in page.text
 

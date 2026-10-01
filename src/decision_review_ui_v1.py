@@ -32,6 +32,10 @@ def install_decision_review_routes(app, console, require, page):
 
     @app.get("/review/policy", response_class=HTMLResponse)
     def policy_get(request: Request, document: str):
+        actor = require(request)
+        env = console._envelope(document)
+        if ((env.get("review_policy") or {}).get("contract") == "managed-review-v2" and not console.snapshot_is_published(document)) or ("publisher" in actor["roles"] and actor["account_id"] not in env["named_reviewers"]):
+            return RedirectResponse(f"/review/participants?document={document}", status_code=303)
         actor, env = authorized(request, document, graph_required=False)
         policy = env.get("review_policy") or {"primary": env["uploader_account_id"], "revision": 0, "assignments": []}
         assignments = {r["reviewer_id"]: r["participation"] for r in policy["assignments"]}
@@ -44,8 +48,8 @@ def install_decision_review_routes(app, console, require, page):
                      f'{options([(c, c) for c in sorted(ALLOWED_CLASSES)], env["class"])}</select></label>'
                      '<button formaction="/review/successor">Nieuwe werkrevisie maken</button>'
                      if "researcher" in actor["roles"] else '')
-        update = '' if console.snapshot_is_published(document) else '<button>Nieuwe policy toepassen</button>'
-        return page(f'<h1>Reviewdeelname wijzigen</h1><p>Een wijziging maakt eerder reviewbewijs onder de oude policy ongeldig. Gepubliceerde historie blijft gesloten.</p>'
+        update = ''
+        return page(f'<a href="/review/participants?document={esc(document)}">Deelnemers van dit traject beheren</a><h1>Nieuwe werkrevisie</h1><p>Dit formulier maakt een nieuwe werkrevisie met eigen reviewbewijs. Gepubliceerde historie blijft gesloten.</p>'
                     f'<form method="post"><input type="hidden" name="document" value="{esc(document)}">'
                     f'<input type="hidden" name="expected_revision" value="{esc(console.objects_revision(document))}">'
                     f'<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'

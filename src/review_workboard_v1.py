@@ -580,11 +580,14 @@ def _workboard_page(
     snapshot_id: str = "",
     q: str = "",
     page: int = 1,
+    theme: str = "",
 ) -> str:
     """Compact document disclosures over existing, authorized review projections."""
     if "reviewer" not in set(account.get("roles") or []):
         raise ConsoleError("reviewer_role_required")
     items = review_workboard_items(console, account=account)
+    if theme:
+        items = [i for i in items if i["envelope"].get("family") == theme]
     by_id = {item["snapshot_id"]: item for item in items}
     if snapshot_id and snapshot_id not in by_id:
         raise ConsoleError("reviewer_not_named_on_snapshot")
@@ -592,6 +595,11 @@ def _workboard_page(
     visible, controls = console_ui._document_list_page(
         [item["envelope"] for item in items], q=q, page=page, path="/review",
     )
+    from src.review_participation_ui_v1 import filters, roster, people
+    controls = controls[controls.index('<nav '):]
+    controls = controls.replace('/review?', '/review?' + _esc(urlencode({'work': 'mine', 'theme': theme})) + '&amp;')
+    controls = filters(console, work='mine', theme=theme, q=q, rows=[i['envelope'] for i in items]) + controls
+    reviewer_names = people(console)
     if snapshot_id and not any(row["snapshot_id"] == snapshot_id for row in visible):
         visible = [by_id[snapshot_id]["envelope"], *visible]
     ledger_path = getattr(console, "_ledger_path", None)
@@ -628,6 +636,7 @@ def _workboard_page(
                     disposition_pending=item["closure_gap_count"],
                     waiting_pending=item["waiting_for_reviewer_duties"],
                 )
+        dashboard = roster(console, envelope, reviewer_names) + f'<a href="/review/trajectory?{_esc(urlencode({"document": chosen}))}">Traject en deelnemers</a>' + dashboard
         # IDs must remain unique when several workspaces share one page.
         for element_id in ("review-task-title", "review-next-title", "review-progress-title"):
             dashboard = dashboard.replace(element_id, element_id + "-" + _esc(chosen))
@@ -780,14 +789,27 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         task: str = "",
         q: str = "",
         page: int = 1,
+        work: str = "mine",
+        theme: str = "",
     ) -> str:
         account = _current_account(console, request)
+        from src.review_participation_ui_v1 import overview, require_overview
+        require_overview(account)
+        if work not in {"mine", "all"}:
+            raise ConsoleError("invalid_review_filter")
+        if not document and (work == "all" or "reviewer" not in account["roles"]):
+            return overview(console, account, theme=theme, q=q, page=page)
+        selected = next((e for e in console.list_envelopes() if e['snapshot_id'] == document), None) if document else None
+        if document and selected is None:
+            raise ConsoleError("unknown_snapshot")
+        if selected and account["account_id"] not in selected["named_reviewers"]:
+            return RedirectResponse('/review/trajectory?' + urlencode({'document': document}), status_code=303)
         chosen = document.strip()
         chosen_task = normalize_review_task(task)
         if chosen_task == "repair" and chosen and not object.strip():
             return RedirectResponse("/settings/technical?" + urlencode({"document": chosen}), status_code=303)
         if not chosen or (not object.strip() and not chosen_task):
-            return _workboard_page(console, account=account, snapshot_id=chosen, q=q, page=page)
+            return _workboard_page(console, account=account, snapshot_id=chosen, q=q, page=page, theme=theme)
         counts = console.waiting_task_counts(str(account["account_id"]))
         rendered = _render_review_room(
             console,

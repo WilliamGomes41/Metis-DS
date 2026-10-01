@@ -221,7 +221,7 @@ def graph_issues(graph: Any, objects: list[dict[str, Any]], inventory: dict[str,
 
 
 def review_target(graph: dict[str, Any], objects: list[dict[str, Any]], policy: dict[str, Any]) -> str:
-    return stable_hash({"graph": graph_hash(graph), "policy": policy,
+    return stable_hash({"graph": graph_hash(graph), "policy": policy.get("review_basis", policy),
                        "objects": sorted((o["object_id"], o["object_version"],
                                            o["provenance"]["canonical_object_hash"])
                                           for o in objects if o.get("object_type") != "document")})
@@ -249,10 +249,10 @@ def publication_issues(envelope: dict[str, Any], objects: list[dict[str, Any]]) 
     issues = graph_issues(graph, objects, envelope["decision_graph_evidence"])
     if issues:
         return issues
-    from src.review_policy_v1 import required_reviewers
+    from src.review_policy_v1 import required_reviewers, archived_required
     target = review_target(graph, objects, envelope["review_policy"])
     confirmed = {r["reviewer_id"] for r in envelope.get("decision_graph_reviews", []) if r.get("target") == target}
-    if required_reviewers(envelope["review_policy"]) - confirmed:
+    if (required_reviewers(envelope["review_policy"]) - confirmed) or archived_required(envelope["review_policy"]):
         issues.append("decision_graph_review_incomplete")
     return issues
 
