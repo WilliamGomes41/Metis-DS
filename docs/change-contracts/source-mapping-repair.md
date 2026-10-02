@@ -10,7 +10,7 @@ Rewrite risk: none
 
 Immutable source bytes and original extracted fragments remain the input authority. `extract_pdf_v2.extract -> mark_pdf_layout -> reconstruct_source_fragments -> semantic_source_blocks/semantic_units_from_proposal -> transform -> processing_evidence_tables` is the affected path. Geometry/cadence cannot distinguish a line gutter from a clinical column. Automatic exclusion is therefore removed; possible markers remain content with findings. Explicit pre-existing text views remain readable and are not rewritten. This is a conservative removal of an unsafe heuristic, not a claim that original Smetten processing will succeed.
 
-Reconstruction still inserts one separator between adjacent grammatical continuations. Mapping gains a closed `join_separator` record with literal space and neighboring original fragment IDs. It never invents a raw offset. Transform regenerates and compares the complete mapping. Export identifies the separator independently of a raw fragment range. Existing raw range records retain their shape. Tests challenge forged text, missing separators, unknown neighbors and extra keys.
+Reconstruction still inserts one separator between adjacent grammatical continuations. Mapping gains a closed `join_separator` record with literal space and neighboring original fragment IDs. It never invents a raw offset. Transform regenerates and compares the complete mapping. Export identifies the separator independently of a raw fragment range. The downloadable lineage CSV retains these three fields as additive columns; its regression reads the actual ZIP. Existing raw range records retain their shape. Tests challenge forged text, missing separators, unknown neighbors and extra keys.
 
 ## State and compatibility
 

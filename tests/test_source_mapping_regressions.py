@@ -3,7 +3,10 @@
 # release-control-evidence: scope/belofte kwaliteit slop releasebewijs
 """
 from copy import deepcopy
+import csv
+import io
 import json
+from zipfile import ZipFile
 
 import fitz
 import pytest
@@ -77,7 +80,7 @@ def test_selection_can_include_only_join_boundary_or_exclude_it():
 def test_join_boundary_is_validated_and_exported():
     from src.pre_review_semantic_v1 import semantic_spec_from_fragments
     from src.semantic_transform_generic_v1 import transform
-    from src.processing_evidence_export_v1 import processing_evidence_tables
+    from src.processing_evidence_export_v1 import processing_evidence_tables, processing_evidence_zip
     source = fragments()
     def provider(_url, _headers, payload, _timeout):
         block = json.loads(payload["input"][1]["content"])["source_blocks"][0]
@@ -95,6 +98,15 @@ def test_join_boundary_is_validated_and_exported():
     boundaries = [row for row in tables["lineage"] if row["relation"] == "inserted_join_separator"]
     assert len(boundaries) == 2
     assert all(row["text"] == " " for row in boundaries)
+    # Inspect the user's downloadable artifact, not only the in-memory table.
+    with ZipFile(io.BytesIO(processing_evidence_zip(
+            snapshot_id="snap", revision="r", envelope={}, objects=rows))) as archive:
+        exported = list(csv.DictReader(io.StringIO(archive.read("lineage.csv").decode("utf-8-sig"))))
+        exported_boundaries = [row for row in exported if row["relation"] == "inserted_join_separator"]
+        assert [(row["text"], row["left_fragment_id"], row["right_fragment_id"])
+                for row in exported_boundaries] == [(" ", "0", "1"), (" ", "1", "2")]
+        original_ranges = [row for row in exported if row["relation"] == "selected_raw_fragment_range"]
+        assert all(row["target_id"] and row["start"] and row["end"] for row in original_ranges)
     for change in ("text", "missing", "source", "extra"):
         forged = deepcopy(spec)
         target = next(row for row in forged["objects"] if row.get("semantic_passage", {}).get("source_mapping"))
