@@ -20,10 +20,11 @@ from src.semantic_passage_v1 import (
     SELECTION_ORIGIN_COVERAGE,
     SELECTION_ORIGIN_PROPOSAL,
     SEMANTIC_PASSAGE_VERSION,
+    LEGACY_SEMANTIC_PASSAGE_VERSION,
 )
 from src.serving_relations_v1 import confirm_relation_set, proposed_relations
 
-TRANSFORM_VERSION = "semantic-generic-v1.0.0"
+TRANSFORM_VERSION = "semantic-generic-v1.1.0"
 _SEMANTIC_PASSAGE_BASE_KEYS = frozenset(
     {"version", "source_bound", "selection_origin", "spans"}
 )
@@ -41,7 +42,7 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
         raise ValueError("semantic_passage_metadata_invalid")
     if (
         value.get("source_bound") is not True
-        or value.get("version") != SEMANTIC_PASSAGE_VERSION
+        or value.get("version") not in {LEGACY_SEMANTIC_PASSAGE_VERSION, SEMANTIC_PASSAGE_VERSION}
     ):
         raise ValueError("semantic_passage_metadata_invalid")
 
@@ -55,6 +56,9 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
     )
     if expected_keys is None or set(value) - {"source_mapping"} != expected_keys:
         raise ValueError("semantic_passage_metadata_invalid")
+
+    if value["version"] == SEMANTIC_PASSAGE_VERSION and "source_mapping" not in value:
+        raise ValueError("semantic_source_mapping_invalid")
 
     spans = value.get("spans")
     if not isinstance(spans, list) or not spans:
@@ -74,7 +78,7 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
             raise ValueError("semantic_passage_metadata_invalid")
 
     result = {
-        "version": SEMANTIC_PASSAGE_VERSION,
+        "version": value["version"],
         "source_bound": True,
         "selection_origin": origin,
         "spans": [dict(span) for span in spans],
@@ -87,7 +91,8 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
             if not isinstance(row, dict):
                 raise ValueError("semantic_source_mapping_invalid")
             if row.get("kind") == "join_separator":
-                valid = (set(row) == {"kind", "text", "left_fragment_id", "right_fragment_id"}
+                valid = (value["version"] == SEMANTIC_PASSAGE_VERSION
+                         and set(row) == {"kind", "text", "left_fragment_id", "right_fragment_id"}
                          and row["text"] == " "
                          and all(isinstance(row.get(key), str) and row[key].strip()
                                  for key in ("left_fragment_id", "right_fragment_id")))
@@ -229,6 +234,8 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
                 if span["end"] > len(public["text"]):
                     raise ValueError("source_bound_field_bounds_invalid")
                 expected_mapping.extend(mapped_raw_spans(source, start=span["start"], end=span["end"]))
+            if semantic_passage["version"] == LEGACY_SEMANTIC_PASSAGE_VERSION:
+                expected_mapping = [row for row in expected_mapping if row.get("kind") != "join_separator"]
             if semantic_passage["source_mapping"] != expected_mapping:
                 raise ValueError("semantic_source_mapping_invalid")
         system_metadata = _system_candidate_metadata(item)

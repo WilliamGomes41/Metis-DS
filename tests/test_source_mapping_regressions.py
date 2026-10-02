@@ -93,7 +93,29 @@ def test_join_boundary_is_validated_and_exported():
     manifest = {"canonical_source": {"source_id": "source", "title": "Fixture", "source_type": "pdf",
         "source_url": "test", "source_level": "national", "canonicality": "canonical",
         "integrity_status": "verified", "source_checksum": "a" * 64}}
+    # A serialized spec must retain its advertised schema across readers.
+    spec = json.loads(json.dumps(spec))
     rows = transform(spec, manifest, source)
+    passages = [row["metadata"]["semantic_passage"] for row in rows
+                if row.get("metadata", {}).get("semantic_passage")]
+    assert passages and all(row["version"] == "semantic-passage-v1.1.0" for row in passages)
+    legacy = deepcopy(spec)
+    for item in legacy["objects"]:
+        passage = item.get("semantic_passage")
+        if passage:
+            passage["version"] = "semantic-passage-v1.0.0"
+            passage["source_mapping"] = [row for row in passage["source_mapping"]
+                                         if row.get("kind") != "join_separator"]
+    legacy_rows = transform(json.loads(json.dumps(legacy)), manifest, source)
+    assert all(row["metadata"]["semantic_passage"]["version"] == "semantic-passage-v1.0.0"
+               for row in legacy_rows if row.get("metadata", {}).get("semantic_passage"))
+    for invalid_version in ("semantic-passage-v1.0.0", "semantic-passage-v99"):
+        invalid = deepcopy(spec)
+        for item in invalid["objects"]:
+            if item.get("semantic_passage"):
+                item["semantic_passage"]["version"] = invalid_version
+        with pytest.raises(ValueError, match="semantic_(source_mapping|passage_metadata)_invalid"):
+            transform(invalid, manifest, source)
     tables, projected_manifest = processing_evidence_tables(snapshot_id="snap", revision="r", envelope={}, objects=rows)
     assert all(row["schema_version"] == "processing-evidence-export-v3" for row in projected_manifest)
     boundaries = [row for row in tables["lineage"] if row["relation"] == "inserted_join_separator"]
@@ -111,6 +133,12 @@ def test_join_boundary_is_validated_and_exported():
                 for row in exported_boundaries] == [(" ", "0", "1"), (" ", "1", "2")]
         original_ranges = [row for row in exported if row["relation"] == "selected_raw_fragment_range"]
         assert all(row["target_id"] and row["start"] and row["end"] for row in original_ranges)
+    unmapped = deepcopy(spec)
+    for item in unmapped["objects"]:
+        if item.get("semantic_passage"):
+            del item["semantic_passage"]["source_mapping"]
+    with pytest.raises(ValueError, match="semantic_source_mapping_invalid"):
+        transform(unmapped, manifest, source)
     for change in ("text", "missing", "source", "extra"):
         forged = deepcopy(spec)
         target = next(row for row in forged["objects"] if row.get("semantic_passage", {}).get("source_mapping"))
@@ -122,3 +150,16 @@ def test_join_boundary_is_validated_and_exported():
         else: boundary["raw_start"] = 0
         with pytest.raises(ValueError, match="semantic_source_mapping_invalid"):
             transform(forged, manifest, source)
+
+
+@pytest.mark.parametrize("field_contract_v2", [False, True])
+def test_replay_identity_binds_mapping_version(monkeypatch, field_contract_v2):
+    from src import pre_review_semantic_v1 as semantic
+    args = dict(document_id="doc", model="test", blocks=[], evidence_blocks=[],
+                source_fragments=fragments(), formation_context={
+                    "snapshot_id": "snap", "source_sha256": "a" * 64},
+                field_contract_v2=field_contract_v2)
+    current = semantic._replay_identity(**args)
+    monkeypatch.setattr(semantic, "SEMANTIC_PASSAGE_VERSION", "semantic-passage-v1.0.0")
+    legacy = semantic._replay_identity(**args)
+    assert current != legacy

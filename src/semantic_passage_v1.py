@@ -30,7 +30,8 @@ from src.source_reconstruction_v1 import reconstruct_source_fragments, source_fr
 from src.source_layout_v1 import mapped_raw_spans
 
 
-SEMANTIC_PASSAGE_VERSION = "semantic-passage-v1.0.0"
+LEGACY_SEMANTIC_PASSAGE_VERSION = "semantic-passage-v1.0.0"
+SEMANTIC_PASSAGE_VERSION = "semantic-passage-v1.1.0"
 RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION = "recommendation-semantics-evidence-v1"
 SELECTION_ORIGIN_PROPOSAL = "proposal_selected"
 SELECTION_ORIGIN_COVERAGE = "coverage_remainder"

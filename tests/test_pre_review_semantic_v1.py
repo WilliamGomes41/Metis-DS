@@ -840,7 +840,7 @@ def test_semantic_selection_provenance_survives_transform_without_mislabeling_co
         if (row.get("content") or {}).get("clean_text") == "Gebruik behandeling X."
     )
     semantic = (selected.get("metadata") or {}).get("semantic_passage") or {}
-    assert semantic["version"] == "semantic-passage-v1.0.0"
+    assert semantic["version"] == "semantic-passage-v1.1.0"
     assert semantic["source_bound"] is True
     assert semantic["selection_origin"] == "proposal_selected"
     assert semantic["spans"] == [expected_span]
