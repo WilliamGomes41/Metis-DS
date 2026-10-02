@@ -30,13 +30,11 @@ def pdf(tmp_path, markers=(20, 25, 30), marker_x=25, text_x=90, intervening_line
     return path
 
 
-def test_margin_markers_keep_original_extract_and_map_every_clinical_character(tmp_path):
+def test_ambiguous_margin_markers_keep_original_extract_and_map_every_clinical_character(tmp_path):
     fragments = extract(pdf(tmp_path), document_id="doc", source_id="source")
-    marked = [row for row in fragments if row.get("source_text_view")]
-    assert sum(len(row["source_text_view"]["exclusions"]) for row in marked) == 3
-    assert [span["text"] for row in marked for span in row["source_text_view"]["exclusions"]] == ["20", "25", "30"]
-    assert all(row["clean_text"] == row["raw_text"] for row in marked)
-    assert all(row["source_text_view"]["text"].startswith("Gebruik geen") for row in marked)
+    assert not any(row.get("source_text_view") for row in fragments)
+    assert any(row.get("source_layout_findings") for row in fragments)
+    assert all(row["clean_text"] == row["raw_text"] for row in fragments)
     blocks = semantic_source_blocks(fragments)
     assert any("geen 5 mg binnen 4 uur, tenzij" in block["text"] for block in blocks)
     proposal = {"objects": [{"spans": [{"block_id": blocks[0]["block_id"], "start": 0, "end": len(blocks[0]["text"])}],
@@ -45,8 +43,8 @@ def test_margin_markers_keep_original_extract_and_map_every_clinical_character(t
     mapping = units[0]["semantic_passage"]["source_mapping"]
     by_id = {row["fragment_id"]: row for row in fragments}
     from src.object_taxonomy_v1 import normalize_visible_prose
-    assert normalize_visible_prose("".join(by_id[row["fragment_id"]]["raw_text"][row["raw_start"]:row["raw_end"]] for row in mapping)) == blocks[0]["text"]
-    assert all(row["source_page"] == 1 and row["bbox"] for row in mapping)
+    assert normalize_visible_prose("".join(row["text"] if row.get("kind") == "join_separator" else by_id[row["fragment_id"]]["raw_text"][row["raw_start"]:row["raw_end"]] for row in mapping)) == blocks[0]["text"]
+    assert all(row["source_page"] == 1 and row["bbox"] for row in mapping if row.get("kind") != "join_separator")
     # Repeated identical prose has distinct position-bound source identities.
     assert len({block["block_id"] for block in blocks}) == len(blocks)
 
@@ -78,7 +76,8 @@ def test_transform_validates_mapping_and_export_retains_raw_and_view(tmp_path):
     envelope = {"sha256": "a" * 64}
     record_processing(envelope, rows, fragments=fragments, replay=None, started_at=instant())
     tables, _ = processing_evidence_tables(snapshot_id="snap", revision="r", envelope=envelope, objects=rows)
-    assert any(row["source_text_view"] for row in tables["source_views"])
+    assert not any(row["source_text_view"] for row in tables["source_views"])
+    assert any(row.get("source_layout_findings") for row in fragments)
     assert any(row["relation"] == "selected_raw_fragment_range" for row in tables["lineage"])
     assert tables["source_views"][0]["raw_text"] == fragments[0]["raw_text"]
     forged = deepcopy(spec)

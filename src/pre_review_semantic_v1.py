@@ -490,7 +490,7 @@ def _replay_identity(
         extractor_version=_extractor_contract(source_fragments),
         reconstruction_version=RECONSTRUCTION_VERSION,
         formation_policy_version=PASSAGE_FORMATION_POLICY_VERSION,
-        semantic_contract_version=("source-bound-fields-v2" if field_contract_v2 else SEMANTIC_PASSAGE_VERSION),
+        semantic_contract_version=(f"source-bound-fields-v2/{SEMANTIC_PASSAGE_VERSION}" if field_contract_v2 else SEMANTIC_PASSAGE_VERSION),
         prompt_hash=_stable_json_hash(SEMANTIC_DEVELOPER_PROMPT + (SEMANTIC_V2_INSTRUCTION if field_contract_v2 else "")),
         schema_hash=_stable_json_hash(_proposal_schema(field_contract_v2)),
         provider_id=SEMANTIC_PROVIDER_ID,

@@ -13,8 +13,8 @@ from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v3"
-PROJECTOR_VERSION = "processing-evidence-export-v2"
+VERSION = "processing-evidence-export-v4"
+PROJECTOR_VERSION = "processing-evidence-export-v3"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
     "processing_attempts": ("attempt_id", "command_id", "actor_id", "source_hash", "state", "started_at", "expires_at", "finished_at", "phase", "error_code", "validation_code", "processing_reference"),
@@ -27,7 +27,8 @@ SCHEMAS = {
     "proposal_fields": ("object_id", "object_version", "field", "value", "value_status", "stage", "producer_status", "contract_version", "source_span", "missing_reason"),
     "validation_findings": ("object_id", "object_version", "gate_result", "reason_code", "evidence_kind", "admission", "rule_execution_trace_status"),
     "context_evidence": ("object_id", "object_version", "context_scan", "expand_merge", "necessary_context_disposition", "source_context_review", "evidence_kind"),
-    "lineage": ("object_id", "object_version", "relation", "target_id", "start", "end", "locator", "page", "bbox", "raw_content_hash"),
+    "lineage": ("object_id", "object_version", "relation", "target_id", "start", "end", "locator", "page", "bbox", "raw_content_hash",
+                "text", "left_fragment_id", "right_fragment_id"),
     "model_calls": ("run_id", "call_id", "request", "raw_response", "stop_reason", "input_tokens", "output_tokens",
                     "output_text", "response_status", "requested_at", "deployed_commit", "proposal_hash", "evidence_kind"),
     "object_events": ("run_id", "object_id", "event_id", "timestamp", "event", "reason"),
@@ -125,6 +126,10 @@ def processing_evidence_tables(
                 section_path=row["section_path"], source_checksum=row["source"].get("source_checksum"))
         semantic = row["semantic_passage"]
         for mapped in semantic.get("source_mapping") or []:
+            if mapped.get("kind") == "join_separator":
+                add("lineage", **keys, relation="inserted_join_separator", text=mapped["text"],
+                    left_fragment_id=mapped["left_fragment_id"], right_fragment_id=mapped["right_fragment_id"])
+                continue
             add("lineage", **keys, relation="selected_raw_fragment_range", target_id=mapped.get("fragment_id"),
                 start=mapped.get("raw_start"), end=mapped.get("raw_end"), page=mapped.get("source_page"), bbox=mapped.get("bbox"))
         for span in semantic.get("spans") or [{}]:
@@ -189,8 +194,8 @@ def processing_evidence_tables(
 
 def processing_evidence_zip(**kwargs: Any) -> bytes:
     tables, manifest = processing_evidence_tables(**kwargs)
-    # Keep the projector/MCP contract intact; compact only this versioned CSV
-    # serialization. The opaque concurrency token must be recoverable exactly.
+    # Compact only the CSV revision columns. The projector/MCP version
+    # independently identifies its expanded lineage schema.
     revision = kwargs["revision"]
     revision_id = "sha256:" + hashlib.sha256(revision.encode("utf-8")).hexdigest()
     common = ("snapshot_id", "revision_id")
@@ -215,7 +220,8 @@ def processing_evidence_zip(**kwargs: Any) -> bytes:
             f"Metis {VERSION}\n"
             f"Exported at: {datetime.now(timezone.utc).isoformat()}\n"
             "Read manifest.csv first. This is a read-only projection of stored evidence.\n"
-            "CSV v3: join snapshot_id + revision_id to revision.csv for the exact objects_revision.\n"
+            "CSV v4 adds text, left_fragment_id and right_fragment_id to lineage.csv for inserted joins.\n"
+            "CSV v3/v4: join snapshot_id + revision_id to revision.csv for the exact objects_revision.\n"
             "CSV v2 readers expecting objects_revision on every row must resolve this join.\n"
             "Current object revision is not a run ID or a production commit.\n"
             "No extraction, model inference or validation was rerun. No missing history was invented.\n"

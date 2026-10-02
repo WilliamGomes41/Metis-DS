@@ -47,53 +47,30 @@ def text_view(raw: str, exclusions: list[dict]) -> dict:
 
 
 def mark_pdf_layout(fragments: list[dict]) -> None:
-    """Only repeated five-line markers in a separate left margin are excluded.
+    """Flag possible margin numbers, but keep ambiguous numbers as content.
 
-    Require three increasing markers beside prose and five actual lines per step.
-    Single numbers, clinical inline spans, lists and ambiguous columns remain.
+    Geometry and five-line cadence also occur in clinical tables. Extraction
+    supplies no independent evidence that a numeric column is a line gutter.
     """
-    groups = defaultdict(list)
     prose_by_page = defaultdict(list)
     for fragment in fragments:
         prose_by_page[fragment["source_page"]].extend(
             s for s in fragment.get("_pdf_spans", []) if re.search(r"[A-Za-zÀ-ÿ]", s["text"]))
+    possible = set()
     for fragment in fragments:
-        spans = fragment.get("_pdf_spans", [])
-        for span in spans:
+        for span in fragment.get("_pdf_spans", []):
             if not re.fullmatch(r"\d+", span["text"].strip()):
                 continue
-            value = int(span["text"])
             box = span["bbox"]
             page_prose = prose_by_page[fragment["source_page"]]
-            peers = [s for s in page_prose
-                     if abs(s["bbox"][1] - box[1]) < 4 and s["bbox"][0] >= box[2] + 8]
-            if peers and value >= 20 and value % 5 == 0 and box[2] + 8 <= min(s["bbox"][0] for s in page_prose):
-                groups[round(box[0] / 4)].append((fragment, span, value))
-    accepted = set()
-    possible = {(row[0]["fragment_id"], row[1]["raw_start"]) for rows in groups.values() for row in rows}
-    for candidates in groups.values():
-        candidates.sort(key=lambda row: (row[0]["source_page"], row[1]["bbox"][1]))
-        values = [row[2] for row in candidates]
-        def five_lines_between(left, right):
-            if left[0]["source_page"] != right[0]["source_page"]:
-                return False  # Page boundaries remain ambiguous without a global line model.
-            lo, hi = left[1]["bbox"][1], right[1]["bbox"][1]
-            lines = {round(s["bbox"][1], 1) for s in prose_by_page[left[0]["source_page"]]
-                     if lo - 4 <= s["bbox"][1] < hi - 4}
-            return len(lines) == 5
-        if (len(values) >= 3 and all(b - a == 5 for a, b in zip(values, values[1:]))
-                and all(five_lines_between(a, b) for a, b in zip(candidates, candidates[1:]))):
-            accepted.update((row[0]["fragment_id"], row[1]["raw_start"]) for row in candidates)
+            if any(abs(s["bbox"][1] - box[1]) < 4 and s["bbox"][0] >= box[2] + 8
+                   for s in page_prose):
+                possible.add((fragment["fragment_id"], span["raw_start"]))
     for fragment in fragments:
-        exclusions = []
         findings = []
         for span in fragment.pop("_pdf_spans", []):
-            if (fragment["fragment_id"], span["raw_start"]) in accepted:
-                exclusions.append({**span, "reason": "repeated_five_line_left_margin"})
-            elif (fragment["fragment_id"], span["raw_start"]) in possible:
+            if (fragment["fragment_id"], span["raw_start"]) in possible:
                 findings.append({**span, "reason": "ambiguous_margin_number_retained"})
-        if exclusions:
-            fragment["source_text_view"] = text_view(fragment["raw_text"], exclusions)
         if findings:
             fragment["source_layout_findings"] = findings
 
@@ -103,6 +80,10 @@ def mapped_raw_spans(fragment: dict, *, start: int, end: int) -> list[dict]:
     for span in fragment.get("_raw_source_mapping", []):
         lo, hi = max(start, span["start"]), min(end, span["end"])
         if lo >= hi:
+            continue
+        if span.get("kind") == "join_separator":
+            result.append({key: span[key] for key in
+                           ("kind", "text", "left_fragment_id", "right_fragment_id")})
             continue
         exact = span["raw_end"] - span["raw_start"] == span["end"] - span["start"]
         result.append({"fragment_id": span["fragment_id"],

@@ -121,7 +121,7 @@ def test_hierarchy_fix_preserves_source_bound_fragment_evidence(tmp_path) -> Non
         source_id="source-eenzaamheid",
     )
 
-    assert PARSER_VERSION == "pdf-fragments-v2.3.0"
+    assert PARSER_VERSION == "pdf-fragments-v2.3.1"
     assert [row["sequence"] for row in rows] == list(range(1, len(rows) + 1))
     assert all(row["parser_version"] == PARSER_VERSION for row in rows)
     assert all(row["raw_text"] == row["clean_text"] for row in rows)

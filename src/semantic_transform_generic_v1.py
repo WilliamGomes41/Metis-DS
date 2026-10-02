@@ -20,10 +20,12 @@ from src.semantic_passage_v1 import (
     SELECTION_ORIGIN_COVERAGE,
     SELECTION_ORIGIN_PROPOSAL,
     SEMANTIC_PASSAGE_VERSION,
+    LEGACY_SEMANTIC_PASSAGE_VERSION,
 )
 from src.serving_relations_v1 import confirm_relation_set, proposed_relations
 
-TRANSFORM_VERSION = "semantic-generic-v1.0.0"
+LEGACY_TRANSFORM_VERSION = "semantic-generic-v1.0.0"
+TRANSFORM_VERSION = "semantic-generic-v1.1.0"
 _SEMANTIC_PASSAGE_BASE_KEYS = frozenset(
     {"version", "source_bound", "selection_origin", "spans"}
 )
@@ -41,7 +43,7 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
         raise ValueError("semantic_passage_metadata_invalid")
     if (
         value.get("source_bound") is not True
-        or value.get("version") != SEMANTIC_PASSAGE_VERSION
+        or value.get("version") not in {LEGACY_SEMANTIC_PASSAGE_VERSION, SEMANTIC_PASSAGE_VERSION}
     ):
         raise ValueError("semantic_passage_metadata_invalid")
 
@@ -55,6 +57,9 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
     )
     if expected_keys is None or set(value) - {"source_mapping"} != expected_keys:
         raise ValueError("semantic_passage_metadata_invalid")
+
+    if value["version"] == SEMANTIC_PASSAGE_VERSION and "source_mapping" not in value:
+        raise ValueError("semantic_source_mapping_invalid")
 
     spans = value.get("spans")
     if not isinstance(spans, list) or not spans:
@@ -74,19 +79,30 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
             raise ValueError("semantic_passage_metadata_invalid")
 
     result = {
-        "version": SEMANTIC_PASSAGE_VERSION,
+        "version": value["version"],
         "source_bound": True,
         "selection_origin": origin,
         "spans": [dict(span) for span in spans],
     }
     if "source_mapping" in value:
         mapping = value["source_mapping"]
-        if not isinstance(mapping, list) or any(
-            not isinstance(row, dict) or set(row) != {"fragment_id", "raw_start", "raw_end", "source_page", "bbox"}
-            or not isinstance(row["raw_start"], int) or not isinstance(row["raw_end"], int)
-            or not 0 <= row["raw_start"] < row["raw_end"] for row in mapping
-        ):
+        if not isinstance(mapping, list):
             raise ValueError("semantic_source_mapping_invalid")
+        for row in mapping:
+            if not isinstance(row, dict):
+                raise ValueError("semantic_source_mapping_invalid")
+            if row.get("kind") == "join_separator":
+                valid = (value["version"] == SEMANTIC_PASSAGE_VERSION
+                         and set(row) == {"kind", "text", "left_fragment_id", "right_fragment_id"}
+                         and row["text"] == " "
+                         and all(isinstance(row.get(key), str) and row[key].strip()
+                                 for key in ("left_fragment_id", "right_fragment_id")))
+            else:
+                valid = (set(row) == {"fragment_id", "raw_start", "raw_end", "source_page", "bbox"}
+                         and type(row["raw_start"]) is int and type(row["raw_end"]) is int
+                         and 0 <= row["raw_start"] < row["raw_end"])
+            if not valid:
+                raise ValueError("semantic_source_mapping_invalid")
         result["source_mapping"] = deepcopy(mapping)
     if origin == SELECTION_ORIGIN_PROPOSAL:
         if str(value.get("formation_mode") or "") not in {"semantic-source-bound-v1", "semantic-source-bound-v2"}:
@@ -219,8 +235,13 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
                 if span["end"] > len(public["text"]):
                     raise ValueError("source_bound_field_bounds_invalid")
                 expected_mapping.extend(mapped_raw_spans(source, start=span["start"], end=span["end"]))
+            if semantic_passage["version"] == LEGACY_SEMANTIC_PASSAGE_VERSION:
+                expected_mapping = [row for row in expected_mapping if row.get("kind") != "join_separator"]
             if semantic_passage["source_mapping"] != expected_mapping:
                 raise ValueError("semantic_source_mapping_invalid")
+        object_transform_version = (TRANSFORM_VERSION
+            if semantic_passage and semantic_passage["version"] == SEMANTIC_PASSAGE_VERSION
+            else LEGACY_TRANSFORM_VERSION)
         system_metadata = _system_candidate_metadata(item)
         from src.source_bound_fields_v2 import KEY, bind_fields, MODE
         if semantic_passage and semantic_passage.get("formation_mode") == MODE:
@@ -317,11 +338,11 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
             "governance": _governance(item.get("review_track", "clinical"), high),
             "provenance": {
                 "transformation_mode": "deterministic",
-                "created_by": f"system:{TRANSFORM_VERSION}",
+                "created_by": f"system:{object_transform_version}",
                 "source_extract_hash": raw_extract_hash,
                 "semantic_spec_version": spec["spec_version"],
                 "semantic_spec_hash": spec_hash,
-                "transform_version": TRANSFORM_VERSION,
+                "transform_version": object_transform_version,
                 "content_hash": "0" * 64,
                 "proposal_id": None,
                 "canonical_object_hash": "0" * 64,

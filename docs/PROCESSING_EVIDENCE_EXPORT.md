@@ -8,12 +8,24 @@ De GET-route is `/review/processing-evidence-export?document=<snapshot_id>`.
 De bestaande passage- en diagnostiekexports blijven beschikbaar.
 
 Lees eerst `manifest.csv`. Iedere CSV heeft vaste kolommen, ook zonder rijen.
-CSV-pakket v3 gebruikt `snapshot_id` en `revision_id`. Koppel deze twee kolommen
-aan `revision.csv` om de exacte `objects_revision` terug te vinden. De lange
-revisiecode staat daar eenmaal. V2-pakketten bevatten deze code nog op iedere rij;
-v2-consumenten moeten voor v3 de join ondersteunen. De in-memory/MCP-projectie
-behoudt de v2-kolommen en versieaanduiding; de v3-join geldt alleen voor de ZIP. Een
-historische `run_id` is een afzonderlijke sleutel. Koppel historische kandidaten
+CSV-pakket v4 gebruikt `snapshot_id` en `revision_id`, zoals v3. Koppel deze
+kolommen aan `revision.csv` om de exacte `objects_revision` terug te vinden.
+De lange revisiecode staat daar eenmaal. V2-pakketten bevatten deze code op iedere
+rij; v2-consumenten moeten voor v3/v4 de join ondersteunen. De in-memory/MCP-
+projectie gebruikt nu versie v3 met de oorspronkelijke revisiekolommen; de
+revision-join geldt alleen voor de ZIP. Selecteer de lezer op `schema_version`:
+`processing-evidence-export-v4` voor ZIP, `processing-evidence-export-v3` voor
+projector/MCP. Oudere ZIP-v3- en projector-v2-pakketten blijven afzonderlijke
+contracten.
+
+Beide nieuwe contracten voegen `text`, `left_fragment_id` en `right_fragment_id`
+toe aan lineage. Een `inserted_join_separator` is een ingevoegde reconstructie-
+spatie met beide originele fragment-ID's. Deze rij verzint geen raw bronpositie.
+De bestaande raw-range-rijen behouden hun betekenis. Separatorbewijs betreft
+fragmentreconstructie; spaties tussen afzonderlijke geselecteerde bronblokken
+vallen buiten deze mappingbelofte.
+
+Een historische `run_id` is een afzonderlijke sleutel. Koppel historische kandidaten
 alleen aan huidige objecten als ook versie en canonical hash overeenkomen.
 
 Beschikbaarheid:
