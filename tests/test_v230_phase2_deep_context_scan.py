@@ -242,9 +242,10 @@ def test_context_scan_not_done_blocks_when_required_scan_skipped() -> None:
     assert "context_scan_not_done" in admitted["reason_codes"]
 
 
-def test_phase1_valid_complete_candidate_stays_allowed_after_deep_scan() -> None:
+def test_complete_candidate_with_unbound_neighbor_condition_stays_blocked() -> None:
     admitted = admit_candidate(_complete_adviseert_candidate())
-    assert admitted["gate_result"] == GATE_ALLOWED
+    assert admitted["gate_result"] == GATE_BLOCKED
+    assert "context_necessary_unresolved" in admitted["reason_codes"]
     assert "context_scan_not_done" not in admitted["reason_codes"]
     assert admitted.get("context_scan_done") is True or _scan_of(admitted).get("context_scan_done") is True
     assert PREV_CONDITION in str(admitted.get("context_before") or "")
@@ -678,7 +679,8 @@ def test_phase2_ingest_records_deep_window_and_wires_scan(tmp_path: Path) -> Non
     adviseert = _find_by_text(objects, "adviseert de verpleegkundige de risicofactoren")
     admission = _admission(adviseert)
     scan = _scan_of(adviseert)
-    assert admission["gate_result"] == GATE_ALLOWED
+    assert admission["gate_result"] == GATE_BLOCKED
+    assert "context_necessary_unresolved" in admission["reason_codes"]
     assert admission.get("context_scan_done") is True or scan.get("context_scan_done") is True
     assert PREV_CONDITION in str(admission.get("context_before") or "") or PREV_CONDITION in str(
         scan.get("previous_paragraph") or ""

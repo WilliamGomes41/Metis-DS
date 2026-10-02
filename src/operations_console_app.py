@@ -1401,14 +1401,15 @@ def _broncontext_html(
             "goedkeuren blijft uitgeschakeld.</p>"
         )
     return f"""
-                  <section class="review-card-bronpassage review-broncontext" data-review-step="b" aria-label="Broncontext">
+                  <section class="review-card-bronpassage review-broncontext" data-review-step="b" aria-label="Broncontext"><details data-review-background><summary>Broncontext en achtergrond</summary>
                     <h4>Broncontext</h4>
                     <div class="broncontext-freeze">{"".join(lines)}</div>
                     {selection_warning}
-                    {_source_bound_fields_html(obj)}
                     {missing}
                     <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}{f'&amp;task={_esc(task)}' if task in REVIEW_TASKS else ''}">Open volledige richtlijn</a></p>
-                  </section>
+                  </details>
+                    <details data-review-diagnostics><summary>Technische diagnostiek en veldbewijs</summary>{_source_bound_fields_html(obj)}<p>Object {_esc(object_id)} · bronhash {_esc((obj.get("source") or {}).get("source_checksum"))}</p></details>
+                  <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}{f'&amp;task={_esc(task)}' if task in REVIEW_TASKS else ''}">Open oorspronkelijke bron</a></p></section>
     """
 
 
@@ -2283,6 +2284,52 @@ def _review_route_objects(
     return sorted(rows, key=review_priority_rank)
 
 
+def _decision_paths_html(console: OperationsConsole, snapshot_id: str, obj: dict[str, Any], objects: list[dict[str, Any]]) -> str:
+    from src.decision_graph_v1 import ordered_paths, publication_issues
+    envelope = console._envelope(snapshot_id)
+    if "decision_graph" not in envelope:
+        return ""
+    result = ordered_paths(envelope["decision_graph"], objects, envelope["decision_graph_evidence"], str(obj["object_id"]))
+    if result["issues"]:
+        return '<section data-decision-paths><h4>Beslispad</h4><p class="banner warn">Pad nog niet vastgesteld: ' + _esc(", ".join(result["issues"])) + '</p></section>'
+    by_id = {row["object_id"]: row for row in objects}
+    paths = []
+    for index, path in enumerate(result["paths"], 1):
+        steps = ''.join('<li>' + _esc((by_id[step["object_id"]].get("content") or {}).get("clean_text"))
+                        + ('<p><b>Antwoord: ' + _esc(step["label"]) + '</b></p>' if step["label"] else '<p>Onvoorwaardelijke vervolgstap</p>')
+                        + '<p>Vervolg: ' + _esc((by_id[step["next_object_id"]].get("content") or {}).get("clean_text")) + '</p></li>'
+                        for step in path["steps"])
+        paths.append(f'<article data-path-alternative><h5>Pad {index}</h5><ol>{steps}</ol></article>')
+    unresolved = publication_issues(envelope, objects)
+    notice = '<p class="banner warn">Deze routes zijn nog niet door alle vereiste reviewers bevestigd.</p>' if unresolved else ''
+    return '<section data-decision-paths><h4>Afzonderlijke paden naar deze uitkomst</h4>' + notice + ''.join(paths) + '</section>'
+
+
+def _knowledge_review_html(obj: dict[str, Any], objects: list[dict[str, Any]]) -> str:
+    from src.review_cockpit_v1 import knowledge_review_projection
+    projected = knowledge_review_projection(obj, objects)
+    essential = "".join(
+        f'<li data-context-status="{_esc(row["status"])}"><b>{_esc(row["role"])}</b>: '
+        f'{_esc(row["text"])} '
+        + ('<strong> — nog niet geldig verbonden</strong>' if row["status"] in {"unresolved", "stale"} else '')
+        + '</li>' for row in projected["essential_context"])
+    issues = ('<p class="banner warn" data-unresolved-meaning>Er staan nog controles open: '
+              + _esc("Betekeniscontext, bronbinding of verplichte velden vragen nog controle.") + '</p>'
+              if projected["unresolved_reasons"] else '')
+    proposal = ('<aside class="object-expand-merge" data-context-proposal><h4>Voorgestelde wijziging — nog niet opgeslagen</h4>'
+                f'<p>{_esc(projected["proposal"])}</p></aside>' if projected["proposal"] else '')
+    return f'''<section class="review-card-object review-step" data-review-step="a" aria-label="Geselecteerde passage"
+        data-reviewed-version="{_esc(projected['object_version'])}">
+      <p class="meta">type <b>{_esc(_object_type_label(str(projected['object_type'] or '')))}</b> ·
+        status <b>{_esc(review_row_status(obj))}</b> · versie <b>{_esc(projected['object_version'])}</b></p>
+      <p class="eyebrow">Te beoordelen passage</p><h3 data-full-knowledge-passage>{_esc(projected['text'])}</h3><p class="why-selected">{_esc(why_selected(obj))}</p>
+      <section data-essential-context><h4>Voorwaarden, uitzonderingen en scope</h4>
+        {f'<ul>{essential}</ul>' if essential else '<p>Geen afzonderlijke betekeniscontext vastgelegd.</p>'}</section>
+      {issues}{proposal}
+      <p class="field-help">Bronbinding bewijst niet dat alle noodzakelijke context is herkend. Controleer ook de oorspronkelijke bron.</p>
+    </section>'''
+
+
 def _render_second_review_card(
     console: OperationsConsole,
     snapshot_id: str,
@@ -2344,19 +2391,12 @@ def _render_second_review_card(
     return f"""
       <p><a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=second_review">← Terug naar tweede beoordelingen</a></p>
       <article class="object review-card-two-column second-review-card" data-object-id="{_esc(obj.get("object_id"))}">
+        {_knowledge_review_html(obj, snapshot_objects)}
         <div class="review-cockpit-copy">
           <p class="eyebrow">Onafhankelijke tweede beoordeling</p>
-          <h3>{_esc(review_card_sentence(obj))}</h3>
           <p>De canonieke inhoud staat vast. Controleer dezelfde objectversie onafhankelijk; deze stap wijzigt type, semantiek of relaties niet.</p>
         </div>
-        <section class="review-card-object review-step">
-          <p>{_esc(text)}</p>
-          <p class="meta">
-            <span>type <b>{_esc(_object_type_label(str(obj.get("confirmed_object_type") or "")))}</b></span>
-            <span>versie <b>{_esc(obj.get("object_version") or "")}</b></span>
-            <span>eerste beoordeling <b>{_esc(first_copy)}</b></span>
-          </p>
-        </section>
+        {_decision_paths_html(console, snapshot_id, obj, snapshot_objects)}
         {_broncontext_html(obj, snapshot_id, str(obj.get("object_id") or ""), True, task="second_review")}
         {_review_context_block(
             obj,
@@ -2749,8 +2789,6 @@ def _render_review_card(
     heading_norm = " ".join(heading.split())
     body_norm = " ".join(str(obj_text).split())
     object_text_html = ""
-    if body_norm and body_norm != heading_norm and not body_norm.startswith(heading_norm.rstrip("…")):
-        object_text_html = f'<div class="object-text"><p>{_esc(obj_text)}</p></div>'
     expand_merge = admission_of(obj).get("expand_merge") or {}
     merged_text = str(expand_merge.get("merged_text") or "").strip()
     merged_norm = " ".join(merged_text.split())
@@ -2775,8 +2813,6 @@ def _render_review_card(
             <button class="btn-secondary" type="submit" formaction="/review/context/accept" formmethod="post">Passage aanvullen met brontekst</button>
           </aside>
         '''
-    elif expand_merge.get("performed") and merge_adds_text:
-        object_text_html += f'<div class="object-expand-merge"><p>{_esc(merged_text)}</p></div>'
     proposed = proposed_type_of(obj)
     confirmable = confirmable_proposed_type(obj)
     confirmed = obj.get("confirmed_object_type") or ""
@@ -2849,11 +2885,6 @@ def _render_review_card(
     return f"""
                 <p><a class="btn-secondary" href="{_review_location(console, snapshot_id, task=task)}">← Terug naar taken</a></p>
                 <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
-                  <div class="review-cockpit-copy">
-                    <p>{_esc(admission_notice)}</p>
-                    {repair_guidance}
-                    <p>{review_intro}</p>
-                  </div>
                   <form class="review-decision-form" method="post" action="/review" data-review-form>
                     <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
                     <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
@@ -2865,13 +2896,13 @@ def _render_review_card(
                     <input type="hidden" name="decision" value="">
                     {four_eyes_html}
                     {conflict_html}
-                    <section class="review-card-object review-step" data-review-step="a" aria-label="Geselecteerde passage">
-                      <p class="eyebrow">Te beoordelen passage</p>
-                      <h3>{_esc(heading)}</h3>
-                      <p class="why-selected">{_esc(selection_note)}</p>
-                      <p class="meta"><span>status <b>{_esc(review_row_status(obj))}</b></span></p>
-                      {object_text_html}
-                    </section>
+                    {_knowledge_review_html(obj, snapshot_objects)}
+        {_decision_paths_html(console, snapshot_id, obj, snapshot_objects)}
+                    {object_text_html}
+                  <div class="review-cockpit-copy">
+                    <p>{_esc(admission_notice)}</p>{repair_guidance}<p>{review_intro}</p>
+                  </div>
+                    <p class="why-selected">{_esc(selection_note)}</p>
                     {_broncontext_html(obj, snapshot_id, obj["object_id"], passage_ok, task=task)}
                     {_review_context_block(
                         obj,

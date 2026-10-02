@@ -67,7 +67,7 @@ def _html() -> bytes:
 
 
 def _ingest(console: OperationsConsole, accounts: dict) -> dict:
-    return console.ingest(
+    receipt = console.ingest(
         actor_id=accounts["researcher"]["account_id"],
         filename="d43.html",
         data=_html(),
@@ -84,6 +84,10 @@ def _ingest(console: OperationsConsole, accounts: dict) -> dict:
             accounts["reviewer"]["account_id"],
         ],
     )
+
+    from tests.context_test_support import bind_detected_context
+    bind_detected_context(console, receipt["snapshot_id"], accounts["reviewer"]["account_id"])
+    return receipt
 
 
 def _text(row: dict) -> str:

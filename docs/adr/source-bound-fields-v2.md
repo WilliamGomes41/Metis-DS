@@ -45,3 +45,7 @@ Na de implementatie is het contract langs de volgende omwegen gecontroleerd:
 | Rollback en herstel | Opt-in uitschakelen met de v2-lezende release. Historische v2-evidence blijft behouden; terugrollen naar een oude binary is niet bewezen en is geen ondersteund herstelpad voor v2-resultaten. |
 
 Resterende onzekerheid: een letterlijk bronbereik kan semantisch verkeerd toegewezen zijn. Dit contract voorkomt vrije veldtekst, maar vervangt menselijke review en de vergelijkingsmeting vóór productiecutover niet.
+
+## Uitbreiding broncontext (2026-10-02)
+
+De opdracht voor betrouwbare kennisobjecten vervangt de eerdere opt-in-default voor nieuwe runtime-proza: v2 is primair. Expliciete legacyconfiguratie blijft leesbaar; beslisbomen blijven structureel. `source-bound-context-v1` voegt alleen exacte contextspans, rollen en gesloten unresolved redenen toe. Admission `source-context-admission-v2` controleert daadwerkelijke realisatie onafhankelijk van scanflags. Geen backfill, SQL-migratie, herreview of wijziging van publicatiehashes. Zie docs/change-contracts/knowledge-context-foundation.md voor invariant-, transactie- en herstelbewijs.

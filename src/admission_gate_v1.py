@@ -563,6 +563,9 @@ def admit_candidate(
     skip_context_scan: bool = False,
     context_unnecessary: bool = False,
     checked_signals: list[str] | None = None,
+    object_revision: dict[str, Any] | None = None,
+    context_objects: Iterable[dict[str, Any]] = (),
+    source_fragments: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Hard-admit one candidate. ``soft_scores`` MAY rank only and MUST NOT open."""
     del soft_scores  # ranking only; never opens the gate
@@ -656,19 +659,14 @@ def admit_candidate(
             codes.append(code)
             codes += ("no_independent_claim",) * bool(independent)
 
-    merge = row.get("expand_merge")
-    if (
-        isinstance(merge, dict)
-        and merge.get("performed")
-        and row.get("context_scan_done")
-        and row.get("exceptions_detected")
-    ):
-        codes = [code for code in codes if code != "source_fidelity_failure"]
-    scan = row.get("context_scan")
-    if not isinstance(scan, dict):
-        scan = {}
-    if scan.get("necessary_context_disposition") == "block":
+    from src.source_context_review_v1 import context_realization
+    realization = context_realization(row, obj=object_revision,
+                                      objects=context_objects, fragments=source_fragments)
+    row["context_realization"] = realization
+    if realization["unresolved"]:
         codes.append("context_necessary_unresolved")
+    if object_revision is not None and source_fragments is not None and realization["source_integrity"] != "verified":
+        codes.append("source_fidelity_failure")
     unique = _unique_reason_codes(codes, scan_done=bool(row.get("context_scan_done")))
     row["reason_codes"] = unique
     row["gate_result"] = (GATE_ALLOWED, GATE_BLOCKED)[bool(unique)]
@@ -847,6 +845,8 @@ def apply_admission_gate(
         for fragment in (fragments or [])
         if fragment.get("fragment_id")
     }
+    source_order = sorted(objects, key=lambda row: (row.get("structure") or {}).get("sequence", 0))
+    positions = {row.get("object_id"): index for index, row in enumerate(source_order)}
     out: list[dict[str, Any]] = []
     for index, obj in enumerate(objects):
         eligibility = assess_candidate_eligibility(obj)
@@ -857,13 +857,14 @@ def apply_admission_gate(
         if eligibility.eligible:
             candidate = candidate_from_object(
                 row,
-                objects=objects,
-                index=index,
+                objects=source_order,
+                index=positions[obj.get("object_id")],
                 document_version=document_version,
                 source_hash=source_hash,
                 fragments_by_id=fragments_by_id,
             )
-            admission = admit_candidate(candidate)
+            admission = admit_candidate(candidate, object_revision=row, context_objects=objects,
+                                        source_fragments=fragments)
             relation_codes = relation_proposal_admission_codes(
                 row,
                 objects=objects,

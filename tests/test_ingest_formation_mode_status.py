@@ -48,18 +48,19 @@ def _ingest_page(console: OperationsConsole) -> str:
     return page.text
 
 
-def test_ingest_shows_default_deterministic_runtime_mode_read_only(tmp_path: Path) -> None:
+def test_ingest_shows_default_source_bound_v2_runtime_mode_read_only(tmp_path: Path) -> None:
     console = _console(tmp_path)
     bind_pre_review_semantic_processing(console, environ={})
 
     html = _ingest_page(console)
 
-    assert "Actieve verwerkingsmodus: Deterministisch" in html
+    assert "Actieve verwerkingsmodus: Semantisch met bronbewijs" in html
     assert (
-        "Nieuwe en opnieuw verwerkte passages worden momenteel zonder taalmodel "
-        "gevormd. Review blijft verplicht."
+        "Nieuwe en opnieuw verwerkte passages worden momenteel brongebonden "
+        "semantisch gevormd. Review blijft verplicht."
     ) in html
-    assert console._passage_formation_mode_reader() == DETERMINISTIC_MODE
+    from src.source_bound_fields_v2 import MODE
+    assert console._passage_formation_mode_reader() == MODE
     assert 'name="passage_formation_mode"' not in html
     assert "Wijzig modus" not in html
 

@@ -72,11 +72,13 @@ from src.semantic_replay_v1 import (
 )
 from src.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
 from src.source_reconstruction_v1 import RECONSTRUCTION_VERSION
-from src.source_bound_fields_v2 import MODE as SEMANTIC_V2_MODE, evidence_schema
+from src.source_bound_fields_v2 import MODE as SEMANTIC_V2_MODE, evidence_schema, context_evidence_schema, CONTEXT_VERSION
 
 
 PASSAGE_FORMATION_MODE_ENV = "METIS_PASSAGE_FORMATION_MODE"
 DEFAULT_TIMEOUT_SECONDS = 180
+MAX_INPUT_BYTES = 2_000_000
+MAX_RESPONSE_BYTES = 4_000_000
 LOGGER = logging.getLogger("metis.provider")
 SEMANTIC_PROVIDER_ID = "openai-responses-v1"
 SEMANTIC_DEVELOPER_PROMPT = (
@@ -110,7 +112,12 @@ SEMANTIC_V2_INSTRUCTION = (
     "source span wholly within the selected candidate, or null with missing_reason "
     "not_stated, uncertain or not_applicable. Never invent or paraphrase field text. "
     "Preserve attribution, uncertainty, negation, conditions, exceptions, numbers and units. "
-    "Field evidence is a proposal for human review, not a confirmation of truth."
+    "Field evidence is a proposal for human review, not a confirmation of truth. "
+    "Return context_evidence for each object: exact evidence_blocks spans for target group, timing, "
+    "condition, exception, negation, scope, list introduction, row/column header or support. "
+    "Context belongs to this candidate. Use unresolved_reason for uncertain applicability or layout; "
+    "never resolve geometry or missing information with general knowledge. Empty context_evidence "
+    "means no separate context was identified, not that completeness has been proven."
 )
 
 SEMANTIC_MODEL_CONFIG = {
@@ -123,7 +130,7 @@ PostJson = Callable[[str, dict[str, str], dict[str, Any], int], dict[str, Any]]
 
 
 def _configured_passage_formation_mode(environ: Mapping[str, str]) -> str:
-    return str(environ.get(PASSAGE_FORMATION_MODE_ENV, "") or "").strip() or DETERMINISTIC_MODE
+    return str(environ.get(PASSAGE_FORMATION_MODE_ENV, "") or "").strip() or SEMANTIC_V2_MODE
 
 
 def _stamp_passage_formation(
@@ -177,7 +184,9 @@ def _post_json(
     LOGGER.info("METIS_PROVIDER start id=%s timeout=%s reference=%s", call_id, timeout, _PROCESSING_REFERENCE.get())
     try:
         with urlopen(request, timeout=timeout) as response:
-            raw = response.read()
+            raw = response.read(MAX_RESPONSE_BYTES + 1)
+            if len(raw) > MAX_RESPONSE_BYTES:
+                raise ConsoleError("pre_review_llm_output_limit_exceeded")
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
         LOGGER.error(
             "METIS_PROVIDER failure id=%s type=%s http=%s elapsed=%.2f reason_type=%s reference=%s",
@@ -288,6 +297,8 @@ def _proposal_schema(field_contract_v2: bool = False) -> dict[str, Any]:
     if field_contract_v2:
         obj["properties"]["field_evidence"] = evidence_schema(span)
         obj["required"].append("field_evidence")
+        obj["properties"]["context_evidence"] = context_evidence_schema(span)
+        obj["required"].append("context_evidence")
     return {
         "type": "object",
         "additionalProperties": False,
@@ -490,7 +501,7 @@ def _replay_identity(
         extractor_version=_extractor_contract(source_fragments),
         reconstruction_version=RECONSTRUCTION_VERSION,
         formation_policy_version=PASSAGE_FORMATION_POLICY_VERSION,
-        semantic_contract_version=(f"source-bound-fields-v2/{SEMANTIC_PASSAGE_VERSION}" if field_contract_v2 else SEMANTIC_PASSAGE_VERSION),
+        semantic_contract_version=(f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}" if field_contract_v2 else SEMANTIC_PASSAGE_VERSION),
         prompt_hash=_stable_json_hash(SEMANTIC_DEVELOPER_PROMPT + (SEMANTIC_V2_INSTRUCTION if field_contract_v2 else "")),
         schema_hash=_stable_json_hash(_proposal_schema(field_contract_v2)),
         provider_id=SEMANTIC_PROVIDER_ID,
@@ -514,8 +525,11 @@ def _provider_proposal(
     payload = _request_payload(model=model, blocks=blocks,
                                evidence_blocks=evidence_blocks,
                                field_contract_v2=field_contract_v2)
+    if len(json.dumps(payload, ensure_ascii=False).encode("utf-8")) > MAX_INPUT_BYTES:
+        raise ConsoleError("pre_review_llm_input_limit_exceeded")
     request_evidence = deepcopy(payload)
     requested_at = datetime.now(timezone.utc).isoformat()
+    started = time.monotonic()
     response = (post_json or _post_json)(
         OPENAI_RESPONSES_URL,
         {
@@ -525,8 +539,12 @@ def _provider_proposal(
         payload,
         DEFAULT_TIMEOUT_SECONDS,
     )
+    if time.monotonic() - started > DEFAULT_TIMEOUT_SECONDS:
+        raise ConsoleError("pre_review_llm_processing_timeout")
     if not isinstance(response, dict):
         raise ConsoleError("pre_review_llm_response_invalid")
+    if len(json.dumps(response, ensure_ascii=False).encode("utf-8")) > MAX_RESPONSE_BYTES:
+        raise ConsoleError("pre_review_llm_output_limit_exceeded")
     try:
         output_text = _extract_output_text(response)
         proposal = json.loads(output_text)
@@ -536,6 +554,9 @@ def _provider_proposal(
         raise ConsoleError("pre_review_llm_response_invalid")
     if str(proposal.get("abstain_reason") or "").strip():
         raise ConsoleError("pre_review_llm_abstained")
+    if field_contract_v2 and isinstance(proposal.get("objects"), list):
+        if any(not isinstance(row, dict) or "context_evidence" not in row for row in proposal["objects"]):
+            raise ConsoleError("pre_review_llm_proposal_rejected", "source_bound_context_required")
     if evidence is not None:
         # Never persist HTTP headers, credentials, arbitrary provider metadata or
         # reasoning. This observation travels through the existing run commit.

@@ -109,7 +109,10 @@ def _ingest(console: OperationsConsole, accounts: dict, fixture: Path = PHASE2_F
         "named_reviewers": [accounts["reviewer"]["account_id"]],
     }
     kwargs.update(overrides)
-    return console.ingest(**kwargs)
+    receipt = console.ingest(**kwargs)
+    from tests.context_test_support import bind_detected_context
+    bind_detected_context(console, receipt["snapshot_id"], accounts["reviewer"]["account_id"])
+    return receipt
 
 
 def _boom_freeze_bytes() -> bytes:

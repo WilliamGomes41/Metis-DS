@@ -248,7 +248,7 @@ def _bronpassage_column(html: str) -> str:
 
 
 def _h3_text(column_html: str) -> str:
-    match = re.search(r"<h3>(.*?)</h3>", column_html, flags=re.S)
+    match = re.search(r"<h3(?:\s[^>]*)?>(.*?)</h3>", column_html, flags=re.S)
     assert match, "open card must have an h3"
     return _visible_text(match.group(1)).strip()
 

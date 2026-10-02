@@ -121,7 +121,10 @@ def _ingest(console: OperationsConsole, accounts: dict, fixture: Path = PHASE2_F
         "named_reviewers": [accounts["reviewer"]["account_id"]],
     }
     kwargs.update(overrides)
-    return console.ingest(**kwargs)
+    receipt = console.ingest(**kwargs)
+    from tests.context_test_support import bind_detected_context
+    bind_detected_context(console, receipt['snapshot_id'], accounts['reviewer']['account_id'])
+    return receipt
 
 
 def _boom_freeze_bytes() -> bytes:
@@ -197,7 +200,7 @@ def _complete_adviseert_candidate(**overrides) -> dict:
         predicate_span="adviseert",
         proposed_type="recommendation",
         type_evidence_spans=["adviseert"],
-        context_before=PREV_CONDITION,
+        context_before="",
         context_after=DJG,
         actor_of_scope="de verpleegkundige",
         recommended_action="te gebruiken",
@@ -674,4 +677,3 @@ def test_djg_source_passage_does_not_enter_ordinary_queue_as_aanbeveling(tmp_pat
     assert ((djg.get("metadata") or {}).get("candidate_eligibility") or {}).get("eligible") is False
     assert is_slow_review_duty(djg) is False
     assert djg not in ordinary_review_queue(objects)
-

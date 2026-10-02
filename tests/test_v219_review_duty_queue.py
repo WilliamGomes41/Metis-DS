@@ -372,6 +372,8 @@ def test_researchers_are_not_required_to_open_thousands_of_inhoud_cards(
     receipt = _ingest(
         console, accounts, data=freeze, filename="wachtrij.html", title="Wachtrij"
     )
+    from tests.context_test_support import bind_detected_context
+    bind_detected_context(console, receipt['snapshot_id'], accounts['reviewer']['account_id'])
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     koppen, old_inhoud = review_stacks(objects)
     duty = slow_review_duty(objects)

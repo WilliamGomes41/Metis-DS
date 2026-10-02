@@ -239,10 +239,16 @@ def test_route_change_invalidates_passages_and_reextract_preserves_policy(tmp_pa
     assert not any(r["valid"] for r in console.object_review_bindings(sid))
     with pytest.raises(ConsoleError, match="decision_graph_passage_review_required"):
         console.confirm_decision_graph(**command(console, accounts, sid, "cannot-skip"))
-    console.reextract_unpublished(actor_id=accounts["researcher"]["account_id"], snapshot_id=sid)
+    before = deepcopy(console.snapshot_objects(sid))
+    retained_graph = deepcopy(console._envelope(sid)["decision_graph"])
+    history = deepcopy(console._load_objects(sid, remember=False))
+    with pytest.raises(ConsoleError, match="pre_review_retry_existing_work"):
+        console.reextract_unpublished(actor_id=accounts["researcher"]["account_id"], snapshot_id=sid)
+    assert console.snapshot_objects(sid) == before
+    assert console._load_objects(sid, remember=False) == history
     assert console._envelope(sid)["review_policy"] == policy(accounts)
     assert all(o["metadata"]["review_policy"] == policy(accounts) for o in console.snapshot_objects(sid))
-    assert console._envelope(sid)["decision_graph"]["unresolved"]
+    assert console._envelope(sid)["decision_graph"] == retained_graph
 
 
 def test_ingest_command_deduplicates_and_rejects_changed_payload(tmp_path):

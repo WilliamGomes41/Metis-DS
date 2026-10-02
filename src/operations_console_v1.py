@@ -18,7 +18,7 @@ import threading
 import unicodedata
 import uuid
 import zipfile
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager, nullcontext, suppress
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
@@ -995,8 +995,8 @@ class OperationsConsole:
                     self._save_bindings()
                     wrote_bindings = True
                 if ledger_fn is not None:
-                    ledger_fn()
                     wrote_ledger = True
+                    ledger_fn()
             except Exception:
                 self._rollback_store_files(
                     objects_snapshot=prior_objects if wrote_objects else None,
@@ -1844,6 +1844,12 @@ class OperationsConsole:
                     or self.snapshot_objects(snapshot_id) or self._bindings.get(snapshot_id)
                     or envelope.get("review_passes")):
                 raise ConsoleError("pre_review_retry_existing_work")
+        from src.source_context_review_v1 import ROLE_KEY, LINKS_KEY
+        if (self._bindings.get(snapshot_id) or envelope.get("review_passes") or
+                any((row.get("governance") or {}).get("validation_status") not in {None, "needs_review"}
+                    or ROLE_KEY in (row.get("metadata") or {}) or LINKS_KEY in (row.get("metadata") or {})
+                    for row in self.snapshot_objects(snapshot_id))):
+            raise ConsoleError("pre_review_retry_existing_work")
         processing_started = quality_instant()
         if self.snapshot_is_published(snapshot_id):
             raise ConsoleError("published_objects_must_not_be_rewritten")
@@ -1870,7 +1876,7 @@ class OperationsConsole:
                 "source_id": envelope["source_id"],
                 "title": envelope["title"],
                 "publisher": "V&VN",
-                "source_url": envelope.get("live_url") or "",
+                "source_url": envelope.get("live_url") or f"urn:vvn:freeze:{envelope['sha256']}",
                 "source_type": "interactive_tree" if envelope["content_kind"] == "boom" else envelope["content_kind"],
                 "source_level": 1,
                 "canonicality": "canonical",
@@ -3391,13 +3397,20 @@ class OperationsConsole:
         patch: dict[str, Any],
         additional_source_fragments: list[dict[str, Any]] | None = None,
         rereview_scope: str = "document",
+        expected_revision: str | None = None,
     ) -> dict[str, Any]:
         account = self._account(actor_id)
         if "researcher" not in account["roles"] and "reviewer" not in account["roles"]:
             raise ConsoleError("correction_role_required")
         if rereview_scope not in {"document", "object"}:
             raise ConsoleError("unknown_rereview_scope")
-        current = self.snapshot_objects(snapshot_id, for_update=True)
+        if self.snapshot_is_published(snapshot_id):
+            raise ConsoleError("published_working_revision_immutable")
+        if "researcher" not in account["roles"] and actor_id not in self._envelope(snapshot_id)["named_reviewers"]:
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        current, revision = self.snapshot_objects_and_revision(snapshot_id)
+        if expected_revision is not None and expected_revision != revision:
+            raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=revision)
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
@@ -3406,7 +3419,7 @@ class OperationsConsole:
             patch,
             actor=account["username"],
             schema_path=self.schema_path,
-            ledger=self._ledger_path,
+            ledger=None,
         )
         if additional_source_fragments:
             provenance = revised.setdefault("provenance", {})
@@ -3428,6 +3441,9 @@ class OperationsConsole:
         stamp_canonical_hashes(revised)
         envelope = self._envelope(snapshot_id)
         if review_path_for_klasse(envelope["class"]) != "boom":
+            source_path, _ = self._verified_source_bytes(envelope)
+            fragments = self._extract(envelope["content_kind"], source_path,
+                                      document_id=envelope["document_id"], source_id=envelope["source_id"])
             peers = [
                 revised if row.get("object_id") == object_id else row
                 for row in current
@@ -3435,6 +3451,7 @@ class OperationsConsole:
             gated = apply_admission_gate(
                 peers,
                 klasse=envelope["class"],
+                fragments=fragments,
                 document_version=envelope["version"],
                 source_hash=envelope["sha256"],
             )
@@ -3451,18 +3468,43 @@ class OperationsConsole:
             new_envelopes[snapshot_id] = new_envelope
         new_bindings = deepcopy(self._bindings)
         new_bindings[snapshot_id] = invalidate_for_object(new_bindings.get(snapshot_id, []), object_id)
-        self._commit_prepared_store(
-            objects=(snapshot_id, history),
-            envelopes=new_envelopes,
-            bindings=new_bindings,
-            snapshot_id=snapshot_id,
-            ledger_fn=lambda: append_event(
-                self._ledger_path, event_type="quality_object_corrected", object_id=object_id,
-                object_version=str(revised.get("object_version") or ""), actor=account["username"],
-                details={"snapshot_id": snapshot_id,
-                         "quality_evidence": review_evidence(envelope, target, revised)},
-            ),
-        )
+        def record_correction():
+            append_event(self._ledger_path, event_type="revision_created", object_id=object_id,
+                         object_version=revised["object_version"], actor=account["username"],
+                         details={"previous_object_version": target["object_version"],
+                                  "revision_patch_hash": revised["provenance"]["revision_patch_hash"],
+                                  "reason": patch["reason"]})
+            append_event(self._ledger_path, event_type="quality_object_corrected", object_id=object_id,
+                         object_version=revised["object_version"], actor=account["username"],
+                         details={"snapshot_id": snapshot_id,
+                                  "quality_evidence": review_evidence(envelope, target, revised)})
+        with self._store_write_lock():
+            try:
+                transaction = (self._reprocessing_transaction(snapshot_id)
+                               if getattr(self, "workflow_document_store", None) is not None
+                               else nullcontext())
+                with transaction:
+                    self._reload_store_locked()
+                    self._assert_source_work_unchanged(envelope, revision, "published_working_revision_immutable")
+                    current_actor = self._account(actor_id)
+                    if not {"researcher", "reviewer"}.intersection(current_actor["roles"]):
+                        raise ConsoleError("correction_role_required")
+                    if "researcher" not in current_actor["roles"] and actor_id not in self._envelope(snapshot_id)["named_reviewers"]:
+                        raise ConsoleError("reviewer_not_named_on_snapshot")
+                    self._commit_prepared_store(
+                        objects=(snapshot_id, history),
+                        envelopes=new_envelopes,
+                        bindings=new_bindings,
+                        snapshot_id=snapshot_id,
+                        expected_revision=revision,
+                        ledger_fn=record_correction,
+                    )
+            except Exception:
+                self._reload_store_locked()
+                remirror = getattr(self, "_remirror_review_runtime", None)
+                if remirror is not None:
+                    remirror()
+                raise
         return deepcopy(revised)
 
     def accept_source_continuation(

@@ -40,7 +40,7 @@ def proposal(payload):
                        "recommendation_evidence_span": TEXT}.items():
         fields[name] = {"span": span(text), "missing_reason": None}
     return {"objects": [{"spans": [span(TEXT)], "proposed_object_type": "recommendation",
-                         "field_evidence": fields,
+                         "field_evidence": fields, "context_evidence": [],
                          "recommendation_semantics": {"direction": "against", "direction_evidence": span("niet zinvol"),
                          "strength": None, "strength_status": "not_stated", "strength_evidence": None}}],
             "relations": [], "abstain_reason": None}
@@ -179,7 +179,7 @@ def test_console_opt_in_persists_evidence_replays_and_survives_restart(tmp_path)
         assert revision['objects_revision'] == before[1]
         assert all(r['revision_id'] == revision['revision_id'] for r in rows('source_stages'))
         assert 'objects_revision' not in call
-        assert 'processing-evidence-export-v4' in archive.read('README.txt').decode()
+        assert 'processing-evidence-export-v5' in archive.read('README.txt').decode()
     assert before == (restarted._envelope(sid), restarted.objects_revision(sid))
     # Even valid JSON from an explicitly incomplete response cannot replace work.
     from src.operations_console_v1 import ConsoleError
