@@ -125,3 +125,96 @@ def apply_bound_fields(candidate: dict) -> list[str]:
         return [str(exc)]
     candidate.update(values)
     return []
+
+# Additive contract for context of new v2 proposals; legacy v2 fields stay readable.
+CONTEXT_KEY = 'source_bound_context'
+CONTEXT_VERSION = 'source-bound-context-v1'
+CONTEXT_ROLES = ('target_group', 'timing', 'condition', 'exception', 'negation', 'scope',
+                 'list_introduction', 'row_header', 'column_header', 'support')
+CONTEXT_REASONS = ('context_uncertain', 'scope_not_stated', 'layout_ambiguous', 'relation_uncertain')
+MAX_CONTEXT_REFERENCES = 256
+
+
+def context_evidence_schema(span: dict) -> dict:
+    return {'type': 'array', 'maxItems': MAX_CONTEXT_REFERENCES, 'items': {
+        'type': 'object', 'additionalProperties': False,
+        'properties': {'role': {'type': 'string', 'enum': list(CONTEXT_ROLES)},
+                       'span': {'anyOf': [deepcopy(span), {'type': 'null'}]},
+                       'unresolved_reason': {'type': ['string', 'null'], 'enum': [None, *CONTEXT_REASONS]}},
+        'required': ['role', 'span', 'unresolved_reason']}}
+
+
+def bind_context(raw: object, *, fragments: list[dict]) -> list[dict]:
+    """Rebuild literal context; source geometry/proximity does not resolve semantics."""
+    from src.semantic_passage_v1 import _reconstructed_blocks
+    from src.source_layout_v1 import mapped_raw_spans
+    if not isinstance(raw, list) or len(raw) > MAX_CONTEXT_REFERENCES:
+        raise ValueError('source_bound_context_invalid')
+    blocks = {public['block_id']: (public, source) for public, source in _reconstructed_blocks(fragments)}
+    result = []
+    for entry in raw:
+        if not isinstance(entry, dict) or set(entry) != {'role', 'span', 'unresolved_reason'}:
+            raise ValueError('source_bound_context_invalid')
+        if entry['role'] not in CONTEXT_ROLES or entry['unresolved_reason'] not in (None, *CONTEXT_REASONS):
+            raise ValueError('source_bound_context_invalid')
+        span = entry['span']
+        text, mapping, source_refs = '', [], []
+        if span is None:
+            if entry['unresolved_reason'] is None:
+                raise ValueError('source_bound_context_reason_required')
+        else:
+            if not isinstance(span, dict) or set(span) != {'block_id', 'start', 'end'} or span['block_id'] not in blocks:
+                raise ValueError('source_bound_context_unknown_block')
+            public, source = blocks[span['block_id']]
+            lo, hi = span['start'], span['end']
+            if type(lo) is not int or type(hi) is not int or not 0 <= lo < hi <= len(public['text']):
+                raise ValueError('source_bound_context_bounds_invalid')
+            text = public['text'][lo:hi]
+            if not text.strip():
+                raise ValueError('source_bound_context_empty')
+            mapping = mapped_raw_spans(source, start=lo, end=hi)
+            ids = {r['fragment_id'] for r in mapping if r.get('kind') != 'join_separator'}
+            source_refs = [{'fragment_id': f['fragment_id'], 'fragment_hash': f['fragment_hash'],
+                            'source_locator': deepcopy(f.get('source_locator'))}
+                           for f in fragments if f['fragment_id'] in ids]
+        result.append({**deepcopy(entry), 'text': text, 'source_mapping': mapping, 'source_refs': source_refs})
+    if len({stable_json_hash(r) for r in result}) != len(result):
+        raise ValueError('source_bound_context_duplicate')
+    return result
+
+
+def context_record(entries: list[dict], *, obj: dict) -> dict:
+    from src.source_context_review_v1 import literal_identity
+    return {'version': CONTEXT_VERSION, 'target_object_id': obj['object_id'],
+            'target_object_version_at_binding': obj['object_version'],
+            'target_literal_hash': literal_identity(obj), 'source': deepcopy(obj['source']), 'entries': deepcopy(entries)}
+
+
+def validated_context(obj: dict, fragments: list[dict], source_hash: str) -> list[dict]:
+    record = (obj.get('metadata') or {}).get(CONTEXT_KEY)
+    if record is None:
+        return []
+    if not isinstance(record, dict) or set(record) != {'version', 'target_object_id', 'target_object_version_at_binding',
+                                                     'target_literal_hash', 'source', 'entries'}:
+        raise ValueError('source_bound_context_invalid')
+    entries = record['entries']
+    if not isinstance(entries, list):
+        raise ValueError('source_bound_context_invalid')
+    raw = [{key: row[key] for key in ('role', 'span', 'unresolved_reason')} for row in entries]
+    rebuilt = bind_context(raw, fragments=fragments)
+    expected = context_record(rebuilt, obj=obj)
+    # Existing context semantics allow classification-only target version changes.
+    expected['target_object_version_at_binding'] = record['target_object_version_at_binding']
+    if record != expected or not source_hash or record['source'].get('source_checksum') != source_hash:
+        raise ValueError('source_bound_context_stale')
+    return rebuilt
+
+
+def context_matches_target(obj: dict) -> bool:
+    """Read-only identity check; literal source revalidation belongs to writes."""
+    record = (obj.get('metadata') or {}).get(CONTEXT_KEY)
+    if not isinstance(record, dict) or not isinstance(record.get('entries'), list):
+        return False
+    expected = context_record(record['entries'], obj=obj)
+    expected['target_object_version_at_binding'] = record.get('target_object_version_at_binding')
+    return bool(expected['target_object_version_at_binding']) and record == expected

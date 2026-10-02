@@ -139,11 +139,15 @@ def test_real_get_pins_text_and_revision_together_and_preserves_conflict_selecti
     response = client.post(form["action"], data={**form["fields"], "object_ids": ids})
     assert response.status_code == 409
     assert "data-stale-write-conflict" in response.text
-    assert new_text in response.text
+    # A shortened, non-reconstructable correction stays available in the audit
+    # card, but cannot re-enter the ordinary batch on a stale form.
+    from src.admission_gate_v1 import admission_of
+    corrected = next(o for o in console.snapshot_objects(sid) if o['object_id'] == ids[0])
+    assert 'source_fidelity_failure' in admission_of(corrected)['reason_codes']
+    assert new_text in client.get('/review', params={'document':sid, 'object':ids[0]}).text
     assert not console._bindings.get(sid)
-    retry = Page(response.text).batches[0]
-    assert set(retry["checked"]) == set(ids)
-    assert retry["fields"]["snapshot_revision"] == console.objects_revision(sid)
+    assert not Page(response.text).batches  # Only one eligible candidate remains.
+    assert console.snapshot_objects_and_revision(sid)[1] == console.objects_revision(sid)
 
 
 def test_concurrent_writer_between_members_is_not_adopted_as_batch_revision(review_system, monkeypatch):

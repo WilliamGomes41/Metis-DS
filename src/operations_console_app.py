@@ -255,6 +255,16 @@ ERROR_COPY = {
     "processing_command_id_invalid": "De verwerkingsopdracht is ongeldig. Open Documenten opnieuw en probeer het nogmaals.",
     "processing_command_conflict": "Deze opdracht hoort bij een andere verwerkingspoging. Open Documenten opnieuw.",
     "processing_dependency_failed": "De verwerking kon niet worden afgerond door een technische fout. Het bestaande werk is behouden.",
+    "pre_review_llm_connection_timeout": "De verbinding met de modeldienst kwam niet binnen de ingestelde tijd tot stand. Het document is bewaard.",
+    "pre_review_llm_connection_failed": "De verbinding met de modeldienst is mislukt. Het document is bewaard.",
+    "pre_review_llm_inactivity_timeout": "De modeldienst gaf binnen de ingestelde wachttijd geen transportantwoord meer. Dit zegt niets over de juistheid van het document.",
+    "pre_review_llm_processing_timeout": "De maximale duur van de modelaanroep is bereikt. Het document en bestaand reviewwerk zijn bewaard.",
+    "pre_review_llm_processing_in_progress": "Er loopt een verwerkingspoging. De kernel bewaakt de eindtijd; transportactiviteit is geen inhoudelijke voortgang.",
+    "pre_review_llm_limits_invalid": "De ingestelde verwerkingsgrenzen zijn ongeldig. Laat de beheerder de configuratie controleren.",
+    "pre_review_llm_transport_unsupported": "Deze verwerkingsroute vereist de ondersteunde Linux-runtime.",
+    "processing_retry_cooldown": "Een nieuwe poging is nog niet mogelijk vóór de vermelde herprobeertijd. Externe annulering van het eerdere verzoek is onbekend.",
+    "processing_attempt_limit_reached": "Het ingestelde maximumaantal pogingen is bereikt. Laat de beheerder de oorzaak onderzoeken.",
+    "processing_structural_limit": "Deze opdracht overschrijdt een invoer- of uitvoergrens. Herhalen zonder de oorzaak te wijzigen is geen herstel.",
     "processing_timeout": "De verwerking is niet op tijd afgerond. Het bestaande werk is behouden; start zo nodig een nieuwe poging.",
     "pre_review_no_reviewable_candidates": "De voorcontrole heeft geen passages vrijgegeven die de toelatingscontroles doorstaan. Bekijk de technische diagnose.",
     "public_signup_forbidden": "Je kunt zelf geen account aanmaken. Vraag de beheerder om toegang tot Metis.",
@@ -1401,14 +1411,15 @@ def _broncontext_html(
             "goedkeuren blijft uitgeschakeld.</p>"
         )
     return f"""
-                  <section class="review-card-bronpassage review-broncontext" data-review-step="b" aria-label="Broncontext">
+                  <section class="review-card-bronpassage review-broncontext" data-review-step="b" aria-label="Broncontext"><details data-review-background><summary>Broncontext en achtergrond</summary>
                     <h4>Broncontext</h4>
                     <div class="broncontext-freeze">{"".join(lines)}</div>
                     {selection_warning}
-                    {_source_bound_fields_html(obj)}
                     {missing}
                     <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}{f'&amp;task={_esc(task)}' if task in REVIEW_TASKS else ''}">Open volledige richtlijn</a></p>
-                  </section>
+                  </details>
+                    <details data-review-diagnostics><summary>Technische diagnostiek en veldbewijs</summary>{_source_bound_fields_html(obj)}<p>Object {_esc(object_id)} · bronhash {_esc((obj.get("source") or {}).get("source_checksum"))}</p></details>
+                  <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}{f'&amp;task={_esc(task)}' if task in REVIEW_TASKS else ''}">Open oorspronkelijke bron</a></p></section>
     """
 
 
@@ -2283,6 +2294,52 @@ def _review_route_objects(
     return sorted(rows, key=review_priority_rank)
 
 
+def _decision_paths_html(console: OperationsConsole, snapshot_id: str, obj: dict[str, Any], objects: list[dict[str, Any]]) -> str:
+    from src.decision_graph_v1 import ordered_paths, publication_issues
+    envelope = console._envelope(snapshot_id)
+    if "decision_graph" not in envelope:
+        return ""
+    result = ordered_paths(envelope["decision_graph"], objects, envelope["decision_graph_evidence"], str(obj["object_id"]))
+    if result["issues"]:
+        return '<section data-decision-paths><h4>Beslispad</h4><p class="banner warn">Pad nog niet vastgesteld: ' + _esc(", ".join(result["issues"])) + '</p></section>'
+    by_id = {row["object_id"]: row for row in objects}
+    paths = []
+    for index, path in enumerate(result["paths"], 1):
+        steps = ''.join('<li>' + _esc((by_id[step["object_id"]].get("content") or {}).get("clean_text"))
+                        + ('<p><b>Antwoord: ' + _esc(step["label"]) + '</b></p>' if step["label"] else '<p>Onvoorwaardelijke vervolgstap</p>')
+                        + '<p>Vervolg: ' + _esc((by_id[step["next_object_id"]].get("content") or {}).get("clean_text")) + '</p></li>'
+                        for step in path["steps"])
+        paths.append(f'<article data-path-alternative><h5>Pad {index}</h5><ol>{steps}</ol></article>')
+    unresolved = publication_issues(envelope, objects)
+    notice = '<p class="banner warn">Deze routes zijn nog niet door alle vereiste reviewers bevestigd.</p>' if unresolved else ''
+    return '<section data-decision-paths><h4>Afzonderlijke paden naar deze uitkomst</h4>' + notice + ''.join(paths) + '</section>'
+
+
+def _knowledge_review_html(obj: dict[str, Any], objects: list[dict[str, Any]]) -> str:
+    from src.review_cockpit_v1 import knowledge_review_projection
+    projected = knowledge_review_projection(obj, objects)
+    essential = "".join(
+        f'<li data-context-status="{_esc(row["status"])}"><b>{_esc(row["role"])}</b>: '
+        f'{_esc(row["text"])} '
+        + ('<strong> — nog niet geldig verbonden</strong>' if row["status"] in {"unresolved", "stale"} else '')
+        + '</li>' for row in projected["essential_context"])
+    issues = ('<p class="banner warn" data-unresolved-meaning>Er staan nog controles open: '
+              + _esc("Betekeniscontext, bronbinding of verplichte velden vragen nog controle.") + '</p>'
+              if projected["unresolved_reasons"] else '')
+    proposal = ('<aside class="object-expand-merge" data-context-proposal><h4>Voorgestelde wijziging — nog niet opgeslagen</h4>'
+                f'<p>{_esc(projected["proposal"])}</p></aside>' if projected["proposal"] else '')
+    return f'''<section class="review-card-object review-step" data-review-step="a" aria-label="Geselecteerde passage"
+        data-reviewed-version="{_esc(projected['object_version'])}">
+      <p class="meta">type <b>{_esc(_object_type_label(str(projected['object_type'] or '')))}</b> ·
+        status <b>{_esc(review_row_status(obj))}</b> · versie <b>{_esc(projected['object_version'])}</b></p>
+      <p class="eyebrow">Te beoordelen passage</p><h3 data-full-knowledge-passage>{_esc(projected['text'])}</h3><p class="why-selected">{_esc(why_selected(obj))}</p>
+      <section data-essential-context><h4>Voorwaarden, uitzonderingen en scope</h4>
+        {f'<ul>{essential}</ul>' if essential else '<p>Geen afzonderlijke betekeniscontext vastgelegd.</p>'}</section>
+      {issues}{proposal}
+      <p class="field-help">Bronbinding bewijst niet dat alle noodzakelijke context is herkend. Controleer ook de oorspronkelijke bron.</p>
+    </section>'''
+
+
 def _render_second_review_card(
     console: OperationsConsole,
     snapshot_id: str,
@@ -2344,19 +2401,12 @@ def _render_second_review_card(
     return f"""
       <p><a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=second_review">← Terug naar tweede beoordelingen</a></p>
       <article class="object review-card-two-column second-review-card" data-object-id="{_esc(obj.get("object_id"))}">
+        {_knowledge_review_html(obj, snapshot_objects)}
         <div class="review-cockpit-copy">
           <p class="eyebrow">Onafhankelijke tweede beoordeling</p>
-          <h3>{_esc(review_card_sentence(obj))}</h3>
           <p>De canonieke inhoud staat vast. Controleer dezelfde objectversie onafhankelijk; deze stap wijzigt type, semantiek of relaties niet.</p>
         </div>
-        <section class="review-card-object review-step">
-          <p>{_esc(text)}</p>
-          <p class="meta">
-            <span>type <b>{_esc(_object_type_label(str(obj.get("confirmed_object_type") or "")))}</b></span>
-            <span>versie <b>{_esc(obj.get("object_version") or "")}</b></span>
-            <span>eerste beoordeling <b>{_esc(first_copy)}</b></span>
-          </p>
-        </section>
+        {_decision_paths_html(console, snapshot_id, obj, snapshot_objects)}
         {_broncontext_html(obj, snapshot_id, str(obj.get("object_id") or ""), True, task="second_review")}
         {_review_context_block(
             obj,
@@ -2749,8 +2799,6 @@ def _render_review_card(
     heading_norm = " ".join(heading.split())
     body_norm = " ".join(str(obj_text).split())
     object_text_html = ""
-    if body_norm and body_norm != heading_norm and not body_norm.startswith(heading_norm.rstrip("…")):
-        object_text_html = f'<div class="object-text"><p>{_esc(obj_text)}</p></div>'
     expand_merge = admission_of(obj).get("expand_merge") or {}
     merged_text = str(expand_merge.get("merged_text") or "").strip()
     merged_norm = " ".join(merged_text.split())
@@ -2775,8 +2823,6 @@ def _render_review_card(
             <button class="btn-secondary" type="submit" formaction="/review/context/accept" formmethod="post">Passage aanvullen met brontekst</button>
           </aside>
         '''
-    elif expand_merge.get("performed") and merge_adds_text:
-        object_text_html += f'<div class="object-expand-merge"><p>{_esc(merged_text)}</p></div>'
     proposed = proposed_type_of(obj)
     confirmable = confirmable_proposed_type(obj)
     confirmed = obj.get("confirmed_object_type") or ""
@@ -2849,11 +2895,6 @@ def _render_review_card(
     return f"""
                 <p><a class="btn-secondary" href="{_review_location(console, snapshot_id, task=task)}">← Terug naar taken</a></p>
                 <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
-                  <div class="review-cockpit-copy">
-                    <p>{_esc(admission_notice)}</p>
-                    {repair_guidance}
-                    <p>{review_intro}</p>
-                  </div>
                   <form class="review-decision-form" method="post" action="/review" data-review-form>
                     <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
                     <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
@@ -2865,13 +2906,13 @@ def _render_review_card(
                     <input type="hidden" name="decision" value="">
                     {four_eyes_html}
                     {conflict_html}
-                    <section class="review-card-object review-step" data-review-step="a" aria-label="Geselecteerde passage">
-                      <p class="eyebrow">Te beoordelen passage</p>
-                      <h3>{_esc(heading)}</h3>
-                      <p class="why-selected">{_esc(selection_note)}</p>
-                      <p class="meta"><span>status <b>{_esc(review_row_status(obj))}</b></span></p>
-                      {object_text_html}
-                    </section>
+                    {_knowledge_review_html(obj, snapshot_objects)}
+        {_decision_paths_html(console, snapshot_id, obj, snapshot_objects)}
+                    {object_text_html}
+                  <div class="review-cockpit-copy">
+                    <p>{_esc(admission_notice)}</p>{repair_guidance}<p>{review_intro}</p>
+                  </div>
+                    <p class="why-selected">{_esc(selection_note)}</p>
                     {_broncontext_html(obj, snapshot_id, obj["object_id"], passage_ok, task=task)}
                     {_review_context_block(
                         obj,
@@ -4403,21 +4444,29 @@ def create_console_app(
                     mutable and child.get("publication_eligibility") == PRE_REVIEW_BLOCKED
                     and ("researcher" in account["roles"] or "reviewer" in account["roles"])
                 ):
-                    pre_review_notice = '<p class="banner warn">Voorcontrole geblokkeerd. Het document is opgeslagen, maar nog niet beschikbaar voor Review. Alleen wachten lost deze blokkade niet op; laat de beheerder de oorzaak onderzoeken.</p>'
+                    processing = state.processing_status(child["snapshot_id"])
+                    code = processing.get("error_code") or processing.get("reason_code")
+                    message = ERROR_COPY.get(code, "Voorcontrole geblokkeerd. Het document is opgeslagen; bekijk de technische diagnose.")
+                    pre_review_notice = '<p class="banner warn">Voorcontrole geblokkeerd. ' + _esc(message) + '</p>'
+                    if processing.get("retry_not_before"):
+                        pre_review_notice += '<p>Nieuwe poging mogelijk vanaf: ' + _esc(processing["retry_not_before"]) + '</p>'
+                    if not processing["retry_allowed"] and processing["reason_code"] != code:
+                        pre_review_notice += '<p>' + _esc(ERROR_COPY.get(processing["reason_code"], "Nieuwe poging is nu niet beschikbaar.")) + '</p>'
                     if (
                         "reviewer" in account["roles"]
                         and account["account_id"] in (state._envelope(child["snapshot_id"]).get("named_reviewers") or [])
                     ):
                         pre_review_notice += f'<p><a href="/review/processing-diagnostics?document={_esc(child["snapshot_id"])}">Technische diagnose bekijken</a></p>'
-                    actions.append(
-                        f"""
-                        <form method="post" action="/tree/reprocess">
-                          <input type="hidden" name="snapshot_id" value="{_esc(child["snapshot_id"])}">
-                          <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
-                          <button class="btn-primary" type="submit">Pre-review opnieuw uitvoeren</button>
-                        </form>
-                        """
-                    )
+                    if processing["retry_allowed"]:
+                        actions.append(
+                            f"""
+                            <form method="post" action="/tree/reprocess">
+                              <input type="hidden" name="snapshot_id" value="{_esc(child["snapshot_id"])}">
+                              <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
+                              <button class="btn-primary" type="submit">Pre-review opnieuw uitvoeren</button>
+                            </form>
+                            """
+                        )
                 if can_move and mutable:
                     actions.append(
                         f"""
@@ -4666,8 +4715,9 @@ def create_console_app(
             raise ConsoleError("reviewer_not_named_on_snapshot")
         objects = state.snapshot_objects(snapshot_id)
         pre_review_blocked = envelope.get("publication_eligibility") == PRE_REVIEW_BLOCKED
-        blocker = str(envelope.get("processing_blocker") or "")
-        blocker = blocker if blocker.startswith("pre_review_llm_") and blocker in ERROR_COPY else None
+        processing = state.processing_status(snapshot_id, actor_id=account["account_id"])
+        blocker = processing.get("error_code") or processing.get("reason_code") or str(envelope.get("processing_blocker") or "")
+        blocker = blocker if blocker in ERROR_COPY else None
         payload = {
             "snapshot_id": snapshot_id,
             "document_id": str(envelope.get("document_id") or ""),
@@ -4675,6 +4725,7 @@ def create_console_app(
             "version": str(envelope.get("version") or ""),
             "objects_revision": state.objects_revision(snapshot_id),
             "processing_attempts": envelope.get("processing_attempts", []),
+            "processing": processing,
             "diagnostics": processing_diagnostics(objects),
             "pre_review": {
                 "blocked": pre_review_blocked,

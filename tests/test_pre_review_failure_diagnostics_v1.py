@@ -114,8 +114,11 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
     assert _PROCESSING_REFERENCE.get() == "-"
 
     after_failure = deepcopy(console._envelope(sid))
-    assert after_failure.pop("processing_attempts")[-1]["state"] == "failed"
-    assert after_failure == before
+    attempts = after_failure.pop("processing_attempts")
+    assert attempts[-1]["state"] == "failed"
+    old = deepcopy(before)
+    assert attempts[:-1] == old.pop("processing_attempts")
+    assert after_failure == old
     assert console.objects_revision(sid) == before_revision
     assert console.object_review_bindings(sid) == before_bindings
 
@@ -133,7 +136,7 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
     assert "processing_blocker" not in recovered
     assert recovered["publication_eligibility"] != PRE_REVIEW_BLOCKED
     assert len(recovered["quality_processing_runs"]) == 2  # failed retry remains separate from candidate provenance
-    assert [attempt["state"] for attempt in recovered["processing_attempts"]] == ["failed", "succeeded"]
+    assert [attempt["state"] for attempt in recovered["processing_attempts"]] == ["failed", "failed", "succeeded"]
     assert restarted.waiting_task_counts(actor["account_id"])["review"] == 1
     assert _PROCESSING_REFERENCE.get() == "-"
     with TestClient(create_console_app(restarted), base_url="https://testserver") as recovered_client:

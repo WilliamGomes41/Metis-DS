@@ -76,6 +76,7 @@ def prepare(text, label, strength, direction, v2, mutation=None, standalone=Fals
                "recommendation_semantics": {"direction": direction, "direction_evidence": selected,
                    "strength": strength, "strength_status": "explicit", "strength_evidence": span(evidence, label)}}
         if v2:
+            obj["context_evidence"] = []
             obj["field_evidence"] = {f: {"span": None, "missing_reason": "uncertain"} for f in FIELDS}
         if mutation:
             mutation(obj, block)

@@ -249,6 +249,22 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
             if isinstance(second, dict) and second.get("required"):
                 second.update(status="pending", reviewer=None, review_date=None, snapshot_hash=None)
             changed[oid] = updated
+        # Re-admit only the explicitly changed targets against verified source.
+        # This is part of the same object/binding/audit transaction, no backfill.
+        from src.admission_gate_v1 import apply_admission_gate
+        path, data = console._verified_source_bytes(envelope)
+        extracted = console._extract(envelope["content_kind"], path,
+                                     document_id=envelope["document_id"], source_id=envelope["source_id"])
+        if not verify_literal_source(source, extracted, envelope["sha256"]):
+            raise ConsoleError("source_context_evidence_invalid")
+        proposed = [changed.get(row["object_id"], row) for row in current]
+        gated = apply_admission_gate(proposed, klasse=envelope["class"], fragments=extracted,
+                                     document_version=envelope["version"], source_hash=envelope["sha256"])
+        from src.passage_register_v1 import apply_passage_register
+        gated = apply_passage_register(gated)
+        for row in gated:
+            if row["object_id"] in changed and row["object_id"] != source_object_id:
+                changed[row["object_id"]] = row
         history = console._load_objects(snapshot_id, remember=False)
         bindings = deepcopy(console._bindings)
         for oid, updated in changed.items():
@@ -273,3 +289,152 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
                          "payload_hash": payload_hash, "reason": reason.strip(), "result": deepcopy(result)}),
         )
         return result
+
+
+def verify_literal_source(obj: dict[str, Any], fragments: list[dict[str, Any]], source_hash: str) -> bool:
+    """Reconstruct from source, never from a model's source_bound/status claim."""
+    from src.object_taxonomy_v1 import normalize_visible_prose
+    from src.semantic_passage_v1 import _reconstructed_blocks
+    from src.source_layout_v1 import mapped_raw_spans
+    refs = (obj.get("provenance") or {}).get("source_fragments") or []
+    by_id = {f.get("fragment_id"): f for f in fragments}
+    if not source_hash or (obj.get("source") or {}).get("source_checksum") != source_hash or not refs:
+        return False
+    if any(r.get("raw_object_id") not in by_id or
+           r.get("raw_content_hash") != by_id[r["raw_object_id"]].get("fragment_hash") for r in refs):
+        return False
+    if any(by_id[r["raw_object_id"]].get("source_id") is not None and
+           by_id[r["raw_object_id"]]["source_id"] != (obj.get("source") or {}).get("source_id") for r in refs):
+        return False
+    text = str((obj.get("content") or {}).get("clean_text") or "")
+    semantic = (obj.get("metadata") or {}).get("semantic_passage")
+    if not semantic:
+        # Legacy/source-unit correction: retain exact whole-fragment provenance.
+        literal = normalize_visible_prose(" ".join(str(by_id[r["raw_object_id"]].get("clean_text") or
+            by_id[r["raw_object_id"]].get("raw_text") or "") for r in refs))
+        return normalize_visible_prose(text) == literal
+    try:
+        blocks = {p["block_id"]: (p, f) for p, f in _reconstructed_blocks(fragments)}
+        parts, mapping = [], []
+        for span in semantic["spans"]:
+            public, fragment = blocks[span["block_id"]]
+            lo, hi = span["start"], span["end"]
+            if type(lo) is not int or type(hi) is not int or not 0 <= lo < hi <= len(public["text"]):
+                return False
+            parts.append(public["text"][lo:hi])
+            mapping.extend(mapped_raw_spans(fragment, start=lo, end=hi))
+        if semantic.get("version") == "semantic-passage-v1.0.0":
+            mapping = [row for row in mapping if row.get("kind") != "join_separator"]
+        elif semantic.get("version") != "semantic-passage-v1.1.0":
+            return False
+        return (normalize_visible_prose(" ".join(parts)) == text and
+                (semantic.get("source_mapping") == mapping or
+                 (semantic.get("version") == "semantic-passage-v1.0.0" and "source_mapping" not in semantic)))
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def context_realization(candidate: dict[str, Any], *, obj: dict[str, Any] | None = None,
+                        objects: Iterable[dict[str, Any]] = (),
+                        fragments: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Check each identified requirement independently of scan dispositions.
+
+    This proves realization of identified context, never completeness of detection.
+    Client-supplied status booleans and linked-text claims are deliberately ignored.
+    """
+    from src.context_scan_v1 import required_context
+    from src.object_taxonomy_v1 import normalize_visible_prose
+    rows = list(objects)
+    by_id = {r.get("object_id"): r for r in rows}
+    source_hash = str(candidate.get("source_hash") or "")
+    text = normalize_visible_prose(str(candidate.get("candidate_text") or ""))
+    source = normalize_visible_prose(str(candidate.get("source_text_exact") or ""))
+    valid_source = verify_literal_source(obj, fragments, source_hash) if obj is not None and fragments is not None else text in source
+    if obj is not None and (obj.get('source') or {}).get('version') is not None:
+        valid_source = valid_source and str(obj['source']['version']) == str(candidate.get('document_version'))
+    linked = []
+    issues = context_issues(rows) if rows else {}
+    if obj is not None and not issues.get(str(obj.get("object_id") or "")):
+        for link in links_of(obj):
+            owner = by_id.get(link.get("source_object_id"))
+            if (owner and fragments is not None and verify_literal_source(owner, fragments, source_hash)
+                    and valid_source):
+                linked.append(link)
+    if obj is not None and fragments is not None and valid_source:
+        linked.extend(source_bound_relation_context(obj, rows, fragments, source_hash))
+    realized, unresolved = [], []
+    from src.source_bound_fields_v2 import validated_context
+    bound_context = []
+    if obj is not None and fragments is not None:
+        try:
+            bound_context = validated_context(obj, fragments, source_hash)
+        except (ValueError, KeyError, TypeError):
+            valid_source = False
+    for context in bound_context:
+        row = {"role": context["role"], "origin": "source_bound_proposal", "text": context["text"], "span": context["span"]}
+        if context["unresolved_reason"]:
+            unresolved.append({**row, "reason": context["unresolved_reason"]})
+        elif valid_source:
+            realized.append({**row, "realization": "source_bound_context"})
+    explicit_links = [r for r in bound_context if not r["unresolved_reason"] and r["role"] != "support"]
+    for requirement in required_context(candidate.get("context_scan") or {}):
+        literal = requirement["text"]
+        if valid_source and literal in text:
+            realized.append({**requirement, "realization": "inline"})
+        else:
+            explicit = next((entry for entry in explicit_links if literal in normalize_visible_prose(entry["text"])), None)
+            binding = next((link for link in linked if literal in normalize_visible_prose(link["text"])), None)
+            if valid_source and explicit:
+                realized.append({**requirement, "realization": "source_bound_context", "span": explicit["span"]})
+            elif valid_source and binding:
+                realized.append({**requirement, "realization": "source_context_binding",
+                                 "source_object_id": binding["source_object_id"],
+                                 "source_object_version": binding["source_object_version"],
+                                 "command_id": binding["command_id"]})
+            else:
+                unresolved.append({**requirement, "reason": "context_necessary_unresolved"})
+    return {"version": "source-context-admission-v2", "object_id": candidate.get("candidate_id"),
+            "object_version": obj.get("object_version") if obj else candidate.get("document_version"),
+            "source_hash": source_hash, "literal_hash": literal_identity(obj) if obj else None,
+            "realized": realized, "unresolved": unresolved,
+            "source_integrity": "verified" if valid_source else "unverified",
+            "detection_completeness": "not_proven"}
+
+
+def source_bound_relation_context(obj: dict[str, Any], objects: list[dict[str, Any]],
+                                  fragments: list[dict[str, Any]], source_hash: str) -> list[dict[str, Any]]:
+    """Use existing applies_if/except_if proposal evidence, never bare relations."""
+    from src.knowledge_relation_proposal_v1 import relation_proposal_admission_codes, relation_evidence_map
+    from src.knowledge_relations_v1 import proposed_knowledge_relations_of
+    from src.semantic_passage_v1 import _reconstructed_blocks, source_fragment_ids_for_text
+    if relation_proposal_admission_codes(obj, objects=objects):
+        return []
+    by_id = {r.get('object_id'): r for r in objects}
+    blocks = {p['block_id']: (p, f) for p, f in _reconstructed_blocks(fragments)}
+    evidence = relation_evidence_map(obj)
+    result = []
+    for relation in proposed_knowledge_relations_of(obj):
+        if relation.get('relation_type') not in {'applies_if', 'except_if'}:
+            continue
+        target = by_id.get(relation.get('target_object_id'))
+        record = evidence.get(relation.get('relation_id'))
+        if not target or not record or not verify_literal_source(target, fragments, source_hash):
+            continue
+        try:
+            for field, owner in (('source_spans', obj), ('target_spans', target)):
+                spans = record[field]
+                declared = ((owner.get('metadata') or {}).get('semantic_passage') or {}).get('spans')
+                if declared is None or [{k: r[k] for k in ('block_id', 'start', 'end')} for r in spans] != declared:
+                    raise ValueError('relation_selection_mismatch')
+            for span in record['source_spans'] + record['target_spans'] + record['evidence_spans']:
+                p, f = blocks[span['block_id']]
+                lo, hi = span['start'], span['end']
+                if type(lo) is not int or type(hi) is not int or not 0 <= lo < hi <= len(p['text']):
+                    raise ValueError('relation_bounds')
+                if span['source_fragment_ids'] != source_fragment_ids_for_text(f, start=lo, end=hi):
+                    raise ValueError('relation_source_mismatch')
+        except (KeyError, ValueError, TypeError):
+            continue
+        result.append({'text': target['content']['clean_text'], 'source_object_id': target['object_id'],
+                       'source_object_version': target['object_version'], 'command_id': relation['relation_id']})
+    return result

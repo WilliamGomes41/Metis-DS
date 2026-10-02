@@ -75,9 +75,11 @@ def prepare_graph(path: Path, data: bytes, kind: str, fragments: list[dict[str, 
         by_source_id = {str(f["boom_id"]): f'{f["document_id"]}-{f["boom_id"]}' for f in fragments}
         for index, branch in enumerate(payload.get("branches", [])):
             if not isinstance(branch, dict):
+                graph["unresolved"].append(f"invalid_export_branch:{index}")
                 continue
             src, dest = by_source_id.get(branch.get("from")), by_source_id.get(branch.get("to"))
             if not src or not dest or not isinstance(branch.get("label", ""), str):
+                graph["unresolved"].append(f"invalid_export_branch:{index}")
                 continue
             eid = f"export-branch-{index}"
             label = branch.get("label", "")
@@ -136,6 +138,10 @@ def graph_issues(graph: Any, objects: list[dict[str, Any]], inventory: dict[str,
         return ["decision_graph_invalid"]
     issues = ["decision_graph_unresolved"] if graph["unresolved"] else []
     current = {o["object_id"]: o for o in objects if o.get("object_type") != "document"}
+    if any((o.get("source") or {}).get("source_checksum") != graph["source_sha256"] for o in current.values()):
+        return ["decision_graph_source_mismatch"]
+    if len({str((o.get("source") or {}).get("version")) for o in current.values()}) > 1:
+        return ["decision_graph_source_mismatch"]
     evidence = inventory.get("items") or {}
     nodes = {}
     for n in graph["nodes"]:
@@ -297,3 +303,48 @@ def read_active_graph(store: Any, source_store: Any, snapshot_id: str) -> dict[s
         raise ValueError("decision_graph_release_invalid")
     return {"release_id": release["release_id"], "release_version": release["release_version"],
             "snapshot_id": snapshot_id, **payload}
+
+
+def ordered_paths(graph: dict[str, Any], objects: list[dict[str, Any]], inventory: dict[str, Any],
+                  outcome_id: str, *, max_paths: int = 1024, max_steps: int = 16384) -> dict[str, Any]:
+    """Pure ordered alternatives referencing shared nodes, never a conjunction.
+
+    This projection verifies source/structure/revision, not human route correctness.
+    An unresolved graph (including PDF proposals) yields no asserted paths.
+    """
+    if not isinstance(graph, dict) or len(graph.get('nodes') or []) > 512:
+        return {'paths': [], 'issues': ['decision_graph_projection_limit'], 'nodes': {}}
+    issues = graph_issues(graph, objects, inventory)
+    if issues:
+        return {'paths': [], 'issues': issues, 'nodes': {}}
+    by_id = {o['object_id']: o for o in objects}
+    target = by_id.get(outcome_id)
+    if target is None:
+        return {'paths': [], 'issues': ['decision_graph_endpoint_invalid'], 'nodes': {}}
+    bundle = (target.get('metadata') or {}).get('result_bundle') or {}
+    route_target = bundle.get('object_id') if bundle.get('role') == 'member' else outcome_id
+    nodes = {n['object_id']: n for n in graph['nodes']}
+    if nodes.get(route_target, {}).get('mode') != 'terminal':
+        return {'paths': [], 'issues': ['decision_graph_not_outcome'], 'nodes': nodes}
+    outgoing = {oid: [] for oid in nodes}
+    for edge in graph['edges']:
+        outgoing[edge['from']].append(edge)
+    pending = [(entry, []) for entry in reversed(graph['entrypoints'])]
+    paths, work = [], 0
+    while pending:
+        oid, steps = pending.pop()
+        work += 1
+        if work > max_steps:
+            return {'paths': [], 'issues': ['decision_graph_projection_limit'], 'nodes': nodes}
+        if oid == route_target:
+            paths.append({'entrypoint': steps[0]['object_id'] if steps else oid,
+                          'steps': steps, 'outcome_id': outcome_id, 'route_outcome_id': route_target})
+            if len(paths) > max_paths:
+                return {'paths': [], 'issues': ['decision_graph_projection_limit'], 'nodes': nodes}
+        else:
+            for edge in reversed(outgoing[oid]):
+                pending.append((edge['to'], steps + [{'object_id': oid, 'object_version': nodes[oid]['object_version'],
+                    'mode': nodes[oid]['mode'], 'edge_id': edge['id'], 'label': edge['label'],
+                    'next_object_id': edge['to']}]))
+    return {'paths': paths, 'issues': [] if paths else ['decision_graph_outcome_unreachable'],
+            'nodes': nodes, 'graph_hash': graph_hash(graph), 'source_sha256': graph['source_sha256']}

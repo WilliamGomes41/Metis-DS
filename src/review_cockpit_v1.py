@@ -328,3 +328,52 @@ def review_passage_record(
             "parent_object_id": (parent_object_id or "").strip(),
         },
     }
+
+
+def knowledge_review_projection(obj, objects):
+    """One lossless projection of the durable revision for both review passes."""
+    from copy import deepcopy
+    from src.admission_gate_v1 import admission_of
+    from src.context_scan_v1 import required_context
+    from src.source_context_review_v1 import links_of, context_issues
+    admission = admission_of(obj)
+    realization = admission.get('context_realization') or {}
+    essential = []
+    for row in required_context(admission.get('context_scan') or {}):
+        proof = next((item for item in realization.get('realized') or []
+                      if item.get('text') == row['text'] and item.get('role') == row['role']), None)
+        if proof and proof.get('realization') == 'inline':
+            continue  # Already visible in the full, lossless core passage.
+        essential.append({**row, 'status': 'bound' if proof else 'unresolved'})
+    from src.source_bound_fields_v2 import CONTEXT_KEY, context_matches_target
+    record = (obj.get('metadata') or {}).get(CONTEXT_KEY) or {}
+    for entry in record.get('entries') or []:
+        if entry.get('role') != 'support':
+            essential.append({'role': entry.get('role'), 'text': entry.get('text'),
+                              'status': 'stale' if not context_matches_target(obj) else
+                                        'unresolved' if entry.get('unresolved_reason') else 'bound'})
+    stale = context_issues(objects).get(str(obj.get('object_id') or ''), [])
+    for link in links_of(obj):
+        present = next((row for row in essential if row.get('text') == link.get('text')), None)
+        if present:
+            present['source_object_id'] = link.get('source_object_id')
+            if stale:
+                present['status'] = 'stale'
+            continue
+        essential.append({'role': link.get('role'), 'text': link.get('text'),
+                          'status': 'stale' if stale else 'bound',
+                          'source_object_id': link.get('source_object_id')})
+    for row in realization.get('unresolved') or []:
+        if not any(e['text'] == row['text'] for e in essential):
+            essential.append({**deepcopy(row), 'status': 'unresolved'})
+    merge = admission.get('expand_merge') or {}
+    proposal = str(merge.get('merged_text') or '')
+    text = str((obj.get('content') or {}).get('clean_text') or '')
+    return {'object_id': obj.get('object_id'), 'object_version': obj.get('object_version'),
+            'object_type': obj.get('confirmed_object_type') or obj.get('proposed_object_type') or obj.get('object_type'),
+            'canonical_hash': (obj.get('provenance') or {}).get('canonical_object_hash'),
+            'text': text, 'essential_context': essential,
+            'proposal': proposal if proposal and proposal != text else '',
+            'unresolved_reasons': list(dict.fromkeys(list(admission.get('reason_codes') or []) + stale)),
+            'source_hash': (obj.get('source') or {}).get('source_checksum'),
+            'semantic_completeness': 'not_proven'}

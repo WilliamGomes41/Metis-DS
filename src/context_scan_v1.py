@@ -308,3 +308,19 @@ def apply_scan_to_candidate(candidate: dict[str, Any], scan: dict[str, Any]) -> 
     if scan.get("expand_merge"):
         row["expand_merge"] = scan["expand_merge"]
     return row
+
+
+def required_context(scan: dict[str, Any]) -> list[dict[str, str]]:
+    """Return literal context requirements, not evidence that they were applied."""
+    requirements = []
+    for origin in ("candidate_paragraph", "previous_paragraph", "next_paragraph"):
+        text = _clean(scan.get(origin))
+        for role, pattern in (("condition", _CONDITION_CUE_RE), ("exception", _EXCEPTION_CUE_RE)):
+            if text and pattern.search(text):
+                row = {"role": role, "origin": origin, "text": text}
+                if row not in requirements:
+                    requirements.append(row)
+    expand = scan.get("expand_merge") or {}
+    if expand.get("kind") == "sentence_continuation" and len(expand.get("parts") or []) == 2:
+        requirements.append({"role": "continuation", "origin": "next_paragraph", "text": _clean(expand["parts"][1])})
+    return requirements

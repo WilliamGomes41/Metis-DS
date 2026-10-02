@@ -352,6 +352,18 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
                 "revision_patch_hash": None,
             },
         }
+        from src.source_bound_fields_v2 import CONTEXT_KEY, bind_context, context_record
+        if CONTEXT_KEY in item:
+            if not semantic_passage or semantic_passage.get("formation_mode") != MODE:
+                raise ValueError("source_bound_context_requires_v2")
+            entries = item[CONTEXT_KEY]
+            if not isinstance(entries, list):
+                raise ValueError("source_bound_context_invalid")
+            raw_context = [{key: row[key] for key in ("role", "span", "unresolved_reason")} for row in entries]
+            rebuilt_context = bind_context(raw_context, fragments=raw_rows)
+            if rebuilt_context != entries:
+                raise ValueError("source_bound_context_invalid")
+            obj.setdefault("metadata", {})[CONTEXT_KEY] = context_record(rebuilt_context, obj=obj)
         out.append(stamp_canonical_hashes(obj))
     return out
 

@@ -583,6 +583,8 @@ def semantic_units_from_proposal(
     raw_objects = proposal.get("objects", [])
     raw_relations = proposal.get("relations", [])
     abstain_reason = str(proposal.get("abstain_reason") or "").strip()
+    if isinstance(raw_objects, list) and (len(raw_objects) > 4096 or not isinstance(raw_relations, list) or len(raw_relations) > 8192):
+        _fail("semantic_proposal_limit_exceeded")
     if not isinstance(raw_objects, list):
         _fail("semantic_objects_invalid")
     if abstain_reason:
@@ -609,7 +611,7 @@ def semantic_units_from_proposal(
     for raw_object in raw_objects:
         if not isinstance(raw_object, dict):
             _fail("semantic_object_invalid")
-        _require_only_keys(raw_object, _OBJECT_KEYS | ({"field_evidence"} if field_contract_v2 else set()), "semantic_object_contains_untrusted_fields")
+        _require_only_keys(raw_object, _OBJECT_KEYS | ({"field_evidence", "context_evidence"} if field_contract_v2 else set()), "semantic_object_contains_untrusted_fields")
 
         proposed_type = str(
             raw_object.get("proposed_object_type") or DEFAULT_OBJECT_TYPE
@@ -756,6 +758,12 @@ def semantic_units_from_proposal(
             try:
                 unit[KEY] = bind_fields(raw_object.get("field_evidence"), selected=selected,
                                        candidate_text=candidate_text, proposed_type=proposed_type)
+            except ValueError as exc:
+                _fail(str(exc))
+        if field_contract_v2 and "context_evidence" in raw_object:
+            from src.source_bound_fields_v2 import CONTEXT_KEY, bind_context
+            try:
+                unit[CONTEXT_KEY] = bind_context(raw_object["context_evidence"], fragments=evidence_list)
             except ValueError as exc:
                 _fail(str(exc))
         if field_contract_v2 or proposed_type != DEFAULT_OBJECT_TYPE:

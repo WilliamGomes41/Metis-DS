@@ -40,7 +40,7 @@ def proposal(payload):
                        "recommendation_evidence_span": TEXT}.items():
         fields[name] = {"span": span(text), "missing_reason": None}
     return {"objects": [{"spans": [span(TEXT)], "proposed_object_type": "recommendation",
-                         "field_evidence": fields,
+                         "field_evidence": fields, "context_evidence": [],
                          "recommendation_semantics": {"direction": "against", "direction_evidence": span("niet zinvol"),
                          "strength": None, "strength_status": "not_stated", "strength_evidence": None}}],
             "relations": [], "abstain_reason": None}
@@ -154,6 +154,8 @@ def test_console_opt_in_persists_evidence_replays_and_survives_restart(tmp_path)
     assert any(KEY in (o.get('metadata') or {}) for o in restarted.snapshot_objects(sid, include_blocked=True))
     restarted.reextract_unpublished(actor_id=author['account_id'], snapshot_id=sid)
     assert len(calls)==1  # exact v2 identity reuses only validated v2 proposal
+    replay_attempt=restarted._envelope(sid)["processing_attempts"][-1]
+    assert "replayed_call_id" in replay_attempt and replay_attempt["transport"] is None
     assert restarted._envelope(sid)['semantic_replay']['provider_evidence'] == evidence
     # The authorized HTTP download resolves its compact revision and contains the
     # origin call, without mutating the current document or inventing a new call.
@@ -179,7 +181,7 @@ def test_console_opt_in_persists_evidence_replays_and_survives_restart(tmp_path)
         assert revision['objects_revision'] == before[1]
         assert all(r['revision_id'] == revision['revision_id'] for r in rows('source_stages'))
         assert 'objects_revision' not in call
-        assert 'processing-evidence-export-v4' in archive.read('README.txt').decode()
+        assert 'processing-evidence-export-v6' in archive.read('README.txt').decode()
     assert before == (restarted._envelope(sid), restarted.objects_revision(sid))
     # Even valid JSON from an explicitly incomplete response cannot replace work.
     from src.operations_console_v1 import ConsoleError
@@ -187,7 +189,12 @@ def test_console_opt_in_persists_evidence_replays_and_survives_restart(tmp_path)
     env[LLM_MODEL_ENV] = 'test-model-next'  # Force a new call, not exact replay.
     with pytest.raises(ConsoleError, match='pre_review_llm_response_not_completed'):
         restarted.reextract_unpublished(actor_id=author['account_id'], snapshot_id=sid)
-    assert before == (restarted._envelope(sid), restarted.objects_revision(sid))
+    failed = deepcopy(restarted._envelope(sid))
+    old_attempts = deepcopy(before[0]).pop("processing_attempts")
+    assert failed.pop("processing_attempts")[:-1] == old_attempts
+    old = deepcopy(before[0]); old.pop("processing_attempts")
+    assert old == failed and before[1] == restarted.objects_revision(sid)
+    assert restarted._envelope(sid)["processing_attempts"][-1]["error_code"] == "pre_review_llm_response_not_completed"
     response_status[0] = 'completed'
     # Changing only the contract mode cannot replay v2 as v1.
     from src.pre_review_semantic_v1 import SEMANTIC_MODE

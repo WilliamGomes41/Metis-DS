@@ -410,3 +410,42 @@ def test_named_reviewer_and_source_readback_are_required_before_context_write(tm
         state.confirm_source_context(**command)
     assert state.snapshot_objects(command['snapshot_id']) == before
     assert not [event for event in read_events(state._ledger_path) if event['event_type'] == EVENT]
+
+
+def test_native_correction_deferred_commit_failure_preserves_revision_reviews_and_audit(recovery_postgres, tmp_path):
+    import psycopg
+    from tests.test_lifecycle_withdrawal_recovery_v1 import _console
+    from tests.test_publication_chain_recovery_v1 import FakeBlobStore
+    root=tmp_path/'native-correction'; root.mkdir()
+    state, _, reviewer, _, target, command = _system(root, _console(root, recovery_postgres, FakeBlobStore()))
+    sid=command['snapshot_id']
+    state.review_object(actor_id=reviewer['account_id'],snapshot_id=sid,object_id=target['object_id'],
+                        decision='revise',comment='Controleer broncontext.')
+    before=deepcopy(state.snapshot_objects(sid)); events=deepcopy(read_events(state._ledger_path))
+    bindings=deepcopy(state.object_review_bindings(sid)); revision=state.objects_revision(sid)
+    patch={'reason':'Expliciete brongebonden correctie.', 'operations':[{'op':'set','path':'content.clean_text',
+             'value':target['content']['clean_text']}]}
+    with psycopg.connect(recovery_postgres.dsn) as connection:
+        connection.execute("""CREATE FUNCTION workflow.fail_correction_commit_test() RETURNS trigger
+            LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'correction_commit_failure'; END; $$""")
+        connection.execute("""CREATE CONSTRAINT TRIGGER fail_correction_commit_test
+            AFTER INSERT ON workflow.document_objects DEFERRABLE INITIALLY DEFERRED
+            FOR EACH ROW EXECUTE FUNCTION workflow.fail_correction_commit_test()""")
+    try:
+        with pytest.raises(Exception,match='correction_commit_failure'):
+            state.correct_object(actor_id=reviewer['account_id'],snapshot_id=sid,object_id=target['object_id'],
+                                 patch=patch,expected_revision=revision)
+        assert state.snapshot_objects(sid)==before
+        assert state.object_review_bindings(sid)==bindings
+        assert read_events(state._ledger_path)==events
+    finally:
+        with psycopg.connect(recovery_postgres.dsn) as connection:
+            connection.execute('DROP TRIGGER fail_correction_commit_test ON workflow.document_objects')
+            connection.execute('DROP FUNCTION workflow.fail_correction_commit_test()')
+    revised=state.correct_object(actor_id=reviewer['account_id'],snapshot_id=sid,object_id=target['object_id'],
+                                 patch=patch,expected_revision=revision)
+    assert revised['object_version']!=target['object_version']
+    assert all(event in read_events(state._ledger_path) for event in events)
+    with pytest.raises(ConsoleError,match='snapshot_object_write_conflict'):
+        state.correct_object(actor_id=reviewer['account_id'],snapshot_id=sid,object_id=target['object_id'],
+                             patch=patch,expected_revision=revision)

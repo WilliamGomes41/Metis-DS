@@ -356,15 +356,19 @@ def test_changed_confirmed_relations_invalidate_publish_authorization(tmp_path: 
     cond = next(obj for obj in objects if "70 jaar" in ((obj.get("content") or {}).get("clean_text") or ""))
     console.confirm_object_type(
         actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=rec["object_id"],
-        confirmed_object_type="recommendation",
+        snapshot_id=receipt["snapshot_id"], object_id=cond["object_id"],
+        confirmed_object_type="condition",
+    )
+    console.confirm_source_context(
+        actor_id=accounts["reviewer"]["account_id"], snapshot_id=receipt["snapshot_id"],
+        source_object_id=cond["object_id"], role="context", target_object_ids=[rec["object_id"]],
+        reason="De voorwaarde hoort bij het verwijsadvies.", command_id="relation-fixture-context",
+        expected_revision=console.objects_revision(receipt["snapshot_id"]),
     )
     console.confirm_object_type(
         actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=cond["object_id"],
-        confirmed_object_type="condition",
+        snapshot_id=receipt["snapshot_id"], object_id=rec["object_id"],
+        confirmed_object_type="recommendation",
     )
     console.review_object(
         actor_id=accounts["reviewer"]["account_id"],

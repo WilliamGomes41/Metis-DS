@@ -13,11 +13,11 @@ from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v4"
-PROJECTOR_VERSION = "processing-evidence-export-v3"
+VERSION = "processing-evidence-export-v6"
+PROJECTOR_VERSION = "processing-evidence-export-v5"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
-    "processing_attempts": ("attempt_id", "command_id", "actor_id", "source_hash", "state", "started_at", "expires_at", "finished_at", "phase", "error_code", "validation_code", "processing_reference"),
+    "processing_attempts": ("attempt_id", "command_id", "actor_id", "source_hash", "state", "started_at", "expires_at", "finished_at", "phase", "error_code", "validation_code", "processing_reference", "source_version", "kind", "retry_of", "limits", "transport", "retry_not_before", "replayed_call_id"),
     "source_views": ("run_id", "fragment_id", "fragment_hash", "source_page", "bbox", "source_locator", "raw_text", "clean_text", "source_text_view", "source_layout_findings"),
     "runs": ("run_id", "source_hash", "started_at", "finished_at", "outcome", "reason", "extractor_versions", "execution", "semantic_identity", "production_commit_status"),
     "run_candidates": ("run_id", "object_id", "object_version", "canonical_hash", "origin", "structural"),
@@ -26,7 +26,7 @@ SCHEMAS = {
     "coverage": ("object_id", "object_version", "block_id", "start", "end", "selection_origin", "register_status", "gate_result", "model_decision_status", "offset_text_status"),
     "proposal_fields": ("object_id", "object_version", "field", "value", "value_status", "stage", "producer_status", "contract_version", "source_span", "missing_reason"),
     "validation_findings": ("object_id", "object_version", "gate_result", "reason_code", "evidence_kind", "admission", "rule_execution_trace_status"),
-    "context_evidence": ("object_id", "object_version", "context_scan", "expand_merge", "necessary_context_disposition", "source_context_review", "evidence_kind"),
+    "context_evidence": ("object_id", "object_version", "context_scan", "expand_merge", "necessary_context_disposition", "source_context_review", "context_realization", "source_bound_context", "evidence_kind"),
     "lineage": ("object_id", "object_version", "relation", "target_id", "start", "end", "locator", "page", "bbox", "raw_content_hash",
                 "text", "left_fragment_id", "right_fragment_id"),
     "model_calls": ("run_id", "call_id", "request", "raw_response", "stop_reason", "input_tokens", "output_tokens",
@@ -164,6 +164,8 @@ def processing_evidence_tables(
                 add("context_evidence", **keys, context_scan=scan,
                     expand_merge=admission.get("expand_merge"),
                     necessary_context_disposition=scan.get("necessary_context_disposition"),
+                    context_realization=admission.get("context_realization"),
+                    source_bound_context=(obj.get("metadata") or {}).get("source_bound_context"),
                     evidence_kind="stored_scan_not_verified_dependency_resolution")
 
     statuses = {
@@ -220,6 +222,7 @@ def processing_evidence_zip(**kwargs: Any) -> bytes:
             f"Metis {VERSION}\n"
             f"Exported at: {datetime.now(timezone.utc).isoformat()}\n"
             "Read manifest.csv first. This is a read-only projection of stored evidence.\n"
+            "CSV v6 adds bounded attempt limits, transport observations and retry linkage; context evidence is retained.\n"
             "CSV v4 adds text, left_fragment_id and right_fragment_id to lineage.csv for inserted joins.\n"
             "CSV v3/v4: join snapshot_id + revision_id to revision.csv for the exact objects_revision.\n"
             "CSV v2 readers expecting objects_revision on every row must resolve this join.\n"

@@ -23,8 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from contextvars import ContextVar
 from typing import Any, Callable, Mapping
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from src.bounded_model_call_v1 import ModelCallLimits, load_limits, post_json as bounded_post_json
 
 # Per execution, including worker threads; never persisted as document authority.
 _PROCESSING_REFERENCE: ContextVar[str] = ContextVar("pre_review_processing_reference", default="-")
@@ -72,11 +71,13 @@ from src.semantic_replay_v1 import (
 )
 from src.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
 from src.source_reconstruction_v1 import RECONSTRUCTION_VERSION
-from src.source_bound_fields_v2 import MODE as SEMANTIC_V2_MODE, evidence_schema
+from src.source_bound_fields_v2 import MODE as SEMANTIC_V2_MODE, evidence_schema, context_evidence_schema, CONTEXT_VERSION
 
 
 PASSAGE_FORMATION_MODE_ENV = "METIS_PASSAGE_FORMATION_MODE"
-DEFAULT_TIMEOUT_SECONDS = 180
+DEFAULT_TIMEOUT_SECONDS = 900
+MAX_INPUT_BYTES = 2_000_000
+MAX_RESPONSE_BYTES = 4_000_000
 LOGGER = logging.getLogger("metis.provider")
 SEMANTIC_PROVIDER_ID = "openai-responses-v1"
 SEMANTIC_DEVELOPER_PROMPT = (
@@ -110,7 +111,12 @@ SEMANTIC_V2_INSTRUCTION = (
     "source span wholly within the selected candidate, or null with missing_reason "
     "not_stated, uncertain or not_applicable. Never invent or paraphrase field text. "
     "Preserve attribution, uncertainty, negation, conditions, exceptions, numbers and units. "
-    "Field evidence is a proposal for human review, not a confirmation of truth."
+    "Field evidence is a proposal for human review, not a confirmation of truth. "
+    "Return context_evidence for each object: exact evidence_blocks spans for target group, timing, "
+    "condition, exception, negation, scope, list introduction, row/column header or support. "
+    "Context belongs to this candidate. Use unresolved_reason for uncertain applicability or layout; "
+    "never resolve geometry or missing information with general knowledge. Empty context_evidence "
+    "means no separate context was identified, not that completeness has been proven."
 )
 
 SEMANTIC_MODEL_CONFIG = {
@@ -123,7 +129,7 @@ PostJson = Callable[[str, dict[str, str], dict[str, Any], int], dict[str, Any]]
 
 
 def _configured_passage_formation_mode(environ: Mapping[str, str]) -> str:
-    return str(environ.get(PASSAGE_FORMATION_MODE_ENV, "") or "").strip() or DETERMINISTIC_MODE
+    return str(environ.get(PASSAGE_FORMATION_MODE_ENV, "") or "").strip() or SEMANTIC_V2_MODE
 
 
 def _stamp_passage_formation(
@@ -166,39 +172,27 @@ def _post_json(
     payload: dict[str, Any],
     timeout: int,
 ) -> dict[str, Any]:
-    request = Request(
-        url,
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
+    limits = load_limits()
+    from dataclasses import replace
+    limits = replace(limits, total=timeout, connect=min(limits.connect, timeout), idle=min(limits.idle, timeout))
+    return _bounded_provider_json(url, headers, payload, limits)
+
+
+def _bounded_provider_json(url, headers, payload, limits, observation=None):
     call_id = uuid.uuid4().hex[:12]
     started = time.monotonic()
-    LOGGER.info("METIS_PROVIDER start id=%s timeout=%s reference=%s", call_id, timeout, _PROCESSING_REFERENCE.get())
+    LOGGER.info("METIS_PROVIDER start id=%s total=%s reference=%s", call_id, limits.total, _PROCESSING_REFERENCE.get())
+    observation = observation if observation is not None else {}
+    observation["call_id"] = call_id
     try:
-        with urlopen(request, timeout=timeout) as response:
-            raw = response.read()
-    except (HTTPError, URLError, TimeoutError, OSError) as exc:
-        LOGGER.error(
-            "METIS_PROVIDER failure id=%s type=%s http=%s elapsed=%.2f reason_type=%s reference=%s",
-            call_id, type(exc).__name__,
-            exc.code if isinstance(exc, HTTPError) else "-",
-            time.monotonic() - started,
-            type(exc.reason).__name__ if isinstance(exc, URLError) else "-",
-            _PROCESSING_REFERENCE.get(),
-        )
-        raise ConsoleError("pre_review_llm_provider_unavailable") from exc
-    LOGGER.info(
-        "METIS_PROVIDER success id=%s http=%s elapsed=%.2f reference=%s",
-        call_id, response.status, time.monotonic() - started, _PROCESSING_REFERENCE.get(),
-    )
-    try:
-        decoded = json.loads(raw.decode("utf-8"))
-    except (UnicodeError, json.JSONDecodeError) as exc:
-        raise ConsoleError("pre_review_llm_response_invalid") from exc
-    if not isinstance(decoded, dict):
-        raise ConsoleError("pre_review_llm_response_invalid")
-    return decoded
+        result = bounded_post_json(url, headers, payload, limits, observation=observation)
+    except ConsoleError as exc:
+        LOGGER.error("METIS_PROVIDER failure id=%s code=%s http=%s elapsed=%.2f reference=%s",
+                     call_id, exc.code, observation.get("http_status", "-"), time.monotonic()-started, _PROCESSING_REFERENCE.get())
+        raise
+    LOGGER.info("METIS_PROVIDER success id=%s http=%s elapsed=%.2f reference=%s",
+                call_id, observation.get("http_status", "-"), time.monotonic()-started, _PROCESSING_REFERENCE.get())
+    return result
 
 
 def _proposal_schema(field_contract_v2: bool = False) -> dict[str, Any]:
@@ -288,6 +282,8 @@ def _proposal_schema(field_contract_v2: bool = False) -> dict[str, Any]:
     if field_contract_v2:
         obj["properties"]["field_evidence"] = evidence_schema(span)
         obj["required"].append("field_evidence")
+        obj["properties"]["context_evidence"] = context_evidence_schema(span)
+        obj["required"].append("context_evidence")
     return {
         "type": "object",
         "additionalProperties": False,
@@ -490,7 +486,7 @@ def _replay_identity(
         extractor_version=_extractor_contract(source_fragments),
         reconstruction_version=RECONSTRUCTION_VERSION,
         formation_policy_version=PASSAGE_FORMATION_POLICY_VERSION,
-        semantic_contract_version=(f"source-bound-fields-v2/{SEMANTIC_PASSAGE_VERSION}" if field_contract_v2 else SEMANTIC_PASSAGE_VERSION),
+        semantic_contract_version=(f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}" if field_contract_v2 else SEMANTIC_PASSAGE_VERSION),
         prompt_hash=_stable_json_hash(SEMANTIC_DEVELOPER_PROMPT + (SEMANTIC_V2_INSTRUCTION if field_contract_v2 else "")),
         schema_hash=_stable_json_hash(_proposal_schema(field_contract_v2)),
         provider_id=SEMANTIC_PROVIDER_ID,
@@ -506,6 +502,7 @@ def _provider_proposal(
     evidence_blocks: list[dict[str, Any]],
     post_json: PostJson | None,
     field_contract_v2: bool = False,
+    model_limits: ModelCallLimits | None = None,
     evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     safe_key = str(api_key or "").strip()
@@ -514,19 +511,27 @@ def _provider_proposal(
     payload = _request_payload(model=model, blocks=blocks,
                                evidence_blocks=evidence_blocks,
                                field_contract_v2=field_contract_v2)
+    if len(json.dumps(payload, ensure_ascii=False).encode("utf-8")) > MAX_INPUT_BYTES:
+        raise ConsoleError("pre_review_llm_input_limit_exceeded")
     request_evidence = deepcopy(payload)
     requested_at = datetime.now(timezone.utc).isoformat()
-    response = (post_json or _post_json)(
-        OPENAI_RESPONSES_URL,
-        {
-            "Authorization": f"Bearer {safe_key}",
-            "Content-Type": "application/json",
-        },
-        payload,
-        DEFAULT_TIMEOUT_SECONDS,
-    )
+    limits = model_limits or ModelCallLimits(total=DEFAULT_TIMEOUT_SECONDS)
+    started = time.monotonic()
+    transport = {}
+    headers = {"Authorization": f"Bearer {safe_key}", "Content-Type": "application/json"}
+    if post_json is None:
+        response = _bounded_provider_json(OPENAI_RESPONSES_URL, headers, payload, limits, transport)
+    else:
+        # Injection for deterministic proposal tests / existing instrumentation.
+        # Production uses the supervised native transport; custom transports must
+        # honor this contract themselves. This guard still forbids late activation.
+        response = post_json(OPENAI_RESPONSES_URL, headers, payload, limits.total)
+    if time.monotonic() - started >= limits.total:
+        raise ConsoleError("pre_review_llm_processing_timeout")
     if not isinstance(response, dict):
         raise ConsoleError("pre_review_llm_response_invalid")
+    if len(json.dumps(response, ensure_ascii=False).encode("utf-8")) > MAX_RESPONSE_BYTES:
+        raise ConsoleError("pre_review_llm_output_limit_exceeded")
     try:
         output_text = _extract_output_text(response)
         proposal = json.loads(output_text)
@@ -536,6 +541,9 @@ def _provider_proposal(
         raise ConsoleError("pre_review_llm_response_invalid")
     if str(proposal.get("abstain_reason") or "").strip():
         raise ConsoleError("pre_review_llm_abstained")
+    if field_contract_v2 and isinstance(proposal.get("objects"), list):
+        if any(not isinstance(row, dict) or "context_evidence" not in row for row in proposal["objects"]):
+            raise ConsoleError("pre_review_llm_proposal_rejected", "source_bound_context_required")
     if evidence is not None:
         # Never persist HTTP headers, credentials, arbitrary provider metadata or
         # reasoning. This observation travels through the existing run commit.
@@ -546,7 +554,7 @@ def _provider_proposal(
             commit = ""
         if len(commit) != 40 or any(c not in "0123456789abcdef" for c in commit):
             commit = None
-        evidence.update(version="semantic-provider-evidence-v1", requested_at=requested_at,
+        evidence.update(version="semantic-provider-evidence-v1", transport=transport, requested_at=requested_at,
                         deployed_commit=commit, request=request_evidence,
                         response={"id": response.get("id"), "status": response.get("status"),
                                   "output_text": output_text,
@@ -563,6 +571,7 @@ def _semantic_execution_before_review(
     formation_context: Mapping[str, Any] | None = None,
     post_json: PostJson | None = None,
     field_contract_v2: bool = False,
+    model_limits: ModelCallLimits | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     safe_key = str(api_key or "").strip()
     safe_model = str(model or "").strip()
@@ -643,6 +652,7 @@ def _semantic_execution_before_review(
             evidence_blocks=evidence_blocks,
             post_json=post_json,
             field_contract_v2=field_contract_v2,
+            model_limits=model_limits,
             evidence=provider_evidence,
         )
         try:
@@ -718,6 +728,7 @@ def semantic_units_before_review(
     formation_context: Mapping[str, Any] | None = None,
     post_json: PostJson | None = None,
     field_contract_v2: bool = False,
+    model_limits: ModelCallLimits | None = None,
 ) -> list[dict[str, Any]]:
     """Return deterministic headings plus source-reconstructed semantic candidates."""
 
@@ -729,6 +740,7 @@ def semantic_units_before_review(
         formation_context=formation_context,
         post_json=post_json,
         field_contract_v2=field_contract_v2,
+        model_limits=model_limits,
     )
     return units
 
@@ -746,6 +758,7 @@ def semantic_spec_from_fragments(
     formation_context: Mapping[str, Any] | None = None,
     post_json: PostJson | None = None,
     field_contract_v2: bool = False,
+    model_limits: ModelCallLimits | None = None,
 ) -> dict[str, Any]:
     reference = uuid.uuid4().hex
     snapshot_id = str((formation_context or {}).get("snapshot_id") or "")
@@ -763,6 +776,7 @@ def semantic_spec_from_fragments(
             formation_context=formation_context,
             post_json=post_json,
             field_contract_v2=field_contract_v2,
+            model_limits=model_limits,
         )
     except ConsoleError as exc:
         reason = str(exc) if exc.code == "pre_review_llm_proposal_rejected" else ""
@@ -821,6 +835,7 @@ def bind_pre_review_semantic_processing(
         return
 
     env = environ if environ is not None else os.environ
+    console._model_call_limits_reader = lambda: load_limits(env)
 
     def active_passage_formation_mode() -> str:
         return _configured_passage_formation_mode(env)
@@ -889,6 +904,17 @@ def bind_pre_review_semantic_processing(
             source_id=source_id,
         )
         provider = load_llm_provider_config(env)
+        limits = (ModelCallLimits(**(formation_context or {}).get("model_call_limits"))
+                  if (formation_context or {}).get("model_call_limits") else load_limits(env))
+        deadline = (formation_context or {}).get("attempt_deadline")
+        if deadline is not None:
+            from dataclasses import replace
+            from src.bounded_model_call_v1 import CLEANUP_SECONDS
+            remaining = deadline - time.monotonic() - CLEANUP_SECONDS
+            if remaining <= 0:
+                raise ConsoleError("processing_attempt_expired")
+            limits = replace(limits, total=min(limits.total, remaining),
+                             connect=min(limits.connect, remaining), idle=min(limits.idle, remaining))
         spec = semantic_spec_from_fragments(
             document_id=document_id,
             title=title,
@@ -901,6 +927,7 @@ def bind_pre_review_semantic_processing(
             formation_context=formation_context,
             post_json=post_json,
             field_contract_v2=(mode == SEMANTIC_V2_MODE),
+            model_limits=limits,
         )
         return fragments, _stamp_passage_formation(spec, decision)
 
