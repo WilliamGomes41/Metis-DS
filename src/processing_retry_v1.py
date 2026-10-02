@@ -97,15 +97,17 @@ def status(envelope: dict, *, clock: datetime | None = None, retry_supported=Tru
     latest = attempts[-1] if attempts else {}
     state = latest.get("state", "not_recorded")
     reason = latest.get("error_code") or envelope.get("processing_blocker")
+    if state == "running":
+        reason = "processing_attempt_in_progress"
     if state == "running" and datetime.fromisoformat(latest["expires_at"]) <= clock:
         state, reason = "expired", "processing_attempt_expired"
     allowed = bool(envelope.get("publication_eligibility") == "blocked_pending_pre_review"
                    and state != "running" and retry_supported)
     max_attempts = policy.max_attempts if policy is not None else (latest.get("limits") or {}).get("max_attempts", 4)
     retry_at = latest.get("retry_not_before")
-    if len(attempts) >= max_attempts:
+    if state != "running" and len(attempts) >= max_attempts:
         allowed, reason = False, "processing_attempt_limit_reached"
-    elif retry_at and datetime.fromisoformat(retry_at) > clock:
+    elif state != "running" and retry_at and datetime.fromisoformat(retry_at) > clock:
         allowed, reason = False, "processing_retry_cooldown"
     elif latest.get("error_code") in {"pre_review_llm_input_limit_exceeded", "pre_review_llm_output_limit_exceeded"}:
         allowed, reason = False, "processing_structural_limit"

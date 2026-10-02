@@ -247,12 +247,14 @@ def test_initial_process_interruption_leaves_durable_recoverable_reservation(wor
 
 
 def test_retry_caps_structural_errors_and_legacy_reader():
-    envelope={'sha256':'a'*64,'version':'1.0','publication_eligibility':PRE_REVIEW_BLOCKED}
+    envelope={'sha256':'a'*64,'version':'1.0','publication_eligibility':PRE_REVIEW_BLOCKED,
+              'processing_blocker':'pre_review_llm_provider_unavailable'}
     assert status(envelope)['state']=='not_recorded'
     limits=ModelCallLimits(max_attempts=2)
     for command_id in ['one','two']:
         attempt,fresh=reserve(envelope,command_id=command_id,actor_id='actor',revision='r',clock=now(),limits=limits)
         assert fresh
+        assert status(envelope,policy=limits)["reason_code"] == "processing_attempt_in_progress"
         finish(envelope,attempt['attempt_id'],state='failed',error=ConsoleError('pre_review_llm_connection_failed'))
     assert reserve(envelope,command_id='two',actor_id='actor',revision='r',clock=now(),limits=limits)[1] is False
     with pytest.raises(ConsoleError,match='processing_attempt_limit_reached'):
