@@ -125,6 +125,10 @@ def processing_evidence_tables(
                 section_path=row["section_path"], source_checksum=row["source"].get("source_checksum"))
         semantic = row["semantic_passage"]
         for mapped in semantic.get("source_mapping") or []:
+            if mapped.get("kind") == "join_separator":
+                add("lineage", **keys, relation="inserted_join_separator", text=mapped["text"],
+                    left_fragment_id=mapped["left_fragment_id"], right_fragment_id=mapped["right_fragment_id"])
+                continue
             add("lineage", **keys, relation="selected_raw_fragment_range", target_id=mapped.get("fragment_id"),
                 start=mapped.get("raw_start"), end=mapped.get("raw_end"), page=mapped.get("source_page"), bbox=mapped.get("bbox"))
         for span in semantic.get("spans") or [{}]:

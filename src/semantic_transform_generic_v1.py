@@ -81,12 +81,22 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
     }
     if "source_mapping" in value:
         mapping = value["source_mapping"]
-        if not isinstance(mapping, list) or any(
-            not isinstance(row, dict) or set(row) != {"fragment_id", "raw_start", "raw_end", "source_page", "bbox"}
-            or not isinstance(row["raw_start"], int) or not isinstance(row["raw_end"], int)
-            or not 0 <= row["raw_start"] < row["raw_end"] for row in mapping
-        ):
+        if not isinstance(mapping, list):
             raise ValueError("semantic_source_mapping_invalid")
+        for row in mapping:
+            if not isinstance(row, dict):
+                raise ValueError("semantic_source_mapping_invalid")
+            if row.get("kind") == "join_separator":
+                valid = (set(row) == {"kind", "text", "left_fragment_id", "right_fragment_id"}
+                         and row["text"] == " "
+                         and all(isinstance(row.get(key), str) and row[key].strip()
+                                 for key in ("left_fragment_id", "right_fragment_id")))
+            else:
+                valid = (set(row) == {"fragment_id", "raw_start", "raw_end", "source_page", "bbox"}
+                         and type(row["raw_start"]) is int and type(row["raw_end"]) is int
+                         and 0 <= row["raw_start"] < row["raw_end"])
+            if not valid:
+                raise ValueError("semantic_source_mapping_invalid")
         result["source_mapping"] = deepcopy(mapping)
     if origin == SELECTION_ORIGIN_PROPOSAL:
         if str(value.get("formation_mode") or "") not in {"semantic-source-bound-v1", "semantic-source-bound-v2"}:

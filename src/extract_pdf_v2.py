@@ -7,7 +7,7 @@ from typing import Any
 import fitz
 from src.integrity_kernel import stable_hash, schema_errors
 
-PARSER_VERSION='pdf-fragments-v2.3.0'
+PARSER_VERSION='pdf-fragments-v2.3.1'
 _HEADING_SIZE_TOLERANCE=0.5
 _OUTLINE_HEADING_RE=re.compile(r'^\s*(?P<number>\d+(?:\.\d+)*)(?:[.)])?\s+\S')
 _TOC_HEADINGS=frozenset({'inhoud','inhoudsopgave'})

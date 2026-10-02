@@ -23,7 +23,7 @@ from src.object_taxonomy_v1 import (
 )
 
 
-RECONSTRUCTION_VERSION = "source-reconstruction-v1.1.0"
+RECONSTRUCTION_VERSION = "source-reconstruction-v1.2.0"
 STATUS_UNCHANGED = "unchanged"
 STATUS_RECONSTRUCTED = "reconstructed"
 STATUS_UNRESOLVED = "unresolved"
@@ -139,6 +139,10 @@ def _join(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
         for span in right.get(_SOURCE_SPANS) or []
     ]
     merged["_raw_source_mapping"] = list(left.get("_raw_source_mapping") or []) + [
+        {"kind": "join_separator", "text": " ", "start": right_offset - 1, "end": right_offset,
+         "left_fragment_id": _source_fragment_ids(left)[-1],
+         "right_fragment_id": _source_fragment_ids(right)[0]}
+    ] + [
         {**span, "start": span["start"] + right_offset, "end": span["end"] + right_offset}
         for span in right.get("_raw_source_mapping") or []
     ]
