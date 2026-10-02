@@ -24,6 +24,7 @@ from src.semantic_passage_v1 import (
 )
 from src.serving_relations_v1 import confirm_relation_set, proposed_relations
 
+LEGACY_TRANSFORM_VERSION = "semantic-generic-v1.0.0"
 TRANSFORM_VERSION = "semantic-generic-v1.1.0"
 _SEMANTIC_PASSAGE_BASE_KEYS = frozenset(
     {"version", "source_bound", "selection_origin", "spans"}
@@ -238,6 +239,9 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
                 expected_mapping = [row for row in expected_mapping if row.get("kind") != "join_separator"]
             if semantic_passage["source_mapping"] != expected_mapping:
                 raise ValueError("semantic_source_mapping_invalid")
+        object_transform_version = (TRANSFORM_VERSION
+            if semantic_passage and semantic_passage["version"] == SEMANTIC_PASSAGE_VERSION
+            else LEGACY_TRANSFORM_VERSION)
         system_metadata = _system_candidate_metadata(item)
         from src.source_bound_fields_v2 import KEY, bind_fields, MODE
         if semantic_passage and semantic_passage.get("formation_mode") == MODE:
@@ -334,11 +338,11 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
             "governance": _governance(item.get("review_track", "clinical"), high),
             "provenance": {
                 "transformation_mode": "deterministic",
-                "created_by": f"system:{TRANSFORM_VERSION}",
+                "created_by": f"system:{object_transform_version}",
                 "source_extract_hash": raw_extract_hash,
                 "semantic_spec_version": spec["spec_version"],
                 "semantic_spec_hash": spec_hash,
-                "transform_version": TRANSFORM_VERSION,
+                "transform_version": object_transform_version,
                 "content_hash": "0" * 64,
                 "proposal_id": None,
                 "canonical_object_hash": "0" * 64,

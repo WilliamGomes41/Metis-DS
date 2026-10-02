@@ -96,6 +96,8 @@ def test_join_boundary_is_validated_and_exported():
     # A serialized spec must retain its advertised schema across readers.
     spec = json.loads(json.dumps(spec))
     rows = transform(spec, manifest, source)
+    assert all(row["provenance"]["transform_version"] == "semantic-generic-v1.1.0"
+               for row in rows if row.get("metadata", {}).get("semantic_passage"))
     passages = [row["metadata"]["semantic_passage"] for row in rows
                 if row.get("metadata", {}).get("semantic_passage")]
     assert passages and all(row["version"] == "semantic-passage-v1.1.0" for row in passages)
@@ -107,6 +109,7 @@ def test_join_boundary_is_validated_and_exported():
             passage["source_mapping"] = [row for row in passage["source_mapping"]
                                          if row.get("kind") != "join_separator"]
     legacy_rows = transform(json.loads(json.dumps(legacy)), manifest, source)
+    assert all(row["provenance"]["transform_version"] == "semantic-generic-v1.0.0" for row in legacy_rows)
     assert all(row["metadata"]["semantic_passage"]["version"] == "semantic-passage-v1.0.0"
                for row in legacy_rows if row.get("metadata", {}).get("semantic_passage"))
     for invalid_version in ("semantic-passage-v1.0.0", "semantic-passage-v99"):
