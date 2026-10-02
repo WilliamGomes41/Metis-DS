@@ -1777,7 +1777,50 @@ class OperationsConsole:
         from src.decision_successor_v1 import execute
         return execute(self, **command)
 
-    def reextract_unpublished(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
+    @contextmanager
+    def _reprocessing_transaction(self, snapshot_id: str) -> Iterator[None]:
+        raise ConsoleError("pre_review_retry_requires_postgres")
+        yield  # pragma: no cover -- the PostgreSQL mixin owns this transaction.
+
+    def retry_pre_review(self, *, actor_id: str, snapshot_id: str, command_id: str) -> dict[str, Any]:
+        """Retry an empty blocked source without losing evidence or prior work."""
+        from src.processing_retry_v1 import KEY, reserve, finish, now
+        with self._reprocessing_transaction(snapshot_id):
+            account = self._account(actor_id)
+            if not {"researcher", "reviewer"}.intersection(account["roles"]):
+                raise ConsoleError("researcher_role_required")
+            envelope = deepcopy(self._envelope(snapshot_id))
+            if self.snapshot_is_published(snapshot_id):
+                raise ConsoleError("published_objects_must_not_be_rewritten")
+            objects, revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
+            duplicate = any(a["command_id"] == command_id for a in envelope.get(KEY, []))
+            if not duplicate:
+                if envelope.get("publication_eligibility") != PRE_REVIEW_BLOCKED:
+                    raise ConsoleError("pre_review_reprocess_not_required")
+                if objects or self._bindings.get(snapshot_id) or envelope.get("review_passes"):
+                    raise ConsoleError("pre_review_retry_existing_work")
+            attempt, fresh = reserve(envelope, command_id=command_id, actor_id=actor_id, revision=revision, clock=now())
+            self._commit_prepared_store(envelopes={snapshot_id: envelope}, snapshot_id=snapshot_id)
+        if not fresh:
+            if attempt["state"] == "succeeded":
+                return self._receipt(envelope)
+            if attempt["state"] == "running":
+                raise ConsoleError("processing_attempt_in_progress")
+            error = ConsoleError(attempt["error_code"], attempt.get("validation_code") or attempt["error_code"])
+            error.pre_review_diagnostics = {"reference": attempt.get("processing_reference"), "reason_code": attempt.get("validation_code")}
+            raise error
+        try:
+            return self.reextract_unpublished(actor_id=actor_id, snapshot_id=snapshot_id, _attempt_id=attempt["attempt_id"])
+        except Exception as error:
+            with self._reprocessing_transaction(snapshot_id):
+                current = deepcopy(self._envelope(snapshot_id))
+                active = next(a for a in current[KEY] if a["attempt_id"] == attempt["attempt_id"])
+                if active["state"] == "running":
+                    finish(current, attempt["attempt_id"], state="failed", error=error)
+                    self._commit_prepared_store(envelopes={snapshot_id: current}, snapshot_id=snapshot_id)
+            raise
+
+    def reextract_unpublished(self, *, actor_id: str, snapshot_id: str, _attempt_id: str | None = None) -> dict[str, Any]:
         """Replace unpublished object identities with a new extract of the same freeze.
 
         Source hash stays. Published objects MUST NOT be rewritten. MUST NOT hide
@@ -1787,7 +1830,20 @@ class OperationsConsole:
         if "researcher" not in account["roles"] and "reviewer" not in account["roles"]:
             raise ConsoleError("researcher_role_required")
         envelope = self._envelope(snapshot_id)
+        if _attempt_id is None and envelope.get("publication_eligibility") == PRE_REVIEW_BLOCKED:
+            return self.retry_pre_review(actor_id=actor_id, snapshot_id=snapshot_id, command_id=uuid.uuid4().hex)
         _, expected_revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
+        if _attempt_id is not None:
+            from src.processing_retry_v1 import assert_active, now
+            attempt = assert_active(envelope, _attempt_id, now())
+            if attempt["actor_id"] != actor_id or attempt["source_hash"] != envelope["sha256"]:
+                raise ConsoleError("processing_command_conflict")
+            if attempt["expected_revision"] != expected_revision:
+                raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=expected_revision)
+            if (envelope.get("publication_eligibility") != PRE_REVIEW_BLOCKED
+                    or self.snapshot_objects(snapshot_id) or self._bindings.get(snapshot_id)
+                    or envelope.get("review_passes")):
+                raise ConsoleError("pre_review_retry_existing_work")
         processing_started = quality_instant()
         if self.snapshot_is_published(snapshot_id):
             raise ConsoleError("published_objects_must_not_be_rewritten")
@@ -1856,14 +1912,26 @@ class OperationsConsole:
         prepared_envelope.pop("processing_blocker", None)
         record_processing(prepared_envelope, objects, fragments=fragments, replay=replay_record,
                           started_at=processing_started)
+        if _attempt_id is not None:
+            from src.processing_retry_v1 import finish
+            if not any((obj.get("metadata") or {}).get("admission", {}).get("gate_result") == "allowed"
+                       for obj in objects if obj.get("object_type") not in {"document", "heading"}):
+                raise ConsoleError("pre_review_no_reviewable_candidates")
+            finish(prepared_envelope, _attempt_id, state="succeeded")
+            successful_run = prepared_envelope["quality_processing_runs"][-1]
+            successful_run["attempt_id"] = _attempt_id
         replaces_snapshot_id = str(prepared_envelope.get("replaces_snapshot_id") or "")
         if replaces_snapshot_id:
             prepared_envelope["object_diff"] = self._diff_objects(
                 self.snapshot_objects(replaces_snapshot_id),
                 objects,
             )
-        with self._store_write_lock():
+        transaction = self._reprocessing_transaction(snapshot_id) if _attempt_id is not None else self._store_write_lock()
+        with transaction:
             self._reload_store_locked()
+            if _attempt_id is not None:
+                from src.processing_retry_v1 import assert_active, now
+                assert_active(self._envelope(snapshot_id), _attempt_id, now())
             self._assert_source_work_unchanged(envelope, expected_revision, "published_objects_must_not_be_rewritten")
             account = self._account(actor_id)
             if not {"researcher", "reviewer"}.intersection(account["roles"]):

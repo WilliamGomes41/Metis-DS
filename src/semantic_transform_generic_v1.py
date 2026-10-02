@@ -53,7 +53,7 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
         if origin == SELECTION_ORIGIN_COVERAGE
         else None
     )
-    if expected_keys is None or set(value) != expected_keys:
+    if expected_keys is None or set(value) - {"source_mapping"} != expected_keys:
         raise ValueError("semantic_passage_metadata_invalid")
 
     spans = value.get("spans")
@@ -79,6 +79,15 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
         "selection_origin": origin,
         "spans": [dict(span) for span in spans],
     }
+    if "source_mapping" in value:
+        mapping = value["source_mapping"]
+        if not isinstance(mapping, list) or any(
+            not isinstance(row, dict) or set(row) != {"fragment_id", "raw_start", "raw_end", "source_page", "bbox"}
+            or not isinstance(row["raw_start"], int) or not isinstance(row["raw_end"], int)
+            or not 0 <= row["raw_start"] < row["raw_end"] for row in mapping
+        ):
+            raise ValueError("semantic_source_mapping_invalid")
+        result["source_mapping"] = deepcopy(mapping)
     if origin == SELECTION_ORIGIN_PROPOSAL:
         if str(value.get("formation_mode") or "") not in {"semantic-source-bound-v1", "semantic-source-bound-v2"}:
             raise ValueError("semantic_passage_metadata_invalid")
@@ -182,6 +191,7 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
     raw_extract_hash = hashlib.sha256("".join(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n" for r in raw_rows).encode("utf-8")).hexdigest()
     out: list[dict[str, Any]] = []
     evidence_blocks = None
+    mapping_blocks = None
     for seq, item in enumerate(spec["objects"], 1):
         refs = []
         for rid in item.get("source_fragment_ids", []):
@@ -194,6 +204,23 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
         high = bool(risk_fields)
         page = next((r.get("source_page") for r in (raw_by_id[x] for x in item.get("source_fragment_ids", [])) if r.get("source_page")), None)
         semantic_passage = _semantic_passage_metadata(item)
+        if semantic_passage is not None and "source_mapping" in semantic_passage:
+            from src.semantic_passage_v1 import _reconstructed_blocks
+            from src.source_layout_v1 import mapped_raw_spans
+            from src.object_taxonomy_v1 import extract_object_type
+            if mapping_blocks is None:
+                mapping_blocks = {public["block_id"]: (public, source) for public, source in _reconstructed_blocks(
+                    row for row in raw_rows if extract_object_type(row)[0] != "heading")}
+            expected_mapping = []
+            for span in semantic_passage["spans"]:
+                if span["block_id"] not in mapping_blocks:
+                    raise ValueError("semantic_source_mapping_unknown_block")
+                public, source = mapping_blocks[span["block_id"]]
+                if span["end"] > len(public["text"]):
+                    raise ValueError("source_bound_field_bounds_invalid")
+                expected_mapping.extend(mapped_raw_spans(source, start=span["start"], end=span["end"]))
+            if semantic_passage["source_mapping"] != expected_mapping:
+                raise ValueError("semantic_source_mapping_invalid")
         system_metadata = _system_candidate_metadata(item)
         from src.source_bound_fields_v2 import KEY, bind_fields, MODE
         if semantic_passage and semantic_passage.get("formation_mode") == MODE:

@@ -74,7 +74,7 @@ def test_reconstructs_adjacent_lowercase_continuation_without_invention() -> Non
     assert result[0]["raw_text"] == COMPLETE
     assert result[0]["source_fragment_ids"] == ["f1", "f2"]
     assert result[0]["source_reconstruction"] == {
-        "version": "source-reconstruction-v1.0.0",
+        "version": "source-reconstruction-v1.1.0",
         "status": STATUS_RECONSTRUCTED,
         "rule": RULE_ADJACENT_GRAMMATICAL_CONTINUATION,
         "source_fragment_ids": ["f1", "f2"],

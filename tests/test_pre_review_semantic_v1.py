@@ -456,17 +456,12 @@ def test_missing_provider_persists_blocked_capture_and_recovers_same_snapshot(
 
     env[LLM_API_KEY_ENV] = "product-key"
     env[LLM_MODEL_ENV] = "test-model"
-    recovered = restarted.reextract_unpublished(
-        actor_id=researcher["account_id"],
-        snapshot_id=snapshot_id,
-    )
-
-    assert recovered["snapshot_id"] == snapshot_id
-    assert recovered["sha256"] == source_hash
-    assert recovered["publication_eligibility"] != PRE_REVIEW_BLOCKED
-    assert "processing_blocker" not in recovered
-    assert restarted.snapshot_objects(snapshot_id)
-    assert restarted.waiting_task_counts(reviewer["account_id"])["review"] == 1
+    with pytest.raises(ConsoleError) as retry_error:
+        restarted.reextract_unpublished(actor_id=researcher["account_id"], snapshot_id=snapshot_id)
+    assert retry_error.value.code == "pre_review_retry_requires_postgres"
+    assert restarted._envelope(snapshot_id) == durable
+    assert restarted.snapshot_objects(snapshot_id) == []
+    assert restarted.waiting_task_counts(reviewer["account_id"])["review"] == 0
 
 
 def test_non_pre_review_processing_error_does_not_commit_capture(tmp_path: Path) -> None:

@@ -23,7 +23,7 @@ from src.object_taxonomy_v1 import (
 )
 
 
-RECONSTRUCTION_VERSION = "source-reconstruction-v1.0.0"
+RECONSTRUCTION_VERSION = "source-reconstruction-v1.1.0"
 STATUS_UNCHANGED = "unchanged"
 STATUS_RECONSTRUCTED = "reconstructed"
 STATUS_UNRESOLVED = "unresolved"
@@ -32,6 +32,10 @@ _SOURCE_SPANS = "_source_reconstruction_spans"
 
 
 def _fragment_text(fragment: dict[str, Any]) -> str:
+    if "_raw_source_mapping" in fragment:
+        return normalize_visible_prose(str(fragment.get("clean_text") or ""))
+    if "source_text_view" in fragment:
+        return fragment["source_text_view"]["text"]
     return normalize_visible_prose(
         str(fragment.get("clean_text") or fragment.get("raw_text") or "")
     )
@@ -89,6 +93,20 @@ def _with_status(fragment: dict[str, Any], status: str) -> dict[str, Any]:
     result[_SOURCE_SPANS] = [
         {"start": 0, "end": len(text), "source_fragment_ids": source_ids}
     ]
+    from src.source_layout_v1 import text_view
+    view = result.get("source_text_view")
+    if view is not None and text_view(str(result["raw_text"]), view["exclusions"]) != view:
+        raise ValueError("source_layout_view_invalid")
+    if view is None and str(result.get("raw_text") or "").strip():
+        candidate_view = text_view(str(result["raw_text"]), [])
+        if candidate_view["text"] == text:
+            view = candidate_view
+    result["_raw_source_mapping"] = [
+        {**span, "fragment_id": result["fragment_id"], "source_page": result.get("source_page"), "bbox": result.get("bbox")}
+        for span in (view or {}).get("mapping", [])
+    ]
+    result["clean_text"] = text
+    result.pop("source_text_view", None)
     result["source_reconstruction"] = {
         "version": RECONSTRUCTION_VERSION,
         "status": status,
@@ -120,6 +138,10 @@ def _join(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
         }
         for span in right.get(_SOURCE_SPANS) or []
     ]
+    merged["_raw_source_mapping"] = list(left.get("_raw_source_mapping") or []) + [
+        {**span, "start": span["start"] + right_offset, "end": span["end"] + right_offset}
+        for span in right.get("_raw_source_mapping") or []
+    ]
     merged["source_reconstruction"] = {
         "version": RECONSTRUCTION_VERSION,
         "status": STATUS_RECONSTRUCTED,
@@ -144,6 +166,8 @@ def reconstruct_source_fragments(
 
     for raw_fragment in fragments:
         current = _with_status(raw_fragment, STATUS_UNCHANGED)
+        if not _fragment_text(current):
+            continue
         if pending is None:
             pending = current
             continue
