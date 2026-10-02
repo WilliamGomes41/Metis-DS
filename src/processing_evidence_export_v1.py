@@ -13,8 +13,8 @@ from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v3"
-PROJECTOR_VERSION = "processing-evidence-export-v2"
+VERSION = "processing-evidence-export-v4"
+PROJECTOR_VERSION = "processing-evidence-export-v3"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
     "processing_attempts": ("attempt_id", "command_id", "actor_id", "source_hash", "state", "started_at", "expires_at", "finished_at", "phase", "error_code", "validation_code", "processing_reference"),
@@ -194,8 +194,8 @@ def processing_evidence_tables(
 
 def processing_evidence_zip(**kwargs: Any) -> bytes:
     tables, manifest = processing_evidence_tables(**kwargs)
-    # Keep the projector/MCP contract intact; compact only this versioned CSV
-    # serialization. The opaque concurrency token must be recoverable exactly.
+    # Compact only the CSV revision columns. The projector/MCP version
+    # independently identifies its expanded lineage schema.
     revision = kwargs["revision"]
     revision_id = "sha256:" + hashlib.sha256(revision.encode("utf-8")).hexdigest()
     common = ("snapshot_id", "revision_id")
@@ -220,7 +220,8 @@ def processing_evidence_zip(**kwargs: Any) -> bytes:
             f"Metis {VERSION}\n"
             f"Exported at: {datetime.now(timezone.utc).isoformat()}\n"
             "Read manifest.csv first. This is a read-only projection of stored evidence.\n"
-            "CSV v3: join snapshot_id + revision_id to revision.csv for the exact objects_revision.\n"
+            "CSV v4 adds text, left_fragment_id and right_fragment_id to lineage.csv for inserted joins.\n"
+            "CSV v3/v4: join snapshot_id + revision_id to revision.csv for the exact objects_revision.\n"
             "CSV v2 readers expecting objects_revision on every row must resolve this join.\n"
             "Current object revision is not a run ID or a production commit.\n"
             "No extraction, model inference or validation was rerun. No missing history was invented.\n"
