@@ -122,6 +122,18 @@ def cmd_console_account(a: argparse.Namespace) -> dict:
     console = OperationsConsole(root=ROOT, source_store=a.source_store, runtime=a.runtime)
     account = console.create_account(a.username, a.password, roles=[item.strip() for item in a.roles.split(",") if item.strip()], display_name=a.display_name)
     return {"status": "PASS", "account": account}
+def cmd_processing_status(a: argparse.Namespace) -> dict:
+    from src.console_asgi import app
+    return app.state.operations_kernel.processing_status(a.snapshot_id, actor_id=a.actor_id)
+
+
+def cmd_processing_retry(a: argparse.Namespace) -> dict:
+    from src.console_asgi import app
+    kernel = app.state.operations_kernel
+    kernel.retry_pre_review(actor_id=a.actor_id, snapshot_id=a.snapshot_id, command_id=a.command_id)
+    return kernel.processing_status(a.snapshot_id, actor_id=a.actor_id)
+
+
 def main()->int:
     ap=argparse.ArgumentParser(prog='vvn-data-service'); sub=ap.add_subparsers(dest='cmd',required=True)
     p=sub.add_parser('audit-current'); p.add_argument('--input',type=Path,default=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v21.jsonl'); p.add_argument('--schema',type=Path,default=ROOT/'schemas/knowledge_object.schema.v1.1.json'); p.add_argument('--source-registry',type=Path,default=ROOT/'data/source_registry.json'); p.add_argument('--raw-extract',type=Path,default=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_raw.jsonl'); p.add_argument('--report',type=Path)
@@ -135,6 +147,10 @@ def main()->int:
     p=sub.add_parser('serve-api'); p.add_argument('--mode',choices=['real','fixture'],default='real'); p.add_argument('--host',default='0.0.0.0'); p.add_argument('--port',type=int,default=8080)
     p=sub.add_parser('serve-console'); p.add_argument('--host',default='127.0.0.1'); p.add_argument('--port',type=int,default=8090); p.add_argument('--source-store',type=Path,default=ROOT/'sources'/'private'); p.add_argument('--runtime',type=Path,default=ROOT/'output'/'runtime'/'operations-console')
     p=sub.add_parser('console-account'); p.add_argument('--username',required=True); p.add_argument('--password',required=True); p.add_argument('--roles',default='researcher'); p.add_argument('--display-name'); p.add_argument('--source-store',type=Path,default=ROOT/'sources'/'private'); p.add_argument('--runtime',type=Path,default=ROOT/'output'/'runtime'/'operations-console'); p.add_argument('--report',type=Path)
+    for name in ('processing-status','processing-retry'):
+        p=sub.add_parser(name); p.add_argument('--snapshot-id',required=True); p.add_argument('--actor-id',required=True); p.add_argument('--report',type=Path)
+        if name=='processing-retry': p.add_argument('--command-id',required=True)
+
     a=ap.parse_args()
     try:
         if a.cmd=='audit-current': rep=cmd_audit_current(a)
@@ -148,6 +164,8 @@ def main()->int:
         elif a.cmd=='serve-api': rep=cmd_serve_api(a)
         elif a.cmd=='serve-console': rep=cmd_serve_console(a)
         elif a.cmd=='console-account': rep=cmd_console_account(a)
+        elif a.cmd=='processing-status': rep={'status':'PASS','processing':cmd_processing_status(a)}
+        elif a.cmd=='processing-retry': rep={'status':'PASS','processing':cmd_processing_retry(a)}
         else: raise AssertionError(a.cmd)
     except Exception as exc:
         rep={'status':'BLOCKED','error':type(exc).__name__,'message':str(exc)}

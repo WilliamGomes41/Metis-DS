@@ -111,7 +111,7 @@ def test_semantic_processing_runs_before_review_and_reconstructs_source_only() -
     )
 
     assert captured["url"] == OPENAI_RESPONSES_URL
-    assert captured["timeout"] == 180
+    assert captured["timeout"] == 900
     assert captured["headers"]["Authorization"] == "Bearer product-key"
     assert captured["payload"]["text"]["format"]["strict"] is True
     assert [row["clean_text"] for row in units] == [
@@ -206,48 +206,37 @@ def test_prompt_injection_source_cannot_smuggle_model_authored_text_or_fallback(
     assert source_payload["source_blocks"][0]["text"] == injection
 
 
-@pytest.mark.parametrize("failure", [
-    TimeoutError("private-provider-detail"),
-    OSError("private-provider-detail"),
-    URLError("private-provider-detail"),
-    HTTPError(OPENAI_RESPONSES_URL, 429, "private-provider-detail", {}, None),
-])
+@pytest.mark.parametrize("failure", ["http", "connection"])
 def test_transport_failure_logs_metadata_without_sensitive_content(monkeypatch, caplog, failure):
-    def fail(request, *, timeout):
-        assert timeout == 180
-        raise failure
-
-    monkeypatch.setattr(semantic_module, "urlopen", fail)
-    with pytest.raises(ConsoleError) as error:
-        semantic_module._post_json(
-            OPENAI_RESPONSES_URL, {"Authorization": "Bearer private-key"},
-            {"input": "private-document"}, 180,
-        )
-    assert error.value.code == "pre_review_llm_provider_unavailable"
-    assert error.value.__cause__ is failure
-    assert f"type={type(failure).__name__}" in caplog.text
-    assert ("http=429" if isinstance(failure, HTTPError) else "http=-") in caplog.text
-    assert "private-" not in caplog.text
+    from tests.model_transport_support import peer
+    import socket
+    monkeypatch.setenv("NO_PROXY", "127.0.0.1")
+    def check(url, code):
+        with pytest.raises(ConsoleError) as error:
+            semantic_module._post_json(url, {"Authorization":"Bearer private-key"}, {"input":"private-document"}, 2)
+        assert error.value.code == code
+        assert "METIS_PROVIDER failure" in caplog.text
+        assert "private-" not in caplog.text
+    if failure == "http":
+        with peer(code=429,body=b"private-provider-detail") as (url,_):
+            check(url, "pre_review_llm_provider_unavailable")
+        assert "http=429" in caplog.text
+    else:
+        with socket.socket() as closed:
+            closed.bind(("127.0.0.1",0)); port=closed.getsockname()[1]
+        check(f"http://127.0.0.1:{port}", "pre_review_llm_connection_failed")
 
 
 def test_transport_success_logs_correlated_timing_without_payload(monkeypatch, caplog):
-    class Response(io.BytesIO):
-        status = 200
-
-    def respond(request, *, timeout):
-        assert timeout == 180
-        return Response(b'{"private-response": true}')
-
-    monkeypatch.setattr(semantic_module, "urlopen", respond)
-    with caplog.at_level(logging.INFO, logger="metis.provider"):
-        result = semantic_module._post_json(
-            OPENAI_RESPONSES_URL, {"Authorization": "Bearer private-key"},
-            {"input": "private-document"}, 180,
-        )
-    assert result == {"private-response": True}
-    messages = [record.message for record in caplog.records if record.name == "metis.provider"]
-    assert len(messages) == 2
-    assert messages[0].split("id=")[1].split()[0] == messages[1].split("id=")[1].split()[0]
+    from tests.model_transport_support import peer
+    monkeypatch.setenv("NO_PROXY", "127.0.0.1")
+    with peer(body=b'{"private-response":true}') as (url,_):
+        with caplog.at_level(logging.INFO, logger="metis.provider"):
+            result=semantic_module._post_json(url, {"Authorization":"Bearer private-key"}, {"input":"private-document"}, 2)
+    assert result == {"private-response":True}
+    messages=[record.message for record in caplog.records if record.name=="metis.provider"]
+    assert len(messages)==2
+    assert messages[0].split("id=")[1].split()[0]==messages[1].split("id=")[1].split()[0]
     assert "http=200 elapsed=" in messages[1]
     assert "private-" not in caplog.text
 
@@ -374,7 +363,8 @@ def test_missing_provider_persists_blocked_capture_and_recovers_same_snapshot(
     env = {PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE}
 
     def fake_post(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
-        return _response(_full_span_proposal(payload))
+        from tests.test_source_bound_fields_v2 import proposal
+        return _response(proposal(payload))
 
     root = tmp_path / "root"
     source_store = tmp_path / "sources"
@@ -456,15 +446,17 @@ def test_missing_provider_persists_blocked_capture_and_recovers_same_snapshot(
 
     env[LLM_API_KEY_ENV] = "product-key"
     env[LLM_MODEL_ENV] = "test-model"
-    with pytest.raises(ConsoleError) as retry_error:
-        restarted.reextract_unpublished(actor_id=researcher["account_id"], snapshot_id=snapshot_id)
-    assert retry_error.value.code == "pre_review_retry_requires_postgres"
-    assert restarted._envelope(snapshot_id) == durable
-    assert restarted.snapshot_objects(snapshot_id) == []
-    assert restarted.waiting_task_counts(reviewer["account_id"])["review"] == 0
+    from tests.test_source_bound_fields_v2 import fragment, proposal
+    from src.source_bound_fields_v2 import MODE
+    env[PASSAGE_FORMATION_MODE_ENV] = MODE
+    restarted._extract = lambda *_args, **_kwargs: [fragment()]
+    recovered = restarted.reextract_unpublished(actor_id=researcher["account_id"], snapshot_id=snapshot_id)
+    assert recovered["processing_attempts"][-1]["state"] == "succeeded"
+    assert restarted._envelope(snapshot_id)["sha256"] == durable["sha256"]
+    assert restarted.snapshot_objects(snapshot_id)
 
 
-def test_non_pre_review_processing_error_does_not_commit_capture(tmp_path: Path) -> None:
+def test_processing_error_retains_failed_intent_without_activating_objects(tmp_path: Path) -> None:
     console = OperationsConsole(
         root=tmp_path,
         source_store=tmp_path / "sources",
@@ -514,7 +506,10 @@ def test_non_pre_review_processing_error_does_not_commit_capture(tmp_path: Path)
         )
 
     assert error.value.code == "extract_failed"
-    assert console.list_envelopes() == []
+    envelope = console.list_envelopes()[0]
+    assert envelope["processing_attempts"][-1]["state"] == "failed"
+    assert envelope["processing_attempts"][-1]["error_code"] == "extract_failed"
+    assert console.snapshot_objects(envelope["snapshot_id"]) == []
 
 def test_read_only_repair_catalog_does_not_call_llm(tmp_path: Path) -> None:
     fragments = [_fragment("p1", "Bespreek samen de behandeling.")]

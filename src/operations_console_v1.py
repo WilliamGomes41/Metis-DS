@@ -17,6 +17,7 @@ import tempfile
 import threading
 import unicodedata
 import uuid
+import time
 import zipfile
 from contextlib import contextmanager, nullcontext, suppress
 from copy import deepcopy
@@ -1680,111 +1681,229 @@ class OperationsConsole:
             envelope["ingest_command"] = ingest_command
         if review_policy is not None:
             envelope["review_policy"] = deepcopy(review_policy)
-        processing_started = quality_instant()
-        try:
-            fragments, spec = self._fragments_and_spec(
-                kind,
-                stored_path,
-                data=data,
-                document_id=document_id,
-                source_id=source_id,
-                title=title.strip(),
-                family=family_hook,
-                class_=class_,
-                formation_context={
-                    "snapshot_id": snapshot_id,
-                    "source_sha256": digest,
-                    "semantic_replay": None,
-                    "explicit_decision_graph": review_path == "boom" and review_policy is not None,
-                },
-            )
-        except ConsoleError as exc:
-            if not exc.code.startswith("pre_review_llm_"):
-                raise
-            blocked_envelope = deepcopy(envelope)
-            blocked_envelope["publication_eligibility"] = PRE_REVIEW_BLOCKED
-            blocked_envelope["processing_blocker"] = exc.code
-            record_processing(blocked_envelope, [], fragments=[], replay=None,
-                              started_at=processing_started, outcome="blocked", reason=exc.code)
-            self._commit_prepared_store(
-                envelopes={snapshot_id: blocked_envelope},
-                snapshot_id=snapshot_id,
-            )
-            return self._receipt(blocked_envelope)
+        attempt_id = None
+        attempt_deadline = None
+        initial_eligibility = envelope["publication_eligibility"]
+        expected_revision = None
+        if self._bounded_semantic_preparation(kind, class_):
+            from src.processing_retry_v1 import reserve, now
+            limits = self._processing_limits()
+            attempt_deadline = time.monotonic() + limits.attempt
+            with self._store_write_lock():
+                self._reload_store_locked()
+                prior = self._envelopes.get(snapshot_id)
+                if prior is not None:
+                    if ingest_command and prior.get("ingest_command") == ingest_command:
+                        return self._receipt(prior)
+                    raise ConsoleError("ingest_command_conflict")
+                expected_revision = (self.workflow_document_store.revision_for_rows([])
+                                     if getattr(self, "workflow_document_store", None) is not None else "")
+                envelope["publication_eligibility"] = PRE_REVIEW_BLOCKED
+                envelope["processing_blocker"] = "pre_review_llm_processing_in_progress"
+                attempt, _ = reserve(envelope, command_id=uuid.uuid4().hex, actor_id=actor_id,
+                    revision=expected_revision, clock=now(), limits=limits, kind="ingest")
+                attempt_id = attempt["attempt_id"]
+                try:
+                    # Existing create-if-absent CAS/advisory lock also protects
+                    # reservation when another runtime has a different file lock.
+                    self._commit_prepared_store(envelopes={snapshot_id:envelope}, objects=(snapshot_id, []),
+                                                expected_revision="", snapshot_id=snapshot_id)
+                except ConsoleError:
+                    self._reload_store_locked()
+                    prior = self._envelopes.get(snapshot_id)
+                    if ingest_command and prior and prior.get("ingest_command") == ingest_command:
+                        return self._receipt(prior)
+                    raise
+                expected_revision = self.objects_revision(snapshot_id)
+            expected_envelope = deepcopy(self._envelope(snapshot_id))
+        with self._source_attempt_failure(snapshot_id, attempt_id):
+            processing_started = quality_instant()
+            try:
+                fragments, spec = self._fragments_and_spec(
+                    kind,
+                    stored_path,
+                    data=data,
+                    document_id=document_id,
+                    source_id=source_id,
+                    title=title.strip(),
+                    family=family_hook,
+                    class_=class_,
+                    formation_context={
+                        "snapshot_id": snapshot_id,
+                        "source_sha256": digest,
+                        "semantic_replay": None,
+                        "explicit_decision_graph": review_path == "boom" and review_policy is not None,
+                        "model_call_limits": {key:attempt["limits"][key] for key in ("connect", "idle", "total", "attempt", "max_attempts")} if attempt_id else None,
+                        "attempt_deadline": attempt_deadline,
+                    },
+                )
+            except ConsoleError as exc:
+                if not exc.code.startswith("pre_review_llm_"):
+                    raise
+                if attempt_id:
+                    self._record_processing_failure(snapshot_id, attempt_id, exc)
+                    return self._receipt(self._envelope(snapshot_id))
+                blocked_envelope = deepcopy(envelope)
+                blocked_envelope["publication_eligibility"] = PRE_REVIEW_BLOCKED
+                blocked_envelope["processing_blocker"] = exc.code
+                record_processing(blocked_envelope, [], fragments=[], replay=None,
+                                  started_at=processing_started, outcome="blocked", reason=exc.code)
+                self._commit_prepared_store(
+                    envelopes={snapshot_id: blocked_envelope},
+                    snapshot_id=snapshot_id,
+                )
+                return self._receipt(blocked_envelope)
 
-        replay_record = spec.pop(SEMANTIC_REPLAY_SPEC_KEY, None)
-        if isinstance(replay_record, dict):
-            envelope["semantic_replay"] = deepcopy(replay_record)
+            replay_record = spec.pop(SEMANTIC_REPLAY_SPEC_KEY, None)
+            if isinstance(replay_record, dict):
+                envelope["semantic_replay"] = deepcopy(replay_record)
 
-        manifest = {
-            "canonical_source": {
-                "source_id": source_id,
-                "title": title.strip(),
-                "publisher": "V&VN",
-                "source_url": live_url or url or f"urn:vvn:freeze:{digest}",
-                "source_type": "interactive_tree" if kind == "boom" else kind,
-                "source_level": 1,
-                "canonicality": "canonical",
-                "source_checksum": digest,
-                "checksum_algorithm": "sha256",
-                "integrity_status": "verified",
-                "publication_date": source_date,
-                "version": source_version,
+            manifest = {
+                "canonical_source": {
+                    "source_id": source_id,
+                    "title": title.strip(),
+                    "publisher": "V&VN",
+                    "source_url": live_url or url or f"urn:vvn:freeze:{digest}",
+                    "source_type": "interactive_tree" if kind == "boom" else kind,
+                    "source_level": 1,
+                    "canonicality": "canonical",
+                    "source_checksum": digest,
+                    "checksum_algorithm": "sha256",
+                    "integrity_status": "verified",
+                    "publication_date": source_date,
+                    "version": source_version,
+                }
             }
-        }
-        objects = transform_generic(spec, manifest, fragments)
-        if review_path == "boom":
-            stamp_boom_flags(objects, fragments)
-        else:
-            objects = apply_admission_gate(
-                objects,
-                klasse=class_,
-                fragments=fragments,
-                document_version=source_version,
-                source_hash=digest,
-            )
-        objects = apply_passage_register(objects)
-        if review_policy is not None:
-            from src.review_policy_v1 import project_policy
-            project_policy(objects, review_policy)
-        if review_path == "boom" and review_policy is not None:
-            from src.decision_graph_v1 import prepare_graph
-            envelope.update(prepare_graph(stored_path, data, kind, fragments, objects, digest))
-        if previous:
-            envelope["object_diff"] = self._diff_objects(
-                self.snapshot_objects(previous["snapshot_id"]),
-                objects,
-            )
-        record_processing(envelope, objects, fragments=fragments, replay=replay_record,
-                          started_at=processing_started)
-        prepared_envelopes = {snapshot_id: envelope}
-        try:
-            self._commit_prepared_store(
-                objects=(snapshot_id, objects), envelopes=prepared_envelopes,
-                expected_revision="" if ingest_command else None,
-            )
-        except ConsoleError:
-            if not ingest_command:
+            objects = transform_generic(spec, manifest, fragments)
+            if review_path == "boom":
+                stamp_boom_flags(objects, fragments)
+            else:
+                objects = apply_admission_gate(
+                    objects,
+                    klasse=class_,
+                    fragments=fragments,
+                    document_version=source_version,
+                    source_hash=digest,
+                )
+            objects = apply_passage_register(objects)
+            if review_policy is not None:
+                from src.review_policy_v1 import project_policy
+                project_policy(objects, review_policy)
+            if review_path == "boom" and review_policy is not None:
+                from src.decision_graph_v1 import prepare_graph
+                envelope.update(prepare_graph(stored_path, data, kind, fragments, objects, digest))
+            if previous:
+                envelope["object_diff"] = self._diff_objects(
+                    self.snapshot_objects(previous["snapshot_id"]),
+                    objects,
+                )
+            record_processing(envelope, objects, fragments=fragments, replay=replay_record,
+                              started_at=processing_started)
+            if attempt_id:
+                envelope["quality_processing_runs"][-1]["attempt_id"] = attempt_id
+                envelope["publication_eligibility"] = initial_eligibility
+                envelope.pop("processing_blocker", None)
+            prepared_envelopes = {snapshot_id: envelope}
+            try:
+                transaction = self._reprocessing_transaction(snapshot_id) if attempt_id else self._store_write_lock()
+                with transaction:
+                    if attempt_id:
+                        from src.processing_retry_v1 import assert_active, finish, attach_transport, now
+                        assert_active(self._envelope(snapshot_id), attempt_id, now())
+                        if time.monotonic() >= attempt_deadline:
+                            raise ConsoleError("processing_attempt_expired")
+                        self._assert_source_work_unchanged(expected_envelope, expected_revision, "published_objects_must_not_be_rewritten")
+                        self._require_role(actor_id, "researcher")
+                        self._verified_source_bytes(expected_envelope)
+                        assert_active(self._envelope(snapshot_id), attempt_id, now())
+                        if time.monotonic() >= attempt_deadline:
+                            raise ConsoleError("processing_attempt_expired")
+                        finish(envelope, attempt_id, state="succeeded")
+                        attach_transport(next(a for a in envelope["processing_attempts"] if a["attempt_id"] == attempt_id),
+                                         (replay_record or {}).get("provider_evidence", {}).get("transport", {}))
+                    self._commit_prepared_store(
+                        objects=(snapshot_id, objects), envelopes=prepared_envelopes,
+                        expected_revision=expected_revision if attempt_id else "" if ingest_command else None,
+                    )
+            except ConsoleError:
+                if not ingest_command or attempt_id:
+                    raise
+                self.list_envelopes()
+                prior = self._envelopes.get(snapshot_id)
+                if prior and prior.get("ingest_command") == ingest_command:
+                    return self._receipt(prior)
                 raise
-            self.list_envelopes()
-            prior = self._envelopes.get(snapshot_id)
-            if prior and prior.get("ingest_command") == ingest_command:
-                return self._receipt(prior)
-            raise
-        return self._receipt(envelope)
+            return self._receipt(envelope)
 
     def create_review_successor(self, **command: Any) -> dict[str, Any]:
         from src.decision_successor_v1 import execute
         return execute(self, **command)
 
+    def _processing_limits(self):
+        from src.bounded_model_call_v1 import ModelCallLimits
+        reader = getattr(self, "_model_call_limits_reader", None)
+        return reader() if reader is not None else ModelCallLimits()
+
+    def _bounded_semantic_preparation(self, kind, class_):
+        from src.passage_formation_policy_v1 import DETERMINISTIC_MODE
+        return (getattr(self, "_pre_review_semantic_bound", False) and kind in {"html", "pdf"}
+                and class_ != "beslisboom" and self._passage_formation_mode_reader() != DETERMINISTIC_MODE)
+
+    def processing_status(self, snapshot_id: str, *, actor_id: str | None = None) -> dict[str, Any]:
+        from src.processing_retry_v1 import status
+        if actor_id is not None:
+            account = self._account(actor_id)
+            if not {"researcher", "reviewer"}.intersection(account["roles"]):
+                raise ConsoleError("researcher_role_required")
+            if "researcher" not in account["roles"] and actor_id not in self._envelope(snapshot_id).get("named_reviewers", []):
+                raise ConsoleError("reviewer_not_named_on_snapshot")
+        result = status(self._envelope(snapshot_id), policy=self._processing_limits())
+        if (self.snapshot_is_published(snapshot_id) or self.snapshot_objects(snapshot_id)
+                or self._bindings.get(snapshot_id) or self._envelope(snapshot_id).get("review_passes")):
+            result["retry_allowed"] = False
+        return result
+
     @contextmanager
     def _reprocessing_transaction(self, snapshot_id: str) -> Iterator[None]:
-        raise ConsoleError("pre_review_retry_requires_postgres")
-        yield  # pragma: no cover -- the PostgreSQL mixin owns this transaction.
+        # Local single-worker compatibility uses the existing durable file boundary;
+        # production PostgreSQL overrides this with its existing row transaction.
+        with self._store_write_lock():
+            self._reload_store_locked()
+            self._envelope(snapshot_id)
+            yield
+
+    def _record_processing_failure(self, snapshot_id, attempt_id, error):
+        from src.processing_retry_v1 import KEY, finish
+        with self._reprocessing_transaction(snapshot_id):
+            current = deepcopy(self._envelope(snapshot_id))
+            active = next(a for a in current[KEY] if a["attempt_id"] == attempt_id)
+            if active["state"] == "running":
+                finish(current, attempt_id, state="failed", error=error)
+                if active.get("kind") == "ingest" and current.get("processing_blocker") == "pre_review_llm_processing_in_progress" and not self.snapshot_objects(snapshot_id):
+                    current["processing_blocker"] = active["error_code"]
+                    record_processing(current, [], fragments=[], replay=None, started_at=active["started_at"],
+                                      outcome="blocked", reason=active["error_code"])
+                self._commit_prepared_store(envelopes={snapshot_id:current}, snapshot_id=snapshot_id)
+
+    @contextmanager
+    def _source_attempt_failure(self, snapshot_id, attempt_id):
+        try:
+            yield
+        except Exception as error:
+            if attempt_id is not None:
+                self._record_processing_failure(snapshot_id, attempt_id, error)
+            raise
+
+    def _execute_source_attempt(self, *, actor_id, snapshot_id, attempt, deadline):
+        with self._source_attempt_failure(snapshot_id, attempt["attempt_id"]):
+            return self.reextract_unpublished(actor_id=actor_id, snapshot_id=snapshot_id,
+                 _attempt_id=attempt["attempt_id"], _attempt_deadline=deadline)
 
     def retry_pre_review(self, *, actor_id: str, snapshot_id: str, command_id: str) -> dict[str, Any]:
         """Retry an empty blocked source without losing evidence or prior work."""
-        from src.processing_retry_v1 import KEY, reserve, finish, now
+        from src.processing_retry_v1 import KEY, reserve, now
+        limits = self._processing_limits()
+        deadline = time.monotonic() + limits.attempt
         with self._reprocessing_transaction(snapshot_id):
             account = self._account(actor_id)
             if not {"researcher", "reviewer"}.intersection(account["roles"]):
@@ -1799,7 +1918,7 @@ class OperationsConsole:
                     raise ConsoleError("pre_review_reprocess_not_required")
                 if objects or self._bindings.get(snapshot_id) or envelope.get("review_passes"):
                     raise ConsoleError("pre_review_retry_existing_work")
-            attempt, fresh = reserve(envelope, command_id=command_id, actor_id=actor_id, revision=revision, clock=now())
+            attempt, fresh = reserve(envelope, command_id=command_id, actor_id=actor_id, revision=revision, clock=now(), limits=limits)
             self._commit_prepared_store(envelopes={snapshot_id: envelope}, snapshot_id=snapshot_id)
         if not fresh:
             if attempt["state"] == "succeeded":
@@ -1809,18 +1928,10 @@ class OperationsConsole:
             error = ConsoleError(attempt["error_code"], attempt.get("validation_code") or attempt["error_code"])
             error.pre_review_diagnostics = {"reference": attempt.get("processing_reference"), "reason_code": attempt.get("validation_code")}
             raise error
-        try:
-            return self.reextract_unpublished(actor_id=actor_id, snapshot_id=snapshot_id, _attempt_id=attempt["attempt_id"])
-        except Exception as error:
-            with self._reprocessing_transaction(snapshot_id):
-                current = deepcopy(self._envelope(snapshot_id))
-                active = next(a for a in current[KEY] if a["attempt_id"] == attempt["attempt_id"])
-                if active["state"] == "running":
-                    finish(current, attempt["attempt_id"], state="failed", error=error)
-                    self._commit_prepared_store(envelopes={snapshot_id: current}, snapshot_id=snapshot_id)
-            raise
+        return self._execute_source_attempt(actor_id=actor_id, snapshot_id=snapshot_id,
+                                            attempt=attempt, deadline=deadline)
 
-    def reextract_unpublished(self, *, actor_id: str, snapshot_id: str, _attempt_id: str | None = None) -> dict[str, Any]:
+    def reextract_unpublished(self, *, actor_id: str, snapshot_id: str, _attempt_id: str | None = None, _attempt_deadline: float | None = None) -> dict[str, Any]:
         """Replace unpublished object identities with a new extract of the same freeze.
 
         Source hash stays. Published objects MUST NOT be rewritten. MUST NOT hide
@@ -1840,9 +1951,9 @@ class OperationsConsole:
                 raise ConsoleError("processing_command_conflict")
             if attempt["expected_revision"] != expected_revision:
                 raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=expected_revision)
-            if (envelope.get("publication_eligibility") != PRE_REVIEW_BLOCKED
+            if (attempt.get("kind", "retry") == "retry" and (envelope.get("publication_eligibility") != PRE_REVIEW_BLOCKED
                     or self.snapshot_objects(snapshot_id) or self._bindings.get(snapshot_id)
-                    or envelope.get("review_passes")):
+                    or envelope.get("review_passes"))):
                 raise ConsoleError("pre_review_retry_existing_work")
         from src.source_context_review_v1 import ROLE_KEY, LINKS_KEY
         if (self._bindings.get(snapshot_id) or envelope.get("review_passes") or
@@ -1853,6 +1964,17 @@ class OperationsConsole:
         processing_started = quality_instant()
         if self.snapshot_is_published(snapshot_id):
             raise ConsoleError("published_objects_must_not_be_rewritten")
+        if _attempt_id is None and self._bounded_semantic_preparation(envelope["content_kind"], envelope["class"]):
+            from src.processing_retry_v1 import reserve, now
+            limits = self._processing_limits()
+            deadline = time.monotonic() + limits.attempt
+            with self._reprocessing_transaction(snapshot_id):
+                self._assert_source_work_unchanged(envelope, expected_revision, "published_objects_must_not_be_rewritten")
+                reserved = deepcopy(envelope)
+                attempt, _ = reserve(reserved, command_id=uuid.uuid4().hex, actor_id=actor_id,
+                                     revision=expected_revision, clock=now(), limits=limits, kind="reextract")
+                self._commit_prepared_store(envelopes={snapshot_id:reserved}, snapshot_id=snapshot_id)
+            return self._execute_source_attempt(actor_id=actor_id, snapshot_id=snapshot_id, attempt=attempt, deadline=deadline)
         freeze_path, freeze_bytes = self._verified_source_bytes(envelope)
         fragments, spec = self._fragments_and_spec(
             envelope["content_kind"],
@@ -1868,6 +1990,8 @@ class OperationsConsole:
                 "source_sha256": envelope["sha256"],
                 "semantic_replay": deepcopy(envelope.get("semantic_replay")),
                 "explicit_decision_graph": "decision_graph" in envelope,
+                "model_call_limits": {key:attempt["limits"][key] for key in ("connect", "idle", "total", "attempt", "max_attempts")} if _attempt_id and attempt.get("limits") else None,
+                "attempt_deadline": _attempt_deadline,
             },
         )
         replay_record = spec.pop(SEMANTIC_REPLAY_SPEC_KEY, None)
@@ -1919,11 +2043,11 @@ class OperationsConsole:
         record_processing(prepared_envelope, objects, fragments=fragments, replay=replay_record,
                           started_at=processing_started)
         if _attempt_id is not None:
-            from src.processing_retry_v1 import finish
+            prepared_envelope["quality_processing_runs"][-1]["attempt_id"] = _attempt_id
+        if _attempt_id is not None and attempt.get("kind", "retry") == "retry":
             if not any((obj.get("metadata") or {}).get("admission", {}).get("gate_result") == "allowed"
                        for obj in objects if obj.get("object_type") not in {"document", "heading"}):
                 raise ConsoleError("pre_review_no_reviewable_candidates")
-            finish(prepared_envelope, _attempt_id, state="succeeded")
             successful_run = prepared_envelope["quality_processing_runs"][-1]
             successful_run["attempt_id"] = _attempt_id
         replaces_snapshot_id = str(prepared_envelope.get("replaces_snapshot_id") or "")
@@ -1937,11 +2061,28 @@ class OperationsConsole:
             self._reload_store_locked()
             if _attempt_id is not None:
                 from src.processing_retry_v1 import assert_active, now
-                assert_active(self._envelope(snapshot_id), _attempt_id, now())
+                active = assert_active(self._envelope(snapshot_id), _attempt_id, now())
+                if active["actor_id"] != actor_id or active["source_hash"] != envelope["sha256"] or active.get("source_version", envelope["version"]) != envelope["version"]:
+                    raise ConsoleError("processing_command_conflict")
+                if _attempt_deadline is not None and time.monotonic() >= _attempt_deadline:
+                    raise ConsoleError("processing_attempt_expired")
             self._assert_source_work_unchanged(envelope, expected_revision, "published_objects_must_not_be_rewritten")
+            self._verified_source_bytes(envelope)
             account = self._account(actor_id)
             if not {"researcher", "reviewer"}.intersection(account["roles"]):
                 raise ConsoleError("researcher_role_required")
+            if _attempt_id is not None:
+                from src.processing_retry_v1 import finish, attach_transport
+                assert_active(self._envelope(snapshot_id), _attempt_id, now())
+                if _attempt_deadline is not None and time.monotonic() >= _attempt_deadline:
+                    raise ConsoleError("processing_attempt_expired")
+                finish(prepared_envelope, _attempt_id, state="succeeded")
+                stored = next(a for a in prepared_envelope["processing_attempts"] if a["attempt_id"] == _attempt_id)
+                transport = (replay_record or {}).get("provider_evidence", {}).get("transport", {})
+                if (replay_record or {}).get("semantic_execution") == "replay":
+                    stored["replayed_call_id"] = transport.get("call_id")
+                else:
+                    attach_transport(stored, transport)
             self._commit_prepared_store(
                 objects=(snapshot_id, objects),
                 envelopes={snapshot_id: prepared_envelope},

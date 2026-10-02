@@ -344,6 +344,7 @@ def build_app() -> object:
     harden_legacy_repair_routes(app, console)
     install_audit_routes(app, console, archive_store=audit_archive_store)
     install_navigation_simplification(app)
+    app.state.operations_kernel = console
     app.state.console_topology = topology
     return app
 

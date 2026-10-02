@@ -255,6 +255,16 @@ ERROR_COPY = {
     "processing_command_id_invalid": "De verwerkingsopdracht is ongeldig. Open Documenten opnieuw en probeer het nogmaals.",
     "processing_command_conflict": "Deze opdracht hoort bij een andere verwerkingspoging. Open Documenten opnieuw.",
     "processing_dependency_failed": "De verwerking kon niet worden afgerond door een technische fout. Het bestaande werk is behouden.",
+    "pre_review_llm_connection_timeout": "De verbinding met de modeldienst kwam niet binnen de ingestelde tijd tot stand. Het document is bewaard.",
+    "pre_review_llm_connection_failed": "De verbinding met de modeldienst is mislukt. Het document is bewaard.",
+    "pre_review_llm_inactivity_timeout": "De modeldienst gaf binnen de ingestelde wachttijd geen transportantwoord meer. Dit zegt niets over de juistheid van het document.",
+    "pre_review_llm_processing_timeout": "De maximale duur van de modelaanroep is bereikt. Het document en bestaand reviewwerk zijn bewaard.",
+    "pre_review_llm_processing_in_progress": "Er loopt een verwerkingspoging. De kernel bewaakt de eindtijd; transportactiviteit is geen inhoudelijke voortgang.",
+    "pre_review_llm_limits_invalid": "De ingestelde verwerkingsgrenzen zijn ongeldig. Laat de beheerder de configuratie controleren.",
+    "pre_review_llm_transport_unsupported": "Deze verwerkingsroute vereist de ondersteunde Linux-runtime.",
+    "processing_retry_cooldown": "Een nieuwe poging is nog niet mogelijk vóór de vermelde herprobeertijd. Externe annulering van het eerdere verzoek is onbekend.",
+    "processing_attempt_limit_reached": "Het ingestelde maximumaantal pogingen is bereikt. Laat de beheerder de oorzaak onderzoeken.",
+    "processing_structural_limit": "Deze opdracht overschrijdt een invoer- of uitvoergrens. Herhalen zonder de oorzaak te wijzigen is geen herstel.",
     "processing_timeout": "De verwerking is niet op tijd afgerond. Het bestaande werk is behouden; start zo nodig een nieuwe poging.",
     "pre_review_no_reviewable_candidates": "De voorcontrole heeft geen passages vrijgegeven die de toelatingscontroles doorstaan. Bekijk de technische diagnose.",
     "public_signup_forbidden": "Je kunt zelf geen account aanmaken. Vraag de beheerder om toegang tot Metis.",
@@ -4434,21 +4444,29 @@ def create_console_app(
                     mutable and child.get("publication_eligibility") == PRE_REVIEW_BLOCKED
                     and ("researcher" in account["roles"] or "reviewer" in account["roles"])
                 ):
-                    pre_review_notice = '<p class="banner warn">Voorcontrole geblokkeerd. Het document is opgeslagen, maar nog niet beschikbaar voor Review. Alleen wachten lost deze blokkade niet op; laat de beheerder de oorzaak onderzoeken.</p>'
+                    processing = state.processing_status(child["snapshot_id"])
+                    code = processing.get("error_code") or processing.get("reason_code")
+                    message = ERROR_COPY.get(code, "Voorcontrole geblokkeerd. Het document is opgeslagen; bekijk de technische diagnose.")
+                    pre_review_notice = '<p class="banner warn">Voorcontrole geblokkeerd. ' + _esc(message) + '</p>'
+                    if processing.get("retry_not_before"):
+                        pre_review_notice += '<p>Nieuwe poging mogelijk vanaf: ' + _esc(processing["retry_not_before"]) + '</p>'
+                    if not processing["retry_allowed"] and processing["reason_code"] != code:
+                        pre_review_notice += '<p>' + _esc(ERROR_COPY.get(processing["reason_code"], "Nieuwe poging is nu niet beschikbaar.")) + '</p>'
                     if (
                         "reviewer" in account["roles"]
                         and account["account_id"] in (state._envelope(child["snapshot_id"]).get("named_reviewers") or [])
                     ):
                         pre_review_notice += f'<p><a href="/review/processing-diagnostics?document={_esc(child["snapshot_id"])}">Technische diagnose bekijken</a></p>'
-                    actions.append(
-                        f"""
-                        <form method="post" action="/tree/reprocess">
-                          <input type="hidden" name="snapshot_id" value="{_esc(child["snapshot_id"])}">
-                          <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
-                          <button class="btn-primary" type="submit">Pre-review opnieuw uitvoeren</button>
-                        </form>
-                        """
-                    )
+                    if processing["retry_allowed"]:
+                        actions.append(
+                            f"""
+                            <form method="post" action="/tree/reprocess">
+                              <input type="hidden" name="snapshot_id" value="{_esc(child["snapshot_id"])}">
+                              <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
+                              <button class="btn-primary" type="submit">Pre-review opnieuw uitvoeren</button>
+                            </form>
+                            """
+                        )
                 if can_move and mutable:
                     actions.append(
                         f"""
@@ -4697,8 +4715,9 @@ def create_console_app(
             raise ConsoleError("reviewer_not_named_on_snapshot")
         objects = state.snapshot_objects(snapshot_id)
         pre_review_blocked = envelope.get("publication_eligibility") == PRE_REVIEW_BLOCKED
-        blocker = str(envelope.get("processing_blocker") or "")
-        blocker = blocker if blocker.startswith("pre_review_llm_") and blocker in ERROR_COPY else None
+        processing = state.processing_status(snapshot_id, actor_id=account["account_id"])
+        blocker = processing.get("error_code") or processing.get("reason_code") or str(envelope.get("processing_blocker") or "")
+        blocker = blocker if blocker in ERROR_COPY else None
         payload = {
             "snapshot_id": snapshot_id,
             "document_id": str(envelope.get("document_id") or ""),
@@ -4706,6 +4725,7 @@ def create_console_app(
             "version": str(envelope.get("version") or ""),
             "objects_revision": state.objects_revision(snapshot_id),
             "processing_attempts": envelope.get("processing_attempts", []),
+            "processing": processing,
             "diagnostics": processing_diagnostics(objects),
             "pre_review": {
                 "blocked": pre_review_blocked,

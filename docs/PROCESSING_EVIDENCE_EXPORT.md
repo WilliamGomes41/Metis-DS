@@ -8,13 +8,13 @@ De GET-route is `/review/processing-evidence-export?document=<snapshot_id>`.
 De bestaande passage- en diagnostiekexports blijven beschikbaar.
 
 Lees eerst `manifest.csv`. Iedere CSV heeft vaste kolommen, ook zonder rijen.
-CSV-pakket v5 gebruikt `snapshot_id` en `revision_id`, zoals v3/v4. Koppel deze
+CSV-pakket v6 gebruikt `snapshot_id` en `revision_id`, zoals v3/v4. Koppel deze
 kolommen aan `revision.csv` om de exacte `objects_revision` terug te vinden.
 De lange revisiecode staat daar eenmaal. V2-pakketten bevatten deze code op iedere
-rij; v2-consumenten moeten voor v3/v4/v5 de join ondersteunen. De in-memory/MCP-
-projectie gebruikt nu versie v4 met de oorspronkelijke revisiekolommen; de
+rij; v2-consumenten moeten voor v3/v4/v5/v6 de join ondersteunen. De in-memory/MCP-
+projectie gebruikt nu versie v5 met de oorspronkelijke revisiekolommen; de
 revision-join geldt alleen voor de ZIP. Selecteer de lezer op `schema_version`:
-`processing-evidence-export-v5` voor ZIP, `processing-evidence-export-v4` voor
+`processing-evidence-export-v6` voor ZIP, `processing-evidence-export-v5` voor
 projector/MCP. Oudere ZIP-v3- en projector-v2-pakketten blijven afzonderlijke
 contracten. De nieuwe versies voegen aan `context_evidence` de opgeslagen
 `context_realization` en `source_bound_context` toe. Alleen gerealiseerd,
@@ -72,3 +72,5 @@ afzonderlijk worden toegevoegd.
 CSV gebruikt UTF-8 met BOM, komma's en JSON voor samengestelde waarden.
 Formuleachtige cellen krijgen een voorloopapostrof voor veilig openen in Excel;
 dit is exportcodering en verandert de opgeslagen bron niet.
+
+CSV v6 / projector v5 voegen gebruikte tijdsgrenzen, transportuitkomst, bronversie, retryrelatie, retry-not-before en verwijzing naar een oorspronkelijke call bij replay toe aan processing_attempts. Ontbrekende historische gegevens blijven leeg; geen backfill. Zie docs/change-contracts/bounded-model-processing.md.
