@@ -593,6 +593,7 @@ def semantic_units_from_proposal(
     evidence_fragments: Iterable[dict[str, Any]] | None = None,
     allowed_candidate_block_ids: set[str] | None = None,
     field_contract_v2: bool = False,
+    field_contract_v3: bool = False,
 ) -> list[dict[str, Any]]:
     """Validate provider proposal and reconstruct source-bound candidate data."""
 
@@ -635,7 +636,7 @@ def semantic_units_from_proposal(
         _FINDING.set({"candidate_index": candidate_index, "proposed_object": raw_object})
         if not isinstance(raw_object, dict):
             _fail("semantic_object_invalid")
-        _require_only_keys(raw_object, _OBJECT_KEYS | ({"field_evidence", "context_evidence"} if field_contract_v2 else set()), "semantic_object_contains_untrusted_fields")
+        _require_only_keys(raw_object, _OBJECT_KEYS | ({"field_evidence", "context_evidence"} if (field_contract_v2 or field_contract_v3) else set()), "semantic_object_contains_untrusted_fields")
 
         proposed_type = str(
             raw_object.get("proposed_object_type") or DEFAULT_OBJECT_TYPE
@@ -778,20 +779,21 @@ def semantic_units_from_proposal(
                     for mapped in mapped_raw_spans(by_id[row["block_id"]][1], start=row["start"], end=row["end"])],
             },
         }
-        if field_contract_v2:
-            from src.source_bound_fields_v2 import KEY, bind_fields
+        if field_contract_v2 or field_contract_v3:
+            from src.source_bound_fields_v2 import KEY, CONTEXT_KEY, bind_fields, bind_context
             try:
-                unit[KEY] = bind_fields(raw_object.get("field_evidence"), selected=selected,
-                                       candidate_text=candidate_text, proposed_type=proposed_type)
+                context = bind_context(raw_object.get("context_evidence", []), fragments=evidence_list)
+                unit[CONTEXT_KEY] = context
+                if field_contract_v3:
+                    from src.source_bound_fields_v3 import bind_fields as bind_v3
+                    unit[KEY] = bind_v3(raw_object.get("field_evidence"), selected=selected,
+                        candidate_text=candidate_text, proposed_type=proposed_type, context=context)
+                else:
+                    unit[KEY] = bind_fields(raw_object.get("field_evidence"), selected=selected,
+                        candidate_text=candidate_text, proposed_type=proposed_type)
             except ValueError as exc:
                 _fail(str(exc), **getattr(exc, "finding", {}))
-        if field_contract_v2 and "context_evidence" in raw_object:
-            from src.source_bound_fields_v2 import CONTEXT_KEY, bind_context
-            try:
-                unit[CONTEXT_KEY] = bind_context(raw_object["context_evidence"], fragments=evidence_list)
-            except ValueError as exc:
-                _fail(str(exc), **getattr(exc, "finding", {}))
-        if field_contract_v2 or proposed_type != DEFAULT_OBJECT_TYPE:
+        if field_contract_v2 or field_contract_v3 or proposed_type != DEFAULT_OBJECT_TYPE:
             unit["proposed_object_type"] = proposed_type
         if semantics is not None:
             unit[PROPOSED_FIELD] = semantics

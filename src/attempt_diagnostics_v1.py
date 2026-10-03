@@ -11,7 +11,7 @@ from pathlib import Path
 VERSION = "attempt-diagnostics-v1"
 MAX_DIAGNOSTIC_BYTES = 16_000_000
 VALIDATOR_FILES = ("semantic_passage_v1.py", "recommendation_semantics_v1.py",
-                   "source_bound_fields_v2.py", "object_taxonomy_v1.py",
+                   "source_bound_fields_v2.py", "source_bound_fields_v3.py", "recommendation_coverage_v1.py", "object_taxonomy_v1.py",
                    "semantic_replay_v1.py", "knowledge_relations_v1.py", "knowledge_relation_proposal_v1.py",
                    "source_reconstruction_v1.py", "source_layout_v1.py",
                    "serving_relations_v1.py", "source_context_review_v1.py",
@@ -113,7 +113,8 @@ def replay_diagnostic(attempt):
     from src.pre_review_semantic_v1 import validate_provider_proposal
     from src.operations_console_v1 import ConsoleError
     try:
-        validate_provider_proposal(diagnostic["proposal"], field_contract_v2=data.get("field_contract_v2", False))
+        validate_provider_proposal(diagnostic["proposal"], field_contract_v2=data.get("field_contract_v2", False),
+                                   field_contract_v3=data.get("field_contract_v3", False))
     except ConsoleError as error:
         finding = getattr(error, "validation_finding", {"reason_code": error.code})
         return {"status": "rejected", "reason_code": finding["reason_code"], "finding": finding}

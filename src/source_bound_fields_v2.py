@@ -90,8 +90,11 @@ def bind_fields(raw: object, *, selected: list[dict], candidate_text: str, propo
     return {**payload, "binding_hash": stable_json_hash(payload)}
 
 
-def bound_values(record: object, *, text: str, proposed_type: str) -> dict:
+def bound_values(record: object, *, text: str, proposed_type: str, context=()) -> dict:
     """Reject stale evidence on correction/type changes, without heuristic repair."""
+    if isinstance(record, dict) and record.get("version") == "source-bound-fields-v3":
+        from src.source_bound_fields_v3 import bound_values as read_v3
+        return read_v3(record, text=text, proposed_type=proposed_type, context=context)
     if not isinstance(record, dict) or set(record) != {"version", "candidate_text", "proposed_type", "values", "evidence", "binding_hash"}:
         raise ValueError("source_bound_fields_invalid")
     payload = {k: v for k, v in record.items() if k != "binding_hash"}
@@ -121,12 +124,14 @@ def bound_values(record: object, *, text: str, proposed_type: str) -> dict:
 
 def apply_bound_fields(candidate: dict) -> list[str]:
     """Replace derived fields atomically; invalid evidence leaves them empty."""
-    for field in FIELDS:
+    from src.source_bound_fields_v3 import FIELDS as V3_FIELDS
+    for field in dict.fromkeys((*FIELDS, *V3_FIELDS)):
         candidate[field] = [] if field == "type_evidence_spans" else ""
     try:
         values = bound_values(candidate.get(KEY),
                               text=str(candidate.get("candidate_text") or ""),
-                              proposed_type=str(candidate.get("proposed_type") or ""))
+                              proposed_type=str(candidate.get("proposed_type") or ""),
+                              context=candidate.get("source_bound_context_entries") or [])
     except ValueError as exc:
         return [str(exc)]
     candidate.update(values)

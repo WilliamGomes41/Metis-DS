@@ -556,6 +556,36 @@ def _recommendation_evidence_missing(row: dict[str, Any], proposed: str, source:
     )
 
 
+def _type_contract_codes(row, proposed, corpus, *, v3):
+    from src.source_bound_fields_v3 import TYPE_FIELDS as V3_TYPE_FIELDS
+    codes = []
+    for field in (V3_TYPE_FIELDS if v3 else TYPE_CONTRACT_FIELDS).get(proposed, ()):
+        extra = _CONTRACT_MISSING_CODES.get(field, ())
+        if not _present(row.get(field)):
+            codes.append("type_contract_incomplete")
+            codes.extend(extra)
+            break
+        if field in _LITERAL_CONTRACT_FIELDS.get(proposed, ()) and corpus and not _literal(row.get(field), corpus):
+            codes.extend(("type_contract_incomplete", "span_not_in_source", "source_fidelity_failure"))
+            codes.extend(extra)
+            break
+
+    return codes
+
+
+def _recommendation_source_codes(row, realization, object_revision, source_fragments):
+    codes = []
+    from src.source_bound_fields_v3 import additional_context_codes, validate_object_fields
+    codes.extend(additional_context_codes(row, realization,
+        obj=object_revision, fragments=source_fragments))
+    if object_revision is not None and source_fragments is not None:
+        try:
+            validate_object_fields(object_revision, source_fragments)
+        except (ValueError, KeyError, TypeError) as exc:
+            codes.append(str(exc) if str(exc).startswith("source_bound_") else "source_bound_fields_invalid")
+    return codes
+
+
 def admit_candidate(
     candidate: dict[str, Any],
     *,
@@ -578,6 +608,10 @@ def admit_candidate(
     row = build_candidate_record(**{k: v for k, v in candidate.items() if k != "skip_context_scan"})
     v2 = FIELD_EVIDENCE_KEY in row
     codes: list[str] = apply_bound_fields(row) if v2 else []
+    from src.source_bound_fields_v3 import VERSION as V3_VERSION, MODE as V3_MODE
+    v3 = isinstance(row.get(FIELD_EVIDENCE_KEY), dict) and row[FIELD_EVIDENCE_KEY].get("version") == V3_VERSION
+    if row.get("field_formation_mode") == V3_MODE and not v3:
+        codes.append("source_bound_fields_contract_mismatch")
     if not v2:
         _enrich_from_text(row)
     if skip_context_scan:
@@ -609,15 +643,17 @@ def admit_candidate(
 
     for field in absent_required:
         codes.append(_ABSENT_FIELD_CODES.get(field, "type_contract_incomplete"))
-    _require_literal(row.get("subject_span"), corpus, "subject_missing", codes)
+    recommendation_v3 = v3 and proposed == "recommendation"
     _require_literal(row.get("predicate_span"), corpus, "predicate_missing", codes)
-    if _word_count(text) < 3:
-        codes.append("incomplete_sentence")
-        codes.append("no_independent_claim")
-    if not has_terminal_sentence_boundary(text):
-        codes.append("incomplete_sentence")
-    if _has_sentence_continuation(row):
-        codes.append("incomplete_sentence")
+    if not recommendation_v3:
+        _require_literal(row.get("subject_span"), corpus, "subject_missing", codes)
+        if _word_count(text) < 3:
+            codes.append("incomplete_sentence")
+            codes.append("no_independent_claim")
+        if not has_terminal_sentence_boundary(text):
+            codes.append("incomplete_sentence")
+        if _has_sentence_continuation(row):
+            codes.append("incomplete_sentence")
     if not str(row.get("source_locator_start") or "").strip() or not str(row.get("source_locator_end") or "").strip():
         codes.append("locator_invalid")
     evidence = [span for span in (row.get("type_evidence_spans") or []) if str(span or "").strip()]
@@ -626,16 +662,12 @@ def admit_candidate(
     elif corpus and any(not _literal(span, corpus) for span in evidence):
         codes.extend(("type_evidence_missing", "span_not_in_source", "source_fidelity_failure"))
 
-    for field in TYPE_CONTRACT_FIELDS.get(proposed, ()):
-        extra = _CONTRACT_MISSING_CODES.get(field, ())
-        if not _present(row.get(field)):
-            codes.append("type_contract_incomplete")
-            codes.extend(extra)
-            break
-        if field in _LITERAL_CONTRACT_FIELDS.get(proposed, ()) and corpus and not _literal(row.get(field), corpus):
-            codes.extend(("type_contract_incomplete", "span_not_in_source", "source_fidelity_failure"))
-            codes.extend(extra)
-            break
+    codes.extend(_type_contract_codes(row, proposed, corpus, v3=v3))
+
+    if recommendation_v3:
+        from src.source_bound_fields_v3 import recommendation_codes
+        codes.extend(recommendation_codes(row, context=row.get("source_bound_context_entries") or []))
+        row["admission_version"] = "recommendation-core-admission-v3"
 
     if _recommendation_evidence_missing(row, proposed, source):
         codes.append("recommendation_evidence_missing")
@@ -662,6 +694,8 @@ def admit_candidate(
     from src.source_context_review_v1 import context_realization
     realization = context_realization(row, obj=object_revision,
                                       objects=context_objects, fragments=source_fragments)
+    if recommendation_v3:
+        codes.extend(_recommendation_source_codes(row, realization, object_revision, source_fragments))
     row["context_realization"] = realization
     if realization["unresolved"]:
         codes.append("context_necessary_unresolved")
@@ -825,7 +859,12 @@ def candidate_from_object(
         fields["factual_claim_span"] = text
     metadata = obj.get("metadata") or {}
     from src.source_bound_fields_v2 import MODE
-    if FIELD_EVIDENCE_KEY in metadata or (metadata.get("semantic_passage") or {}).get("formation_mode") == MODE:
+    from src.source_bound_fields_v3 import MODE as V3_MODE
+    fields["recommendation_coverage"] = metadata.get("recommendation_coverage") or {}
+    fields["field_formation_mode"] = (metadata.get("semantic_passage") or {}).get("formation_mode")
+    if fields["field_formation_mode"] == V3_MODE:
+        fields["source_bound_context_entries"] = (metadata.get("source_bound_context") or {}).get("entries") or []
+    if FIELD_EVIDENCE_KEY in metadata or (metadata.get("semantic_passage") or {}).get("formation_mode") in {MODE, V3_MODE}:
         fields[FIELD_EVIDENCE_KEY] = metadata.get(FIELD_EVIDENCE_KEY)
     return build_candidate_record(**fields)
 
