@@ -72,6 +72,7 @@ from src.semantic_replay_v1 import (
 from src.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
 from src.source_reconstruction_v1 import RECONSTRUCTION_VERSION
 from src.source_bound_fields_v2 import MODE as SEMANTIC_V2_MODE, evidence_schema, context_evidence_schema, CONTEXT_VERSION
+from src.source_evidence_resolution_v1 import resolve_proposal_evidence, VERSION as EVIDENCE_RESOLUTION_VERSION
 
 
 PASSAGE_FORMATION_MODE_ENV = "METIS_PASSAGE_FORMATION_MODE"
@@ -82,7 +83,11 @@ LOGGER = logging.getLogger("metis.provider")
 SEMANTIC_PROVIDER_ID = "openai-responses-v1"
 SEMANTIC_DEVELOPER_PROMPT = (
     "Form meaning units for human review by selecting only exact source spans. "
-    "Do not write, rewrite or paraphrase candidate knowledge text or evidence text. "
+    "Copy each selected source substring verbatim into its literal reference; "
+    "never write, rewrite or paraphrase source text. Do not calculate character offsets. "
+    "Every reference has block_id, literal and occurrence. Use occurrence:null for "
+    "a unique exact match, otherwise the zero-based occurrence counting all exact "
+    "matches including overlapping matches in that block. Never guess an occurrence. "
     "Group spans only when they form one independently understandable unit. "
     "Keep target group, conditions, exceptions and modality with the statement "
     "they qualify. For every object return recommendation_semantics: null unless "
@@ -201,10 +206,10 @@ def _proposal_schema(field_contract_v2: bool = False) -> dict[str, Any]:
         "additionalProperties": False,
         "properties": {
             "block_id": {"type": "string"},
-            "start": {"type": "integer", "minimum": 0},
-            "end": {"type": "integer", "minimum": 1},
+            "literal": {"type": "string", "minLength": 1},
+            "occurrence": {"type": ["integer", "null"], "minimum": 0},
         },
-        "required": ["block_id", "start", "end"],
+        "required": ["block_id", "literal", "occurrence"],
     }
     nullable_span = {
         "type": ["object", "null"],
@@ -486,7 +491,7 @@ def _replay_identity(
         extractor_version=_extractor_contract(source_fragments),
         reconstruction_version=RECONSTRUCTION_VERSION,
         formation_policy_version=PASSAGE_FORMATION_POLICY_VERSION,
-        semantic_contract_version=(f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}" if field_contract_v2 else SEMANTIC_PASSAGE_VERSION),
+        semantic_contract_version=(f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}"),
         prompt_hash=_stable_json_hash(SEMANTIC_DEVELOPER_PROMPT + (SEMANTIC_V2_INSTRUCTION if field_contract_v2 else "")),
         schema_hash=_stable_json_hash(_proposal_schema(field_contract_v2)),
         provider_id=SEMANTIC_PROVIDER_ID,
@@ -601,7 +606,16 @@ def _provider_proposal(
                                   "output_text": output_text,
                                   "input_tokens": usage.get("input_tokens"),
                                   "output_tokens": usage.get("output_tokens")})
-    return proposal
+    try:
+        resolved = resolve_proposal_evidence(proposal, blocks=blocks, evidence_blocks=evidence_blocks)
+    except SemanticPassageError as exc:
+        if checkpoint:
+            checkpoint("validation_rejected", {"finding": exc.finding})
+        raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
+    if checkpoint:
+        checkpoint("evidence_resolved", {"resolved_proposal": resolved,
+                   "resolved_proposal_hash": _stable_json_hash(resolved)})
+    return resolved
 
 def _semantic_execution_before_review(
     fragments: list[dict[str, Any]],
@@ -708,7 +722,7 @@ def _semantic_execution_before_review(
             checkpoint=checkpoint,
         )
         if checkpoint:
-            checkpoint("proposal_received", {"proposal": proposal, "provider_evidence": provider_evidence})
+            checkpoint("proposal_received", {"provider_evidence": provider_evidence})
         try:
             content_units = semantic_units_from_proposal(
                 content_fragments,
