@@ -49,3 +49,7 @@ Resterende onzekerheid: een letterlijk bronbereik kan semantisch verkeerd toegew
 ## Uitbreiding broncontext (2026-10-02)
 
 De opdracht voor betrouwbare kennisobjecten vervangt de eerdere opt-in-default voor nieuwe runtime-proza: v2 is primair. Expliciete legacyconfiguratie blijft leesbaar; beslisbomen blijven structureel. `source-bound-context-v1` voegt alleen exacte contextspans, rollen en gesloten unresolved redenen toe. Admission `source-context-admission-v2` controleert daadwerkelijke realisatie onafhankelijk van scanflags. Geen backfill, SQL-migratie, herreview of wijziging van publicatiehashes. Zie docs/change-contracts/knowledge-context-foundation.md voor invariant-, transactie- en herstelbewijs.
+
+## Versioned successor (#496)
+
+The v2 core-only and mandatory actor/scope admission requirements are explicitly reopened by #496. The additive v3 successor and its staged acceptance/rollback contract are specified in [recommendation-context-v3](../change-contracts/recommendation-context-v3.md). V2 records retain v2 semantics; the default remains v2 pending the live-provider and durable acceptance gates.

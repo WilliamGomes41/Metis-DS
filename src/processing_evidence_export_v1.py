@@ -26,6 +26,7 @@ SCHEMAS = {
     "semantic_proposals": ("proposal_hash", "identity", "validation", "semantic_execution", "origin_execution", "replay_from_proposal_hash", "proposal", "evidence_kind"),
     "source_stages": ("object_id", "object_version", "stage", "text", "section_path", "source_checksum", "text_status"),
     "coverage": ("object_id", "object_version", "block_id", "start", "end", "selection_origin", "register_status", "gate_result", "model_decision_status", "offset_text_status"),
+    "recommendation_coverage": ("object_id", "object_version", "contract_version", "detection_completeness", "block_id", "start", "end", "text", "status", "scope_cue"),
     "proposal_fields": ("object_id", "object_version", "field", "value", "value_status", "stage", "producer_status", "contract_version", "source_span", "missing_reason"),
     "validation_findings": ("object_id", "object_version", "gate_result", "reason_code", "evidence_kind", "admission", "rule_execution_trace_status"),
     "context_evidence": ("object_id", "object_version", "context_scan", "expand_merge", "necessary_context_disposition", "source_context_review", "context_realization", "source_bound_context", "evidence_kind"),
@@ -67,7 +68,8 @@ def _field_producer_status(bound: dict, obj: dict) -> str:
         return "not_recorded"
     try:
         bound_values(bound, text=str((obj.get("content") or {}).get("clean_text") or ""),
-                     proposed_type=str(obj.get("proposed_object_type") or "unclassified"))
+                     proposed_type=str(obj.get("proposed_object_type") or "unclassified"),
+                     context=((obj.get("metadata") or {}).get("source_bound_context") or {}).get("entries") or [])
     except ValueError as exc:
         return "stale_source_bound_proposal" if str(exc) == "source_bound_fields_stale" else "invalid_source_bound_proposal"
     return "source_bound_proposal"
@@ -107,19 +109,26 @@ def processing_evidence_tables(
         add("semantic_proposals", **{key: replay.get(key) for key in SCHEMAS["semantic_proposals"] if key != "evidence_kind"},
             evidence_kind="stored_validated_proposal_not_raw_response")
     provider = replay.get("provider_evidence") or {}
-    if provider.get("version") == "semantic-provider-evidence-v1":
-        response = provider.get("response") or {}
-        add("model_calls", call_id=response.get("id"), request=provider.get("request"),
-            output_text=response.get("output_text"), response_status=response.get("status"),
-            input_tokens=response.get("input_tokens"), output_tokens=response.get("output_tokens"),
-            requested_at=provider.get("requested_at"), deployed_commit=provider.get("deployed_commit"),
-            proposal_hash=replay.get("proposal_hash"),
-            evidence_kind="origin_call_of_latest_saved_proposal_not_all_attempts")
+    providers = [provider, *(provider.get("supplementary_calls") or [])]
+    for provider in providers:
+        if provider.get("version") == "semantic-provider-evidence-v1":
+            response = provider.get("response") or {}
+            add("model_calls", call_id=response.get("id"), request=provider.get("request"),
+                output_text=response.get("output_text"), response_status=response.get("status"),
+                input_tokens=response.get("input_tokens"), output_tokens=response.get("output_tokens"),
+                requested_at=provider.get("requested_at"), deployed_commit=provider.get("deployed_commit"),
+                proposal_hash=replay.get("proposal_hash"),
+                evidence_kind="origin_call_of_latest_saved_proposal_not_all_attempts")
 
     for obj, row in zip([o for o in objects if o.get("object_type") != "document"], passage_export_rows(objects)):
         keys = {"object_id": row["object_id"], "object_version": row["object_version"]}
         content = obj.get("content") or {}
         admission = row["admission"]
+        coverage = (obj.get("metadata") or {}).get("recommendation_coverage") or {}
+        for entry in coverage.get("entries") or []:
+            add("recommendation_coverage", **keys,
+                contract_version=coverage.get("version"), detection_completeness=coverage.get("detection_completeness"),
+                **entry["span"], text=entry.get("text"), status=entry.get("status"), scope_cue=entry.get("scope_cue"))
         context_review = row.get("source_context_review") or {}
         if context_review.get("role") or context_review.get("links") or context_review.get("issues"):
             add("context_evidence", **keys, source_context_review=context_review,
@@ -154,6 +163,8 @@ def processing_evidence_tables(
                 bbox=fragment.get("bbox"), raw_content_hash=fragment.get("raw_content_hash"))
         from src.source_bound_fields_v2 import KEY, FIELDS as BOUND_FIELDS
         bound = (obj.get("metadata") or {}).get(KEY) or {}
+        if bound.get("version") == "source-bound-fields-v3":
+            from src.source_bound_fields_v3 import FIELDS as BOUND_FIELDS
         producer_status = _field_producer_status(bound, obj)
         for field in dict.fromkeys((*FIELDS, *(BOUND_FIELDS if bound else ()))):
             evidence = (bound.get("evidence") or {}).get(field) or {}
@@ -186,6 +197,8 @@ def processing_evidence_tables(
         "semantic_proposals": ("recorded" if replay else "not_recorded", "Latest saved replay record only; not the raw provider response or every attempt."),
         "source_stages": ("partial", "Current object text only; original extraction and reconstruction stages were not retained here."),
         "coverage": ("partial", "Stored selections and register status; does not establish which blocks were sent or explicitly assessed."),
+        "recommendation_coverage": ("partial" if tables["recommendation_coverage"] else "not_recorded",
+            "Source-derived potential recommendations and selection disposition; detector completeness and clinical recall are not proven."),
         "proposal_fields": ("partial", "Stored admission fields; field producers and intermediate transformations are not recorded."),
         "validation_findings": ("partial", "Stored results and reasons; no individual execution trace. No reason does not prove all checks passed."),
         "context_evidence": ("partial", "Stored context scan; include does not by itself prove that context was attached."),

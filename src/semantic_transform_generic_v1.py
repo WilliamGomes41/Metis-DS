@@ -105,7 +105,7 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
                 raise ValueError("semantic_source_mapping_invalid")
         result["source_mapping"] = deepcopy(mapping)
     if origin == SELECTION_ORIGIN_PROPOSAL:
-        if str(value.get("formation_mode") or "") not in {"semantic-source-bound-v1", "semantic-source-bound-v2"}:
+        if str(value.get("formation_mode") or "") not in {"semantic-source-bound-v1", "semantic-source-bound-v2", "semantic-source-bound-v3"}:
             raise ValueError("semantic_passage_metadata_invalid")
         if not str(value.get("model") or "").strip():
             raise ValueError("semantic_passage_metadata_invalid")
@@ -139,6 +139,8 @@ def _system_candidate_metadata(item: dict[str, Any]) -> dict[str, Any]:
     relation_evidence = item.get("knowledge_relation_evidence")
     if isinstance(relation_evidence, dict):
         out["knowledge_relation_evidence"] = deepcopy(relation_evidence)
+    if isinstance(item.get("recommendation_coverage"), dict):
+        out["recommendation_coverage"] = deepcopy(item["recommendation_coverage"])
     return out
 
 
@@ -249,7 +251,8 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
             if rebuilt != item.get("clean_text", item.get("text")):
                 raise ValueError("decision_unit_source_fidelity_failure")
         from src.source_bound_fields_v2 import KEY, bind_fields, MODE
-        if semantic_passage and semantic_passage.get("formation_mode") == MODE:
+        from src.source_bound_fields_v3 import MODE as V3_MODE, bind_fields as bind_v3
+        if semantic_passage and semantic_passage.get("formation_mode") in {MODE, V3_MODE}:
             from src.semantic_passage_v1 import semantic_source_blocks
             from src.object_taxonomy_v1 import extract_object_type
             if evidence_blocks is None:
@@ -264,9 +267,11 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
                     raise ValueError("source_bound_field_bounds_invalid")
                 selected.append({**span, "text": block["text"][span["start"]:span["end"]]})
             record = item.get(KEY)
-            rebuilt = bind_fields(record.get("evidence") if isinstance(record, dict) else None,
+            binding = bind_v3 if semantic_passage.get("formation_mode") == V3_MODE else bind_fields
+            context_args = {"context": item.get("source_bound_context") or []} if binding is bind_v3 else {}
+            rebuilt = binding(record.get("evidence") if isinstance(record, dict) else None,
                                   selected=selected, candidate_text=item.get("clean_text", item["text"]),
-                                  proposed_type=item.get("proposed_object_type", "unclassified"))
+                                  proposed_type=item.get("proposed_object_type", "unclassified"), **context_args)
             if record != rebuilt:
                 raise ValueError("source_bound_fields_invalid")
             system_metadata[KEY] = rebuilt
@@ -359,7 +364,7 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
         }
         from src.source_bound_fields_v2 import CONTEXT_KEY, bind_context, context_record
         if CONTEXT_KEY in item:
-            if not semantic_passage or semantic_passage.get("formation_mode") != MODE:
+            if not semantic_passage or semantic_passage.get("formation_mode") not in {MODE, V3_MODE}:
                 raise ValueError("source_bound_context_requires_v2")
             entries = item[CONTEXT_KEY]
             if not isinstance(entries, list):

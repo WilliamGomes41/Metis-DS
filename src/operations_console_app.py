@@ -95,7 +95,7 @@ from src.ingest_limits_v1 import (
     read_upload_limited,
 )
 from src.llm_provider_v1 import load_llm_provider_config
-from src.passage_formation_policy_v1 import DETERMINISTIC_MODE, SEMANTIC_MODE, SEMANTIC_V2_MODE
+from src.passage_formation_policy_v1 import DETERMINISTIC_MODE, SEMANTIC_MODE, SEMANTIC_V2_MODE, SEMANTIC_V3_MODE
 from src.operations_console_v1 import (
     ALLOWED_CLASSES,
     ALLOWED_DELETE_NEXT,
@@ -165,8 +165,8 @@ def normalize_review_task(value: str) -> str:
 def _passage_formation_status_html(state: OperationsConsole) -> str:
     reader = getattr(state, "_passage_formation_mode_reader", None)
     mode = reader() if callable(reader) else DETERMINISTIC_MODE
-    if mode in {SEMANTIC_MODE, SEMANTIC_V2_MODE}:
-        label = "Semantisch met bronbewijs" if mode == SEMANTIC_V2_MODE else "Semantisch"
+    if mode in {SEMANTIC_MODE, SEMANTIC_V2_MODE, SEMANTIC_V3_MODE}:
+        label = "Semantisch met bronbewijs" if mode in {SEMANTIC_V2_MODE, SEMANTIC_V3_MODE} else "Semantisch"
         detail = (
             "Nieuwe en opnieuw verwerkte passages worden momenteel brongebonden "
             "semantisch gevormd. Review blijft verplicht."
@@ -1329,7 +1329,10 @@ def _source_bound_fields_html(obj: dict[str, Any]) -> str:
     record = (obj.get("metadata") or {}).get(KEY)
     if record is None:
         return ""
+    if record.get("version") == "source-bound-fields-v3":
+        from src.source_bound_fields_v3 import FIELDS
     labels = {
+        "actor_span": "Uitvoerder", "target_group_span": "Doelgroep", "scope_span": "Toepassingsbereik",
         "subject_span": "Onderwerp", "predicate_span": "Gezegde",
         "type_evidence_spans": "Bewijs voor type", "actor_of_scope": "Actor of doelgroep",
         "recommended_action": "Handeling", "action_object_or_goal": "Doel of object",
@@ -1341,7 +1344,8 @@ def _source_bound_fields_html(obj: dict[str, Any]) -> str:
     }
     try:
         values = bound_values(record, text=str((obj.get("content") or {}).get("clean_text") or ""),
-                              proposed_type=str(obj.get("proposed_object_type") or "unclassified"))
+                              proposed_type=str(obj.get("proposed_object_type") or "unclassified"),
+                              context=((obj.get("metadata") or {}).get("source_bound_context") or {}).get("entries") or [])
     except ValueError:
         return '<p class="muted" data-source-bound-fields-invalid>Het veldbewijs past niet meer bij deze passage. Opnieuw controleren is nodig.</p>'
     rows = []
