@@ -3661,7 +3661,17 @@ class OperationsConsole:
             revised = next(row for row in gated if row["object_id"] == object_id)
             revised = apply_passage_register([revised])[0]
         else:
-            from src.decision_unit_construction_v1 import apply_gate
+            from src.decision_unit_construction_v1 import KEY, apply_gate, rebuild_for_revision
+            if (target.get("metadata") or {}).get(KEY):
+                from src.decision_graph_v1 import pdf_fragments
+                source_path, _ = self._verified_source_bytes(envelope)
+                fragments = pdf_fragments(source_path, document_id=envelope["document_id"],
+                                          source_id=envelope["source_id"])
+                try:
+                    rebuild_for_revision(target, revised, fragments)
+                except ValueError as exc:
+                    raise ConsoleError(str(exc)) from exc
+                stamp_canonical_hashes(revised)
             peers = [revised if row.get("object_id") == object_id else row for row in current]
             apply_gate(peers, source_hash=envelope["sha256"], graph=envelope.get("decision_graph"),
                        inventory=envelope.get("decision_graph_evidence"))

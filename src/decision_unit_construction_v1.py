@@ -275,6 +275,48 @@ def unit_issues(obj):
     return sorted(set(issues))
 
 
+def rebuild_for_revision(original, revised, fragments):
+    """Rebuild only an explicit literal selection from verified immutable input.
+
+    Whole-fragment merges retain the v1 newline representation. A single
+    fragment may be narrowed to one unique literal substring. No fuzzy match,
+    metadata patch or stale construction proof is accepted.
+    """
+    by_id = {f["fragment_id"]: f for f in fragments}
+    reconstruct(original["metadata"][KEY], by_id)
+    if "decision_unit_source_fidelity_failure" in unit_issues(original):
+        raise ValueError("decision_unit_source_fidelity_failure")
+    unit = []
+    for ref in revised.get("provenance", {}).get("source_fragments", []):
+        fragment = by_id.get(ref.get("raw_object_id"))
+        if (not fragment or ref.get("raw_content_hash") != fragment.get("fragment_hash")
+                or ref.get("source_locator") != fragment["source_locator"]
+                or fragment in unit):
+            raise ValueError("decision_unit_source_fidelity_failure")
+        unit.append(fragment)
+    if not unit:
+        raise ValueError("decision_unit_source_fidelity_failure")
+    text = str(revised.get("content", {}).get("clean_text") or "")
+    evidence = record(unit)
+    literal = reconstruct(evidence, by_id)
+    if len(unit) == 1:
+        if not text or literal.find(text) < 0 or literal.find(text) != literal.rfind(text):
+            raise ValueError("decision_unit_source_fidelity_failure")
+        start = literal.index(text)
+        span = evidence["spans"][0]
+        span.update(start=start, end=start+len(text), text_sha256=stable_hash(text))
+        evidence["literal_hash"] = stable_hash(text)
+        literal = reconstruct(evidence, by_id)
+    elif re.sub(r"\s+", " ", text).strip() != re.sub(r"\s+", " ", literal).strip():
+        raise ValueError("decision_unit_source_fidelity_failure")
+    # Recompute interpretation hints from the realized text, not old grouping.
+    hints = record([{**unit[0], "clean_text": literal}])
+    evidence.update(role=hints["role"], reason_codes=hints["reason_codes"])
+    revised["content"].update(clean_text=literal, raw_text=literal)
+    revised.setdefault("metadata", {})[KEY] = evidence
+    return revised
+
+
 def apply_gate(objects, *, source_hash, graph=None, inventory=None):
     """Derived admission for versioned PDF units only, persisted by existing callers."""
     graph_reasons = []

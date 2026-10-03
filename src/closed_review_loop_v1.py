@@ -384,9 +384,15 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             and _norm(str(operations[0].get("value") or "")) == proposed
         ):
             return deepcopy(current)
-        self._validate_source_bound_patch(
-            snapshot_id=snapshot_id, object_id=object_id, patch=patch
-        )
+        from src.decision_unit_construction_v1 import KEY
+        from src.beslisboom_path_v1 import review_path_for_klasse
+        if not (review_path_for_klasse(self._envelope(snapshot_id)["class"]) == "boom"
+                and (current.get("metadata") or {}).get(KEY)):
+            self._validate_source_bound_patch(
+                snapshot_id=snapshot_id, object_id=object_id, patch=patch
+            )
+        # Constructed units are validated by the kernel against immutable source
+        # fragments, including explicit merge refs unavailable in this text view.
         return super().correct_object(**kwargs)
 
     def _require_repair_access(
