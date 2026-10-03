@@ -346,6 +346,9 @@ def build_app() -> object:
     install_navigation_simplification(app)
     app.state.operations_kernel = console
     app.state.console_topology = topology
+    # Register last so timings include status/auth middleware and all DB reads.
+    from src.console_performance_v1 import install_console_performance
+    install_console_performance(app)
     return app
 
 
