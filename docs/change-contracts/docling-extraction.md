@@ -141,3 +141,15 @@ SKU increase, container-registry publication or production-fit claim. The lean
 ZIP's dependency exclusions remain intact. Production cutover still requires
 confirmation that the existing Azure host can run this artifact within budget;
 no infrastructure changes are authorized by creating or testing this recipe.
+
+The unequal-page regression also exposes SDK 2.132.0's specific origin rule:
+ReadingOrderModel._merge_elements serializes a continuation bbox using the FIRST
+element's page height, even when its page_no identifies another-sized page.
+The adapter translates that pinned serialization rule for mixed-page text
+provenance, records the origin height, and preserves raw SDK coordinates. This
+is arithmetic coordinate translation, not own extraction or inferred layout.
+In Mantelzorg the uncorrected page-3 reference for 'Vertoont de mantelzorger
+signalen van overbelasting?' opens an empty passage; the translated box opens
+that exact original text. The numbered/unequal-page real-PDF regression and
+forced merged-provenance unit case guard against accepting an in-page but
+incorrectly shifted locator. No semantic/review/publication rule changes.

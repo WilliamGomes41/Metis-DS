@@ -109,6 +109,21 @@ def test_visible_page_intersection_retains_raw_bounds_and_rejects_invalid_geomet
     assert fragments.extraction_record["bindings"][0]["provenance"]["bbox"] == raw
 
 
+def test_pinned_sdk_merged_text_uses_first_page_height_not_target_page_height():
+    payload = result()
+    payload["document"]["pages"]["2"] = {"size": {"width": 600, "height": 1200}}
+    item = payload["document"]["texts"][0]
+    item.update(text="eerste tweede", orig="eerste tweede")
+    item["prov"][0]["charspan"] = [0, 6]
+    item["prov"].append({"page_no": 2, "charspan": [7, 13],
+        "bbox": {"l": 10, "r": 200, "t": 780, "b": 760, "coord_origin": "BOTTOMLEFT"}})
+    fragments = rows(payload)
+    assert [f["source_page"] for f in fragments] == [1, 2]
+    assert [f["bbox"] for f in fragments] == [[10, 20, 200, 40], [10, 20, 200, 40]]
+    assert fragments.extraction_record["bindings"][1]["docling_origin_height"] == 800
+    assert fragments.extraction_record["document"]["texts"][0]["prov"][1]["bbox"]["t"] == 780
+
+
 def test_mapping_hash_offsets_origin_and_atomic_evidence():
     fragments = rows()
     row = fragments[0]

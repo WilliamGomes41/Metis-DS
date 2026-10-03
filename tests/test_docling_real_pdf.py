@@ -31,11 +31,11 @@ pytestmark = pytest.mark.skipif(os.environ.get("METIS_DOCLING_REAL_ACCEPTANCE") 
                               reason="Real Docling/models acceptance environment required; not proven by unit tests")
 
 
-def pdf(tmp_path, text=TEXT):
+def pdf(tmp_path, text=TEXT, heading="Screening"):
     path = tmp_path / "source.pdf"
     with fitz.open() as doc:
         page = doc.new_page()
-        page.insert_text((72, 80), "Screening", fontsize=20)
+        page.insert_text((72, 80), heading, fontsize=20)
         page.insert_text((72, 140), text, fontsize=12)
         doc.save(path)
     return path
@@ -100,6 +100,30 @@ def test_real_structure_columns_labels_table_and_cross_page(tmp_path):
     assert "Beoordelen" in " ".join(r["clean_text"] for r in old)
 
 
+def test_real_line_numbers_cross_page_text_and_unequal_page_sizes(tmp_path):
+    source = tmp_path / "numbered.pdf"
+    expected = [(1, "Bespreek de mogelijkheden."), (1, "Adviseer de cliënt bij"),
+                (2, "toenemende klachten."), (2, "Bewaar deze aanbeveling.")]
+    with fitz.open() as doc:
+        for page_no, height in [(1, 220), (2, 300)]:
+            page = doc.new_page(width=400, height=height)
+            page.insert_text((72, 55), "Aanbevelingen", fontsize=20)
+            for index, (_, text) in enumerate(p for p in expected if p[0] == page_no):
+                y = 105 + index * 25
+                page.insert_text((32, y), str((page_no - 1)*2 + index + 1), fontsize=10)
+                page.insert_text((72, y), text, fontsize=12)
+        doc.save(source)
+    rows = extract(source, document_id="numbered", source_id="src")
+    old = legacy(source, document_id="numbered", source_id="src")
+    for page_no, text in expected:
+        candidates = [r for r in rows if r["source_page"] == page_no and text in r["clean_text"]]
+        assert candidates, text
+        assert text in " ".join(r["clean_text"] for r in old)
+        for row in candidates:
+            passage = passage_from_pdf_freeze(source.read_bytes(), row["source_locator"]["locator_value"])
+            assert text in " ".join(passage.split())
+
+
 def chain(root, create_console):
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
     from src.operations_console_v1 import ConsoleError
@@ -153,7 +177,8 @@ def test_real_pdf_postgres_chain(tmp_path, workflow_postgres, monkeypatch):
 from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: E402, F401
 
 
-def test_real_pdf_postgres_successful_publication_and_restart(tmp_path, recovery_postgres, monkeypatch):
+@pytest.mark.parametrize("field_contract", ["v2", "v3"])
+def test_real_pdf_postgres_successful_publication_and_restart(tmp_path, recovery_postgres, monkeypatch, field_contract):
     """Actual models + native PostgreSQL + unchanged review/publication commands.
 
     The test source-store double avoids an Azure subscription; it does not prove
@@ -171,6 +196,8 @@ def test_real_pdf_postgres_successful_publication_and_restart(tmp_path, recovery
     from src.source_bound_fields_v2 import KEY, MODE
     from src.operations_console_v1 import ConsoleError, review_lane
     from src.review_disposition_v1 import definitive_review_disposition
+    from src.source_bound_fields_v3 import MODE as MODE_V3, VERSION as VERSION_V3
+    from tests.test_recommendation_context_v3 import response_for
     monkeypatch.setenv("METIS_PDF_EXTRACTOR", "docling")
     source_store = MemorySourceStore()
     def create():
@@ -185,14 +212,16 @@ def test_real_pdf_postgres_successful_publication_and_restart(tmp_path, recovery
             workflow_identity_store=identity, workflow_document_store=documents,
             workflow_review_store=reviews, workflow_remaining_store=remaining)
     console = create()
+    core, heading = ("Mobiliseer dagelijks", "Als de klachten toenemen") if field_contract == "v3" else (TEXT, "Screening")
     def post(url, headers, payload, timeout):
-        return {"output": [{"type": "message", "content": [{"type": "output_text", "text": json.dumps(proposal(payload))}]}]}
+        proposed = response_for(payload, core, heading=heading) if field_contract == "v3" else proposal(payload)
+        return {"output": [{"type": "message", "content": [{"type": "output_text", "text": json.dumps(proposed)}]}]}
     bind_pre_review_semantic_processing(console, environ={"METIS_LLM_API_KEY": "test",
-        "METIS_LLM_MODEL": "controlled", "METIS_PASSAGE_FORMATION_MODE": MODE}, post_json=post)
+        "METIS_LLM_MODEL": "controlled", "METIS_PASSAGE_FORMATION_MODE": MODE_V3 if field_contract == "v3" else MODE}, post_json=post)
     accounts = {name: console.create_account(username=name, password="test-secret-long", roles=roles)
                 for name, roles in [("author", ("researcher",)), ("first", ("reviewer",)),
                                     ("second", ("reviewer",)), ("publisher", ("publisher",))]}
-    source = pdf(tmp_path)
+    source = pdf(tmp_path, text=core, heading=heading)
     receipt = console.ingest(actor_id=accounts["author"]["account_id"], filename="source.pdf",
         data=source.read_bytes(), content_type="application/pdf", ingest_kind="new", title="Screening",
         version="1.0", date="2026-10-03", live_url="", class_="richtlijn", family="test",
@@ -200,13 +229,20 @@ def test_real_pdf_postgres_successful_publication_and_restart(tmp_path, recovery
     sid = receipt["snapshot_id"]
     assert console.processing_status(sid)["state"] == "succeeded"
     target = next(o for o in console.snapshot_objects(sid) if KEY in o.get("metadata", {}))
+    if field_contract == "v3":
+        fields = target["metadata"][KEY]
+        assert fields["version"] == VERSION_V3
+        assert fields["values"]["scope_span"] == heading
+        assert "actor_span" not in fields["values"], "Unstated actor must not be fabricated"
+    for fragment in target["provenance"]["source_fragments"]:
+        assert core in passage_from_pdf_freeze(source.read_bytes(), fragment["source_locator"]["locator_value"])
     blocked = console.publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=sid)
     assert blocked["status"] == "BLOCKED" and not blocked["cutover"]
     assert console.canonical_publication_store.release_for_snapshot(sid) is None
     assert console.open_source_passage(snapshot_id=sid, object_id=target["object_id"])
     console.review_object(actor_id=accounts["first"]["account_id"], snapshot_id=sid,
         object_id=target["object_id"], decision="approve", confirmed_object_type="recommendation",
-        recommendation_direction="against", recommendation_strength_level="not_stated")
+        recommendation_direction="for" if field_contract == "v3" else "against", recommendation_strength_level="not_stated")
     from src.four_eyes_v1 import requires_four_eyes
     reviewed = next(o for o in console.snapshot_objects(sid) if o["object_id"] == target["object_id"])
     if requires_four_eyes(reviewed):

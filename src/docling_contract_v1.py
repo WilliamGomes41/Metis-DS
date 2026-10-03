@@ -86,16 +86,25 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
     record.pop("metrics", None)
     record["offsets"] = "unicode_codepoints_in_binding_text_field"
     record["raw_text_definition"] = "Docling text; not a verbatim digital-layer claim"
-    record["coordinate_mapping"] = "top_left_points_intersect_original_page"
+    record["coordinate_mapping"] = "docling_2_132_merged_first_page_origin_to_top_left_intersect_page"
     record["selected_pages"] = sorted(selected)
     extraction_id = stable_hash(record)
     out, bindings, exclusions, stack = [], [], [], []
 
-    def emit(text: str, prov: dict, ref: str, *, heading=None, cell=None, text_field="text"):
+    def emit(text: str, prov: dict, ref: str, *, heading=None, cell=None, text_field="text", origin_height=None):
         page = prov["page_no"]
         if type(page) is not int or str(page) not in page_data:
             raise DoclingError("docling_page_invalid")
-        box = top_left_box(prov["bbox"], page_data[str(page)]["size"], intersect_page=True)
+        geometry = prov["bbox"]
+        if origin_height is not None:
+            # Pinned SDK 2.132.0 ReadingOrderModel._merge_elements serializes
+            # ALL merged bboxes with the first element's page height. Translate
+            # that declared origin; do not guess a new box or alter SDK output.
+            if geometry.get("coord_origin") != "BOTTOMLEFT":
+                raise DoclingError("docling_geometry_invalid")
+            geometry = {**geometry, "t": origin_height - geometry["t"],
+                        "b": origin_height - geometry["b"], "coord_origin": "TOPLEFT"}
+        box = top_left_box(geometry, page_data[str(page)]["size"], intersect_page=True)
         if page not in selected or not text.strip():
             return
         sequence = len(out) + 1
@@ -115,6 +124,7 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
                          "item_ref": ref, "provenance": deepcopy(prov), "table_cell": cell,
                          "charspan_text_field": text_field,
                          "text_origin": origin, "geometry_precision": "item_bbox",
+                         "docling_origin_height": origin_height,
                          "geometry_mapping": "intersect_original_page"})
 
     for ref in ordered:
@@ -169,7 +179,14 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
             if type(start) is not int or type(end) is not int or not 0 <= start < end <= len(text):
                 raise DoclingError("docling_charspan_invalid")
             ranges.append((start, end))
-            emit(text[start:end], prov, ref, heading=heading, text_field=text_field)
+            origin_height = None
+            first_page = provenance[0]["page_no"]
+            if prov["page_no"] != first_page:
+                if type(first_page) is not int or str(first_page) not in page_data:
+                    raise DoclingError("docling_page_invalid")
+                origin_height = page_data[str(first_page)]["size"]["height"]
+            emit(text[start:end], prov, ref, heading=heading, text_field=text_field,
+                 origin_height=origin_height)
         # Docling merged paragraphs may have a separator between page spans.
         covered = set(i for lo, hi in ranges for i in range(lo, hi))
         if any(not ch.isspace() and i not in covered for i, ch in enumerate(text)):
