@@ -7,7 +7,7 @@ from typing import Any
 import fitz
 from src.integrity_kernel import stable_hash, schema_errors
 
-PARSER_VERSION='pdf-fragments-v2.3.1'
+PARSER_VERSION='pdf-fragments-v2.3.2'
 _HEADING_SIZE_TOLERANCE=0.5
 _OUTLINE_HEADING_RE=re.compile(r'^\s*(?P<number>\d+(?:\.\d+)*)(?:[.)])?\s+\S')
 _TOC_HEADINGS=frozenset({'inhoud','inhoudsopgave'})
@@ -94,16 +94,27 @@ def extract(pdf:Path, *, document_id:str, source_id:str, pages:list[int]|None=No
             for line in block.get('lines',[]):
                 for span in line.get('spans',[]):
                     value=span.get('text','')
-                    start=offset-leading; end=start+len(value)
-                    if start>=0 and end<=len(raw):
-                        span_rows.append({'text':value,'raw_start':start,'raw_end':end,'bbox':list(span['bbox'])})
+                    start=max(0,offset-leading); end=min(len(raw),offset-leading+len(value))
+                    if start<end:
+                        span_rows.append({'text':raw[start:end],'raw_start':start,'raw_end':end,'bbox':list(span['bbox'])})
                     offset+=len(value)
                 offset+=1
             x['_pdf_spans']=span_rows
             x['fragment_hash']=stable_hash(fragment_payload(x)); out.append(x)
-    from src.source_layout_v1 import mark_pdf_layout
-    mark_pdf_layout(out)
+    _apply_pdf_layout(out)
     return out
+
+def _apply_pdf_layout(fragments: list[dict]) -> None:
+    from src.source_layout_v1 import mark_pdf_layout
+    mark_pdf_layout(fragments)
+    # Propagate the verified reading form of headings into section navigation.
+    # Raw prose stays intact, and hashes describe the complete new extraction.
+    heading_views={x['heading']:x['source_text_view']['text'] for x in fragments
+                   if x.get('heading') and x.get('source_text_view')}
+    for x in fragments:
+        x['heading']=heading_views.get(x['heading'],x['heading'])
+        x['section_path']=[heading_views.get(part,part) for part in x['section_path']]
+        x['fragment_hash']=stable_hash(fragment_payload(x))
 
 def main()->int:
     ap=argparse.ArgumentParser(); ap.add_argument('pdf',type=Path); ap.add_argument('--document-id',required=True); ap.add_argument('--source-id',required=True); ap.add_argument('--pages'); ap.add_argument('--schema',type=Path,required=True); ap.add_argument('--out',type=Path,required=True); ap.add_argument('--report',type=Path,required=True)
