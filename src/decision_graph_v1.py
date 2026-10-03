@@ -312,17 +312,25 @@ def read_active_graph(store: Any, source_store: Any, snapshot_id: str) -> dict[s
     if actual != expected:
         raise ValueError("decision_graph_release_incomplete")
     payload = deepcopy(release["decision_graph_release"])
-    from src.integrity_kernel import compute_canonical_object_hash
+    from src.integrity_kernel import compute_canonical_object_hash, validate_hashes
+    # Context labels are immutable graph evidence, not independently approved
+    # knowledge objects. Verify the exact graph review before excluding them.
+    if any(validate_hashes(o) for o in payload["objects"]) or payload["graph_hash"] != graph_hash(payload["graph"]) or publication_issues(
+        {"decision_graph": payload["graph"], "decision_graph_evidence": payload["evidence"],
+         "review_policy": payload["policy"], "decision_graph_reviews": payload["reviews"]},
+        payload["objects"],
+    ):
+        raise ValueError("decision_graph_release_invalid")
+    from src.decision_unit_construction_v1 import label_usage
     payload_objects = {(o["object_id"], o["object_version"], compute_canonical_object_hash(o))
-                       for o in payload["objects"] if o.get("object_type") != "document"}
+                       for o in payload["objects"] if o.get("object_type") != "document"
+                       and not label_usage(o, payload["graph"])}
     active_objects = {(r["knowledge_object"]["object_id"], r["knowledge_object"]["object_version"],
                        compute_canonical_object_hash(r["knowledge_object"])) for r in active}
     if payload["source_sha256"] != release["source_sha256"] or payload_objects != active_objects:
         raise ValueError("decision_graph_release_mismatch")
     if source_store is None or sha256_bytes(source_store.load_verified(release["source_locator"])) != payload["source_sha256"]:
         raise ValueError("decision_graph_source_unavailable")
-    if payload["graph_hash"] != graph_hash(payload["graph"]) or graph_issues(payload["graph"], payload["objects"], payload["evidence"]):
-        raise ValueError("decision_graph_release_invalid")
     return {"release_id": release["release_id"], "release_version": release["release_version"],
             "snapshot_id": snapshot_id, **payload}
 
