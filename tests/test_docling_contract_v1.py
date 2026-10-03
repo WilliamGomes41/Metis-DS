@@ -154,3 +154,17 @@ def test_missing_true_pipeline_persists_failed_attempt_and_duplicate_restarts_sa
     assert len(restarted._envelope(sid)["processing_attempts"]) == 1
     assert restarted.processing_status(sid)["retry_allowed"]
     assert restarted._verified_source_bytes(restarted._envelope(sid))[1] == data
+
+
+def test_official_list_marker_full_original_span_is_preserved_not_clamped():
+    payload = result()
+    item = payload["document"]["texts"][0]
+    item.update(label="list_item", text="één advies", orig="· één advies", marker="·")
+    item["prov"][0]["charspan"] = [0, len(item["orig"])]
+    fragments = rows(payload)
+    assert fragments[0]["raw_text"] == "· één advies"
+    assert fragments.extraction_record["bindings"][0]["charspan_text_field"] == "orig"
+    assert fragments.extraction_record["document"]["texts"][0]["text"] == "één advies"
+    item["orig"] = "x één advies"
+    with pytest.raises(DoclingError, match="charspan_invalid"):
+        rows(payload)

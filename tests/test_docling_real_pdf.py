@@ -121,7 +121,9 @@ def chain(root, create_console):
                           object_id=target["object_id"], decision="reject", comment="Controlled review evidence")
     restarted = create_console()
     assert stored_fragments(restarted._envelope(sid)) == before
-    assert restarted.object_review_bindings(sid)
+    restored_target = next(o for o in restarted.snapshot_objects(sid) if o["object_id"] == target["object_id"])
+    assert restored_target["governance"]["validation_status"] == "rejected"
+    assert not restarted.object_review_bindings(sid), "Rejection must not grant publication authorization"
     # Capture/extraction/review do not bypass immutable storage/publication gates.
     assert restarted._envelope(sid)["publication_eligibility"] == "blocked_pending_immutable_storage"
     return sid

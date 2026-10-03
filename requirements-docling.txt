@@ -2,3 +2,7 @@
 # Official SDK, PDF backend and actual local layout/TableFormer models, no VLM/RAG.
 docling-slim[format-pdf,models-local,convert-core]==2.132.0
 docling-core==2.99.0
+# TableFormer imports cv2; models-local does not declare it in this SDK.
+opencv-python-headless==5.0.0.93
+docling-parse==7.22.1
+docling-ibm-models==4.0.3

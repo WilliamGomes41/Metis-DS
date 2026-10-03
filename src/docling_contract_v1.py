@@ -1,6 +1,6 @@
 """Translate official Docling JSON into Metis source fragments; no extraction.
 
-Offsets index Python Unicode characters in Docling's derived text, not PDF
+Offsets index Python Unicode characters in the recorded Docling text field, not PDF
 bytes or the digital text layer. Original Docling text, tables, relationships,
 OCR observations and excluded furniture remain in the immutable result record.
 """
@@ -70,13 +70,13 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
         raise DoclingError("docling_inventory_incomplete")
     record = deepcopy(result)
     record.pop("metrics", None)
-    record["offsets"] = "unicode_codepoints_in_docling_derived_text"
+    record["offsets"] = "unicode_codepoints_in_binding_text_field"
     record["raw_text_definition"] = "Docling text; not a verbatim digital-layer claim"
     record["selected_pages"] = sorted(selected)
     extraction_id = stable_hash(record)
     out, bindings, exclusions, stack = [], [], [], []
 
-    def emit(text: str, prov: dict, ref: str, *, heading=None, cell=None):
+    def emit(text: str, prov: dict, ref: str, *, heading=None, cell=None, text_field="text"):
         page = prov["page_no"]
         if type(page) is not int or str(page) not in page_data:
             raise DoclingError("docling_page_invalid")
@@ -98,6 +98,7 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
                   if observations and all(v is False for v in observations) else "unknown")
         bindings.append({"fragment_id": row["fragment_id"], "fragment_hash": row["fragment_hash"],
                          "item_ref": ref, "provenance": deepcopy(prov), "table_cell": cell,
+                         "charspan_text_field": text_field,
                          "text_origin": origin, "geometry_precision": "item_bbox"})
 
     for ref in ordered:
@@ -134,13 +135,25 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
             if type(level) is not int or not 1 <= level <= 20:
                 raise DoclingError("docling_heading_level_invalid")
             stack = [x for x in stack if x[0] < level] + [(level, heading)]
+        text_field = "text"
+        # Official ListItemMarkerProcessor strips the declared marker from text
+        # without changing the full-original provenance span. Retain orig only
+        # when that exact transformation is proven; do not clamp/guess offsets.
+        original = item.get("orig")
+        marker = item.get("marker")
+        if (label == "list_item" and isinstance(original, str) and text
+                and isinstance(marker, str) and marker and len(provenance) == 1
+                and provenance[0].get("charspan") == [0, len(original)]
+                and len(original) > len(text) and original.endswith(text)
+                and original[:-len(text)].strip() == marker):
+            text, text_field = original, "orig"
         ranges = []
         for prov in provenance:
             start, end = prov["charspan"]
             if type(start) is not int or type(end) is not int or not 0 <= start < end <= len(text):
                 raise DoclingError("docling_charspan_invalid")
             ranges.append((start, end))
-            emit(text[start:end], prov, ref, heading=heading)
+            emit(text[start:end], prov, ref, heading=heading, text_field=text_field)
         # Docling merged paragraphs may have a separator between page spans.
         covered = set(i for lo, hi in ranges for i in range(lo, hi))
         if any(not ch.isspace() and i not in covered for i, ch in enumerate(text)):

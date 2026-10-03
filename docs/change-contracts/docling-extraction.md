@@ -67,3 +67,13 @@ Available user-relevant sources found locally: Smetten (46 pages), Mantelzorg de
 Reupload after accepted cutover: keep existing test records intact; upload each original as explicit new source/work, verify extraction finished and original highlighted passages, review the newly formed objects and context, then satisfy existing publication conditions. Never copy old reviews or infer object continuity from similar text. Any desired deletion of old test records is a separate user-authorized cleanup, not performed here.
 
 Rollback: disable new PDF preparation or use the explicit legacy staged route for NEW work in a compatible reader release. Keep accepted Docling records/objects/reviews unchanged; their readers resolve stored evidence without the model runtime. Do not fall back during failed conversion, or delete/reset data. Never automatically deploy an old binary that re-extracts Docling source IDs. No production operations were performed.
+
+Acceptance follow-up (2026-10-03, before adapter correction): the actual SDK 2.132.0
+list-marker processor changes `ListItem.text` but leaves a full-item `charspan`
+indexing `orig`. Mantelzorg has nine such items; treating all spans as indexes in
+`text` was an incorrect adapter assumption. The translation will use `orig` only
+for a single full-original span where the only removed prefix is the SDK-declared
+list marker and whitespace. Preserve original geometry/span and record the text
+field used per binding; never clamp ranges or infer alignment for arbitrary edits.
+All other invalid spans continue to fail closed. This is a source-coordinate
+translation, not a new extractor or a relaxation of source evidence requirements.
