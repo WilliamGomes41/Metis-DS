@@ -108,6 +108,8 @@ def review_stage(
         return None
     obj_type = authoritative_review_type(obj)
     gate = str(admission_of(obj).get("gate_result") or "")
+    if gate == GATE_BLOCKED and (review_path != "boom" or (obj.get("metadata") or {}).get("decision_unit_construction")):
+        return None
     confirmed = str(obj.get("confirmed_object_type") or "").strip()
     # Headings are structural and have no Admission. A human-confirmed type
     # without a gate is also reviewable: the reviewer already classified it.
@@ -420,10 +422,9 @@ def repair_duty_count(
     *,
     review_path: str,
 ) -> int:
-    if review_path == "boom":
-        return 0
     return sum(
         str(obj.get("object_type") or "") != "document"
         and admission_of(obj).get("gate_result") == GATE_BLOCKED
+        and (review_path != "boom" or bool((obj.get("metadata") or {}).get("decision_unit_construction")))
         for obj in objects
     )

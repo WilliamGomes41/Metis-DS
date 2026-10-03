@@ -15,12 +15,16 @@ from src.integrity_kernel import stable_hash
 CONTRACT = "source-decision-graph-v1"
 
 
-def pdf_fragments(path: Path, *, document_id: str, source_id: str) -> list[dict[str, Any]]:
+def pdf_fragments(path: Path, *, document_id: str, source_id: str, construct_units: bool = True) -> list[dict[str, Any]]:
     from src.extract_pdf_v2 import extract
     fragments = extract(path, document_id=document_id, source_id=source_id)
     for row in fragments:
         row["boom_id"] = row["fragment_id"]
         row["boom_kind"] = "node"
+    if construct_units:
+        from src.decision_unit_construction_v1 import add_layout, source_lines
+        add_layout(path, fragments)
+        fragments = source_lines(fragments)
     from src.decision_bundles_v1 import split_bundles
     return split_bundles(fragments)
 
@@ -68,8 +72,10 @@ def prepare_graph(path: Path, data: bytes, kind: str, fragments: list[dict[str, 
         obj.setdefault("metadata", {})["decision_graph_contract"] = CONTRACT
         stamp_canonical_hashes(obj)
         if obj["object_type"] != "document":
+            from src.decision_unit_construction_v1 import KEY, branch_label
             graph["nodes"].append({"object_id": obj["object_id"], "object_version": obj["object_version"],
-                                   "mode": "unresolved", "evidence_ids": [r["raw_object_id"] for r in obj["provenance"]["source_fragments"]]})
+                                   "mode": "context" if (obj.get("metadata") or {}).get(KEY) and branch_label(obj["content"]["clean_text"]) else "unresolved",
+                                   "evidence_ids": [r["raw_object_id"] for r in obj["provenance"]["source_fragments"]]})
     if kind == "boom":
         payload = json.loads(data)
         by_source_id = {str(f["boom_id"]): f'{f["document_id"]}-{f["boom_id"]}' for f in fragments}
@@ -91,9 +97,20 @@ def prepare_graph(path: Path, data: bytes, kind: str, fragments: list[dict[str, 
     if kind == "pdf":
         from src.pdf_route_proposals_v1 import propose_routes
         proposals = propose_routes(fragments, objects, inventory)
-        graph["edges"] = [{k: v for k, v in proposal.items() if k != "uncertainties"} for proposal in proposals]
+        from src.decision_unit_construction_v1 import KEY
+        constructed = any((o.get("metadata") or {}).get(KEY) for o in objects)
+        graph["edges"] = [{k: v for k, v in proposal.items() if k != "uncertainties"} for proposal in proposals
+                          if not constructed or set(proposal["uncertainties"]) <= {"human_route_confirmation_required"}]
+    from src.decision_unit_construction_v1 import apply_gate
+    from src.passage_register_v1 import apply_passage_register
+    apply_gate(objects, source_hash=source_hash, graph=graph, inventory=inventory)
+    objects[:] = apply_passage_register(objects)
+    for obj in objects:
+        stamp_canonical_hashes(obj)
+    from src.decision_unit_construction_v1 import KEY, CONTRACT as UNIT_CONTRACT
     return {"decision_graph": graph, "decision_graph_evidence": inventory, "decision_graph_reviews": [],
-            "decision_graph_proposals": proposals}
+            "decision_graph_proposals": proposals,
+            **({"decision_unit_contract": UNIT_CONTRACT} if any((o.get("metadata") or {}).get(KEY) for o in objects) else {})}
 
 
 def graph_hash(graph: dict[str, Any]) -> str:
@@ -159,6 +176,11 @@ def graph_issues(graph: Any, objects: list[dict[str, Any]], inventory: dict[str,
         if not isinstance(ids, list) or not ids or any(not isinstance(i, str) or i not in evidence or i not in source_ids for i in ids):
             issues.append("decision_graph_node_evidence_missing")
         nodes[oid] = n
+        from src.decision_unit_construction_v1 import KEY, unit_issues
+        if (current[oid].get("metadata") or {}).get(KEY):
+            construction_issues = unit_issues(current[oid])
+            issues.extend(code for code in construction_issues if n["mode"] != "context"
+                          or code not in {"decision_branch_label_not_node", "decision_unit_incomplete"})
     if set(nodes) != set(current):
         issues.append("decision_graph_coverage_incomplete")
     outgoing = {oid: [] for oid in nodes}
@@ -240,7 +262,7 @@ def verify_source_evidence(console: Any, envelope: dict[str, Any]) -> None:
     from src.beslisboom_path_v1 import extract_boom_fragments
     path, data = console._verified_source_bytes(envelope)
     args = {"document_id": envelope["document_id"], "source_id": envelope["source_id"]}
-    fragments = pdf_fragments(path, **args) if envelope["content_kind"] == "pdf" else extract_boom_fragments(data, **args)
+    fragments = pdf_fragments(path, **args, construct_units=bool(envelope.get("decision_unit_contract"))) if envelope["content_kind"] == "pdf" else extract_boom_fragments(data, **args)
     from src.decision_bundles_v1 import split_bundles
     fragments = split_bundles(fragments)
     inventory = prepare_graph(path, data, envelope["content_kind"], fragments, [], envelope["sha256"])["decision_graph_evidence"]

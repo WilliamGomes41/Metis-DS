@@ -193,8 +193,8 @@ def admission_of(obj: dict[str, Any]) -> dict[str, Any]:
 
 
 def is_admission_blocked(obj: dict[str, Any], review_path: str | None = None) -> bool:
-    if review_path == "boom" or is_boom_object(obj):
-        return False
+    if (review_path == "boom" or is_boom_object(obj)) and not (obj.get("metadata") or {}).get("decision_unit_construction"):
+        return False  # Retained snapshots use their original admission contract.
     return admission_of(obj).get("gate_result") == GATE_BLOCKED
 
 
@@ -839,7 +839,8 @@ def apply_admission_gate(
     source_hash: str,
 ) -> list[dict[str, Any]]:
     if review_path_for_klasse(klasse) == "boom":
-        return objects
+        from src.decision_unit_construction_v1 import apply_gate
+        return apply_gate(objects, source_hash=source_hash)
     fragments_by_id = {
         str(fragment.get("fragment_id") or ""): fragment
         for fragment in (fragments or [])

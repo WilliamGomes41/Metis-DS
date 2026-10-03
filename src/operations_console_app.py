@@ -2843,7 +2843,7 @@ def _render_review_card(
     disabled = "" if passage_ok else " disabled"
     gate = str(admission_of(obj).get("gate_result") or "")
     admission_notice = "Beoordeel deze passage aan de hand van de oorspronkelijke bron."
-    if review_path != "boom" and gate != "allowed" and authoritative_review_type(obj) != "heading":
+    if is_admission_blocked(obj, review_path=review_path) or (review_path != "boom" and gate != "allowed" and authoritative_review_type(obj) != "heading"):
         admission_notice = (
             "Deze passage is technisch geblokkeerd. Bekijk de bron en kies een brongebonden correctie of gemotiveerde afhandeling; inhoudelijk goedkeuren is nog niet mogelijk."
             if gate == "blocked" else
@@ -2859,6 +2859,13 @@ def _render_review_card(
         'De herstelde passage wordt een nieuw voorstel dat opnieuw beoordeeld moet worden.</aside>'
         if is_admission_blocked(obj, review_path=review_path) else ""
     )
+    if review_path == "boom" and "decision_unit_graph_unresolved" in admission_of(obj).get("reason_codes", []):
+        repair_guidance = (
+            '<aside class="banner warn"><b>Eerst de beslisstructuur controleren.</b> '
+            'Controleer vragen, antwoordlabels en verbindingen tegen de bron. '
+            f'<a href="/review/decision-graph?document={_esc(snapshot_id)}">Open beslisroutes</a>. '
+            'Onvolledige bronpassages blijven daarna afzonderlijk herstelwerk.</aside>'
+        )
     four_eyes_html = ""
     if requires_four_eyes(obj, confirmed_type=confirmed or None):
         four_eyes_html = (

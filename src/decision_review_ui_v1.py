@@ -108,11 +108,17 @@ def install_decision_review_routes(app, console, require, page):
         fields = []
         for o in rows:
             oid = o["object_id"]
+            from src.decision_unit_construction_v1 import KEY
+            construction = (o.get("metadata") or {}).get(KEY, {})
+            construction_note = ('<small>Antwoordlabel: verbind dit met een tak; beoordeel het niet als vraag.</small>'
+                                 if construction.get("role") == "branch_label" else
+                                 '<small>Controleer de samenhang van deze bronfragmenten vóór inhoudelijke beoordeling.</small>'
+                                 if construction.get("reason_codes") else '')
             bundle = (o.get("metadata") or {}).get("result_bundle")
             bundle_note = ('<small>Onderdeel van een resultaatbundel: kies broncontext; de route hoort bij de bundel.</small>'
                            if bundle and bundle["role"] == "member" else '')
             fields.append(f'<p>{esc(o["content"]["clean_text"])}<input type="hidden" name="node_id" value="{esc(oid)}">'
-                          f'{bundle_note}'
+                          f'{bundle_note}{construction_note}'
                           f'<select name="node_mode">{options(modes, nodes.get(oid, {}).get("mode", "unresolved"))}</select>'
                           f'<label><input type="checkbox" name="entrypoint" value="{esc(oid)}" {"checked" if oid in graph["entrypoints"] else ""}>Beginpunt</label></p>')
         edges = []
@@ -132,7 +138,8 @@ def install_decision_review_routes(app, console, require, page):
             co_review = "<h2>Passages mede-beoordelen</h2>" + "".join(
                 f'<form method="post" action="/review/decision-passage">{common}'
                 f'<p>{esc(o["content"]["clean_text"])}</p><input type="hidden" name="object_id" value="{esc(o["object_id"])}">'
-                '<button>Deze actuele passage bevestigen</button></form>' for o in rows)
+                '<button>Deze actuele passage bevestigen</button></form>' for o in rows
+                if not (o.get("metadata") or {}).get("decision_unit_construction", {}).get("role") == "branch_label")
         problems = publication_issues(env, console.snapshot_objects(document))
         proposals = env.get("decision_graph_proposals", [])
         proposal_note = (f'<p>{len(proposals)} geometrische verbindingsvoorstellen. Richting, antwoordlabel en eindpunten '

@@ -105,7 +105,8 @@ def review_followup_queues(
             continue
         task = (
             "repair"
-            if review_path != "boom" and admission_of(obj).get("gate_result") == "blocked"
+            if admission_of(obj).get("gate_result") == "blocked"
+            and (review_path != "boom" or (obj.get("metadata") or {}).get("decision_unit_construction"))
             else "disposition"
         )
         queues[task].append(obj)
