@@ -71,6 +71,7 @@ jobs:
           name: docling-real-acceptance
           path: |
             output/docling-real.xml
+            output/docling-synthetic/
             ${{ runner.temp }}/docling-models/metis-model-manifest.json
             ${{ runner.temp }}/docling-models/python-dependencies.txt
           if-no-files-found: error

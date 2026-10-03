@@ -76,6 +76,15 @@ def test_real_structure_columns_labels_table_and_cross_page(tmp_path):
             page.insert_text((72, 800), f"Documentvoet {page_no + 1}", fontsize=8)
         doc.save(source)
     rows = extract(source, document_id="structure", source_id="src")
+    # Synthetic content only: retain the actual model output before assertions
+    # so runner-specific layout errors can be traced without user documents.
+    evidence_dir = Path("output/docling-synthetic")
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    (evidence_dir / "structure.pdf").write_bytes(source.read_bytes())
+    (evidence_dir / "structure-extraction.json").write_text(
+        json.dumps(rows.extraction_record, ensure_ascii=False, indent=2))
+    (evidence_dir / "structure-fragments.json").write_text(
+        json.dumps(list(rows), ensure_ascii=False, indent=2))
     texts = " ".join(r["clean_text"] for r in rows)
     for expected in ["DOEN", "OVERWEEG", "Linkerkolom", "Rechterkolom", "Ouderen", "Beoordelen"]:
         assert expected in texts
