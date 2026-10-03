@@ -207,7 +207,8 @@ def test_concurrent_initial_command_reserves_once_across_runtime_locks(workflow_
             commit=console._commit_prepared_store
             def synchronize(*, _commit=commit, **kwargs):
                 env=next(iter((kwargs.get('envelopes') or {}).values()),{})
-                if env.get('processing_blocker')=='pre_review_llm_processing_in_progress':barrier.wait(5)
+                # Synchronize only the initial create/CAS, not envelope-only evidence checkpoints.
+                if env.get('processing_blocker')=='pre_review_llm_processing_in_progress' and kwargs.get('objects') is not None:barrier.wait(5)
                 return _commit(**kwargs)
             monkeypatch.setattr(console,'_commit_prepared_store',synchronize)
         def execute(console):

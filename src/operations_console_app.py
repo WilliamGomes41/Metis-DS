@@ -224,6 +224,10 @@ BLOCKER_LABELS = {
     "prepublication_projection_failed": "Metis kon de publicatie niet voorbereiden. Controleer de publicatiestatus en meld dit bij de beheerder voordat je opnieuw probeert.",
 }
 ERROR_COPY = {
+    "processing_diagnostic_write_failed": "Het foutbewijs kon niet duurzaam worden opgeslagen. Laat de beheerder de opslag controleren voordat je opnieuw probeert.",
+    "processing_recovery_reason_required": "Geef een reden op voor deze eenmalige herstelpoging.",
+    "processing_recovery_not_required": "Eenmalig herstel is alleen beschikbaar voor een geblokkeerd document na het maximumaantal pogingen.",
+    "processing_recovery_already_authorized": "Voor dit document is al een eenmalige herstelpoging toegestaan of gebruikt.",
     "pre_review_llm_proposal_rejected": "De voorcontrole heeft het modelvoorstel afgewezen omdat het niet aan de brongebonden controles voldoet. Er zijn geen nieuwe passages voor Review vrijgegeven. Meld de technische informatie hieronder bij de beheerder.",
     "pre_review_llm_provider_unavailable": "De modeldienst kon de voorcontrole niet afronden. Meld de technische informatie bij de beheerder om de verbindingsfout te onderzoeken.",
     "pre_review_llm_api_key_required": "De modeldienst is niet geconfigureerd. Laat de beheerder de configuratie van de voorcontrole controleren.",
@@ -4457,6 +4461,16 @@ def create_console_app(
                         and account["account_id"] in (state._envelope(child["snapshot_id"]).get("named_reviewers") or [])
                     ):
                         pre_review_notice += f'<p><a href="/review/processing-diagnostics?document={_esc(child["snapshot_id"])}">Technische diagnose bekijken</a></p>'
+                    latest = (state._envelope(child["snapshot_id"]).get("processing_attempts") or [{}])[-1]
+                    finding = (latest.get("diagnostic") or {}).get("finding")
+                    if finding:
+                        pre_review_notice += '<p>Validatiereden: ' + _esc(finding.get("reason_code", "")) + '; kandidaat: ' + _esc(str(finding.get("candidate_index", "onbekend"))) + '</p>'
+                    if ("publisher" in account["roles"]
+                            and (account["account_id"] in state._envelope(child["snapshot_id"]).get("named_reviewers", [])
+                                 or account["account_id"] == state._envelope(child["snapshot_id"]).get("uploader_account_id"))
+                            and processing.get("reason_code") == "processing_attempt_limit_reached"
+                            and not state._envelope(child["snapshot_id"]).get("processing_recovery")):
+                        actions.append(f'<form method="post" action="/tree/processing-recovery"><input type="hidden" name="snapshot_id" value="{_esc(child["snapshot_id"])}"><label>Reden voor eenmalig herstel<input name="reason" required maxlength="1000"></label><button type="submit">Een herstelpoging autoriseren</button></form>')
                     if processing["retry_allowed"]:
                         actions.append(
                             f"""
@@ -4533,6 +4547,26 @@ def create_console_app(
             """,
             title="Documenten — V&amp;VN Data Services",
         )
+
+    @app.post("/tree/processing-recovery")
+    def tree_processing_recovery(request: Request, snapshot_id: str = Form(...), reason: str = Form(...)):
+        account = _require(request)
+        state.authorize_processing_recovery(actor_id=account["account_id"], snapshot_id=snapshot_id, reason=reason)
+        return RedirectResponse("/tree", status_code=303)
+
+    @app.get("/review/processing-diagnostic-replay", response_class=JSONResponse)
+    def review_processing_diagnostic_replay(request: Request, document: str, attempt_id: str):
+        account = _require(request)
+        if "reviewer" not in set(account.get("roles") or []):
+            raise ConsoleError("reviewer_role_required")
+        envelope = state._envelope(document)
+        if account["account_id"] not in (envelope.get("named_reviewers") or []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        attempt = next((a for a in envelope.get("processing_attempts", []) if a["attempt_id"] == attempt_id), None)
+        if attempt is None:
+            raise ConsoleError("processing_attempt_not_active")
+        from src.attempt_diagnostics_v1 import replay_diagnostic
+        return JSONResponse(replay_diagnostic(attempt), headers={"Cache-Control": "no-store"})
 
     @app.post("/tree/reprocess")
     def tree_reprocess(
@@ -4725,6 +4759,7 @@ def create_console_app(
             "version": str(envelope.get("version") or ""),
             "objects_revision": state.objects_revision(snapshot_id),
             "processing_attempts": envelope.get("processing_attempts", []),
+            "processing_recovery": envelope.get("processing_recovery"),
             "processing": processing,
             "diagnostics": processing_diagnostics(objects),
             "pre_review": {
@@ -4737,7 +4772,7 @@ def create_console_app(
                 "note": "De kandidaattellers beschrijven alleen opgeslagen objecten. Nul kandidaten betekent niet dat de voorcontrole is geslaagd. Nieuwe herstelpogingen bewaren hun uitkomst, veilige foutcode en eventuele validatiereden en verwerkingsreferentie. Historische ontbrekende gegevens worden niet achteraf ingevuld.",
             },
         }
-        return JSONResponse(payload)
+        return JSONResponse(payload, headers={"Cache-Control": "no-store"})
 
 
     @app.get("/review/processing-diagnostics-detail", response_class=JSONResponse)

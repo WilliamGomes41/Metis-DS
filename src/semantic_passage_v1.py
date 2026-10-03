@@ -7,6 +7,8 @@ from immutable source blocks.
 from __future__ import annotations
 
 import hashlib
+from contextvars import ContextVar
+from functools import wraps
 from typing import Any, Iterable
 
 from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES, DEFAULT_OBJECT_TYPE, normalize_visible_prose
@@ -56,15 +58,33 @@ _RECOMMENDATION_KEYS = frozenset(
 )
 
 
+_FINDING = ContextVar("semantic_validation_finding", default=None)
+
+
+def _finding_scope(function):
+    @wraps(function)
+    def validate(*args, **kwargs):
+        token = _FINDING.set({})
+        try:
+            return function(*args, **kwargs)
+        finally:
+            _FINDING.reset(token)
+    return validate
+
+
 class SemanticPassageError(ValueError):
     """Fail-closed proposal validation error with one stable reason code."""
 
     def __init__(self, code: str) -> None:
         self.code = code
+        self.finding = dict(_FINDING.get() or {})
+        self.finding["reason_code"] = code
         super().__init__(code)
 
 
-def _fail(code: str) -> None:
+def _fail(code: str, **details) -> None:
+    if _FINDING.get() is not None:
+        _FINDING.get().update(details)
     raise SemanticPassageError(code)
 
 
@@ -199,6 +219,8 @@ def _resolve_evidence_ref(
     candidate_section_path: list[str],
     code_prefix: str,
 ) -> tuple[str, dict[str, Any]]:
+    if _FINDING.get() is not None:
+        _FINDING.get().update(field=code_prefix, evidence_ref=raw_ref)
     if not isinstance(raw_ref, dict):
         _fail(f"{code_prefix}_missing")
     _require_only_keys(raw_ref, _SPAN_KEYS, f"{code_prefix}_contains_untrusted_fields")
@@ -281,7 +303,7 @@ def _recommendation_semantics_from_proposal(
         _fail("recommendation_direction_evidence_outside_candidate")
     literal_direction = source_label_direction(direction_text)
     if literal_direction is not None and literal_direction != direction:
-        _fail("recommendation_direction_literal_mismatch")
+        _fail("recommendation_direction_literal_mismatch", field="direction", proposed_value=direction, observed_value=literal_direction, evidence_ref=raw_semantics.get("direction_evidence"), reconstructed_text=direction_text)
 
     status = str(raw_semantics.get("strength_status") or "").strip()
     if status not in {"explicit", "not_stated", "unmapped"}:
@@ -301,10 +323,10 @@ def _recommendation_semantics_from_proposal(
         )
         literal = source_literal_strength(strength_text)
         if literal != strength:
-            _fail("recommendation_strength_literal_mismatch")
+            _fail("recommendation_strength_literal_mismatch", field="strength", proposed_value=strength, observed_value=literal, evidence_ref=raw_semantics.get("strength_evidence"), reconstructed_text=strength_text)
         label_direction = source_label_direction(strength_text)
         if label_direction is not None and label_direction != direction:
-            _fail("recommendation_direction_literal_mismatch")
+            _fail("recommendation_direction_literal_mismatch", field="direction", proposed_value=direction, observed_value=label_direction, evidence_ref=raw_semantics.get("strength_evidence"), reconstructed_text=strength_text)
     elif status == "not_stated":
         if strength is not None or raw_semantics.get("strength_evidence") is not None:
             _fail("recommendation_strength_not_stated_invalid")
@@ -562,6 +584,7 @@ def semantic_coverage_units(
     return [unit for _position, unit in rows]
 
 
+@_finding_scope
 def semantic_units_from_proposal(
     fragments: Iterable[dict[str, Any]],
     *,
@@ -608,7 +631,8 @@ def semantic_units_from_proposal(
     units_with_position: list[tuple[tuple[int, int], dict[str, Any]]] = []
     selected_ranges_by_block: dict[str, list[tuple[int, int]]] = {}
 
-    for raw_object in raw_objects:
+    for candidate_index, raw_object in enumerate(raw_objects):
+        _FINDING.set({"candidate_index": candidate_index, "proposed_object": raw_object})
         if not isinstance(raw_object, dict):
             _fail("semantic_object_invalid")
         _require_only_keys(raw_object, _OBJECT_KEYS | ({"field_evidence", "context_evidence"} if field_contract_v2 else set()), "semantic_object_contains_untrusted_fields")
@@ -626,6 +650,7 @@ def semantic_units_from_proposal(
         selected: list[dict[str, Any]] = []
         seen_ranges: set[tuple[str, int, int]] = set()
         for raw_span in raw_spans:
+            _FINDING.get().update(source_span=raw_span)
             if not isinstance(raw_span, dict):
                 _fail("semantic_span_invalid")
             _require_only_keys(raw_span, _SPAN_KEYS, "semantic_span_contains_untrusted_fields")
@@ -637,7 +662,7 @@ def semantic_units_from_proposal(
                 allowed_candidate_block_ids is not None
                 and block_id not in allowed_candidate_block_ids
             ):
-                _fail("semantic_span_not_candidate_selectable")
+                _fail("semantic_span_not_candidate_selectable", candidate_selectable=False)
 
             start = raw_span.get("start")
             end = raw_span.get("end")
@@ -759,13 +784,13 @@ def semantic_units_from_proposal(
                 unit[KEY] = bind_fields(raw_object.get("field_evidence"), selected=selected,
                                        candidate_text=candidate_text, proposed_type=proposed_type)
             except ValueError as exc:
-                _fail(str(exc))
+                _fail(str(exc), **getattr(exc, "finding", {}))
         if field_contract_v2 and "context_evidence" in raw_object:
             from src.source_bound_fields_v2 import CONTEXT_KEY, bind_context
             try:
                 unit[CONTEXT_KEY] = bind_context(raw_object["context_evidence"], fragments=evidence_list)
             except ValueError as exc:
-                _fail(str(exc))
+                _fail(str(exc), **getattr(exc, "finding", {}))
         if field_contract_v2 or proposed_type != DEFAULT_OBJECT_TYPE:
             unit["proposed_object_type"] = proposed_type
         if semantics is not None:
