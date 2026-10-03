@@ -85,7 +85,7 @@ def test_real_structure_columns_labels_table_and_cross_page(tmp_path):
         page_rows = [r for r in rows if r["source_page"] == page_no]
         left = next(i for i, r in enumerate(page_rows) if "Linkerkolom" in r["clean_text"])
         right = next(i for i, r in enumerate(page_rows) if "Rechterkolom" in r["clean_text"])
-        assert left < right
+        assert left < right, [(r["clean_text"], r["bbox"]) for r in page_rows]
     # Compare concrete source text, not fragment counts. No quality-gain claim.
     old = legacy(source, document_id="structure", source_id="src")
     assert "Beoordelen" in " ".join(r["clean_text"] for r in old)
@@ -191,8 +191,9 @@ def test_real_pdf_postgres_successful_publication_and_restart(tmp_path, recovery
     sid = receipt["snapshot_id"]
     assert console.processing_status(sid)["state"] == "succeeded"
     target = next(o for o in console.snapshot_objects(sid) if KEY in o.get("metadata", {}))
-    with pytest.raises(ConsoleError):
-        console.publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=sid)
+    blocked = console.publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=sid)
+    assert blocked["status"] == "BLOCKED" and not blocked["cutover"]
+    assert console.canonical_publication_store.release_for_snapshot(sid) is None
     assert console.open_source_passage(snapshot_id=sid, object_id=target["object_id"])
     console.review_object(actor_id=accounts["first"]["account_id"], snapshot_id=sid,
         object_id=target["object_id"], decision="approve", confirmed_object_type="recommendation",
@@ -208,7 +209,8 @@ def test_real_pdf_postgres_successful_publication_and_restart(tmp_path, recovery
             object_id=obj["object_id"], decision="reject", suitability="ja", eindoordeel="afwijzen",
             comment="Fixture: no separate knowledge object for this source passage")
     before = stored_fragments(console._envelope(sid))
-    console.publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=sid)
+    published = console.publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=sid)
+    assert published.get("status") != "BLOCKED", published
     release = console.canonical_publication_store.release_for_snapshot(sid)
     assert release and any(o["object_id"] == target["object_id"] for o in release["objects"])
     restarted = create()
