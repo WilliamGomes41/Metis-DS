@@ -285,3 +285,83 @@ def test_real_converter_timeout_restart_retry_no_partial_activation(tmp_path, mo
     replay.retry_pre_review(actor_id=author["account_id"], snapshot_id=sid, command_id="real-retry")
     assert stored_fragments(replay._envelope(sid)) == before
     assert len(replay._envelope(sid)["processing_attempts"]) == 2
+
+
+def test_real_pdf_postgres_commit_rollback_and_concurrent_retry(tmp_path, workflow_postgres, monkeypatch):
+    """Real conversion before failed activation, then concurrent kernel retry.
+
+    Only the transaction fault and scheduling barrier are injected. The winning
+    execution runs actual Docling; the losing commands must never invoke it.
+    """
+    from threading import Event, Thread
+    from tests.test_review_batch_atomic_postgres import _console
+    from src.operations_console_v1 import ConsoleError
+    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.source_bound_fields_v2 import MODE
+    from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+    def create(root=tmp_path):
+        console = _console(root, workflow_postgres)
+        def post(url, headers, payload, timeout):
+            return {"output": [{"type": "message", "content": [{"type": "output_text", "text": json.dumps(proposal(payload))}]}]}
+        bind_pre_review_semantic_processing(console, environ={"METIS_LLM_API_KEY": "test",
+            "METIS_LLM_MODEL": "controlled", "METIS_PASSAGE_FORMATION_MODE": MODE}, post_json=post)
+        return console
+    monkeypatch.setenv("METIS_PDF_EXTRACTOR", "docling")
+    monkeypatch.setenv("METIS_DOCLING_TIMEOUT_SECONDS", "0.01")
+    console = create()
+    author = console.create_account(username="author", password="test-secret-long", roles=("researcher",))
+    reviewer = console.create_account(username="reviewer", password="test-secret-long", roles=("reviewer",))
+    source = pdf(tmp_path)
+    receipt = console.ingest(actor_id=author["account_id"], filename="source.pdf", data=source.read_bytes(),
+        content_type="application/pdf", ingest_kind="new", title="Screening", version="1.0", date="2026-10-03",
+        live_url="", class_="richtlijn", family="test", named_reviewers=[reviewer["account_id"]])
+    sid, actor = receipt["snapshot_id"], author["account_id"]
+    assert console.processing_status(sid)["state"] == "failed"
+    monkeypatch.setenv("METIS_DOCLING_TIMEOUT_SECONDS", "1200")
+    store = console.workflow_document_store
+    write = store.write_bundle
+    def fail_activation(**kwargs):
+        result = write(**kwargs)
+        if kwargs.get("objects") is not None:
+            raise WorkflowDocumentStoreError("injected_commit_failure")
+        return result
+    monkeypatch.setattr(store, "write_bundle", fail_activation)
+    with pytest.raises(ConsoleError, match="workflow_document_write_failed"):
+        console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id="rollback-real")
+    restarted = create()
+    assert restarted.processing_status(sid)["state"] == "failed"
+    assert not restarted.snapshot_objects(sid)
+    assert stored_fragments(restarted._envelope(sid)) is None
+    monkeypatch.setattr(store, "write_bundle", write)
+    second = create(tmp_path / "second-runtime")
+    started, release = Event(), Event()
+    original = restarted._fragments_and_spec
+    def paused(*args, **kwargs):
+        started.set()
+        assert release.wait(20)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(restarted, "_fragments_and_spec", paused)
+    outcomes = []
+    def run():
+        try:
+            outcomes.append(restarted.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id="winner-real"))
+        except BaseException as error:
+            outcomes.append(error)
+    thread = Thread(target=run)
+    thread.start()
+    try:
+        assert started.wait(20)
+        for key in ("winner-real", "competing-real"):
+            with pytest.raises(ConsoleError, match="processing_attempt_in_progress"):
+                second.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id=key)
+        assert not second.snapshot_objects(sid)
+        assert stored_fragments(second._envelope(sid)) is None
+    finally:
+        release.set()
+        thread.join(90)
+    assert not thread.is_alive()
+    assert len(outcomes) == 1 and isinstance(outcomes[0], dict), outcomes
+    final = create()
+    assert final.processing_status(sid)["state"] == "succeeded"
+    assert [a["state"] for a in final._envelope(sid)["processing_attempts"]] == ["failed", "failed", "succeeded"]
+    assert stored_fragments(final._envelope(sid)) and final.snapshot_objects(sid)

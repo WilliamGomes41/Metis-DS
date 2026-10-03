@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.docling_contract_v1 import DOCLING_VERSION, MODEL_REVISIONS
+from src.docling_render_fonts_v1 import font_inventory
 
 
 def main():
@@ -16,6 +17,7 @@ def main():
     args = parser.parse_args()
     if version("docling-slim") != DOCLING_VERSION:
         raise SystemExit("docling_dependency_version_invalid")
+    fonts = font_inventory()
     from docling.models.utils.hf_model_download import download_hf_model
     for repo, revision in MODEL_REVISIONS.items():
         download_hf_model(repo_id=repo, revision=revision,
@@ -27,6 +29,7 @@ def main():
                 files[path.relative_to(args.output).as_posix()] = hashlib.file_digest(handle, "sha256").hexdigest()
     manifest = {"docling_version": version("docling-slim"), "files": files,
                 "repositories": MODEL_REVISIONS,
+                "render_fonts": fonts,
                 "purpose": "official CPU Egret-large and TableFormer; OCR disabled"}
     (args.output / "metis-model-manifest.json").write_text(json.dumps(manifest, indent=2))
 

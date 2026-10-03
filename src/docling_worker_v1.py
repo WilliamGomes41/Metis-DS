@@ -14,6 +14,7 @@ import sys
 import time
 
 from src.docling_contract_v1 import CONTRACT, DOCLING_VERSION, CORE_VERSION, LAYOUT_PRESET, MODEL_REVISIONS, DoclingError
+from src.docling_render_fonts_v1 import verify_fonts
 
 
 def verified_models(path: Path) -> dict:
@@ -22,6 +23,7 @@ def verified_models(path: Path) -> dict:
         if (manifest["docling_version"] != DOCLING_VERSION or not manifest["files"]
                 or manifest.get("repositories") != MODEL_REVISIONS):
             raise ValueError()
+        verify_fonts(manifest.get("render_fonts"))
         for name, digest in manifest["files"].items():
             target = (path / name).resolve()
             if not target.is_relative_to(path.resolve()) or not target.is_file():
@@ -40,6 +42,7 @@ def convert(data: bytes, config: dict) -> dict:
         raise DoclingError("docling_dependency_version_invalid")
     models = verified_models(Path(config["artifacts_path"]))
     from docling.document_converter import DocumentConverter, PdfFormatOption
+    from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
     from docling.datamodel.base_models import InputFormat, ConversionStatus
     from docling.datamodel.pipeline_options import PdfPipelineOptions, HeadingHierarchyOptions, LayoutObjectDetectionOptions
     from docling.datamodel.accelerator_options import AcceleratorOptions, AcceleratorDevice
@@ -58,7 +61,8 @@ def convert(data: bytes, config: dict) -> dict:
         heading_hierarchy_options=HeadingHierarchyOptions(enabled=True),
         accelerator_options=AcceleratorOptions(device=AcceleratorDevice.CPU, num_threads=2))
     converter = DocumentConverter(allowed_formats=[InputFormat.PDF],
-        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)})
+        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options,
+                                                       backend=PyPdfiumDocumentBackend)})
     started = time.monotonic()
     result = converter.convert(DocumentStream(name="source.pdf", stream=BytesIO(data)),
                                raises_on_error=True, max_num_pages=config["max_pages"],
@@ -75,7 +79,8 @@ def convert(data: bytes, config: dict) -> dict:
                for page in result.pages}
     return {"contract": CONTRACT, "source_sha256": hashlib.sha256(data).hexdigest(),
             "versions": {d.metadata["Name"].lower().replace("_", "-"): d.version for d in distributions()},
-            "models": models, "settings": options.model_dump(mode="json"),
+            "models": models, "settings": {**options.model_dump(mode="json"),
+                "pdf_backend": "docling.backend.pypdfium2_backend.PyPdfiumDocumentBackend"},
             "document": doc.export_to_dict(), "reading_order": order,
             "page_text_origins": origins,
             "metrics": {"conversion_seconds": time.monotonic() - started,

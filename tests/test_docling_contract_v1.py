@@ -21,6 +21,29 @@ from src.integrity_kernel import schema_errors, stable_hash
 from src.quality_evidence_v1 import record_processing
 
 
+def test_render_font_build_identity_rejects_missing_changed_or_added_fonts(tmp_path, monkeypatch):
+    import hashlib
+    from src import docling_render_fonts_v1 as fonts
+    monkeypatch.setattr(fonts, "FONT_ROOTS", (tmp_path,))
+    standard = tmp_path / "standard.otf"
+    standard.write_bytes(b"controlled font file")
+    monkeypatch.setattr(fonts, "STANDARD_FONT", str(standard))
+    monkeypatch.setattr(fonts, "STANDARD_FONT_SHA256", hashlib.sha256(standard.read_bytes()).hexdigest())
+    expected = fonts.font_inventory()
+    fonts.verify_fonts(expected)
+    extra = tmp_path / "substitute.ttf"
+    extra.write_bytes(b"changes native font resolver inventory")
+    with pytest.raises(DoclingError, match="render_fonts_invalid"):
+        fonts.verify_fonts(expected)
+    extra.unlink()
+    standard.write_bytes(b"changed")
+    with pytest.raises(DoclingError, match="render_fonts_invalid"):
+        fonts.verify_fonts(expected)
+    standard.unlink()
+    with pytest.raises(DoclingError, match="render_fonts_invalid"):
+        fonts.verify_fonts(expected)
+
+
 def result():
     return {"contract": CONTRACT, "source_sha256": "a" * 64,
             "versions": {"docling-slim": "2.132.0", "docling-core": "2.99.0"},

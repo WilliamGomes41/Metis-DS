@@ -91,3 +91,23 @@ Current evidence is tracked in `docling-acceptance-evidence.md` and
 above are historical. The selected Egret model has genuine PDF evidence on all
 three available sources. The current Azure capacity is unknown (user response),
 so the staged production cutover remains deliberately blocked.
+
+### Official backend acceptance follow-up
+
+The default ThreadedDoclingParseDocumentBackend merges the two-column synthetic
+fixture on GitHub before adapter translation. SDK, model and dependency hashes
+match the local run; adding the same URW standard-font package alone did not fix
+it. The exact lower-level cause is not established. Test the official Docling
+PyPdfiumDocumentBackend with the same StandardPdfPipeline, Egret and TableFormer;
+this is a fixed SDK backend selection, never a conditional fallback. Record the
+backend class in immutable extraction settings. No kernel mutation, transaction,
+review or publication boundary changes. Accept this selection only after the
+unchanged column test, genuine PostgreSQL recovery/concurrency/rollback proof
+and original-document locator comparison pass.
+
+Rendering fonts are a build/runtime dependency, not a user setting. The build
+records the installed Linux font inventory, verifies the required standard face
+hash and refuses conversion if that inventory changes. The acceptance Docker
+image installs URW fonts before model preparation. These checks identify a
+runtime input; they do not prove the previous column failure was font-caused or
+establish production Azure fitness.
