@@ -1737,6 +1737,7 @@ class OperationsConsole:
                         "model_call_limits": {key:attempt["limits"][key] for key in ("connect", "idle", "total", "attempt", "max_attempts")} if attempt_id else None,
                         "attempt_deadline": attempt_deadline,
                         "diagnostic_checkpoint": self._diagnostic_writer(snapshot_id, attempt_id),
+                        "processing_reference": attempt.get("processing_reference") if attempt_id else None,
                     },
                 )
             except ConsoleError as exc:
@@ -2046,6 +2047,7 @@ class OperationsConsole:
                 "model_call_limits": {key:attempt["limits"][key] for key in ("connect", "idle", "total", "attempt", "max_attempts")} if _attempt_id and attempt.get("limits") else None,
                 "attempt_deadline": _attempt_deadline,
                 "diagnostic_checkpoint": self._diagnostic_writer(snapshot_id, _attempt_id),
+                "processing_reference": attempt.get("processing_reference") if _attempt_id else None,
             },
         )
         replay_record = spec.pop(SEMANTIC_REPLAY_SPEC_KEY, None)

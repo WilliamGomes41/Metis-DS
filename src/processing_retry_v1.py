@@ -45,7 +45,7 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
                "limits": limits.record(), "retry_of":attempts[-1]["attempt_id"] if attempts else None,
                "retry_not_before":None, "transport":None, "state": "running", "started_at": clock.isoformat(),
                "expires_at": (clock + timedelta(seconds=limits.attempt)).isoformat(), "finished_at": None,
-               "error_code": None, "validation_code": None, "processing_reference": None,
+               "error_code": None, "validation_code": None, "processing_reference": uuid.uuid4().hex,
                "phase": "source_and_validation"}
     if recovery:
         grant["consumed_by"] = attempt["attempt_id"]
@@ -53,7 +53,8 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
         attempt["recovery_authorization_id"] = grant["authorization_id"]
     from src.attempt_diagnostics_v1 import checkpoint, deployment_identity
     checkpoint(attempt, "reserved", {"source_hash": envelope["sha256"], "source_version": envelope["version"],
-               "expected_revision": revision, "actor_id": actor_id, "deployed_commit": deployment_identity()})
+               "expected_revision": revision, "actor_id": actor_id, "deployed_commit": deployment_identity(),
+               "processing_reference": attempt["processing_reference"]})
     attempts.append(attempt)
     return attempt, True
 
@@ -88,7 +89,7 @@ def finish(envelope: dict, attempt_id: str, *, state: str, error: Exception | No
         validation = str(diagnostics.get("reason_code") or "")
         reference = str(diagnostics.get("reference") or "")
         attempt["validation_code"] = validation if re.fullmatch(r"(?:semantic|recommendation|source_bound)_[a-z_]{1,100}", validation) else None
-        attempt["processing_reference"] = reference if re.fullmatch(r"[A-Za-z0-9_-]{1,80}", reference) else None
+        attempt["processing_reference"] = reference if re.fullmatch(r"[A-Za-z0-9_-]{1,80}", reference) else attempt.get("processing_reference")
         transport = getattr(error, "model_call_observation", None)
         if transport is not None:
             attach_transport(attempt, transport)

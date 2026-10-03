@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import platform
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,13 +13,16 @@ MAX_DIAGNOSTIC_BYTES = 16_000_000
 VALIDATOR_FILES = ("semantic_passage_v1.py", "recommendation_semantics_v1.py",
                    "source_bound_fields_v2.py", "object_taxonomy_v1.py",
                    "semantic_replay_v1.py", "knowledge_relations_v1.py", "knowledge_relation_proposal_v1.py",
-                   "source_reconstruction_v1.py", "source_layout_v1.py")
+                   "source_reconstruction_v1.py", "source_layout_v1.py",
+                   "serving_relations_v1.py", "source_context_review_v1.py",
+                   "attempt_diagnostics_v1.py")
 
 
 def validator_identity():
     root = Path(__file__).parent
-    return {name: hashlib.sha256((root / name).read_bytes()).hexdigest()
-            for name in VALIDATOR_FILES}
+    return {"python_version": platform.python_version(),
+            **{name: hashlib.sha256((root / name).read_bytes()).hexdigest()
+               for name in VALIDATOR_FILES}}
 
 
 def classification(code):

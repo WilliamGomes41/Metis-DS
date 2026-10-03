@@ -802,7 +802,9 @@ def semantic_spec_from_fragments(
     field_contract_v2: bool = False,
     model_limits: ModelCallLimits | None = None,
 ) -> dict[str, Any]:
-    reference = uuid.uuid4().hex
+    reference = str((formation_context or {}).get("processing_reference") or uuid.uuid4().hex)
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", reference):
+        reference = uuid.uuid4().hex
     snapshot_id = str((formation_context or {}).get("snapshot_id") or "")
     # Do not log document titles, source prose, credentials or provider messages.
     snapshot_id = snapshot_id if re.fullmatch(r"snap-[A-Za-z0-9_-]{1,100}", snapshot_id) else "-"
