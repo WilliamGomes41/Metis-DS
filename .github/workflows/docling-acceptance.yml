@@ -6,6 +6,8 @@ on:
       - 'src/docling*.py'
       - 'src/pdf_fragment_contract_v1.py'
       - 'requirements-docling.txt'
+      - 'requirements-docling.lock'
+      - 'Dockerfile.docling-acceptance'
       - 'tests/test_docling*.py'
       - 'scripts/prepare_docling_models.py'
       - '.github/workflows/docling-acceptance.yml'
@@ -46,8 +48,8 @@ jobs:
       - name: Install isolated official model pipeline
         run: |
           python -m venv "$RUNNER_TEMP/docling-env"
-          "$RUNNER_TEMP/docling-env/bin/pip" install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          "$RUNNER_TEMP/docling-env/bin/pip" install -r requirements-docling.txt
+          "$RUNNER_TEMP/docling-env/bin/pip" install torch==2.14.1+cpu torchvision==0.29.1+cpu --index-url https://download.pytorch.org/whl/cpu
+          "$RUNNER_TEMP/docling-env/bin/pip" install -r requirements-docling.lock
           "$RUNNER_TEMP/docling-env/bin/pip" check
           echo "METIS_DOCLING_PYTHON=$RUNNER_TEMP/docling-env/bin/python" >> "$GITHUB_ENV"
       - name: Prefetch and fingerprint real models before requests

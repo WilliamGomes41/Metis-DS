@@ -142,3 +142,68 @@ def test_real_pdf_postgres_chain(tmp_path, workflow_postgres, monkeypatch):
 
 
 from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: E402, F401
+
+
+def test_real_pdf_postgres_successful_publication_and_restart(tmp_path, recovery_postgres, monkeypatch):
+    """Actual models + native PostgreSQL + unchanged review/publication commands.
+
+    The test source-store double avoids an Azure subscription; it does not prove
+    Azure Blob immutability or production deployment packaging.
+    """
+    from tests.test_lifecycle_withdrawal_recovery_v1 import _console
+    from tests.test_vsa_publish_readiness_ui_v1 import MemorySourceStore
+    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.source_bound_fields_v2 import KEY, MODE
+    from src.operations_console_v1 import ConsoleError, review_lane
+    from src.review_disposition_v1 import definitive_review_disposition
+    monkeypatch.setenv("METIS_PDF_EXTRACTOR", "docling")
+    source_store = MemorySourceStore()
+    create = lambda: _console(tmp_path, recovery_postgres, source_store)
+    console = create()
+    def post(url, headers, payload, timeout):
+        return {"output": [{"type": "message", "content": [{"type": "output_text", "text": json.dumps(proposal(payload))}]}]}
+    bind_pre_review_semantic_processing(console, environ={"METIS_LLM_API_KEY": "test",
+        "METIS_LLM_MODEL": "controlled", "METIS_PASSAGE_FORMATION_MODE": MODE}, post_json=post)
+    accounts = {name: console.create_account(username=name, password="test-secret-long", roles=roles)
+                for name, roles in [("author", ("researcher",)), ("first", ("reviewer",)),
+                                    ("second", ("reviewer",)), ("publisher", ("publisher",))]}
+    source = pdf(tmp_path)
+    receipt = console.ingest(actor_id=accounts["author"]["account_id"], filename="source.pdf",
+        data=source.read_bytes(), content_type="application/pdf", ingest_kind="new", title="Screening",
+        version="1.0", date="2026-10-03", live_url="", class_="richtlijn", family="test",
+        named_reviewers=[accounts["first"]["account_id"], accounts["second"]["account_id"]])
+    sid = receipt["snapshot_id"]
+    assert console.processing_status(sid)["state"] == "succeeded"
+    target = next(o for o in console.snapshot_objects(sid) if KEY in o.get("metadata", {}))
+    with pytest.raises(ConsoleError):
+        console.publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=sid)
+    assert console.open_source_passage(snapshot_id=sid, object_id=target["object_id"])
+    console.review_object(actor_id=accounts["first"]["account_id"], snapshot_id=sid,
+        object_id=target["object_id"], decision="approve", confirmed_object_type="recommendation",
+        recommendation_direction="against", recommendation_strength_level="not_stated")
+    console.approve_second_review(actor_id=accounts["second"]["account_id"], snapshot_id=sid,
+                                  object_id=target["object_id"])
+    for obj in console.snapshot_objects(sid):
+        if obj["object_id"] == target["object_id"] or obj.get("object_type") == "document" or review_lane(obj) == "fast":
+            continue
+        if definitive_review_disposition(obj)["final"]:
+            continue
+        console.review_object(actor_id=accounts["first"]["account_id"], snapshot_id=sid,
+            object_id=obj["object_id"], decision="reject", suitability="ja", eindoordeel="afwijzen",
+            comment="Fixture: no separate knowledge object for this source passage")
+    before = stored_fragments(console._envelope(sid))
+    console.publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=sid)
+    release = console.canonical_publication_store.release_for_snapshot(sid)
+    assert release and any(o["object_id"] == target["object_id"] for o in release["objects"])
+    restarted = create()
+    assert restarted.canonical_publication_store.release_for_snapshot(sid) == release
+    assert stored_fragments(restarted._envelope(sid)) == before
+    with pytest.raises(ConsoleError):
+        restarted.reextract_unpublished(actor_id=accounts["author"]["account_id"], snapshot_id=sid)
+
+
+from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: E402, F401
+
+
+def test_acceptance_requires_native_postgres():
+    assert os.environ.get("METIS_TEST_POSTGRES_DSN"), "Acceptance must not pass with skipped PostgreSQL proofs"
