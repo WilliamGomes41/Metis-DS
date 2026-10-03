@@ -315,7 +315,21 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
                 continue
             row = deepcopy(row)
             provenance = row.setdefault("provenance", {})
-            provenance["source_fragments"] = deepcopy(source_refs)
+            from src.decision_unit_construction_v1 import KEY, unit_issues
+            if (row.get("metadata") or {}).get(KEY):
+                # The correction kernel has already reconstructed and ordered
+                # these refs. Finalization must not undo that verified order.
+                def bindings(refs):
+                    return {ref["raw_object_id"]: (ref.get("raw_content_hash"), ref.get("source_locator"))
+                            for ref in refs}
+                current_refs = provenance.get("source_fragments") or []
+                if (len(source_refs) != len(current_refs)
+                        or len(bindings(source_refs)) != len(source_refs)
+                        or bindings(source_refs) != bindings(current_refs)
+                        or "decision_unit_source_fidelity_failure" in unit_issues(row)):
+                    raise ConsoleError("decision_unit_source_fidelity_failure")
+            else:
+                provenance["source_fragments"] = deepcopy(source_refs)
             provenance["revision_patch_hash"] = stable_hash(repair_spec)
             stamp_canonical_hashes(row)
             errors = schema_errors(row, self.schema_path)

@@ -326,3 +326,41 @@ def test_markerless_correction_keeps_legacy_contract(tmp_path, monkeypatch):
                                      object_id=target['object_id'], patch=patch('Bespreek'))
     assert KEY not in revised.get('metadata', {})
     assert revised['content']['clean_text'] == 'Bespreek'
+
+
+def test_native_interleaved_repeated_text_merge_preserves_kernel_proof(tmp_path):
+    """Equal literal text must not hide reordered provenance during finalization."""
+    import fitz
+    from tests.decision_graph_native_support import native_state
+    from src.deterministic_review_repair_v1 import REPAIR_MERGE_OBJECTS
+    state, _store, _source = native_state(tmp_path)
+    with fitz.open() as doc:
+        page = doc.new_page()
+        page.draw_rect(fitz.Rect(60, 45, 235, 150))
+        page.insert_text((75, 70), 'van een', fontsize=11)
+        page.insert_text((295, 250), 'van een', fontsize=11)
+        page.insert_text((75, 88), 'van een', fontsize=11)
+        data = doc.tobytes()
+    console = state()
+    accounts = _accounts(console)
+    sid = ingest(console, accounts, data)
+    units = [o for o in console.snapshot_objects(sid) if o['object_type'] != 'document']
+    primary = next(o for o in units if len(o['provenance']['source_fragments']) == 2)
+    absorbed = next(o for o in units if len(o['provenance']['source_fragments']) == 1)
+    assert primary['content']['clean_text'] == 'van een\nvan een'
+    revised = console.submit_review_resolution(
+        actor_id=accounts['researcher']['account_id'], snapshot_id=sid,
+        object_id=primary['object_id'], expected_revision=console.objects_revision(sid),
+        suitability='samenvoegen', comment='Letterlijke fragmenten samenvoegen.',
+        repair_kind=REPAIR_MERGE_OBJECTS, merge_object_ids=[absorbed['object_id']])
+    expected_ids = [primary['provenance']['source_fragments'][0]['raw_object_id'],
+                    absorbed['provenance']['source_fragments'][0]['raw_object_id'],
+                    primary['provenance']['source_fragments'][1]['raw_object_id']]
+    assert revised['content']['clean_text'] == 'van een\nvan een\nvan een'
+    assert [r['raw_object_id'] for r in revised['provenance']['source_fragments']] == expected_ids
+    assert [s['fragment_id'] for s in revised['metadata'][KEY]['spans']] == expected_ids
+    # The fragment remains incomplete; successful repair must not invent completeness.
+    assert unit_issues(revised) == ['decision_unit_incomplete']
+    restarted = state('interleaved-merge-restart')
+    assert restarted._current_object(sid, primary['object_id']) == revised
+    assert restarted._current_object(sid, absorbed['object_id'])['governance']['validation_status'] == 'superseded'
