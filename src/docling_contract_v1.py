@@ -12,7 +12,7 @@ from typing import Any
 
 CONTRACT = "metis-docling-source-v1"
 DOCLING_VERSION = "2.132.0"
-CORE_VERSION = "2.98.0"
+CORE_VERSION = "2.99.0"
 
 
 class DoclingError(RuntimeError):

@@ -35,6 +35,7 @@ def pdf(tmp_path, text=TEXT):
     path = tmp_path / "source.pdf"
     with fitz.open() as doc:
         page = doc.new_page()
+        page.insert_text((72, 80), "Screening", fontsize=20)
         page.insert_text((72, 140), text, fontsize=12)
         doc.save(path)
     return path

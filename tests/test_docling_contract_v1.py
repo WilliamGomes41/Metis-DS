@@ -23,7 +23,7 @@ from src.quality_evidence_v1 import record_processing
 
 def result():
     return {"contract": CONTRACT, "source_sha256": "a" * 64,
-            "versions": {"docling-slim": "2.132.0", "docling-core": "2.98.0"},
+            "versions": {"docling-slim": "2.132.0", "docling-core": "2.99.0"},
             "document": {"pages": {"1": {"size": {"width": 600, "height": 800}}},
                          "texts": [{"self_ref": "#/texts/0", "text": "één  advies",
                                     "orig": "één\nadvies", "label": "text", "content_layer": "body",
