@@ -349,6 +349,8 @@ def _authoritative_review_type(obj: dict[str, Any]) -> str | None:
 
 
 def inferred_review_path(obj: dict[str, Any]) -> str:
+    if (obj.get("metadata") or {}).get("decision_unit_construction"):
+        return "boom"
     authoritative = _authoritative_review_type(obj)
     if authoritative in CLOSED_BOOM_TYPES or obj.get("proposed_object_type") in CLOSED_BOOM_TYPES:
         return "boom"
@@ -442,7 +444,7 @@ def is_slow_review_duty(obj: dict[str, Any], review_path: str | None = None) -> 
     if obj.get("object_type") == "document":
         return False
     path = review_path or inferred_review_path(obj)
-    if path != "boom" and admission_of(obj).get("gate_result") == GATE_BLOCKED:
+    if is_admission_blocked(obj, review_path=path):
         return False
     if review_lane(obj, review_path=path) == "fast":
         return False
@@ -2347,8 +2349,10 @@ class OperationsConsole:
                 fragments = pdf_fragments(path, document_id=document_id, source_id=source_id)
             except Exception as exc:
                 raise ConsoleError("invalid_decision_pdf") from exc
-            return fragments, boom_spec_from_fragments(document_id=document_id, title=title,
-                                                      family=family, class_=class_, fragments=fragments)
+            spec = boom_spec_from_fragments(document_id=document_id, title=title,
+                                           family=family, class_=class_, fragments=fragments)
+            from src.decision_unit_construction_v1 import construction_spec
+            return fragments, construction_spec(spec, fragments)
         if kind == "boom":
             try:
                 fragments = extract_boom_fragments(data, document_id=document_id, source_id=source_id)
@@ -3655,6 +3659,12 @@ class OperationsConsole:
                 source_hash=envelope["sha256"],
             )
             revised = next(row for row in gated if row["object_id"] == object_id)
+            revised = apply_passage_register([revised])[0]
+        else:
+            from src.decision_unit_construction_v1 import apply_gate
+            peers = [revised if row.get("object_id") == object_id else row for row in current]
+            apply_gate(peers, source_hash=envelope["sha256"], graph=envelope.get("decision_graph"),
+                       inventory=envelope.get("decision_graph_evidence"))
             revised = apply_passage_register([revised])[0]
         history = self._load_objects(snapshot_id)
         history.append(revised)

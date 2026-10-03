@@ -10,10 +10,29 @@ def propose_routes(fragments: list[dict[str, Any]], objects: list[dict[str, Any]
                    inventory: dict[str, Any]) -> list[dict[str, Any]]:
     object_for = {r["raw_object_id"]: o["object_id"] for o in objects if o["object_type"] != "document"
                   for r in o["provenance"]["source_fragments"]}
+    from src.decision_unit_construction_v1 import KEY, branch_label
+    from copy import deepcopy
+    raw_by_id = {f["fragment_id"]: f for f in fragments}
+    endpoint_fragments = []
+    for obj in objects:
+        refs = obj.get("provenance", {}).get("source_fragments", [])
+        rows = [raw_by_id[r["raw_object_id"]] for r in refs if r["raw_object_id"] in raw_by_id]
+        if not rows:
+            continue
+        if (obj.get("metadata") or {}).get(KEY) and branch_label(obj["content"]["clean_text"]):
+            continue
+        merged = deepcopy(rows[0])
+        if len(rows) > 1:
+            boxes = [r["bbox"] for r in rows]
+            merged["bbox"] = [min(b[0] for b in boxes), min(b[1] for b in boxes),
+                              max(b[2] for b in boxes), max(b[3] for b in boxes)]
+            merged["clean_text"] = obj["content"]["clean_text"]
+        endpoint_fragments.append(merged)
     proposals = []
     for page in sorted({f["source_page"] for f in fragments}):
-        texts = [f for f in fragments if f["source_page"] == page and f["fragment_id"] in object_for
+        texts = [f for f in endpoint_fragments if f["source_page"] == page and f["fragment_id"] in object_for
                  and f.get("bundle_role") != "member"]
+        label_texts = [f for f in fragments if f["source_page"] == page and f.get("bundle_role") != "member"]
         segments = [(a, b, eid) for eid, e in inventory["items"].items()
                     if e["kind"] == "graphic" and e["page"] == page for a, b in e["segments"]]
         for eid, e in inventory["items"].items():
@@ -69,7 +88,7 @@ def propose_routes(fragments: list[dict[str, Any]], objects: list[dict[str, Any]
                 if v != start and v in anchors:
                     evidence |= set().union(*(adjacency[v][w] for w in adjacency[v] if w in wings))
                     pair = tuple(sorted((start, v)))
-                    if pair in pairs or anchors[start][0] == anchors[v][0]:
+                    if pair in pairs or object_for[anchors[start][0]] == object_for[anchors[v][0]]:
                         continue
                     pairs.add(pair)
                     uncertainties = ["human_route_confirmation_required"]
@@ -86,7 +105,7 @@ def propose_routes(fragments: list[dict[str, Any]], objects: list[dict[str, Any]
                         uncertainties.append("endpoint_ambiguous")
                     endpoint_ids = {anchors[start][0], anchors[v][0]}
                     labels = []
-                    for f in texts:
+                    for f in label_texts:
                         if f["fragment_id"] in endpoint_ids or len(f["clean_text"]) > 60:
                             continue
                         box = f["bbox"]

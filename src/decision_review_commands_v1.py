@@ -87,6 +87,9 @@ def _execute(console: Any, *, action: str, actor_id: str, snapshot_id: str,
             for obj in current:
                 if obj.get("object_type") == "document" or role_of(obj):
                     continue
+                from src.decision_unit_construction_v1 import label_usage
+                if label_usage(obj, graph):
+                    continue
                 if actor_id not in exact_current_approver_ids(obj, console.object_review_bindings(snapshot_id)):
                     raise ConsoleError("decision_graph_passage_review_required")
             target = review_target(graph, current, old_policy)
@@ -129,7 +132,15 @@ def _execute(console: Any, *, action: str, actor_id: str, snapshot_id: str,
                 obj.setdefault("metadata", {})["decision_review_revision"] = command_id
             stamp_canonical_hashes(obj)
             updated.append(obj)
-        history.extend(updated)
+        from src.decision_unit_construction_v1 import apply_gate
+        from src.passage_register_v1 import apply_passage_register
+        projected = {o["object_id"]: deepcopy(o) for o in current}
+        projected.update({o["object_id"]: o for o in updated})
+        gated = apply_gate(list(projected.values()), source_hash=envelope["sha256"],
+                           graph=envelope["decision_graph"], inventory=envelope["decision_graph_evidence"])
+        gated = apply_passage_register(gated)
+        prior = {o["object_id"]: o for o in current}
+        history.extend(o for o in gated if o != prior[o["object_id"]])
         envelopes = deepcopy(console._envelopes)
         envelopes[snapshot_id] = envelope
         result = {"snapshot_id": snapshot_id, "action": action, "command_id": command_id, "idempotent": False}

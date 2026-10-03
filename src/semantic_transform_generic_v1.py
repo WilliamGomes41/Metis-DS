@@ -129,7 +129,7 @@ def _system_candidate_metadata(item: dict[str, Any]) -> dict[str, Any]:
     source = item.get("metadata")
     source = source if isinstance(source, dict) else {}
     out: dict[str, Any] = {}
-    for key in ("passage_formation", "source_occurrence_authority"):
+    for key in ("passage_formation", "source_occurrence_authority", "decision_unit_construction"):
         value = source.get(key)
         if isinstance(value, dict):
             out[key] = deepcopy(value)
@@ -243,6 +243,11 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
             if semantic_passage and semantic_passage["version"] == SEMANTIC_PASSAGE_VERSION
             else LEGACY_TRANSFORM_VERSION)
         system_metadata = _system_candidate_metadata(item)
+        from src.decision_unit_construction_v1 import KEY as DECISION_UNIT_KEY, reconstruct
+        if DECISION_UNIT_KEY in system_metadata:
+            rebuilt = reconstruct(system_metadata[DECISION_UNIT_KEY], raw_by_id)
+            if rebuilt != item.get("clean_text", item.get("text")):
+                raise ValueError("decision_unit_source_fidelity_failure")
         from src.source_bound_fields_v2 import KEY, bind_fields, MODE
         if semantic_passage and semantic_passage.get("formation_mode") == MODE:
             from src.semantic_passage_v1 import semantic_source_blocks

@@ -119,6 +119,8 @@ def _initial_status(obj: dict[str, Any], *, context_headings: set[str]) -> tuple
     admission = admission_of(obj)
     gate = admission.get("gate_result")
     reasons = [str(code) for code in (admission.get("reason_codes") or []) if str(code).strip()]
+    if admission.get("admission_version") == "decision-unit-construction-v1" and admission.get("source_usage") == "edge_label":
+        return "used_as_context", []
     if gate == GATE_BLOCKED:
         # v2.33: a machine admission failure is diagnostic evidence, not a
         # substantive human exclusion. Keep the passage in the coverage
