@@ -130,7 +130,7 @@ def test_context_http_projection_and_command(tmp_path):
     after = client.get('/review', params={'document': command['snapshot_id'], 'object': target['object_id']})
     assert 'Bevestigde broncontext' in after.text
     assert 'DOEN' in after.text
-    assert 'Dit bevestigt geen aanbevelingssterkte' in after.text
+    assert 'Dit bevestigt geen aanbevelingssterkte' not in after.text
     label_page = client.get('/review', params={'document': command['snapshot_id'], 'object': source['object_id']})
     assert 'data-source-role-card' in label_page.text
 

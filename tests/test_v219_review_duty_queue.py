@@ -386,7 +386,7 @@ def test_researchers_are_not_required_to_open_thousands_of_inhoud_cards(
     client = _client(console)
     dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
     html = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
-    control = client.get(f"/review?document={receipt['snapshot_id']}&task=control").text
+    control = client.get(f"/review?document={receipt['snapshot_id']}&task=inventory").text
     visible = _visible_text(dashboard + html + control)
     assert f"{len(koppen)} te controleren" in dashboard
     assert f"{len(duty)} te beoordelen" in dashboard
@@ -398,7 +398,7 @@ def test_researchers_are_not_required_to_open_thousands_of_inhoud_cards(
     leftover_snips = [_text_of(obj)[:40] for obj in leftover]
     for snip in leftover_snips:
         assert not any(snip in title for title in duty_titles)
-    assert "Technisch herstel nodig" in visible
+    assert "Alle passages en hun afhandeling" in visible
     assert "unclassified" not in visible.casefold()
     assert "Beoordeel elk kennisobject afzonderlijk." not in html
     for obj in leftover:
@@ -451,7 +451,8 @@ def test_koppen_remain_batch_confirmable_as_structure_never_advice(
     fast = _section(html, "review-lane-fast")
     assert "/review/headings/batch-confirm" in fast
     assert "Bevestig geselecteerde koppen als structuur" in fast
-    assert "veranderen de inhoud niet" in fast.casefold() or "veranderen de inhoud niet" in html.casefold()
+    assert "veranderen de inhoud niet" not in fast.casefold()
+    assert 'href="/help/review"' in html
     confirmed = console.batch_confirm_headings(
         actor_id=accounts["reviewer"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
@@ -557,10 +558,10 @@ def test_console_inhoud_lists_only_slow_duty_cards(tmp_path: Path) -> None:
         assert "batch-confirm" not in card
     visible = _visible_text(html)
     assert "Passages afzonderlijk beoordelen" in visible
-    assert "oorspronkelijke bron" in visible
+    assert 'href="/help/review"' in html
     assert leftover
-    control = client.get(f"/review?document={receipt['snapshot_id']}&task=control").text
-    assert "Technisch herstel nodig" in _visible_text(control)
+    control = client.get(f"/review?document={receipt['snapshot_id']}&task=inventory").text
+    assert "Alle passages en hun afhandeling" in _visible_text(control)
 
 
 # ---------------------------------------------------------------------------
@@ -583,7 +584,7 @@ def test_no_zwaar_licht_switch_no_auto_confirm_no_auto_promote(tmp_path: Path) -
     ordinary = next(obj for obj in leftover if "Gewone toelichtende tekst" in _text_of(obj))
     assert ordinary.get("proposed_object_type") not in {"recommendation", "heading"}
     html = _client(console).get(
-        f"/review?document={receipt['snapshot_id']}&task=control"
+        f"/review?document={receipt['snapshot_id']}&task=inventory"
     ).text
     lower = html.lower()
     for forbidden in (
@@ -861,10 +862,10 @@ def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path) -> None:
     )
     assert any(obj["object_id"] == planted["object_id"] for obj in leftover)
     html = _client(console).get(
-        f"/review?document={receipt['snapshot_id']}&task=control"
+        f"/review?document={receipt['snapshot_id']}&task=inventory"
     ).text
     visible = _visible_text(html)
-    assert "Controleoverzicht per kop" in visible
+    assert "Alle passages en hun afhandeling" in visible
     assert "unclassified" not in visible.casefold()
     slow = _section(html, "review-lane-slow")
     assert planted["object_id"] not in slow

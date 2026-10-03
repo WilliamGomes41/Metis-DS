@@ -553,7 +553,7 @@ def test_strength_error_keeps_review_input_without_saving(tmp_path: Path) -> Non
     assert "Je beoordeling is niet opgeslagen" in response.text
     assert 'name="recommendation_strength_level" value="strong" checked' in response.text
     assert "Mijn toelichting &lt;behouden&gt;" in response.text
-    assert "de passage blijft dan een aanbeveling" in response.text
+    assert "de passage blijft dan een aanbeveling" not in response.text
     assert console.snapshot_objects(snapshot_id) == before
     assert console.objects_revision(snapshot_id) == revision
 

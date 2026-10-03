@@ -284,7 +284,7 @@ def test_slogan_sentence_absent_from_researcher_pages(tmp_path: Path) -> None:
         assert "Documenten" in html
         assert "Documentenhiërarchie" not in html
     review = client.get(f"/review?document={receipt['snapshot_id']}").text
-    assert "Beoordeel passages stap voor stap, met de oorspronkelijke bron als uitgangspunt." in review
+    assert 'href="/help/review"' in review
 
 
 def test_help_once_via_negativa_absent_from_researcher_pages(tmp_path: Path) -> None:
@@ -462,7 +462,7 @@ def test_one_word_chrome_tools_card_must_not_exist(tmp_path: Path) -> None:
     tools = [obj for obj in objects if _text_of(obj).casefold() == "tools"]
     assert tools == []
     html = _client(console).get(
-        f"/review?document={receipt['snapshot_id']}&task=control"
+        f"/review?document={receipt['snapshot_id']}&task=inventory"
     ).text
     assert ">Tools<" not in html
     assert "kennisplatform.venvn.nl/tools" not in html
@@ -686,9 +686,9 @@ def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path) -> None:
     )
     assert any(obj["object_id"] == planted["object_id"] for obj in leftover)
     html = _client(console).get(
-        f"/review?document={receipt['snapshot_id']}&task=control"
+        f"/review?document={receipt['snapshot_id']}&task=inventory"
     ).text
-    assert "Controleoverzicht per kop" in html
+    assert "Alle passages en hun afhandeling" in html
     assert "unclassified" not in html.casefold()
     card = _client(console).get(
         f"/review?document={receipt['snapshot_id']}&object={planted['object_id']}"

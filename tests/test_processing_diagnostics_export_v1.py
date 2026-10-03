@@ -331,7 +331,8 @@ def test_source_label_guidance_http_and_export_preserve_review_state(tmp_path):
     assert 'Mogelijk bronlabel' in page.text
     detail = client.get(f'/review?document={sid}&object={target["object_id"]}&task=repair')
     assert detail.status_code == 200
-    assert 'De koppeling en betekenis zijn hiermee niet bevestigd.' in detail.text
+    assert 'Mogelijk bronlabel' in detail.text
+    assert 'De koppeling en betekenis zijn hiermee niet bevestigd.' not in detail.text
     response = client.get(f'/review/passages-export?document={sid}&format=csv')
     assert response.status_code == 200
     rows = list(csv.DictReader(io.StringIO(response.content.decode('utf-8-sig'))))
@@ -493,7 +494,8 @@ def test_technical_management_collects_tools_and_keeps_repair_actionable(tmp_pat
     assert snapshot_id in hub.text
     repair = client.get(f"/review?document={snapshot_id}&task=repair")
     assert "Bekijk bronpassage" in repair.text
-    assert "Technische diagnose en exports" in repair.text
+    assert "Technische diagnose en exports" not in repair.text
+    assert 'href="/settings/technical"' in repair.text
     assert "Signalen per diagnostische familie" not in repair.text
     assert "Exporteer detaildiagnostiek" not in repair.text
     other = _client(console)

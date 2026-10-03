@@ -39,8 +39,10 @@ CURRENT_HEADING = "2 Aanbevelingen"
 ANCESTOR_HEADING = "Richtlijn Fractuurpreventie"
 
 REVIEWER_COPY = (
-    "Beoordeel deze passage aan de hand van de oorspronkelijke bron.",
-    "Metis doet een voorstel; jij bepaalt wat met de passage gebeurt.",
+    "Is deze passage op zichzelf bruikbaar?",
+    "Staat de passage onder de juiste kop?",
+    "Wat voor informatie is dit?",
+    "Wat is je besluit?",
 )
 PROTOCOL_JARGON = (
     "Relatie bevestigen",
@@ -261,7 +263,7 @@ def test_review_cockpit_uses_fixed_ordinary_dutch_copy(tmp_path: Path) -> None:
     assert "ignore this" not in visible.casefold()
     assert "chrome" not in visible.casefold()
     assert "pas ze alleen aan als ze inhoudelijk niet kloppen" not in visible
-    assert "Controleer de gemarkeerde brontekst, de voorgestelde kop en het informatietype" in visible
+    assert "Controleer de gemarkeerde brontekst, de voorgestelde kop en het informatietype" not in visible
 
 
 def test_primary_surface_has_no_protocol_jargon_or_relation_chrome(tmp_path: Path) -> None:
@@ -308,12 +310,12 @@ def test_review_cockpit_is_a_to_f_order_with_one_save(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_step_a_shows_selected_passage_and_why(tmp_path: Path) -> None:
+def test_step_a_shows_selected_passage_without_selection_explanation(tmp_path: Path) -> None:
     _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path)
     step = _step(_card(html, adviseert["object_id"]), "a")
     visible = _visible_text(step)
     assert "adviseert de verpleegkundige" in visible
-    assert "Metis stelt voor" in visible
+    assert "why-selected" not in step
     assert "aanbeveling" in visible.casefold()
     assert "Geselecteerd omdat dit een volledige aanbeveling is." not in visible
 
@@ -966,7 +968,7 @@ def test_empty_suitability_is_rejected_and_creates_no_approval_binding(tmp_path:
 def test_dit_klopt_reveals_sterkte_before_one_save(tmp_path: Path) -> None:
     _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path)
     card = _card(html, adviseert["object_id"])
-    assert 'value="dit_klopt" checked' in card
+    assert 'value="dit_klopt" checked' not in card
     source = (ROOT / "src/operations_console_app.py").read_text(encoding="utf-8")
     stamp_fn = source[source.find("const strengthTypes") : source.find("const updateChooser")]
     assert "dit_klopt" in stamp_fn

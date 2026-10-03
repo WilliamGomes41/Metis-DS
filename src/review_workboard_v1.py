@@ -55,7 +55,7 @@ _TASK_COPY = {
         "Beoordeel onafhankelijk exact dezelfde goedgekeurde objectversie",
     ),
     "repair": (
-        "Technisch herstel nodig",
+        "Passages corrigeren",
         "Controleer passages die Metis nog niet veilig als inhoudelijke review kan aanbieden",
     ),
     "disposition": (
@@ -677,7 +677,7 @@ def _workboard_page(
             <span class="document-work-summary">{_esc(_work_summary(item))}</span>
           </summary>{dashboard}</details>''')
     return _page(_nav(account, "review", counts) + '<section class="room review-room"><h1>Review</h1>'
-                 + controls + '<div class="doc-list">' + ''.join(cards)
+                 + console_ui._task_links("review") + controls + '<div class="doc-list">' + ''.join(cards)
                  + (('<p>Geen documenten gevonden.</p>' if q else '<p>Geen aan jou toegewezen reviewdocumenten.</p>') if not cards else '')
                  + '</div></section>', title="Review — Metis")
 
@@ -768,7 +768,7 @@ def _projected_document_dashboard(
         {_nav(account, "review", counts)}
         <section class="room review-room">
           <h1>Review</h1>
-          <p class="lead">Beoordeel passages stap voor stap, met de oorspronkelijke bron als uitgangspunt.</p>
+          {console_ui._task_links("review")}
           <div class="doc-card review-document-card">
             <div class="review-document-card-top"><span class="review-document-kicker">Document in review</span>
               <a class="btn-secondary" href="/review">Ander document kiezen</a>
@@ -833,8 +833,6 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             return RedirectResponse('/review/trajectory?' + urlencode({'document': document}), status_code=303)
         chosen = document.strip()
         chosen_task = normalize_review_task(task)
-        if chosen_task == "repair" and chosen and not object.strip():
-            return RedirectResponse("/settings/technical?" + urlencode({"document": chosen}), status_code=303)
         if not chosen or (not object.strip() and not chosen_task):
             return _workboard_page(console, account=account, snapshot_id=chosen, q=q, page=page, theme=theme)
         counts = console.waiting_task_counts(str(account["account_id"]))

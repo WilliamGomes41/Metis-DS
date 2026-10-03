@@ -179,7 +179,7 @@ def test_delete_control_absent_from_inleveren_review_publiceren_accounts(
             assert snap in html
 
     chosen = client.get(f"/review?document={snap}").text
-    assert "Beoordeel" in chosen
+    assert 'href="/help/review"' in chosen
     assert DELETE_LABEL not in chosen
     assert not _has_delete_control(chosen)
 

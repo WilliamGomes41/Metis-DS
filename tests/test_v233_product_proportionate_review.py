@@ -248,7 +248,7 @@ def test_rendered_batch_panel_splits_large_groups_by_type_and_maximum() -> None:
     html = render_normal_risk_batch_panel(console, "snap-1")
     assert html.count('action="/review/normal-risk/batch-confirm"') == 1
     assert html.count('class="normal-risk-single"') == 2
-    assert f"maximaal {NORMAL_RISK_BATCH_MAX} passages tegelijk" in html
+    assert f"Maximaal {NORMAL_RISK_BATCH_MAX} passages per bevestiging" in html
     assert f"Definitie ({NORMAL_RISK_BATCH_MAX})" in html
     assert "Voorstel van Metis: Definitie" in html
     assert "Voorstel van Metis: Toelichting" in html

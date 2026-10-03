@@ -74,7 +74,7 @@ def test_negative_recommendation_has_exact_fields_without_regex_reinterpretation
     assert not obj.get("confirmed_object_type")
     assert 'field_evidence' in request["text"]["format"]["schema"]["properties"]["objects"]["items"]["required"]
     html = _source_bound_fields_html(obj)
-    assert 'Voorgestelde betekenisvelden' in html and 'niet zinvol' in html
+    assert 'Bronbewijs bij het voorstel' in html and 'niet zinvol' in html
     tables, _ = processing_evidence_tables(snapshot_id="snap", revision="r1", envelope={}, objects=rows)
     field = next(r for r in tables["proposal_fields"] if r['field']=='recommended_action' and r['object_id']==obj['object_id'])
     assert field["source_span"]["start"] == 0 and field["value"] == "Screening"

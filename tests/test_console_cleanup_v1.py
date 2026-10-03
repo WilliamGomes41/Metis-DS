@@ -131,8 +131,9 @@ def test_exports_and_technical_repair_preserve_document_authorization(tmp_path):
     assert "Verwerkingsproblemen herstellen" in technical.text
     assert "Reviewinteracties" in technical.text
     redirect = client.get("/review", params={"document": snapshot, "task": "repair"}, follow_redirects=False)
-    assert redirect.status_code == 303
-    assert redirect.headers["location"].startswith("/settings/technical?")
+    assert redirect.status_code == 200
+    assert "Passages corrigeren" in redirect.text
+    assert "Diagnostiek en brondekking" not in redirect.text
     _login(client, "publisher.carla")
     assert client.get("/settings/technical/exports").status_code == 403
 

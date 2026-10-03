@@ -827,8 +827,7 @@ def install_deterministic_review_repair_routes(
         return (
             "<h2>Kies de exacte bronpassage voor het nieuwe voorstel</h2>"
             f"<p><strong>Huidig kennisobject:</strong> {_esc(current_text)}</p>"
-            "<p>Selecteer één of meer aaneengesloten bronzinnen. Metis bouwt de nieuwe "
-            "tekst uitsluitend uit deze geselecteerde bronzinnen.</p>"
+            "<p>Selecteer aaneengesloten bronzinnen.</p>"
             '<label>Bronzinnen<select name="source_unit_ids" multiple size="14" required>'
             + "".join(options)
             + "</select></label>"
@@ -861,8 +860,7 @@ def install_deterministic_review_repair_routes(
             raise ConsoleError("merge_target_required")
         return (
             "<h2>Kies de passage(s) die bij dit kennisobject horen</h2>"
-            "<p>Metis combineert de brongebonden tekst in bronvolgorde. De opgenomen "
-            "oude kennisobjecten worden daarna <code>superseded</code>.</p>"
+            "<p>Deze passages worden vervangen door één nieuw voorstel voor beoordeling.</p>"
             + "".join(options)
         )
 
@@ -911,17 +909,14 @@ def install_deterministic_review_repair_routes(
             )
         note = str(submission.get("proposed_correction") or "")
         note_html = (
-            "<p class='field-help'><strong>Opmerking uit het oude vrije tekstveld:</strong> "
-            f"{_esc(note)}<br>Deze tekst wordt alleen als review-evidence bewaard en nooit "
-            "als canonieke kennis overgenomen.</p>"
+            f"<p><strong>Jouw opmerking:</strong> {_esc(note)}</p>"
             if note
             else ""
         )
         body = (
             "<p><a href='" + _esc(_review_url(str(submission["snapshot_id"]), str(submission["object_id"]))) + "'>← Terug naar Review</a></p>"
             "<h1>Correctie specificeren</h1>"
-            "<p class='lead'>Er is nog niets gewijzigd. Deze stap bepaalt de uitvoerbare, "
-            "brongebonden reparatie. Pas daarna worden review en nieuwe versie samen opgeslagen.</p>"
+            "<p class='lead'>Er is nog niets gewijzigd. Bevestigen maakt een nieuw voorstel voor beoordeling.</p>"
             f"<p><strong>Reden:</strong> {_esc(submission.get('comment'))}</p>"
             + note_html
             + '<form method="post" action="/review/resolve">'

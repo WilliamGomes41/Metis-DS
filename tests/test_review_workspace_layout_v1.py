@@ -67,14 +67,15 @@ def test_workspace_preserves_task_destinations_and_passage_progress():
     assert '56 te controleren' in html and '338 af te handelen' in html
     assert html.index('Jouw open werk') < html.index('Reviewvoortgang')
     assert 'review-burden' not in html
-    assert '/settings/technical?document=snapshot-1' in hrefs
+    assert '/review?document=snapshot-1&task=repair' in hrefs
 
 
 def test_workspace_empty_work_does_not_imply_publication_readiness():
     html = render(Projection(empty=True))
-    assert 'dit betekent niet automatisch dat publicatie mogelijk is' in html
+    assert 'Geen inhoudelijke beoordeling voor jou beschikbaar.' in html
+    assert 'Klaar voor publicatie' not in html
     assert '/review?document=snapshot-1&task=structure' not in Links(html).hrefs
-    assert '/settings/technical?document=snapshot-1' in Links(html).hrefs
+    assert '/review?document=snapshot-1&task=repair' in Links(html).hrefs
 
 
 def test_workboard_still_requires_reviewer_role():

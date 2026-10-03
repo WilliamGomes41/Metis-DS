@@ -16,10 +16,6 @@ _HOME_WORKFLOW_NAV = re.compile(
     r'<a href="/(?:ingest|review|publish|tree)"[^>]*>.*?</a>', re.S
 )
 _HOME_NAV = re.compile(r'<a href="/"[^>]*>Mijn werk</a>', re.S)
-_NEXT_STEP = re.compile(
-    r'<section class="review-next-step(?: review-next-step-complete)?"[^>]*>.*?</section>',
-    re.S,
-)
 _BATCH_SOURCE_LINK = re.compile(
     r'\s*<a href="/review/bronpassage\?document=[^"]+">Bronpassage</a>', re.S
 )
@@ -48,9 +44,6 @@ def simplify_console_html(path: str, body: str) -> str:
         html = _HOME_WORKFLOW_NAV.sub("", html)
 
     if path == "/review":
-        # The recommended task is already the first actionable task card below.
-        html = _NEXT_STEP.sub("", html)
-
         # In a batch row the object-review link already exposes source context
         # and the full-source action. Do not offer a second direct source door.
         html = _BATCH_SOURCE_LINK.sub("", html)

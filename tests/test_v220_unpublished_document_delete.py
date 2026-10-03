@@ -206,7 +206,7 @@ def test_delete_control_on_document_card_and_review_chooser(tmp_path: Path) -> N
     chooser = client.get("/review").text
     assert DELETE_LABEL not in chooser
     assert snap in chooser
-    assert "Beoordeel" in chooser
+    assert 'href="/help/review"' in chooser
 
     tree = client.get("/tree").text
     assert "Documenten" in tree
@@ -219,7 +219,7 @@ def test_delete_control_on_document_card_and_review_chooser(tmp_path: Path) -> N
 
     chosen = client.get(f"/review?document={snap}").text
     assert DELETE_LABEL not in chosen
-    assert "Beoordeel" in chosen
+    assert 'href="/help/review"' in chosen
 
     assert "envelope" not in _visible_text(chooser).lower()
     assert "envelope" not in _visible_text(tree).lower()
@@ -560,7 +560,7 @@ def test_hide_selected_objects_in_staying_freeze_is_forbidden(tmp_path: Path) ->
     assert "hide this card" not in APP_SOURCE.read_text(encoding="utf-8").lower()
     assert not hasattr(OperationsConsole, "hide_selected_objects")
     assert not hasattr(OperationsConsole, "delete_object")
-    assert "Beoordeel" in before
+    assert 'href="/help/review"' in before
 
 
 def test_delete_is_whole_unpublished_snapshot_only() -> None:
@@ -808,7 +808,7 @@ def test_v216_through_v219_review_extract_still_holds(tmp_path: Path) -> None:
     dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
     headings = client.get(f"/review?document={receipt['snapshot_id']}&task=headings").text
     individual = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
-    control = client.get(f"/review?document={receipt['snapshot_id']}&task=control").text
+    control = client.get(f"/review?document={receipt['snapshot_id']}&task=inventory").text
     html = dashboard + headings + individual + control
     assert SLOGAN not in html
     assert "wat een EPD MAG zeggen" not in html
@@ -818,7 +818,7 @@ def test_v216_through_v219_review_extract_still_holds(tmp_path: Path) -> None:
     assert "Bevestig geselecteerde koppen als structuur" in html
     assert f"Koppen controleren ({len(koppen)})" in html
     if leftover:
-        assert "Controleoverzicht per kop" in _visible_text(html)
+        assert "Alle passages en hun afhandeling" in _visible_text(html)
         assert "unclassified" not in _visible_text(html).casefold()
     duty_ids = {obj["object_id"] for obj in duty}
     leftover_ids = {obj["object_id"] for obj in leftover}

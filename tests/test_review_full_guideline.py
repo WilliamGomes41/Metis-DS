@@ -54,7 +54,7 @@ def test_click_full_guideline_shows_all_frozen_html_and_returns_to_same_task(tmp
     objects_before = deepcopy(console.snapshot_objects(snapshot))
     source_before = console._verified_source_bytes(console._envelope(snapshot))[1]
     card = client.get(f"/review?{query}&task=contextual").text
-    link = re.search(r'href="([^"]+)">Open volledige richtlijn</a>', card)
+    link = re.search(r'href="([^"]+)">Open oorspronkelijke bron</a>', card)
     assert link, card
     response = client.get(unescape(link[1]))
     assert response.status_code == 200

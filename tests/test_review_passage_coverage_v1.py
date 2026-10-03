@@ -41,7 +41,7 @@ def test_343_to_5_keeps_all_338_missing_admission_passages_reachable():
     assert "missing-0" not in contextual
     remaining = _render_review_index("snap-test", objects, "tekst", task="disposition", bindings=[])
     assert set(_inventory_ids(remaining)) == {f"missing-{i}" for i in range(338)}
-    assert "Toelating ontbreekt of is onbekend" in remaining
+    assert "Gebruik van bronpassage bepalen" in remaining
     inventory = _render_review_index("snap-test", objects, "tekst", task="inventory", bindings=[])
     assert len(_inventory_ids(inventory)) == 343
     assert len(set(_inventory_ids(inventory))) == 343
@@ -64,7 +64,7 @@ def test_followup_counts_lists_and_final_blocked_history_are_disjoint():
     dashboard = _render_review_index("snap", objects, "tekst", bindings=[])
     assert "Alle reviewtaken zijn afgerond" not in dashboard
     assert 'task=disposition' in dashboard
-    assert '/settings/technical?document=snap' in dashboard
+    assert '/review?document=snap&amp;task=repair' in dashboard
     inventory = _render_review_index("snap", objects, "tekst", task="inventory", bindings=[])
     assert set(_inventory_ids(inventory)) == {"blocked", "excluded", "unknown"}
     assert 'object=excluded&amp;task=history' in inventory
@@ -105,7 +105,7 @@ def test_http_followup_is_reachable_and_can_be_resolved_without_losing_history(t
     assert target["object_id"] in _inventory_ids(response.text)
     detail = client.get(f"/review?document={sid}&task={task}&object={target['object_id']}")
     assert detail.status_code == 200
-    assert ("technisch geblokkeerd" if gate else "technische toelating") in detail.text
+    assert ("kan nog niet worden goedgekeurd" if gate else "nog niet beschikbaar voor goedkeuring") in detail.text
     assert "Metis heeft de technische controles uitgevoerd" not in detail.text
     assert console.objects_revision(sid) == before
     assert not source_passage_closure(console.snapshot_objects(sid))["source_passage_review_complete"]

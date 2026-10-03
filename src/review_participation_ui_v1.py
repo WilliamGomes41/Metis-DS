@@ -187,9 +187,9 @@ def install_routes(app, console, require, page):
         if publisher:
             for target, available in choices['replace']:
                 forms.append(form('replace', 'Reviewer vervangen: '+names.get(target,'Voormalige reviewer'), available, target))
-        note = '<p>Een publisher activeert bij de eerste wijziging expliciet het deelnemersbeheer. Bestaande verplichte reviewers en onafhankelijkheid blijven behouden.</p>' if not policy else ''
+        from src.operations_console_app import _task_links
+        note = _task_links('review')
         return page(navigation(actor,document)+'<h1>Deelnemers beheren</h1><p>'+esc(env['title'])+'</p>'+roster(console,env,names)+note+
-                    '<p>Archiveren bewaart historie. Een verplichte plek blijft open tot vervanging. De vervanger beoordeelt zelf; geldig werk van anderen blijft behouden. Vervang de primaire reviewer in één handeling.</p>'+
                     ''.join(forms))
 
     @app.post('/review/participants')
