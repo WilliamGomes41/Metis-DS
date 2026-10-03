@@ -34,7 +34,7 @@ The workflow-document payload remains the single authority for processing attemp
 
 Checkpoints are bounded diagnostic metadata on the running attempt. Activation compares all original workflow/source/attempt state except this non-authoritative metadata, then merges the latest stored diagnostics before committing success. State, actor, source hash/version, object revision, grant, bindings and publication guards retain their checks. Diagnostics are never inserted into `semantic_replay`, which remains validated-only.
 
-Versioned diagnostic replay fingerprints validator dependencies and verifies both saved input and proposal hashes. It validates the semantic proposal only, without provider/parsing or downstream admission reruns. A provider abstention/invalid JSON/transport error therefore has recorded provider-stage evidence, but cannot claim a matching semantic rejection. Unavailable versions are reported instead of rerunning a historical input under new rules.
+Versioned diagnostic replay fingerprints validator dependencies and verifies both saved input and proposal hashes. It reruns the same pure proposal gates and semantic validator, without provider calls, JSON repair or downstream admission reruns. Abstention and missing v2 context reproduce their gate rejection. Invalid JSON/transport errors have recorded provider-stage evidence but no usable parsed proposal. Unavailable versions are reported instead of rerunning a historical input under new rules.
 
 ## Compatibility and recovery
 

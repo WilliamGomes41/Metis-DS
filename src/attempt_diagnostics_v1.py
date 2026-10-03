@@ -15,7 +15,7 @@ VALIDATOR_FILES = ("semantic_passage_v1.py", "recommendation_semantics_v1.py",
                    "semantic_replay_v1.py", "knowledge_relations_v1.py", "knowledge_relation_proposal_v1.py",
                    "source_reconstruction_v1.py", "source_layout_v1.py",
                    "serving_relations_v1.py", "source_context_review_v1.py",
-                   "attempt_diagnostics_v1.py")
+                   "attempt_diagnostics_v1.py", "pre_review_semantic_v1.py")
 
 
 def validator_identity():
@@ -109,6 +109,13 @@ def replay_diagnostic(attempt):
     expected = diagnostic.get("validator_input_hash")
     if expected != hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest():
         return {"status": "unavailable", "reason_code": "diagnostic_input_integrity_failed"}
+    from src.pre_review_semantic_v1 import validate_provider_proposal
+    from src.operations_console_v1 import ConsoleError
+    try:
+        validate_provider_proposal(diagnostic["proposal"], field_contract_v2=data.get("field_contract_v2", False))
+    except ConsoleError as error:
+        finding = getattr(error, "validation_finding", {"reason_code": error.code})
+        return {"status": "rejected", "reason_code": finding["reason_code"], "finding": finding}
     from src.semantic_passage_v1 import semantic_units_from_proposal, SemanticPassageError
     try:
         units = semantic_units_from_proposal(**deepcopy(data), proposal=deepcopy(diagnostic["proposal"]))

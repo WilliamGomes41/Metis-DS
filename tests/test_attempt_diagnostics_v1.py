@@ -216,3 +216,20 @@ def test_failed_diagnostic_write_stops_before_provider(tmp_path, monkeypatch):
     with pytest.raises(ConsoleError, match="processing_diagnostic_write_failed") as caught:
         console._diagnostic_writer(sid, attempt["attempt_id"])("model_request", {})
     assert "exception prose" not in str(caught.value)
+
+
+@pytest.mark.parametrize("case,reason", [("abstain", "pre_review_llm_abstained"), ("context", "source_bound_context_required")])
+def test_pure_proposal_gate_reproduces_abstention_and_missing_context(case, reason):
+    from src.attempt_diagnostics_v1 import checkpoint
+    attempt = {}
+    proposal = {"objects": [], "abstain_reason": "uncertain"} if case == "abstain" else {"objects": [{}], "abstain_reason": None}
+    with pytest.raises(ConsoleError):
+        semantic_spec_from_fragments(document_id="d", title="t", family="f", class_="richtlijn",
+            fragments=[_fragment("p", "Bespreek dit.")], content_kind="html", api_key="test", model="test",
+            field_contract_v2=(case == "context"),
+            formation_context={"diagnostic_checkpoint": lambda phase, values: checkpoint(attempt, phase, values)},
+            post_json=lambda *_: _response(proposal))
+    assert replay_diagnostic(attempt)["reason_code"] == reason
+    if case == "context":
+        assert attempt["diagnostic"]["finding"]["candidate_index"] == 0
+        assert attempt["diagnostic"]["finding"]["field"] == "context_evidence"

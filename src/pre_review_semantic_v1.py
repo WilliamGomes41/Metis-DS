@@ -494,6 +494,21 @@ def _replay_identity(
         model_config_hash=_stable_json_hash(SEMANTIC_MODEL_CONFIG),
     )
 
+def validate_provider_proposal(proposal, *, field_contract_v2=False):
+    """Pure proposal gates shared with read-only diagnostic reproduction."""
+    if not isinstance(proposal, dict):
+        raise ConsoleError("pre_review_llm_response_invalid")
+    if str(proposal.get("abstain_reason") or "").strip():
+        raise ConsoleError("pre_review_llm_abstained")
+    if field_contract_v2 and isinstance(proposal.get("objects"), list):
+        for index, row in enumerate(proposal["objects"]):
+            if not isinstance(row, dict) or "context_evidence" not in row:
+                error = ConsoleError("pre_review_llm_proposal_rejected", "source_bound_context_required")
+                error.validation_finding = {"candidate_index": index, "field": "context_evidence",
+                    "proposed_object": row, "reason_code": "source_bound_context_required"}
+                raise error
+
+
 def _provider_proposal(
     *,
     api_key: str,
@@ -562,15 +577,14 @@ def _provider_proposal(
         proposal = json.loads(output_text)
     except json.JSONDecodeError as exc:
         raise ConsoleError("pre_review_llm_response_invalid") from exc
-    if not isinstance(proposal, dict):
-        raise ConsoleError("pre_review_llm_response_invalid")
     if checkpoint:
         checkpoint("proposal_parsed", {"proposal": proposal, "proposal_hash": _stable_json_hash(proposal)})
-    if str(proposal.get("abstain_reason") or "").strip():
-        raise ConsoleError("pre_review_llm_abstained")
-    if field_contract_v2 and isinstance(proposal.get("objects"), list):
-        if any(not isinstance(row, dict) or "context_evidence" not in row for row in proposal["objects"]):
-            raise ConsoleError("pre_review_llm_proposal_rejected", "source_bound_context_required")
+    try:
+        validate_provider_proposal(proposal, field_contract_v2=field_contract_v2)
+    except ConsoleError as error:
+        if checkpoint:
+            checkpoint("proposal_gate_rejected", {"finding": getattr(error, "validation_finding", {"reason_code": error.code})})
+        raise
     if evidence is not None:
         # Never persist HTTP headers, credentials, arbitrary provider metadata or
         # reasoning. This observation travels through the existing run commit.
