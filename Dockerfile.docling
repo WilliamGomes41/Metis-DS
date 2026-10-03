@@ -1,0 +1,36 @@
+# Same Metis kernel and existing startup/authority guards, with an isolated
+# official Docling interpreter. This recipe does not create Azure resources.
+FROM python:3.12-slim AS runtime
+WORKDIR /app
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends fonts-urw-base35 \
+ && rm -rf /var/lib/apt/lists/*
+COPY requirements-docling.txt requirements-docling.lock requirements-console.txt /app/
+RUN python -m venv /opt/docling \
+ && /opt/docling/bin/pip install --no-cache-dir torch==2.14.1+cpu torchvision==0.29.1+cpu --index-url https://download.pytorch.org/whl/cpu \
+ && /opt/docling/bin/pip install --no-cache-dir -r requirements-docling.lock \
+ && /opt/docling/bin/pip check \
+ && python -m pip install --no-cache-dir -r requirements-console.txt
+COPY scripts/prepare_docling_models.py /app/scripts/
+COPY src/__init__.py src/docling_contract_v1.py src/docling_render_fonts_v1.py /app/src/
+RUN /opt/docling/bin/python scripts/prepare_docling_models.py /opt/docling-models
+COPY src /app/src
+COPY scripts /app/scripts
+COPY config /app/config
+COPY schemas /app/schemas
+COPY assets /app/assets
+COPY db /app/db
+COPY data/audit/semantic_passage_safety_v1.json /app/data/audit/semantic_passage_safety_v1.json
+ENV METIS_DOCLING_PYTHON=/opt/docling/bin/python \
+    METIS_DOCLING_ARTIFACTS_PATH=/opt/docling-models \
+    HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+    METIS_DOCLING_MAX_RSS_MIB=1536
+# METIS_PDF_EXTRACTOR remains an explicit staged server cutover setting.
+# Existing PostgreSQL/Azure Blob environment requirements still apply.
+CMD ["bash", "scripts/azure_console_startup.sh"]
+
+FROM runtime AS acceptance
+RUN python -m pip install --no-cache-dir pytest httpx
+COPY tests /app/tests
+ENV METIS_DOCLING_REAL_ACCEPTANCE=1 METIS_PDF_EXTRACTOR=docling
+CMD ["python", "-m", "pytest", "-q", "tests/test_docling_real_pdf.py"]

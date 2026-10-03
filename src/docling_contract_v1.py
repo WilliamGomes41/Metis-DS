@@ -33,7 +33,7 @@ class ExtractedFragments(list):
         self.extraction_record = record
 
 
-def top_left_box(box: dict, size: dict) -> list[float]:
+def top_left_box(box: dict, size: dict, *, intersect_page: bool = False) -> list[float]:
     try:
         left, right, top, bottom = (float(box[k]) for k in ("l", "r", "t", "b"))
         width, height = float(size["width"]), float(size["height"])
@@ -41,9 +41,18 @@ def top_left_box(box: dict, size: dict) -> list[float]:
             top, bottom = height - top, height - bottom
         elif box["coord_origin"] != "TOPLEFT":
             raise ValueError()
+        if (not all(math.isfinite(v) for v in [left, top, right, bottom, width, height])
+                or width <= 0 or height <= 0 or left >= right or top >= bottom):
+            raise ValueError()
+        if intersect_page:
+            # A PDF glyph's bounds can extend beyond the visible page rectangle.
+            # Locate the supplied geometry's visible intersection; retain the
+            # unmodified SDK bbox in provenance. Never move disjoint geometry
+            # onto a page or repair reversed/non-finite coordinates.
+            left, top = max(0, left), max(0, top)
+            right, bottom = min(width, right), min(height, bottom)
         values = [left, top, right, bottom]
-        if (not all(math.isfinite(v) for v in [*values, width, height])
-                or not (0 <= left < right <= width and 0 <= top < bottom <= height)):
+        if not (0 <= left < right <= width and 0 <= top < bottom <= height):
             raise ValueError()
         return values
     except (KeyError, TypeError, ValueError, OverflowError) as error:
@@ -77,6 +86,7 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
     record.pop("metrics", None)
     record["offsets"] = "unicode_codepoints_in_binding_text_field"
     record["raw_text_definition"] = "Docling text; not a verbatim digital-layer claim"
+    record["coordinate_mapping"] = "top_left_points_intersect_original_page"
     record["selected_pages"] = sorted(selected)
     extraction_id = stable_hash(record)
     out, bindings, exclusions, stack = [], [], [], []
@@ -85,7 +95,7 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
         page = prov["page_no"]
         if type(page) is not int or str(page) not in page_data:
             raise DoclingError("docling_page_invalid")
-        box = top_left_box(prov["bbox"], page_data[str(page)]["size"])
+        box = top_left_box(prov["bbox"], page_data[str(page)]["size"], intersect_page=True)
         if page not in selected or not text.strip():
             return
         sequence = len(out) + 1
@@ -104,7 +114,8 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
         bindings.append({"fragment_id": row["fragment_id"], "fragment_hash": row["fragment_hash"],
                          "item_ref": ref, "provenance": deepcopy(prov), "table_cell": cell,
                          "charspan_text_field": text_field,
-                         "text_origin": origin, "geometry_precision": "item_bbox"})
+                         "text_origin": origin, "geometry_precision": "item_bbox",
+                         "geometry_mapping": "intersect_original_page"})
 
     for ref in ordered:
         item = items[ref]

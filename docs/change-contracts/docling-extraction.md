@@ -111,3 +111,33 @@ hash and refuses conversion if that inventory changes. The acceptance Docker
 image installs URW fonts before model preparation. These checks identify a
 runtime input; they do not prove the previous column failure was font-caused or
 establish production Azure fitness.
+
+### Visible source geometry and bounded memory follow-up
+
+A Mantelzorg PDFium glyph bbox ends 1.272 points below page 3's physical
+rectangle. Its visible intersection contains the exact expected word in the
+original PDF. Metis locators therefore use the mathematical intersection of
+Docling-supplied item/cell geometry with the original page. Keep the raw bbox
+unchanged in the document and binding, and hash the mapping definition into
+extraction identity. Disjoint, reversed, non-finite and unknown-origin geometry
+still fails; do not clamp text offsets or infer a replacement location. This
+translation preserves the hard invariant that a source locator lies on the
+original page, without deleting partly clipped source content.
+
+PID-namespace mismatch exposed an actual supervisor bug: a namespace-local
+child PID could identify an unrelated process in a host-mounted /proc. Bind RSS
+to PPid and NSpid, including threaded callers and Linux without task/children.
+Kill/reap when monitoring remains unavailable rather than accepting unmeasured
+conversion. Verify a real allocating child is killed from a thread. This
+strengthens the existing bounded conversion; no durable state owner changes.
+
+Dockerfile.docling packages the SAME kernel/startup command with an isolated
+SDK interpreter, models and fingerprinted fonts prepared at image build time.
+The runtime target excludes test dependencies and retains all existing
+PostgreSQL/Azure Blob startup guards. The acceptance target tests that exact
+runtime base offline in a 2 GiB / two-CPU container, with a 1536 MiB child RSS
+ceiling. That is a candidate measured runtime profile, not an Azure deployment,
+SKU increase, container-registry publication or production-fit claim. The lean
+ZIP's dependency exclusions remain intact. Production cutover still requires
+confirmation that the existing Azure host can run this artifact within budget;
+no infrastructure changes are authorized by creating or testing this recipe.

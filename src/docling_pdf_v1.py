@@ -37,13 +37,39 @@ def _positive(name: str, default: float, maximum: float) -> float:
         raise DoclingError("docling_limits_invalid") from error
 
 
-def _rss(pid: int) -> int:
+def _status(path: Path) -> dict[str, str]:
     try:
-        for line in Path(f"/proc/{pid}/status").read_text().splitlines():
-            if line.startswith("VmRSS:"):
-                return int(line.split()[1]) * 1024
+        return dict(line.split(":", 1) for line in path.read_text().splitlines() if ":" in line)
     except FileNotFoundError:
-        pass
+        return {}
+
+
+def _rss(pid: int) -> int:
+    # /proc may be mounted from an ancestor PID namespace. Never measure an
+    # unrelated host process whose numeric PID happens to equal Popen.pid.
+    parent = _status(Path("/proc/self/status"))
+    if not parent.get("Pid"):
+        raise DoclingError("docling_memory_monitor_unavailable")
+    parent_pid = int(parent["Pid"])
+    depth = len(parent.get("NSpid", parent["Pid"]).split()) - 1
+    def own_child(status):
+        namespace_pids = status.get("NSpid", status.get("Pid", "")).split()
+        return (status.get("PPid", "").strip() == str(parent_pid)
+                and len(namespace_pids) > depth and int(namespace_pids[depth]) == pid)
+    status = _status(Path(f"/proc/{pid}/status"))
+    if not own_child(status):
+        try:
+            children = Path("/proc/thread-self/children").read_text().split()
+        except FileNotFoundError:
+            # Some Linux kernels omit task/children (CONFIG_CHECKPOINT_RESTORE).
+            # Only inspect status metadata; PPid + NSpid still bind the result
+            # to this exact child. No command lines or other process contents.
+            children = [path.name for path in Path("/proc").iterdir()
+                        if path.name.isdigit()] if depth else []
+        status = next((s for child in children
+                       if own_child(s := _status(Path(f"/proc/{child}/status")))), {})
+    if status.get("VmRSS"):
+        return int(status["VmRSS"].split()[0]) * 1024
     return 0
 
 
@@ -59,6 +85,8 @@ def supervise(command: list[str], *, pass_fds: tuple[int, ...], env: dict,
             peak = max(peak, _rss(process.pid))
             if peak > max_rss_bytes:
                 raise DoclingError("docling_memory_limit_exceeded")
+            if not peak and time.monotonic() - started >= 1:
+                raise DoclingError("docling_memory_monitor_unavailable")
             if time.monotonic() - started >= timeout:
                 raise DoclingError("docling_timeout")
             try:

@@ -78,7 +78,7 @@ def test_real_structure_columns_labels_table_and_cross_page(tmp_path):
     rows = extract(source, document_id="structure", source_id="src")
     # Synthetic content only: retain the actual model output before assertions
     # so runner-specific layout errors can be traced without user documents.
-    evidence_dir = Path("output/docling-synthetic")
+    evidence_dir = Path(os.environ.get("METIS_DOCLING_TEST_EVIDENCE_DIR", str(tmp_path / "evidence")))
     evidence_dir.mkdir(parents=True, exist_ok=True)
     (evidence_dir / "structure.pdf").write_bytes(source.read_bytes())
     (evidence_dir / "structure-extraction.json").write_text(
@@ -326,7 +326,7 @@ def test_real_pdf_postgres_commit_rollback_and_concurrent_retry(tmp_path, workfl
             raise WorkflowDocumentStoreError("injected_commit_failure")
         return result
     monkeypatch.setattr(store, "write_bundle", fail_activation)
-    with pytest.raises(ConsoleError, match="workflow_document_write_failed"):
+    with pytest.raises(ConsoleError, match="injected_commit_failure"):
         console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id="rollback-real")
     restarted = create()
     assert restarted.processing_status(sid)["state"] == "failed"

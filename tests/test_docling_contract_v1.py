@@ -44,6 +44,34 @@ def test_render_font_build_identity_rejects_missing_changed_or_added_fonts(tmp_p
         fonts.verify_fonts(expected)
 
 
+def test_rss_uses_own_child_in_the_mounted_pid_namespace(monkeypatch):
+    from src import docling_pdf_v1 as adapter
+    statuses = {
+        "/proc/self/status": {"Pid": "100", "NSpid": "100 5"},
+        # Host PID 6 is an unrelated process, not the namespace-local child 6.
+        "/proc/6/status": {"Pid": "6", "PPid": "1", "NSpid": "6", "VmRSS": "1 kB"},
+        "/proc/101/status": {"Pid": "101", "PPid": "100", "NSpid": "101 6", "VmRSS": "12345 kB"},
+    }
+    monkeypatch.setattr(adapter, "_status", lambda path: statuses.get(str(path), {}))
+    monkeypatch.setattr(Path, "read_text", lambda self: "101" if str(self) == "/proc/thread-self/children" else "")
+    assert adapter._rss(6) == 12345 * 1024
+    def missing_children(self):
+        raise FileNotFoundError()
+    monkeypatch.setattr(Path, "read_text", missing_children)
+    monkeypatch.setattr(Path, "iterdir", lambda self: iter([Path("/proc/6"), Path("/proc/101")]))
+    assert adapter._rss(6) == 12345 * 1024
+
+
+def test_real_supervisor_terminates_memory_overrun_from_a_thread():
+    from concurrent.futures import ThreadPoolExecutor
+    def run():
+        with pytest.raises(DoclingError, match="docling_memory_limit_exceeded"):
+            supervise([sys.executable, "-c", "import time; allocation=bytearray(96*1024*1024); time.sleep(10)"],
+                      pass_fds=(), env=dict(os.environ), timeout=5, max_rss_bytes=32*1024*1024)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pool.submit(run).result(timeout=8)
+
+
 def result():
     return {"contract": CONTRACT, "source_sha256": "a" * 64,
             "versions": {"docling-slim": "2.132.0", "docling-core": "2.99.0"},
@@ -60,6 +88,25 @@ def result():
 
 def rows(payload=None):
     return translate(payload or result(), document_id="doc", source_id="src", source_sha256="a" * 64)
+
+
+def test_visible_page_intersection_retains_raw_bounds_and_rejects_invalid_geometry():
+    size = {"width": 100, "height": 200}
+    box = {"l": 20, "r": 80, "t": 5, "b": -1, "coord_origin": "BOTTOMLEFT"}
+    with pytest.raises(DoclingError, match="geometry_invalid"):
+        top_left_box(box, size)
+    assert top_left_box(box, size, intersect_page=True) == [20, 195, 80, 200]
+    assert box["b"] == -1
+    for invalid in [dict(box, t=-5, b=-10), dict(box, l=90, r=80), dict(box, t=float("nan")),
+                    dict(box, coord_origin="unknown")]:
+        with pytest.raises(DoclingError, match="geometry_invalid"):
+            top_left_box(invalid, size, intersect_page=True)
+    payload = result()
+    raw = payload["document"]["texts"][0]["prov"][0]["bbox"]
+    raw.update(t=5, b=-1)
+    fragments = rows(payload)
+    assert fragments[0]["bbox"] == [10, 795, 200, 800]
+    assert fragments.extraction_record["bindings"][0]["provenance"]["bbox"] == raw
 
 
 def test_mapping_hash_offsets_origin_and_atomic_evidence():
