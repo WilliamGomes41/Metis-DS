@@ -153,3 +153,12 @@ signalen van overbelasting?' opens an empty passage; the translated box opens
 that exact original text. The numbered/unequal-page real-PDF regression and
 forced merged-provenance unit case guard against accepting an in-page but
 incorrectly shifted locator. No semantic/review/publication rule changes.
+
+Packaging cleanup: Dockerfile.docling's runtime/acceptance targets replace the
+initial duplicate Dockerfile.docling-acceptance recipe. The build context has an
+allowlist: code/dependencies, fixtures and the existing static audit JSON only;
+no private source files, runtime state or credentials. Builds require an explicit
+40-character METIS_BUILD_COMMIT and stamp the existing deployed-commit marker
+plus the OCI revision label. This uses the existing deployment identity, not a
+new status administration. Example build (no push/deploy):
+`docker build -f Dockerfile.docling --target runtime --build-arg METIS_BUILD_COMMIT=<reviewed-commit> -t metis-docling:<reviewed-commit> .`

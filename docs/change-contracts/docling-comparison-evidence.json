@@ -1,15 +1,18 @@
 {
-  "pipeline": "official Docling 2.132.0 / Egret-large / TableFormer / OCR disabled",
+  "pipeline": "official Docling 2.132.0 / official PyPdfiumDocumentBackend / Egret-large / TableFormer / OCR disabled",
+  "conversion_code_commit": "15b8556fbbb6d1c1424dcf955a261a578b79e3a8",
+  "coordinate_translation_code_commit": "3b7bfdbe68f975754bde165a830738c05a96d39b",
+  "child_rss_limit_mib": 1536,
   "documents": [
     {
       "name": "mantelzorg",
       "source_sha256": "48a4e9913c24a7c43d9eb1adacee4a508625add0da11dd5656ba47aed46a5c62",
       "pages": 5,
       "metrics": {
-        "conversion_seconds": 6.596355425994261,
-        "peak_rss_kib": 1223564,
-        "elapsed_seconds": 11.12206049499946,
-        "observed_peak_rss_bytes": 462848,
+        "conversion_seconds": 6.533958479994908,
+        "peak_rss_kib": 1170944,
+        "elapsed_seconds": 11.074319050996564,
+        "observed_peak_rss_bytes": 1199816704,
         "worker_reaped": true
       }
     },
@@ -18,10 +21,10 @@
       "source_sha256": "62dfd76e0683a372d54b6d7aea8b09b47b2b71022e60ff034d76223919bec47c",
       "pages": 46,
       "metrics": {
-        "conversion_seconds": 50.60162761700485,
-        "peak_rss_kib": 1812036,
-        "elapsed_seconds": 55.548146528999496,
-        "observed_peak_rss_bytes": 0,
+        "conversion_seconds": 48.46661902000051,
+        "peak_rss_kib": 1307460,
+        "elapsed_seconds": 53.20719091399951,
+        "observed_peak_rss_bytes": 1339715584,
         "worker_reaped": true
       }
     },
@@ -30,10 +33,10 @@
       "source_sha256": "431a90fc7619791ab8ab29b859526364e4ad9244b4ce1eac2b130c0ce37e4a9c",
       "pages": 86,
       "metrics": {
-        "conversion_seconds": 68.34501414400438,
-        "peak_rss_kib": 2816176,
-        "elapsed_seconds": 73.50809552500141,
-        "observed_peak_rss_bytes": 0,
+        "conversion_seconds": 66.36718895599915,
+        "peak_rss_kib": 1261712,
+        "elapsed_seconds": 71.02757160900364,
+        "observed_peak_rss_bytes": 1286103040,
         "worker_reaped": true
       }
     }
@@ -52,7 +55,7 @@
       ],
       "new": [
         {
-          "locator": "page:6;bbox:70.944000,386.039120,506.063080,394.972525",
+          "locator": "page:6;bbox:71.740799,385.929535,505.375854,395.371613",
           "expected_in_original_highlight": true
         }
       ]
@@ -70,7 +73,7 @@
       ],
       "new": [
         {
-          "locator": "page:2;bbox:73.346000,247.756400,538.220400,267.933400",
+          "locator": "page:2;bbox:73.633003,247.756470,537.671265,267.949829",
           "expected_in_original_highlight": true
         }
       ]
@@ -88,7 +91,7 @@
       ],
       "new": [
         {
-          "locator": "page:4;bbox:73.346000,206.447400,528.462400,226.624400",
+          "locator": "page:4;bbox:73.460800,206.365417,529.700867,225.041809",
           "expected_in_original_highlight": true
         }
       ]
@@ -106,7 +109,7 @@
       ],
       "new": [
         {
-          "locator": "page:67;bbox:58.346000,61.610000,547.856000,519.451000",
+          "locator": "page:67;bbox:59.029999,402.181000,298.186951,410.614014",
           "expected_in_original_highlight": true
         }
       ]
@@ -124,11 +127,41 @@
       ],
       "new": [
         {
-          "locator": "page:2;bbox:152.400000,396.281250,318.259500,404.827508",
+          "locator": "page:2;bbox:171.188095,396.912994,317.591614,404.647400",
+          "expected_in_original_highlight": true
+        }
+      ]
+    },
+    {
+      "document": "mantelzorg",
+      "source_sha256": "48a4e9913c24a7c43d9eb1adacee4a508625add0da11dd5656ba47aed46a5c62",
+      "page": 3,
+      "expected": "Vertoont de mantelzorger signalen van overbelasting?",
+      "purpose": "mixed-page origin or visible page-edge regression",
+      "new": [
+        {
+          "locator": "page:3;bbox:39.002998,52.000000,236.642975,59.713013",
+          "expected_in_original_highlight": true
+        }
+      ]
+    },
+    {
+      "document": "mantelzorg",
+      "source_sha256": "48a4e9913c24a7c43d9eb1adacee4a508625add0da11dd5656ba47aed46a5c62",
+      "page": 3,
+      "expected": "vaststellen",
+      "purpose": "mixed-page origin or visible page-edge regression",
+      "new": [
+        {
+          "locator": "page:3;bbox:349.373016,1199.280001,387.748993,1205.472000",
+          "expected_in_original_highlight": true
+        },
+        {
+          "locator": "page:3;bbox:591.973022,1205.580000,630.429993,1210.500000",
           "expected_in_original_highlight": true
         }
       ]
     }
   ],
-  "scope": "Selected known source passages; not a document-wide semantic completeness or Azure capacity proof"
+  "limitation": "Available original files are not confirmed to equal the current three production documents. Concrete selected passages only; no document-wide completeness or general quality-gain claim. Corpus timing/RSS on development host, not Azure. Container hard-budget proof uses synthetic PDFs."
 }

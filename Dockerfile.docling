@@ -21,6 +21,9 @@ COPY schemas /app/schemas
 COPY assets /app/assets
 COPY db /app/db
 COPY data/audit/semantic_passage_safety_v1.json /app/data/audit/semantic_passage_safety_v1.json
+ARG METIS_BUILD_COMMIT
+RUN python -c 'import os,re; from pathlib import Path; revision=os.environ.get("METIS_BUILD_COMMIT", ""); assert re.fullmatch("[0-9a-f]{40}", revision), "explicit_build_commit_required"; Path("config/deployed_commit.txt").write_text(revision + "\n")'
+LABEL org.opencontainers.image.revision=$METIS_BUILD_COMMIT
 ENV METIS_DOCLING_PYTHON=/opt/docling/bin/python \
     METIS_DOCLING_ARTIFACTS_PATH=/opt/docling-models \
     HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
