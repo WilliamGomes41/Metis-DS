@@ -111,8 +111,8 @@ def test_replay_revalidates_merged_proposal_without_another_provider_call():
     assert replayed["_semantic_replay"]["proposal"] == spec["_semantic_replay"]["proposal"]
 
 
-def test_console_v3_survives_restart_replays_and_failed_replacement_is_atomic(tmp_path):
-    from src.operations_console_v1 import OperationsConsole, ConsoleError
+def console_v3_story(tmp_path, make_console):
+    from src.operations_console_v1 import ConsoleError
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV
     from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
     from src.source_bound_fields_v3 import MODE
@@ -126,7 +126,7 @@ def test_console_v3_survives_restart_replays_and_failed_replacement_is_atomic(tm
         return {"id": f"call-{len(calls)}", "status": "completed", "output": [
             {"type": "message", "content": [{"type": "output_text", "text": json.dumps(response_for(payload, text))}]}]}
     env = {PASSAGE_FORMATION_MODE_ENV: MODE, LLM_API_KEY_ENV: "test", LLM_MODEL_ENV: "test-model"}
-    console = OperationsConsole(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
+    console = make_console()
     bind_pre_review_semantic_processing(console, environ=env, post_json=provider)
     author = console.create_account(username='author', password='strong-test-password', roles=('researcher',))
     reviewer = console.create_account(username='reviewer', password='strong-test-password', roles=('reviewer',))
@@ -140,7 +140,7 @@ def test_console_v3_survives_restart_replays_and_failed_replacement_is_atomic(tm
     assert len(recommendations) == 2 and len(calls) == 2
     assert all(o['metadata']['admission']['gate_result'] == 'allowed' for o in recommendations)
     assert all(o['governance']['validation_status'] == 'needs_review' for o in recommendations)
-    restarted = OperationsConsole(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
+    restarted = make_console()
     bind_pre_review_semantic_processing(restarted, environ=env, post_json=provider)
     assert restarted.snapshot_objects(sid, include_blocked=True) == initial
     from fastapi.testclient import TestClient
@@ -169,3 +169,9 @@ def test_console_v3_survives_restart_replays_and_failed_replacement_is_atomic(tm
     assert restarted.snapshot_objects(sid, include_blocked=True) == before
     assert restarted.objects_revision(sid) == revision
     assert restarted._envelope(sid)['processing_attempts'][-1]['state'] == 'failed'
+
+
+def test_console_v3_survives_restart_replays_and_failed_replacement_is_atomic(tmp_path):
+    from src.operations_console_v1 import OperationsConsole
+    console_v3_story(tmp_path, lambda: OperationsConsole(
+        root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime'))
