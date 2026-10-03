@@ -551,9 +551,9 @@ def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path) -> None:
     )
     assert any(obj["object_id"] == planted["object_id"] for obj in leftover)
     html = _client(console).get(
-        f"/review?document={receipt['snapshot_id']}&task=control"
+        f"/review?document={receipt['snapshot_id']}&task=inventory"
     ).text
-    assert "Controleoverzicht per kop" in html
+    assert "Alle passages en hun afhandeling" in html
     assert "unclassified" not in html.casefold()
     card = _client(console).get(
         f"/review?document={receipt['snapshot_id']}&object={planted['object_id']}"

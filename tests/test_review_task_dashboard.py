@@ -33,7 +33,7 @@ def test_default_review_page_is_a_clickable_task_dashboard():
     assert "Documentindeling controleren" in html
     assert "Passages afzonderlijk beoordelen" in html
     assert "Passages selecteren en bevestigen" in html
-    assert "Verder beoordelen" in html
+    assert "Ga verder met beoordelen" in html
     assert 'class="review-task-grid"' in html
     assert "Een onafhankelijke tweede beoordeling geven" not in html
     assert "task=repair" not in html
@@ -41,7 +41,7 @@ def test_default_review_page_is_a_clickable_task_dashboard():
     assert 'href="/review?document=snap-1&amp;task=contextual"' in html
     assert 'href="/review?document=snap-1&amp;task=batch"' in html
     assert "Passage r1." not in html
-    assert "Controleoverzicht per kop" not in html
+    assert "Alle passages en hun afhandeling" not in html
 
 
 def test_each_task_view_only_contains_its_own_work():
@@ -66,15 +66,15 @@ def test_control_information_is_secondary_to_review_tasks():
     objects = [_obj("r1", "recommendation")]
 
     dashboard = _render_review_index("snap-1", objects, "richtlijn")
-    control = _render_review_index("snap-1", objects, "richtlijn", task="control")
+    control = _render_review_index("snap-1", objects, "richtlijn", task="inventory")
 
     assert "Controle en uitzonderingen" not in dashboard
     assert "Passages herstellen" not in dashboard
     assert 'class="review-management"' not in dashboard
     assert 'class="review-blocked-notice"' not in dashboard
-    assert "Controleoverzicht per kop" not in dashboard
-    assert "Geblokkeerde passages herstellen" in control
-    assert "Controleoverzicht per kop" in control
+    assert "Alle passages en hun afhandeling" not in dashboard
+    assert "Alle passages en hun afhandeling" in control
+    assert "Alle passages en hun afhandeling" in control
 
 
 def test_control_card_highlights_blocked_passages_as_work():
@@ -85,10 +85,10 @@ def test_control_card_highlights_blocked_passages_as_work():
 
     dashboard = _render_review_index("snap-1", [blocked], "richtlijn")
 
-    assert "1 passage wacht op technisch herstel" in dashboard
-    assert "Bekijk verwerkingsproblemen" in dashboard
+    assert "1 passage is nog niet beschikbaar voor goedkeuring." in dashboard
+    assert "Passages corrigeren" in dashboard
     assert 'class="review-blocked-notice"' in dashboard
-    assert '/settings/technical?document=snap-1' in dashboard
+    assert '/review?document=snap-1&amp;task=repair' in dashboard
 
 
 
@@ -341,7 +341,7 @@ def test_dashboard_accounts_for_every_passage_without_hiding_followup_work():
     assert inventory.count('data-passage-id=') == 436
     assert followup.count('data-passage-id=') == 338
     assert 'Metis heeft nog niet vastgesteld' in followup
-    assert dashboard.count('/settings/technical?document=snap-430') == 1
+    assert dashboard.count('/review?document=snap-430&amp;task=repair') == 1
     assert rows == before
 
 

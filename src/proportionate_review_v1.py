@@ -228,10 +228,7 @@ def render_normal_risk_batch_panel(
     panels: list[str] = [
         '<section class="review-normal-risk" aria-labelledby="normal-risk-title">',
         '<h2 id="normal-risk-title">Passages selecteren en bevestigen</h2>',
-        '<p>Passages staan hieronder per brononderdeel en typevoorstel. '
-        'Dat betekent niet dat ze inhoudelijk hetzelfde zeggen. Controleer iedere passage met de bron. '
-        'Selecteer daarna alleen de passages die je wilt goedkeuren. '
-        f'Je kunt maximaal {NORMAL_RISK_BATCH_MAX} passages tegelijk bevestigen.</p>',
+        f'<p>Maximaal {NORMAL_RISK_BATCH_MAX} passages per bevestiging.</p>',
     ]
     batch_index = 0
     for (section, proposed), group_objects in groups.items():

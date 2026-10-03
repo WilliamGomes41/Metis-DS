@@ -1,4 +1,4 @@
-"""Decision review copy explains extraction without changing review authority.
+"""Decision review keeps evidence separate from help without changing authority.
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: toegang
@@ -16,7 +16,7 @@ from tests.test_decision_graph_chain import _accounts, _console, _ingest_boom, p
 
 
 @pytest.mark.parametrize("source", ["pdf", "bundle", "export"])
-def test_decision_review_explains_types_without_mutating_evidence(tmp_path, source):
+def test_decision_review_moves_type_explanations_to_help_without_mutating_evidence(tmp_path, source):
     console = _console(tmp_path)
     accounts = _accounts(console)
     kwargs = {}
@@ -39,21 +39,21 @@ def test_decision_review_explains_types_without_mutating_evidence(tmp_path, sour
         assert 'value="path"' in html and "Pad — route of resultaatbundel" in html
         assert 'value="node"' in html and "Knoop — vraag of beslispunt" in html
         assert 'value="outcome"' in html and "Uitkomst — afsluitend advies" in html
-        assert "scorelijstitem" in html and "Een pad is zelf geen advies" in html
+        assert "scorelijstitem" not in html and "Een pad is zelf geen advies" not in html
         assert "Metis stelt voor" not in html
         assert "Huidige indeling:" in html
-        if source == "pdf":
-            assert "standaard het type Knoop" in html
-            assert "geen inhoudelijke classificatie" in html
-        elif source == "bundle":
-            role = obj["metadata"]["result_bundle"]["role"]
-            assert ("automatisch gegroepeerd" if role == "container" else "automatisch afgesplitst") in html
-        else:
-            assert "standaard het type Knoop" not in html
+        assert "standaard het type Knoop" not in html
+        assert "automatisch gegroepeerd" not in html
+        assert "automatisch afgesplitst" not in html
+    help_page = client.get("/help/review")
+    assert help_page.status_code == 200
+    assert "scorelijstitem" in help_page.text and "Een pad is zelf geen advies" in help_page.text
+    assert "geen inhoudelijke classificatie" in help_page.text
     graph = client.get(f"/review/decision-graph?document={sid}")
     assert graph.status_code == 200
     assert "Verbinding 1" in graph.text and "Soort verbinding" in graph.text
-    assert "Een route bestaat uit opeenvolgende stappen" in graph.text
+    assert "Een route bestaat uit opeenvolgende stappen" not in graph.text
+    assert 'href="/help/review"' in graph.text
     assert "Verbindingen opslaan" in graph.text
     assert console.snapshot_objects(sid) == before
     assert console._envelope(sid) == envelope

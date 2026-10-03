@@ -35,7 +35,7 @@ def test_home_keeps_audit_but_removes_duplicate_workflow_nav() -> None:
     assert 'class="review-control-card" href="/audit"' in result
 
 
-def test_review_removes_recommended_duplicate_and_batch_source_shortcut() -> None:
+def test_review_keeps_primary_next_step_and_removes_batch_source_shortcut() -> None:
     html = '''
     <a href="/">Mijn werk</a>
     <section class="review-next-step" aria-labelledby="review-next-title">
@@ -46,8 +46,8 @@ def test_review_removes_recommended_duplicate_and_batch_source_shortcut() -> Non
     <a href="/review/bronpassage?document=s1&amp;object=o1">Bronpassage</a>
     '''
     result = simplify_console_html("/review", html)
-    assert "review-next-step" not in result
-    assert "Ga verder" not in result
+    assert "review-next-step" in result
+    assert "Ga verder" in result
     assert "review-task-card" in result
     assert "Afzonderlijk beoordelen" in result
     assert ">Bronpassage<" not in result

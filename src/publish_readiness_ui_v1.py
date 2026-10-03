@@ -24,12 +24,13 @@ from src.operations_console_app import (
     _esc,
     _nav,
     _page,
+    _task_links,
 )
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 
 CURATION_BLOCKER_LABELS = {
     "review_work_incomplete": (
-        "Nog niet alle kandidaat-kennisobjecten hebben een definitief reviewbesluit."
+        "Nog niet alle voorgestelde passages hebben een definitief reviewbesluit."
     ),
     "source_passage_review_incomplete": (
         "Nog niet alle inhoudelijke bronpassages zijn definitief afgehandeld."
@@ -56,7 +57,7 @@ def _blocker_message(code: str) -> str:
         CURATION_BLOCKER_LABELS.get(code)
         or BLOCKER_LABELS.get(code)
         or ERROR_COPY.get(code)
-        or code.replace("_", " ")
+        or "Publiceren is nog niet beschikbaar. De verantwoordelijke beheerder moet deze blokkade onderzoeken."
     )
 
 
@@ -160,7 +161,7 @@ def _render_publish_state(view: dict[str, Any]) -> str:
     if view["overall_state"] == "published":
         banner = (
             '<div class="banner ok" data-publication-state="published">'
-            "Gepubliceerd. Dit document staat in de publicatieprojectie.</div>"
+            "Gepubliceerd.</div>"
         )
         if not view.get("withdraw_release_id"):
             return banner
@@ -211,15 +212,14 @@ def _render_publish_state(view: dict[str, Any]) -> str:
         )
 
     if not view["technical_ready"]:
-        blocker_html = _blocker_list(view["technical_blockers"])
-        if not blocker_html:
-            blocker_html = (
-                '<p class="muted">Er is nog geen technisch publiceerbaar kennisobject.</p>'
-            )
+        review_blockers = [item for item in view["technical_blockers"] if item.get("recovery_href")]
         sections.append(
             '<section class="section" data-readiness-category="technical">'
-            "<h3>Technische controles</h3>"
-            f"{blocker_html}</section>"
+            '<h3>Publicatie nog niet beschikbaar</h3>'
+            + _blocker_list(review_blockers)
+            + ('<p>De vereiste publicatiecontroles zijn niet afgerond. Technisch beheer moet de blokkade onderzoeken.</p>'
+               if len(review_blockers) < len(view["technical_blockers"]) or not review_blockers else '')
+            + '</section>'
         )
 
     return (
@@ -328,8 +328,7 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
         success = ""
         if request.query_params.get("published") == "yes":
             success = (
-                '<div class="banner ok">Publicatie voltooid en zichtbaar gemaakt '
-                "in de publicatieprojectie.</div>"
+                '<div class="banner ok">Publicatie voltooid.</div>'
             )
         counts = console.waiting_task_counts(account["account_id"])
         return _page(
@@ -337,7 +336,7 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
             {_nav(account, "publish", counts)}
             <section class="room">
               <h1>Publiceren</h1>
-              <p class="lead">Controleer per document of review en technische controles zijn afgerond. Alleen bij volledige gereedheid kan het publicatiebesluit worden genomen.</p>
+              {_task_links("publish")}
               {success}
               <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen documenten.</p>'}</div>
             </section>
@@ -376,7 +375,7 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
             retry = _withdrawal_retry_form(snapshot_id, expected_release_id, reason) if uncertain else ""
             return HTMLResponse(_page(
                 f'<section class="room"><h1>{title}</h1><p>{_esc(message)}</p>'
-                f'<p class="muted">{_esc(exc.code)}</p>{retry}<p><a href="/publish">Naar Publiceren</a></p></section>'
+                f'{retry}<p><a href="/publish">Naar Publiceren</a></p></section>'
             ), status_code=503 if uncertain else 409 if exc.code == "canonical_expected_release_changed" else 400)
         pending = result["projection_status"] == "pending"
         detail = (

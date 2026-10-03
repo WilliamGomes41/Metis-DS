@@ -366,7 +366,7 @@ def test_queue_context_resolves_outside_task_and_preserves_stale_warning():
     assert "Tekst van condition." in html
     assert 'data-relation-authority="proposed"' in html
     assert 'data-relation-resolution="version_mismatch"' in html
-    assert "Alleen de geselecteerde passage" in html
+    assert "Alleen de geselecteerde passage" not in html
     assert [rec, condition] == before
 
 
@@ -374,5 +374,6 @@ def test_queue_without_relations_does_not_invent_semantic_group():
     from src.operations_console_app import _review_section_groups
 
     html = _review_section_groups([_obj("a", "recommendation")], "snapshot")
-    assert "hetzelfde opgeslagen bronpad" in html
+    assert "hetzelfde opgeslagen bronpad" not in html
+    assert 'class="review-source-path"' in html
     assert "Bekijk verbonden passages" not in html

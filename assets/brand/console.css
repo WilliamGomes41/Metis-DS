@@ -1727,3 +1727,10 @@ html[data-theme="dark"] .metis-mark-frame { background: #fff; }
 }
 [data-context-proposal] { border-left: 4px solid var(--paars); padding-left: 12px; }
 [data-review-diagnostics] { overflow-wrap: anywhere; }
+
+/* Task-only execution/evidence layout; home tiles and navigation are excluded. */
+.review-decision-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+.review-source-column, .review-choices-column { min-width: 0; }
+.review-source-column [data-source-bound-fields] { overflow-x: auto; }
+.review-room .task-secondary-nav { margin: 12px 0 24px; }
+@media (max-width: 900px) { .review-decision-layout { grid-template-columns: 1fr; } }

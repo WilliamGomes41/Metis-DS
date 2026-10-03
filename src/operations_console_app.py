@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import html
+import json
 import os
 import re
 import uuid
@@ -696,6 +697,103 @@ def _nav(account: dict[str, Any] | None, current: str = "", counts: dict[str, in
     """
 
 
+def _task_links(topic: str) -> str:
+    """Separate destinations, never embedded instructional or diagnostic UI."""
+    return (
+        '<nav class="task-secondary-nav" aria-label="Hulp en beheer">'
+        f'<a href="/help/{_esc(topic)}">Uitleg bij deze taak</a> · '
+        '<a href="/settings/technical">Technisch beheer</a></nav>'
+    )
+
+
+def _review_validation_script() -> str:
+    """Task-local validation; no changes to the home page's shared script."""
+    return """<script>
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('[data-review-form]').forEach((form) => {
+        const button = form.querySelector('[data-submit-review]');
+        if (!button) return;
+        form.noValidate = true;
+        const selected = (name) => form.querySelector('[name="' + name + '"]:checked');
+        const errors = () => {
+          const missing = [];
+          const add = (name, message) => missing.push({name, message});
+          const decision = selected('eindoordeel');
+          if (!decision) add('eindoordeel', 'Kies een besluit.');
+          if (!selected('suitability')) add('suitability', 'Kies of de passage zelfstandig bruikbaar is.');
+          if (decision && decision.value === 'goedkeuren') {
+            const position = selected('documentpositie_action');
+            const type = selected('type_action');
+            if (!position) add('documentpositie_action', 'Bevestig de kop of kies een andere kop.');
+            if (position && position.value === 'andere_kop' && !selected('parent_choice'))
+              add('parent_choice', 'Kies een kop.');
+            if (!type) add('type_action', 'Bevestig het type of kies een ander type.');
+            const typeField = form.querySelector('[name="confirmed_object_type"]');
+            const proposal = form.querySelector('[name="proposed_object_type"]');
+            const kind = type && type.value === 'dit_klopt' ? proposal.value : typeField.value;
+            if (type && type.value === 'type_wijzigen' && !kind) add('confirmed_object_type', 'Kies een type.');
+            if (kind === 'recommendation' && form.querySelector('[data-recommendation-semantics-block]')) {
+              if (!selected('recommendation_direction')) add('recommendation_direction', 'Kies de richting van de aanbeveling.');
+              if (!selected('recommendation_strength_level')) add('recommendation_strength_level', 'Kies de sterkte die de bron vermeldt.');
+            }
+            const relation = form.querySelector('[name="relation_review_ack"]');
+            if (relation && !relation.checked) add('relation_review_ack', 'Bevestig de relaties.');
+          }
+          Array.from(form.elements).filter((field) => field.willValidate && !field.validity.valid)
+            .forEach((field) => { if (!missing.some((item) => item.name === field.name))
+              add(field.name, field.name === 'comment' ? 'Vul een toelichting in.' : 'Controleer dit veld.'); });
+          return missing;
+        };
+        const showErrors = (missing) => {
+          let summary = form.querySelector('[data-review-error-summary]');
+          if (!summary) {
+            summary = document.createElement('div');
+            summary.className = 'banner err'; summary.dataset.reviewErrorSummary = '';
+            summary.setAttribute('role', 'alert'); summary.tabIndex = -1;
+            form.prepend(summary);
+          }
+          form.querySelectorAll('[aria-invalid="true"]').forEach((field) => field.removeAttribute('aria-invalid'));
+          form.querySelectorAll('[data-review-field-error]').forEach((note) => note.remove());
+          form.querySelectorAll('[data-review-error-describedby]').forEach((field) => {
+            field.removeAttribute('aria-describedby'); delete field.dataset.reviewErrorDescribedby;
+          });
+          summary.replaceChildren(); summary.hidden = !missing.length;
+          if (!missing.length) return;
+          const title = document.createElement('p'); title.textContent = 'Er ontbreekt nog iets'; summary.append(title);
+          const list = document.createElement('ul'); summary.append(list);
+          missing.forEach((item, index) => {
+            const field = form.querySelector('[name="' + item.name + '"]');
+            const row = document.createElement('li'); const link = document.createElement('a');
+            link.textContent = item.message;
+            if (field) {
+              if (!field.id) field.id = 'review-required-' + form.querySelector('[name="object_id"]').value + '-' + index;
+              field.setAttribute('aria-invalid', 'true'); link.href = '#' + field.id;
+              const note = document.createElement('p'); note.className = 'field-error';
+              note.dataset.reviewFieldError = ''; note.id = field.id + '-error'; note.textContent = item.message;
+              field.closest('section, fieldset, label').append(note);
+              if (!field.hasAttribute('aria-describedby')) {
+                field.setAttribute('aria-describedby', note.id); field.dataset.reviewErrorDescribedby = '';
+              }
+              link.addEventListener('click', () => field.focus());
+            }
+            row.append(link); list.append(row);
+          });
+          summary.focus();
+        };
+        const enable = () => { button.disabled = false; };
+        form.addEventListener('input', enable); form.addEventListener('change', enable);
+        form.addEventListener('submit', (event) => {
+          // Source continuation is a separate existing command, not a review decision.
+          if (event.submitter && event.submitter.hasAttribute('formaction')) return;
+          const missing = errors();
+          if (missing.length) { event.preventDefault(); showErrors(missing); }
+        });
+        enable();
+      });
+    });
+    </script>"""
+
+
 def _home_tile(
     *,
     href: str,
@@ -902,9 +1000,6 @@ def _review_context_block(
     return f"""
       <section class="review-card-context review-step" data-review-step="context" aria-label="Samenhang met andere kennisobjecten">
         <h4>Samenhang met andere kennisobjecten</h4>
-        <p class="field-help">
-          Deze context helpt je de passage te begrijpen. Alleen de geselecteerde passage wordt met dit formulier beoordeeld.
-        </p>
         <div class="relation-context-list">{"".join(rows)}</div>
       </section>
     """
@@ -994,10 +1089,6 @@ def _knowledge_relation_review_block(
     return f"""
       <section class="review-step review-knowledge-relations" data-review-step="relations">
         <h4>Welke relaties kloppen?</h4>
-        <p class="field-help">
-          Metis doet relationele voorstellen. Bevestig alleen relaties die volgens de bron bij deze passage horen.
-          Een voorwaarde verandert de sterkte van een aanbeveling niet.
-        </p>
         <div class="relation-review-list">{"".join(rows)}</div>
         <label class="check relation-review-ack">
           <input type="checkbox" name="relation_review_ack" value="1"{_checked((draft or {}).get("relation_review_ack", ""), "1")}>
@@ -1237,7 +1328,6 @@ def _recommendation_semantics_block(
     return f"""
                     <section class="review-step review-recommendation-semantics" data-recommendation-semantics-block data-stamp-block{hidden_attr}>
                       <h4>Sterkte van de aanbeveling</h4>
-                      <p class="field-help">Bevestig richting en sterkte afzonderlijk. Een klinische voorwaarde maakt een aanbeveling niet automatisch zwak.</p>
                       {evidence_html}
                       <fieldset>
                         <legend>Richting</legend>
@@ -1246,8 +1336,6 @@ def _recommendation_semantics_block(
                       </fieldset>
                       <fieldset>
                         <legend>Welke sterkte vermeldt de bron?</legend>
-                        <p class="field-help">Neem de sterkte over uit de oorspronkelijke richtlijn. Je beoordeelt hier niet hoe belangrijk je het advies vindt of hoe zeker je bent van je eigen beoordeling.</p>
-                        <p class="field-help">Kies Sterk of Zwak alleen als de bron de aanbeveling expliciet zo aanduidt. ‘De werkgroep adviseert’ is op zichzelf geen sterkteaanduiding. Kies Niet vermeld in de bron als de bron geen sterkte noemt; de passage blijft dan een aanbeveling.</p>
                         {('<div class="banner err" role="alert">' + _esc(ERROR_COPY.get(draft.get("validation_error", ""), "")) + '<p>Je beoordeling is niet opgeslagen. Je invoer staat hieronder nog klaar.</p></div>') if draft.get("validation_error") else ""}
                         <label class="check"><input type="radio" name="recommendation_strength_level" value="strong"{disabled_attr}{_checked(strength_level, "strong")}> Sterk</label>
                         <label class="check"><input type="radio" name="recommendation_strength_level" value="weak"{disabled_attr}{_checked(strength_level, "weak")}> Zwak</label>
@@ -1357,9 +1445,8 @@ def _source_bound_fields_html(obj: dict[str, Any]) -> str:
         value = values.get(field)
         text = " / ".join(value) if isinstance(value, list) else value
         rows.append(f'<tr><th>{_esc(labels[field])}</th><td>{_esc(text or reasons.get(entry.get("missing_reason"), "Ontbreekt"))}</td></tr>')
-    return ('<details data-source-bound-fields><summary>Voorgestelde betekenisvelden met bronbewijs</summary>'
-            '<p>Letterlijk uit de geselecteerde bronpassage. Controleer ook betekenis en context; dit is nog geen inhoudelijk akkoord.</p>'
-            '<table><tbody>' + ''.join(rows) + '</tbody></table></details>')
+    return ('<section data-source-bound-fields><h4>Bronbewijs bij het voorstel</h4>'
+            '<table><tbody>' + ''.join(rows) + '</tbody></table></section>')
 
 
 def _broncontext_html(
@@ -1374,7 +1461,7 @@ def _broncontext_html(
     lines = []
     hint = source_label_hint(obj)
     if hint:
-        lines.append(f'<p data-source-label-hint><strong>{_esc(hint["label"])}</strong> {_esc(hint["guidance"])}</p>')
+        lines.append(f'<p data-source-label-hint><strong>{_esc(hint["label"])}</strong></p>')
     for ancestor in parts["ancestor_headings"]:
         lines.append(f'<p class="broncontext-heading">{_esc(ancestor)}</p>')
     if parts["current_heading"]:
@@ -1419,15 +1506,14 @@ def _broncontext_html(
             "goedkeuren blijft uitgeschakeld.</p>"
         )
     return f"""
-                  <section class="review-card-bronpassage review-broncontext" data-review-step="b" aria-label="Broncontext"><details data-review-background><summary>Broncontext en achtergrond</summary>
-                    <h4>Broncontext</h4>
+                  <section class="review-card-bronpassage review-broncontext" data-review-step="b" aria-label="Broncontext">
+                    <h4>Bronpassage en context</h4>
                     <div class="broncontext-freeze">{"".join(lines)}</div>
                     {selection_warning}
                     {missing}
-                    <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}{f'&amp;task={_esc(task)}' if task in REVIEW_TASKS else ''}">Open volledige richtlijn</a></p>
-                  </details>
-                    <details data-review-diagnostics><summary>Technische diagnostiek en veldbewijs</summary>{_source_bound_fields_html(obj)}<p>Object {_esc(object_id)} · bronhash {_esc((obj.get("source") or {}).get("source_checksum"))}</p></details>
-                  <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}{f'&amp;task={_esc(task)}' if task in REVIEW_TASKS else ''}">Open oorspronkelijke bron</a></p></section>
+                    {_source_bound_fields_html(obj)}
+                    <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}{f'&amp;task={_esc(task)}' if task in REVIEW_TASKS else ''}">Open oorspronkelijke bron</a></p>
+                  </section>
     """
 
 
@@ -1439,10 +1525,7 @@ _REVIEW_DRAFT_SETS = {
     "documentpositie_action": frozenset({"dit_klopt", "andere_kop"}),
     "type_action": frozenset({"dit_klopt", "type_wijzigen"}),
 }
-_REVIEW_DRAFT_DEFAULTS = {
-    "documentpositie_action": "dit_klopt",
-    "type_action": "dit_klopt",
-}
+_REVIEW_DRAFT_DEFAULTS: dict[str, str] = {}
 _RECOMMENDATION_DIRECTION_VALUES = frozenset({"for", "against"})
 _RECOMMENDATION_STRENGTH_LEVEL_VALUES = frozenset({"strong", "weak", "not_stated"})
 def _sanitize_review_draft(draft: dict[str, Any] | None) -> dict[str, Any]:
@@ -1486,7 +1569,6 @@ def _review_conflict_html(
         f'<div class="banner err" data-stale-write-conflict '
         f'data-error-code="{_esc(SNAPSHOT_OBJECT_WRITE_CONFLICT)}">'
         f"{_esc(ERROR_COPY[SNAPSHOT_OBJECT_WRITE_CONFLICT])}</div>"
-        f'<p class="muted">{_esc(SNAPSHOT_OBJECT_WRITE_CONFLICT)}</p>'
     )
     diffs: list[str] = []
     if current is not None and draft is not None:
@@ -1496,7 +1578,7 @@ def _review_conflict_html(
         if current_suit and current_suit != draft_suit:
             diffs.append(
                 '<div data-diff-field="suitability">'
-                f"<dt>Geschiktheid nu in de store</dt><dd>{_esc(current_suit)}</dd>"
+                f"<dt>Huidige geschiktheid</dt><dd>{_esc(current_suit)}</dd>"
                 f"<dt>Jouw concept</dt><dd>{_esc(draft_suit)}</dd></div>"
             )
         current_eindoordeel = str(passage.get("eindoordeel") or "")
@@ -1504,7 +1586,7 @@ def _review_conflict_html(
         if current_eindoordeel and current_eindoordeel != draft_eindoordeel:
             diffs.append(
                 '<div data-diff-field="eindoordeel">'
-                f"<dt>Eindoordeel nu in de store</dt><dd>{_esc(current_eindoordeel)}</dd>"
+                f"<dt>Huidig eindoordeel</dt><dd>{_esc(current_eindoordeel)}</dd>"
                 f"<dt>Jouw concept</dt><dd>{_esc(draft_eindoordeel)}</dd></div>"
             )
     extra = ""
@@ -1536,12 +1618,7 @@ def _review_index_item(
         f'<a class="review-row-title" href="/review?document={_esc(snapshot_id)}&amp;object={_esc(obj["object_id"])}{task_query}">'
         f"{_esc(title)}</a>"
     )
-    reason_html = (
-        f'<span class="info-tip" tabindex="0" aria-label="Waarom staat deze passage hier? { _esc(reason) }">ⓘ'
-        f'<span class="info-tip-text">{_esc(reason)}</span></span>'
-        if reason else ""
-    )
-    status_html = f'<span class="review-row-status">{_esc(status)}</span>{reason_html}'
+    status_html = f'<span class="review-row-status">{_esc(status)}</span>'
     if checkbox:
         return (
             '<li class="review-row">'
@@ -1594,10 +1671,7 @@ def _review_section_groups(
         panels.append(
             f'<details class="review-section"{" open" if index == 0 else ""}>'
             f'<summary>{_esc(title)} <span class="review-section-count">{len(rows)} passages</span></summary>'
-            '<details class="review-source-path"><summary>Waarom deze groep?</summary>'
-            '<p>Deze passages hebben hetzelfde opgeslagen bronpad. Dit is geen inhoudelijke goedkeuring. '
-            'Controleer de plaatsing bij het beoordelen.</p>'
-            f'<p>{_esc(path or "Geen bronpad beschikbaar")}</p></details>'
+            f'<p class="review-source-path">{_esc(path or "Geen bronpad beschikbaar")}</p>'
             '<ol class="object-index">'
             + "".join(
                 passage_row(obj)
@@ -2005,10 +2079,6 @@ def _review_progress_overview(
           <div><dt>Niet opgenomen</dt><dd>{progress["not_included"]}</dd></div>
         </dl>
         {extras_html}
-        <details class="review-progress-help">
-          <summary>Wat telt mee in de voortgang?</summary>
-          <p>Afwijzen, context, onderbouwing en bewust niet opnemen tellen als afhandeling. De taakkaarten tellen handelingen; tel die aantallen hier niet bij op.</p>
-        </details>
         <a class="review-history-link" href="/review?document={_esc(snapshot_id)}&amp;task=history">Besluiten en historie <span aria-hidden="true">→</span></a>
       </section>
     """
@@ -2027,7 +2097,6 @@ def _review_task_card(
     return f'''
       <a class="review-task-card" href="/review?document={_esc(snapshot_id)}&amp;task={_esc(task)}">
         <span class="review-task-card-title">{_esc(title)}</span>
-        <span class="review-task-card-copy">{_esc(description)}</span>
         <span class="review-task-card-status">{_esc(status)}</span>
         <span class="review-task-card-action">{action} <span aria-hidden="true">→</span></span>
       </a>
@@ -2085,17 +2154,6 @@ def _review_task_dashboard(
     ]
     available = [row for row in tasks if row[3]]
     recommended = available[0] if available else None
-    if recommended:
-        next_step = f'''
-          <section class="review-next-step" aria-labelledby="review-next-title">
-            <p class="eyebrow">Volgende stap</p>
-            <h2 id="review-next-title">{_esc(recommended[1])}</h2>
-            <p>{_esc(recommended[2])}.</p>
-            <a class="btn-primary" href="/review?document={_esc(snapshot_id)}&amp;task={recommended[0]}">Verder beoordelen</a>
-          </section>
-        '''
-    else:
-        next_step = '<p class="review-task-empty">Geen inhoudelijke beoordeling voor jou beschikbaar. Bekijk hieronder wat nog nodig is; dit betekent niet automatisch dat publicatie mogelijk is.</p>'
     statuses = {
         "structure": f"{heading_pending} te controleren · {heading_done} afgerond",
         "contextual": f"{individual_pending} te beoordelen · {individual_done} afgerond",
@@ -2103,13 +2161,25 @@ def _review_task_dashboard(
         "second_review": f"{second_review_pending} te beoordelen",
         "disposition": f"{disposition_pending} af te handelen",
     }
+    if recommended:
+        next_step = f'''
+          <section class="review-next-step" aria-labelledby="review-next-title">
+            <p class="eyebrow">Volgende stap</p>
+            <h2 id="review-next-title">{_esc(recommended[1])}</h2>
+            <p>{_esc(statuses[recommended[0]])}</p>
+            <a class="btn-primary" href="/review?document={_esc(snapshot_id)}&amp;task={recommended[0]}">Ga verder met beoordelen</a>
+          </section>
+        '''
+    else:
+        next_step = '<p class="review-task-empty">Geen inhoudelijke beoordeling voor jou beschikbaar.</p>'
     rows = "".join(
         _review_task_card(
             snapshot_id, task=task, title=title,
-            description=description + ".", status=statuses[task],
+            description="", status=statuses[task],
             recommended=bool(recommended and task == recommended[0]),
         )
         for task, title, description, count in available
+        if recommended is None or task != recommended[0]
     )
     waiting = (
         f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=waiting">'
@@ -2117,8 +2187,9 @@ def _review_task_dashboard(
         if waiting_pending else ''
     )
     repair_notice = (
-        f'<p class="review-blocked-notice">{blocked_count} {"passage wacht" if blocked_count == 1 else "passages wachten"} op technisch herstel. '
-        f'<a href="/settings/technical?document={_esc(snapshot_id)}">Bekijk verwerkingsproblemen</a></p>'
+        f'<p class="review-blocked-notice">{blocked_count} '
+        f'{"passage is" if blocked_count == 1 else "passages zijn"} nog niet beschikbaar voor goedkeuring. '
+        f'<a href="/review?document={_esc(snapshot_id)}&amp;task=repair">Passages corrigeren</a></p>'
         if blocked_count else ''
     )
     return f'''
@@ -2129,7 +2200,6 @@ def _review_task_dashboard(
         <div class="review-work-header">
           <div>
             <h2 id="review-task-title">Jouw open werk</h2>
-            <p>Kies wat je wilt beoordelen.</p>
           </div>
           <a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a>
         </div>
@@ -2150,7 +2220,7 @@ def _review_task_header(snapshot_id: str, title: str, description: str) -> str:
       <header class="review-task-workspace">
         <a class="btn-secondary review-task-back" href="/review?document={_esc(snapshot_id)}">← Terug naar taken</a>
         <h2>{_esc(title)}</h2>
-        <p>{_esc(description)}</p>
+        {_task_links("review")}
       </header>
     '''
 
@@ -2309,7 +2379,7 @@ def _decision_paths_html(console: OperationsConsole, snapshot_id: str, obj: dict
         return ""
     result = ordered_paths(envelope["decision_graph"], objects, envelope["decision_graph_evidence"], str(obj["object_id"]))
     if result["issues"]:
-        return '<section data-decision-paths><h4>Beslispad</h4><p class="banner warn">Pad nog niet vastgesteld: ' + _esc(", ".join(result["issues"])) + '</p></section>'
+        return '<section data-decision-paths><h4>Beslispad</h4><p class="banner warn">Pad nog niet vastgesteld. Controleer de beslisroutes.</p></section>'
     by_id = {row["object_id"]: row for row in objects}
     paths = []
     for index, path in enumerate(result["paths"], 1):
@@ -2327,7 +2397,7 @@ def _knowledge_review_html(obj: dict[str, Any], objects: list[dict[str, Any]]) -
     from src.review_cockpit_v1 import knowledge_review_projection
     projected = knowledge_review_projection(obj, objects)
     essential = "".join(
-        f'<li data-context-status="{_esc(row["status"])}"><b>{_esc(row["role"])}</b>: '
+        f'<li data-context-status="{_esc(row["status"])}"><b>{_esc({"condition": "Voorwaarde", "exception": "Uitzondering", "scope": "Toepassingsgebied", "support": "Onderbouwing"}.get(row["role"], _object_type_label(row["role"])))}</b>: '
         f'{_esc(row["text"])} '
         + ('<strong> — nog niet geldig verbonden</strong>' if row["status"] in {"unresolved", "stale"} else '')
         + '</li>' for row in projected["essential_context"])
@@ -2340,11 +2410,10 @@ def _knowledge_review_html(obj: dict[str, Any], objects: list[dict[str, Any]]) -
         data-reviewed-version="{_esc(projected['object_version'])}">
       <p class="meta">type <b>{_esc(_object_type_label(str(projected['object_type'] or '')))}</b> ·
         status <b>{_esc(review_row_status(obj))}</b> · versie <b>{_esc(projected['object_version'])}</b></p>
-      <p class="eyebrow">Te beoordelen passage</p><h3 data-full-knowledge-passage>{_esc(projected['text'])}</h3><p class="why-selected">{_esc(why_selected(obj))}</p>
+      <p class="eyebrow">Te beoordelen passage</p><h3 data-full-knowledge-passage>{_esc(projected['text'])}</h3>
       <section data-essential-context><h4>Voorwaarden, uitzonderingen en scope</h4>
         {f'<ul>{essential}</ul>' if essential else '<p>Geen afzonderlijke betekeniscontext vastgelegd.</p>'}</section>
       {issues}{proposal}
-      <p class="field-help">Bronbinding bewijst niet dat alle noodzakelijke context is herkend. Controleer ook de oorspronkelijke bron.</p>
     </section>'''
 
 
@@ -2412,7 +2481,7 @@ def _render_second_review_card(
         {_knowledge_review_html(obj, snapshot_objects)}
         <div class="review-cockpit-copy">
           <p class="eyebrow">Onafhankelijke tweede beoordeling</p>
-          <p>De canonieke inhoud staat vast. Controleer dezelfde objectversie onafhankelijk; deze stap wijzigt type, semantiek of relaties niet.</p>
+          <p>Versie {_esc(obj.get("object_version"))}</p>
         </div>
         {_decision_paths_html(console, snapshot_id, obj, snapshot_objects)}
         {_broncontext_html(obj, snapshot_id, str(obj.get("object_id") or ""), True, task="second_review")}
@@ -2500,7 +2569,7 @@ def _review_inventory(
     labels = {
         "structure": "Documentindeling controleren", "contextual": "Passage afzonderlijk beoordelen",
         "batch": "Passages selecteren en bevestigen", "second_review": "Tweede beoordeling",
-        "waiting": "Wacht op andere reviewer", "repair": "Technisch herstel nodig",
+        "waiting": "Wacht op andere reviewer", "repair": "Passages corrigeren",
         "disposition": "Gebruik van bronpassage bepalen", "history": "Status en historie",
     }
     outcomes = {
@@ -2532,12 +2601,9 @@ def _review_inventory(
         if task != "inventory" and category != task:
             continue
         gate = str(admission_of(obj).get("gate_result") or "")
-        admission_label = {"allowed": "Toegelaten", "blocked": "Technisch geblokkeerd"}.get(gate, "Toelating ontbreekt of is onbekend")
-        if obj.get("object_type") == "heading" or review_path == "boom":
-            admission_label = "Structuur-/boomroute"
         outcome = outcomes.get(str(disposition.get("outcome") or ""), "Afhandeling controleren")
         register = (obj.get("metadata") or {}).get("passage_register") or {}
-        origin = "Menselijke review" if register.get("source") == "review" else "Bronverwerking / bestaande registratie"
+        origin = "Vastgelegd door een beoordelaar" if register.get("source") == "review" else "Voorstel uit de bron"
         target_task = "second_review" if category == "waiting" else category
         next_action = "Open de passage en controleer het voorstel met de bron."
         if category == "waiting":
@@ -2563,21 +2629,18 @@ def _review_inventory(
             f'<li data-passage-id="{_esc(object_id)}" data-passage-category="{_esc(category)}">'
             f'<a class="review-row-title" href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={_esc(target_task)}">{_esc(review_card_sentence(obj))}</a>'
             f'{hint_html}'
-            f'<p>{_esc(labels[category])} · {_esc(admission_label)} · {_esc(outcome)}</p>'
+            f'<p>{_esc(labels[category])} · {_esc(outcome)}</p>'
             f'<p class="review-next-action">{_esc(next_action)}</p>'
             f'<a href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={_esc(target_task)}">Bekijk bronpassage</a>'
             f'<p class="muted">{_esc(origin)}</p></li>'
         )
     title = "Alle passages en hun afhandeling" if task == "inventory" else labels[task]
-    repair_copy = ""
     if task == "repair":
         title += f" ({len(items)})"
-        repair_copy = '<p>Dit is geen inhoudelijke reviewtaak; inhoudelijk goedkeuren is pas mogelijk na herstel. Open de passage voor brongebonden correctie of gemotiveerde afhandeling. Als de bron niet beschikbaar is, blijft de passage hier staan voor technisch herstel.</p>'
     panel_class = "review-blocked-audit" if task == "repair" else "review-passage-inventory"
     return (
         f'<section class="{panel_class}">'
         + _review_task_header(snapshot_id, title, "Beoordelingswerk en bronafhandeling zijn afzonderlijke controles; de aantallen mogen overlappen")
-        + repair_copy
         + f'<p>{len(items)} passages in dit overzicht.</p>'
         + f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p>'
         + '<ol class="object-index review-passage-inventory">' + "".join(items) + '</ol>'
@@ -2595,7 +2658,6 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
                         f'<a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(link.get("source_object_id"))}">Bekijk contextbron</a>'
                         f'<p>{_esc(link.get("reason"))}</p></li>' for link in evidence["links"])
         parts.append('<section data-confirmed-source-context><h4>Bevestigde broncontext</h4>'
-                     '<p>Dit bevestigt geen aanbevelingssterkte. Controleer de betekenis in de oorspronkelijke bron.</p>'
                      f'<ul>{items}</ul></section>')
     if evidence["issues"]:
         parts.append('<p class="banner warn">Deze contextkoppeling moet opnieuw worden gecontroleerd; tekst of bronverwijzing is gewijzigd.</p>')
@@ -2617,21 +2679,20 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
         checked = ' checked' if row.get('object_id') in selected else ''
         options.append(f'<label><input type="checkbox" name="target_object_ids" value="{_esc(row.get("object_id"))}"{checked}> '
                        f'{_esc(text[:180])} (versie {_esc(row.get("object_version"))})</label>')
-    parts.append(f'''<details class="review-step" data-source-context-form><summary>Bronrol en contextkoppeling</summary>
-      <p>Gebruik dit wanneer dit fragment een label of context bij andere passages is. Nabijheid alleen is onvoldoende: controleer ook tabellen en kolommen in de bron. De tekst blijft exact bewaard.</p>
+    parts.append(f'''<section class="review-step" data-source-context-form><h3>Bronrol en contextkoppeling</h3>
       <form method="post" action="/review/source-context">
         <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
         <input type="hidden" name="source_object_id" value="{_esc(obj.get('object_id'))}">
         <input type="hidden" name="snapshot_revision" value="{_esc(snapshot_revision)}">
         <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
         <label>Bronrol <select name="role">{role_options}</select></label>
-        <p>Kies alle passages waarvoor het fragment geldt. Bij niet opnemen of bronrol opheffen: geen passages selecteren.</p>
+        <h4>Geldt voor passages</h4>
         <div class="source-context-targets">{''.join(options)}</div>
         <label>Toelichting <textarea name="reason" required maxlength="4000">{_esc(role.get('reason'))}</textarea></label>
         <label><input type="checkbox" name="source_checked" value="1" required> Ik heb de bron en de gekozen passage(s) gecontroleerd.</label>
         <p>Gewijzigde context vraagt opnieuw beoordelen van de betrokken passages. Dit besluit wijzigt geen type, richting of sterkte.</p>
         <button type="submit">Bronrol en koppeling opslaan</button>
-      </form></details>''')
+      </form></section>''')
     return ''.join(parts)
 
 
@@ -2756,8 +2817,7 @@ def _render_review_index(
         return f'''
           {_review_task_header(snapshot_id, "Geblokkeerde passages herstellen", "Controleer de bron en handel verwerkingsproblemen af voordat je inhoudelijk beoordeelt")}
           {_review_inventory(snapshot_id, snapshot_objects, review_path=review_path, bindings=bindings, reviewer_id=reviewer_id, task="repair")}
-          <p><a class="btn-secondary" href="/settings/technical?document={_esc(snapshot_id)}">Technische diagnose en exports →</a></p>
-          {_coverage_panel(snapshot_objects)}
+
         '''
     return _review_task_dashboard(
         snapshot_id,
@@ -2821,10 +2881,9 @@ def _render_review_card(
     ):
         parts = list(expand_merge.get("parts") or [])
         missing = str(parts[1] if len(parts) > 1 else "").strip()
-        explanation = "De bron heeft deze zin over twee aansluitende tekstblokken verdeeld. Metis voegt alleen de letterlijk aangetroffen vervolgregel toe."
         object_text_html += f'''
           <aside class="source-continuation-proposal" aria-label="Voorstel om afgebroken zin te herstellen">
-            <h4>Metis heeft waarschijnlijk een afgebroken zin gevonden <span class="info-tip" tabindex="0" aria-label="{_esc(explanation)}">ⓘ<span class="info-tip-text">{_esc(explanation)}</span></span></h4>
+            <h4>Voorstel: afgebroken zin aanvullen</h4>
             <p><b>Ontbrekende brontekst:</b> {_esc(missing)}</p>
             <p><b>Herstelde passage:</b> {_esc(merged_text)}</p>
             <p class="field-help">Na aanvullen ontstaat een nieuwe versie. Die versie is nog niet goedgekeurd en moet opnieuw worden beoordeeld.</p>
@@ -2846,12 +2905,12 @@ def _render_review_card(
         passage_ok = False
     disabled = "" if passage_ok else " disabled"
     gate = str(admission_of(obj).get("gate_result") or "")
-    admission_notice = "Beoordeel deze passage aan de hand van de oorspronkelijke bron."
+    admission_notice = ""
     if is_admission_blocked(obj, review_path=review_path) or (review_path != "boom" and gate != "allowed" and authoritative_review_type(obj) != "heading"):
         admission_notice = (
-            "Deze passage is technisch geblokkeerd. Bekijk de bron en kies een brongebonden correctie of gemotiveerde afhandeling; inhoudelijk goedkeuren is nog niet mogelijk."
+            "Deze passage kan nog niet worden goedgekeurd. Een correctie of gemotiveerde afhandeling is nodig."
             if gate == "blocked" else
-            "De technische toelating van deze passage ontbreekt of is onbekend. Controleer bron en classificatie voordat je een besluit neemt."
+            "Deze passage is nog niet beschikbaar voor goedkeuring."
         )
     approval_disabled = disabled or (
         " disabled" if is_admission_blocked(obj, review_path=review_path) else ""
@@ -2873,8 +2932,8 @@ def _render_review_card(
     four_eyes_html = ""
     if requires_four_eyes(obj, confirmed_type=confirmed or None):
         four_eyes_html = (
-            '<div class="banner warn">Dit object vereist four-eyes: '
-            "<b>tweede reviewer nodig</b>.</div>"
+            '<div class="banner warn">Voor deze passage is een '
+            "<b>onafhankelijke tweede beoordeling nodig</b>.</div>"
         )
     path_text = found_under_path(obj)
     proposed_label = _object_type_label(proposed or confirmable)
@@ -2884,28 +2943,11 @@ def _render_review_card(
         if confirmed else
         f'Metis stelt voor: <b>{_esc(proposed_label)}</b>. Dit type is nog niet door jou bevestigd.'
     )
-    classification_help = (
-        '<p>Controleer wat de tekst doet: een definitie legt een begrip uit; een toelichting beschrijft of verklaart iets; '
-        'een advies zegt wat iemand zou moeten doen. Kies bij een verkeerd voorstel <b>Type wijzigen</b>.</p>'
-    )
-    review_intro = 'Metis doet een voorstel; jij bepaalt wat met de passage gebeurt. Controleer de gemarkeerde brontekst, de voorgestelde kop en het informatietype voordat je bevestigt of wijzigt.'
-    selection_note = why_selected(obj)
     if review_path == "boom":
-        selection_note = why_selected(obj, content_kind=console._envelope(snapshot_id).get("content_kind", ""))
         classification_note = (
             f'Eerder bevestigd type: <b>{_esc(_object_type_label(str(confirmed)))}</b>.'
             if confirmed else
             f'Huidige indeling: <b>{_esc(proposed_label)}</b>. Dit type is nog niet door jou bevestigd.'
-        )
-        review_intro = 'Jij bepaalt de betekenis van deze passage in de beslisboom. Controleer de brontekst, de plaats in de boom en het type voordat je bevestigt of wijzigt.'
-        classification_help = (
-            '<ul><li><b>Pad</b>: structuur voor een geordende route, bijvoorbeeld vraag → antwoord → advies, '
-            'of een resultaatbundel met afzonderlijk te beoordelen onderdelen. Een pad is zelf geen advies.</li>'
-            '<li><b>Knoop</b>: een vraag, beslispunt, vertakkingskeuze of scorelijstitem, bijvoorbeeld “Is er valrisico?”.</li>'
-            '<li><b>Uitkomst</b>: een afsluitend advies, bijvoorbeeld “Verwijs naar de valpoli”, of “Geen actie nodig”. '
-            'Controleer ook onder welke voorwaarden het advies geldt.</li></ul>'
-            '<p>Een verbinding tussen twee onderdelen controleer je bij <b>Beslisroutes controleren</b>. '
-            'Kies bij een verkeerde indeling <b>Type wijzigen</b>.</p>'
         )
     return f"""
                 <p><a class="btn-secondary" href="{_review_location(console, snapshot_id, task=task)}">← Terug naar taken</a></p>
@@ -2921,13 +2963,11 @@ def _render_review_card(
                     <input type="hidden" name="decision" value="">
                     {four_eyes_html}
                     {conflict_html}
+                    <div class="review-decision-layout">
+                    <div class="review-source-column">
                     {_knowledge_review_html(obj, snapshot_objects)}
-        {_decision_paths_html(console, snapshot_id, obj, snapshot_objects)}
+                    {_decision_paths_html(console, snapshot_id, obj, snapshot_objects)}
                     {object_text_html}
-                  <div class="review-cockpit-copy">
-                    <p>{_esc(admission_notice)}</p>{repair_guidance}<p>{review_intro}</p>
-                  </div>
-                    <p class="why-selected">{_esc(selection_note)}</p>
                     {_broncontext_html(obj, snapshot_id, obj["object_id"], passage_ok, task=task)}
                     {_review_context_block(
                         obj,
@@ -2936,9 +2976,11 @@ def _render_review_card(
                         review_path=review_path,
                         task=task,
                     )}
+                    </div>
+                    <div class="review-choices-column">
+                    {f'<p>{_esc(admission_notice)}</p>' if admission_notice else ''}{repair_guidance}
                     <section class="review-step" data-review-step="c">
                       <h4>Is deze passage op zichzelf bruikbaar?</h4>
-                      <p class="field-help">Een zelfstandige passage is begrijpelijk zonder dat iemand de rest van het document hoeft te lezen.</p>
                       <label class="check"><input type="radio" name="suitability" value="ja"{_checked(draft.get("suitability", ""), "ja")}> Ja, als zelfstandig stukje kennis</label>
                       <label class="check"><input type="radio" name="suitability" value="mist_context"{_checked(draft.get("suitability", ""), "mist_context")}> Nee, ik mis uitleg eromheen</label>
                       <label class="check"><input type="radio" name="suitability" value="samenvoegen"{_checked(draft.get("suitability", ""), "samenvoegen")}> Nee, deze hoort samen met een andere passage</label>
@@ -2955,8 +2997,6 @@ def _render_review_card(
                     <section class="review-step" data-review-step="e" id="classification-{_esc(obj["object_id"])}">
                       <h4>Wat voor informatie is dit?</h4>
                       <p>{classification_note}</p>
-                      {classification_help}
-                      <p class="field-help">Een type kiezen is nog geen goedkeuring. Je legt hieronder afzonderlijk vast hoe de passage gebruikt mag worden.</p>
                       <label class="check"><input type="radio" name="type_action" value="dit_klopt"{_checked(draft.get("type_action", ""), "dit_klopt")}> Dit klopt</label>
                       <label class="check"><input type="radio" name="type_action" value="type_wijzigen"{_checked(draft.get("type_action", ""), "type_wijzigen")}> Type wijzigen</label>
                       <div data-type-chooser hidden>
@@ -3000,10 +3040,12 @@ def _render_review_card(
                         <label for="correction-{_esc(obj["object_id"])}">Voorgestelde correctie</label>
                         <textarea id="correction-{_esc(obj["object_id"])}" name="proposed_correction">{html.escape(draft.get("proposed_correction", ""), quote=True)}</textarea>
                       </div>
-                      <button class="btn-primary" type="submit" disabled data-submit-review>Review opslaan en volgende</button>
+                      <button class="btn-primary" type="submit" data-submit-review>Review opslaan en volgende</button>
                     </section>
+                    </div></div>
                   </form>
                 </article>
+                {_review_validation_script()}
                 """
 
 
@@ -3177,7 +3219,7 @@ def _render_review_room(
             {_nav(account, "review", counts)}
             <section class="room review-room">
               <h1>Review</h1>
-              <p class="lead">Beoordeel passages stap voor stap, met de oorspronkelijke bron als uitgangspunt.</p>
+              {_task_links("review")}
               {conflict_html if not chosen_object_id else ""}
               {"".join(cards) if not chosen else ""}
               {objects_html or empty}
@@ -3270,7 +3312,7 @@ def create_console_app(
     @app.exception_handler(ConsoleError)
     async def console_errors(_request: Request, exc: ConsoleError) -> HTMLResponse:
         status = 401 if exc.code in {"not_authenticated", "invalid_credentials"} else 403 if "role_required" in exc.code or exc.code in {"entra_access_denied", "entra_local_auth_disabled"} else 400
-        message = ERROR_COPY.get(exc.code, "Metis kon deze actie niet afronden. Controleer de huidige status in Mijn werk voordat je opnieuw probeert. Blijft dit gebeuren? Meld het bij de beheerder met de technische code hieronder.")
+        message = ERROR_COPY.get(exc.code, "Metis kon deze actie niet afronden. Controleer de huidige status voordat je opnieuw probeert. Blijft dit gebeuren? Meld het bij de beheerder.")
         account = _current(_request)
         filename_error = exc.code == "invalid_store_path" and _request.url.path == "/ingest"
         hint = f'<p class="field-help">{_esc(FILENAME_HINT)}</p>' if filename_error else ""
@@ -3294,14 +3336,20 @@ def create_console_app(
             back = '<p><a href="/review?work=all">Terug naar reviewoverzicht</a></p>'
             if document:
                 back += f'<p><a href="/review/participants?{_esc(urlencode({"document": document}))}">Terug naar deelnemersbeheer</a></p>'
+        technical_details = (
+            f'<details><summary>Technische informatie voor de beheerder</summary><code>{_esc(exc.code)}</code>{processing_details}</details>'
+            if _request.url.path.startswith(("/settings", "/audit")) else ""
+        )
+        if not technical_details and (exc.code.startswith(("pre_review_", "processing_"))):
+            message = "De verwerking is niet beschikbaar. Deze taak kan nu niet worden uitgevoerd."
         body = _page(
             f"""
             {_nav(account)}
             <section class="room">
               <h1>Actie niet uitgevoerd</h1>
-              <div class="banner err">{_esc(message)}</div>
+              <div class="banner err" data-error-code="{_esc(exc.code)}">{_esc(message)}</div>
               {hint}
-              <details><summary>Technische informatie voor de beheerder</summary><code>{_esc(exc.code)}</code>{processing_details}</details>
+              {technical_details}
               {back}
             </section>
             """
@@ -3369,6 +3417,99 @@ def create_console_app(
             """
         )
 
+    @app.get("/help/{topic}", response_class=HTMLResponse)
+    def task_instructions(request: Request, topic: str) -> str:
+        account = _require(request)
+        topics = {
+            "ingest": ("Document inleveren", "/ingest", """
+              <h2>Documentgegevens</h2><p>Lever HTML, PDF of een vastgelegde beslisboom aan.
+              Gebruik het versienummer van het brondocument en de publicatiedatum uit het colofon.
+              Kies bij een opvolgende bronversie het bestaande document.</p>
+              <h2>Beoordelaars</h2><p>De verantwoordelijke beoordelaar kan de uploader zijn als die bevoegd is.
+              De gekozen reviewvorm bepaalt de aanvullende deelname; bestaande onafhankelijke
+              controles blijven gelden. Bij bestaande reviewregels mag de uploader niet de enige reviewer zijn.</p>
+              <h2>Verwerking</h2><p>Metis maakt voorstellen; een voorstel is geen inhoudelijk besluit.
+              De verwerking kan worden geblokkeerd. Diagnose en nieuwe verwerkingspogingen staan bij technisch beheer.</p>"""),
+            "review": ("Beoordelen", "/review", """
+              <h2>Bron en betekenis</h2><p>Controleer de passage met de oorspronkelijke bron en de relevante context.
+              Metis doet een voorstel; jij bepaalt wat met de passage gebeurt.
+              Een zelfstandige passage is begrijpelijk zonder de rest van het document.
+              Een definitie legt een begrip uit; een toelichting beschrijft of verklaart iets;
+              een advies zegt wat iemand zou moeten doen. Kop en type zijn voorstellen totdat ze zijn bevestigd.</p>
+              <h2>Richting en sterkte</h2><p>Neem de sterkte over uit de oorspronkelijke richtlijn.
+              Kies Sterk of Zwak alleen als de bron dit expliciet vermeldt.
+              ‘De werkgroep adviseert’ is geen sterkteaanduiding. Een klinische voorwaarde maakt een advies
+              niet automatisch zwak. Kies Niet vermeld in de bron wanneer geen sterkte wordt genoemd.</p>
+              <h2>Beslisboom</h2><p>Een pad beschrijft de route of resultaatbundel. Een pad is zelf geen advies. Een knoop is een vraag, beslispunt of scorelijstitem;
+              een uitkomst is het afsluitende advies. Een route bestaat uit opeenvolgende stappen: een verbinding legt één stap van een onderdeel naar het volgende vast. Controleer de voorwaarden en verbindingen met de bron.</p>
+              <h2>Voortgang en selecties</h2><p>Afwijzen, context, onderbouwing en gemotiveerd niet opnemen
+              tellen als afhandeling. Passageaantallen en aantallen handelingen kunnen overlappen.
+              Controleer iedere passage voordat je een selectie bevestigt; dezelfde kop of hetzelfde type
+              betekent niet dat passages hetzelfde zeggen. Geen beschikbaar werk betekent niet dat publicatie mogelijk is.</p>
+              <h2>Voorstellen uit verwerking</h2><p>PDF-fragmenten kunnen standaard het type Knoop hebben gekregen bij het inlezen. Dit is geen inhoudelijke classificatie. Opsommingen kunnen automatisch gegroepeerd zijn als resultaatbundel, met afzonderlijk afgesplitste uitkomsten. Bepaal het juiste type aan de hand van de bron.</p>
+              <h2>Broncontrole</h2><p>Bronbinding bewijst niet dat alle noodzakelijke context is herkend. Controleer ook de oorspronkelijke bron.</p>
+              <h2>Reviewdeelname</h2><p>Archiveren bewaart historie. Een verplichte plek blijft open tot vervanging. De vervanger beoordeelt zelf; geldig werk van anderen blijft behouden. Vervang de primaire reviewer in één handeling.</p>
+              <h2>Correctie en bronrol</h2><p>Een correctie maakt een nieuw voorstel voor beoordeling.
+              Kies aaneengesloten bronzinnen; samengevoegde passages worden vervangen door het nieuwe voorstel.
+              Alleen de geselecteerde passage wordt met het beoordelingsformulier beoordeeld. Metis doet relationele voorstellen; bevestig alleen relaties die volgens de bron bij deze passage horen. Een voorwaarde verandert de sterkte van een aanbeveling niet.
+              Koppel een bronlabel of context alleen aan passages waarvoor het aantoonbaar geldt.
+              Controleer daarbij ook tabellen en kolommen. Nabijheid alleen is onvoldoende.</p>"""),
+            "publish": ("Publiceren", "/publish", """
+              <h2>Publicatiebesluit</h2><p>De review, bronafhandeling en publicatiecontroles moeten gereed zijn.
+              Metis controleert deze voorwaarden opnieuw bij het besluit. Afgeronde review betekent
+              niet automatisch dat het document gepubliceerd kan worden.</p>
+              <h2>Beschikbaarheid</h2><p>Een historische publicatie kan vervangen, ingetrokken of niet actief zijn.
+              Na intrekking wordt een oudere versie niet automatisch opnieuw actief.</p>"""),
+            "documents": ("Documenten", "/tree", """
+              <h2>Documentbeheer</h2><p>Zoek een document en open de beschikbare taak.
+              Gepubliceerde versies blijven ongewijzigd. Een wijziging van documenttype kan een nieuwe
+              beoordeling of verwerking vereisen. Verwerking en technische herstelpogingen staan in technisch beheer.</p>"""),
+        }
+        if topic not in topics:
+            raise ConsoleError("unknown_document")
+        title, back, content = topics[topic]
+        return _page(f'{_nav(account, "settings", _counts(account))}<section class="room">'
+                     f'<h1>Uitleg: {_esc(title)}</h1>{content}'
+                     f'<p><a href="{back}">Terug naar {_esc(title)}</a></p></section>',
+                     title=f'Uitleg: {_esc(title)} — Metis')
+
+    @app.get("/settings/technical/processing", response_class=HTMLResponse)
+    def processing_management(request: Request, document: str) -> str:
+        account = _require(request)
+        envelope = state._envelope(document)
+        roles = set(account.get("roles") or [])
+        # Same authorization as processing_status/retry: researchers or assigned reviewers.
+        processing = state.processing_status(document, actor_id=account["account_id"])
+        controls = []
+        if processing["retry_allowed"]:
+            controls.append(f'''<form method="post" action="/tree/reprocess">
+              <input type="hidden" name="snapshot_id" value="{_esc(document)}">
+              <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
+              <button class="btn-primary" type="submit">Verwerking opnieuw proberen</button></form>''')
+        if ("publisher" in roles
+                and (account["account_id"] in envelope.get("named_reviewers", [])
+                     or account["account_id"] == envelope.get("uploader_account_id"))
+                and processing.get("reason_code") == "processing_attempt_limit_reached"
+                and not envelope.get("processing_recovery")):
+            controls.append(f'''<form method="post" action="/tree/processing-recovery">
+              <input type="hidden" name="snapshot_id" value="{_esc(document)}">
+              <label>Reden voor eenmalig herstel<input name="reason" required maxlength="1000"></label>
+              <button type="submit">Een herstelpoging autoriseren</button></form>''')
+        code = processing.get("error_code") or processing.get("reason_code") or ""
+        diagnostic = ((envelope.get("processing_attempts") or [{}])[-1].get("diagnostic") or {})
+        detail = _esc(json.dumps(diagnostic, ensure_ascii=False, indent=2))
+        reviewer_links = (f'<p><a href="/settings/technical?document={_esc(document)}">Passagediagnostiek en exports</a></p>'
+                          if "reviewer" in roles and account["account_id"] in envelope.get("named_reviewers", []) else "")
+        return _page(f'''{_nav(account, "settings", _counts(account))}<section class="room">
+          <p><a href="/settings/technical">Terug naar technisch beheer</a></p>
+          <h1>Verwerkingsbeheer: {_esc(envelope.get("title"))}</h1>
+          <p>{_esc(ERROR_COPY.get(code, "Controleer de actuele verwerking."))}</p>
+          <p>Code: <code>{_esc(code)}</code></p>
+          <p>Nieuwe poging vanaf: {_esc(processing.get("retry_not_before") or "niet van toepassing")}</p>
+          {"".join(controls)}<pre>{detail}</pre>{reviewer_links}
+          <p><a href="/review?document={_esc(document)}">Naar beoordeling</a> · <a href="/tree">Naar Documenten</a></p>
+          </section>''', title="Verwerkingsbeheer — Metis")
+
     @app.get("/settings", response_class=HTMLResponse)
     def settings_home(request: Request) -> str:
         account = _require(request)
@@ -3419,7 +3560,7 @@ def create_console_app(
               <h2>Verwerkingsproblemen herstellen: {_esc(envelope.get("title"))}</h2>
               <p><a href="/review?document={_esc(document)}">Naar inhoudelijke review</a>
               · <a href="/settings/technical/exports?document={_esc(document)}">Exports</a></p>
-              {_review_inventory(document, objects, review_path=review_path_for_klasse(envelope["class"]), bindings=_review_bindings(state, document), reviewer_id=account["account_id"], task="repair")}
+              <p><a href="/review?document={_esc(document)}&amp;task=repair">Passages corrigeren</a></p>
               <details><summary>Diagnostiek en brondekking</summary>
                 {_processing_diagnostics_html(objects)}{_coverage_panel(objects)}
               </details>
@@ -3429,12 +3570,17 @@ def create_console_app(
                 <p>Historische besluiten zonder gemeten interactie: {int(burden["legacy_unmeasured_decisions"])}.</p>
               </details>
             '''
+        if document:
+            return _page(f'{_nav(account, "settings", _counts(account))}<section class="room">'
+                         '<p><a href="/settings/technical">Terug naar technisch beheer</a></p>'
+                         + document_panel + '</section>', title="Documentdiagnostiek — Metis")
         assigned = [row for row in state.list_envelopes()
-                    if "reviewer" in set(account.get("roles") or [])
-                    and account["account_id"] in (row.get("named_reviewers") or [])]
+                    if "researcher" in set(account.get("roles") or []) or (
+                        "reviewer" in set(account.get("roles") or [])
+                        and account["account_id"] in (row.get("named_reviewers") or []))]
         assigned, list_controls = _document_list_page(assigned, q=q, page=page, path="/settings/technical")
         documents = "".join(
-            f'<li><a href="/settings/technical?document={_esc(row["snapshot_id"])}">{_esc(row.get("title"))} · {_esc(row.get("version"))}</a></li>'
+            f'<li><a href="/settings/technical/processing?document={_esc(row["snapshot_id"])}">{_esc(row.get("title"))} · {_esc(row.get("version"))}</a></li>'
             for row in assigned
         )
         return _page(f'''
@@ -3442,6 +3588,7 @@ def create_console_app(
           <section class="room">
             <p><a href="/settings">← Instellingen</a></p>
             <h1>Technisch beheer</h1>
+            {_passage_formation_status_html(state)}
             <p class="lead">Configuratie, technische controles en experimenten op één plek. Testresultaten zijn geen inhoudelijke beoordeling van documenten.</p>
             <h2>Configuratie en koppelingen</h2>
             <div class="doc-list">
@@ -4203,17 +4350,17 @@ def create_console_app(
             {_nav(account, "ingest", _counts(account))}
             <section class="room">
               <h1>Document inleveren</h1>
-              <p class="lead">Lever HTML, PDF of een gehashte beslisboom-freeze in. Klasse bepaalt het reviewpad.</p>
-              {_passage_formation_status_html(state)}
+              <p class="lead">Voeg een document toe voor beoordeling.</p>
+              {_task_links("ingest")}
               <form method="post" action="/ingest" enctype="multipart/form-data">
                 <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
                 <div class="sections">
                   <div class="section">
                     <h3>Bron</h3>
-                    <label for="file">Bestand (HTML, PDF of boom-freeze)</label>
+                    <label for="file">Bronbestand (HTML, PDF of beslisboom)</label>
                     <input id="file" type="file" name="file" aria-describedby="filename-help">
                     <p id="filename-help" class="field-help">{_esc(FILENAME_HINT)}</p>
-                    <label for="url">Of PDF-URL (exacte bytes worden direct vastgelegd)</label>
+                    <label for="url">Of een link naar het PDF-bestand</label>
                     <input id="url" name="url" placeholder="https://...">
                   </div>
                   <div class="section">
@@ -4224,7 +4371,7 @@ def create_console_app(
                         <input id="title" name="title" required>
                       </div>
                       <div>
-                        <label for="version">Versie van de freeze</label>
+                        <label for="version">Versienummer van het brondocument</label>
                         <input id="version" name="version" required pattern="[0-9]+(\\.[0-9]+)*" inputmode="numeric" placeholder="bijv. 2.13" autocomplete="off">
                         <p class="field-help">Alleen getallen met punten, bijvoorbeeld 1.0 of 2.13. Geen jaartal.</p>
                       </div>
@@ -4239,14 +4386,14 @@ def create_console_app(
                         <p class="field-help">Datum uit het colofon / publicatiedatum, weergave dd-mm-jjjj. Leeg is niet toegestaan.</p>
                       </div>
                       <div>
-                        <label for="class_">Klasse</label>
+                        <label for="class_">Documenttype</label>
                         <select id="class_" name="class_">{_class_options()}</select>
                       </div>
                     </div>
                     <label for="family">Onderwerp</label>
                     <input id="family" name="family" required autocomplete="off" list="family-options" placeholder="Kies bestaand of typ nieuw onderwerp">
                     <datalist id="family-options">{family_options}</datalist>
-                    <p class="field-help">Bestaande onderwerpen worden hergebruikt, ongeacht hoofdletters of extra spaties.</p>
+
                     <label for="ingest_kind">Nieuw of nieuwe versie</label>
                     <select id="ingest_kind" name="ingest_kind">
                       <option value="new">Nieuw document</option>
@@ -4256,7 +4403,7 @@ def create_console_app(
                       <label for="replaces_document">Bestaand document</label>
                       <select id="replaces_document" name="replaces_document">{_document_options(documents)}</select>
                     </div>
-                    <label for="live_url">Live URL (optioneel)</label>
+                    <label for="live_url">Link naar de online bron (optioneel)</label>
                     <input id="live_url" name="live_url">
                   </div>
                   <div class="section">
@@ -4264,17 +4411,17 @@ def create_console_app(
                     <label for="review_mode">Reviewdeelname</label>
                     <select id="review_mode" name="review_mode">
                       <option value="legacy">Bestaande reviewregels</option>
-                      <option value="single">Enkelvoudig — expliciete policy</option>
-                      <option value="optional">Optionele co-review — expliciete policy</option>
-                      <option value="required">Verplichte onafhankelijke review — expliciete policy</option>
+                      <option value="single">Eén beoordelaar</option>
+                      <option value="optional">Aanvullende beoordeling mogelijk</option>
+                      <option value="required">Onafhankelijke aanvullende beoordeling verplicht</option>
                     </select>
-                    <label for="primary_reviewer">Primaire reviewer (leeg: uploader indien bevoegd)</label>
+                    <label for="primary_reviewer">Verantwoordelijke beoordelaar</label>
                     <select id="primary_reviewer" name="primary_reviewer"><option value="">Uploader</option>{options}</select>
                     <label for="source_status">Vaststellingsstatus volgens de bron</label>
                     <select id="source_status" name="source_status"><option value="unknown">Niet opgegeven</option><option value="established">Vastgesteld</option><option value="draft">Concept</option></select>
-                    <label for="named_reviewers">Extra reviewers</label>
+                    <label for="named_reviewers">Aanvullende beoordelaars</label>
                     <select id="named_reviewers" name="named_reviewers" multiple size="6">{options}</select>
-                    <p class="muted">De uploader mag reviewer zijn, maar niet de enige.</p>
+
                   </div>
                 </div>
                 <button class="btn-primary" type="submit" id="ingest-submit">Inleveren</button>
@@ -4392,24 +4539,14 @@ def create_console_app(
                       if "decision_graph" in receipt else "")
         pre_review_blocked = receipt.get("publication_eligibility") == PRE_REVIEW_BLOCKED
         lead = (
-            "Document opgeslagen. De voorcontrole is geblokkeerd; "
-            "het document is nog niet beschikbaar voor Review. "
-            + ERROR_COPY.get(receipt.get("processing_blocker"), "Laat de beheerder de oorzaak van de blokkade onderzoeken.")
-            if pre_review_blocked
-            else "Vastgelegd en klaar voor review."
+            "Document opgeslagen. De verwerking is niet afgerond; beoordelen is nog niet beschikbaar."
+            if pre_review_blocked else "Vastgelegd en klaar voor review."
         )
         next_actions = (
-            '<p><a class="btn-secondary" href="/tree">Naar Documenten</a></p>'
-            if pre_review_blocked
-            else '<p><a class="btn-secondary" href="/review">Naar review</a> <a class="btn-secondary" href="/tree">Naar Documenten</a></p>'
+            '<p><a class="btn-primary" href="/tree">Document bekijken</a></p>'
+            if pre_review_blocked else '<p><a class="btn-primary" href="/review">Naar review</a></p>'
         )
-        processing_notice = (
-            '<details><summary>Technische informatie voor de beheerder</summary>'
-            f'<p>Documentreferentie: <code>{_esc(receipt["snapshot_id"])}</code></p>'
-            f'<p>Foutcode: <code>{_esc(receipt.get("processing_blocker", ""))}</code></p>'
-            '<p>De foutcode en eventuele validatiereden staan in de verwerkingslogs bij deze documentreferentie.</p></details>'
-            if pre_review_blocked else ""
-        )
+        processing_notice = _task_links("ingest")
         return _page(
             f"""
             {_nav(account, "ingest", _counts(account))}
@@ -4455,43 +4592,8 @@ def create_console_app(
                     actions.append('<p class="muted">Voor deze versie zijn wijzigacties niet beschikbaar. Gepubliceerde versies blijven ongewijzigd.</p>')
                     if "researcher" in account["roles"]:
                         actions.append('<a class="btn-secondary" href="/ingest">Nieuwe bronversie inleveren</a>')
-                if (
-                    mutable and child.get("publication_eligibility") == PRE_REVIEW_BLOCKED
-                    and ("researcher" in account["roles"] or "reviewer" in account["roles"])
-                ):
-                    processing = state.processing_status(child["snapshot_id"])
-                    code = processing.get("error_code") or processing.get("reason_code")
-                    message = ERROR_COPY.get(code, "Voorcontrole geblokkeerd. Het document is opgeslagen; bekijk de technische diagnose.")
-                    pre_review_notice = '<p class="banner warn">Voorcontrole geblokkeerd. ' + _esc(message) + '</p>'
-                    if processing.get("retry_not_before"):
-                        pre_review_notice += '<p>Nieuwe poging mogelijk vanaf: ' + _esc(processing["retry_not_before"]) + '</p>'
-                    if not processing["retry_allowed"] and processing["reason_code"] != code:
-                        pre_review_notice += '<p>' + _esc(ERROR_COPY.get(processing["reason_code"], "Nieuwe poging is nu niet beschikbaar.")) + '</p>'
-                    if (
-                        "reviewer" in account["roles"]
-                        and account["account_id"] in (state._envelope(child["snapshot_id"]).get("named_reviewers") or [])
-                    ):
-                        pre_review_notice += f'<p><a href="/review/processing-diagnostics?document={_esc(child["snapshot_id"])}">Technische diagnose bekijken</a></p>'
-                    latest = (state._envelope(child["snapshot_id"]).get("processing_attempts") or [{}])[-1]
-                    finding = (latest.get("diagnostic") or {}).get("finding")
-                    if finding:
-                        pre_review_notice += '<p>Validatiereden: ' + _esc(finding.get("reason_code", "")) + '; kandidaat: ' + _esc(str(finding.get("candidate_index", "onbekend"))) + '</p>'
-                    if ("publisher" in account["roles"]
-                            and (account["account_id"] in state._envelope(child["snapshot_id"]).get("named_reviewers", [])
-                                 or account["account_id"] == state._envelope(child["snapshot_id"]).get("uploader_account_id"))
-                            and processing.get("reason_code") == "processing_attempt_limit_reached"
-                            and not state._envelope(child["snapshot_id"]).get("processing_recovery")):
-                        actions.append(f'<form method="post" action="/tree/processing-recovery"><input type="hidden" name="snapshot_id" value="{_esc(child["snapshot_id"])}"><label>Reden voor eenmalig herstel<input name="reason" required maxlength="1000"></label><button type="submit">Een herstelpoging autoriseren</button></form>')
-                    if processing["retry_allowed"]:
-                        actions.append(
-                            f"""
-                            <form method="post" action="/tree/reprocess">
-                              <input type="hidden" name="snapshot_id" value="{_esc(child["snapshot_id"])}">
-                              <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
-                              <button class="btn-primary" type="submit">Pre-review opnieuw uitvoeren</button>
-                            </form>
-                            """
-                        )
+                if mutable and child.get("publication_eligibility") == PRE_REVIEW_BLOCKED:
+                    pre_review_notice = '<p class="banner warn">Verwerking niet afgerond. Beoordelen is nog niet beschikbaar.</p>'
                 if can_move and mutable:
                     actions.append(
                         f"""
@@ -4551,6 +4653,7 @@ def create_console_app(
             {_nav(account, "tree", _counts(account))}
             <section class="room">
               <h1>Documenten</h1>
+              {_task_links("documents")}
               <datalist id="move-family-options">{move_family_options}</datalist>
               {list_controls}
               {"".join(blocks) or ('<p>Geen documenten gevonden.</p>' if q else empty)}
@@ -4563,7 +4666,7 @@ def create_console_app(
     def tree_processing_recovery(request: Request, snapshot_id: str = Form(...), reason: str = Form(...)):
         account = _require(request)
         state.authorize_processing_recovery(actor_id=account["account_id"], snapshot_id=snapshot_id, reason=reason)
-        return RedirectResponse("/tree", status_code=303)
+        return RedirectResponse("/settings/technical/processing?" + urlencode({"document": snapshot_id}), status_code=303)
 
     @app.get("/review/processing-diagnostic-replay", response_class=JSONResponse)
     def review_processing_diagnostic_replay(request: Request, document: str, attempt_id: str):
@@ -4592,7 +4695,7 @@ def create_console_app(
             command_id=command_id or uuid.uuid4().hex,
         )
         return RedirectResponse(
-            f"/review?document={quote(snapshot_id, safe='')}",
+            "/settings/technical/processing?" + urlencode({"document": snapshot_id}),
             status_code=303,
         )
 

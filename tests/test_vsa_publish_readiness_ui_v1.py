@@ -327,7 +327,8 @@ def test_publish_room_requires_publisher_role(tmp_path: Path) -> None:
     page = client.get("/publish")
 
     assert page.status_code == 403
-    assert "publisher_role_required" in page.text
+    assert 'data-error-code="publisher_role_required"' in page.text
+    assert "Je account heeft geen rechten om te publiceren." in page.text
 
 
 def test_direct_post_cannot_bypass_backend_readiness(tmp_path: Path) -> None:
@@ -364,7 +365,8 @@ def test_stale_ready_page_is_rechecked_on_publish_post(tmp_path: Path) -> None:
     )
 
     assert blocked.status_code == 400
-    assert "g2_source_checksum_mismatch" in blocked.text
+    assert 'data-error-code="g2_source_checksum_mismatch"' in blocked.text
+    assert "Het opgeslagen bronbestand wijkt af" in blocked.text
     assert console.snapshot_is_published(receipt["snapshot_id"]) is False
 
 

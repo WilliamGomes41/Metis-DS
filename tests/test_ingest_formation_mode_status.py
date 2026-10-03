@@ -35,7 +35,7 @@ def _console(tmp_path: Path) -> OperationsConsole:
     return console
 
 
-def _ingest_page(console: OperationsConsole) -> str:
+def _management_page(console: OperationsConsole) -> str:
     client = TestClient(create_console_app(console))
     login = client.post(
         "/login",
@@ -43,16 +43,17 @@ def _ingest_page(console: OperationsConsole) -> str:
         follow_redirects=False,
     )
     assert login.status_code == 303
-    page = client.get("/ingest")
+    assert "Actieve verwerkingsmodus" not in client.get("/ingest").text
+    page = client.get("/settings/technical")
     assert page.status_code == 200
     return page.text
 
 
-def test_ingest_shows_default_source_bound_v2_runtime_mode_read_only(tmp_path: Path) -> None:
+def test_management_shows_default_source_bound_v2_runtime_mode_read_only(tmp_path: Path) -> None:
     console = _console(tmp_path)
     bind_pre_review_semantic_processing(console, environ={})
 
-    html = _ingest_page(console)
+    html = _management_page(console)
 
     assert "Actieve verwerkingsmodus: Semantisch met bronbewijs" in html
     assert (
@@ -65,14 +66,14 @@ def test_ingest_shows_default_source_bound_v2_runtime_mode_read_only(tmp_path: P
     assert "Wijzig modus" not in html
 
 
-def test_ingest_shows_same_injected_semantic_mode_used_by_processing_router(
+def test_management_shows_same_injected_semantic_mode_used_by_processing_router(
     tmp_path: Path,
 ) -> None:
     console = _console(tmp_path)
     env = {PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE}
     bind_pre_review_semantic_processing(console, environ=env)
 
-    html = _ingest_page(console)
+    html = _management_page(console)
 
     assert "Actieve verwerkingsmodus: Semantisch" in html
     assert (
@@ -83,16 +84,16 @@ def test_ingest_shows_same_injected_semantic_mode_used_by_processing_router(
     assert 'name="passage_formation_mode"' not in html
 
 
-def test_ingest_runtime_status_tracks_same_bound_configuration_mapping(
+def test_management_runtime_status_tracks_same_bound_configuration_mapping(
     tmp_path: Path,
 ) -> None:
     console = _console(tmp_path)
     env = {PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE}
     bind_pre_review_semantic_processing(console, environ=env)
 
-    assert "Actieve verwerkingsmodus: Semantisch" in _ingest_page(console)
+    assert "Actieve verwerkingsmodus: Semantisch" in _management_page(console)
 
     env[PASSAGE_FORMATION_MODE_ENV] = DETERMINISTIC_MODE
 
     assert console._passage_formation_mode_reader() == DETERMINISTIC_MODE
-    assert "Actieve verwerkingsmodus: Deterministisch" in _ingest_page(console)
+    assert "Actieve verwerkingsmodus: Deterministisch" in _management_page(console)

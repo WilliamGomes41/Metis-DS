@@ -272,6 +272,6 @@ def test_control_diagnostics_stay_on_the_existing_read_path() -> None:
 
     assert objects == before
     assert 'class="processing-diagnostics"' not in html
-    assert '/settings/technical?document=snap-1' in html
-    assert "Technisch herstel nodig (1)" in html
+    assert 'object=a&amp;task=repair' in html
+    assert "Passages corrigeren (1)" in html
     assert "source_fidelity_failure" not in html

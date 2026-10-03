@@ -599,7 +599,7 @@ def test_four_eyes_copy_visible_when_required(tmp_path: Path) -> None:
     client = TestClient(create_console_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     page = client.get(f"/review?document={receipt['snapshot_id']}&object={target['object_id']}").text
-    assert "tweede reviewer nodig" in page
+    assert "onafhankelijke tweede beoordeling nodig" in page
     assert "envelope" not in page.lower()
 
 

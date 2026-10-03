@@ -19,7 +19,7 @@ def test_sections_keep_same_named_headings_in_separate_source_paths():
     assert "2 passages" in html
     for i in range(3):
         assert html.count(f'object={i}&amp;task=contextual"') == 1
-    assert "geen inhoudelijke goedkeuring" in html
+    assert "geen inhoudelijke goedkeuring" not in html
     assert "<form" not in html
 
 
@@ -43,5 +43,5 @@ def test_repeated_heading_and_literal_separator_do_not_merge_paths():
     ]
     html = _review_section_groups(objects, "snapshot", priority_ids={"0"})
     assert html.count('class="review-section"') == 3
-    assert "omdat zij advies, een voorwaarde, een uitzondering of mogelijk risico bevat" in html
-    assert "kan niet veilig samen met andere passages" in html
+    assert "omdat zij advies, een voorwaarde, een uitzondering of mogelijk risico bevat" not in html
+    assert "kan niet veilig samen met andere passages" not in html

@@ -630,10 +630,10 @@ def test_ui_must_not_hide_stored_fragments_without_extract(tmp_path: Path) -> No
     )
     assert any(obj["object_id"] == planted["object_id"] for obj in leftover)
     html = _client(console).get(
-        f"/review?document={receipt['snapshot_id']}&task=control"
+        f"/review?document={receipt['snapshot_id']}&task=inventory"
     ).text
-    assert "Controleoverzicht per kop" in html
-    assert "Nog niet beoordeeld" in html
+    assert "Alle passages en hun afhandeling" in html
+    assert "Nog niet afgehandeld" in html
     card = _client(console).get(
         f"/review?document={receipt['snapshot_id']}&object={planted['object_id']}"
     ).text

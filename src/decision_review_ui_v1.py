@@ -145,10 +145,10 @@ def install_decision_review_routes(app, console, require, page):
         proposal_note = (f'<p>{len(proposals)} geometrische verbindingsvoorstellen. Richting, antwoordlabel en eindpunten '
                          'zijn nog niet bevestigd. Controleer ook verbindingen die niet zijn herkend.</p>' if proposals else '')
         original = f'/review/brondocument?document={esc(document)}&amp;object={esc(rows[0]["object_id"])}' if rows else ""
-        return page(f'<h1>Beslisroutes controleren</h1><p>Controleer iedere route en ieder antwoord tegen de originele pagina. Extra review vervangt ontbrekend bronbewijs niet.</p>'
-                    '<p>Een verbinding legt één stap vast van het ene onderdeel naar het volgende, bijvoorbeeld van een vraag via “Ja” naar een advies. Een route bestaat uit opeenvolgende stappen. Het passagetype Pad kan ook een resultaatbundel aanduiden; dat is geen losse verbinding.</p>'
-                    f'<p><a href="/review?document={esc(document)}">Passages beoordelen</a> · <a href="{original}">Open origineel</a> · <a href="/review/policy?document={esc(document)}">Reviewdeelname</a></p>'
-                    f'{proposal_note}<p>Open controles: {esc(", ".join(problems) or "geen")}</p>{co_review}'
+        from src.operations_console_app import _task_links
+        return page('<h1>Beslisroutes controleren</h1>' + _task_links("review")
+                    + f'<p><a href="/review?document={esc(document)}">Passages beoordelen</a> · <a href="{original}">Open origineel</a> · <a href="/review/policy?document={esc(document)}">Reviewdeelname</a></p>'
+                    f'{proposal_note}<p>{"De beslisroutes vragen nog controle." if problems else "Alle vereiste routecontroles zijn afgerond."}</p>{co_review}'
                     f'<form method="post">{common}<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
                     + "".join(fields + edges) + '<label>Toelichting<input name="reason" required></label>'
                     '<button name="action" value="graph">Verbindingen opslaan</button></form>'

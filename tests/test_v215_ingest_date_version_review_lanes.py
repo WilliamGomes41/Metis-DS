@@ -464,9 +464,11 @@ def test_four_thousand_identical_unclassified_titles_is_a_fail(tmp_path: Path) -
     # Protocol v2.19: leftover unclassified is not equal one-by-one duty cards.
     assert passage_titles == []
     visible = re.sub(r"\s+", " ", html)
-    assert "Technisch herstel nodig (12)" not in visible
+    assert "Passages corrigeren (12)" not in visible
     # The heading stays in the same not-yet-assessed coverage count as the 12 passages.
-    assert "Nog niet beoordeeld 13" in visible
+    management = _client(console).get(f"/settings/technical?document={receipt['snapshot_id']}").text
+    assert "Nog niet beoordeeld" in management
+    assert "13" in management
     assert "unclassified" not in visible.casefold()
 
 

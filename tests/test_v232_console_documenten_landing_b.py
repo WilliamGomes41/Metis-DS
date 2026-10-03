@@ -267,7 +267,7 @@ def test_unpublished_delete_stays_on_documenten_tree_room_only(tmp_path: Path) -
         assert not _has_delete_control(html)
 
     chosen = client.get(f"/review?document={snap}").text
-    assert "Beoordeel" in chosen
+    assert 'href="/help/review"' in chosen
     assert DELETE_LABEL not in chosen
     assert not _has_delete_control(chosen)
 

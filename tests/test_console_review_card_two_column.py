@@ -276,7 +276,7 @@ def test_review_post_requires_explicit_decision_and_comment_when_needed(tmp_path
         )
 
 
-def test_blocked_passages_are_presented_as_technical_work_not_content_review() -> None:
+def test_blocked_passages_offer_correction_without_technical_diagnostics() -> None:
     blocked = {
         "object_id": "obj-incomplete",
         "object_type": "unclassified",
@@ -292,9 +292,10 @@ def test_blocked_passages_are_presented_as_technical_work_not_content_review() -
 
     html = _render_review_index("snap-1", [blocked], "richtlijn", task="control")
 
-    assert "Technisch herstel nodig (1)" in html
-    assert "Dit is geen inhoudelijke reviewtaak" in html
-    assert "inhoudelijk goedkeuren is pas mogelijk na herstel" in html
+    assert "Passages corrigeren (1)" in html
+    assert "task=repair" in html
+    assert "incomplete_sentence" not in html
+    assert "processing-diagnostics" not in html
 
 
 def test_review_card_css_two_column_and_stacks_on_narrow() -> None:

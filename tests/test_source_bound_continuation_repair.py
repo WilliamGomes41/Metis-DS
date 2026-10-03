@@ -210,11 +210,12 @@ def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: P
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     page = client.get(f"/review?document={snapshot_id}&object={object_id}")
     assert page.status_code == 200
-    assert "Metis heeft waarschijnlijk een afgebroken zin gevonden" in page.text
+    assert "Voorstel: afgebroken zin aanvullen" in page.text
     assert "Ontbrekende brontekst:" in page.text
     assert CONTINUATION in page.text
     assert "Passage aanvullen met brontekst" in page.text
-    assert "voegt alleen de letterlijk aangetroffen vervolgregel toe" in page.text
+    assert "Ontbrekende brontekst:" in page.text
+    assert "Herstelde passage:" in page.text
 
     stale_revision = console.objects_revision(snapshot_id)
     rows = console._load_objects(snapshot_id)

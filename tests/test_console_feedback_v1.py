@@ -33,7 +33,7 @@ def test_error_has_safe_fallback_and_ingest_return_link(tmp_path, monkeypatch):
     assert response.status_code == 400
     assert "Controleer de huidige status" in response.text
     assert '<a href="/ingest">Terug naar Inleveren</a>' in response.text
-    assert '<details><summary>Technische informatie' in response.text
+    assert '<details><summary>Technische informatie' not in response.text
     assert "unexpected_&lt;code&gt;" in response.text
     assert "private internal detail" not in response.text
     anonymous = _client(console).get("/ingest")
