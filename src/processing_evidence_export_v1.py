@@ -241,6 +241,12 @@ def processing_evidence_zip(**kwargs: Any) -> bytes:
                                               [revision_manifest, *compact(manifest)]))
         for name, fields in SCHEMAS.items():
             archive.writestr(name + ".csv", _csv(common + fields, compact(tables[name])))
+        for index, run in enumerate(kwargs.get("envelope", {}).get("quality_processing_runs") or []):
+            extraction = run.get("document_extraction")
+            if extraction is not None:
+                # Complete structured evidence, not a lossy Markdown/CSV view.
+                # Index is internal, so source-supplied names cannot escape ZIP.
+                archive.writestr(f"extractions/{index:06d}.json", json.dumps(extraction, ensure_ascii=False, sort_keys=True))
         archive.writestr("README.txt", (
             f"Metis {VERSION}\n"
             f"Exported at: {datetime.now(timezone.utc).isoformat()}\n"

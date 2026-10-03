@@ -15,9 +15,13 @@ from src.integrity_kernel import stable_hash
 CONTRACT = "source-decision-graph-v1"
 
 
-def pdf_fragments(path: Path, *, document_id: str, source_id: str, construct_units: bool = True) -> list[dict[str, Any]]:
+def pdf_fragments(path: Path, *, document_id: str, source_id: str, construct_units: bool = True, deadline=None, use_docling=None) -> list[dict[str, Any]]:
     from src.extract_pdf_v2 import extract
-    fragments = extract(path, document_id=document_id, source_id=source_id)
+    from src.docling_pdf_v1 import enabled, extract as extract_docling
+    selected = enabled() if use_docling is None else use_docling
+    fragments = (extract_docling(path, document_id=document_id, source_id=source_id, deadline=deadline)
+                 if selected else extract(path, document_id=document_id, source_id=source_id))
+    extraction_record = getattr(fragments, "extraction_record", None)
     for row in fragments:
         row["boom_id"] = row["fragment_id"]
         row["boom_kind"] = "node"
@@ -26,7 +30,11 @@ def pdf_fragments(path: Path, *, document_id: str, source_id: str, construct_uni
         add_layout(path, fragments)
         fragments = source_lines(fragments)
     from src.decision_bundles_v1 import split_bundles
-    return split_bundles(fragments)
+    output = split_bundles(fragments)
+    if extraction_record is not None:
+        from src.docling_contract_v1 import ExtractedFragments
+        output = ExtractedFragments(output, extraction_record)
+    return output
 
 
 def evidence_inventory(path: Path, fragments: list[dict[str, Any]], source_hash: str) -> dict[str, Any]:
@@ -262,7 +270,7 @@ def verify_source_evidence(console: Any, envelope: dict[str, Any]) -> None:
     from src.beslisboom_path_v1 import extract_boom_fragments
     path, data = console._verified_source_bytes(envelope)
     args = {"document_id": envelope["document_id"], "source_id": envelope["source_id"]}
-    fragments = pdf_fragments(path, **args, construct_units=bool(envelope.get("decision_unit_contract"))) if envelope["content_kind"] == "pdf" else extract_boom_fragments(data, **args)
+    fragments = console._read_source_fragments(envelope, path)
     from src.decision_bundles_v1 import split_bundles
     fragments = split_bundles(fragments)
     inventory = prepare_graph(path, data, envelope["content_kind"], fragments, [], envelope["sha256"])["decision_graph_evidence"]

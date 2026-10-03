@@ -1743,7 +1743,7 @@ class OperationsConsole:
                     },
                 )
             except ConsoleError as exc:
-                if not exc.code.startswith("pre_review_llm_"):
+                if not exc.code.startswith(("pre_review_llm_", "docling_")):
                     raise
                 if attempt_id:
                     self._record_processing_failure(snapshot_id, attempt_id, exc)
@@ -1852,6 +1852,9 @@ class OperationsConsole:
         return reader() if reader is not None else ModelCallLimits()
 
     def _bounded_semantic_preparation(self, kind, class_):
+        from src.docling_pdf_v1 import enabled
+        if kind == "pdf" and enabled():
+            return True
         from src.passage_formation_policy_v1 import DETERMINISTIC_MODE
         return (getattr(self, "_pre_review_semantic_bound", False) and kind in {"html", "pdf"}
                 and class_ != "beslisboom" and self._passage_formation_mode_reader() != DETERMINISTIC_MODE)
@@ -2322,12 +2325,34 @@ class OperationsConsole:
             "g2": "BLOCKED",
         }
 
-    def _extract(self, kind: str, path: Path, *, document_id: str, source_id: str) -> list[dict[str, Any]]:
+    def _extract(self, kind: str, path: Path, *, document_id: str, source_id: str, deadline=None) -> list[dict[str, Any]]:
         if kind == "html":
             return extract_html(path, document_id=document_id, source_id=source_id)
         if kind == "boom":
             return extract_boom_fragments(path.read_bytes(), document_id=document_id, source_id=source_id)
-        return extract_pdf(path, document_id=document_id, source_id=source_id)
+        from src.docling_pdf_v1 import enabled, extract as extract_docling
+        from src.docling_contract_v1 import DoclingError
+        try:
+            return (extract_docling(path, document_id=document_id, source_id=source_id, deadline=deadline)
+                    if enabled() else extract_pdf(path, document_id=document_id, source_id=source_id))
+        except DoclingError as exc:
+            raise ConsoleError(exc.code) from exc
+
+    def _read_source_fragments(self, envelope, path):
+        from src.docling_contract_v1 import stored_fragments
+        retained = stored_fragments(envelope)
+        if retained is not None:
+            return retained
+        args = {"document_id": envelope["document_id"], "source_id": envelope["source_id"]}
+        if envelope["content_kind"] == "pdf":
+            # Historical compatibility is selected by persisted provenance,
+            # never by a failed Docling conversion or the current config.
+            if envelope["class"] == "beslisboom":
+                from src.decision_graph_v1 import pdf_fragments
+                return pdf_fragments(path, **args, use_docling=False,
+                                     construct_units=bool(envelope.get("decision_unit_contract")))
+            return extract_pdf(path, **args)
+        return self._extract(envelope["content_kind"], path, **args)
 
     def _fragments_and_spec(
         self,
@@ -2343,11 +2368,17 @@ class OperationsConsole:
         formation_context: dict[str, Any] | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         explicit_graph = bool((formation_context or {}).get("explicit_decision_graph"))
+        retained_fragments = (formation_context or {}).get("retained_fragments")
         if kind == "pdf" and class_ == "beslisboom":
             from src.decision_graph_v1 import pdf_fragments
             try:
-                fragments = pdf_fragments(path, document_id=document_id, source_id=source_id)
+                fragments = (retained_fragments if retained_fragments is not None else
+                             pdf_fragments(path, document_id=document_id, source_id=source_id,
+                                           deadline=(formation_context or {}).get("attempt_deadline")))
             except Exception as exc:
+                from src.docling_contract_v1 import DoclingError
+                if isinstance(exc, DoclingError):
+                    raise ConsoleError(exc.code) from exc
                 raise ConsoleError("invalid_decision_pdf") from exc
             spec = boom_spec_from_fragments(document_id=document_id, title=title,
                                            family=family, class_=class_, fragments=fragments)
@@ -2373,7 +2404,10 @@ class OperationsConsole:
                 fragments=fragments,
             )
             return fragments, spec
-        fragments = self._extract(kind, path, document_id=document_id, source_id=source_id)
+        from src.docling_pdf_v1 import enabled
+        kwargs = {"deadline": (formation_context or {}).get("attempt_deadline")} if kind == "pdf" and enabled() else {}
+        fragments = (retained_fragments if retained_fragments is not None else
+                     self._extract(kind, path, document_id=document_id, source_id=source_id, **kwargs))
         spec = _spec_from_fragments(
             document_id=document_id,
             title=title,
@@ -2694,6 +2728,8 @@ class OperationsConsole:
             title=envelope["title"],
             family=envelope["family"],
             class_=new_class,
+            formation_context={"retained_fragments": self._read_source_fragments(envelope, freeze_path)}
+                              if envelope["content_kind"] == "pdf" else None,
         )
         objects = transform_generic(spec, self._class_change_manifest(envelope), fragments)
         return apply_passage_register(
@@ -3645,8 +3681,7 @@ class OperationsConsole:
         envelope = self._envelope(snapshot_id)
         if review_path_for_klasse(envelope["class"]) != "boom":
             source_path, _ = self._verified_source_bytes(envelope)
-            fragments = self._extract(envelope["content_kind"], source_path,
-                                      document_id=envelope["document_id"], source_id=envelope["source_id"])
+            fragments = self._read_source_fragments(envelope, source_path)
             peers = [
                 revised if row.get("object_id") == object_id else row
                 for row in current
@@ -3665,8 +3700,7 @@ class OperationsConsole:
             if (target.get("metadata") or {}).get(KEY):
                 from src.decision_graph_v1 import pdf_fragments
                 source_path, _ = self._verified_source_bytes(envelope)
-                fragments = pdf_fragments(source_path, document_id=envelope["document_id"],
-                                          source_id=envelope["source_id"])
+                fragments = self._read_source_fragments(envelope, source_path)
                 try:
                     rebuild_for_revision(target, revised, fragments)
                 except ValueError as exc:

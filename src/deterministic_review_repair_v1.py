@@ -160,16 +160,18 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
         freeze_bytes = freeze_path.read_bytes()
         if sha256_bytes(freeze_bytes) != str(envelope.get("sha256") or ""):
             raise ConsoleError("freeze_bytes_missing")
-        fragments, _spec = self._fragments_and_spec(
-            str(envelope["content_kind"]),
-            freeze_path,
-            data=freeze_bytes,
-            document_id=str(envelope["document_id"]),
-            source_id=str(envelope["source_id"]),
-            title=str(envelope["title"]),
-            family=str(envelope["family"]),
-            class_=str(envelope["class"]),
-        )
+        fragments = self._read_source_fragments(envelope, freeze_path) if envelope["content_kind"] == "pdf" else None
+        if fragments is None:
+            fragments, _spec = self._fragments_and_spec(
+                str(envelope["content_kind"]),
+                freeze_path,
+                data=freeze_bytes,
+                document_id=str(envelope["document_id"]),
+                source_id=str(envelope["source_id"]),
+                title=str(envelope["title"]),
+                family=str(envelope["family"]),
+                class_=str(envelope["class"]),
+            )
         catalog: list[dict[str, Any]] = []
         for index, fragment in enumerate(fragments):
             fragment_id = str(fragment.get("fragment_id") or "")
@@ -303,8 +305,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             from src.decision_graph_v1 import pdf_fragments
             envelope = self._envelope(snapshot_id)
             source_path, _ = self._verified_source_bytes(envelope)
-            fragments = pdf_fragments(source_path, document_id=envelope["document_id"],
-                                      source_id=envelope["source_id"])
+            fragments = self._read_source_fragments(envelope, source_path)
         try:
             return finalized_source_refs(obj, source_refs, fragments)
         except ValueError as exc:

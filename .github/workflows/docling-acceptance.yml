@@ -1,0 +1,74 @@
+name: docling-acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'src/docling*.py'
+      - 'src/pdf_fragment_contract_v1.py'
+      - 'requirements-docling.txt'
+      - 'tests/test_docling*.py'
+      - 'scripts/prepare_docling_models.py'
+      - '.github/workflows/docling-acceptance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-pdf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: metis_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d metis_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      METIS_DOCLING_REAL_ACCEPTANCE: '1'
+      METIS_PDF_EXTRACTOR: docling
+      METIS_TEST_POSTGRES_DSN: postgresql://postgres:postgres@127.0.0.1:5432/metis_test
+      # Acceptance host budget, not permission to increase Azure production SKU.
+      METIS_DOCLING_MAX_RSS_MIB: '4096'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated official model pipeline
+        run: |
+          python -m venv "$RUNNER_TEMP/docling-env"
+          "$RUNNER_TEMP/docling-env/bin/pip" install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          "$RUNNER_TEMP/docling-env/bin/pip" install -r requirements-docling.txt
+          "$RUNNER_TEMP/docling-env/bin/pip" check
+          echo "METIS_DOCLING_PYTHON=$RUNNER_TEMP/docling-env/bin/python" >> "$GITHUB_ENV"
+      - name: Prefetch and fingerprint real models before requests
+        run: |
+          "$RUNNER_TEMP/docling-env/bin/python" scripts/prepare_docling_models.py "$RUNNER_TEMP/docling-models"
+          "$RUNNER_TEMP/docling-env/bin/pip" freeze > "$RUNNER_TEMP/docling-models/python-dependencies.txt"
+          echo "METIS_DOCLING_ARTIFACTS_PATH=$RUNNER_TEMP/docling-models" >> "$GITHUB_ENV"
+      - name: Install lean kernel dependencies
+        run: pip install -r requirements-console.txt pytest httpx
+      - name: Genuine PDF conversion and PostgreSQL chain
+        env:
+          HF_HUB_OFFLINE: '1'
+          TRANSFORMERS_OFFLINE: '1'
+        run: python -m pytest -q tests/test_docling_real_pdf.py --junitxml=output/docling-real.xml
+      - name: Preserve evidence; skipped/failing tests are not acceptance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docling-real-acceptance
+          path: |
+            output/docling-real.xml
+            ${{ runner.temp }}/docling-models/metis-model-manifest.json
+            ${{ runner.temp }}/docling-models/python-dependencies.txt
+          if-no-files-found: error

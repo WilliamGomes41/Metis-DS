@@ -1056,11 +1056,16 @@ def bind_pre_review_semantic_processing(
         checkpoint = (formation_context or {}).get("diagnostic_checkpoint")
         if checkpoint:
             checkpoint("extraction_started", {})
-        fragments = console._extract(
+        from src.docling_pdf_v1 import enabled as docling_enabled
+        extraction_kwargs = ({"deadline": (formation_context or {}).get("attempt_deadline")}
+                             if kind == "pdf" and docling_enabled() else {})
+        retained_fragments = (formation_context or {}).get("retained_fragments")
+        fragments = retained_fragments if retained_fragments is not None else console._extract(
             kind,
             path,
             document_id=document_id,
             source_id=source_id,
+            **extraction_kwargs,
         )
         if checkpoint:
             checkpoint("extraction_finished", {"fragment_count": len(fragments), "extractor_versions": sorted({str(f.get("parser_version") or "not_recorded") for f in fragments})})

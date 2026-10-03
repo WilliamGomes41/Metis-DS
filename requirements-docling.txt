@@ -1,0 +1,4 @@
+# Isolated conversion interpreter; never install into the lean console vendor tree.
+# Official SDK, PDF backend and actual local layout/TableFormer models, no VLM/RAG.
+docling-slim[format-pdf,models-local,convert-core]==2.132.0
+docling-core==2.98.0

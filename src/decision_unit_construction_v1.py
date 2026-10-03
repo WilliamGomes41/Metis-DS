@@ -38,7 +38,10 @@ def add_layout(path, fragments):
                 for item in drawing["items"]:
                     if item[0] == "re":
                         enclosures.append(list(item[1]))
-            blocks = {tuple(b["bbox"]): b for b in page.get_text("dict")["blocks"] if b["type"] == 0}
+            # Docling already owns text extraction. Native drawings remain
+            # geometric evidence; missing Docling typography stays unresolved.
+            blocks = ({} if getattr(fragments, "extraction_record", None) is not None else
+                      {tuple(b["bbox"]): b for b in page.get_text("dict")["blocks"] if b["type"] == 0})
             for f in by_page[number]:
                 box = f.get("bbox")
                 if not box:
