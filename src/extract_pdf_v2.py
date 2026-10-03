@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 import fitz
 from src.integrity_kernel import stable_hash, schema_errors
+from src.pdf_fragment_contract_v1 import fragment_payload, page_bbox_locator
 
 PARSER_VERSION='pdf-fragments-v2.3.2'
 _HEADING_SIZE_TOLERANCE=0.5
@@ -60,13 +61,6 @@ def _heading_level(text:str,max_size:float,stack:list[tuple[int,str,float]])->in
 def _update_heading_stack(stack:list[tuple[int,str,float]],heading:str,max_size:float)->list[tuple[int,str,float]]:
     level=_heading_level(heading,max_size,stack)
     return [item for item in stack if item[0]<level]+[(level,heading,max_size)]
-
-def fragment_payload(x:dict[str,Any])->dict[str,Any]:
-    return {k:x[k] for k in ['fragment_id','document_id','source_id','source_page','bbox','source_locator','raw_text','clean_text','section_path','heading','sequence','parser_version']}
-
-def page_bbox_locator(page_no:int,bbox:list[float])->dict[str,str]:
-    coordinates=','.join(f'{value:.6f}' for value in bbox)
-    return {'locator_type':'page_bbox','locator_value':f'page:{page_no};bbox:{coordinates}'}
 
 def extract(pdf:Path, *, document_id:str, source_id:str, pages:list[int]|None=None)->list[dict[str,Any]]:
     doc=fitz.open(pdf); selected=pages or list(range(1,len(doc)+1)); out=[]; stack=[]; seq=0

@@ -78,6 +78,17 @@ def record_processing(envelope: dict[str, Any], objects: list[dict[str, Any]], *
            "extractor_versions": sorted({str(f["parser_version"]) for f in fragments if f.get("parser_version")}),
            "semantic_identity": deepcopy((replay or {}).get("identity")),
            "execution": (replay or {}).get("semantic_execution"), "candidates": []}
+    extraction = getattr(fragments, "extraction_record", None)
+    if extraction is not None:
+        # Prepared metadata only. Complete model output and bindings become
+        # durable in the SAME existing atomic envelope/object commit.
+        run["document_extraction"] = deepcopy(extraction)
+        from src.integrity_kernel import stable_hash
+        retained = run["document_extraction"]
+        retained["prepared_fragments"] = deepcopy(list(fragments))
+        retained["prepared_fragments_hash"] = stable_hash(retained["prepared_fragments"])
+        retained.pop("record_hash", None)
+        retained["record_hash"] = stable_hash(retained)
     for obj in objects:
         if obj.get("object_type") == "document":
             continue

@@ -1,0 +1,134 @@
+{
+  "pipeline": "official Docling 2.132.0 / Egret-large / TableFormer / OCR disabled",
+  "documents": [
+    {
+      "name": "mantelzorg",
+      "source_sha256": "48a4e9913c24a7c43d9eb1adacee4a508625add0da11dd5656ba47aed46a5c62",
+      "pages": 5,
+      "metrics": {
+        "conversion_seconds": 6.596355425994261,
+        "peak_rss_kib": 1223564,
+        "elapsed_seconds": 11.12206049499946,
+        "observed_peak_rss_bytes": 462848,
+        "worker_reaped": true
+      }
+    },
+    {
+      "name": "smetten",
+      "source_sha256": "62dfd76e0683a372d54b6d7aea8b09b47b2b71022e60ff034d76223919bec47c",
+      "pages": 46,
+      "metrics": {
+        "conversion_seconds": 50.60162761700485,
+        "peak_rss_kib": 1812036,
+        "elapsed_seconds": 55.548146528999496,
+        "observed_peak_rss_bytes": 0,
+        "worker_reaped": true
+      }
+    },
+    {
+      "name": "continentie",
+      "source_sha256": "431a90fc7619791ab8ab29b859526364e4ad9244b4ce1eac2b130c0ce37e4a9c",
+      "pages": 86,
+      "metrics": {
+        "conversion_seconds": 68.34501414400438,
+        "peak_rss_kib": 2816176,
+        "elapsed_seconds": 73.50809552500141,
+        "observed_peak_rss_bytes": 0,
+        "worker_reaped": true
+      }
+    }
+  ],
+  "passage_checks": [
+    {
+      "document": "smetten",
+      "source_sha256": "62dfd76e0683a372d54b6d7aea8b09b47b2b71022e60ff034d76223919bec47c",
+      "page": 6,
+      "expected": "Het doel van deze richtlijn is het bieden van uniforme",
+      "old": [
+        {
+          "locator": "page:6;bbox:36.360001,344.316193,524.359436,408.701599",
+          "expected_in_original_highlight": true
+        }
+      ],
+      "new": [
+        {
+          "locator": "page:6;bbox:70.944000,386.039120,506.063080,394.972525",
+          "expected_in_original_highlight": true
+        }
+      ]
+    },
+    {
+      "document": "continentie",
+      "source_sha256": "431a90fc7619791ab8ab29b859526364e4ad9244b4ce1eac2b130c0ce37e4a9c",
+      "page": 2,
+      "expected": "Houd tijdens het bespreken van mogelijke urine-incontinentie",
+      "old": [
+        {
+          "locator": "page:2;bbox:73.346001,244.829041,538.220642,256.095856",
+          "expected_in_original_highlight": true
+        }
+      ],
+      "new": [
+        {
+          "locator": "page:2;bbox:73.346000,247.756400,538.220400,267.933400",
+          "expected_in_original_highlight": true
+        }
+      ]
+    },
+    {
+      "document": "continentie",
+      "source_sha256": "431a90fc7619791ab8ab29b859526364e4ad9244b4ce1eac2b130c0ce37e4a9c",
+      "page": 4,
+      "expected": "Adviseer de cliënt bij rectaal bloedverlies",
+      "old": [
+        {
+          "locator": "page:4;bbox:73.346001,203.520020,530.028931,214.786819",
+          "expected_in_original_highlight": true
+        }
+      ],
+      "new": [
+        {
+          "locator": "page:4;bbox:73.346000,206.447400,528.462400,226.624400",
+          "expected_in_original_highlight": true
+        }
+      ]
+    },
+    {
+      "document": "continentie",
+      "source_sha256": "431a90fc7619791ab8ab29b859526364e4ad9244b4ce1eac2b130c0ce37e4a9c",
+      "page": 67,
+      "expected": "Leeg de urineopvangzak zodra deze voor twee derde vol zit.",
+      "old": [
+        {
+          "locator": "page:67;bbox:58.346001,398.968018,298.969971,411.334015",
+          "expected_in_original_highlight": true
+        }
+      ],
+      "new": [
+        {
+          "locator": "page:67;bbox:58.346000,61.610000,547.856000,519.451000",
+          "expected_in_original_highlight": true
+        }
+      ]
+    },
+    {
+      "document": "mantelzorg",
+      "source_sha256": "48a4e9913c24a7c43d9eb1adacee4a508625add0da11dd5656ba47aed46a5c62",
+      "page": 2,
+      "expected": "De ervaren belasting van de mantelzorg;",
+      "old": [
+        {
+          "locator": "page:2;bbox:152.399994,372.632019,420.116913,460.056244",
+          "expected_in_original_highlight": true
+        }
+      ],
+      "new": [
+        {
+          "locator": "page:2;bbox:152.400000,396.281250,318.259500,404.827508",
+          "expected_in_original_highlight": true
+        }
+      ]
+    }
+  ],
+  "scope": "Selected known source passages; not a document-wide semantic completeness or Azure capacity proof"
+}
