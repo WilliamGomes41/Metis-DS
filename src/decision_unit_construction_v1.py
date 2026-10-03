@@ -296,6 +296,16 @@ def rebuild_for_revision(original, revised, fragments):
         unit.append(fragment)
     if not unit:
         raise ValueError("decision_unit_source_fidelity_failure")
+    original_ids = [s["fragment_id"] for s in original["metadata"][KEY]["spans"]]
+    selected_ids = [f["fragment_id"] for f in unit]
+    # Retain verified construction order for the same selection: layout grouping
+    # may differ from PDF insertion order. New merges follow immutable extraction
+    # position, matching the existing source-catalog merge planner.
+    ordered_ids = original_ids if set(selected_ids) == set(original_ids) else [
+        f["fragment_id"] for f in fragments if f["fragment_id"] in selected_ids]
+    source_position = {fid: index for index, fid in enumerate(ordered_ids)}
+    unit.sort(key=lambda f: source_position[f["fragment_id"]])
+    revised["provenance"]["source_fragments"].sort(key=lambda ref: source_position[ref["raw_object_id"]])
     text = str(revised.get("content", {}).get("clean_text") or "")
     evidence = record(unit)
     literal = reconstruct(evidence, by_id)
