@@ -126,3 +126,35 @@ that answer. The selected model still exceeds the 768 MiB conversion limit and
 needs production-host capacity verification. Default activation, legacy cleanup
 and a deployable production package remain blocked on this resource/topology
 choice and the outstanding full acceptance gates.
+
+
+## Native PostgreSQL full-chain result
+
+The downloaded JUnit artifact from Actions run **37157191064**, code commit
+**4f5c26a9bfb8fae7ea433cb455c534376b2f46fa**, reports **8 tests, 7 passed,
+1 failed, 0 skipped, 0 errors** (81.432 seconds).
+
+Passing evidence now includes genuine PDF -> official Docling/models ->
+source-bound semantic formation -> original-source verification -> human review
+under the existing applicable review rule -> native PostgreSQL publication ->
+restart -> rejection of re-extracting published work. Publication before review
+is blocked and creates no canonical release. The semantic provider and immutable
+source-store interface are controlled test doubles; extraction and PostgreSQL
+are real. This does not prove Azure Blob or a live paid LLM.
+
+Also passing: actual converter timeout -> no partial activation -> restart ->
+genuine successful retry -> duplicate replay with the converter disabled, both
+locally and against native PostgreSQL.
+
+The remaining failing test is the unchanged column-order assertion. It fails on
+the GitHub runner although local tests pass, including in a clean kernel
+environment using the pinned console dependencies. Do not describe Egret as
+having solved this across supported runtimes. The cause remains unproven and
+the assertion has not been removed or relaxed.
+
+The existing Azure deployment ZIP was actually built and inspected: 1831
+entries, approximately 43 MiB, adapter present, no model manifest or Docling
+runtime, no forbidden NumPy vendor tree. It is **not** a Docling production
+artifact. The container recipe is still an acceptance recipe, not proven Azure
+production packaging. Actual Azure memory remains unknown; activation and
+legacy decommission therefore remain blocked.
