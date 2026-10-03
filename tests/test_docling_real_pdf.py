@@ -198,8 +198,12 @@ def test_real_pdf_postgres_successful_publication_and_restart(tmp_path, recovery
     console.review_object(actor_id=accounts["first"]["account_id"], snapshot_id=sid,
         object_id=target["object_id"], decision="approve", confirmed_object_type="recommendation",
         recommendation_direction="against", recommendation_strength_level="not_stated")
-    console.approve_second_review(actor_id=accounts["second"]["account_id"], snapshot_id=sid,
-                                  object_id=target["object_id"])
+    from src.four_eyes_v1 import requires_four_eyes
+    reviewed = next(o for o in console.snapshot_objects(sid) if o["object_id"] == target["object_id"])
+    if requires_four_eyes(reviewed):
+        console.approve_second_review(actor_id=accounts["second"]["account_id"], snapshot_id=sid,
+                                      object_id=target["object_id"])
+    assert any(b["valid"] and b["object_id"] == target["object_id"] for b in console.object_review_bindings(sid))
     for obj in console.snapshot_objects(sid):
         if obj["object_id"] == target["object_id"] or obj.get("object_type") == "document" or review_lane(obj) == "fast":
             continue
