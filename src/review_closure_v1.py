@@ -224,7 +224,7 @@ class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewC
             ):
                 continue
             row = deepcopy(row)
-            row.setdefault("provenance", {})["source_fragments"] = deepcopy(source_refs)
+            row.setdefault("provenance", {})["source_fragments"] = self._verified_finalized_source_refs(snapshot_id, row, source_refs)
             stamp_canonical_hashes(row)
             errors = schema_errors(row, self.schema_path)
             if errors:

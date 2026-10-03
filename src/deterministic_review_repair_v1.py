@@ -296,6 +296,20 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             refs_by_id.setdefault(row["fragment_id"], self._fragment_ref(row))
         return text, list(refs_by_id.values()), [row["unit_id"] for row in chosen]
 
+    def _verified_finalized_source_refs(self, snapshot_id, obj, source_refs):
+        from src.decision_unit_construction_v1 import KEY, finalized_source_refs
+        fragments = None
+        if (obj.get("metadata") or {}).get(KEY):
+            from src.decision_graph_v1 import pdf_fragments
+            envelope = self._envelope(snapshot_id)
+            source_path, _ = self._verified_source_bytes(envelope)
+            fragments = pdf_fragments(source_path, document_id=envelope["document_id"],
+                                      source_id=envelope["source_id"])
+        try:
+            return finalized_source_refs(obj, source_refs, fragments)
+        except ValueError as exc:
+            raise ConsoleError(str(exc)) from exc
+
     def _finalize_source_provenance(
         self,
         *,
@@ -315,7 +329,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
                 continue
             row = deepcopy(row)
             provenance = row.setdefault("provenance", {})
-            provenance["source_fragments"] = deepcopy(source_refs)
+            provenance["source_fragments"] = self._verified_finalized_source_refs(snapshot_id, row, source_refs)
             provenance["revision_patch_hash"] = stable_hash(repair_spec)
             stamp_canonical_hashes(row)
             errors = schema_errors(row, self.schema_path)

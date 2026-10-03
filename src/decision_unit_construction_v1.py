@@ -296,6 +296,21 @@ def rebuild_for_revision(original, revised, fragments):
         unit.append(fragment)
     if not unit:
         raise ValueError("decision_unit_source_fidelity_failure")
+    original_ids = [s["fragment_id"] for s in original["metadata"][KEY]["spans"]]
+    selected_ids = {f["fragment_id"] for f in unit}
+    # Source units are ordered by catalog position, but their verified internal
+    # layout order must survive extension (PDF insertion may differ from layout).
+    extraction_position = {f["fragment_id"]: index for index, f in enumerate(fragments)}
+    blocks = [[fid for fid in original_ids if fid in selected_ids]]
+    remaining = selected_ids - set(original_ids)
+    blocks.extend([f["fragment_id"] for f in group if f["fragment_id"] in remaining]
+                  for group in groups(fragments))
+    blocks = sorted((block for block in blocks if block),
+                    key=lambda block: min(extraction_position[fid] for fid in block))
+    ordered_ids = [fid for block in blocks for fid in block]
+    source_position = {fid: index for index, fid in enumerate(ordered_ids)}
+    unit.sort(key=lambda f: source_position[f["fragment_id"]])
+    revised["provenance"]["source_fragments"].sort(key=lambda ref: source_position[ref["raw_object_id"]])
     text = str(revised.get("content", {}).get("clean_text") or "")
     evidence = record(unit)
     literal = reconstruct(evidence, by_id)
@@ -315,6 +330,26 @@ def rebuild_for_revision(original, revised, fragments):
     revised["content"].update(clean_text=literal, raw_text=literal)
     revised.setdefault("metadata", {})[KEY] = evidence
     return revised
+
+
+def finalized_source_refs(obj, selected_refs, fragments=None):
+    """Preserve kernel construction order after verifying the same selection."""
+    if not (obj.get("metadata") or {}).get(KEY):
+        return deepcopy(selected_refs)
+    try:
+        reconstruct(obj["metadata"][KEY], fragments or [])
+    except ValueError as exc:
+        raise ValueError("decision_unit_source_fidelity_failure") from exc
+    current = obj.get("provenance", {}).get("source_fragments") or []
+    def bindings(refs):
+        return {ref["raw_object_id"]: (ref.get("raw_content_hash"), ref.get("source_locator"))
+                for ref in refs}
+    if (len(selected_refs) != len(current)
+            or len(bindings(selected_refs)) != len(selected_refs)
+            or bindings(selected_refs) != bindings(current)
+            or {"decision_unit_source_fidelity_failure", "decision_unit_evidence_invalid"}.intersection(unit_issues(obj))):
+        raise ValueError("decision_unit_source_fidelity_failure")
+    return deepcopy(current)
 
 
 def apply_gate(objects, *, source_hash, graph=None, inventory=None):
