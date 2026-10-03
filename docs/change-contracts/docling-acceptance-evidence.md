@@ -89,3 +89,40 @@ not claimed. Keep the existing staged default until these gates pass, then remov
 the legacy new-upload route as defined in `docling-extraction.md`. Historical
 source/review data remains untouched. Reupload and rollback instructions remain
 in that contract.
+
+## Selected-model retest (supersedes Heron failures above)
+
+The official `layout_egret_large` preset resolves the two reproduced Heron
+failures. The three local real-PDF tests now pass, including the unchanged
+column-order assertion. No custom layout reconstruction was added. The model
+repositories are pinned to exact commits in `MODEL_REVISIONS` and verified by
+file hashes before conversion. Neither the model nor package selection is a
+user-facing control.
+
+| Source | Supervisor wall time | Worker peak RSS | Result |
+| --- | ---: | ---: | --- |
+| Mantelzorg, 5 pages | 11.12 s | 1,223,564 KiB | Complete conversion and validated geometry/spans |
+| Smetten, 46 pages | 55.55 s | 1,812,036 KiB | Complete conversion and validated geometry/spans |
+| Continentie, 86 pages | 73.51 s | 2,816,176 KiB | Complete conversion and validated geometry/spans |
+
+`docling-comparison-evidence.json` identifies the exact files by SHA256 and records
+five same-source passage checks, including original PDF crop verification for
+both old and new routes. All five selected passages are present with valid crops
+in both routes. This shows selected source fidelity, not general superiority.
+The model treats part of the synthetic column fixture as a table; that structure
+is preserved rather than rewritten by the adapter. Semantic interpretation and
+human review remain necessary.
+
+The full local staged suite reported 2604 passed / 171 skipped / 4 failures. The
+same four failing tests were rerun on the verified main baseline and also failed:
+parent-process death and three proxy/DNS-isolation security cases. No tests were
+weakened. Repository preflight, release-control preflight, compilation and all
+17 adapter/architecture tests passed. Native PostgreSQL is exercised in CI, not
+claimed from locally skipped tests.
+
+The user confirmed that the current Azure memory capacity is unknown. This is an
+unresolved deployment acceptance input; no capacity increase is authorized by
+that answer. The selected model still exceeds the 768 MiB conversion limit and
+needs production-host capacity verification. Default activation, legacy cleanup
+and a deployable production package remain blocked on this resource/topology
+choice and the outstanding full acceptance gates.

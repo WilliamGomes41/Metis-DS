@@ -85,3 +85,9 @@ preset for the next acceptance run and pin its downloaded repository commit,
 along with the TableFormer repository commit. This changes only model extraction
 metadata for new work; accepted source evidence stays immutable. Re-measure all
 three sources; the prior Heron resource measurements are not Egret evidence.
+
+Current evidence is tracked in `docling-acceptance-evidence.md` and
+`docling-comparison-evidence.json`; earlier local-network/Heron-only proof notes
+above are historical. The selected Egret model has genuine PDF evidence on all
+three available sources. The current Azure capacity is unknown (user response),
+so the staged production cutover remains deliberately blocked.

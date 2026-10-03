@@ -223,3 +223,50 @@ from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: E40
 
 def test_acceptance_requires_native_postgres():
     assert os.environ.get("METIS_TEST_POSTGRES_DSN"), "Acceptance must not pass with skipped PostgreSQL proofs"
+
+
+@pytest.mark.parametrize("backend", ["local", "postgres"])
+def test_real_converter_timeout_restart_retry_no_partial_activation(tmp_path, monkeypatch, request, backend):
+    from src.operations_console_v1 import OperationsConsole
+    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.source_bound_fields_v2 import MODE
+    if backend == "postgres":
+        from tests.test_review_batch_atomic_postgres import _console
+        config = request.getfixturevalue("workflow_postgres")
+        create = lambda: _console(tmp_path, config)
+    else:
+        create = lambda: OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    def bind(console):
+        def post(url, headers, payload, timeout):
+            return {"output": [{"type": "message", "content": [{"type": "output_text", "text": json.dumps(proposal(payload))}]}]}
+        bind_pre_review_semantic_processing(console, environ={"METIS_LLM_API_KEY": "test",
+            "METIS_LLM_MODEL": "controlled", "METIS_PASSAGE_FORMATION_MODE": MODE}, post_json=post)
+        return console
+    monkeypatch.setenv("METIS_PDF_EXTRACTOR", "docling")
+    monkeypatch.setenv("METIS_DOCLING_TIMEOUT_SECONDS", "0.01")
+    console = bind(create())
+    author = console.create_account(username="author", password="test-secret-long", roles=("researcher",))
+    reviewer = console.create_account(username="reviewer", password="test-secret-long", roles=("reviewer",))
+    source = pdf(tmp_path)
+    receipt = console.ingest(actor_id=author["account_id"], filename="source.pdf", data=source.read_bytes(),
+        content_type="application/pdf", ingest_kind="new", title="Screening", version="1.0", date="2026-10-03",
+        live_url="", class_="richtlijn", family="test", named_reviewers=[reviewer["account_id"]])
+    sid = receipt["snapshot_id"]
+    assert console.processing_status(sid)["state"] == "failed"
+    assert receipt["processing_attempts"][-1]["error_code"] == "docling_timeout"
+    assert not console.snapshot_objects(sid)
+    assert stored_fragments(console._envelope(sid)) is None
+    assert console._verified_source_bytes(console._envelope(sid))[1] == source.read_bytes()
+    monkeypatch.setenv("METIS_DOCLING_TIMEOUT_SECONDS", "1200")
+    restarted = bind(create())
+    restarted.retry_pre_review(actor_id=author["account_id"], snapshot_id=sid, command_id="real-retry")
+    assert restarted.processing_status(sid)["state"] == "succeeded"
+    assert [a["state"] for a in restarted._envelope(sid)["processing_attempts"]] == ["failed", "succeeded"]
+    before = stored_fragments(restarted._envelope(sid))
+    assert before and restarted.snapshot_objects(sid)
+    # A successful duplicate must return durable work even with runtime disabled.
+    monkeypatch.delenv("METIS_DOCLING_PYTHON")
+    replay = create()
+    replay.retry_pre_review(actor_id=author["account_id"], snapshot_id=sid, command_id="real-retry")
+    assert stored_fragments(replay._envelope(sid)) == before
+    assert len(replay._envelope(sid)["processing_attempts"]) == 2
