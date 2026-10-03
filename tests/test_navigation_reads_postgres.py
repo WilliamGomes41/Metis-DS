@@ -53,7 +53,7 @@ def test_native_navigation_count_matches_workboard_with_five_connections(
         envelope["named_reviewers"] = [primary, secondary]
         envelope["review_policy"] = deepcopy(policy)
         project_policy(objects, policy)
-        documents.create_document_bundle(envelope=envelope, objects=objects)
+        documents.write_bundle(envelope=envelope, objects=objects)
 
     account = console._account(primary)
     expected = sum(item["work_state"] in {"review", "disposition", "technical_repair"}
