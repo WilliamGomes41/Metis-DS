@@ -12,9 +12,12 @@ from typing import Any
 
 from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError
 from src.document_status_v1 import derive_lifecycle_status
+from src.console_performance_v1 import measure_badges
+from src.publish_authorization_v1 import still_matches
 from src.four_eyes_v1 import HIGH_RISK_FIELDS
 from src.operations_console_v1 import CAPTURED, PRE_REVIEW_BLOCKED, ConsoleError
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+from src.workflows.workflow_review_postgres_v1 import WorkflowReviewStoreError
 from src.workflows.workflow_remaining_cutover_v1 import (
     PostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
     PostgresCompleteWorkflowDurablePublicationConsole,
@@ -308,6 +311,8 @@ class _PostgresBadgeCountsMixin:
         self,
         account_id: str,
         snapshot_id: str | None = None,
+        *,
+        navigation_only: bool = False,
     ) -> dict[str, dict[str, Any]]:
         """Summarize assigned Review work in one set-based workflow query."""
         try:
@@ -941,13 +946,70 @@ class _PostgresBadgeCountsMixin:
                 "progress_superseded": int(row.get("progress_superseded") or 0),
                 "progress_revised": int(row.get("progress_revised") or 0),
             }
+        if navigation_only:
+            return out
         from src.review_workboard_v1 import review_work_item
         for sid, summary in out.items():
             if summary["envelope"].get("review_policy"):
                 item = review_work_item(self, account=self._account(account_id), envelope=summary["envelope"])
+                summary["work_item"] = item
                 if item:
                     summary.update({k: v for k, v in item.items() if k in summary})
         return out
+
+    def _navigation_review_count(self, account: dict[str, Any]) -> int:
+        """Use review rules once with call-local batched inputs, not publish gates.
+
+        Navigation needs actionable work and whether a revision is closed. The
+        full publication readiness and source verification remain on their
+        existing authoritative command/detail paths.
+        """
+        from src.review_workboard_v1 import ReviewWorkInputs, review_work_item, review_workboard_items
+        try:
+            summaries = self.review_workboard_summaries(account["account_id"], navigation_only=True)
+            releases = self._canonical_list_release_rows(list(summaries))
+            lifecycle: dict[str, dict[str, str]] = {}
+            for sid, summary in summaries.items():
+                if self.canonical_publication_store is None:
+                    state = str(summary["envelope"].get("state") or "")
+                    release_status = state if state in {"published", "withdrawn", "superseded"} else "none"
+                    serving_status = "active" if release_status == "published" else "inactive"
+                else:
+                    release_status, serving_status = self._release_dimensions(releases.get(sid))
+                lifecycle[sid] = derive_lifecycle_status(
+                    readiness={}, release_status=release_status, serving_status=serving_status,
+                )
+            # Historical publication closes review even when stale object rows
+            # still contain duties. Do not materialize those closed payloads.
+            summaries = {sid: summary for sid, summary in summaries.items()
+                         if lifecycle[sid]["workflow_status"] != "closed"}
+            explicit_ids = [sid for sid, summary in summaries.items()
+                            if summary["envelope"].get("review_policy")]
+            objects = self.workflow_document_store.list_current_objects_batch(explicit_ids)
+            bindings = self.workflow_review_store.read_bindings(explicit_ids) if explicit_ids else {}
+            for sid in explicit_ids:
+                current = {obj["object_id"]: obj for obj in objects[sid]}
+                checked = []
+                for binding in bindings.get(sid, []):
+                    item = dict(binding)
+                    obj = current.get(item.get("object_id"))
+                    item["valid"] = bool(obj) and still_matches(item, obj)
+                    checked.append(item)
+                summaries[sid]["work_item"] = review_work_item(
+                    self, account=account, envelope=summaries[sid]["envelope"],
+                    inputs=ReviewWorkInputs(objects[sid], checked, lifecycle[sid],
+                                           lifecycle[sid]["release_status"] != "none"),
+                )
+            items = review_workboard_items(self, account=account, summaries=summaries,
+                                          lifecycle_statuses=lifecycle)
+            return sum(item["work_state"] in {"review", "disposition", "technical_repair"}
+                       for item in items)
+        except CanonicalPublicationStoreError as exc:
+            raise ConsoleError("durable_lifecycle_status_read_failed", str(exc)) from exc
+        except WorkflowDocumentStoreError as exc:
+            raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
+        except WorkflowReviewStoreError as exc:
+            raise ConsoleError("workflow_review_unavailable", str(exc)) from exc
 
     def _published_snapshot_ids(self, snapshot_ids: list[str]) -> set[str]:
         if not snapshot_ids:
@@ -1020,6 +1082,7 @@ class _PostgresBadgeCountsMixin:
                 return snapshot_id in published
         return super().snapshot_is_published(snapshot_id)
 
+    @measure_badges
     def waiting_task_counts(self, account_id: str) -> dict[str, int]:
         account = self._account(account_id)
         roles = set(account.get("roles") or [])
@@ -1044,9 +1107,7 @@ class _PostgresBadgeCountsMixin:
 
         review_count = int(row.get("review") or 0)
         if row.get("explicit_review_documents") and "reviewer" in roles:
-            from src.review_workboard_v1 import review_workboard_items
-            review_count = sum(i["work_state"] in {"review", "disposition", "technical_repair"}
-                               for i in review_workboard_items(self, account=account))
+            review_count = self._navigation_review_count(account)
         return {
             "ingest": int(row.get("ingest") or 0) if "researcher" in roles else 0,
             "tree": int(row.get("tree") or 0)

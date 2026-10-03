@@ -7,6 +7,8 @@ before the Azure runtime is switched over.
 """
 from __future__ import annotations
 
+from src.console_performance_v1 import connect_postgres
+
 import hashlib
 import secrets
 import uuid
@@ -83,10 +85,10 @@ class PostgresWorkflowIdentityStore:
             raise WorkflowIdentityStoreError("psycopg_unavailable") from exc
         try:
             if self.config.dsn:
-                return psycopg.connect(self.config.dsn, row_factory=dict_row, connect_timeout=10)
+                return connect_postgres(psycopg, self.config.dsn, row_factory=dict_row, connect_timeout=10)
             credential = self._credential or DefaultAzureCredential()
             token = credential.get_token(AZURE_POSTGRES_SCOPE).token
-            return psycopg.connect(
+            return connect_postgres(psycopg,
                 host=self.config.host,
                 dbname=self.config.database,
                 user=self.config.user,

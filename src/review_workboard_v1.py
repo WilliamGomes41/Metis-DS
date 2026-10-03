@@ -7,6 +7,7 @@ is added; explicit task links continue to use the existing review room.
 from __future__ import annotations
 
 import html
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote, urlencode
 
@@ -226,11 +227,26 @@ def _work_item_from_counts(
     }
 
 
+@dataclass(frozen=True)
+class ReviewWorkInputs:
+    """Disposable, already authorized inputs for one read projection.
+
+    Consumers must not mutate these call-local values. They are never reused by
+    a command or retained between requests.
+    """
+
+    objects: list[dict[str, Any]]
+    bindings: list[dict[str, Any]]
+    lifecycle_status: dict[str, str]
+    published: bool
+
+
 def review_work_item(
     console: OperationsConsole,
     *,
     account: dict[str, Any],
     envelope: dict[str, Any],
+    inputs: ReviewWorkInputs | None = None,
 ) -> dict[str, Any] | None:
     """Summarize one assigned document using the existing Review queues."""
     account_id = str(account.get("account_id") or "")
@@ -243,7 +259,7 @@ def review_work_item(
     if not snapshot_id:
         return None
 
-    objects = console.snapshot_objects(snapshot_id)
+    objects = inputs.objects if inputs is not None else console.snapshot_objects(snapshot_id)
     closure = source_passage_closure(objects)
 
     review_path = review_path_for_klasse(str(envelope.get("class") or ""))
@@ -270,7 +286,9 @@ def review_work_item(
         )
 
     bindings: list[dict[str, Any]] | None
-    if not hasattr(console, "_bindings") and not hasattr(console, "workflow_review_store"):
+    if inputs is not None:
+        bindings = inputs.bindings
+    elif not hasattr(console, "_bindings") and not hasattr(console, "workflow_review_store"):
         bindings = None
     else:
         try:
@@ -307,7 +325,8 @@ def review_work_item(
     item = _work_item_from_counts(
         envelope=envelope,
         snapshot_id=snapshot_id,
-        lifecycle_status=_lifecycle_for_work_item(console, snapshot_id),
+        lifecycle_status=(inputs.lifecycle_status if inputs is not None
+                          else _lifecycle_for_work_item(console, snapshot_id)),
         heading_pending=heading_pending,
         individual_pending=individual_pending,
         normal_passages=normal_passages,
@@ -326,7 +345,10 @@ def review_work_item(
         and (obj.get("governance") or {}).get("review_snapshot_hash")
         for obj in objects
     )
-    if "decision_graph" in envelope and not console.snapshot_is_published(snapshot_id):
+    published = inputs.published if inputs is not None else (
+        console.snapshot_is_published(snapshot_id) if "decision_graph" in envelope else False
+    )
+    if "decision_graph" in envelope and not published:
         from src.decision_graph_v1 import publication_issues, review_target
         graph_issues = publication_issues(envelope, objects)
         target = review_target(envelope["decision_graph"], objects, envelope["review_policy"])
@@ -348,19 +370,23 @@ def review_workboard_items(
     console: OperationsConsole,
     *,
     account: dict[str, Any],
+    summaries: dict[str, dict[str, Any]] | None = None,
+    lifecycle_statuses: dict[str, dict[str, str]] | None = None,
 ) -> list[dict[str, Any]]:
     """Return only documents assigned to the current reviewer, in store order."""
     account_id = str(account.get("account_id") or "")
     summary_reader = getattr(console, "review_workboard_summaries", None)
-    if account_id and callable(summary_reader):
-        summaries = summary_reader(account_id)
+    if account_id and (summaries is not None or callable(summary_reader)):
+        if summaries is None:
+            summaries = summary_reader(account_id)
         items: list[dict[str, Any]] = []
         for snapshot_id, summary in summaries.items():
             envelope = {"snapshot_id": snapshot_id, **summary["envelope"]}
             if str(envelope.get("publication_eligibility") or "") == PRE_REVIEW_BLOCKED:
                 continue
             if envelope.get("review_policy"):
-                item = review_work_item(console, envelope=envelope, account=account)
+                item = (summary["work_item"] if "work_item" in summary else
+                        review_work_item(console, envelope=envelope, account=account))
                 if item is not None:
                     items.append(item)
                 continue
@@ -371,7 +397,8 @@ def review_workboard_items(
                 _work_item_from_counts(
                     envelope=envelope,
                     snapshot_id=snapshot_id,
-                    lifecycle_status=_lifecycle_for_work_item(console, snapshot_id),
+                    lifecycle_status=(lifecycle_statuses[snapshot_id] if lifecycle_statuses is not None
+                                      else _lifecycle_for_work_item(console, snapshot_id)),
                     heading_pending=int(summary.get("heading_pending") or 0),
                     individual_pending=int(summary.get("individual_pending") or 0),
                     normal_passages=int(summary.get("normal_passages") or 0),

@@ -132,6 +132,29 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         except Exception as exc:
             raise WorkflowDocumentStoreError("workflow_document_objects_read_failed") from exc
 
+    def list_current_objects_batch(self, snapshot_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """Read current object versions once, preserving the existing position order."""
+        if not snapshot_ids:
+            return {}
+        try:
+            with self._connect() as con:
+                rows = con.execute(
+                    "SELECT snapshot_id,position,payload FROM workflow.document_objects "
+                    "WHERE snapshot_id=ANY(%s) ORDER BY snapshot_id,position",
+                    (snapshot_ids,),
+                ).fetchall()
+            current: dict[str, dict[str, dict[str, Any]]] = {sid: {} for sid in snapshot_ids}
+            for row in rows:
+                if row["position"] is None:
+                    raise WorkflowDocumentStoreError("workflow_document_cutover_not_prepared")
+                obj = dict(row["payload"]) if isinstance(row["payload"], dict) else json.loads(row["payload"])
+                current[str(row["snapshot_id"])][obj["object_id"]] = obj
+            return {sid: list(objects.values()) for sid, objects in current.items()}
+        except WorkflowDocumentStoreError:
+            raise
+        except Exception as exc:
+            raise WorkflowDocumentStoreError("workflow_document_objects_read_failed") from exc
+
     @staticmethod
     def _revision(rows: list[dict[str, Any]]) -> str:
         return hashlib.sha256(_objects_jsonl_bytes(rows)).hexdigest()

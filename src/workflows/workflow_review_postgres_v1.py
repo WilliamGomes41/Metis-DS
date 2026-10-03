@@ -268,7 +268,9 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
                 for event in events:
                     handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
 
-    def read_bindings(self) -> dict[str, list[dict[str, Any]]]:
+    def read_bindings(self, snapshot_ids: list[str] | None = None) -> dict[str, list[dict[str, Any]]]:
+        if snapshot_ids == []:
+            return {}
         try:
             with self._connect() as con:
                 rows = con.execute(
@@ -276,7 +278,9 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
                     "confirmed_object_type,reviewer_account_id,reviewer_display_name,decision,valid,"
                     "authorization_payload "
                     "FROM workflow.publish_authorizations "
-                    "ORDER BY snapshot_id,position NULLS LAST,authorization_id"
+                    + ("WHERE snapshot_id=ANY(%s) " if snapshot_ids is not None else "")
+                    + "ORDER BY snapshot_id,position NULLS LAST,authorization_id",
+                    *(((snapshot_ids,),) if snapshot_ids is not None else ()),
                 ).fetchall()
             out: dict[str, list[dict[str, Any]]] = {}
             for row in rows:
