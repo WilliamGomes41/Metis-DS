@@ -7,6 +7,7 @@ RUN python -m venv /opt/docling \
  && /opt/docling/bin/pip install --no-cache-dir torch==2.14.1+cpu torchvision==0.29.1+cpu --index-url https://download.pytorch.org/whl/cpu \
  && /opt/docling/bin/pip install --no-cache-dir -r requirements-docling.lock
 COPY scripts/prepare_docling_models.py /app/scripts/
+COPY src/__init__.py src/docling_contract_v1.py /app/src/
 RUN /opt/docling/bin/python scripts/prepare_docling_models.py /opt/docling-models \
  && /opt/docling/bin/pip freeze > /opt/docling-models/python-dependencies.txt
 COPY requirements-console.txt /app/

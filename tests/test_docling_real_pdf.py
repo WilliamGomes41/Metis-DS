@@ -150,7 +150,13 @@ def test_real_pdf_postgres_successful_publication_and_restart(tmp_path, recovery
     The test source-store double avoids an Azure subscription; it does not prove
     Azure Blob immutability or production deployment packaging.
     """
-    from tests.test_lifecycle_withdrawal_recovery_v1 import _console
+    from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+    from src.workflows.workflow_badge_counts_postgres_v1 import FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole
+    from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
+    from src.workflows.workflow_identity_cutover_v1 import CutoverPostgresWorkflowIdentityStore
+    from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
+    from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+    from src.workflows.workflow_transaction_v1 import bind_workflow_stores
     from tests.test_vsa_publish_readiness_ui_v1 import MemorySourceStore
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
     from src.source_bound_fields_v2 import KEY, MODE
@@ -158,7 +164,17 @@ def test_real_pdf_postgres_successful_publication_and_restart(tmp_path, recovery
     from src.review_disposition_v1 import definitive_review_disposition
     monkeypatch.setenv("METIS_PDF_EXTRACTOR", "docling")
     source_store = MemorySourceStore()
-    create = lambda: _console(tmp_path, recovery_postgres, source_store)
+    def create():
+        identity = CutoverPostgresWorkflowIdentityStore(recovery_postgres)
+        documents = PostgresConcurrentWorkflowDocumentStore(recovery_postgres)
+        reviews = PostgresWorkflowReviewStore(recovery_postgres)
+        remaining = PostgresWorkflowRemainingStore(recovery_postgres)
+        bind_workflow_stores(identity, documents, reviews, remaining)
+        return FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole(
+            root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime",
+            immutable_source_store=source_store, canonical_publication_store=PostgresCanonicalPublicationStore(recovery_postgres),
+            workflow_identity_store=identity, workflow_document_store=documents,
+            workflow_review_store=reviews, workflow_remaining_store=remaining)
     console = create()
     def post(url, headers, payload, timeout):
         return {"output": [{"type": "message", "content": [{"type": "output_text", "text": json.dumps(proposal(payload))}]}]}

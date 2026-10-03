@@ -13,13 +13,14 @@ import signal
 import sys
 import time
 
-from src.docling_contract_v1 import CONTRACT, DOCLING_VERSION, CORE_VERSION, DoclingError
+from src.docling_contract_v1 import CONTRACT, DOCLING_VERSION, CORE_VERSION, LAYOUT_PRESET, MODEL_REVISIONS, DoclingError
 
 
 def verified_models(path: Path) -> dict:
     try:
         manifest = json.loads((path / "metis-model-manifest.json").read_text())
-        if manifest["docling_version"] != DOCLING_VERSION or not manifest["files"]:
+        if (manifest["docling_version"] != DOCLING_VERSION or not manifest["files"]
+                or manifest.get("repositories") != MODEL_REVISIONS):
             raise ValueError()
         for name, digest in manifest["files"].items():
             target = (path / name).resolve()
@@ -40,7 +41,7 @@ def convert(data: bytes, config: dict) -> dict:
     models = verified_models(Path(config["artifacts_path"]))
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.datamodel.base_models import InputFormat, ConversionStatus
-    from docling.datamodel.pipeline_options import PdfPipelineOptions, HeadingHierarchyOptions
+    from docling.datamodel.pipeline_options import PdfPipelineOptions, HeadingHierarchyOptions, LayoutObjectDetectionOptions
     from docling.datamodel.accelerator_options import AcceleratorOptions, AcceleratorDevice
     from docling_core.types.io import DocumentStream
     from docling_core.types.doc import ContentLayer
@@ -49,6 +50,7 @@ def convert(data: bytes, config: dict) -> dict:
         artifacts_path=Path(config["artifacts_path"]), document_timeout=config["timeout"],
         enable_remote_services=False, allow_external_plugins=False,
         do_ocr=False, do_table_structure=True, generate_parsed_pages=True,
+        layout_options=LayoutObjectDetectionOptions.from_preset(LAYOUT_PRESET),
         generate_page_images=False, generate_picture_images=False,
         do_picture_classification=False, do_picture_description=False,
         do_code_enrichment=False, do_formula_enrichment=False,

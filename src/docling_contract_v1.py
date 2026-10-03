@@ -13,6 +13,11 @@ from typing import Any
 CONTRACT = "metis-docling-source-v1"
 DOCLING_VERSION = "2.132.0"
 CORE_VERSION = "2.99.0"
+LAYOUT_PRESET = "layout_egret_large"
+MODEL_REVISIONS = {
+    "docling-project/docling-layout-egret-large": "fff417c78abd6bab338c87706c95a8d79dc68f1e",
+    "docling-project/docling-models": "fc0f2d45e2218ea24bce5045f58a389aed16dc23",
+}
 
 
 class DoclingError(RuntimeError):

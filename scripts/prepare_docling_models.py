@@ -5,25 +5,29 @@ import hashlib
 from importlib.metadata import version
 import json
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from src.docling_contract_v1 import DOCLING_VERSION, MODEL_REVISIONS
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
-    if version("docling-slim") != "2.132.0":
+    if version("docling-slim") != DOCLING_VERSION:
         raise SystemExit("docling_dependency_version_invalid")
-    from docling.utils.model_downloader import download_models
-    download_models(args.output, with_layout=True, with_tableformer=True,
-                    with_code_formula=False, with_picture_classifier=False,
-                    with_rapidocr=False, with_easyocr=False, progress=True)
+    from docling.models.utils.hf_model_download import download_hf_model
+    for repo, revision in MODEL_REVISIONS.items():
+        download_hf_model(repo_id=repo, revision=revision,
+                          local_dir=args.output / repo.replace("/", "--"), progress=True)
     files = {}
     for path in sorted(args.output.rglob("*")):
-        if path.is_file() and path.name != "metis-model-manifest.json":
+        if path.is_file() and ".cache" not in path.parts and path.name != "metis-model-manifest.json":
             with path.open("rb") as handle:
                 files[path.relative_to(args.output).as_posix()] = hashlib.file_digest(handle, "sha256").hexdigest()
     manifest = {"docling_version": version("docling-slim"), "files": files,
-                "purpose": "official CPU layout and TableFormer; OCR disabled"}
+                "repositories": MODEL_REVISIONS,
+                "purpose": "official CPU Egret-large and TableFormer; OCR disabled"}
     (args.output / "metis-model-manifest.json").write_text(json.dumps(manifest, indent=2))
 
 

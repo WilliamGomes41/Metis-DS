@@ -77,3 +77,11 @@ list marker and whitespace. Preserve original geometry/span and record the text
 field used per binding; never clamp ranges or infer alignment for arbitrary edits.
 All other invalid spans continue to fail closed. This is a source-coordinate
 translation, not a new extractor or a relaxation of source evidence requirements.
+
+Model selection follow-up: real Heron acceptance failed on column order and on
+Mantelzorg mixed-page geometry. An experiment with the official Egret-large preset
+resolved those two fixtures without custom extraction. Select that official
+preset for the next acceptance run and pin its downloaded repository commit,
+along with the TableFormer repository commit. This changes only model extraction
+metadata for new work; accepted source evidence stays immutable. Re-measure all
+three sources; the prior Heron resource measurements are not Egret evidence.
