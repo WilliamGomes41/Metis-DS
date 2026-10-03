@@ -45,6 +45,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install PDF standard font rendering dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fonts-urw-base35
+          sha256sum /usr/share/fonts/opentype/urw-base35/NimbusSans-Regular.otf
       - name: Install isolated official model pipeline
         run: |
           python -m venv "$RUNNER_TEMP/docling-env"
