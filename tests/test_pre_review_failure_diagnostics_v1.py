@@ -73,8 +73,8 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
     assert response.status_code == 200, response.text
     envelope = console.list_envelopes()[0]
     sid = envelope["snapshot_id"]
-    assert "De voorcontrole is geblokkeerd" in response.text
-    assert sid in response.text and code in response.text
+    assert "De verwerking is niet afgerond; beoordelen is nog niet beschikbaar" in response.text
+    assert code not in response.text
     assert envelope["publication_eligibility"] == PRE_REVIEW_BLOCKED
     assert envelope["processing_blocker"] == code
     assert console.snapshot_objects(sid) == []
@@ -89,8 +89,10 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
     console.list_document_lifecycle_statuses = reader.list_document_lifecycle_statuses
     tree = client.get("/tree")
     assert "status <b>geblokkeerd</b>" in tree.text
-    assert "Voorcontrole geblokkeerd" in tree.text
-    assert "Technische diagnose bekijken" in tree.text
+    assert "Technische diagnose bekijken" not in tree.text
+    management = client.get(f"/settings/technical/processing?document={sid}")
+    assert management.status_code == 200
+    assert code in management.text
     payload = client.get(f"/review/processing-diagnostics?document={sid}").json()
     assert payload["diagnostics"]["blocked_candidate_count"] == 0
     assert payload["pre_review"]["blocked"] is True
@@ -101,10 +103,14 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
     response = client.post("/tree/reprocess", data={"snapshot_id": sid})
     assert response.status_code == 400
     assert code in response.text
-    reference = re.search(r"Verwerkingsreferentie: <code>([a-f0-9]{32})</code>", response.text).group(1)
-    assert ("Validatiereden:" in response.text) == bool(reason)
+    reference = console._envelope(sid)["processing_attempts"][-1]["processing_reference"]
+    assert re.fullmatch(r"[a-f0-9]{32}", reference)
+    assert "Verwerkingsreferentie:" not in response.text
+    assert "Validatiereden:" not in response.text
+    management = client.get(f"/settings/technical/processing?document={sid}")
+    assert management.status_code == 200
     if reason:
-        assert reason in response.text
+        assert reason in management.text
     assert any(f"reference={reference} snapshot_id={sid} code={code} reason={reason or '-'}" in row.message
                for row in caplog.records)
     attempts = [row.message for row in caplog.records if "METIS_PRE_REVIEW blocked" in row.message]
