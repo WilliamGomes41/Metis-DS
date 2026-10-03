@@ -28,7 +28,9 @@ def test_real_transport_wait_is_bounded_even_with_trickle(case,code,monkeypatch)
     options={'connect':{'tls_stall':True},'silent':{'delay':3},
              'drip':{'drip':.06,'body':b'{"ok":"'+b'x'*100+b'"}'},'late':{'delay':1.2}}[case]
     if case=='connect':limits=ModelCallLimits(connect=.2,idle=.5,total=.8)
-    if case=='late':limits=ModelCallLimits(connect=.5,idle=2,total=.8)
+    # Drip proves the total deadline independently of runner scheduling jitter.
+    # Silent proves the separate idle deadline; drip/late must not race that timer.
+    if case in {'drip','late'}:limits=ModelCallLimits(connect=.5,idle=2,total=.8)
     observation={}
     with peer(**options) as (url,received):
         started=time.monotonic()
