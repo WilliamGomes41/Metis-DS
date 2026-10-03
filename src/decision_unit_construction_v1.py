@@ -332,10 +332,14 @@ def rebuild_for_revision(original, revised, fragments):
     return revised
 
 
-def finalized_source_refs(obj, selected_refs):
+def finalized_source_refs(obj, selected_refs, fragments=None):
     """Preserve kernel construction order after verifying the same selection."""
     if not (obj.get("metadata") or {}).get(KEY):
         return deepcopy(selected_refs)
+    try:
+        reconstruct(obj["metadata"][KEY], fragments or [])
+    except ValueError as exc:
+        raise ValueError("decision_unit_source_fidelity_failure") from exc
     current = obj.get("provenance", {}).get("source_fragments") or []
     def bindings(refs):
         return {ref["raw_object_id"]: (ref.get("raw_content_hash"), ref.get("source_locator"))

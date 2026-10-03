@@ -328,7 +328,7 @@ def test_markerless_correction_keeps_legacy_contract(tmp_path, monkeypatch):
     assert revised['content']['clean_text'] == 'Bespreek'
 
 
-def test_native_interleaved_repeated_text_merge_preserves_kernel_proof(tmp_path):
+def test_native_interleaved_repeated_text_merge_preserves_kernel_proof(tmp_path, monkeypatch):
     """Equal literal text must not hide reordered provenance during finalization."""
     import fitz
     from tests.decision_graph_native_support import native_state
@@ -399,6 +399,32 @@ def test_native_interleaved_repeated_text_merge_preserves_kernel_proof(tmp_path)
             console._finalize_source_provenance(
                 snapshot_id=sid, object_id=primary['object_id'], source_refs=invalid_refs,
                 repair_spec={'repair_kind': REPAIR_MERGE_OBJECTS})
+        assert console.snapshot_objects(sid) == before
+        assert console.objects_revision(sid) == revision_before
+    from src.deterministic_review_repair_v1 import DeterministicRepairReviewConsole
+    load = console._load_objects
+    for field in ('end', 'fragment_text_hash', 'text_sha256', 'separator', 'parent'):
+        def corrupted_rows(*args, **kwargs):
+            rows = deepcopy(load(*args, **kwargs))
+            row = next(r for r in reversed(rows) if r['object_id'] == primary['object_id'])
+            proof = row['metadata'][KEY]
+            if field == 'separator':
+                proof[field] = ' '
+            elif field == 'end':
+                proof['spans'][0][field] += 1
+            elif field == 'parent':
+                proof['spans'][0][field] = {'fragment_id': 'forged-parent'}
+            else:
+                proof['spans'][0][field] = '0' * 64
+            return rows
+        with monkeypatch.context() as context:
+            context.setattr(console, '_load_objects', corrupted_rows)
+            for finalize in (console._finalize_source_provenance,
+                             lambda **kw: DeterministicRepairReviewConsole._finalize_source_provenance(console, **kw)):
+                with pytest.raises(ConsoleError, match='source_fidelity|evidence_invalid'):
+                    finalize(snapshot_id=sid, object_id=primary['object_id'],
+                             source_refs=revised['provenance']['source_fragments'],
+                             repair_spec={'repair_kind': REPAIR_MERGE_OBJECTS})
         assert console.snapshot_objects(sid) == before
         assert console.objects_revision(sid) == revision_before
     restarted = state('interleaved-merge-restart')

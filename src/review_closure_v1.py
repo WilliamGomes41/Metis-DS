@@ -224,11 +224,7 @@ class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewC
             ):
                 continue
             row = deepcopy(row)
-            from src.decision_unit_construction_v1 import finalized_source_refs
-            try:
-                row.setdefault("provenance", {})["source_fragments"] = finalized_source_refs(row, source_refs)
-            except ValueError as exc:
-                raise ConsoleError(str(exc)) from exc
+            row.setdefault("provenance", {})["source_fragments"] = self._verified_finalized_source_refs(snapshot_id, row, source_refs)
             stamp_canonical_hashes(row)
             errors = schema_errors(row, self.schema_path)
             if errors:
