@@ -1470,7 +1470,8 @@ class OperationsConsole:
         snapshot_id = envelope["snapshot_id"]
         if self.snapshot_is_published(snapshot_id):
             raise ConsoleError(published_error)
-        if self._envelope(snapshot_id) != envelope or self.objects_revision(snapshot_id) != revision:
+        from src.attempt_diagnostics_v1 import comparable_envelope
+        if comparable_envelope(self._envelope(snapshot_id)) != comparable_envelope(envelope) or self.objects_revision(snapshot_id) != revision:
             raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=self.objects_revision(snapshot_id))
 
     def open_source_passage(
@@ -1735,6 +1736,7 @@ class OperationsConsole:
                         "explicit_decision_graph": review_path == "boom" and review_policy is not None,
                         "model_call_limits": {key:attempt["limits"][key] for key in ("connect", "idle", "total", "attempt", "max_attempts")} if attempt_id else None,
                         "attempt_deadline": attempt_deadline,
+                        "diagnostic_checkpoint": self._diagnostic_writer(snapshot_id, attempt_id),
                     },
                 )
             except ConsoleError as exc:
@@ -1818,6 +1820,8 @@ class OperationsConsole:
                         assert_active(self._envelope(snapshot_id), attempt_id, now())
                         if time.monotonic() >= attempt_deadline:
                             raise ConsoleError("processing_attempt_expired")
+                        from src.attempt_diagnostics_v1 import merge_diagnostics
+                        merge_diagnostics(envelope, self._envelope(snapshot_id))
                         finish(envelope, attempt_id, state="succeeded")
                         attach_transport(next(a for a in envelope["processing_attempts"] if a["attempt_id"] == attempt_id),
                                          (replay_record or {}).get("provider_evidence", {}).get("transport", {}))
@@ -1871,6 +1875,55 @@ class OperationsConsole:
             self._reload_store_locked()
             self._envelope(snapshot_id)
             yield
+
+    def _diagnostic_writer(self, snapshot_id, attempt_id):
+        if not attempt_id:
+            return None
+        def write(phase, values):
+            from src.processing_retry_v1 import assert_active, now
+            from src.attempt_diagnostics_v1 import checkpoint
+            with self._reprocessing_transaction(snapshot_id):
+                current = deepcopy(self._envelope(snapshot_id))
+                active = assert_active(current, attempt_id, now())
+                checkpoint(active, phase, values)
+                try:
+                    self._commit_prepared_store(envelopes={snapshot_id: current}, snapshot_id=snapshot_id)
+                except Exception as error:
+                    raise ConsoleError("processing_diagnostic_write_failed") from error
+        return write
+
+    def authorize_processing_recovery(self, *, actor_id, snapshot_id, reason):
+        """One grant per blocked snapshot; consumption belongs to reservation."""
+        from src.processing_retry_v1 import now, expire_running
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 1000:
+            raise ConsoleError("processing_recovery_reason_required")
+        with self._reprocessing_transaction(snapshot_id):
+            account = self._account(actor_id)
+            if "publisher" not in account["roles"]:
+                raise ConsoleError("publisher_role_required")
+            envelope = deepcopy(self._envelope(snapshot_id))
+            if actor_id not in envelope.get("named_reviewers", []) and actor_id != envelope.get("uploader_account_id"):
+                raise ConsoleError("reviewer_not_named_on_snapshot")
+            if self.snapshot_is_published(snapshot_id):
+                raise ConsoleError("published_objects_must_not_be_rewritten")
+            objects, revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
+            if envelope.get("publication_eligibility") != PRE_REVIEW_BLOCKED or objects or self._bindings.get(snapshot_id) or envelope.get("review_passes"):
+                raise ConsoleError("pre_review_retry_existing_work")
+            expire_running(envelope, now())
+            attempts = envelope.get("processing_attempts") or []
+            if attempts and attempts[-1].get("error_code") in {"pre_review_llm_input_limit_exceeded", "pre_review_llm_output_limit_exceeded"}:
+                raise ConsoleError("processing_structural_limit")
+            if len(attempts) < self._processing_limits().max_attempts or any(a["state"] == "running" for a in attempts):
+                raise ConsoleError("processing_recovery_not_required")
+            if envelope.get("processing_recovery"):
+                raise ConsoleError("processing_recovery_already_authorized")
+            grant = {"authorization_id": "pra_" + uuid.uuid4().hex, "actor_id": actor_id,
+                     "reason": reason.strip(), "authorized_at": now().isoformat(),
+                     "source_hash": envelope["sha256"], "source_version": envelope["version"],
+                     "revision": revision, "consumed_by": None}
+            envelope["processing_recovery"] = grant
+            self._commit_prepared_store(envelopes={snapshot_id: envelope}, snapshot_id=snapshot_id)
+            return deepcopy(grant)
 
     def _record_processing_failure(self, snapshot_id, attempt_id, error):
         from src.processing_retry_v1 import KEY, finish
@@ -1992,6 +2045,7 @@ class OperationsConsole:
                 "explicit_decision_graph": "decision_graph" in envelope,
                 "model_call_limits": {key:attempt["limits"][key] for key in ("connect", "idle", "total", "attempt", "max_attempts")} if _attempt_id and attempt.get("limits") else None,
                 "attempt_deadline": _attempt_deadline,
+                "diagnostic_checkpoint": self._diagnostic_writer(snapshot_id, _attempt_id),
             },
         )
         replay_record = spec.pop(SEMANTIC_REPLAY_SPEC_KEY, None)
@@ -2076,6 +2130,8 @@ class OperationsConsole:
                 assert_active(self._envelope(snapshot_id), _attempt_id, now())
                 if _attempt_deadline is not None and time.monotonic() >= _attempt_deadline:
                     raise ConsoleError("processing_attempt_expired")
+                from src.attempt_diagnostics_v1 import merge_diagnostics
+                merge_diagnostics(prepared_envelope, self._envelope(snapshot_id))
                 finish(prepared_envelope, _attempt_id, state="succeeded")
                 stored = next(a for a in prepared_envelope["processing_attempts"] if a["attempt_id"] == _attempt_id)
                 transport = (replay_record or {}).get("provider_evidence", {}).get("transport", {})

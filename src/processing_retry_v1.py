@@ -22,9 +22,7 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
     from src.bounded_model_call_v1 import ModelCallLimits
     limits = limits or ModelCallLimits()
     attempts = envelope.setdefault(KEY, [])
-    for attempt in attempts:
-        if attempt["state"] == "running" and datetime.fromisoformat(attempt["expires_at"]) <= clock:
-            attempt.update(state="interrupted", finished_at=clock.isoformat(), error_code="processing_attempt_expired")
+    expire_running(envelope, clock)
     for attempt in attempts:
         if attempt["command_id"] == command_id:
             if attempt["actor_id"] != actor_id or attempt["source_hash"] != envelope["sha256"] or attempt.get("source_version", envelope["version"]) != envelope["version"]:
@@ -32,7 +30,10 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
             return attempt, False
     if any(attempt["state"] == "running" for attempt in attempts):
         raise ConsoleError("processing_attempt_in_progress")
-    if len(attempts) >= limits.max_attempts:
+    grant = envelope.get("processing_recovery") or {}
+    recovery = len(attempts) >= limits.max_attempts
+    if recovery and (grant.get("consumed_by") or grant.get("source_hash") != envelope["sha256"]
+                     or grant.get("source_version") != envelope["version"] or grant.get("revision") != revision):
         raise ConsoleError("processing_attempt_limit_reached")
     if attempts and attempts[-1].get("retry_not_before") and datetime.fromisoformat(attempts[-1]["retry_not_before"]) > clock:
         raise ConsoleError("processing_retry_cooldown")
@@ -46,8 +47,23 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
                "expires_at": (clock + timedelta(seconds=limits.attempt)).isoformat(), "finished_at": None,
                "error_code": None, "validation_code": None, "processing_reference": None,
                "phase": "source_and_validation"}
+    if recovery:
+        grant["consumed_by"] = attempt["attempt_id"]
+        grant["consumed_at"] = clock.isoformat()
+        attempt["recovery_authorization_id"] = grant["authorization_id"]
+    from src.attempt_diagnostics_v1 import checkpoint, deployment_identity
+    checkpoint(attempt, "reserved", {"source_hash": envelope["sha256"], "source_version": envelope["version"],
+               "expected_revision": revision, "actor_id": actor_id, "deployed_commit": deployment_identity()})
     attempts.append(attempt)
     return attempt, True
+
+
+def expire_running(envelope, clock):
+    from src.attempt_diagnostics_v1 import finish_diagnostic
+    for attempt in envelope.get(KEY, []):
+        if attempt["state"] == "running" and datetime.fromisoformat(attempt["expires_at"]) <= clock:
+            attempt.update(state="interrupted", finished_at=clock.isoformat(), phase="stopped", error_code="processing_attempt_expired")
+            finish_diagnostic(attempt, ConsoleError("processing_attempt_expired"))
 
 
 def assert_active(envelope: dict, attempt_id: str, clock: datetime) -> dict:
@@ -76,6 +92,8 @@ def finish(envelope: dict, attempt_id: str, *, state: str, error: Exception | No
         transport = getattr(error, "model_call_observation", None)
         if transport is not None:
             attach_transport(attempt, transport)
+    from src.attempt_diagnostics_v1 import finish_diagnostic
+    finish_diagnostic(attempt, error)
     return deepcopy(attempt)
 
 
@@ -105,7 +123,11 @@ def status(envelope: dict, *, clock: datetime | None = None, retry_supported=Tru
                    and state != "running" and retry_supported)
     max_attempts = policy.max_attempts if policy is not None else (latest.get("limits") or {}).get("max_attempts", 4)
     retry_at = latest.get("retry_not_before")
-    if state != "running" and len(attempts) >= max_attempts:
+    grant = envelope.get("processing_recovery") or {}
+    recovery_available = bool(grant and not grant.get("consumed_by")
+                              and grant.get("source_hash") == envelope.get("sha256")
+                              and grant.get("source_version") == envelope.get("version"))
+    if state != "running" and len(attempts) >= max_attempts and not recovery_available:
         allowed, reason = False, "processing_attempt_limit_reached"
     elif state != "running" and retry_at and datetime.fromisoformat(retry_at) > clock:
         allowed, reason = False, "processing_retry_cooldown"
@@ -113,5 +135,5 @@ def status(envelope: dict, *, clock: datetime | None = None, retry_supported=Tru
         allowed, reason = False, "processing_structural_limit"
     return {"state":state, "stored_state":latest.get("state"), "attempt_id":latest.get("attempt_id"),
             "reason_code":reason, "error_code":latest.get("error_code"), "retry_allowed":allowed, "retry_not_before":retry_at,
-            "attempts_used":len(attempts), "max_attempts":max_attempts,
+            "recovery_available": recovery_available, "attempts_used":len(attempts), "max_attempts":max_attempts,
             "external_cancellation":(latest.get("transport") or {}).get("external_cancellation", "not_requested" if "replayed_call_id" in latest else "not_recorded")}

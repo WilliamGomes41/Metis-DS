@@ -504,6 +504,7 @@ def _provider_proposal(
     field_contract_v2: bool = False,
     model_limits: ModelCallLimits | None = None,
     evidence: dict[str, Any] | None = None,
+    checkpoint=None,
 ) -> dict[str, Any]:
     safe_key = str(api_key or "").strip()
     if not safe_key:
@@ -518,6 +519,16 @@ def _provider_proposal(
     limits = model_limits or ModelCallLimits(total=DEFAULT_TIMEOUT_SECONDS)
     started = time.monotonic()
     transport = {}
+    if evidence is not None:
+        evidence.update(version="semantic-provider-evidence-v1", requested_at=requested_at, request=request_evidence)
+    try:
+        commit = (Path(__file__).resolve().parents[1] / "config/deployed_commit.txt").read_text().strip()
+    except OSError:
+        commit = ""
+    if evidence is not None:
+        evidence["deployed_commit"] = commit if re.fullmatch(r"[0-9a-f]{40}", commit) else None
+    if checkpoint:
+        checkpoint("model_request", {"provider_evidence": evidence})
     headers = {"Authorization": f"Bearer {safe_key}", "Content-Type": "application/json"}
     if post_json is None:
         response = _bounded_provider_json(OPENAI_RESPONSES_URL, headers, payload, limits, transport)
@@ -530,15 +541,31 @@ def _provider_proposal(
         raise ConsoleError("pre_review_llm_processing_timeout")
     if not isinstance(response, dict):
         raise ConsoleError("pre_review_llm_response_invalid")
+    if evidence is not None:
+        usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
+        evidence.update(transport=transport, response={"id": response.get("id"), "status": response.get("status"),
+                        "output_text": None, "input_tokens": usage.get("input_tokens"),
+                        "output_tokens": usage.get("output_tokens")})
+    if checkpoint:
+        checkpoint("response_received", {"provider_evidence": evidence})
     if len(json.dumps(response, ensure_ascii=False).encode("utf-8")) > MAX_RESPONSE_BYTES:
         raise ConsoleError("pre_review_llm_output_limit_exceeded")
+    output_text = _extract_output_text(response)
+    if evidence is not None:
+        usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
+        evidence.update(transport=transport, response={"id": response.get("id"), "status": response.get("status"),
+                        "output_text": output_text, "input_tokens": usage.get("input_tokens"),
+                        "output_tokens": usage.get("output_tokens")})
+    if checkpoint:
+        checkpoint("model_response", {"provider_evidence": evidence})
     try:
-        output_text = _extract_output_text(response)
         proposal = json.loads(output_text)
     except json.JSONDecodeError as exc:
         raise ConsoleError("pre_review_llm_response_invalid") from exc
     if not isinstance(proposal, dict):
         raise ConsoleError("pre_review_llm_response_invalid")
+    if checkpoint:
+        checkpoint("proposal_parsed", {"proposal": proposal, "proposal_hash": _stable_json_hash(proposal)})
     if str(proposal.get("abstain_reason") or "").strip():
         raise ConsoleError("pre_review_llm_abstained")
     if field_contract_v2 and isinstance(proposal.get("objects"), list):
@@ -643,6 +670,16 @@ def _semantic_execution_before_review(
         elif lookup.status == LOOKUP_REJECTED:
             replay_rejection_reason = lookup.reason or "semantic_replay_record_rejected"
 
+    checkpoint = (formation_context or {}).get("diagnostic_checkpoint")
+    validator_input = {"fragments": content_fragments, "document_id": document_id,
+                       "evidence_fragments": evidence_fragments,
+                       "allowed_candidate_block_ids": sorted(allowed_candidate_block_ids),
+                       "field_contract_v2": field_contract_v2}
+    if checkpoint:
+        from src.attempt_diagnostics_v1 import validator_identity
+        checkpoint("source_reconstructed", {"validator_input": validator_input,
+            "validator_input_hash": _stable_json_hash(validator_input),
+            "validator_identity": validator_identity(), "semantic_identity": identity})
     if blocks and proposal is None:
         provider_evidence: dict[str, Any] = {}
         proposal = _provider_proposal(
@@ -654,7 +691,10 @@ def _semantic_execution_before_review(
             field_contract_v2=field_contract_v2,
             model_limits=model_limits,
             evidence=provider_evidence,
+            checkpoint=checkpoint,
         )
+        if checkpoint:
+            checkpoint("proposal_received", {"proposal": proposal, "provider_evidence": provider_evidence})
         try:
             content_units = semantic_units_from_proposal(
                 content_fragments,
@@ -665,6 +705,8 @@ def _semantic_execution_before_review(
                 field_contract_v2=field_contract_v2,
             )
         except SemanticPassageError as exc:
+            if checkpoint:
+                checkpoint("validation_rejected", {"finding": exc.finding})
             LOGGER.error("METIS_VALIDATION rejected code=%s reference=%s", exc.code, _PROCESSING_REFERENCE.get())
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
         execution = EXECUTION_INFERENCE
@@ -764,6 +806,10 @@ def semantic_spec_from_fragments(
     snapshot_id = str((formation_context or {}).get("snapshot_id") or "")
     # Do not log document titles, source prose, credentials or provider messages.
     snapshot_id = snapshot_id if re.fullmatch(r"snap-[A-Za-z0-9_-]{1,100}", snapshot_id) else "-"
+    checkpoint = (formation_context or {}).get("diagnostic_checkpoint")
+    if checkpoint:
+        checkpoint("validation_started", {"processing_reference": reference, "model": model,
+                    "field_contract": "v2" if field_contract_v2 else "v1"})
     token = _PROCESSING_REFERENCE.set(reference)
     started = time.monotonic()
     LOGGER.info("METIS_PRE_REVIEW start reference=%s snapshot_id=%s", reference, snapshot_id)
@@ -897,12 +943,17 @@ def bind_pre_review_semantic_processing(
             )
             return fragments, _stamp_passage_formation(spec, decision)
 
+        checkpoint = (formation_context or {}).get("diagnostic_checkpoint")
+        if checkpoint:
+            checkpoint("extraction_started", {})
         fragments = console._extract(
             kind,
             path,
             document_id=document_id,
             source_id=source_id,
         )
+        if checkpoint:
+            checkpoint("extraction_finished", {"fragment_count": len(fragments), "extractor_versions": sorted({str(f.get("parser_version") or "not_recorded") for f in fragments})})
         provider = load_llm_provider_config(env)
         limits = (ModelCallLimits(**(formation_context or {}).get("model_call_limits"))
                   if (formation_context or {}).get("model_call_limits") else load_limits(env))

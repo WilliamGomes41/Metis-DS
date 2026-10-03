@@ -48,6 +48,12 @@ def evidence_schema(span: dict) -> dict:
                            for field in FIELDS}, "required": list(FIELDS)}
 
 
+def _bound_error(code, **finding):
+    error = ValueError(code)
+    error.finding = deepcopy(finding)
+    return error
+
+
 def bind_fields(raw: object, *, selected: list[dict], candidate_text: str, proposed_type: str) -> dict:
     if not isinstance(raw, dict) or set(raw) != set(FIELDS):
         raise ValueError("source_bound_fields_invalid")
@@ -57,26 +63,26 @@ def bind_fields(raw: object, *, selected: list[dict], candidate_text: str, propo
     values, evidence = {}, {}
     for field, entry in raw.items():
         if not isinstance(entry, dict) or set(entry) != {"span", "missing_reason"}:
-            raise ValueError("source_bound_field_invalid")
+            raise _bound_error("source_bound_field_invalid", field=field, evidence_ref=entry)
         span, reason = entry["span"], entry["missing_reason"]
         if span is None:
             if reason not in MISSING:
-                raise ValueError("source_bound_missing_reason_required")
+                raise _bound_error("source_bound_missing_reason_required", field=field, evidence_ref=entry)
             evidence[field] = deepcopy(entry)
             continue
         if reason is not None or not isinstance(span, dict) or set(span) != {"block_id", "start", "end"}:
-            raise ValueError("source_bound_field_invalid")
+            raise _bound_error("source_bound_field_invalid", field=field, evidence_ref=entry)
         start, end = span["start"], span["end"]
         if type(start) is not int or type(end) is not int or start < 0 or end <= start:
-            raise ValueError("source_bound_field_bounds_invalid")
+            raise _bound_error("source_bound_field_bounds_invalid", field=field, evidence_ref=entry)
         owner = next((s for s in selected if s["block_id"] == span["block_id"] and s["start"] <= start < end <= s["end"]), None)
         if owner is None:
-            raise ValueError("source_bound_field_outside_candidate")
+            raise _bound_error("source_bound_field_outside_candidate", field=field, evidence_ref=entry)
         text = owner["text"][start-owner["start"]:end-owner["start"]]
         # The existing passage reconstruction normalizes visible whitespace.
         text = normalize_visible_prose(text)
         if not text or text not in candidate_text:
-            raise ValueError("source_bound_field_not_literal")
+            raise _bound_error("source_bound_field_not_literal", field=field, evidence_ref=entry)
         values[field] = [text] if field == "type_evidence_spans" else text
         evidence[field] = deepcopy(entry)
     payload = {"version": VERSION, "candidate_text": candidate_text,
@@ -152,26 +158,26 @@ def bind_context(raw: object, *, fragments: list[dict]) -> list[dict]:
         raise ValueError('source_bound_context_invalid')
     blocks = {public['block_id']: (public, source) for public, source in _reconstructed_blocks(fragments)}
     result = []
-    for entry in raw:
+    for context_index, entry in enumerate(raw):
         if not isinstance(entry, dict) or set(entry) != {'role', 'span', 'unresolved_reason'}:
-            raise ValueError('source_bound_context_invalid')
+            raise _bound_error('source_bound_context_invalid', field='context_evidence', context_index=context_index, evidence_ref=entry)
         if entry['role'] not in CONTEXT_ROLES or entry['unresolved_reason'] not in (None, *CONTEXT_REASONS):
-            raise ValueError('source_bound_context_invalid')
+            raise _bound_error('source_bound_context_invalid', field='context_evidence', context_index=context_index, evidence_ref=entry)
         span = entry['span']
         text, mapping, source_refs = '', [], []
         if span is None:
             if entry['unresolved_reason'] is None:
-                raise ValueError('source_bound_context_reason_required')
+                raise _bound_error('source_bound_context_reason_required', field='context_evidence', context_index=context_index, evidence_ref=entry)
         else:
             if not isinstance(span, dict) or set(span) != {'block_id', 'start', 'end'} or span['block_id'] not in blocks:
-                raise ValueError('source_bound_context_unknown_block')
+                raise _bound_error('source_bound_context_unknown_block', field='context_evidence', context_index=context_index, evidence_ref=entry)
             public, source = blocks[span['block_id']]
             lo, hi = span['start'], span['end']
             if type(lo) is not int or type(hi) is not int or not 0 <= lo < hi <= len(public['text']):
-                raise ValueError('source_bound_context_bounds_invalid')
+                raise _bound_error('source_bound_context_bounds_invalid', field='context_evidence', context_index=context_index, evidence_ref=entry)
             text = public['text'][lo:hi]
             if not text.strip():
-                raise ValueError('source_bound_context_empty')
+                raise _bound_error('source_bound_context_empty', field='context_evidence', context_index=context_index, evidence_ref=entry)
             mapping = mapped_raw_spans(source, start=lo, end=hi)
             ids = {r['fragment_id'] for r in mapping if r.get('kind') != 'join_separator'}
             source_refs = [{'fragment_id': f['fragment_id'], 'fragment_hash': f['fragment_hash'],

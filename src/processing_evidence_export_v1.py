@@ -13,10 +13,12 @@ from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v6"
-PROJECTOR_VERSION = "processing-evidence-export-v5"
+VERSION = "processing-evidence-export-v7"
+PROJECTOR_VERSION = "processing-evidence-export-v7"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
+    "attempt_diagnostics": ("attempt_id", "state", "diagnostic", "evidence_kind"),
+    "processing_recovery": ("authorization_id", "actor_id", "reason", "authorized_at", "source_hash", "source_version", "revision", "consumed_by", "consumed_at"),
     "processing_attempts": ("attempt_id", "command_id", "actor_id", "source_hash", "state", "started_at", "expires_at", "finished_at", "phase", "error_code", "validation_code", "processing_reference", "source_version", "kind", "retry_of", "limits", "transport", "retry_not_before", "replayed_call_id"),
     "source_views": ("run_id", "fragment_id", "fragment_hash", "source_page", "bbox", "source_locator", "raw_text", "clean_text", "source_text_view", "source_layout_findings"),
     "runs": ("run_id", "source_hash", "started_at", "finished_at", "outcome", "reason", "extractor_versions", "execution", "semantic_identity", "production_commit_status"),
@@ -83,7 +85,13 @@ def processing_evidence_tables(
         tables[name].append({**common, **values})
 
     runs = envelope.get("quality_processing_runs") or []
+    recovery = envelope.get("processing_recovery")
+    if recovery:
+        add("processing_recovery", **{key: recovery.get(key) for key in SCHEMAS["processing_recovery"]})
     for attempt in envelope.get("processing_attempts") or []:
+        if attempt.get("diagnostic"):
+            add("attempt_diagnostics", attempt_id=attempt["attempt_id"], state=attempt["state"],
+                diagnostic=attempt["diagnostic"], evidence_kind="attempt_evidence_not_admission_authority")
         add("processing_attempts", **{key: attempt.get(key) for key in SCHEMAS["processing_attempts"]})
     for run in runs:
         for fragment in run.get("source_fragments") or []:
@@ -169,6 +177,8 @@ def processing_evidence_tables(
                     evidence_kind="stored_scan_not_verified_dependency_resolution")
 
     statuses = {
+        "attempt_diagnostics": ("recorded" if tables["attempt_diagnostics"] else "not_recorded", "Attempt-owned checkpoints, request/output, validator input and finding. Missing historical evidence is not reconstructed. Never admission/replay authority."),
+        "processing_recovery": ("recorded" if recovery else "not_recorded", "One document-scoped authorization and its atomic consumption."),
         "processing_attempts": ("recorded" if "processing_attempts" in envelope else "not_recorded", "Durable retry outcomes; historical missing attempts are not reconstructed."),
         "source_views": ("recorded" if any("source_fragments" in run for run in runs) else "not_recorded", "Recorded original extraction and derived source views; no inferred historical layout evidence."),
         "runs": ("recorded" if "quality_processing_runs" in envelope else "not_recorded", "Stored processing runs; objects_revision identifies this export, not a historical run."),
