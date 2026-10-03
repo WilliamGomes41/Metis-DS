@@ -1,6 +1,10 @@
 """Coordinate-bearing PDF proof, exact raw mapping and clinical-gap protection.
 
-# release-control-evidence: scope/belofte kwaliteit slop releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: beschikbaarheid
+# release-control-evidence: kwaliteit
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from copy import deepcopy
 import json
@@ -121,3 +125,58 @@ def test_mixed_block_exclusion_is_reversible_and_keeps_negation_and_exception():
             "spans": [{"block_id": block["block_id"], "start": 0, "end": offset},
                       {"block_id": block["block_id"], "start": offset + 4, "end": len(block["text"])}],
             "proposed_object_type": "recommendation", "recommendation_semantics": None}]})
+
+
+def numbered_document(tmp_path, *, table=False, broken=False, body_column=False):
+    path = tmp_path / "document-gutter.pdf"
+    doc = fitz.open()
+    for page_no in range(3):
+        page = doc.new_page()
+        for i in range(8):
+            marker = (page_no * 8 + i + 1) * 5
+            if broken and marker == 60:
+                marker = 61
+            y = 80 + i * 80
+            value = str(marker)
+            edge = 130 if body_column else 55
+            x = edge - fitz.get_text_length(value, fontsize=10)
+            page.insert_text((x, y), value + " ", fontsize=10)
+            for step in range(1 if table else 5):
+                page.insert_text((90, y + step * 16),
+                    "Gebruik geen 5 mg binnen 4 uur, tenzij de arts anders adviseert.", fontsize=10)
+    doc.save(path)
+    doc.close()
+    return path
+
+
+def test_document_wide_gutter_is_removed_only_from_reading_view(tmp_path):
+    fragments = extract(numbered_document(tmp_path), document_id="doc", source_id="source")
+    exclusions = [ex for row in fragments for ex in row.get("source_text_view", {}).get("exclusions", [])]
+    assert len(exclusions) == 24
+    assert all(ex["recognition"]["page_count"] == 3 for ex in exclusions)
+    assert {ex["text"].strip() for ex in exclusions} == {str(i * 5) for i in range(1, 25)}
+    for row in fragments:
+        for ex in row.get("source_text_view", {}).get("exclusions", []):
+            assert row["raw_text"][ex["raw_start"]:ex["raw_end"]] == ex["text"]
+    blocks = semantic_source_blocks(fragments)
+    assert all("5 mg binnen 4 uur, tenzij" in b["text"] for b in blocks)
+    # Extraction is deterministic and every original raw fragment remains available.
+    assert extract(numbered_document(tmp_path), document_id="doc", source_id="source") == fragments
+
+
+@pytest.mark.parametrize("options", [{"table": True}, {"broken": True}, {"body_column": True}])
+def test_document_wide_ambiguous_columns_keep_numbers(tmp_path, options):
+    fragments = extract(numbered_document(tmp_path, **options), document_id="doc", source_id="source")
+    assert not any(row.get("source_text_view") for row in fragments)
+
+
+def test_trimmed_numeric_span_preserves_geometry_and_exact_raw_bounds(tmp_path, monkeypatch):
+    import src.source_layout_v1 as layout
+    monkeypatch.setattr(layout, "mark_pdf_layout", lambda rows: None)
+    fragments = extract(numbered_document(tmp_path), document_id="doc", source_id="source")
+    numeric = [span for row in fragments for span in row["_pdf_spans"] if span["text"].strip().isdigit()]
+    assert len(numeric) == 24
+    for row in fragments:
+        for span in row["_pdf_spans"]:
+            assert row["raw_text"][span["raw_start"]:span["raw_end"]] == span["text"]
+            assert 0 <= span["raw_start"] < span["raw_end"] <= len(row["raw_text"])

@@ -47,11 +47,8 @@ def text_view(raw: str, exclusions: list[dict]) -> dict:
 
 
 def mark_pdf_layout(fragments: list[dict]) -> None:
-    """Flag possible margin numbers, but keep ambiguous numbers as content.
-
-    Geometry and five-line cadence also occur in clinical tables. Extraction
-    supplies no independent evidence that a numeric column is a line gutter.
-    """
+    """Recognize document-wide line gutters; retain ambiguous numeric columns."""
+    verified = _document_line_gutters(fragments)
     prose_by_page = defaultdict(list)
     for fragment in fragments:
         prose_by_page[fragment["source_page"]].extend(
@@ -68,11 +65,20 @@ def mark_pdf_layout(fragments: list[dict]) -> None:
                 possible.add((fragment["fragment_id"], span["raw_start"]))
     for fragment in fragments:
         findings = []
+        exclusions = []
         for span in fragment.pop("_pdf_spans", []):
-            if (fragment["fragment_id"], span["raw_start"]) in possible:
+            key = (fragment["fragment_id"], span["raw_start"])
+            if key in verified:
+                exclusion = {**span, "reason": "document_wide_five_line_gutter",
+                             "recognition": verified[key]}
+                exclusions.append(exclusion)
+                findings.append(exclusion)
+            elif key in possible:
                 findings.append({**span, "reason": "ambiguous_margin_number_retained"})
         if findings:
             fragment["source_layout_findings"] = findings
+        if exclusions:
+            fragment["source_text_view"] = text_view(fragment["raw_text"], exclusions)
 
 
 def mapped_raw_spans(fragment: dict, *, start: int, end: int) -> list[dict]:
@@ -90,4 +96,56 @@ def mapped_raw_spans(fragment: dict, *, start: int, end: int) -> list[dict]:
                        "raw_start": span["raw_start"] + lo - span["start"] if exact else span["raw_start"],
                        "raw_end": span["raw_start"] + hi - span["start"] if exact else span["raw_end"],
                        "source_page": span.get("source_page"), "bbox": span.get("bbox")})
+    return result
+
+
+def _document_line_gutters(fragments: list[dict]) -> dict:
+    """Require document-wide sequence, outer alignment and body-line cadence.
+
+    Short columns and local five-step tables are insufficient. Number widths
+    change at 10/100/1000, so compare aligned right edges rather than left edges.
+    """
+    spans_by_page = defaultdict(list)
+    columns = defaultdict(list)
+    for fragment in fragments:
+        page = fragment["source_page"]
+        for span in fragment.get("_pdf_spans", []):
+            spans_by_page[page].append(span)
+            if re.fullmatch(r"\d+", span["text"].strip()):
+                columns[round(span["bbox"][2] * 2) / 2].append(
+                    (page, fragment["fragment_id"], span))
+    result = {}
+    for right_edge, rows in columns.items():
+        rows.sort(key=lambda row: (row[0], row[2]["bbox"][1]))
+        pages = {row[0] for row in rows}
+        if len(rows) < 20 or len(pages) < 3:
+            continue
+        values = [int(row[2]["text"].strip()) for row in rows]
+        if min(pages) != 1 or values[0] != 5 or any(b - a != 5 for a, b in zip(values, values[1:])):
+            continue
+        if any(span["bbox"][0] < right_edge + 8
+               for page in pages for span in spans_by_page[page]
+               if re.search(r"[A-Za-zÀ-ÿ]", span["text"])):
+            continue
+        intervals = []
+        for left, right in zip(rows, rows[1:]):
+            if left[0] != right[0]:
+                continue
+            ys = sorted(span["bbox"][1] for span in spans_by_page[left[0]]
+                        if span["bbox"][0] >= right_edge + 8
+                        and left[2]["bbox"][1] - 1 <= span["bbox"][1]
+                        < right[2]["bbox"][1] - 1)
+            baselines = []
+            for y in ys:
+                if not baselines or y - baselines[-1] > 1:
+                    baselines.append(y)
+            intervals.append(len(baselines))
+        if not intervals or sum(n == 5 for n in intervals) / len(intervals) < .7:
+            continue
+        proof = {"classifier": "document-line-gutter-v1", "marker_count": len(rows),
+                 "page_count": len(pages), "step": 5,
+                 "five_line_intervals": sum(n == 5 for n in intervals),
+                 "interval_count": len(intervals), "right_edge": right_edge}
+        for _page, fragment_id, span in rows:
+            result[(fragment_id, span["raw_start"])] = proof
     return result
