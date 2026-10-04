@@ -49,6 +49,12 @@ A Class A high-risk rewrite MUST additionally map every relevant authority, writ
 
 If `docs/agents/lifecycle-vsa.md` requires a lifecycle, identity, authority, supersession, withdrawal, migration, recovery, or rewrite-risk decision that the assigned issue does not define, the agent MUST stop and surface the missing decision instead of making an assumption.
 
+### Reuse existing domain contracts
+
+Before changing extraction, review, publication, or persistence, read the relevant owner and proof in `docs/agents/abstraction-boundaries.md`. Reuse the named domain operation instead of adding a parallel gate, status writer, or authority. Add an abstraction only when it enforces a named invariant or removes demonstrated duplication. Keep runtime decisions in code, not in agent instructions.
+
+Run `python scripts/check_architecture_boundaries.py` before opening a PR. CI rejects Docling SDK imports outside the worker and infrastructure/HTTP dependencies in the selected SDK-independent contract modules. This is a bounded dependency check, not proof of lifecycle correctness; existing behavioral and lifecycle tests remain required.
+
 ### Improve codebase architecture
 
 Periodic architecture survey (mattpocock). Skill files: `.agents/skills/improve-codebase-architecture/`. Invoke explicitly — do not auto-run. Companion vocabulary skills (`codebase-design`, `grilling`) live upstream at https://github.com/mattpocock/skills.

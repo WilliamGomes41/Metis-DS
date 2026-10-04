@@ -18,6 +18,7 @@ Before making any change:
 6. If the issue is Class A, read and apply `docs/agents/lifecycle-vsa.md` in full before implementation.
 7. If the issue is Class B and creates or mutates durable domain state, verify the stateful Class B domain-first overlay in `docs/agents/continuous-development.md` is explicit before implementation.
 8. If rewrite risk is high, verify every mandatory rewrite-mitigation field is explicit before implementation.
+9. For extraction, review, publication, or persistence changes, read the relevant owner and proof in `docs/agents/abstraction-boundaries.md`. Trace callers and runtime overrides before reusing or changing a contract; do not create a parallel authority.
 
 Fail closed and do not implement when any of these is true:
 
@@ -64,7 +65,8 @@ Before opening the pull request, run the repository's normal verification sequen
 - `python scripts/repository_preflight.py`
 - `python scripts/release_control_preflight.py --base origin/main`
 - `python -m compileall -q src`
-- `python scripts/verify_architecture_invariants.py`
+- `python scripts/check_architecture_boundaries.py`
+- `python -m pytest -q tests/test_architecture_invariants.py`
 - `pytest -q`
 
 If a required check cannot run, report that explicitly and do not claim completion.
