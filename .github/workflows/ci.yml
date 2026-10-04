@@ -18,8 +18,18 @@ jobs:
       - name: Validate Metis change contract
         run: python scripts/validate_change_contract.py
 
+  architecture-boundaries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Check domain contract import boundaries
+        run: python scripts/check_architecture_boundaries.py
+
   test:
-    needs: change-contract
+    needs: [change-contract, architecture-boundaries]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

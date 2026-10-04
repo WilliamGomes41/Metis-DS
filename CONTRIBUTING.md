@@ -11,12 +11,15 @@
 
 ```bash
 python scripts/repository_preflight.py
+python scripts/check_architecture_boundaries.py
 python scripts/release_control_preflight.py
 python -m compileall -q src
 pytest -q
 ```
 
 `scripts/release_control_preflight.py` names the Metis skill checks (`scope/belofte`, `opslag`, `beschikbaarheid`, `toegang`, `kwaliteit`, `metrics`, `slop`, `releasebewijs`) as `required` or `n.v.t.` from changed paths. CI must run this mapping after `repository_preflight.py` and must fail when a `required` category has no matching test marker or evidence path. Do not drop that step from `.github/workflows/ci.yml`; the skill names the checks so they cannot be forgotten. Product categories (`opslag`–`metrics`) stay `n.v.t.` until a product path is in the diff. Markers and `# release-control-evidence:` comments are metadata pointing at those concrete checks; they are not live-release evidence.
+
+Agent contract owners and the bounded import rules are documented in `docs/agents/abstraction-boundaries.md`. The dependency check uses only the Python standard library. Do not disable it to introduce a second extraction, review, or publication authority; review the relevant contract first. Existing behavioral tests still prove runtime semantics.
 
 ## Commit convention
 
