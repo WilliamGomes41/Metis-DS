@@ -311,6 +311,10 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
         except ValueError as exc:
             raise ConsoleError(str(exc)) from exc
 
+    def _source_repair_provenance_patch(self, repair_spec: dict[str, Any]) -> dict[str, Any]:
+        """Compatibility repairs bind the final provenance to their repair spec."""
+        return {"revision_patch_hash": stable_hash(repair_spec)}
+
     def _finalize_source_provenance(
         self,
         *,
@@ -331,7 +335,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             row = deepcopy(row)
             provenance = row.setdefault("provenance", {})
             provenance["source_fragments"] = self._verified_finalized_source_refs(snapshot_id, row, source_refs)
-            provenance["revision_patch_hash"] = stable_hash(repair_spec)
+            provenance.update(self._source_repair_provenance_patch(repair_spec))
             stamp_canonical_hashes(row)
             errors = schema_errors(row, self.schema_path)
             if errors:
