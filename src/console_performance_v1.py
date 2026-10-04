@@ -15,6 +15,8 @@ class ConsolePerformance:
     connections: int = 0
     queries: int = 0
     badge_ms: float = 0.0
+    connect_ms: float = 0.0
+    query_ms: float = 0.0
 
 
 _CURRENT: ContextVar[ConsolePerformance | None] = ContextVar("console_performance", default=None)
@@ -60,14 +62,26 @@ def connect_postgres(psycopg: Any, *args: Any, **kwargs: Any) -> Any:
     class MeasuredCursor(psycopg.Cursor):
         def execute(self, *args: Any, **kwargs: Any) -> Any:
             metrics.queries += 1
-            return super().execute(*args, **kwargs)
+            start = time.perf_counter()
+            try:
+                return super().execute(*args, **kwargs)
+            finally:
+                metrics.query_ms += (time.perf_counter() - start) * 1000
 
         def executemany(self, *args: Any, **kwargs: Any) -> Any:
             metrics.queries += 1
-            return super().executemany(*args, **kwargs)
+            start = time.perf_counter()
+            try:
+                return super().executemany(*args, **kwargs)
+            finally:
+                metrics.query_ms += (time.perf_counter() - start) * 1000
 
     kwargs["cursor_factory"] = MeasuredCursor
-    return psycopg.connect(*args, **kwargs)
+    start = time.perf_counter()
+    try:
+        return psycopg.connect(*args, **kwargs)
+    finally:
+        metrics.connect_ms += (time.perf_counter() - start) * 1000
 
 
 def install_console_performance(app: Any) -> None:
@@ -95,9 +109,11 @@ def install_console_performance(app: Any) -> None:
                 try:
                     _LOGGER.info(
                         "console_performance route=%s status=%d duration_ms=%.3f "
-                        "badge_ms=%.3f db_connections=%d db_queries=%d",
+                        "badge_ms=%.3f db_connections=%d db_queries=%d "
+                        "db_connect_ms=%.3f db_query_ms=%.3f",
                         route, status, (time.perf_counter() - start) * 1000,
                         metrics.badge_ms, metrics.connections, metrics.queries,
+                        metrics.connect_ms, metrics.query_ms,
                     )
                 except Exception:
                     # Diagnostics must not change the result of a domain request.

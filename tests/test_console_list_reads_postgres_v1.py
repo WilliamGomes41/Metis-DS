@@ -477,3 +477,51 @@ def test_review_workboard_summary_uses_exact_authorizations_for_four_eyes() -> N
                 "DELETE FROM workflow.accounts WHERE account_id=ANY(%s)",
                 ([reviewer_a, reviewer_b],),
             )
+
+
+@pytest.mark.parametrize("document_count", [1, 10])
+def test_explicit_policy_review_uses_bounded_postgres_reads(document_count):
+    from src.console_performance_v1 import performance_scope
+    from src.review_policy_v1 import CONTRACT, project_policy
+    from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+
+    config = PostgresCanonicalConfig(dsn=_dsn())
+    store = PostgresWorkflowDocumentRuntimeStore(config)
+    with store._connect() as con:
+        paths = migration_paths(ROOT)
+        apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))
+    token = uuid.uuid4().hex
+    account_id = f"acc-navigation-{token}"
+    snapshots = [f"snap-navigation-{token}-{i}" for i in range(document_count)]
+    with store._connect() as con:
+        con.execute(
+            "INSERT INTO workflow.accounts(account_id,username,display_name,roles,password_salt,password_hash,created_at) "
+            "VALUES(%s,%s,%s,%s,%s,%s,CURRENT_TIMESTAMP)",
+            (account_id, account_id, "Reviewer", ["reviewer"], "salt", "hash"),
+        )
+    subject = _ListReadSubject(store, account_id)
+    subject.workflow_review_store = PostgresWorkflowReviewStore(config)
+    batch_token = subject._tree_publication_batch.set(None)
+    try:
+        for sid in snapshots:
+            envelope = _envelope(sid, token, account_id)
+            policy = {"contract": CONTRACT, "revision": 1, "primary": account_id, "assignments": []}
+            envelope["review_policy"] = policy
+            objects = [_object(sid, 0, object_type="recommendation", validation_status="needs_review")]
+            project_policy(objects, policy)
+            store.write_bundle(envelope=envelope, objects=objects)
+        with performance_scope() as metrics:
+            summaries = subject.review_workboard_summaries(account_id)
+        assert set(summaries) == set(snapshots)
+        assert all(s["work_item"]["actionable_review_duties"] == 1 for s in summaries.values())
+        assert metrics.connections == 4
+        assert subject._tree_publication_batch.get() is None
+        with performance_scope() as metrics:
+            assert subject.review_workboard_summaries(account_id + "-unassigned") == {}
+        assert metrics.connections == 1
+    finally:
+        subject._tree_publication_batch.reset(batch_token)
+        with store._connect() as con:
+            for sid in snapshots:
+                con.execute("DELETE FROM workflow.documents WHERE snapshot_id=%s", (sid,))
+            con.execute("DELETE FROM workflow.accounts WHERE account_id=%s", (account_id,))
