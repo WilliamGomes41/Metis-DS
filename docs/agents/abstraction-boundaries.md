@@ -44,7 +44,9 @@ model; no separate personal skill installation is required.
 `python scripts/check_architecture_boundaries.py` scans every Python file under
 `src/`, including imports inside functions and conditional branches.
 
-- Only `src/docling_worker_v1.py` may import `docling` or `docling_core`. Failure
+- Only `src/docling_worker_v1.py` may import `docling` or `docling_core`. Other
+  product modules may not import the worker itself; the controller starts it as
+  a subprocess. Failure
   prevented: importing the heavyweight SDK into the API process bypasses the
   bounded worker and breaks the lightweight runtime dependency contract.
 - `docling_contract_v1`, `integrity_kernel`, `candidate_eligibility_v1`,

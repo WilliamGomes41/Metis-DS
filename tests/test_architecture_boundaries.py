@@ -40,6 +40,8 @@ def test_current_repository_satisfies_boundaries():
     "from importlib import import_module as load\nload('docling_core.types.doc')",
     "__import__('docling')",
     "import importlib\nimportlib.import_module(name='docling_core.types.doc')",
+    "from .docling_worker_v1 import main",
+    "import importlib\nimportlib.import_module('src.docling_worker_v1')",
 ])
 def test_sdk_cannot_bypass_worker(repository, code):
     (repository / "src/new_route.py").write_text(code, encoding="utf-8")

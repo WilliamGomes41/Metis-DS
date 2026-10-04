@@ -7,7 +7,7 @@ import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SDK_PREFIXES = ("docling", "docling_core")
+WORKER_ONLY_PREFIXES = ("docling", "docling_core", "src.docling_worker_v1")
 SDK_OWNER = "src/docling_worker_v1.py"
 PROTECTED_MODULES = (
     "src/docling_contract_v1.py",
@@ -97,7 +97,7 @@ def check_boundaries(root: Path) -> list[str]:
             continue
         violations = set()
         for line, module in _imports(tree, relative):
-            if relative != SDK_OWNER and _matches(module, SDK_PREFIXES):
+            if relative != SDK_OWNER and _matches(module, WORKER_ONLY_PREFIXES):
                 violations.add((line, "docling-worker-only", module))
             if relative in PROTECTED_MODULES and _matches(module, INFRA_PREFIXES):
                 violations.add((line, "contract-without-infrastructure", module))
