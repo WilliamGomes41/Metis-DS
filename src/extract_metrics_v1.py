@@ -36,7 +36,7 @@ from src.admission_gate_v1 import (
     build_candidate_record,
     ordinary_review_queue,
 )
-from src.extract_coverage_v1 import coverage_by_section
+from src.extract_coverage_v1 import coverage_by_section, coverage_by_section_role
 from src.passage_register_v1 import apply_passage_register, passage_register_of
 from src.review_cockpit_v1 import confirmable_proposed_type
 
@@ -599,6 +599,7 @@ def _empty_metrics(*, reason: str) -> dict[str, Any]:
         "neighbor_context_present": None,
         "review_burden_defined": False,
         "coverage": {"objectify_every_sentence": False, "duty": "normative_application_critical", "sections": {}},
+        "section_role_distribution": {"diagnostic_only": True, "content_passages": 0, "roles": {}},
     }
 
 
@@ -619,10 +620,12 @@ def compute_extract_metrics(
     if gold is not None and not gold_schema_supported(gold):
         empty = _empty_metrics(reason="gold_schema_unsupported")
         empty["coverage"] = coverage_by_section(passages)
+        empty["section_role_distribution"] = coverage_by_section_role(passages)
         return empty
     if not gold_rows:
         empty = _empty_metrics(reason="gold_standard_required")
         empty["coverage"] = coverage_by_section(passages)
+        empty["section_role_distribution"] = coverage_by_section_role(passages)
         return empty
 
     selected = [obj for obj in passages if passage_register_of(obj).get("status") == "selected_as_candidate"]
@@ -674,6 +677,7 @@ def compute_extract_metrics(
         "assignment_unit": ASSIGNMENT_UNIT,
         "duplicate_predictions": duplicates,
         "coverage": coverage_by_section(passages),
+        "section_role_distribution": coverage_by_section_role(passages),
         "matched_gold_passages": matched,
         "gold_passages": len(gold_rows),
         "true_positives": true_positives,

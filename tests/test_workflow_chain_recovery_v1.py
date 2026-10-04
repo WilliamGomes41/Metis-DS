@@ -24,6 +24,7 @@ from src.canonical_publication_postgres_v1 import (
     PostgresCanonicalPublicationStore,
 )
 from src.integrity_kernel import stable_hash
+from src.topic_identity_v1 import topic_identity
 from src.publication_chain_recovery_v1 import PublicationChainRecoveryError
 from src.workflows import workflow_chain_recovery_v1 as recovery
 from src.workflows.workflow_chain_recovery_v1 import (
@@ -103,6 +104,7 @@ def _seed_workflow(config: PostgresCanonicalConfig) -> None:
         "acquired_at": "2026-09-12T12:00:00+00:00",
         "console_version": "recovery-test",
     }
+    topic_id, identity_key, display_name = topic_identity(envelope["family"])
     with psycopg.connect(config.dsn, autocommit=True) as con:
         con.execute(
             "INSERT INTO workflow.accounts VALUES(%s,%s,%s,%s,%s,%s,%s)",
@@ -118,14 +120,19 @@ def _seed_workflow(config: PostgresCanonicalConfig) -> None:
             (token_hash, "acc-uploader", "2026-09-12T12:00:00Z", "2027-09-12T12:00:00Z"),
         )
         con.execute(
+            "INSERT INTO workflow.topics(topic_id,identity_key,display_name,created_at) VALUES(%s,%s,%s,%s)",
+            (topic_id, identity_key, display_name, "2026-09-12T12:00:00Z"),
+        )
+        envelope["topic_id"] = topic_id
+        con.execute(
             """INSERT INTO workflow.documents(
-            snapshot_id,source_id,document_id,title,family,class,state,publication_eligibility,
+            snapshot_id,source_id,document_id,title,family,topic_id,class,state,publication_eligibility,
             content_kind,ingest_kind,source_version,source_date,source_sha256,source_locator,
             immutable_storage_locator,live_url,uploader_account_id,replaces_snapshot_id,object_diff,
             clinical_rereview_required,acquired_at,console_version,revision,updated_at,envelope_payload)
-            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NULL,NULL,%s,%s,%s,2,%s,%s::jsonb)""",
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NULL,NULL,%s,%s,%s,2,%s,%s::jsonb)""",
             (
-                "snap-1", "source-1", "doc-1", "Recovery document", "test", "richtlijn", "review", "eligible",
+                "snap-1", "source-1", "doc-1", "Recovery document", "test", topic_id, "richtlijn", "review", "eligible",
                 "pdf", "upload", "1.0", "2026-09-12", SOURCE_SHA, "source://snap-1", SOURCE_LOCATOR, "",
                 "acc-uploader", False, "2026-09-12T12:00:00Z", "recovery-test", "2026-09-12T12:01:00Z",
                 json.dumps(envelope, sort_keys=True),
@@ -187,6 +194,32 @@ def test_workflow_backup_restore_roundtrip_uses_one_database_authority(recovery_
     assert after["workflow_tables"] == before["workflow_tables"]
     assert after["tables"] == before["tables"]
     assert restored_blobs.load_verified(SOURCE_LOCATOR) == SOURCE_BYTES
+    assert len(after["workflow_tables"]["topics"]) == 1
+    assert after["workflow_tables"]["documents"][0]["topic_id"] == after["workflow_tables"]["topics"][0]["topic_id"]
+
+
+def test_legacy_v5_workflow_backup_is_deterministically_upgraded(
+    recovery_postgres: PostgresCanonicalConfig,
+) -> None:
+    _seed_workflow(recovery_postgres)
+    source = PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(recovery_postgres))
+    current = source.export_state()
+    expected_topic_id = current["workflow_tables"]["topics"][0]["topic_id"]
+
+    legacy = deepcopy(current)
+    legacy["workflow_recovery_version"] = 5
+    legacy["workflow_tables"].pop("topics")
+    for row in legacy["workflow_tables"]["documents"]:
+        row.pop("topic_id", None)
+
+    _install_schema(recovery_postgres.dsn)
+    target = PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(recovery_postgres))
+    target.restore_state(legacy)
+    restored = target.export_state()
+
+    assert check_workflow_integrity(restored)["ok"] is True
+    assert restored["workflow_tables"]["topics"][0]["topic_id"] == expected_topic_id
+    assert restored["workflow_tables"]["documents"][0]["topic_id"] == expected_topic_id
 
 
 def test_resealed_review_chain_tamper_is_rejected(recovery_postgres: PostgresCanonicalConfig, tmp_path: Path) -> None:
