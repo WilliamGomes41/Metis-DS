@@ -73,7 +73,10 @@ from src.source_occurrence_authority_v1 import prefer_authoritative_exact_occurr
 from src.source_reconstruction_v1 import RECONSTRUCTION_VERSION
 from src.source_bound_fields_v2 import MODE as SEMANTIC_V2_MODE, evidence_schema, context_evidence_schema, CONTEXT_VERSION
 from src.source_bound_fields_v3 import MODE as SEMANTIC_V3_MODE, VERSION as FIELDS_V3_VERSION
-from src.source_evidence_resolution_v1 import resolve_proposal_evidence, VERSION as EVIDENCE_RESOLUTION_VERSION
+from src.source_evidence_resolution_v1 import (
+    resolve_proposal_evidence, VERSION as EVIDENCE_RESOLUTION_VERSION,
+    V3_VERSION as V3_EVIDENCE_RESOLUTION_VERSION,
+)
 
 
 PASSAGE_FORMATION_MODE_ENV = "METIS_PASSAGE_FORMATION_MODE"
@@ -139,6 +142,7 @@ SEMANTIC_V3_INSTRUCTION = (
     "target_group_span (patients) and scope_span (clinical situation). Do not invent a performer "
     "for an imperative: actor/subject may be not_stated. These three fields can reference exact "
     "applicable context: scope role for performer/situation, target_group role for patients. "
+    "condition_span may also reference an exact applicable context entry with role condition. "
     "Other field evidence must stay within the selected core. Link every necessary heading, "
     "condition, exception, table/list, timing or abbreviation definition using context_evidence. "
     "A header alone does not realize an announced list/table: include its applicable content. "
@@ -520,7 +524,7 @@ def _replay_identity(
         extractor_version=_extractor_contract(source_fragments),
         reconstruction_version=RECONSTRUCTION_VERSION,
         formation_policy_version=PASSAGE_FORMATION_POLICY_VERSION,
-        semantic_contract_version=(f"{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}"),
+        semantic_contract_version=(f"{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}"),
         prompt_hash=_stable_json_hash(SEMANTIC_DEVELOPER_PROMPT + (SEMANTIC_V3_INSTRUCTION if field_contract_v3 else SEMANTIC_V2_INSTRUCTION if field_contract_v2 else "")),
         schema_hash=_stable_json_hash(_proposal_schema(field_contract_v2, field_contract_v3)),
         provider_id=SEMANTIC_PROVIDER_ID,
@@ -638,7 +642,8 @@ def _provider_proposal(
                                   "input_tokens": usage.get("input_tokens"),
                                   "output_tokens": usage.get("output_tokens")})
     try:
-        resolved = resolve_proposal_evidence(proposal, blocks=blocks, evidence_blocks=evidence_blocks)
+        resolved = resolve_proposal_evidence(proposal, blocks=blocks, evidence_blocks=evidence_blocks,
+                                            field_contract_v3=field_contract_v3)
     except SemanticPassageError as exc:
         if checkpoint:
             checkpoint("validation_rejected", {"finding": exc.finding})
