@@ -27,6 +27,7 @@ TYPE_FIELDS = {**V2_TYPE_FIELDS, "recommendation": (
 CONTEXT_FIELDS = {
     "actor_span": {"scope"}, "target_group_span": {"target_group"},
     "scope_span": {"scope", "condition", "row_header", "column_header"},
+    "condition_span": {"condition"},
 }
 
 
@@ -43,6 +44,10 @@ def evidence_schema(span):
     schema["properties"]["recommendation_evidence_span"]["description"] = (
         "Entire normative core, including negation and qualifiers, excluding list number and strength stamp. "
         "Do not abbreviate it or omit any clinical words. Necessary lists may be exact context references."
+    )
+    schema["properties"]["condition_span"]["description"] = (
+        "Literal condition in the core or an explicitly supplied condition-role context entry. "
+        "An external condition must also be present in context_evidence; proximity alone is insufficient."
     )
     return schema
 
@@ -172,7 +177,10 @@ def recommendation_codes(row, *, context):
     if re.search(r"\b(?:en|of|geen|niet|bij|met|als|wanneer|tenzij|voor)\s*$", core, re.I):
         codes.append("recommendation_core_incomplete")
     if core.rstrip().endswith(":") and not any(
-        r["span"] and not r["unresolved_reason"] and r["role"] == "list_introduction"
+        r["span"] and not r["unresolved_reason"]
+        and (r["role"] == "list_introduction" or (
+            r["role"] == "timing" and re.match(r"^\s*[•*-]\s+\S+\s+\S", r["text"])
+        ))
         and normalize_visible_prose(r["text"]) not in core
         and not r["text"].rstrip().endswith(":")
         for r in context

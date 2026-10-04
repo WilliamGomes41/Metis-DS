@@ -123,7 +123,8 @@ def replay_diagnostic(attempt):
     try:
         proposal = resolve_proposal_evidence(diagnostic["proposal"],
             blocks=semantic_source_blocks(data["fragments"]),
-            evidence_blocks=semantic_source_blocks(data["evidence_fragments"]))
+            evidence_blocks=semantic_source_blocks(data["evidence_fragments"]),
+            field_contract_v3=data.get("field_contract_v3", False))
         units = semantic_units_from_proposal(**deepcopy(data), proposal=proposal)
     except SemanticPassageError as error:
         return {"status": "rejected", "reason_code": error.code, "finding": error.finding}
