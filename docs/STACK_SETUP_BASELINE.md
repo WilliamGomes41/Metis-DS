@@ -36,7 +36,7 @@ The G0 local operations console MVP is implemented in this repository (`vvn-data
 | Capability | Current implementation | Target / production implication | Required by | Cost/setup exposure | Status |
 |---|---|---|---|---|---|
 | Authoritative code | GitHub repository `WilliamGomes41/VENVN-DS` (public during the declared MVP period under Protocol v2.5) | After MVP restore private hosting or an organization plan that can protect a private default branch | G1 | Current free personal plan cannot protect a private default branch (403); public MVP is the accepted workaround | **Implemented:** G1 technical protection is ON |
-| CI | GitHub Actions, Python 3.12/3.13 | Continue clean lockfile install, preflight, compile and tests | G1 | Usually existing GitHub usage; monitor quota/plan | Implemented |
+| CI | GitHub Actions, Python 3.12/3.13; isolated Playwright 1.58.2 + Chromium review checks on 3.12 | Continue clean lockfile install, preflight, compile and tests; browser tooling is ephemeral and uses only synthetic fixtures | G1 | Existing GitHub usage; browser checks add runner minutes and package downloads, no hosted service or product runtime dependency; monitor quota/plan | Implemented |
 | Runtime language | Python `>=3.12,<3.14` | Pin supported runtime in deployed container | G1/G8 | No separate service cost | Implemented |
 | Packaging/runtime image | Docker, `python:3.13-slim` | A managed Azure container/web runtime must be selected before Azure DEV | G8 | **New hosting cost likely** | Decision open |
 | Container image registry | None required locally | May be needed depending selected Azure deployment route | G8 | Possible registry/storage cost | Decision open; do not assume ACR until runtime is chosen |

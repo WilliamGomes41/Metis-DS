@@ -39,7 +39,7 @@
       "environment": "local_development",
       "requirement_status": "required",
       "implementation_status": "implemented",
-      "current_implementation": "GitHub Actions on Python 3.12 and 3.13",
+      "current_implementation": "GitHub Actions on Python 3.12 and 3.13; Python 3.12 also runs isolated desktop/mobile Chromium checks with Playwright 1.58.2 installed into the ephemeral runner",
       "target_implementation": "GitHub Actions unless architecture changes",
       "provider": "GitHub",
       "data_classification": "source_code_and_test_fixtures",

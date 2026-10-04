@@ -18,7 +18,11 @@ import pytest
 
 
 @pytest.mark.skipif(not os.environ.get('METIS_BROWSER_EXECUTABLE'), reason='Chromium browser verification is opt-in')
-def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_path):
+@pytest.mark.parametrize('fixture,script', [
+    ('tests.browser_knowledge_context_fixture', 'browser_knowledge_context_check.cjs'),
+    ('tests.browser_source_context_fixture', 'browser_source_context_check.cjs'),
+])
+def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_path, fixture, script):
     root = Path(__file__).resolve().parents[1]
     with socket.socket() as port:
         port.bind(('127.0.0.1', 0))
@@ -28,7 +32,7 @@ def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_pat
                METIS_BROWSER_OUTPUT=str(tmp_path))
     import sys
     with (tmp_path/'server.log').open('w') as log:
-        server = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'tests.browser_knowledge_context_fixture:app',
+        server = subprocess.Popen([sys.executable, '-m', 'uvicorn', fixture + ':app',
                                    '--host', '127.0.0.1', '--port', str(address)], cwd=root, env=env,
                                   stdout=log, stderr=log)
         try:
@@ -41,7 +45,7 @@ def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_pat
                     time.sleep(.1)
             else:
                 pytest.fail((tmp_path/'server.log').read_text())
-            subprocess.run([env.get('METIS_BROWSER_NODE', 'node'), str(root/'tests/browser_knowledge_context_check.cjs')],
+            subprocess.run([env.get('METIS_BROWSER_NODE', 'node'), str(root/'tests'/script)],
                            env=env, cwd=root, check=True, timeout=90)
             assert len(list(tmp_path.glob('*.png'))) == 6
         finally:
