@@ -16,10 +16,16 @@ const assert = require('node:assert/strict');
       stylesheet: [...document.styleSheets].some(s => s.href?.includes('/brand/console.css') && s.cssRules.length),
       nestedForms: !!document.querySelector('form form'),
       context: document.querySelector('[data-passage-context]')?.innerText,
+      contextTop: document.querySelector('[data-passage-context]')?.getBoundingClientRect().top,
+      menuBottom: document.querySelector('.topbar')?.getBoundingClientRect().bottom,
     }));
     assert.equal(data.overflow, false);
     assert.equal(data.nestedForms, false);
     assert.ok(data.stylesheet && data.context);
+    if (stage !== 'passage') {
+      assert.ok(data.contextTop >= 0, 'Context task must start in the visible viewport');
+      assert.ok(data.menuBottom <= data.contextTop, 'Navigation must not cover the context task');
+    }
     fs.writeFileSync(`${process.env.METIS_BROWSER_OUTPUT}/${stage}-${width}.json`, JSON.stringify(data, null, 2));
     await page.screenshot({path: `${process.env.METIS_BROWSER_OUTPUT}/${stage}-${width}.png`, fullPage: true});
   }

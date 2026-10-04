@@ -1736,7 +1736,9 @@ html[data-theme="dark"] .metis-mark-frame { background: #fff; }
 @media (max-width: 900px) { .review-decision-layout { grid-template-columns: 1fr; } }
 
 /* Context is inspected with the passage; full source text never clips. */
-.passage-context { margin-top: 16px; }
+/* A tall sticky menu must not cover the task when following its anchor. */
+.canvas:has([data-passage-context]) .topbar { position: static; }
+.passage-context { margin-top: 16px; scroll-margin-top: 16px; }
 .passage-context details { margin: 12px 0; }
 .passage-context summary { cursor: pointer; padding: 10px 0; font-weight: 700; }
 .passage-context summary:focus-visible { outline: 3px solid var(--paars); outline-offset: 3px; }
