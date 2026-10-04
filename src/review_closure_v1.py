@@ -26,7 +26,7 @@ from src.deterministic_review_repair_v1 import (
     REPAIR_SUPPORT_RELATION,
     DeterministicRepairReviewConsole,
 )
-from src.integrity_kernel import compute_canonical_object_hash, schema_errors, stamp_canonical_hashes
+from src.integrity_kernel import compute_canonical_object_hash
 from src.operations_console_v1 import ConsoleError
 from src.publication_readiness_v1 import PublicationReadinessMixin
 from src.review_ledger import append_event
@@ -201,43 +201,9 @@ class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewC
             return REPAIR_CLASSIFICATION
         return REPAIR_SOURCE_UNITS
 
-    def _finalize_source_provenance(
-        self,
-        *,
-        snapshot_id: str,
-        object_id: str,
-        source_refs: list[dict[str, Any]],
-        repair_spec: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Update source refs without replacing the revision engine's patch hash."""
-        _ = repair_spec
-        revision = self.objects_revision(snapshot_id)
-        rows = deepcopy(self._load_objects(snapshot_id, remember=False))
-        live = self._current_object(snapshot_id, object_id)
-        version = str(live.get("object_version") or "")
-        updated: dict[str, Any] | None = None
-        for index in range(len(rows) - 1, -1, -1):
-            row = rows[index]
-            if (
-                row.get("object_id") != object_id
-                or str(row.get("object_version") or "") != version
-            ):
-                continue
-            row = deepcopy(row)
-            row.setdefault("provenance", {})["source_fragments"] = self._verified_finalized_source_refs(snapshot_id, row, source_refs)
-            stamp_canonical_hashes(row)
-            errors = schema_errors(row, self.schema_path)
-            if errors:
-                raise ConsoleError("revision_schema_invalid", " | ".join(errors))
-            rows[index] = row
-            updated = row
-            break
-        if updated is None:
-            raise ConsoleError("unknown_object")
-        self._commit_prepared_store(
-            objects=(snapshot_id, rows), expected_revision=revision
-        )
-        return deepcopy(updated)
+    def _source_repair_provenance_patch(self, repair_spec: dict[str, Any]) -> dict[str, Any]:
+        """Keep the revision engine's patch hash and its revision_created evidence."""
+        return {}
 
     def _append_audit_evidence(
         self,

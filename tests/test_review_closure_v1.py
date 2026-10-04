@@ -14,6 +14,8 @@ from fastapi.testclient import TestClient
 
 from src.closed_review_loop_v1 import ClosedLoopReviewConsole, install_closed_review_routes
 from src.deterministic_review_repair_v1 import (
+    DeterministicRepairReviewConsole,
+    REPAIR_MERGE_OBJECTS,
     REPAIR_SOURCE_UNITS,
     install_deterministic_review_repair_routes,
 )
@@ -22,6 +24,94 @@ from src.operations_console_v1 import ConsoleError
 from src.review_closure_v1 import ReviewClosureConsole, harden_legacy_repair_routes
 from src.review_ledger import read_events
 from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+
+
+@pytest.mark.parametrize("console_type", [DeterministicRepairReviewConsole, ReviewClosureConsole])
+@pytest.mark.parametrize("repair_kind", [REPAIR_SOURCE_UNITS, REPAIR_MERGE_OBJECTS])
+def test_repair_finalization_preserves_hash_policy_restart_and_stale_replay(
+    tmp_path, console_type, repair_kind,
+):
+    from src.integrity_kernel import stable_hash, schema_errors, compute_canonical_object_hash
+    from tests.test_deterministic_review_repair_v1 import _system as repair_system
+
+    console, _, _, reviewer, sid, objects = repair_system(tmp_path, console_type)
+    obj = objects[0]
+    command = dict(
+        actor_id=reviewer["account_id"], snapshot_id=sid, object_id=obj["object_id"],
+        expected_revision=console.objects_revision(sid), comment="Exacte bronselectie.",
+        repair_kind=repair_kind,
+    )
+    if repair_kind == REPAIR_SOURCE_UNITS:
+        fragment_ids = {ref["raw_object_id"] for ref in obj["provenance"]["source_fragments"]}
+        units = [unit for unit in console.source_units(snapshot_id=sid, object_id=obj["object_id"])
+                 if unit["fragment_id"] in fragment_ids]
+        command.update(suitability="mist_context", source_unit_ids=[unit["unit_id"] for unit in units])
+    else:
+        command.update(suitability="samenvoegen", merge_object_ids=[objects[1]["object_id"]])
+
+    repaired = console.submit_review_resolution(**command)
+    events = read_events(console._ledger_path)
+    revision_event = next(event for event in reversed(events)
+                          if event.get("event_type") == "revision_created"
+                          and event.get("object_id") == obj["object_id"])
+    if console_type is ReviewClosureConsole:
+        expected_hash = revision_event["details"]["revision_patch_hash"]
+    elif repair_kind == REPAIR_SOURCE_UNITS:
+        expected_hash = stable_hash({
+            "repair_kind": REPAIR_SOURCE_UNITS,
+            "source_unit_ids": command["source_unit_ids"],
+            "source_fragment_ids": list(dict.fromkeys(unit["fragment_id"] for unit in units)),
+            "text": repaired["content"]["clean_text"],
+        })
+    else:
+        expected_hash = stable_hash({
+            "repair_kind": REPAIR_MERGE_OBJECTS,
+            "merge_object_ids": command["merge_object_ids"],
+            "merged_text": repaired["content"]["clean_text"],
+        })
+    assert repaired["provenance"]["revision_patch_hash"] == expected_hash
+    assert repaired["provenance"]["canonical_object_hash"] == compute_canonical_object_hash(repaired)
+    assert schema_errors(repaired, console.schema_path) == []
+    assert repaired["governance"]["validation_status"] == "needs_review"
+    before = console.snapshot_objects(sid)
+    with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
+        console.submit_review_resolution(**command)
+    assert console.snapshot_objects(sid) == before
+    assert read_events(console._ledger_path) == events
+    restarted = console_type(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    assert restarted._current_object(sid, obj["object_id"]) == repaired
+
+
+@pytest.mark.parametrize("console_type", [DeterministicRepairReviewConsole, ReviewClosureConsole])
+def test_failure_after_provenance_finalization_rolls_back_whole_repair(tmp_path, monkeypatch, console_type):
+    from tests.test_deterministic_review_repair_v1 import _system as repair_system
+
+    console, _, _, reviewer, sid, objects = repair_system(tmp_path, console_type)
+    obj = objects[0]
+    units = console.source_units(snapshot_id=sid, object_id=obj["object_id"])
+    fragment_ids = {ref["raw_object_id"] for ref in obj["provenance"]["source_fragments"]}
+    selected = [unit["unit_id"] for unit in units if unit["fragment_id"] in fragment_ids]
+    before = console.snapshot_objects(sid)
+    events = read_events(console._ledger_path)
+    revision = console.objects_revision(sid)
+    finalize = console._finalize_source_provenance
+
+    def fail_after_commit(**kwargs):
+        finalize(**kwargs)
+        raise RuntimeError("injected_after_finalization")
+
+    monkeypatch.setattr(console, "_finalize_source_provenance", fail_after_commit)
+    with pytest.raises(RuntimeError, match="injected_after_finalization"):
+        console.submit_review_resolution(
+            actor_id=reviewer["account_id"], snapshot_id=sid, object_id=obj["object_id"],
+            expected_revision=revision, suitability="mist_context", comment="Exacte bronselectie.",
+            repair_kind=REPAIR_SOURCE_UNITS, source_unit_ids=selected,
+        )
+    assert console.snapshot_objects(sid) == before
+    assert console.objects_revision(sid) == revision
+    assert read_events(console._ledger_path) == events
+    restarted = console_type(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    assert restarted.snapshot_objects(sid) == before
 
 
 def _system(tmp_path, console=None):

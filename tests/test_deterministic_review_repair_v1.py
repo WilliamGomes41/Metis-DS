@@ -27,8 +27,8 @@ from src.review_ledger import read_events
 from src.serving_relations_v1 import binding_relations
 
 
-def _system(tmp_path):
-    console = DeterministicRepairReviewConsole(
+def _system(tmp_path, console_type=DeterministicRepairReviewConsole):
+    console = console_type(
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",
