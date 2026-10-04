@@ -94,3 +94,26 @@ def test_human_review_disposition_overrides_extract_reason():
     again = _by_text(apply_passage_register([o if o is not versie else reviewed for o in objects]))
     assert again["Versie: 1"]["metadata"]["passage_register"]["status"] == "linked_as_support"
     assert again["Versie: 1"]["metadata"]["passage_register"]["source"] == "review"
+
+
+def test_table_cells_after_caption_are_not_recommendation_targets():
+    """Smetten Tabel 1 row labels were forced on the model as recommendations."""
+    from src.recommendation_coverage_v1 import inventory
+
+    path = ["Smetten", "Module 2: Preventieve maatregelen", "Aanbevelingen"]
+    blocks = [
+        {"block_id": "b1", "section_path": path, "text": "1. Overweeg (een combinatie van) de volgende preventieve maatregelen [zie Tabel 1] toe te passen bij patiënten met een verhoogd risico op smetten."},
+        {"block_id": "b2", "section_path": path, "text": "Zwak – voor"},
+        {"block_id": "b3", "section_path": path, "text": "Tabel 1. Preventieve maatregelen"},
+        {"block_id": "b4", "section_path": path, "text": "Voorkom overmatig transpireren"},
+        {"block_id": "b5", "section_path": path, "text": "Voorkom huid-op-huid contact"},
+        {"block_id": "b6", "section_path": path, "text": "2. Gebruik geen poeders of pasta’s bij de preventie van smetten"},
+        {"block_id": "b7", "section_path": path, "text": "Voorkom wrijving bij het drogen van de huidplooien."},
+    ]
+    texts = [row["text"] for row in inventory(blocks)]
+    assert "Voorkom overmatig transpireren" not in texts
+    assert "Voorkom huid-op-huid contact" not in texts
+    assert texts[0].startswith("Overweeg (een combinatie van)")
+    assert "Gebruik geen poeders of pasta’s bij de preventie van smetten" in texts
+    # A numbered item ends the table; later unnumbered advice is detected again.
+    assert "Voorkom wrijving bij het drogen van de huidplooien." in texts

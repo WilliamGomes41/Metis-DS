@@ -17,6 +17,7 @@ _NORMATIVE = re.compile(
     r"Meet|Geef|Vraag|Onderzoek|Leg|Voorkom|Mobiliseer|Wij bevelen|Het wordt aanbevolen)\b"
 )
 _STAMP = re.compile(r"\b(?:Sterk|Zwak)\s*[–—-]\s*(?:voor|tegen)\b\.?", re.I)
+_TABLE_CAPTION = re.compile(r"(?:Tabel|Table)\s+\d+\b", re.I)
 _RECOMMENDATION_SECTION = re.compile(r"(?:\d+(?:\.\d+)*[.)]?\s*)?(?:aanbevelingen|recommendations)\s*:?", re.I)
 
 
@@ -29,6 +30,7 @@ def inventory(blocks):
     result = []
     active_scope = None
     active_path = None
+    in_table = False
     for block in blocks:
         path = list(block.get("section_path") or [])
         if not is_recommendation_section_path(path):
@@ -37,13 +39,20 @@ def inventory(blocks):
         if path != active_path:
             active_scope = None
             active_path = path
+            in_table = False
+        if _TABLE_CAPTION.match(text.lstrip()):
+            # Cells of an announced table are content of the recommendation
+            # that refers to it, not unnumbered recommendations of their own.
+            in_table = True
         scope_label = text.rstrip().endswith(":") and len(text) < 240 and not _NORMATIVE.search(text.lstrip())
         if scope_label:
             active_scope = {"block_id": block["block_id"], "start": 0, "end": len(text), "text": text}
         numbers = [m for m in _NUMBER.finditer(text)
                    if not re.search(r"\b(?:Tabel|Table|Bijlage|Figuur)\s*$", text[:m.start()], re.I)]
         starts = [m.end() for m in numbers]
-        if not starts and _NORMATIVE.search(text.lstrip()):
+        if numbers:
+            in_table = False
+        if not starts and not in_table and _NORMATIVE.search(text.lstrip()):
             starts = [len(text) - len(text.lstrip())]
         if not starts and not scope_label:
             # A descriptive list/body breaks the adjacency of a possible
