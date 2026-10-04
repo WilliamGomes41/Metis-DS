@@ -81,9 +81,13 @@ def test_metadata_batch_preserves_unselected_condition_history_and_restart(tmp_p
     assert not source_passage_closure(before)["source_passage_review_complete"]
     from src.operations_console_app import _render_review_index
     page = _render_review_index(command["snapshot_id"], before, "richtlijn",
-        snapshot_revision=command["expected_revision"], task="disposition")
+        snapshot_revision=command["expected_revision"], task="inventory")
     assert 'data-source-accountability' in page and '/review/source-exclusions' in page
     assert 'data-source-record' in page and CONDITION in page
+    definition = next(r for r in before if r.get("proposed_object_type") == "definition")
+    assert definition["metadata"]["admission"]["gate_result"] == "allowed"
+    assert f'data-passage-id="{definition["object_id"]}"' in page
+    assert f'data-source-record="{definition["object_id"]}"' not in page
     result = confirm_source_exclusions(state, **command)
     assert len(result["source_versions"]) == 2
     current = state.snapshot_objects(command["snapshot_id"])
