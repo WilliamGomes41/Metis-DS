@@ -1734,3 +1734,19 @@ html[data-theme="dark"] .metis-mark-frame { background: #fff; }
 .review-source-column [data-source-bound-fields] { overflow-x: auto; }
 .review-room .task-secondary-nav { margin: 12px 0 24px; }
 @media (max-width: 900px) { .review-decision-layout { grid-template-columns: 1fr; } }
+
+/* Context is inspected with the passage; full source text never clips. */
+/* A tall sticky menu must not cover the task when following its anchor. */
+.canvas:has([data-passage-context]) .topbar { position: static; }
+.passage-context { margin-top: 16px; scroll-margin-top: 16px; }
+.passage-context details { margin: 12px 0; }
+.passage-context summary { cursor: pointer; padding: 10px 0; font-weight: 700; }
+.passage-context summary:focus-visible { outline: 3px solid var(--paars); outline-offset: 3px; }
+.passage-context fieldset { min-width: 0; margin: 16px 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.passage-context legend { font-weight: 700; padding: 0 4px; }
+.context-choice { margin: 12px 0; padding: 14px; border: 1px solid var(--line); border-radius: 8px; }
+.context-choice .check { display: flex; gap: 10px; align-items: flex-start; }
+.context-choice input[type="checkbox"] { flex: 0 0 auto; margin-top: 5px; }
+.context-literal { display: block; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 400; }
+.passage-context textarea { width: 100%; min-height: 90px; }
+.passage-context a { overflow-wrap: anywhere; }

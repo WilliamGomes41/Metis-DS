@@ -121,14 +121,14 @@ def test_context_http_projection_and_command(tmp_path):
     client = TestClient(create_console_app(state))
     assert client.post('/login', data={'username': reviewer['username'], 'password': 'bert-secret'}, follow_redirects=False).status_code == 303
     before = client.get('/review', params={'document': command['snapshot_id'], 'object': source['object_id']})
-    assert 'Bronrol en contextkoppeling' in before.text
+    assert 'Bij welke passage hoort dit label?' in before.text
     result = client.post('/review/source-context', data={'snapshot_id': command['snapshot_id'],
         'source_object_id': source['object_id'], 'role': 'label', 'target_object_ids': [target['object_id']],
         'reason': command['reason'], 'command_id': command['command_id'], 'snapshot_revision': command['expected_revision'],
         'source_checked': '1'}, follow_redirects=False)
     assert result.status_code == 303, result.text
     after = client.get('/review', params={'document': command['snapshot_id'], 'object': target['object_id']})
-    assert 'Bevestigde broncontext' in after.text
+    assert 'Context die bij deze passage is vastgelegd' in after.text
     assert 'DOEN' in after.text
     assert 'Dit bevestigt geen aanbevelingssterkte' not in after.text
     label_page = client.get('/review', params={'document': command['snapshot_id'], 'object': source['object_id']})

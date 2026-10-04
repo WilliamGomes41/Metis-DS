@@ -84,3 +84,23 @@ jobs:
       - name: Verify architecture invariants
         run: pytest -q tests/test_architecture_invariants.py
       - run: pytest -q
+      - name: Install isolated browser test tooling
+        if: matrix.python-version == '3.12'
+        run: |
+          npm install --prefix "$RUNNER_TEMP/metis-browser" playwright@1.58.2
+          "$RUNNER_TEMP/metis-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Verify desktop and mobile review workflows
+        if: matrix.python-version == '3.12'
+        run: |
+          export METIS_PLAYWRIGHT_MODULE="$RUNNER_TEMP/metis-browser/node_modules/playwright"
+          export METIS_BROWSER_EXECUTABLE="$(node -e 'process.stdout.write(require(process.env.METIS_PLAYWRIGHT_MODULE).chromium.executablePath())')"
+          pytest -q tests/test_browser_knowledge_context.py --basetemp="$RUNNER_TEMP/metis-browser-proof"
+      - name: Upload synthetic browser evidence
+        if: always() && matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-browser-desktop-mobile
+          path: |
+            ${{ runner.temp }}/metis-browser-proof/**/*.png
+            ${{ runner.temp }}/metis-browser-proof/**/*.json
+          if-no-files-found: warn
