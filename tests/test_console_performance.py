@@ -100,3 +100,23 @@ def test_request_log_uses_route_template_and_reports_errors(monkeypatch):
     def broken_logger(*args): raise OSError("synthetic logger failure")
     monkeypatch.setattr(_LOGGER, "info", broken_logger)
     assert client.get("/document/one").status_code == 200
+
+
+def test_elapsed_connection_and_statement_time_includes_failures(monkeypatch):
+    ticks = iter(range(20))
+    monkeypatch.setattr("src.console_performance_v1.time.perf_counter", lambda: next(ticks))
+    fake = SimpleNamespace(Cursor=Cursor, connect=connection)
+    with performance_scope() as metrics:
+        con = connect_postgres(fake)
+        con.cursor.execute("SELECT private")
+        with pytest.raises(ValueError):
+            con.cursor.execute("FAIL")
+        con.cursor.executemany("private", [])
+        assert metrics.connect_ms == 1000
+        assert metrics.query_ms == 3000
+    def failed(*args, **kwargs): raise OSError("private")
+    fake.connect = failed
+    with performance_scope() as metrics:
+        with pytest.raises(OSError): connect_postgres(fake)
+        assert metrics.connect_ms == 1000
+        assert metrics.query_ms == 0

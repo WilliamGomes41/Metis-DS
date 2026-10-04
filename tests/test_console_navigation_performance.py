@@ -242,3 +242,46 @@ def test_batch_objects_keeps_current_versions_and_order():
     store._connect = lambda: Connection()
     assert store.list_current_objects_batch(["one"])["one"] == [
         {"object_id": "a", "object_version": "2"}, {"object_id": "b", "object_version": "1"}]
+
+
+@pytest.mark.parametrize("documents", [1, 20])
+def test_review_overview_batches_explicit_policy_inputs_and_keeps_fresh_duties(documents):
+    from src.document_status_ui_v1 import _LIFECYCLE_BY_SNAPSHOT
+    probe = NavigationProbe(count=3, documents=documents)
+    lifecycle = {sid: probe.document_lifecycle_status(sid) for sid in probe.envelopes}
+    token = _LIFECYCLE_BY_SNAPSHOT.set(lifecycle)
+    try:
+        for phase in ("open", "first-approved", "stale-binding"):
+            if phase == "first-approved":
+                probe.approve("reviewer-1")
+            elif phase == "stale-binding":
+                for rows in probe.objects.values():
+                    rows[0]["object_version"] = "2"
+            expected = {sid: review_work_item(probe, account=probe.account, envelope=env)
+                        for sid, env in probe.envelopes.items()}
+            summaries = probe.review_workboard_summaries("reviewer-1")
+            probe.calls.clear()
+            probe._enrich_review_workboard_summaries("reviewer-1", summaries)
+            assert {sid: row["work_item"] for sid, row in summaries.items()} == expected
+            assert probe.calls == {"objects": 1, "bindings": 1}
+    finally:
+        _LIFECYCLE_BY_SNAPSHOT.reset(token)
+
+
+def test_review_overview_loads_missing_list_status_once_and_propagates_failure():
+    probe = NavigationProbe(count=1, documents=3)
+    def statuses(ids):
+        probe.calls["list_status"] += 1
+        return {sid: derive_lifecycle_status(readiness={"curation_ready": False},
+                    release_status="none", serving_status="inactive") for sid in ids}
+    probe.list_document_lifecycle_statuses = statuses
+    summaries = probe.review_workboard_summaries("reviewer-1")
+    probe.calls.clear()
+    probe._enrich_review_workboard_summaries("reviewer-1", summaries)
+    assert probe.calls == {"list_status": 1, "objects": 1, "bindings": 1}
+    def unavailable(ids):
+        raise WorkflowReviewStoreError("synthetic unavailable")
+    probe.workflow_review_store.read_bindings = unavailable
+    with pytest.raises(ConsoleError) as failure:
+        probe._enrich_review_workboard_summaries("reviewer-1", summaries)
+    assert failure.value.code == "workflow_review_unavailable"

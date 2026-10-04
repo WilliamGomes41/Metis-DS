@@ -21,7 +21,9 @@ _LIFECYCLE_BY_SNAPSHOT: ContextVar[dict[str, dict[str, str]]] = ContextVar(
     "document_lifecycle_by_snapshot",
     default={},
 )
-_STATUS_PATHS = frozenset({"/tree", "/review", "/publish"})
+# Publish derives its label from the readiness result it already needs for the
+# action card. Evaluating readiness here would run every gate twice.
+_STATUS_PATHS = frozenset({"/tree", "/review"})
 
 
 def _closed_fallback() -> dict[str, str]:

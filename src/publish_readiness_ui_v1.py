@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse
 
 from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
 from src.durable_publication_console_v1 import DurablePublicationConsole
+from src.document_status_v1 import derive_document_status
 
 from src.operations_console_app import (
     BLOCKER_LABELS,
@@ -315,11 +316,14 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
             display_status = {
                 "published": "published", "withdrawn": "Ingetrokken", "superseded": "Vervangen",
                 "inactive": "Niet actief", "authority_unavailable": "Publicatiestatus onbekend",
-            }.get(view["overall_state"], envelope["state"])
+            }.get(view["overall_state"], derive_document_status(
+                envelope_state="captured_not_published",
+                readiness=considered,
+            ))
             rows.append(
                 f'''
                 <article class="doc-card" data-publish-document="{_esc(envelope['snapshot_id'])}">
-                  {_document_card_heading({**envelope, "status": display_status})}
+                  {_document_card_heading({**envelope, "status": display_status, "meaningful_status": display_status})}
                   {_render_publish_state(view)}
                 </article>
                 '''

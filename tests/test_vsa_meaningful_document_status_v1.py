@@ -297,3 +297,27 @@ def test_ready_blocked_and_published_labels_are_shared_across_rooms(tmp_path: Pa
 
 def test_postgres_workflow_console_inherits_same_derived_status_policy() -> None:
     assert issubclass(PostgresWorkflowDurablePublicationConsole, DocumentStatusReadinessMixin)
+
+
+def test_publish_evaluates_readiness_once_per_document_and_refreshes_next_request(tmp_path, monkeypatch):
+    console, accounts, receipt, source = _system(tmp_path)
+    _complete_review(console, accounts, receipt)
+    original = console.publication_readiness
+    calls = []
+    def measured(snapshot_id):
+        calls.append(snapshot_id)
+        return original(snapshot_id)
+    monkeypatch.setattr(console, "publication_readiness", measured)
+    client = _client(console)
+    _login(client, "publisher.carla")
+    calls.clear()
+    first = client.get("/publish")
+    assert first.status_code == 200
+    assert "klaar voor publicatie" in first.text
+    assert calls == [receipt["snapshot_id"]]
+    source.blobs.pop(str(receipt["immutable_storage_locator"]))
+    calls.clear()
+    second = client.get("/publish")
+    assert second.status_code == 200
+    assert "geblokkeerd" in second.text
+    assert calls == [receipt["snapshot_id"]]

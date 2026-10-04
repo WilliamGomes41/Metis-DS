@@ -948,14 +948,62 @@ class _PostgresBadgeCountsMixin:
             }
         if navigation_only:
             return out
-        from src.review_workboard_v1 import review_work_item
-        for sid, summary in out.items():
-            if summary["envelope"].get("review_policy"):
-                item = review_work_item(self, account=self._account(account_id), envelope=summary["envelope"])
-                summary["work_item"] = item
-                if item:
-                    summary.update({k: v for k, v in item.items() if k in summary})
+        self._enrich_review_workboard_summaries(account_id, out)
         return out
+
+    def _enrich_review_workboard_summaries(
+        self, account_id: str, summaries: dict[str, dict[str, Any]],
+    ) -> None:
+        """Load explicit-policy inputs together; retain the existing duty rules.
+
+        All inputs live only for this projection. Commands still read and check
+        current durable state independently. No publication gate is evaluated
+        merely to display the review overview's lifecycle label.
+        """
+        from src.document_status_ui_v1 import current_document_lifecycle_status
+        from src.review_workboard_v1 import ReviewWorkInputs, review_work_item
+
+        ids = [sid for sid, summary in summaries.items()
+               if summary["envelope"].get("review_policy")]
+        if not ids:
+            return
+        try:
+            account = self._account(account_id)
+            lifecycle = {sid: current_document_lifecycle_status(sid) for sid in ids}
+            missing = [sid for sid in ids if lifecycle[sid] is None]
+            if missing:
+                # The list reader also offers a disposable tree prefetch. This
+                # review projection must not leave it behind for later commands.
+                token = self._tree_publication_batch.set(None)
+                try:
+                    lifecycle.update(self.list_document_lifecycle_statuses(missing))
+                finally:
+                    self._tree_publication_batch.reset(token)
+            if any(lifecycle.get(sid) is None for sid in ids):
+                raise ConsoleError("durable_lifecycle_status_read_failed")
+            objects = self.workflow_document_store.list_current_objects_batch(ids)
+            bindings = self.workflow_review_store.read_bindings(ids)
+            for sid in ids:
+                current = {obj["object_id"]: obj for obj in objects[sid]}
+                checked = []
+                for binding in bindings.get(sid, []):
+                    row = dict(binding)
+                    obj = current.get(row.get("object_id"))
+                    row["valid"] = bool(obj) and still_matches(row, obj)
+                    checked.append(row)
+                status = lifecycle[sid]
+                item = review_work_item(
+                    self, account=account, envelope=summaries[sid]["envelope"],
+                    inputs=ReviewWorkInputs(objects[sid], checked, status,
+                                           status["release_status"] != "none"),
+                )
+                summaries[sid]["work_item"] = item
+                if item:
+                    summaries[sid].update({k: v for k, v in item.items() if k in summaries[sid]})
+        except WorkflowDocumentStoreError as exc:
+            raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
+        except WorkflowReviewStoreError as exc:
+            raise ConsoleError("workflow_review_unavailable", str(exc)) from exc
 
     def _navigation_review_count(self, account: dict[str, Any]) -> int:
         """Use review rules once with call-local batched inputs, not publish gates.
