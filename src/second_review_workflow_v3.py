@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Strict four-eyes review bound to the exact canonical object hash."""
+# LEGACY-SUPPORTED: historical JSONL CLI and integrity regression tests.
+# Current console review uses its own live workflow; retain this compatibility API.
 from __future__ import annotations
 import argparse,json
 from copy import deepcopy

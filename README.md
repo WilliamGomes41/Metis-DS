@@ -23,6 +23,7 @@ Actuele voortgang wordt gelezen uit de gemergede code, tests, CI en commitgeschi
 - `docs/` — current protocol and technical documentation
 - `docs/history/` — historical step, audit and repair reports; not steering documents
 - `docs/REPOSITORY_CONVENTIONS.md` — directory contract
+- `config/code_lifecycle_inventory.v1.json` — repository usage/legacy status at the audited commit; evidence only, not runtime configuration. Findings: `docs/history/METIS_CODE_AUDIT_2026-10-04.md`.
 
 ## Reproduce
 

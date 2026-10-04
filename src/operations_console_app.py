@@ -234,7 +234,6 @@ ERROR_COPY = {
     "pre_review_llm_api_key_required": "De modeldienst is niet geconfigureerd. Laat de beheerder de configuratie van de voorcontrole controleren.",
     "pre_review_llm_model_required": "Het model voor de voorcontrole is niet ingesteld. Laat de beheerder de configuratie controleren.",
     "pre_review_llm_response_invalid": "De modeldienst gaf geen bruikbaar antwoord voor de voorcontrole. Meld dit bij de beheerder.",
-    "pre_review_llm_response_not_completed": "Het antwoord van de modeldienst was niet volledig. De voorcontrole kon daardoor niet worden afgerond.",
     "pre_review_llm_response_empty": "De modeldienst gaf geen voorstel terug. De voorcontrole kon daardoor niet worden afgerond.",
     "pre_review_llm_refused": "De modeldienst heeft het verzoek geweigerd. Meld dit bij de beheerder.",
     "pre_review_llm_abstained": "De modeldienst kon geen veilig voorstel op basis van de bron maken. Meld dit bij de beheerder.",
