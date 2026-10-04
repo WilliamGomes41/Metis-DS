@@ -1,7 +1,7 @@
 Change class: A
 Promise: New v3 proposals bind unambiguous adjacent strength labels and explicit condition context without relaxing source integrity.
 Proof: The two supplied failed provider responses are replayed privately; synthetic producer/transform/admission regressions, negative ambiguity/context tests, existing durable restart/failure story.
-Touches lifecycle invariants: yes, versioned proposal validation only
+Touches lifecycle invariants: yes
 Rewrite risk: none
 
 Assigned by owner: “implementeer” in this conversation. Narrow first implementation slice of #496. No Azure deployment, automatic publication, historical re-admission, partial object-set activation or additional model retry mechanism.
@@ -22,8 +22,10 @@ Mutable entities: newly prepared objects/evidence and existing attempt record.
 Immutable entities: source bytes, previous versions/reviews and published releases.
 Workflow state before: processing/blocked or unpublished in_review.
 Workflow state after: in_review only on existing successful atomic commit; failed attempt otherwise.
-Release state before/after: unchanged.
-Serving state before/after: unchanged, registry authoritative.
+Release state before: unchanged.
+Release state after: unchanged.
+Serving state before: unchanged, registry authoritative.
+Serving state after: unchanged, registry authoritative.
 Expected API result: existing receipt or exact rejection.
 Expected UI result: existing source-bound review projection; no new UI state.
 Failure result: no partial bundle or lost prior objects.
