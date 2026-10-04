@@ -59,7 +59,7 @@ class Rows:
 def test_plan_digest_binds_exact_ordered_migration_bytes() -> None:
     paths = migration_paths(ROOT)
     assert tuple(path.name for path in paths) == MIGRATION_NAMES
-    assert MIGRATION_NAMES[-7:] == (
+    assert MIGRATION_NAMES[-8:] == (
         "008_workflow_lifecycle_identity.sql",
         "009_console_hotpath_indexes.sql",
         "011_workflow_audit_retention.sql",
@@ -67,6 +67,7 @@ def test_plan_digest_binds_exact_ordered_migration_bytes() -> None:
         "013_quality_measurements.sql",
         "014_route_comparisons.sql",
         "015_historical_accounts.sql",
+        "016_workflow_topic_identity.sql",
     )
     digest = migration_digest(paths)
     assert len(digest) == 64
@@ -87,6 +88,9 @@ def test_apply_requires_exact_digest_and_verifies_all_required_shape() -> None:
     assert ("documents", "logical_document_id") in REQUIRED_COLUMNS
     assert ("documents", "working_revision_id") in REQUIRED_COLUMNS
     assert ("documents", "working_revision_number") in REQUIRED_COLUMNS
+    assert ("documents", "topic_id") in REQUIRED_COLUMNS
+    assert ("topics", "identity_key") in REQUIRED_COLUMNS
+    assert "topics" in REQUIRED_TABLES
     assert result["verification"]["row_counts"] == {name: 0 for name in sorted(REQUIRED_TABLES)}
 
 

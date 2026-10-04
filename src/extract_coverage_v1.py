@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.object_taxonomy_v1 import section_role_for_path
 from src.passage_register_v1 import (
     PASSAGE_REGISTER_STATUSES,
     apply_passage_register,
@@ -57,6 +58,41 @@ def coverage_by_section(objects: list[dict[str, Any]]) -> dict[str, Any]:
         "objectify_every_sentence": False,
         "duty": "normative_application_critical",
         "sections": sections,
+    }
+
+
+def coverage_by_section_role(objects: list[dict[str, Any]]) -> dict[str, Any]:
+    """Diagnostic distribution of content passages by deterministic document role.
+
+    This is observability only. It does not rank sections, open a quality claim,
+    or change passage-register disposition.
+    """
+
+    stamped = apply_passage_register(list(objects))
+    roles: dict[str, dict[str, Any]] = {}
+    content_passages = 0
+    for obj in stamped:
+        if obj.get("object_type") in {"document", "heading"}:
+            continue
+        role = section_role_for_path(section_path_of(obj))
+        row = roles.setdefault(
+            role,
+            {
+                "role": role,
+                "counts": {status: 0 for status in PASSAGE_REGISTER_STATUSES},
+                "passages": 0,
+            },
+        )
+        status = passage_register_of(obj).get("status") or "not_yet_assessed"
+        if status not in row["counts"]:
+            raise ValueError("unknown_passage_register_status")
+        row["counts"][status] += 1
+        row["passages"] += 1
+        content_passages += 1
+    return {
+        "diagnostic_only": True,
+        "content_passages": content_passages,
+        "roles": roles,
     }
 
 

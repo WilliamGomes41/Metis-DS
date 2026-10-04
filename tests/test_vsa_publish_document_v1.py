@@ -43,6 +43,7 @@ MIGRATIONS = (
     "005_workflow_remaining_authority.sql",
     "006_workflow_authorization_payload.sql",
     "011_workflow_audit_retention.sql",
+    "016_workflow_topic_identity.sql",
 )
 
 pytestmark = [

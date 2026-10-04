@@ -136,10 +136,12 @@ def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Pat
     assert "scripts/azure_console_startup.sh" in names
     assert "scripts/azure_step9_cutover.py" in names
     assert "scripts/migrate_workflow_cutover_postgres.py" in names
+    assert "scripts/migrate_workflow_topic_identity.py" in names
     assert "db/migrations/002_workflow_schema.sql" in names
     assert "db/migrations/005_workflow_remaining_authority.sql" in names
     assert "db/migrations/006_workflow_authorization_payload.sql" in names
     assert "data/audit/semantic_passage_safety_v1.json" in names
+    assert "db/migrations/016_workflow_topic_identity.sql" in names
     assert "src/console_asgi.py" in names
     assert "requirements.txt" in names
     assert CONSOLE_REQUIREMENTS_NAME in names
