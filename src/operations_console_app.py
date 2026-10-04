@@ -225,6 +225,7 @@ BLOCKER_LABELS = {
     "prepublication_projection_failed": "Metis kon de publicatie niet voorbereiden. Controleer de publicatiestatus en meld dit bij de beheerder voordat je opnieuw probeert.",
 }
 ERROR_COPY = {
+    "docling_no_source_text": "Er is geen bruikbare brontekst vastgelegd. De verwerking is geblokkeerd. Controleer het bronbestand; lege en gescande pagina’s worden in deze route nog niet automatisch onderscheiden.",
     "docling_page_text_unverified": "Voor één of meer pagina’s is geen bruikbare brontekst vastgelegd. De verwerking is geblokkeerd. Controleer het bronbestand; lege en gescande pagina’s worden in deze route nog niet automatisch onderscheiden.",
     "processing_diagnostic_write_failed": "Het foutbewijs kon niet duurzaam worden opgeslagen. Laat de beheerder de opslag controleren voordat je opnieuw probeert.",
     "processing_recovery_reason_required": "Geef een reden op voor deze eenmalige herstelpoging.",

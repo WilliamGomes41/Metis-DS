@@ -334,7 +334,11 @@ def test_selected_page_without_usable_text_is_not_silently_accepted():
         rows(payload)
 
 
-def test_unverified_page_failure_is_durable_and_visible_without_partial_activation(tmp_path, monkeypatch):
+@pytest.mark.parametrize("all_text_missing, expected_code", [
+    (False, "docling_page_text_unverified"),
+    (True, "docling_no_source_text"),
+])
+def test_unverified_page_failure_is_durable_and_visible_without_partial_activation(tmp_path, monkeypatch, all_text_missing, expected_code):
     import hashlib
     import fitz
     from fastapi.testclient import TestClient
@@ -343,6 +347,9 @@ def test_unverified_page_failure_is_durable_and_visible_without_partial_activati
     import src.docling_pdf_v1 as adapter
     payload = result()
     payload["document"]["pages"]["2"] = {"size": {"width": 600, "height": 800}}
+    if all_text_missing:
+        payload["document"]["texts"] = []
+        payload["reading_order"] = []
     with fitz.open() as document:
         document.new_page().insert_text((72, 72), "Brontekst.")
         document.new_page()
@@ -366,7 +373,7 @@ def test_unverified_page_failure_is_durable_and_visible_without_partial_activati
     sid = receipt["snapshot_id"]
     restarted = create()
     assert restarted.processing_status(sid)["state"] == "failed"
-    assert restarted._envelope(sid)["processing_attempts"][-1]["error_code"] == "docling_page_text_unverified"
+    assert restarted._envelope(sid)["processing_attempts"][-1]["error_code"] == expected_code
     assert not restarted.snapshot_objects(sid)
     assert stored_fragments(restarted._envelope(sid)) is None
     assert restarted._verified_source_bytes(restarted._envelope(sid))[1] == data
@@ -379,5 +386,5 @@ def test_unverified_page_failure_is_durable_and_visible_without_partial_activati
         assert response.status_code == 200
         pre_review = response.json()["pre_review"]
         assert pre_review["blocked"] and pre_review["object_count"] == 0
-        assert pre_review["reason_code"] == "docling_page_text_unverified"
+        assert pre_review["reason_code"] == expected_code
         assert "lege en gescande pagina’s" in pre_review["message"]
