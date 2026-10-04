@@ -253,3 +253,131 @@ def test_official_list_marker_full_original_span_is_preserved_not_clamped():
     item["orig"] = "x één advies"
     with pytest.raises(DoclingError, match="charspan_invalid"):
         rows(payload)
+
+
+def test_later_extraction_free_runs_keep_accepted_fragments_for_source_readers(monkeypatch):
+    from src.operations_console_v1 import OperationsConsole
+    import src.operations_console_v1 as kernel
+    fragments = rows()
+    envelope = {"sha256": "a" * 64, "content_kind": "pdf", "class": "richtlijn",
+                "document_id": "doc", "source_id": "src"}
+    record_processing(envelope, [], fragments=fragments, replay=None, started_at="accepted")
+    record_processing(envelope, [], fragments=[], replay=None, started_at="class-change")
+    record_processing(envelope, [], fragments=[], replay=None, started_at="failed",
+                      outcome="blocked", reason="docling_timeout")
+    # Stored history is the input; source reading must not depend on runtime or reconversion.
+    restored = json.loads(json.dumps(envelope))
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Native parser must not replace retained Docling IDs")
+    monkeypatch.setattr(kernel, "extract_pdf", forbidden)
+    console = object.__new__(OperationsConsole)
+    assert console._read_source_fragments(restored, Path("unused.pdf")) == fragments
+    assert restored == envelope
+
+
+def test_latest_complete_extraction_wins_and_corruption_never_downgrades():
+    first = rows()
+    changed = result()
+    changed["document"]["texts"][0].update(text="ander advies", orig="ander advies")
+    changed["document"]["texts"][0]["prov"][0]["charspan"] = [0, 12]
+    second = rows(changed)
+    envelope = {"sha256": "a" * 64}
+    for fragment_set in [first, second, []]:
+        record_processing(envelope, [], fragments=fragment_set, replay=None, started_at="test")
+    assert stored_fragments(envelope) == second
+    envelope["quality_processing_runs"][-2]["document_extraction"]["prepared_fragments"][0]["raw_text"] += " invented"
+    with pytest.raises(DoclingError, match="stored_evidence_invalid"):
+        stored_fragments(envelope)
+
+
+@pytest.mark.parametrize("invalid_record", [None, [], {}])
+def test_malformed_latest_extraction_does_not_fall_back(invalid_record):
+    envelope = {"sha256": "a" * 64}
+    record_processing(envelope, [], fragments=rows(), replay=None, started_at="accepted")
+    record_processing(envelope, [], fragments=rows(), replay=None, started_at="latest")
+    envelope["quality_processing_runs"][-1]["document_extraction"] = invalid_record
+    with pytest.raises(DoclingError, match="stored_evidence_invalid"):
+        stored_fragments(envelope)
+
+
+def test_later_native_extraction_does_not_reuse_older_docling_fragments():
+    envelope = {"sha256": "a" * 64}
+    record_processing(envelope, [], fragments=rows(), replay=None, started_at="docling")
+    native = deepcopy(list(rows()))
+    native[0]["parser_version"] = "pdf-fragments-v2.3.2"
+    record_processing(envelope, [], fragments=native, replay=None, started_at="native")
+    record_processing(envelope, [], fragments=[], replay=None, started_at="class-change")
+    assert stored_fragments(envelope) is None
+    # A Docling producer must not be mistaken for historical native work if its evidence is lost.
+    envelope["quality_processing_runs"][-2]["extractor_versions"] = [CONTRACT + "/2.132.0"]
+    with pytest.raises(DoclingError, match="stored_evidence_invalid"):
+        stored_fragments(envelope)
+
+
+def test_selected_page_without_usable_text_is_not_silently_accepted():
+    payload = result()
+    payload["document"]["pages"]["2"] = {"size": {"width": 600, "height": 800}}
+    payload["page_text_origins"]["2"] = []
+    with pytest.raises(DoclingError, match="page_text_unverified"):
+        rows(payload)
+
+    # Explicit page selection does not require text on an unselected page.
+    selected = translate(payload, document_id="doc", source_id="src",
+                         source_sha256="a" * 64, pages=[1])
+    assert {f["source_page"] for f in selected} == {1}
+    furniture = deepcopy(payload["document"]["texts"][0])
+    furniture.update(self_ref="#/texts/1", content_layer="furniture", label="page_footer")
+    furniture["prov"][0]["page_no"] = 2
+    payload["document"]["texts"].append(furniture)
+    payload["reading_order"].append(furniture["self_ref"])
+    with pytest.raises(DoclingError, match="page_text_unverified"):
+        rows(payload)
+
+
+def test_unverified_page_failure_is_durable_and_visible_without_partial_activation(tmp_path, monkeypatch):
+    import hashlib
+    import fitz
+    from fastapi.testclient import TestClient
+    from src.operations_console_v1 import OperationsConsole
+    from src.operations_console_app import create_console_app
+    import src.docling_pdf_v1 as adapter
+    payload = result()
+    payload["document"]["pages"]["2"] = {"size": {"width": 600, "height": 800}}
+    with fitz.open() as document:
+        document.new_page().insert_text((72, 72), "Brontekst.")
+        document.new_page()
+        data = document.tobytes()
+    payload["source_sha256"] = hashlib.sha256(data).hexdigest()
+    def controlled_extract(path, *, document_id, source_id, **kwargs):
+        return translate(payload, document_id=document_id, source_id=source_id,
+                         source_sha256=hashlib.sha256(Path(path).read_bytes()).hexdigest())
+    monkeypatch.setenv("METIS_PDF_EXTRACTOR", "docling")
+    monkeypatch.setattr(adapter, "extract", controlled_extract)
+    def create():
+        return OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    console = create()
+    author = console.create_account(username="author", password="test-secret-long", roles=("researcher",))
+    reviewer = console.create_account(username="reviewer", password="test-secret-long", roles=("reviewer",))
+    command = dict(actor_id=author["account_id"], filename="source.pdf", data=data,
+                   content_type="application/pdf", ingest_kind="new", title="Bron", version="1.0",
+                   date="2026-10-04", live_url="", class_="richtlijn", family="test",
+                   named_reviewers=[reviewer["account_id"]], command_id="missing-page")
+    receipt = console.ingest(**command)
+    sid = receipt["snapshot_id"]
+    restarted = create()
+    assert restarted.processing_status(sid)["state"] == "failed"
+    assert restarted._envelope(sid)["processing_attempts"][-1]["error_code"] == "docling_page_text_unverified"
+    assert not restarted.snapshot_objects(sid)
+    assert stored_fragments(restarted._envelope(sid)) is None
+    assert restarted._verified_source_bytes(restarted._envelope(sid))[1] == data
+    assert restarted.ingest(**command)["snapshot_id"] == sid
+    assert len(restarted._envelope(sid)["processing_attempts"]) == 1
+    with TestClient(create_console_app(restarted), base_url="https://testserver") as client:
+        assert client.post("/login", data={"username": "reviewer", "password": "test-secret-long"},
+                           follow_redirects=False).status_code == 303
+        response = client.get("/review/processing-diagnostics", params={"document": sid})
+        assert response.status_code == 200
+        pre_review = response.json()["pre_review"]
+        assert pre_review["blocked"] and pre_review["object_count"] == 0
+        assert pre_review["reason_code"] == "docling_page_text_unverified"
+        assert "lege en gescande pagina’s" in pre_review["message"]

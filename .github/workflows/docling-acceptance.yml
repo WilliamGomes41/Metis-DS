@@ -3,13 +3,21 @@ name: docling-acceptance
 on:
   pull_request:
     paths:
-      - 'src/docling*.py'
-      - 'src/pdf_fragment_contract_v1.py'
-      - 'requirements-docling.txt'
-      - 'requirements-docling.lock'
+      # Source preparation, persistence, repair and review share kernel modules.
+      - 'src/**'
+      - 'schemas/**'
+      - 'requirements*.txt'
+      - 'requirements*.lock'
+      - 'pyproject.toml'
+      - 'pytest.ini'
       - 'Dockerfile.docling-acceptance'
       - 'Dockerfile.docling'
       - 'tests/test_docling*.py'
+      - 'tests/test_source_bound_fields_v2.py'
+      - 'tests/test_review_batch_atomic_postgres.py'
+      - 'tests/test_workflow_transaction_v1.py'
+      - 'tests/test_workflow_chain_recovery_v1.py'
+      - 'tests/conftest.py'
       - 'scripts/prepare_docling_models.py'
       - '.github/workflows/docling-acceptance.yml'
   workflow_dispatch:
