@@ -484,7 +484,6 @@ def test_explicit_policy_review_uses_bounded_postgres_reads(document_count):
     from src.console_performance_v1 import performance_scope
     from src.review_policy_v1 import CONTRACT, project_policy
     from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
-    from tests.test_vsa_review_workboard_v1 import _obj
 
     config = PostgresCanonicalConfig(dsn=_dsn())
     store = PostgresWorkflowDocumentRuntimeStore(config)
@@ -508,7 +507,7 @@ def test_explicit_policy_review_uses_bounded_postgres_reads(document_count):
             envelope = _envelope(sid, token, account_id)
             policy = {"contract": CONTRACT, "revision": 1, "primary": account_id, "assignments": []}
             envelope["review_policy"] = policy
-            objects = [_obj(sid + "-object", "recommendation")]
+            objects = [_object(sid, 0, object_type="recommendation", validation_status="needs_review")]
             project_policy(objects, policy)
             store.write_bundle(envelope=envelope, objects=objects)
         with performance_scope() as metrics:
