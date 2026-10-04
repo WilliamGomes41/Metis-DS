@@ -524,7 +524,7 @@ def _replay_identity(
         extractor_version=_extractor_contract(source_fragments),
         reconstruction_version=RECONSTRUCTION_VERSION,
         formation_policy_version=PASSAGE_FORMATION_POLICY_VERSION,
-        semantic_contract_version=(f"{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v1/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}"),
+        semantic_contract_version=(f"{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}"),
         prompt_hash=_stable_json_hash(SEMANTIC_DEVELOPER_PROMPT + (SEMANTIC_V3_INSTRUCTION if field_contract_v3 else SEMANTIC_V2_INSTRUCTION if field_contract_v2 else "")),
         schema_hash=_stable_json_hash(_proposal_schema(field_contract_v2, field_contract_v3)),
         provider_id=SEMANTIC_PROVIDER_ID,

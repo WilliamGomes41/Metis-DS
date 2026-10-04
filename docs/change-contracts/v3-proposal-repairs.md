@@ -10,7 +10,7 @@ Existing path: pre_review_semantic_v1._provider_proposal -> source_evidence_reso
 
 Two proven failures: repeated identical strength stamp with null occurrence; a literal heading supplied as condition context and condition_span rejected by v3 although scope_span accepts the same context.
 
-Required behavior: only v3 may resolve a repeated directional strength stamp from one uniquely resolved single-span recommendation when the stamp is immediately after its core with whitespace only. Do not use first-match, nearest-match, fuzzy matching or unrelated block context. Explicit occurrences retain existing behavior; unmatched/ambiguous references reject. Externally bound condition_span requires an exact validated context entry with condition role. Core/action evidence cannot borrow external context. Bind/rebind and review evidence remain mandatory. Pin changed validation policy in replay identity; do not reinterpret existing saved proposals under an old identity.
+Required behavior: only v3 may resolve a repeated directional strength stamp from the uniquely resolved normative-core field inside one selected candidate span when the stamp is immediately after that core with whitespace only. Do not use first-match, nearest-match, fuzzy matching or unrelated block context. Explicit occurrences retain existing behavior; unmatched/ambiguous references reject. Externally bound condition_span requires an exact validated context entry with condition role. Core/action evidence cannot borrow external context. Bind/rebind and review evidence remain mandatory. Pin changed validation policy in replay identity; do not reinterpret existing saved proposals under an old identity.
 
 Lifecycle entity: existing unpublished WorkingRevision.
 Lifecycle transition: existing authorized ingest/retry activates a fully validated bundle, or retains prior working state on rejection.
@@ -58,3 +58,9 @@ Tested: all four directional strength labels, second rather than first occurrenc
 - Frozen second provider response: 13 recommendations reach admission, 12 allowed and one unresolved table reference. The timing bullet list is preserved and accepted. This is not full-document recall or clinical acceptance.
 - Frozen first provider response: original repeated-label failure is repaired; a later nonliteral condition-target reference still correctly rejects the bundle.
 - Repository publication was explicitly approved by the owner after review of the local patch and verification results. No source PDF, raw provider response or private export is included in the patch.
+
+## PR review corrections
+
+The adjacency anchor is the bound recommendation_evidence_span, contained in the selected candidate, including when that candidate contains its strength stamp. Missing or external core evidence cannot disambiguate a label. Timing-list recognition also accepts the preserved middle-dot marker. Both policy identities are advanced for exact replay. Producer-to-admission regressions cover candidates with and without the stamp; negative cases cover missing and external cores.
+
+The PR contract uses the exact required field names and values, including separate before/after release and serving states. Local contract validation passes. Review-focused regressions: 67 passed. The original GitHub Python 3.13 suite passed 2842 tests with 14 skips. Final-head CI remains the merge gate.

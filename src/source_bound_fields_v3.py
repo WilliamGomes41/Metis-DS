@@ -179,7 +179,7 @@ def recommendation_codes(row, *, context):
     if core.rstrip().endswith(":") and not any(
         r["span"] and not r["unresolved_reason"]
         and (r["role"] == "list_introduction" or (
-            r["role"] == "timing" and re.match(r"^\s*[•*-]\s+\S+\s+\S", r["text"])
+            r["role"] == "timing" and re.match(r"^\s*[•·*-]\s+\S+\s+\S", r["text"])
         ))
         and normalize_visible_prose(r["text"]) not in core
         and not r["text"].rstrip().endswith(":")

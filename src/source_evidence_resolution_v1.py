@@ -12,7 +12,7 @@ import re
 from src.semantic_passage_v1 import SemanticPassageError
 
 VERSION = "source-evidence-resolution-v1"
-V3_VERSION = "source-evidence-resolution-v1/v3-adjacent-strength-v1"
+V3_VERSION = "source-evidence-resolution-v1/v3-adjacent-strength-v2"
 
 
 def resolve_proposal_evidence(proposal, *, blocks, evidence_blocks, field_contract_v3=False):
@@ -49,11 +49,20 @@ def resolve_proposal_evidence(proposal, *, blocks, evidence_blocks, field_contra
         obj = proposal["objects"][index]
         if obj.get("proposed_object_type") != "recommendation" or len(obj.get("spans") or []) != 1:
             return None
-        selected = resolve(obj["spans"][0], f"objects.{index}.spans.0")
+        core_ref = ((obj.get("field_evidence") or {}).get("recommendation_evidence_span") or {}).get("span")
+        if not isinstance(core_ref, dict):
+            return None
+        candidate = resolve(obj["spans"][0], f"objects.{index}.spans.0")
+        selected = resolve(core_ref, f"objects.{index}.field_evidence.recommendation_evidence_span.span")
         if (set(selected) != {"block_id", "start", "end"}
                 or selected["block_id"] != ref["block_id"]
                 or type(selected["start"]) is not int or type(selected["end"]) is not int
                 or not 0 <= selected["start"] < selected["end"] <= len(text)):
+            return None
+        if (not isinstance(candidate, dict) or set(candidate) != {"block_id", "start", "end"}
+                or candidate["block_id"] != selected["block_id"]
+                or type(candidate["start"]) is not int or type(candidate["end"]) is not int
+                or not 0 <= candidate["start"] <= selected["start"] < selected["end"] <= candidate["end"] <= len(text)):
             return None
         end = selected["end"]
         tail = text[end:]
