@@ -145,6 +145,8 @@ def _upgrade_workflow_state(state: Mapping[str, Any]) -> dict[str, Any]:
     tables = upgraded.get("workflow_tables")
     if not isinstance(tables, dict):
         raise PublicationChainRecoveryError("workflow_backup_tables_missing")
+    if "topics" in tables:
+        raise PublicationChainRecoveryError("workflow_backup_topic_version_conflict")
     documents = tables.get("documents")
     if not isinstance(documents, list) or any(not isinstance(row, dict) for row in documents):
         raise PublicationChainRecoveryError("workflow_backup_table_invalid:documents")

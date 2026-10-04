@@ -17,6 +17,8 @@ from pathlib import Path
 import pytest
 
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication_chain_recovery_v1 import PublicationChainRecoveryError
+from src.workflows.workflow_chain_recovery_v1 import _upgrade_workflow_state
 from src.topic_identity_v1 import topic_id_for_key, topic_identity_key
 from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
 from src.workflows.workflow_documents_postgres_v1 import (
@@ -27,6 +29,33 @@ from src.workflows.workflow_postgres_migration_v1 import migration_paths
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_topic_backup_cannot_downgrade_version_and_replace_retained_topics() -> None:
+    state = {"workflow_recovery_version": 5, "workflow_tables": {"topics": [], "documents": []}}
+    with pytest.raises(PublicationChainRecoveryError, match="workflow_backup_topic_version_conflict"):
+        _upgrade_workflow_state(state)
+
+
+def test_pre_topic_upgrade_preserves_other_authorities_and_input() -> None:
+    state = {
+        "workflow_recovery_version": 5,
+        "workflow_tables": {
+            "documents": [{"family": " Delier ", "acquired_at": "2026-09-21T09:00:00Z"}],
+            "accounts": [{"retirement": {"reason": "retired"}}],
+            "audit_records": [{"payload": {"decision": "retained"}}],
+        },
+        "api_access_tables": {"grants": [{"scope": "read"}]},
+    }
+    before = deepcopy(state)
+    upgraded = _upgrade_workflow_state(state)
+    assert state == before
+    assert upgraded["workflow_recovery_version"] == 6
+    assert upgraded["api_access_tables"] == before["api_access_tables"]
+    for table in ("accounts", "audit_records"):
+        assert upgraded["workflow_tables"][table] == before["workflow_tables"][table]
+    assert upgraded["workflow_tables"]["documents"][0]["family"] == " Delier "
+    assert upgraded["workflow_tables"]["documents"][0]["topic_id"] == upgraded["workflow_tables"]["topics"][0]["topic_id"]
 
 
 def _install_schema(dsn: str) -> None:
