@@ -14,6 +14,9 @@ Safety properties:
 """
 from __future__ import annotations
 
+# LEGACY-SUPPORTED: SQLite pilot CLI and regression fixtures, not Azure authority.
+# Retained operator entrypoint; see config/code_lifecycle_inventory.v1.json.
+
 import argparse
 import json
 import sqlite3

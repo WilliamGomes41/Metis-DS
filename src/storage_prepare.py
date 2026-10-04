@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Prepare validated V&VN knowledge objects for authoritative storage.
 
+LEGACY-UNUSED in the current product: retained historical pilot CLI only.
+No current runtime, script or test caller. This approval-only partition is not
+the current publication gate. See config/code_lifecycle_inventory.v1.json.
+
 This step deliberately does NOT create embeddings. It validates the publication gate:
 only objects with governance.validation_status == 'approved' and a reviewer/date
 are eligible for storage in the approved dataset.
