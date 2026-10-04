@@ -18,6 +18,7 @@ from src.admission_gate_v1 import (
     is_inhoudelijk_candidate,
 )
 from src.object_taxonomy_v1 import section_role_for_path
+from src.recommendation_coverage_v1 import is_recommendation_section_path
 from src.review_cockpit_v1 import SUITABILITY_VALUES
 
 
@@ -38,6 +39,11 @@ SUITABILITY_TO_REGISTER = {
 }
 
 UNKNOWN_REGISTER_STATUS = "unknown_passage_register_status"
+# Source text the semantic proposer saw but did not select, outside every
+# recommendation section of a document that has recommendation sections.
+# Recorded per section with a reason (never silently dropped); a human review
+# disposition still overrides it.
+COVERAGE_REMAINDER_OUTSIDE_RECOMMENDATIONS = "coverage_remainder_outside_recommendation_section"
 
 
 def passage_register_of(obj: dict[str, Any]) -> dict[str, Any]:
@@ -112,7 +118,18 @@ def _context_heading_texts(objects: list[dict[str, Any]]) -> set[str]:
     return found
 
 
-def _initial_status(obj: dict[str, Any], *, context_headings: set[str]) -> tuple[str, list[str]]:
+def _is_coverage_remainder(obj: dict[str, Any]) -> bool:
+    md = obj.get("metadata") if isinstance(obj.get("metadata"), dict) else {}
+    passage = md.get("semantic_passage") if isinstance(md.get("semantic_passage"), dict) else {}
+    return passage.get("selection_origin") == "coverage_remainder"
+
+
+def _initial_status(
+    obj: dict[str, Any],
+    *,
+    context_headings: set[str],
+    recommendation_document: bool = False,
+) -> tuple[str, list[str]]:
     existing = passage_register_of(obj)
     if existing.get("source") == "review" and existing.get("status") in PASSAGE_REGISTER_STATUSES:
         return str(existing["status"]), list(existing.get("reason_codes") or [])
@@ -146,6 +163,13 @@ def _initial_status(obj: dict[str, Any], *, context_headings: set[str]) -> tuple
         if text and any(text == heading or text in heading or heading in text for heading in context_headings):
             return "used_as_context", []
         return "not_yet_assessed", []
+    if (
+        recommendation_document
+        and not admission
+        and _is_coverage_remainder(obj)
+        and not is_recommendation_section_path(section_path_of(obj))
+    ):
+        return "excluded_with_reason", [COVERAGE_REMAINDER_OUTSIDE_RECOMMENDATIONS]
     return "not_yet_assessed", []
 
 
@@ -164,6 +188,10 @@ def apply_passage_register(objects: list[dict[str, Any]]) -> list[dict[str, Any]
         if existing.get("status"):
             _require_status(str(existing.get("status") or ""))
     context_headings = _context_heading_texts(objects)
+    recommendation_document = any(
+        obj.get("object_type") != "document" and is_recommendation_section_path(section_path_of(obj))
+        for obj in objects
+    )
     out: list[dict[str, Any]] = []
     for obj in objects:
         row = obj
@@ -175,7 +203,11 @@ def apply_passage_register(objects: list[dict[str, Any]]) -> list[dict[str, Any]
                 source = "review"
                 suitability = str(existing.get("suitability") or "")
             else:
-                status, reasons = _initial_status(obj, context_headings=context_headings)
+                status, reasons = _initial_status(
+                    obj,
+                    context_headings=context_headings,
+                    recommendation_document=recommendation_document,
+                )
                 source = "extract"
                 suitability = ""
             row = dict(obj)

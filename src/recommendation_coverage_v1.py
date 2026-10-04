@@ -17,6 +17,12 @@ _NORMATIVE = re.compile(
     r"Meet|Geef|Vraag|Onderzoek|Leg|Voorkom|Mobiliseer|Wij bevelen|Het wordt aanbevolen)\b"
 )
 _STAMP = re.compile(r"\b(?:Sterk|Zwak)\s*[–—-]\s*(?:voor|tegen)\b\.?", re.I)
+_RECOMMENDATION_SECTION = re.compile(r"(?:\d+(?:\.\d+)*[.)]?\s*)?(?:aanbevelingen|recommendations)\s*:?", re.I)
+
+
+def is_recommendation_section_path(path) -> bool:
+    """True when any heading on the path is a recommendation section."""
+    return any(_RECOMMENDATION_SECTION.fullmatch(str(p).strip()) for p in path or [])
 
 
 def inventory(blocks):
@@ -25,7 +31,7 @@ def inventory(blocks):
     active_path = None
     for block in blocks:
         path = list(block.get("section_path") or [])
-        if not any(re.fullmatch(r"(?:\d+(?:\.\d+)*[.)]?\s*)?(?:aanbevelingen|recommendations)\s*:?", p.strip(), re.I) for p in path):
+        if not is_recommendation_section_path(path):
             continue
         text = block["text"]
         if path != active_path:
