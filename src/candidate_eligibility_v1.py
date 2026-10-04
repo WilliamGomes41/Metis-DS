@@ -76,6 +76,10 @@ def assess_candidate_eligibility(obj: dict[str, Any]) -> CandidateEligibility:
     if object_type in {"document", "heading"} or proposed == "heading":
         return CandidateEligibility(False, REASON_STRUCTURAL, SOURCE_STRUCTURE)
 
+    from src.source_accountability_v1 import is_source_record
+    if is_source_record(obj):
+        return CandidateEligibility(False, REASON_SEMANTIC_COVERAGE, SOURCE_SEMANTIC)
+
     existing = candidate_eligibility_of(obj)
     if existing.get("eligible") is True:
         return CandidateEligibility(

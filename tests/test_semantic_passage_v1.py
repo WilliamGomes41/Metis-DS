@@ -148,7 +148,10 @@ def test_abstain_creates_no_candidate() -> None:
         },
     )
 
-    assert units == []
+    assert len(units) == 1
+    assert units[0]["semantic_passage"]["selection_origin"] == "coverage_remainder"
+    assert units[0]["review_track"] == "technical"
+    assert "proposed_object_type" not in units[0]
 
 
 def test_model_order_cannot_override_source_order() -> None:

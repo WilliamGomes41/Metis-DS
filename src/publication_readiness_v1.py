@@ -65,6 +65,10 @@ def source_passage_closure(objects: Iterable[dict[str, Any]]) -> dict[str, Any]:
     unresolved_ids: list[str] = []
     objects = list(objects)
     context_conflicts = context_issues(objects)
+    from src.source_accountability_v1 import is_source_record, evidence_of
+    for obj in objects:
+        if is_source_record(obj) and not evidence_of(obj):
+            context_conflicts.setdefault(str(obj.get("object_id") or ""), []).append("source_accountability_invalid")
     for obj in objects:
         if obj.get("object_type") == "document" or (review_lane(obj) == "fast" and str(obj.get("object_id") or "") not in context_conflicts):
             continue

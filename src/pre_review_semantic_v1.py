@@ -133,7 +133,11 @@ SEMANTIC_V2_INSTRUCTION = (
 )
 
 SEMANTIC_V3_INSTRUCTION = (
-    " Examine all recommendation sections, including numbered and unnumbered recommendations. "
+    " Examine every supplied source block in source order. Perform document-wide curation, "
+    "not a sample or summary. Select all complete source-bound meaning units of the existing types: "
+    "definition, explanation, condition, exception and recommendation. Examine all sections, "
+    "including numbered and unnumbered recommendations. Preserve attribution, uncertainty, "
+    "negation, conditions, exceptions, target group, modality, numbers and units. "
     "For each object return every field_evidence and context_evidence. All values must be exact "
     "source references or null with a closed missing reason. The recommendation_evidence_span "
     "is the entire normative core, without its list number or strength stamp. Never omit clinical "
@@ -149,8 +153,29 @@ SEMANTIC_V3_INSTRUCTION = (
     "Do not guess applicability from proximity or add general knowledge. Use unresolved_reason "
     "for uncertain scope, relation or layout. All references remain proposals for human review. "
     "Missing punctuation is not missing meaning. If selection_targets are supplied, select only "
-    "the open recommendations identified by those exact source literals, not prior selections. "
+    "meaning units wholly within the unselected source ranges identified by those exact literals, "
+    "across all five knowledge types, not prior selections. Never stop after a few examples. "
 )
+
+SOURCE_ACCOUNTABILITY_INSTRUCTION = (
+    " Return source_assessments for unselected metadata, structure or unresolved content. "
+    "Each assessment covers one exact source span with a closed role and matching reason. "
+    "Do not overlap candidate selections or other assessments. Split mixed blocks at exact "
+    "boundaries; never classify clinical statements as metadata merely because their section "
+    "is introductory or administrative. metadata means document_metadata or page_furniture; "
+    "structure means navigation or document_structure; unresolved means unformed_meaning or "
+    "uncertain_source_role. These are proposals for source disposition, never exclusions, "
+    "human approval or proof of completeness. Omitted ranges remain explicitly unresolved. "
+)
+
+
+def _semantic_instruction(field_contract_v2=False, field_contract_v3=False):
+    if field_contract_v3:
+        return SEMANTIC_V3_INSTRUCTION + SOURCE_ACCOUNTABILITY_INSTRUCTION
+    if field_contract_v2:
+        return SEMANTIC_V2_INSTRUCTION + SOURCE_ACCOUNTABILITY_INSTRUCTION
+    return ""
+
 
 SEMANTIC_MODEL_CONFIG = {
     "api": "responses",
@@ -318,7 +343,7 @@ def _proposal_schema(field_contract_v2: bool = False, field_contract_v3: bool = 
         obj["required"].append("field_evidence")
         obj["properties"]["context_evidence"] = context_evidence_schema(span)
         obj["required"].append("context_evidence")
-    return {
+    result = {
         "type": "object",
         "additionalProperties": False,
         "properties": {
@@ -328,6 +353,12 @@ def _proposal_schema(field_contract_v2: bool = False, field_contract_v3: bool = 
         },
         "required": ["objects", "relations", "abstain_reason"],
     }
+    if field_contract_v2 or field_contract_v3:
+        from src.source_accountability_v1 import assessment_schema
+        result["properties"]["source_assessments"] = assessment_schema(span)
+        result["required"].append("source_assessments")
+    return result
+
 
 def _extract_output_text(response: dict[str, Any]) -> str:
     if response.get("status") not in (None, "completed"):
@@ -369,7 +400,7 @@ def _request_payload(
         "input": [
             {
                 "role": "developer",
-                "content": SEMANTIC_DEVELOPER_PROMPT + (SEMANTIC_V3_INSTRUCTION if field_contract_v3 else SEMANTIC_V2_INSTRUCTION if field_contract_v2 else ""),
+                "content": SEMANTIC_DEVELOPER_PROMPT + _semantic_instruction(field_contract_v2, field_contract_v3),
             },
             {
                 "role": "user",
@@ -524,8 +555,8 @@ def _replay_identity(
         extractor_version=_extractor_contract(source_fragments),
         reconstruction_version=RECONSTRUCTION_VERSION,
         formation_policy_version=PASSAGE_FORMATION_POLICY_VERSION,
-        semantic_contract_version=(f"{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}"),
-        prompt_hash=_stable_json_hash(SEMANTIC_DEVELOPER_PROMPT + (SEMANTIC_V3_INSTRUCTION if field_contract_v3 else SEMANTIC_V2_INSTRUCTION if field_contract_v2 else "")),
+        semantic_contract_version="source-accountability-v1/" + (f"{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}"),
+        prompt_hash=_stable_json_hash(SEMANTIC_DEVELOPER_PROMPT + _semantic_instruction(field_contract_v2, field_contract_v3)),
         schema_hash=_stable_json_hash(_proposal_schema(field_contract_v2, field_contract_v3)),
         provider_id=SEMANTIC_PROVIDER_ID,
         model_id=model,
@@ -777,9 +808,10 @@ def _semantic_execution_before_review(
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
         if field_contract_v3:
             from dataclasses import replace
-            from src.recommendation_coverage_v1 import assess, supplementary_blocks, merge_proposals
-            coverage = assess(blocks, proposal)
-            targets = [r for r in coverage["entries"] if r["status"] == "open"]
+            from src.recommendation_coverage_v1 import assess, merge_proposals
+            from src.source_accountability_v1 import supplementary_targets
+            targets = supplementary_targets(content_units)
+            target_blocks = {r["span"]["block_id"] for r in targets}
             if targets:
                 limits = model_limits or ModelCallLimits(total=DEFAULT_TIMEOUT_SECONDS)
                 remaining = limits.total - (time.monotonic() - execution_started)
@@ -787,13 +819,24 @@ def _semantic_execution_before_review(
                     supplementary_evidence = {}
                     try:
                         supplement = _provider_proposal(api_key=api_key, model=safe_model,
-                            blocks=supplementary_blocks(blocks, coverage), evidence_blocks=evidence_blocks,
+                            blocks=[b for b in blocks if b["block_id"] in target_blocks], evidence_blocks=evidence_blocks,
                             selection_targets=[{"block_id": r["span"]["block_id"], "literal": r["text"]} for r in targets],
                             post_json=post_json, field_contract_v3=True,
                             model_limits=replace(limits, total=remaining, connect=min(limits.connect, remaining),
                                                  idle=min(limits.idle, remaining)),
                             evidence=supplementary_evidence,
                             checkpoint=None)
+                        semantic_units_from_proposal(content_fragments, document_id=document_id,
+                            proposal=supplement, evidence_fragments=evidence_fragments,
+                            allowed_candidate_block_ids=allowed_candidate_block_ids, field_contract_v3=True)
+                        # The supplemental producer cannot reselect earlier work or
+                        # escape the explicitly unselected ranges it was given.
+                        supplemental_spans = [ref for obj in supplement.get("objects", []) for ref in obj["spans"]]
+                        supplemental_spans += [r["span"] for r in supplement.get("source_assessments", [])]
+                        if any(not any(t["span"]["block_id"] == ref["block_id"]
+                            and t["span"]["start"] <= ref["start"] < ref["end"] <= t["span"]["end"]
+                            for t in targets) for ref in supplemental_spans):
+                            raise ConsoleError("pre_review_llm_proposal_rejected", "semantic_supplement_outside_target")
                         merged = merge_proposals(proposal, supplement)
                         content_units = semantic_units_from_proposal(content_fragments, document_id=document_id,
                             proposal=merged, evidence_fragments=evidence_fragments,

@@ -102,6 +102,9 @@ def review_stage(
     already has two independent current human approvals.
     """
 
+    from src.source_accountability_v1 import is_source_record
+    if is_source_record(obj):
+        return None
     if str(obj.get("object_type") or "") == "document":
         return None
     if _terminal_without_open_review(obj):

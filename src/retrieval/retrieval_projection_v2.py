@@ -224,7 +224,8 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             # Decision content is served through the complete release graph,
             # never as a detached prose recommendation.
             continue
-        if role_of(obj):
+        from src.source_accountability_v1 import is_source_record
+        if role_of(obj) or is_source_record(obj):
             blocked.append({"object_id": obj["object_id"], "errors": ["source_context_not_knowledge"]})
             continue
         # Canonical console objects have their own unrelated ``metadata``

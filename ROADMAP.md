@@ -37,7 +37,7 @@ Een proof-slice wordt pas een nieuwe repair bij een reproduceerbare invariantbre
 
 - Verifieer dat Experiment en read-only Documentkwaliteit de gedeelde auditstore niet aan een specifieke auditvorm koppelen.
 - Beoordeel brongebonden passagevorming op een bevroren set met blinde A/B-review, correcties, foutcategorieën, reviewtijd en bruikbare yield. Onverifieerbare toevoegingen die zouden kunnen doorstromen: nul tolerantie.
-- De semantische productieroute vereist expliciete `METIS_PASSAGE_FORMATION_MODE=semantic-source-bound-v1` én één deployment-owned `METIS_LLM_API_KEY` en `METIS_LLM_MODEL`. Deterministisch blijft de standaard/rollbackroute; een fout in geactiveerde semantic mode valt niet stil terug.
+- Voor nieuwe proza is `semantic-source-bound-v2` de standaard conform protocol §5. V1, V3 en deterministische verwerking vereisen expliciete modeconfiguratie; V3 is geen nieuwe protocol- of API-versie. Semantische verwerking gebruikt één deployment-owned `METIS_LLM_API_KEY` en `METIS_LLM_MODEL` en valt bij fouten niet stil terug. Documentbrede kennisvorming en bronverantwoording worden hersteld onder #513; productieacceptatie vereist de bevroren bron en menselijke referentiebeoordeling.
 - Audit-bewijs eindigt bij `READY FOR IMPLEMENTATION`. Een menselijke ontwikkelroute buiten Metis beslist over code en releases. Compiled knowledge blijft uitsluitend afgeleid uit actieve gepubliceerde kennis; een module is nog geen bewezen productie-executor.
 
 ## R4.4 Aanmelding en uitrol

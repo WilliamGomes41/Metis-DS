@@ -28,6 +28,115 @@ def literal_identity(obj: dict[str, Any]) -> str:
     })
 
 
+def confirm_source_exclusions(console: Any, *, actor_id: str, snapshot_id: str,
+                              source_object_ids: Iterable[str], reason: str,
+                              command_id: str, expected_revision: str) -> dict[str, Any]:
+    """Confirm an exact non-knowledge batch in one existing workflow commit.
+
+    Only proposed metadata/structure qualifies. Unformed substantive content
+    needs the existing individual source-context/repair command. Model roles
+    never close the passage register by themselves.
+    """
+    from contextlib import nullcontext
+    from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT, utc_now
+    from src.passage_register_v1 import passage_register_record
+    from src.revision_workflow import bump_patch
+    from src.source_accountability_v1 import evidence_of
+    from src.workflows.workflow_transaction_v1 import workflow_transaction, workflow_transaction_active
+
+    ids = sorted(set(source_object_ids))
+    if (not ids or len(ids) > 4096 or any(not isinstance(oid, str) or not oid for oid in ids)
+            or not reason.strip() or len(reason) > 4000 or not command_id.strip()
+            or len(command_id) > 128 or not expected_revision):
+        raise ConsoleError("source_context_command_required")
+    documents = getattr(console, "workflow_document_store", None)
+    reviews = getattr(console, "workflow_review_store", None)
+    if (documents is None) != (reviews is None) or workflow_transaction_active():
+        raise ConsoleError("source_context_independent_transaction_required")
+    event_type = "source_exclusions_confirmed"
+    payload_hash = stable_hash({"actor_id": actor_id, "snapshot_id": snapshot_id,
+                               "source_object_ids": ids, "reason": reason.strip()})
+    with console._store_write_lock():
+        try:
+            with workflow_transaction(reviews) if reviews is not None else nullcontext() as connection:
+                if connection is not None:
+                    connection.execute("SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
+                                       (snapshot_id,))
+                console._reload_store_locked()
+                reviewer = console._require_role(actor_id, "reviewer")
+                envelope = console._envelope(snapshot_id)
+                if actor_id not in (envelope.get("named_reviewers") or []):
+                    raise ConsoleError("reviewer_not_named_on_snapshot")
+                if console.snapshot_is_published(snapshot_id):
+                    raise ConsoleError("published_working_revision_immutable")
+                for event in read_events(console._ledger_path):
+                    details = event.get("details") or {}
+                    if (event.get("event_type") == event_type and details.get("snapshot_id") == snapshot_id
+                            and details.get("command_id") == command_id):
+                        if details.get("payload_hash") != payload_hash:
+                            raise ConsoleError("source_context_command_conflict")
+                        return {**deepcopy(details["result"]), "idempotent": True}
+                current, revision = console.snapshot_objects_and_revision(snapshot_id)
+                if revision != expected_revision:
+                    raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=revision)
+                by_id = {row["object_id"]: row for row in current}
+                path, _ = console._verified_source_bytes(envelope)
+                fragments = console._read_source_fragments(envelope, path)
+                changed = []
+                now = utc_now()
+                for oid in ids:
+                    source = by_id.get(oid)
+                    evidence = evidence_of(source) if source else {}
+                    if (not evidence or evidence["proposed_role"] not in {"metadata", "structure"}
+                            or role_of(source) or links_of(source)
+                            or source.get("confirmed_object_type")
+                            or (source.get("governance") or {}).get("validation_status") != "needs_review"):
+                        raise ConsoleError("source_exclusion_not_proposed")
+                    console._require_open_original(snapshot_id, oid)
+                    if not verify_literal_source(source, fragments, envelope["sha256"]):
+                        raise ConsoleError("source_context_evidence_invalid")
+                    updated = deepcopy(source)
+                    updated["object_version"] = bump_patch(str(source["object_version"]))
+                    metadata = updated.setdefault("metadata", {})
+                    metadata[ROLE_KEY] = {"version": CONTRACT, "role": "excluded", "command_id": command_id,
+                        "reviewer_id": actor_id, "reviewer": reviewer["username"], "reviewed_at": now,
+                        "reason": reason.strip(), "literal_hash": literal_identity(source),
+                        "source_sha256": envelope["sha256"]}
+                    metadata["passage_register"] = passage_register_record(status="excluded_with_reason",
+                        reason_codes=["reviewer_confirmed_source_role"], source="review")
+                    governance = updated.setdefault("governance", {})
+                    governance.update(validation_status="rejected", validated_by=reviewer["username"],
+                        validation_date=now[:10], review_snapshot_hash=None, publication_status="unpublished")
+                    second = governance.get("second_review")
+                    if isinstance(second, dict) and second.get("required"):
+                        second.update(status="pending", reviewer=None, review_date=None, snapshot_hash=None)
+                    stamp_canonical_hashes(updated)
+                    errors = schema_errors(updated, console.schema_path)
+                    if errors:
+                        raise ConsoleError("revision_schema_invalid", " | ".join(errors))
+                    changed.append(updated)
+                history = console._load_objects(snapshot_id, remember=False) + changed
+                bindings = deepcopy(console._bindings)
+                for oid in ids:
+                    bindings[snapshot_id] = invalidate_for_object(bindings.get(snapshot_id, []), oid)
+                result = {"snapshot_id": snapshot_id, "command_id": command_id, "idempotent": False,
+                          "source_versions": {row["object_id"]: row["object_version"] for row in changed}}
+                console._commit_prepared_store(objects=(snapshot_id, history), bindings=bindings,
+                    snapshot_id=snapshot_id, expected_revision=revision,
+                    ledger_fn=lambda: append_event(console._ledger_path, event_type=event_type,
+                        object_id=ids[0], object_version=result["source_versions"][ids[0]], actor=reviewer["username"],
+                        details={"snapshot_id": snapshot_id, "actor_account_id": actor_id,
+                            "command_id": command_id, "payload_hash": payload_hash,
+                            "reason": reason.strip(), "result": deepcopy(result)}))
+            return result
+        except Exception:
+            console._reload_store_locked()
+            remirror = getattr(console, "_remirror_review_runtime", None)
+            if remirror is not None:
+                remirror()
+            raise
+
+
 def role_of(obj: dict[str, Any]) -> dict[str, Any]:
     row = (obj.get("metadata") or {}).get(ROLE_KEY)
     return deepcopy(row) if isinstance(row, dict) else {}
