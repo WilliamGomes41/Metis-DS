@@ -193,6 +193,10 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
             raise DoclingError("docling_text_coverage_incomplete")
     if not out:
         raise DoclingError("docling_no_source_text")
+    # OCR is disabled. A missing page may be blank, scanned, or missed by the
+    # model; none of those possibilities proves complete source extraction.
+    if selected - {row["source_page"] for row in out}:
+        raise DoclingError("docling_page_text_unverified")
     record.update(extraction_id=extraction_id, bindings=bindings, exclusions=exclusions,
                   selected_pages=sorted(selected), metrics=deepcopy(result.get("metrics", {})))
     return ExtractedFragments(out, record)
@@ -202,9 +206,25 @@ def stored_fragments(envelope: dict):
     """Read the accepted representation, never reconvert on review/repair."""
     from src.integrity_kernel import stable_hash
     runs = envelope.get("quality_processing_runs") or []
-    if not runs or "document_extraction" not in runs[-1]:
+    # Classification and blocked attempts can append a run without producing
+    # a new extraction. Keep the latest accepted producer, not the latest event.
+    for run in reversed(runs):
+        if run.get("outcome") != "succeeded":
+            continue
+        if "document_extraction" in run:
+            record = run["document_extraction"]
+            break
+        versions = run.get("extractor_versions") or []
+        if any(str(version).startswith(CONTRACT + "/") for version in versions):
+            raise DoclingError("docling_stored_evidence_invalid")
+        if versions or run.get("source_fragments"):
+            # An explicitly accepted native extraction supersedes older
+            # Docling work. Historical native readers retain their own route.
+            return None
+    else:
         return None
-    record = runs[-1]["document_extraction"]
+    if not isinstance(record, dict):
+        raise DoclingError("docling_stored_evidence_invalid")
     rows = record.get("prepared_fragments")
     if (record.get("source_sha256") != envelope.get("sha256") or not isinstance(rows, list)
             or record.get("prepared_fragments_hash") != stable_hash(rows)

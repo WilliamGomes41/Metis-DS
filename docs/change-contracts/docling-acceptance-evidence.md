@@ -1,7 +1,48 @@
 # Docling acceptance evidence — 2026-10-03
 
-Status: **incomplete; do not merge or deploy**. This supersedes earlier notes
-saying that all genuine conversion was blocked by missing network access.
+Status as of 2026-10-04: integration merged; production activation remains
+unproven. The historical failures below are superseded by Actions run
+37160084965 on commit 3b7bfdbe68f975754bde165a830738c05a96d39b: **11 passed**
+both on the runner and in the built container with 2 GiB memory / 2 CPUs.
+The run logs were read, including the PostgreSQL/publication and packaged-chain
+steps. This is acceptance-fixture evidence, not Azure production-host evidence
+or document-wide quality superiority. Earlier measurements remain history.
+
+## Source-integrity follow-up (2026-10-04)
+
+Change class: B
+Promise: Accepted Docling source evidence survives extraction-free processing
+history, and new preparation does not silently omit a selected textless page.
+Proof: Source-reader history/corruption/native-cutover regressions, durable failed
+ingest/restart/duplicate and readable diagnostics; real mixed-scan and durable
+PostgreSQL source-reader coverage in the existing acceptance suite.
+Touches lifecycle invariants: no
+Rewrite risk: none
+
+This is a bounded read/validation correction. Source identity, existing atomic
+activation/failure commits, reviewed objects, publication/serving authority and
+class-change/decision-graph guards are unchanged. No schema migration, historical
+rewrite, new authority, or OCR enablement is introduced. The source reader selects
+the most recent successful extraction-bearing run, passing extraction-free runs;
+an accepted native extraction ends that search. Missing/corrupt latest Docling
+evidence blocks rather than falling back to an older extraction or native parser.
+The history regression tests stored records; it does not claim that the current
+public class-change command permits converting a Docling decision PDF to prose.
+
+A selected page without a usable non-furniture fragment now fails preparation
+with `docling_page_text_unverified`, before any new object activation. This is
+deliberately conservative: blank/illustration-only pages are also unverified;
+the error does not claim the page is a scan. Existing source bytes and previous
+work are retained and duplicate/manual retry follow the existing kernel rules.
+The existing console diagnostics explain this condition. A title/text fragment
+alone still does not prove all content on that page is complete.
+
+Real acceptance now triggers for shared `src/**`, schemas, dependency files and
+acceptance fixtures, so integration-only changes cannot silently skip the suite.
+Rollback is a compatible reader release with new Docling preparation disabled;
+never discard accepted extraction evidence or deploy an old native-only reader
+against Docling IDs. Production ZIP/runtime, Azure capacity and actual activation
+remain separate acceptance work.
 
 ## Reproducible runtime
 

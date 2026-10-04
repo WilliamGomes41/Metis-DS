@@ -56,6 +56,35 @@ def test_true_pipeline_preserves_text_hash_and_original_geometry(tmp_path):
     assert TEXT in " ".join(r["clean_text"] for r in legacy(source, document_id="doc", source_id="src"))
 
 
+def test_real_mixed_digital_and_scanned_pdf_blocks_before_activation(tmp_path, monkeypatch):
+    from src.operations_console_v1 import OperationsConsole
+    source = tmp_path / "mixed.pdf"
+    with fitz.open() as scan:
+        scan.new_page().insert_text((72, 140), "Deze tekst bestaat alleen als afbeelding.")
+        image = scan[0].get_pixmap().tobytes("png")
+    with fitz.open() as document:
+        document.new_page().insert_text((72, 140), TEXT)
+        page = document.new_page()
+        page.insert_image(page.rect, stream=image)
+        document.save(source)
+    monkeypatch.setenv("METIS_PDF_EXTRACTOR", "docling")
+    def create():
+        return OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    console = create()
+    author = console.create_account(username="author", password="test-secret-long", roles=("researcher",))
+    reviewer = console.create_account(username="reviewer", password="test-secret-long", roles=("reviewer",))
+    receipt = console.ingest(actor_id=author["account_id"], filename="mixed.pdf", data=source.read_bytes(),
+        content_type="application/pdf", ingest_kind="new", title="Gemengde bron", version="1.0", date="2026-10-04",
+        live_url="", class_="richtlijn", family="test", named_reviewers=[reviewer["account_id"]])
+    sid = receipt["snapshot_id"]
+    restarted = create()
+    assert restarted.processing_status(sid)["state"] == "failed"
+    assert restarted._envelope(sid)["processing_attempts"][-1]["error_code"] == "docling_page_text_unverified"
+    assert not restarted.snapshot_objects(sid)
+    assert stored_fragments(restarted._envelope(sid)) is None
+    assert restarted._verified_source_bytes(restarted._envelope(sid))[1] == source.read_bytes()
+
+
 def test_real_structure_columns_labels_table_and_cross_page(tmp_path):
     source = tmp_path / "structure.pdf"
     with fitz.open() as doc:
@@ -152,8 +181,18 @@ def chain(root, create_console):
     before = stored_fragments(console._envelope(sid))
     console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
                           object_id=target["object_id"], decision="reject", comment="Controlled review evidence")
+    # Persist extraction-free history like later processing records. This does
+    # not bypass class-change/decision-graph guards or alter reviewed objects.
+    from copy import deepcopy
+    from src.quality_evidence_v1 import record_processing
+    envelope = deepcopy(console._envelope(sid))
+    record_processing(envelope, console.snapshot_objects(sid), fragments=[], replay=None,
+                      started_at="retained-history-regression")
+    console._commit_prepared_store(envelopes={sid: envelope}, snapshot_id=sid)
     restarted = create_console()
     assert stored_fragments(restarted._envelope(sid)) == before
+    source_path, _ = restarted._verified_source_bytes(restarted._envelope(sid))
+    assert restarted._read_source_fragments(restarted._envelope(sid), source_path) == before
     restored_target = next(o for o in restarted.snapshot_objects(sid) if o["object_id"] == target["object_id"])
     assert restored_target["governance"]["validation_status"] == "rejected"
     assert not restarted.object_review_bindings(sid), "Rejection must not grant publication authorization"
