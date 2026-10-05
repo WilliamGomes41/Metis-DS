@@ -14,6 +14,7 @@ from src.bounded_formation_v2 import PLAN_VERSION, VERSION, build_plan, execute,
 from src.bounded_model_call_v1 import ModelCallLimits
 from src.closed_review_loop_v1 import ClosedLoopReviewConsole
 from src.integrity_kernel import stamp_canonical_hashes
+from src.knowledge_relations_v1 import confirmed_knowledge_relations_of, knowledge_relation_errors
 from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES
 from src.operations_console_v1 import ConsoleError
 from src.passage_register_v1 import apply_passage_register, passage_register_of
@@ -259,6 +260,48 @@ def test_fifty_unstarted_tasks_make_one_checkpoint_and_zero_provider_calls():
     assert len(spans) == 50
 
 
+def test_unassessed_abstention_stays_pending_and_can_resume():
+    fragments = [dict(source(BACKGROUND)[0], fragment_id="0", fragment_hash="0", section_path=["0"])]
+    blocks = semantic_source_blocks(fragments)
+    seen = []
+
+    def provider(**kwargs):
+        seen.append(kwargs.get("selection_targets"))
+        block = kwargs["blocks"][0]
+        if len(seen) == 1:
+            return {"objects": [], "relations": [], "source_assessments": [],
+                    "abstain_reason": "no_validated_proposals"}
+        return {"objects": [], "relations": [], "abstain_reason": None, "source_assessments": [{
+            "span": {"block_id": block["block_id"], "start": 0, "end": len(block["text"])},
+            "role": "background", "reason": "historical_context",
+        }]}
+
+    validator = {"fragments": fragments, "document_id": "smetten", "evidence_fragments": fragments,
+                 "allowed_candidate_block_ids": [block["block_id"] for block in blocks],
+                 "field_contract_v4": True, "source_accountability_version": VERSION_V3}
+    identity = {"source_hash": "a" * 64, "extractor_version": "fixture",
+                "reconstruction_version": "fixture", "semantic_contract_version": MODE}
+    proposal, evidence = execute(
+        blocks=blocks, evidence_blocks=blocks, validator_input=validator, provider=provider,
+        limits=ModelCallLimits(total=30, connect=5, idle=5, attempt=120, max_attempts=4),
+        plan_identity=identity,
+    )
+    assert evidence["formation_state"] == "pending"
+    assert evidence["tasks"][0]["status"] == "partial"
+    assert evidence["pending_rejections"]
+    assert seen == [None]
+
+    proposal, evidence = execute(
+        blocks=blocks, evidence_blocks=blocks, validator_input=validator, provider=provider,
+        limits=ModelCallLimits(total=30, connect=5, idle=5, attempt=120, max_attempts=4),
+        proposal=proposal, evidence=evidence, plan_identity=identity,
+    )
+    assert seen[1] is not None
+    assert evidence["formation_state"] == "complete"
+    assert evidence["pending_rejections"] == []
+    assert proposal["source_assessments"][0]["role"] == "background"
+
+
 def _support_console(tmp_path):
     console = ClosedLoopReviewConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     researcher = console.create_account(username="anne", password="anne-secret", roles=("researcher",))
@@ -317,6 +360,14 @@ def _prove_atomic_support(console, reviewer, sid, monkeypatch):
     assert sum(1 for claim in ("claim-0", "claim-1", "claim-2") for rel in binding_relations(current[claim])
                if rel.get("relation_type") == "supported_by" and rel.get("target_object_id") == "support-1") == 3
     assert len([row for row in console.snapshot_objects(sid) if row["object_id"] == "support-1"]) == 1
+    support_version = current["support-1"]["object_version"]
+    for claim_id in ("claim-0", "claim-1", "claim-2"):
+        claim = current[claim_id]
+        assert knowledge_relation_errors(claim) == []
+        canonical = confirmed_knowledge_relations_of(claim)
+        assert [(row["relation_type"], row["target_object_id"], row["target_object_version"]) for row in canonical] == [
+            ("supported_by", "support-1", support_version)
+        ]
     assert passage_register_of(current["support-1"])["status"] == "linked_as_support"
     audits = [event for event in read_events(console._ledger_path)
               if (event.get("details") or {}).get("decision") == "confirm_support_targets"]

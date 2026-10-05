@@ -113,6 +113,21 @@ def _drop_background_objects(result):
     return result
 
 
+def _span_covered(span, result):
+    refs = [item for obj in result.get("objects") or [] for item in obj.get("spans") or []]
+    refs.extend(row.get("span") or {} for row in result.get("source_assessments") or [])
+    return any(
+        ref.get("block_id") == span.get("block_id")
+        and int(ref.get("start", 0)) <= int(span.get("start", 0))
+        and int(ref.get("end", 0)) >= int(span.get("end", 0))
+        for ref in refs
+    )
+
+
+def _uncovered_targets(spans, result):
+    return [deepcopy(span) for span in spans if not _span_covered(span, result)]
+
+
 def _store_call(evidence, call):
     if "target_spans" not in evidence and not evidence.get("supplementary_calls"):
         evidence.update(call)
@@ -227,6 +242,16 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                 for rejection in call["formation"]["rejections"]:
                     if not rejection.get("spans"):
                         rejection["spans"] = deepcopy(spans)
+                uncovered = _uncovered_targets(spans, result)
+                if uncovered:
+                    # An abstention without an object or assessment leaves the
+                    # source range unaccounted. It stays pending and resumable.
+                    call["formation"]["rejections"].append({
+                        "kind": "source_range",
+                        "reason_code": "source_range_unaccounted",
+                        "spans": uncovered,
+                    })
+                    call["formation"]["status"] = "partial"
                 merged = merge_proposals(proposal, result)
                 if merged != proposal:
                     semantic_units_from_proposal(**validator_input, proposal=merged)
