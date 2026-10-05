@@ -3,7 +3,7 @@
 Change class: A
 Rewrite risk: none
 Promise: New ingest or an explicit successor may form source with METIS_PASSAGE_FORMATION_MODE=semantic-source-bound-v4. Understandable source text is not automatically answer-bearing knowledge. Large guidelines stay bounded and resumable, and formation stays incomplete until the original plan is accounted for. Review and publication stay human.
-Proof: tests/test_semantic_source_bound_v4.py, tests/test_bounded_formation_v1.py, passage-register gold, closed review loop, recoverable formation, source accountability, replay and publication-readiness tests. PostgreSQL transaction proof skips without METIS_TEST_POSTGRES_DSN.
+Proof: tests/test_semantic_source_bound_v4.py, tests/test_bounded_formation_v1.py, passage-register gold, closed review loop, recoverable formation, source accountability, replay and publication-readiness tests. PostgreSQL resume and crash-safe support confirmation must actually run with METIS_TEST_POSTGRES_DSN; a skip is not acceptance proof.
 Touches lifecycle invariants: yes
 
 Lifecycle entity: WorkingRevision formation evidence, passage register and confirmed supported_by relations on unpublished knowledge objects.
@@ -11,7 +11,7 @@ Lifecycle transition: semantic-source-bound-v3 or earlier processing to an expli
 Initial durable state: verified immutable source and, on resume, the stored formation plan plus validated proposal history in the existing working revision.
 Trigger: authorized new ingest or explicit reprocessing with METIS_PASSAGE_FORMATION_MODE=semantic-source-bound-v4, or resume_formation on an unpublished V4 plan.
 Authorization: existing researcher ingest and named-reviewer commands. ConfirmSupportTargets requires the reviewer role, a named reviewer, command_id and expected_revision.
-Validation: existing admission, source-accountability-v3 role checks, relation_endpoint_compatible, and formation complete only when pending and unknown source ranges are empty.
+Validation: existing admission, source-accountability-v3 role checks, relation_endpoint_compatible, and formation complete only when pending tasks, unknown work, pending source ranges and unaccounted source ranges are all empty.
 Mutable entities: unpublished working-revision objects, passage register, confirmed relations, formation-plan evidence and one audit decision.
 Immutable entities: immutable source bytes, published revisions, review evidence already committed, and the closed object and relation taxonomies.
 Workflow state before: unpublished source, formation not started or a V4 plan with pending ranges.
@@ -24,7 +24,7 @@ Expected API result: processing may succeed while formation_state stays pending;
 Expected UI result: the console projects the existing formation mode, including semantic-source-bound-v4, and does not gain a second formation authority.
 Failure result: provider failure leaves the affected range pending or unresolved; stale revision and commit failure roll back; no partial supported_by edges.
 Restart result: the stored plan, completed and pending ranges, validated proposals and confirmed relations are read back from the working revision.
-Recovery result: resume continues the same plan and sends only open ranges. A new reconstruction is only the existing technical reload of the same immutable source.
+Recovery result: resume continues the same plan from the persisted source representation, sends only open ranges, and does not re-extract. A missing or mismatched representation fails closed.
 Legacy-data result: V3 and earlier documents stay readable. No startup migration rewrites reviewed or published revisions.
 Required black-box scenario: synthetic Smetten sentences prove background is not a recommendation, context stays context, support links only after confirmed targets, unresolved text blocks source closure, budget exhaustion keeps one checkpoint, and resume skips completed ranges.
 Explicit non-goals: no production activation of semantic-source-bound-v4, no merge, no deploy, no canonical-store migration, no new object type, no new relation type, and no clinical completeness claim.

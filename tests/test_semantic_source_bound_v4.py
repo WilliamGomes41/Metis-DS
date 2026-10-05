@@ -13,6 +13,7 @@ import pytest
 from src.bounded_formation_v2 import PLAN_VERSION, VERSION, build_plan, execute, plan_tasks
 from src.bounded_model_call_v1 import ModelCallLimits
 from src.closed_review_loop_v1 import ClosedLoopReviewConsole
+from src.review_closure_v1 import ReviewClosureConsole
 from src.integrity_kernel import stamp_canonical_hashes
 from src.knowledge_relations_v1 import confirmed_knowledge_relations_of, knowledge_relation_errors
 from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES
@@ -26,7 +27,9 @@ from src.semantic_replay_v1 import LOOKUP_MISS, exact_replay_lookup
 from src.serving_relations_v1 import binding_relations
 from src.source_accountability_v1 import VERSION_V3, evidence_of
 from src.source_bound_fields_v4 import MODE
+from src.source_containers_v1 import partition
 from tests.test_recommendation_context_v3 import response_for, source
+from tests.test_recommendation_coverage_v1 import SECOND
 from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
 
 
@@ -422,3 +425,535 @@ def test_postgres_support_confirmation_is_atomic(workflow_postgres, tmp_path, mo
     rows.extend([support, *claims])
     console._commit_prepared_store(objects=(sid, rows), expected_revision=console.objects_revision(sid))
     _prove_atomic_support(console, reviewer, sid, monkeypatch)
+
+
+def _provider_message(proposal):
+    return {"id": "call", "status": "completed", "output": [
+        {"type": "message", "content": [{"type": "output_text", "text": json.dumps(proposal)}]}]}
+
+
+def test_uncovered_interval_stays_pending_until_resume_sends_only_that_range():
+    """One task, two source ranges: a formed prefix must not complete the tail."""
+    from src.bounded_formation_v2 import _unaccounted_ranges
+
+    span = {"block_id": "b", "start": 0, "end": 26}
+    assert _unaccounted_ranges([span], {
+        "objects": [{"spans": [{"block_id": "b", "start": 0, "end": 8}]}],
+        "source_assessments": [],
+    }) == [{**span, "start": 8, "end": 26}]
+    assert _unaccounted_ranges([span], {
+        "objects": [{"spans": [{"block_id": "b", "start": 0, "end": 8}]}],
+        "source_assessments": [{"span": {"block_id": "b", "start": 8, "end": 26}}],
+    }) == []
+
+    whole = f"{RECOMMENDATION} {SECOND}"
+    fragments = [dict(source(whole)[0], fragment_id="only", fragment_hash="only", section_path=["Aanbevelingen"])]
+    calls = []
+
+    def post(_url, _headers, payload, _timeout):
+        data = json.loads(payload["input"][1]["content"])
+        calls.append(data)
+        targets = data.get("selection_targets") or []
+        if not targets:
+            assert len(data["source_blocks"]) == 1
+            assert RECOMMENDATION in data["source_blocks"][0]["text"] and SECOND in data["source_blocks"][0]["text"]
+            proposal = response_for(payload, RECOMMENDATION)
+            proposal["source_assessments"] = []
+            return _provider_message(proposal)
+        assert len(targets) == 1
+        literal = targets[0]["literal"]
+        assert SECOND in literal and not literal.startswith(RECOMMENDATION)
+        block = data["source_blocks"][0]
+        return _provider_message({
+            "objects": [], "relations": [], "abstain_reason": None,
+            "source_assessments": [{
+                "span": {"block_id": block["block_id"], "literal": literal, "occurrence": None},
+                "role": "background", "reason": "historical_context",
+            }],
+        })
+
+    _, replay = _semantic_execution_before_review(
+        fragments, document_id="smetten", api_key="fixture", model="fixture", field_contract_v4=True,
+        post_json=post, formation_context=_context(),
+    )
+    evidence = replay["provider_evidence"]
+    assert len(evidence["formation_plan"]["tasks"]) == 1
+    assert evidence["tasks"][0]["status"] == "partial"
+    assert evidence["formation_state"] == "pending"
+    pending = [row for row in evidence["pending_rejections"] if row.get("reason_code") == "unaccounted_source_range"]
+    assert len(pending) == 1
+    gap = pending[0]["spans"][0]
+    block = semantic_source_blocks(fragments)[0]
+    assert SECOND in block["text"][gap["start"]:gap["end"]]
+    assert RECOMMENDATION not in block["text"][gap["start"]:gap["end"]]
+    progress = evidence["formation_progress"]
+    assert progress["pending_task_count"] > 0
+    assert progress["unaccounted_source_range_count"] > 0
+    assert progress["pending_source_range_count"] > 0
+
+    _, resumed = _semantic_execution_before_review(
+        fragments, document_id="smetten", api_key="fixture", model="fixture", field_contract_v4=True,
+        post_json=post, formation_context={**_context(), "resume_formation": True, "semantic_replay": replay},
+    )
+    assert len(calls) == 2
+    assert resumed["provider_evidence"]["formation_state"] == "complete"
+    assert resumed["provider_evidence"]["formation_plan"]["plan_hash"] == evidence["formation_plan"]["plan_hash"]
+    assert resumed["provider_evidence"]["pending_rejections"] == []
+    assert resumed["provider_evidence"]["formation_progress"]["unaccounted_source_range_count"] == 0
+
+
+def test_two_block_task_resume_receives_only_the_open_block():
+    fragments = [
+        dict(source(RECOMMENDATION)[0], fragment_id="a", fragment_hash="a", section_path=["Aanbevelingen"]),
+        dict(source(SECOND)[0], fragment_id="b", fragment_hash="b", section_path=["Aanbevelingen"]),
+    ]
+    calls = []
+
+    def post(_url, _headers, payload, _timeout):
+        data = json.loads(payload["input"][1]["content"])
+        calls.append(data)
+        texts = [block["text"] for block in data["source_blocks"]]
+        if len(calls) == 1:
+            assert RECOMMENDATION in texts and SECOND in texts
+            proposal = response_for(payload, RECOMMENDATION)
+            proposal["source_assessments"] = []
+            return _provider_message(proposal)
+        assert texts == [SECOND]
+        assert all(row["literal"] == SECOND for row in data.get("selection_targets") or [])
+        proposal = response_for(payload, SECOND)
+        proposal["source_assessments"] = []
+        return _provider_message(proposal)
+
+    _, replay = _semantic_execution_before_review(
+        fragments, document_id="smetten", api_key="fixture", model="fixture", field_contract_v4=True,
+        post_json=post, formation_context=_context(),
+    )
+    assert replay["provider_evidence"]["formation_state"] == "pending"
+    assert replay["provider_evidence"]["tasks"][0]["status"] == "partial"
+    _, resumed = _semantic_execution_before_review(
+        fragments, document_id="smetten", api_key="fixture", model="fixture", field_contract_v4=True,
+        post_json=post, formation_context={**_context(), "resume_formation": True, "semantic_replay": replay},
+    )
+    assert len(calls) == 2
+    assert resumed["provider_evidence"]["formation_state"] == "complete"
+
+
+def test_plan_identity_binds_context_and_a_changed_context_fails_closed():
+    target = {"block_id": "t", "text": RECOMMENDATION, "section_path": ["Aanbevelingen"], "position": 1}
+    context = {"block_id": "c", "text": CONTEXT, "section_path": ["Aanbevelingen"], "position": 0}
+    changed = {**context, "text": CONTEXT + " Extra context."}
+    identity = {"source_hash": "a" * 64, "extractor_version": "fixture",
+                "reconstruction_version": "fixture", "semantic_contract_version": MODE}
+    tasks = plan_tasks([target], [context, target])
+    again = plan_tasks([target], [context, target])
+    other = plan_tasks([target], [changed, target])
+    assert tasks[0]["task_id"] == again[0]["task_id"]
+    assert tasks[0]["context_signature"]
+    assert tasks[0]["task_id"] != other[0]["task_id"]
+    plan = build_plan(tasks, identity)
+    assert build_plan(again, identity)["plan_hash"] == plan["plan_hash"]
+    assert build_plan(other, identity)["plan_hash"] != plan["plan_hash"]
+    evidence = {"formation_plan": plan, "tasks": [], "pending_rejections": []}
+    proposal = {"objects": [], "relations": [], "source_assessments": [], "abstain_reason": "no_validated_proposals"}
+    validator = {"fragments": [], "document_id": "smetten", "evidence_fragments": [],
+                 "allowed_candidate_block_ids": ["t"], "field_contract_v4": True,
+                 "source_accountability_version": VERSION_V3}
+
+    def forbidden(**kwargs):
+        raise AssertionError("provider must not run after a plan mismatch")
+
+    with pytest.raises(ConsoleError, match="formation_plan_mismatch"):
+        execute(blocks=[target], evidence_blocks=[changed, target], validator_input=validator,
+                provider=forbidden, limits=ModelCallLimits(total=30, connect=5, idle=5, attempt=120, max_attempts=4),
+                proposal=proposal, evidence=evidence, plan_identity=identity)
+
+
+def _bind_v4(state, post):
+    bind_pre_review_semantic_processing(state, environ={
+        "METIS_PASSAGE_FORMATION_MODE": MODE,
+        "METIS_LLM_API_KEY": "fixture",
+        "METIS_LLM_MODEL": "fixture",
+    }, post_json=post)
+
+
+def _v4_console(tmp_path, make_console=None):
+    make = make_console or (lambda: ReviewClosureConsole(
+        root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime"))
+    return make(), make
+
+
+def _partial_html_provider(calls):
+    def post(_url, _headers, payload, _timeout):
+        data = json.loads(payload["input"][1]["content"])
+        calls.append(data)
+        texts = [block["text"] for block in data["source_blocks"]]
+        if RECOMMENDATION in texts and SECOND in texts:
+            proposal = response_for(payload, RECOMMENDATION)
+            proposal["source_assessments"] = []
+            return _provider_message(proposal)
+        if texts == [SECOND] or (SECOND in texts and RECOMMENDATION not in texts):
+            proposal = response_for(payload, SECOND)
+            proposal["source_assessments"] = []
+            return _provider_message(proposal)
+        return _provider_message({"objects": [], "relations": [], "source_assessments": [], "abstain_reason": None})
+    return post
+
+
+def _ingest_partial(state, author, reviewer):
+    return state.ingest(
+        actor_id=author["account_id"], filename="smetten.html", content_type="text/html",
+        data=f"<html><body><h1>Aanbevelingen</h1><p>{RECOMMENDATION}</p><p>{SECOND}</p></body></html>".encode(),
+        ingest_kind="new", title="Smetten", version="1.0", date="2026-10-05", live_url="",
+        class_="richtlijn", family="smetten", named_reviewers=[reviewer["account_id"]],
+    )
+
+
+def test_v4_resume_reuses_persisted_source_and_does_not_extract(tmp_path, monkeypatch):
+    calls = []
+    state, make = _v4_console(tmp_path)
+    author = state.create_account(username="anne", password="anne-secret", roles=("researcher",))
+    reviewer = state.create_account(username="bert", password="bert-secret", roles=("reviewer", "publisher"))
+    _bind_v4(state, _partial_html_provider(calls))
+    sid = _ingest_partial(state, author, reviewer)["snapshot_id"]
+    evidence = state._envelope(sid)["semantic_replay"]["provider_evidence"]
+    plan_hash = evidence["formation_plan"]["plan_hash"]
+    assert evidence["formation_state"] == "pending"
+    assert any(row.get("reason_code") == "unaccounted_source_range" for row in evidence["pending_rejections"])
+    assert state._envelope(sid)["quality_processing_runs"][-1]["formation_source_fragments"]
+    assert "source_formation_incomplete" in state.publication_readiness(sid)["blockers"]
+    assert not state.publication_readiness(sid)["publish_allowed"]
+    formed = next(row for row in state.snapshot_objects(sid) if row["content"]["clean_text"] == RECOMMENDATION)
+    formed_id = formed["object_id"]
+
+    restarted = make()
+    _bind_v4(restarted, _partial_html_provider(calls))
+
+    def explode(*args, **kwargs):
+        raise AssertionError("source extraction is forbidden during formation resume")
+
+    monkeypatch.setattr(restarted, "_extract", explode)
+    import src.docling_pdf_v1 as docling
+    monkeypatch.setattr(docling, "extract", explode)
+    before_calls = len(calls)
+    command = dict(actor_id=author["account_id"], snapshot_id=sid, command_id="resume-v4",
+                   expected_revision=restarted.objects_revision(sid))
+    before_objects = restarted.snapshot_objects(sid)
+    with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
+        restarted.resume_formation(actor_id=author["account_id"], snapshot_id=sid, command_id="resume-stale",
+                                   expected_revision="stale")
+    assert restarted.snapshot_objects(sid) == before_objects
+    assert len(calls) == before_calls
+    restarted.resume_formation(**command)
+    assert len(calls) == before_calls + 1
+    assert [block["text"] for block in calls[-1]["source_blocks"]] == [SECOND]
+    after = restarted._envelope(sid)["semantic_replay"]["provider_evidence"]
+    assert after["formation_plan"]["plan_hash"] == plan_hash
+    assert after["formation_state"] == "complete"
+    current = {row["object_id"]: row for row in restarted.snapshot_objects(sid)}
+    assert current[formed_id]["content"]["clean_text"] == RECOMMENDATION
+    assert "source_formation_incomplete" not in restarted.publication_readiness(sid)["blockers"]
+    assert not restarted.publication_readiness(sid)["publish_allowed"]
+    restarted.resume_formation(**command)
+    assert len(calls) == before_calls + 1
+    before_objects = restarted.snapshot_objects(sid)
+    restarted.review_object(actor_id=reviewer["account_id"], snapshot_id=sid, object_id=formed_id,
+                            decision="approve", confirmed_object_type="recommendation",
+                            recommendation_direction="for", recommendation_strength_level="not_stated")
+    with pytest.raises(ConsoleError, match="pre_review_retry_existing_work"):
+        restarted.resume_formation(actor_id=author["account_id"], snapshot_id=sid, command_id="resume-reviewed",
+                                   expected_revision=restarted.objects_revision(sid))
+
+
+def test_missing_or_damaged_source_representation_fails_closed(tmp_path, monkeypatch):
+    calls = []
+    state, make = _v4_console(tmp_path)
+    author = state.create_account(username="anne", password="anne-secret", roles=("researcher",))
+    reviewer = state.create_account(username="bert", password="bert-secret", roles=("reviewer",))
+    _bind_v4(state, _partial_html_provider(calls))
+    sid = _ingest_partial(state, author, reviewer)["snapshot_id"]
+    envelope = deepcopy(state._envelope(sid))
+    envelope["quality_processing_runs"][-1].pop("formation_source_fragments")
+    state._commit_prepared_store(envelopes={sid: envelope}, snapshot_id=sid)
+    restarted = make()
+    _bind_v4(restarted, _partial_html_provider(calls))
+    monkeypatch.setattr(restarted, "_extract", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("extract")))
+    with pytest.raises(ConsoleError, match="formation_source_representation_missing"):
+        restarted.resume_formation(actor_id=author["account_id"], snapshot_id=sid, command_id="missing",
+                                   expected_revision=restarted.objects_revision(sid))
+    damaged = deepcopy(restarted._envelope(sid))
+    damaged["quality_processing_runs"][-1]["formation_source_fragments"] = []
+    damaged["quality_processing_runs"][-1]["formation_source_fragments_hash"] = "not-the-hash"
+    restarted._commit_prepared_store(envelopes={sid: damaged}, snapshot_id=sid)
+    with pytest.raises(ConsoleError, match="formation_source_representation_mismatch"):
+        restarted.resume_formation(actor_id=author["account_id"], snapshot_id=sid, command_id="damaged",
+                                   expected_revision=restarted.objects_revision(sid))
+
+
+NAVIGATION = "Inhoud......................3"
+FALSE_METADATA = "Geen documentmetadata maar een klinische zin over zalf."
+ANSWER = "Dit antwoorddragende fragment noemt een dosis zonder advies."
+
+
+def _role_provider(bind_context=False):
+    roles = (
+        ("Versie: 1", "metadata", "document_metadata"),
+        (NAVIGATION, "structure", "navigation"),
+        (BACKGROUND, "background", "historical_context"),
+        (CONTEXT, "context", "target_group"),
+        (SUPPORT, "support", "proposed_support"),
+        (UNRESOLVED, "unresolved", "uncertain_source_role"),
+        (ANSWER, "answer_bearing", "answer_bearing_candidate"),
+        (FALSE_METADATA, "metadata", "document_metadata"),
+    )
+
+    def post(_url, _headers, payload, _timeout):
+        data = json.loads(payload["input"][1]["content"])
+        blocks = data["source_blocks"]
+
+        def assessment(block):
+            for needle, role, reason in roles:
+                if needle in block["text"] and RECOMMENDATION not in block["text"]:
+                    return {"span": {"block_id": block["block_id"], "literal": block["text"], "occurrence": None},
+                            "role": role, "reason": reason}
+            return None
+
+        if any(RECOMMENDATION in block["text"] for block in blocks):
+            proposal = response_for(payload, RECOMMENDATION)
+        else:
+            proposal = {"objects": [], "relations": [], "abstain_reason": None}
+        proposal["source_assessments"] = [row for row in (assessment(block) for block in blocks) if row]
+        if bind_context and proposal.get("objects"):
+            owner = next(block for block in [*blocks, *data["evidence_blocks"]] if block["text"] == CONTEXT)
+            proposal["objects"][0]["context_evidence"] = [{"role": "scope", "span": {
+                "block_id": owner["block_id"], "literal": CONTEXT, "occurrence": 0}, "unresolved_reason": None}]
+        return _provider_message(proposal)
+    return post
+
+
+def _role_html():
+    paragraphs = ["Versie: 1", NAVIGATION, BACKGROUND, CONTEXT, RECOMMENDATION, SUPPORT, UNRESOLVED, ANSWER, FALSE_METADATA]
+    # Separate headings keep non-terminal metadata and navigation from being
+    # reconstructed as one grammatical continuation.
+    body = "".join(f"<h2>Rol {index}</h2><p>{text}</p>" for index, text in enumerate(paragraphs))
+    return f"<html><body><h1>Aanbevelingen</h1>{body}</body></html>".encode()
+
+
+def test_v4_source_roles_do_not_grant_closure_or_publication(tmp_path):
+    state, _make = _v4_console(tmp_path)
+    author = state.create_account(username="anne", password="anne-secret", roles=("researcher",))
+    reviewer = state.create_account(username="bert", password="bert-secret", roles=("reviewer", "publisher"))
+    _bind_v4(state, _role_provider())
+    sid = state.ingest(
+        actor_id=author["account_id"], filename="rollen.html", content_type="text/html", data=_role_html(),
+        ingest_kind="new", title="Rollen", version="1.0", date="2026-10-05", live_url="",
+        class_="richtlijn", family="smetten", named_reviewers=[reviewer["account_id"]],
+    )["snapshot_id"]
+    rows = state.snapshot_objects(sid)
+    usage = {row["record"]["content"]["clean_text"]: row for row in partition(rows)["source"]}
+    expected = {
+        "Versie: 1": ("document_information", True),
+        NAVIGATION: ("document_information", True),
+        BACKGROUND: ("background", False),
+        CONTEXT: ("unresolved", False),
+        SUPPORT: ("proposed_support", False),
+        UNRESOLVED: ("unresolved", False),
+        ANSWER: ("answer_bearing", False),
+        FALSE_METADATA: ("unresolved", False),
+    }
+    closure = source_passage_closure(rows)
+    for text, (kind, accounted) in expected.items():
+        row = usage[text]
+        assert row["usage"]["kind"] == kind, text
+        assert row["usage"]["accounted"] is accounted, text
+        object_id = row["record"]["object_id"]
+        assert (object_id not in closure["unresolved_source_passage_ids"]) is accounted
+        assert passage_register_of(row["record"])["status"] == "not_yet_assessed"
+        assert row["record"].get("object_type") not in CLOSED_OBJECT_TYPES or row["record"].get("proposed_object_type") not in {
+            "recommendation", "explanation", "definition", "condition", "exception"}
+    assert not any(row.get("proposed_object_type") == "recommendation" and row["content"]["clean_text"] == BACKGROUND for row in rows)
+    readiness = state.publication_readiness(sid)
+    assert not readiness["publish_allowed"]
+    assert not readiness["source_passage_review_complete"]
+    assert "source_passage_review_incomplete" in readiness["blockers"]
+
+
+def test_bound_context_is_accounted_only_after_the_target_is_approved(tmp_path):
+    state, _make = _v4_console(tmp_path)
+    author = state.create_account(username="anne", password="anne-secret", roles=("researcher",))
+    reviewer = state.create_account(username="bert", password="bert-secret", roles=("reviewer",))
+    _bind_v4(state, _role_provider(bind_context=True))
+    html = f"<html><body><h1>Aanbevelingen</h1><p>{CONTEXT}</p><p>{RECOMMENDATION}</p></body></html>".encode()
+    sid = state.ingest(
+        actor_id=author["account_id"], filename="context.html", content_type="text/html", data=html,
+        ingest_kind="new", title="Context", version="1.0", date="2026-10-05", live_url="",
+        class_="richtlijn", family="smetten", named_reviewers=[reviewer["account_id"]],
+    )["snapshot_id"]
+    rows = state.snapshot_objects(sid)
+    linked = next(row for row in partition(rows)["source"] if row["record"]["content"]["clean_text"] == CONTEXT)
+    assert linked["usage"]["kind"] == "linked_context"
+    assert linked["usage"]["accounted"] is False
+    assert linked["record"]["object_id"] in source_passage_closure(rows)["unresolved_source_passage_ids"]
+    target = next(row for row in rows if row.get("content", {}).get("clean_text") == RECOMMENDATION)
+    target.setdefault("governance", {})["validation_status"] = "approved"
+    accounted = next(row for row in partition(rows)["source"] if row["record"]["content"]["clean_text"] == CONTEXT)
+    assert accounted["usage"]["accounted"] is True
+    assert accounted["record"]["object_id"] not in source_passage_closure(rows)["unresolved_source_passage_ids"]
+    assert not state.publication_readiness(sid)["publish_allowed"]
+
+
+def test_postgres_v4_resume_survives_restart(workflow_postgres, tmp_path, monkeypatch):
+    from tests.test_review_batch_atomic_postgres import _console
+    calls = []
+    root = tmp_path / "pg-resume"
+
+    def make():
+        return _console(root, workflow_postgres)
+
+    state = make()
+    author = state.create_account(username="anne", password="anne-secret", roles=("researcher",))
+    reviewer = state.create_account(username="bert", password="bert-secret", roles=("reviewer", "publisher"))
+    _bind_v4(state, _partial_html_provider(calls))
+    sid = _ingest_partial(state, author, reviewer)["snapshot_id"]
+    plan_hash = state._envelope(sid)["semantic_replay"]["provider_evidence"]["formation_plan"]["plan_hash"]
+    assert state.processing_status(sid)["formation_state"] == "pending"
+    formed_id = next(row["object_id"] for row in state.snapshot_objects(sid) if row["content"]["clean_text"] == RECOMMENDATION)
+    before_objects = state.workflow_document_store.list_document_objects(sid)
+    restarted = make()
+    _bind_v4(restarted, _partial_html_provider(calls))
+    monkeypatch.setattr(restarted, "_extract", lambda *a, **k: (_ for _ in ()).throw(AssertionError("extract")))
+    import src.docling_pdf_v1 as docling
+    monkeypatch.setattr(docling, "extract", lambda *a, **k: (_ for _ in ()).throw(AssertionError("docling")))
+    command = dict(actor_id=author["account_id"], snapshot_id=sid, command_id="resume-pg",
+                   expected_revision=restarted.objects_revision(sid))
+    stale_before = restarted.workflow_document_store.list_document_objects(sid)
+    with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
+        restarted.resume_formation(actor_id=author["account_id"], snapshot_id=sid, command_id="resume-stale-pg",
+                                   expected_revision="stale")
+    assert restarted.workflow_document_store.list_document_objects(sid) == stale_before
+    restarted.resume_formation(**command)
+    assert [block["text"] for block in calls[-1]["source_blocks"]] == [SECOND]
+    stored = restarted.workflow_document_store.get_envelope(sid)
+    assert stored["semantic_replay"]["provider_evidence"]["formation_plan"]["plan_hash"] == plan_hash
+    assert stored["semantic_replay"]["provider_evidence"]["formation_state"] == "complete"
+    current = restarted.workflow_document_store.list_document_objects(sid)
+    assert next(row for row in current if row["object_id"] == formed_id)["content"]["clean_text"] == RECOMMENDATION
+    assert any(row["object_id"] == formed_id and row["object_version"] == next(old["object_version"] for old in before_objects if old["object_id"] == formed_id) for row in current)
+    again = make()
+    _bind_v4(again, _partial_html_provider(calls))
+    before = len(calls)
+    again.resume_formation(**command)
+    assert len(calls) == before
+    assert not again.publication_readiness(sid)["publish_allowed"]
+
+
+def _install_support_rows(console, reviewer, sid):
+    base = next(row for row in console.snapshot_objects(sid) if row.get("object_type") not in {"document", "heading"})
+    rows = [row for row in console._load_objects(sid, remember=False) if row.get("object_type") in {"document", "heading"}]
+    support = deepcopy(base)
+    support.update(object_id="support-1", object_type="explanation", proposed_object_type="explanation", object_version="1.0")
+    support["content"] = {**support.get("content", {}), "clean_text": SUPPORT}
+    claims = []
+    for index in range(3):
+        claim = deepcopy(base)
+        claim.update(object_id=f"claim-{index}", object_type="recommendation", proposed_object_type="recommendation", object_version="1.0")
+        claim["content"] = {**claim.get("content", {}), "clean_text": f"{RECOMMENDATION} {index}"}
+        claim["confirmed_relations"] = []
+        stamp_canonical_hashes(claim)
+        claims.append(claim)
+    support["confirmed_relations"] = []
+    stamp_canonical_hashes(support)
+    rows.extend([support, *claims])
+    console._commit_prepared_store(objects=(sid, rows), expected_revision=console.objects_revision(sid))
+
+
+def test_postgres_support_crash_before_commit_keeps_audit_and_edges_together(workflow_postgres, tmp_path, monkeypatch):
+    from contextlib import contextmanager
+    from tests.test_review_batch_atomic_postgres import _console
+    console = _console(tmp_path / "pg-crash", workflow_postgres)
+    researcher = console.create_account(username="anne", password="anne-secret", roles=("researcher",))
+    reviewer = console.create_account(username="bert", password="bert-secret", roles=("reviewer",))
+    receipt = console.ingest(
+        actor_id=researcher["account_id"], filename="smetten.html", content_type="text/html",
+        data=f"<html><body><h1>Smetten</h1><p>{RECOMMENDATION}</p></body></html>".encode(),
+        ingest_kind="new", title="Smetten", version="1.0", date="2026-10-05", live_url="",
+        class_="richtlijn", family="smetten", named_reviewers=[reviewer["account_id"]],
+    )
+    sid = receipt["snapshot_id"]
+    _install_support_rows(console, reviewer, sid)
+    documents = console.workflow_document_store
+    reviews = console.workflow_review_store
+    before_objects = documents.list_document_objects(sid)
+    before_events = reviews.read_events()
+    before_commands = (documents.get_envelope(sid).get("support_target_commands") or [])
+    revision = console.objects_revision(sid)
+
+    @contextmanager
+    def transparent(self, snapshot_id):
+        with self._store_write_lock():
+            self._reload_store_locked()
+            yield
+
+    monkeypatch.setattr(
+        "src.workflows.workflow_documents_cutover_v1._PostgresWorkflowDocumentsMixin._atomic_snapshot_mutation",
+        transparent,
+    )
+    monkeypatch.setattr(console, "_restore_review_state", lambda **kwargs: None)
+    original_flush = reviews._flush_buffer
+
+    def flush_then_crash(events):
+        original_flush(events)
+        raise RuntimeError("crash before durable commit")
+
+    monkeypatch.setattr(reviews, "_flush_buffer", flush_then_crash)
+    with pytest.raises(RuntimeError, match="crash before durable commit"):
+        console.confirm_support_targets(
+            actor_id=reviewer["account_id"], snapshot_id=sid, support_object_id="support-1",
+            claim_object_ids=["claim-0", "claim-1", "claim-2"], expected_revision=revision, command_id="cmd-crash",
+        )
+    assert documents.list_document_objects(sid) == before_objects
+    assert reviews.read_events() == before_events
+    assert (documents.get_envelope(sid).get("support_target_commands") or []) == before_commands
+    assert "confirm_support_targets" not in console._ledger_path.read_text(encoding="utf-8")
+
+
+def test_postgres_support_audit_survives_without_the_file_mirror(workflow_postgres, tmp_path, monkeypatch):
+    from tests.test_review_batch_atomic_postgres import _console
+    root = tmp_path / "pg-mirror"
+    console = _console(root, workflow_postgres)
+    researcher = console.create_account(username="anne", password="anne-secret", roles=("researcher",))
+    reviewer = console.create_account(username="bert", password="bert-secret", roles=("reviewer",))
+    receipt = console.ingest(
+        actor_id=researcher["account_id"], filename="smetten.html", content_type="text/html",
+        data=f"<html><body><h1>Smetten</h1><p>{RECOMMENDATION}</p></body></html>".encode(),
+        ingest_kind="new", title="Smetten", version="1.0", date="2026-10-05", live_url="",
+        class_="richtlijn", family="smetten", named_reviewers=[reviewer["account_id"]],
+    )
+    sid = receipt["snapshot_id"]
+    _install_support_rows(console, reviewer, sid)
+    monkeypatch.setattr(console.workflow_review_store, "_mirror_events", lambda events: None)
+    revision = console.objects_revision(sid)
+    console.confirm_support_targets(
+        actor_id=reviewer["account_id"], snapshot_id=sid, support_object_id="support-1",
+        claim_object_ids=["claim-0", "claim-1", "claim-2"], expected_revision=revision, command_id="cmd-mirror",
+    )
+    audits = [event for event in console.workflow_review_store.read_events()
+              if (event.get("details") or {}).get("decision") == "confirm_support_targets"]
+    assert len(audits) == 1
+    assert "confirm_support_targets" not in console._ledger_path.read_text(encoding="utf-8")
+    claims = [row for row in console.snapshot_objects(sid) if str(row["object_id"]).startswith("claim-")]
+    assert len(claims) == 3
+    assert all(any(rel.get("relation_type") == "supported_by" for rel in binding_relations(row)) for row in claims)
+    restarted = _console(root, workflow_postgres)
+    mirrored = [event for event in restarted.workflow_review_store.read_events()
+                if (event.get("details") or {}).get("decision") == "confirm_support_targets"]
+    assert len(mirrored) == 1
+    assert restarted._ledger_path.read_text(encoding="utf-8").count('"decision": "confirm_support_targets"') == 1
+    again = restarted.confirm_support_targets(
+        actor_id=reviewer["account_id"], snapshot_id=sid, support_object_id="support-1",
+        claim_object_ids=["claim-0", "claim-1", "claim-2"],
+        expected_revision=restarted.objects_revision(sid), command_id="cmd-mirror",
+    )
+    assert again["command_id"] == "cmd-mirror"
+    assert len([event for event in restarted.workflow_review_store.read_events()
+                if (event.get("details") or {}).get("decision") == "confirm_support_targets"]) == 1
+
