@@ -982,3 +982,16 @@ def test_write_outputs_removes_stale_divergence_file(tmp_path):
     assert stale.exists()
     write_outputs(trace(load_evidence(EVIDENCE)), output)
     assert not stale.exists()
+
+
+def test_cli_removes_stale_differential_without_candidate(tmp_path):
+    output = tmp_path / "trace"
+    output.mkdir()
+    stale = output / "forensic_differential.json"
+    stale.write_text('{"stale": true}\n', encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/trace_recorded_formation.py"),
+         str(EVIDENCE), "--output", str(output)],
+        check=False, capture_output=True, text=True)
+    assert completed.returncode == 0, completed.stderr
+    assert not stale.exists()
