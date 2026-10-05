@@ -2,6 +2,8 @@
 
 Change class: A
 
+PR validation: the lifecycle fields in this contract are mirrored in draft PR #520 because CI validates the pull-request event body.
+
 Promise: bounded Passage Formation V3 may stop at an internal processing deadline without losing validated work, but unfinished source tasks remain explicitly pending and can be resumed until the original source-task plan is fully accounted for.
 
 Touches lifecycle invariants: yes.
