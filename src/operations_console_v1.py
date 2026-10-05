@@ -2193,14 +2193,21 @@ class OperationsConsole:
                 finish(prepared_envelope, _attempt_id, state="succeeded")
                 stored = next(a for a in prepared_envelope["processing_attempts"] if a["attempt_id"] == _attempt_id)
                 if stored.get("kind") == "resume":
-                    from src.bounded_formation_v1 import formation_progress
+                    from src.bounded_formation_v1 import formation_progress, pending_source_extent
                     before_provider = (envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
                     after_provider = (prepared_envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
                     before_progress = before_provider.get("formation_progress") or formation_progress(before_provider)
                     after_progress = after_provider.get("formation_progress") or formation_progress(after_provider)
+                    before_extent = pending_source_extent(before_provider)
+                    after_extent = pending_source_extent(after_provider)
                     stored["formation_progress_made"] = bool(
                         after_progress.get("terminal_task_count", 0) > before_progress.get("terminal_task_count", 0)
                         or after_progress.get("pending_task_count", 0) < before_progress.get("pending_task_count", 0)
+                        or after_extent["unknown_pending_count"] < before_extent["unknown_pending_count"]
+                        or (
+                            after_extent["unknown_pending_count"] == before_extent["unknown_pending_count"]
+                            and after_extent["pending_source_char_count"] < before_extent["pending_source_char_count"]
+                        )
                     )
                 transport = (replay_record or {}).get("provider_evidence", {}).get("transport", {})
                 if (replay_record or {}).get("semantic_execution") == "replay":
