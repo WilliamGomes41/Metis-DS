@@ -96,8 +96,10 @@ def _hash(value: Any) -> str:
 
 def source_span_id(*, source_sha256: str, source_reconstruction_hash: str,
                    source_fragment_ids: list[str] | None = None, start: int | None = None,
-                   end: int | None = None, fragments: list[dict[str, Any]] | None = None) -> str | None:
-    """Identity of one reconstructed range. Not defined when a component is missing."""
+                   end: int | None = None, fragments: list[dict[str, Any]] | None = None,
+                   block_id: str | None = None, block_start: int | None = None,
+                   block_end: int | None = None) -> str | None:
+    """Identity of one source range, with reconstructed bounds when they are recorded."""
     ranges = fragments
     if ranges is None:
         ids = list(source_fragment_ids or [])
@@ -117,12 +119,23 @@ def source_span_id(*, source_sha256: str, source_reconstruction_hash: str,
         normalized.append({"fragment_id": fragment_id, "start": lo, "end": hi})
     if not source_sha256 or not source_reconstruction_hash or not normalized:
         return None
-    return _hash({
+    material = {
         "v": 2,
         "source_sha256": source_sha256,
         "source_reconstruction_hash": source_reconstruction_hash,
         "fragments": normalized,
-    })
+    }
+    if block_id is not None or block_start is not None or block_end is not None:
+        if (not isinstance(block_id, str) or not block_id or type(block_start) is not int
+                or type(block_end) is not int or not 0 <= block_start < block_end):
+            return None
+        material["v"] = 3
+        material["reconstructed_span"] = {
+            "block_id": block_id,
+            "start": block_start,
+            "end": block_end,
+        }
+    return _hash(material)
 
 
 def _unknown_stage() -> dict[str, Any]:
@@ -455,13 +468,23 @@ def slice_block_mapping(rows: list[dict[str, Any]], block_id: Any, start: Any, e
             covered += hi - lo
             continue
         raw_lo, raw_hi = row.get("raw_start"), row.get("raw_end")
-        if (type(raw_lo) is not int or type(raw_hi) is not int or raw_hi - raw_lo != hi - lo
-                or not row.get("fragment_id")):
+        if type(raw_lo) is not int or type(raw_hi) is not int or not row.get("fragment_id"):
             return None
+        exact = raw_hi - raw_lo == hi - lo
+        if exact:
+            mapped_raw_start = raw_lo + overlap_lo - lo
+            mapped_raw_end = raw_lo + overlap_hi - lo
+        else:
+            # A normalized whitespace/layout segment may map one reconstructed
+            # character to several raw characters. Only a whole-segment overlap
+            # is reversible; a partial overlap is ambiguous and stays unlinked.
+            if overlap_lo != lo or overlap_hi != hi:
+                return None
+            mapped_raw_start, mapped_raw_end = raw_lo, raw_hi
         mapping.append({
             "fragment_id": str(row["fragment_id"]),
-            "raw_start": raw_lo + overlap_lo - lo,
-            "raw_end": raw_lo + overlap_hi - lo,
+            "raw_start": mapped_raw_start,
+            "raw_end": mapped_raw_end,
             "source_page": row.get("source_page"),
         })
         covered += overlap_hi - overlap_lo
@@ -961,8 +984,12 @@ def _fragment_from_view(view: Mapping[str, Any]) -> dict[str, Any]:
         "fragment_id": view.get("fragment_id"),
         "raw_text": view.get("raw_text"),
         "clean_text": view.get("clean_text"),
+        "section_path": view.get("section_path"),
+        "heading": view.get("heading"),
         "source_page": view.get("source_page"),
         "source_locator": view.get("source_locator"),
+        "source_text_view": view.get("source_text_view"),
+        "source_layout_findings": view.get("source_layout_findings"),
     }
 
 
@@ -1117,12 +1144,26 @@ def _identity_gap(evidence: Mapping[str, Any], gold: Mapping[str, Any]) -> tuple
 
 
 def _case_span_id(case: Mapping[str, Any]) -> str | None:
+    reconstruction = case.get("reconstruction") if isinstance(case.get("reconstruction"), Mapping) else {}
+    block_id = case.get("block_id") or reconstruction.get("block_id") or reconstruction.get("semantic_block_id")
+    block_start = case.get("block_start")
+    if block_start is None:
+        block_start = reconstruction.get("block_start", reconstruction.get("start"))
+    block_end = case.get("block_end")
+    if block_end is None:
+        block_end = reconstruction.get("block_end", reconstruction.get("end"))
+    bounds = {
+        "block_id": block_id,
+        "block_start": block_start,
+        "block_end": block_end,
+    } if block_id is not None or block_start is not None or block_end is not None else {}
     fragments = case.get("fragments")
     if isinstance(fragments, list) and fragments:
         return source_span_id(
             source_sha256=str(case.get("source_sha256") or ""),
             source_reconstruction_hash=str(case.get("source_reconstruction_hash") or ""),
             fragments=fragments,
+            **bounds,
         )
     return source_span_id(
         source_sha256=str(case.get("source_sha256") or ""),
@@ -1130,6 +1171,7 @@ def _case_span_id(case: Mapping[str, Any]) -> str | None:
         source_fragment_ids=list(case.get("source_fragment_ids") or []),
         start=case.get("start"),
         end=case.get("end"),
+        **bounds,
     )
 
 
@@ -1276,23 +1318,33 @@ def _ranges_of(span: Mapping[str, Any]) -> list[dict[str, Any]] | None:
 def _public_span(evidence: Mapping[str, Any], span: Mapping[str, Any]) -> dict[str, Any]:
     identity = evidence.get("identity") or {}
     ranges = _ranges_of(span)
+    source_kwargs: dict[str, Any] = {
+        "source_sha256": str(identity.get("source_sha256") or ""),
+        "source_reconstruction_hash": str(identity.get("source_reconstruction_hash") or ""),
+    }
     if ranges is None:
-        span_id = source_span_id(
-            source_sha256=str(identity.get("source_sha256") or ""),
-            source_reconstruction_hash=str(identity.get("source_reconstruction_hash") or ""),
+        source_kwargs.update(
             source_fragment_ids=list(span.get("source_fragment_ids") or []),
             start=span.get("start") if type(span.get("start")) is int else None,
             end=span.get("end") if type(span.get("end")) is int else None,
         )
     else:
+        source_kwargs["fragments"] = ranges
+    legacy_span_id = source_span_id(**source_kwargs)
+    reconstruction = span.get("reconstruction") or {}
+    if reconstruction.get("status") == "recorded":
         span_id = source_span_id(
-            source_sha256=str(identity.get("source_sha256") or ""),
-            source_reconstruction_hash=str(identity.get("source_reconstruction_hash") or ""),
-            fragments=ranges,
-        )
+            **source_kwargs,
+            block_id=reconstruction.get("semantic_block_id"),
+            block_start=reconstruction.get("block_start"),
+            block_end=reconstruction.get("block_end"),
+        ) or legacy_span_id
+    else:
+        span_id = legacy_span_id
     return {
         "trace_version": TRACE_VERSION,
         "source_span_id": span_id,
+        "legacy_source_span_id": legacy_span_id if legacy_span_id != span_id else None,
         "span_identity_status": "source_span" if span_id else "not_a_source_span",
         "source": span.get("source") or _unknown_stage(),
         "reconstruction": span.get("reconstruction") or _unknown_stage(),
@@ -1394,6 +1446,14 @@ def trace(evidence: Mapping[str, Any], gold: Mapping[str, Any] | None = None) ->
 
     summary["comparison"] = "compared"
     by_id = {row["source_span_id"]: row for row in records}
+    legacy_candidates: dict[str, list[dict[str, Any]]] = {}
+    for row in records:
+        legacy = row.get("legacy_source_span_id")
+        if legacy:
+            legacy_candidates.setdefault(str(legacy), []).append(row)
+    for legacy, candidates in legacy_candidates.items():
+        if len(candidates) == 1 and legacy not in by_id:
+            by_id[legacy] = candidates[0]
     for case in gold.get("cases") or []:
         span_id = _case_span_id(case)
         recorded_hash = (evidence.get("identity") or {}).get("source_reconstruction_hash")
@@ -1446,7 +1506,7 @@ def trace(evidence: Mapping[str, Any], gold: Mapping[str, Any] | None = None) ->
             "selected" if provider.get("selected") else "not_selected")
         divergences.append({
             "case_id": case.get("case_id"),
-            "source_span_id": span_id,
+            "source_span_id": public.get("source_span_id") or span_id,
             "verdict": graded["verdict"],
             "first_divergence_stage": graded["first_divergence_stage"],
             "divergence_class": graded["divergence_class"],
@@ -1559,8 +1619,11 @@ def write_outputs(result: Mapping[str, Any], directory: Path) -> None:
     (directory / "forensic_trace.csv").write_bytes(_csv_bytes(CSV_FIELDS, [_csv_row(record, status) for record in records]))
     (directory / "forensic_summary.json").write_text(
         json.dumps(result["summary"], ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    divergence_path = directory / "first_divergence.csv"
     if result["divergences"]:
-        (directory / "first_divergence.csv").write_bytes(_csv_bytes(DIVERGENCE_FIELDS, result["divergences"]))
+        divergence_path.write_bytes(_csv_bytes(DIVERGENCE_FIELDS, result["divergences"]))
+    else:
+        divergence_path.unlink(missing_ok=True)
 
 
 def rows_for_export(*, snapshot_id: str, revision: str, envelope: Mapping[str, Any],
