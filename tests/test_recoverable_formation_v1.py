@@ -64,7 +64,12 @@ def partial_story(tmp_path, make_console=None):
     first = next(o for o in before if o['content']['clean_text'] == FIRST)
     assert first['metadata']['admission']['gate_result'] == 'allowed'
     assert any(evidence_of(o).get('text') == SECOND for o in before)
-    assert state.processing_status(sid)['resume_allowed']
+    processing = state.processing_status(sid)
+    assert processing['state'] == 'succeeded'
+    assert processing['formation_state'] == 'pending'
+    assert processing['formation_incomplete']
+    assert processing['resume_allowed']
+    assert processing['formation_progress']['pending_task_count'] > 0
     assert 'source_formation_incomplete' in state.publication_readiness(sid)['blockers']
     assert not state.publication_readiness(sid)['publish_allowed']
 
@@ -82,6 +87,13 @@ def partial_story(tmp_path, make_console=None):
     assert next(o for o in current if o['object_id'] == first['object_id']) == first
     assert len([o for o in current if o.get('proposed_object_type') == 'recommendation']) == 2
     assert not incomplete(restarted._envelope(sid))
+    processing = restarted.processing_status(sid)
+    assert processing['formation_state'] == 'complete'
+    assert processing['formation_progress']['pending_task_count'] == 0
+    resume_attempt = restarted._envelope(sid)['processing_attempts'][-1]
+    assert resume_attempt['kind'] == 'resume'
+    assert resume_attempt['state'] == 'succeeded'
+    assert resume_attempt['formation_progress_made'] is True
     assert 'source_formation_incomplete' not in restarted.publication_readiness(sid)['blockers']
     assert not restarted.publication_readiness(sid)['publish_allowed']  # reviews still required
     final = make(); bind(final)
