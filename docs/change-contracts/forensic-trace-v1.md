@@ -1,7 +1,7 @@
 # Forensic trace v1
 
 Change class: B
-Promise: A named reviewer can project one recorded source span through extraction, reconstruction, formation, provider decision, validation, transformation and admission, then a review-queue projection. The package does not export the review ledger, so this is not a human review decision. A source assessment joins through the version-bound source-block map and does not need a KnowledgeObject. Rejected proposals and separate spans of one object stay on their own source span. The first stage that diverges from an explicit gold case is reported.
+Promise: A named reviewer can project one recorded source span through extraction, reconstruction, formation, provider decision, validation, transformation and admission, then a review-queue projection. The package does not export the review ledger, so this is not a human review decision. A derived block-to-fragment map is used only when its reconstruction version and source-blocks hash equal the recorded replay identity. A different version or hash is `RECONSTRUCTION_IDENTITY_MISMATCH` and does not link a source span. Rejected proposals and separate spans of one object stay on their own source span. The first stage that diverges from an explicit gold case is reported.
 Proof: tests/test_forensic_trace_v1.py, including a processing-evidence ZIP written to disk and reloaded by the CLI. The known Smetten background sentence stays a RED diagnostic baseline. No provider call, database write, or workflow mutation.
 Touches lifecycle invariants: no
 Rewrite risk: none

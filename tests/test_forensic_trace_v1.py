@@ -8,7 +8,7 @@ import subprocess
 import sys
 
 from src.forensic_trace_v1 import (
-    UNKNOWN, compare_traces, load_evidence, load_gold, trace, write_outputs,
+    UNKNOWN, compare_traces, current_reconstruction_identity, load_evidence, load_gold, trace, write_outputs,
 )
 from src.processing_evidence_export_v1 import processing_evidence_tables, processing_evidence_zip
 
@@ -454,11 +454,13 @@ def _zip_trace(tmp_path, envelope, objects, gold):
 def test_background_assessment_without_object_is_a_source_span(tmp_path):
     text = "Dit is achtergrond en geen aanbeveling."
     fragment, block = _source_case(text, "frag-bg")
+    derived = current_reconstruction_identity([fragment])
     envelope = {
         "semantic_replay": {
             "identity": {"components": {
                 "snapshot_id": "snapshot", "source_sha256": "source-sha",
-                "source_blocks_hash": "reconstruction-sha",
+                "source_blocks_hash": derived["source_blocks_hash"],
+                "reconstruction_version": derived["reconstruction_version"],
             }},
             "validation": "passed",
             "proposal": {"objects": [], "source_assessments": [{
@@ -485,7 +487,7 @@ def test_background_assessment_without_object_is_a_source_span(tmp_path):
         "cases": [{
             "case_id": "BG-NO-OBJECT",
             "source_sha256": "source-sha",
-            "source_reconstruction_hash": "reconstruction-sha",
+            "source_reconstruction_hash": derived["source_blocks_hash"],
             "fragments": [{"fragment_id": "frag-bg", "start": 0, "end": len(text)}],
             "exact_raw_text": text,
             "expected_source_function": "background",
@@ -511,12 +513,14 @@ def test_background_assessment_without_object_is_a_source_span(tmp_path):
 def test_rejected_provider_proposal_stays_on_the_source_span(tmp_path):
     text = "Dit is achtergrond en geen aanbeveling."
     fragment, block = _source_case(text, "frag-bg")
+    derived = current_reconstruction_identity([fragment])
     span = {"block_id": block["block_id"], "start": 0, "end": len(block["text"])}
     envelope = {
         "semantic_replay": {
             "identity": {"components": {
                 "snapshot_id": "snapshot", "source_sha256": "source-sha",
-                "source_blocks_hash": "reconstruction-sha",
+                "source_blocks_hash": derived["source_blocks_hash"],
+                "reconstruction_version": derived["reconstruction_version"],
             }},
             "validation": "passed",
             "proposal": {"objects": [], "source_assessments": []},
@@ -544,7 +548,7 @@ def test_rejected_provider_proposal_stays_on_the_source_span(tmp_path):
         "cases": [{
             "case_id": "BG-REJECTED-EXPLANATION",
             "source_sha256": "source-sha",
-            "source_reconstruction_hash": "reconstruction-sha",
+            "source_reconstruction_hash": derived["source_blocks_hash"],
             "fragments": [{"fragment_id": "frag-bg", "start": 0, "end": len(text)}],
             "exact_raw_text": text,
             "expected_source_function": "background",
@@ -570,11 +574,13 @@ def test_multi_span_object_keeps_separate_source_identities(tmp_path):
     right = "Tweede zin van de passage."
     frag_a, block_a = _source_case(left, "frag-a")
     frag_b, block_b = _source_case(right, "frag-b")
+    derived = current_reconstruction_identity([frag_a, frag_b])
     envelope = {
         "semantic_replay": {
             "identity": {"components": {
                 "snapshot_id": "snapshot", "source_sha256": "source-sha",
-                "source_blocks_hash": "reconstruction-sha",
+                "source_blocks_hash": derived["source_blocks_hash"],
+                "reconstruction_version": derived["reconstruction_version"],
             }},
             "validation": "passed",
             "proposal": {"objects": [{
@@ -627,8 +633,67 @@ def test_multi_span_object_keeps_separate_source_identities(tmp_path):
     assert all(row["source"].get("status") != "conflict" for row in located)
     assert all(row["reconstruction"].get("status") != "conflict" for row in located)
     assert source_span_id(
-        source_sha256="source-sha", source_reconstruction_hash="reconstruction-sha",
+        source_sha256="source-sha", source_reconstruction_hash=derived["source_blocks_hash"],
         fragments=[{"fragment_id": "frag-a", "start": 0, "end": len(left)}],
     ) in identities
+
+
+def test_changed_reconstruction_identity_does_not_link_a_derived_block_map(tmp_path):
+    text = "Dit is achtergrond en geen aanbeveling."
+    fragment, block = _source_case(text, "frag-bg")
+    envelope = {
+        "semantic_replay": {
+            "identity": {"components": {
+                "snapshot_id": "snapshot", "source_sha256": "source-sha",
+                "source_blocks_hash": "H",
+                "reconstruction_version": "source-reconstruction-v0",
+            }},
+            "validation": "passed",
+            "proposal": {"objects": [], "source_assessments": [{
+                "span": {"block_id": block["block_id"], "start": 0, "end": len(block["text"])},
+                "role": "background", "reason": "historical_context",
+            }]},
+            "provider_evidence": {
+                "version": "semantic-provider-evidence-v1",
+                "task_policy": "bounded-formation-v1",
+                "response": {"id": "call-bg", "status": "completed", "output_text": "{}"},
+                "tasks": [{"task_id": "task-bg", "phase": "initial", "status": "completed",
+                           "target_spans": [{"block_id": block["block_id"], "start": 0, "end": len(block["text"])}]}],
+            },
+        },
+        "quality_processing_runs": [{
+            "run_id": "run-old", "source_hash": "source-sha",
+            "semantic_identity": {"passage_formation_mode": "semantic-source-bound-v3"},
+            "source_fragments": [fragment],
+        }],
+    }
+    gold = {
+        "gold_version": "forensic-gold-v1",
+        "expected_identity": {"passage_formation_mode": "semantic-source-bound-v3"},
+        "cases": [{
+            "case_id": "BG-OLD-RECONSTRUCTION",
+            "source_sha256": "source-sha",
+            "source_reconstruction_hash": "H",
+            "fragments": [{"fragment_id": "frag-bg", "start": 0, "end": len(text)}],
+            "exact_raw_text": text,
+            "expected_source_function": "background",
+            "expected_answer_bearing": False,
+            "expected_object_type": None,
+        }],
+    }
+    tables, _manifest = processing_evidence_tables(
+        snapshot_id="snapshot", revision="rev", envelope=envelope, objects=[])
+    assert any(row.get("provenance") == "RECONSTRUCTION_IDENTITY_MISMATCH" for row in tables["source_blocks"])
+    assert all(row.get("provenance") != "verified_derived" for row in tables["source_blocks"])
+    result = _zip_trace(tmp_path, envelope, [], gold)
+    evidence = load_evidence(tmp_path / "evidence.zip")
+    assert evidence["reconstruction_provenance"]["status"] == "RECONSTRUCTION_IDENTITY_MISMATCH"
+    assert not any(
+        span.get("fragments") and (span.get("reconstruction") or {}).get("status") == "recorded"
+        for span in evidence["spans"])
+    assert result["summary"]["comparison"] == "RECONSTRUCTION_IDENTITY_MISMATCH"
+    assert result["divergences"][0]["verdict"] == "RECONSTRUCTION_IDENTITY_MISMATCH"
+    assert result["divergences"][0]["first_divergence_stage"] == "reconstruction"
+
 
 

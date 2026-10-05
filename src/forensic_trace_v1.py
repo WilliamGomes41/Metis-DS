@@ -318,9 +318,7 @@ def _objects_for_span(span: dict[str, Any], objects: list[dict[str, Any]]) -> li
     return found
 
 
-def recorded_source_block_rows(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Persist the reconstructed block map. The tracer does not rebuild it."""
-    from src.semantic_passage_v1 import _reconstructed_blocks
+def _safe_source_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     safe = []
     for fragment in fragments or []:
         if not isinstance(fragment, dict) or not fragment.get("fragment_id"):
@@ -329,8 +327,65 @@ def recorded_source_block_rows(fragments: list[dict[str, Any]]) -> list[dict[str
         if not isinstance(item.get("source_locator"), dict):
             item.pop("source_locator", None)
         safe.append(item)
+    return safe
+
+
+def current_reconstruction_identity(fragments: list[dict[str, Any]]) -> dict[str, str]:
+    """Identity of a map derived by the code that is running now. Not historical evidence."""
+    from src.pre_review_semantic_v1 import _candidate_fragments, _evidence_fragments
+    from src.semantic_passage_v1 import semantic_source_blocks
+    from src.semantic_replay_v1 import stable_json_hash
+    from src.source_reconstruction_v1 import RECONSTRUCTION_VERSION
+    safe = _safe_source_fragments(fragments)
+    semantic_input = {
+        "source_blocks": semantic_source_blocks(_candidate_fragments(safe)),
+        "evidence_blocks": semantic_source_blocks(_evidence_fragments(safe)),
+    }
+    return {
+        "reconstruction_version": RECONSTRUCTION_VERSION,
+        "source_blocks_hash": stable_json_hash(semantic_input),
+    }
+
+
+def project_source_blocks(fragments: list[dict[str, Any]], recorded_version: Any, recorded_hash: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Use a derived block map only when it is proven identical to the recorded replay identity."""
+    derived = current_reconstruction_identity(fragments)
+    recorded_version = str(recorded_version) if recorded_version not in (None, "") else None
+    recorded_hash = str(recorded_hash) if recorded_hash not in (None, "") else None
+    base = {
+        "recorded_version": recorded_version,
+        "recorded_hash": recorded_hash,
+        "derived_version": derived["reconstruction_version"],
+        "derived_hash": derived["source_blocks_hash"],
+    }
+    if recorded_version is None or recorded_hash is None:
+        return [], {**base, "status": "unavailable"}
+    if recorded_version != derived["reconstruction_version"] or recorded_hash != derived["source_blocks_hash"]:
+        return [{
+            "kind": "reconstruction_identity_mismatch",
+            "provenance": "RECONSTRUCTION_IDENTITY_MISMATCH",
+            "reconstruction_version": derived["reconstruction_version"],
+            "recorded_reconstruction_version": recorded_version,
+            "recorded_source_blocks_hash": recorded_hash,
+            "derived_source_blocks_hash": derived["source_blocks_hash"],
+        }], {**base, "status": "RECONSTRUCTION_IDENTITY_MISMATCH"}
     rows = []
-    for public, source in _reconstructed_blocks(safe):
+    for row in recorded_source_block_rows(fragments):
+        rows.append({
+            **row,
+            "provenance": "verified_derived",
+            "recorded_reconstruction_version": recorded_version,
+            "recorded_source_blocks_hash": recorded_hash,
+            "derived_source_blocks_hash": derived["source_blocks_hash"],
+        })
+    return rows, {**base, "status": "verified_derived"}
+
+
+def recorded_source_block_rows(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Derive a block map with the current reconstructor. Not historical evidence until verified."""
+    from src.semantic_passage_v1 import _reconstructed_blocks
+    rows = []
+    for public, source in _reconstructed_blocks(_safe_source_fragments(fragments)):
         version = (source.get("source_reconstruction") or {}).get("version")
         for piece in source.get("_raw_source_mapping") or []:
             kind = piece.get("kind") or "fragment_range"
@@ -355,7 +410,8 @@ def slice_block_mapping(rows: list[dict[str, Any]], block_id: Any, start: Any, e
     """Exact cover of one block span. A partial or inexact piece is not a source span."""
     if not block_id or type(start) is not int or type(end) is not int or not start < end:
         return None
-    pieces = [row for row in rows if row.get("block_id") == block_id]
+    pieces = [row for row in rows
+              if row.get("block_id") == block_id and row.get("provenance") in {"verified_derived", "recorded"}]
     if not pieces:
         return None
     mapping: list[dict[str, Any]] = []
@@ -713,6 +769,7 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
         "identity": identity,
         "spans": spans,
         "identity_conflicts": identity_conflicts,
+        "reconstruction_provenance": dict(envelope.get("reconstruction_provenance") or {"status": "unavailable"}),
         "projection": "stored_evidence_join_not_a_new_authority",
     }
 
@@ -851,6 +908,23 @@ def evidence_from_zip(path: Path) -> dict[str, Any]:
     commits = [row.get("deployed_commit") for row in calls if row.get("deployed_commit")]
     call_ids = [row.get("call_id") for row in calls if row.get("call_id")]
     deployed = commits[0] if len(set(commits)) == 1 else None
+    mismatch = next((row for row in source_blocks if row.get("provenance") == "RECONSTRUCTION_IDENTITY_MISMATCH"), None)
+    verified = [row for row in source_blocks if row.get("provenance") in {"verified_derived", "recorded"}]
+    if mismatch:
+        provenance = {
+            "status": "RECONSTRUCTION_IDENTITY_MISMATCH",
+            "recorded_version": mismatch.get("recorded_reconstruction_version"),
+            "recorded_hash": mismatch.get("recorded_source_blocks_hash"),
+            "derived_version": mismatch.get("reconstruction_version"),
+            "derived_hash": mismatch.get("derived_source_blocks_hash"),
+        }
+        usable_blocks = []
+    elif verified:
+        provenance = {"status": "verified_derived" if verified[0].get("provenance") == "verified_derived" else "recorded"}
+        usable_blocks = verified
+    else:
+        provenance = {"status": "unavailable"}
+        usable_blocks = []
     envelope = {
         "semantic_replay": {
             "identity": identity if isinstance(identity, dict) else {},
@@ -879,7 +953,8 @@ def evidence_from_zip(path: Path) -> dict[str, Any]:
                 } for row in formation_findings]},
             },
         },
-        "source_block_map": source_blocks,
+        "source_block_map": usable_blocks,
+        "reconstruction_provenance": provenance,
         "quality_processing_runs": [{
             "source_hash": (runs[0].get("source_hash") if runs else None),
             "semantic_identity": runs[0].get("semantic_identity") if runs and isinstance(runs[0].get("semantic_identity"), dict) else {},
@@ -1225,6 +1300,17 @@ def trace(evidence: Mapping[str, Any], gold: Mapping[str, Any] | None = None) ->
             divergences.append(row)
             continue
         public = by_id.get(span_id) if span_id else None
+        provenance = (evidence.get("reconstruction_provenance") or {}).get("status")
+        historically_reconstructed = ((public or {}).get("reconstruction") or {}).get("status") == "recorded"
+        if provenance == "RECONSTRUCTION_IDENTITY_MISMATCH" and not historically_reconstructed:
+            divergences.append({
+                "case_id": case.get("case_id"), "source_span_id": span_id,
+                "verdict": "RECONSTRUCTION_IDENTITY_MISMATCH", "first_divergence_stage": "reconstruction",
+                "divergence_class": "source", "expected_function": case.get("expected_source_function"),
+                "expected_object_type": case.get("expected_object_type"),
+                "actual_provider_decision": None, "actual_proposed_object_type": None,
+            })
+            continue
         if public is None:
             divergences.append({
                 "case_id": case.get("case_id"), "source_span_id": span_id,
@@ -1273,6 +1359,8 @@ def trace(evidence: Mapping[str, Any], gold: Mapping[str, Any] | None = None) ->
     summary["verdicts"] = counts
     summary["first_divergence_counts"] = stages
     summary["divergence_classes"] = classes
+    if counts and set(counts) == {"RECONSTRUCTION_IDENTITY_MISMATCH"}:
+        summary["comparison"] = "RECONSTRUCTION_IDENTITY_MISMATCH"
     return {"records": [*records, *unindexed], "summary": summary, "divergences": divergences}
 
 

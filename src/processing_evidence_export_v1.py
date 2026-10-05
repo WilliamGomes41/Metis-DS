@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from src.forensic_trace_v1 import CSV_FIELDS, recorded_source_block_rows, rows_for_export
+from src.forensic_trace_v1 import CSV_FIELDS, project_source_blocks, rows_for_export
 from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
@@ -38,7 +38,7 @@ SCHEMAS = {
     "proposal_fields": ("object_id", "object_version", "field", "value", "value_status", "stage", "producer_status", "contract_version", "source_span", "missing_reason"),
     "validation_findings": ("object_id", "object_version", "gate_result", "reason_code", "evidence_kind", "admission", "rule_execution_trace_status"),
     "context_evidence": ("object_id", "object_version", "context_scan", "expand_merge", "necessary_context_disposition", "source_context_review", "context_realization", "source_bound_context", "evidence_kind"),
-    "source_blocks": ("block_id", "reconstruction_version", "map_start", "map_end", "kind", "fragment_id", "raw_start", "raw_end", "text", "source_page", "left_fragment_id", "right_fragment_id"),
+    "source_blocks": ("block_id", "reconstruction_version", "map_start", "map_end", "kind", "fragment_id", "raw_start", "raw_end", "text", "source_page", "left_fragment_id", "right_fragment_id", "provenance", "recorded_reconstruction_version", "recorded_source_blocks_hash", "derived_source_blocks_hash"),
     "lineage": ("object_id", "object_version", "relation", "target_id", "start", "end", "locator", "page", "bbox", "raw_content_hash",
                 "text", "left_fragment_id", "right_fragment_id"),
     "model_calls": ("run_id", "call_id", "request", "raw_response", "stop_reason", "input_tokens", "output_tokens",
@@ -218,15 +218,38 @@ def processing_evidence_tables(
                     source_bound_context=(obj.get("metadata") or {}).get("source_bound_context"),
                     evidence_kind="stored_scan_not_verified_dependency_resolution")
 
+    replay_components = {}
+    if isinstance(replay.get("identity"), dict) and isinstance(replay["identity"].get("components"), dict):
+        replay_components = replay["identity"]["components"]
     block_rows = []
+    block_provenance = {"status": "unavailable"}
+    saw_fragments = False
     for run in runs:
-        block_rows.extend(recorded_source_block_rows(run.get("source_fragments") or []))
+        fragments = run.get("source_fragments") or []
+        if not fragments:
+            continue
+        saw_fragments = True
+        rows, status = project_source_blocks(
+            fragments, replay_components.get("reconstruction_version"), replay_components.get("source_blocks_hash"))
+        if status["status"] == "RECONSTRUCTION_IDENTITY_MISMATCH":
+            block_rows = rows
+            block_provenance = status
+            break
+        if status["status"] != "verified_derived":
+            block_provenance = status
+            continue
+        block_rows.extend(rows)
+        block_provenance = status
+    if not saw_fragments:
+        block_provenance = {"status": "unavailable"}
     for row in block_rows:
         add("source_blocks", **row)
+    usable_rows = [row for row in block_rows if row.get("provenance") == "verified_derived"]
 
     trace_rows, trace_availability, trace_limitation = rows_for_export(
         snapshot_id=snapshot_id, revision=revision,
-        envelope={**envelope, "source_block_map": block_rows}, objects=objects)
+        envelope={**envelope, "source_block_map": usable_rows, "reconstruction_provenance": block_provenance},
+        objects=objects)
     for row in trace_rows:
         add("forensic_trace", **row)
 
@@ -251,8 +274,9 @@ def processing_evidence_tables(
         "proposal_fields": ("partial", "Stored admission fields; field producers and intermediate transformations are not recorded."),
         "validation_findings": ("partial", "Stored results and reasons; no individual execution trace. No reason does not prove all checks passed."),
         "context_evidence": ("partial", "Stored context scan; include does not by itself prove that context was attached."),
-        "source_blocks": ("recorded" if block_rows else "not_recorded",
-            "Version-bound reconstructed block-to-fragment map. The tracer slices a span only when the map covers it exactly."),
+        "source_blocks": (
+            "verified_derived" if block_provenance.get("status") == "verified_derived" else "not_recorded",
+            "Derived from current reconstruction only when reconstruction_version and source_blocks_hash equal the recorded replay identity. A mismatch is not used as a historical block map."),
         "lineage": ("partial", "Object-to-block and object-to-fragment relations are separate; block-to-fragment mapping is source_blocks, not inferred from object text."),
         "model_calls": ("partial" if tables["model_calls"] else "not_recorded",
                         "Origin call of latest saved validated proposal only, also on replay; not a new call. "
