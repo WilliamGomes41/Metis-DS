@@ -80,7 +80,10 @@ def _apply_candidate_semantics(
 ) -> dict[str, Any]:
     """Keep candidate semantics independent from source-location authority."""
 
-    if donor is principal or not _proposal_rank(donor):
+    if donor is principal or (
+        not _proposal_rank(donor)
+        and (principal.get("source_accountability") or donor.get("source_accountability"))
+    ):
         return principal
     row = deepcopy(principal)
     # A selected exact duplicate may supply candidate semantics to a more
