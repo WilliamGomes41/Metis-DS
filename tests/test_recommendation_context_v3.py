@@ -60,6 +60,11 @@ def response_for(payload, text, *, heading=None, include_context=True, stamp=Non
 def prepare(text="Gebruik geen zalf", *, heading=None, include_context=True, stamp=None, mutate=None, fragments=None):
     fragments = fragments if fragments is not None else source(text, heading)
     def provider(_url, _headers, payload, _timeout):
+        if json.loads(payload["input"][1]["content"]).get("selection_targets"):
+            # These tests exercise recommendation admission. The broader
+            # recovery pass explicitly leaves the remaining source unresolved.
+            return {"output": [{"type": "message", "content": [{"type": "output_text",
+                "text": json.dumps({"objects": [], "relations": [], "abstain_reason": "uncertain"})}]}]}
         proposal = response_for(payload, text, heading=heading, include_context=include_context, stamp=stamp)
         if mutate:
             mutate(proposal)

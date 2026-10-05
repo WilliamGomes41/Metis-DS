@@ -80,11 +80,22 @@ def _apply_candidate_semantics(
 ) -> dict[str, Any]:
     """Keep candidate semantics independent from source-location authority."""
 
-    if donor is principal:
+    if donor is principal or (
+        not _proposal_rank(donor)
+        and (principal.get("source_accountability") or donor.get("source_accountability"))
+    ):
         return principal
     row = deepcopy(principal)
+    # A selected exact duplicate may supply candidate semantics to a more
+    # authoritative source occurrence. Its prior source-only disposition must
+    # not travel with those candidate semantics. For source-only duplicates,
+    # keep the principal occurrence's exact span and bound role together.
+    row.pop("source_accountability", None)
     for key in (
         "semantic_passage",
+        "source_bound_fields",
+        "source_bound_context",
+        "review_track",
         "proposed_object_type",
         "proposed_recommendation_strength",
         "proposed_recommendation_semantics",

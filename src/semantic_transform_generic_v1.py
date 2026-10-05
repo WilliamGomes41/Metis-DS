@@ -279,6 +279,20 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
             raise ValueError("source_bound_fields_contract_mismatch")
         if semantic_passage is not None:
             system_metadata["semantic_passage"] = semantic_passage
+        from src.source_accountability_v1 import KEY as SOURCE_KEY, record as source_record
+        if SOURCE_KEY in item:
+            evidence = item[SOURCE_KEY]
+            if not semantic_passage or semantic_passage["selection_origin"] != SELECTION_ORIGIN_COVERAGE:
+                raise ValueError("source_accountability_requires_source_record")
+            expected = source_record(text=item.get("clean_text", item["text"]),
+                spans=semantic_passage["spans"], assessment={
+                    "role": evidence.get("proposed_role"), "reason": evidence.get("reason")})
+            from src.source_accountability_v1 import ROLES
+            if (evidence != expected or evidence.get("proposed_role") not in ROLES
+                    or evidence.get("reason") not in ROLES[evidence["proposed_role"]]
+                    or item.get("review_track") != "technical"):
+                raise ValueError("source_accountability_invalid")
+            system_metadata[SOURCE_KEY] = expected
         obj = {
             "object_id": item["object_id"],
             "document_id": spec["document_id"],

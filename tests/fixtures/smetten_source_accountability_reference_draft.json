@@ -1,0 +1,119 @@
+{
+  "status": "draft_not_human_validated",
+  "basis": "supplied processing export; original PDF bytes unavailable",
+  "snapshot_id": "snap-25bdf01186a1769c-6239c1e4",
+  "source_sha256": "62dfd76e0683a372d54b6d7aea8b09b47b2b71022e60ff034d76223919bec47c",
+  "scope": "regression examples, not exhaustive recall gold set",
+  "entries": [
+    {
+      "original_record_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-semcov-d688d23251b9ef1f",
+      "text": "Versie: 1",
+      "source_spans": [
+        {
+          "end": 9,
+          "start": 0,
+          "block_id": "semblock-ed3a2cf4b4c6a830edab"
+        }
+      ],
+      "section_path": [
+        "Smetten"
+      ],
+      "original_selection_origin": "coverage_remainder",
+      "human_review_question": "metadata",
+      "expected_safety": "source preserved; formed with exact evidence or explicitly unresolved; no automatic substantive exclusion"
+    },
+    {
+      "original_record_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-semcov-5693cf4b15ed28c6",
+      "text": "Datum: juli 2026",
+      "source_spans": [
+        {
+          "end": 16,
+          "start": 0,
+          "block_id": "semblock-616565e3e0ff71488fe0"
+        }
+      ],
+      "section_path": [
+        "Smetten"
+      ],
+      "original_selection_origin": "coverage_remainder",
+      "human_review_question": "metadata",
+      "expected_safety": "source preserved; formed with exact evidence or explicitly unresolved; no automatic substantive exclusion"
+    },
+    {
+      "original_record_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-semcov-c300ab77abc3eab1",
+      "text": "Smetten is een huidontsteking die ontstaat op plekken waar huid-op-huid contact is. Dit gebeurt vooral in grote huidplooien, zoals onder de borsten, in de liezen, onder een buikplooi of in de bilspleet. Ook in kleinere huidplooien kan smetten ontstaan, bijvoorbeeld bij vingers die door een contractuur voortdurend gebogen staan. De precieze oorzaak van smetten is niet bekend. Wel spelen vocht, warmte, wrijving tussen huidoppervlakken een belangrijke rol. Door tijdig de correcte behandeling van smetten te starten, kunnen secundaire infecties worden voorkomen.",
+      "source_spans": [
+        {
+          "end": 563,
+          "start": 0,
+          "block_id": "semblock-de4d24e8075c659e9e56"
+        }
+      ],
+      "section_path": [
+        "Smetten",
+        "Inleiding",
+        "Aanleiding en doel richtlijn"
+      ],
+      "original_selection_origin": "coverage_remainder",
+      "human_review_question": "possible_definition_and_explanation",
+      "expected_safety": "source preserved; formed with exact evidence or explicitly unresolved; no automatic substantive exclusion"
+    },
+    {
+      "original_record_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-semcov-725f261b7894a94a",
+      "text": "De richtlijn bevat aanbevelingen van algemene aard. Het is mogelijk dat deze aanbevelingen in een individueel geval niet van toepassing zijn. Er kunnen zich feiten of omstandigheden voordoen waardoor het wenselijk is dat in het belang van de patiënten van de richtlijn wordt afgeweken. Wanneer van de richtlijn wordt afgeweken dient dit beargumenteerd en gedocumenteerd te worden en is de verantwoordelijkheid van de zorgverlener.",
+      "source_spans": [
+        {
+          "end": 430,
+          "start": 0,
+          "block_id": "semblock-9fd3b1abc3c020824358"
+        }
+      ],
+      "section_path": [
+        "Smetten",
+        "Algemene verantwoording",
+        "Juridische betekenis van de richtlijn"
+      ],
+      "original_selection_origin": "coverage_remainder",
+      "human_review_question": "possible_exception_and_condition",
+      "expected_safety": "source preserved; formed with exact evidence or explicitly unresolved; no automatic substantive exclusion"
+    },
+    {
+      "original_record_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-af6336104011fc04",
+      "text": "Breng bij iedere patiënt de risicofactoren voor smetten in kaart, om te bepalen of preventieve maatregelen nodig zijn.",
+      "source_spans": [
+        {
+          "end": 118,
+          "start": 0,
+          "block_id": "semblock-a4cc4b199073c6f04a46"
+        }
+      ],
+      "section_path": [
+        "Smetten",
+        "Module 1: Risicofactoren",
+        "Aanbevelingen"
+      ],
+      "original_selection_origin": "proposal_selected",
+      "human_review_question": "recommendation",
+      "expected_safety": "source preserved; formed with exact evidence or explicitly unresolved; no automatic substantive exclusion"
+    },
+    {
+      "original_record_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-semcov-eca1aa717cace991",
+      "text": "Wanneer de huidafwijking zich uitbreidt tot buiten de huidplooien, is er vaak sprake van een (secundaire) gist- of schimmelinfectie. Eerst is het van belang om te beoordelen of de niet medicamenteuze basismaatregelen adequaat zijn toegepast. In de praktijk blijkt dat factoren zoals vocht, warmte en wrijving vaak onvoldoende worden aangepakt. Als de basismaatregelen correct toegepast worden, kan doorgaans binnen 5-7 dagen verbetering van de smetplek/klachten optreden. Het direct inzetten van medicamenteuze behandeling, zonder het wegnemen van de onderliggende oorzaak van smetten, kan leiden tot onnodig medicatiegebruik.",
+      "source_spans": [
+        {
+          "end": 626,
+          "start": 0,
+          "block_id": "semblock-b97732d13f68a9cd7981"
+        }
+      ],
+      "section_path": [
+        "Smetten",
+        "Module 3: Diagnostiek",
+        "Van bewijs naar aanbeveling (overwegingen)"
+      ],
+      "original_selection_origin": "coverage_remainder",
+      "human_review_question": "possible_condition_and_explanation",
+      "expected_safety": "source preserved; formed with exact evidence or explicitly unresolved; no automatic substantive exclusion"
+    }
+  ]
+}

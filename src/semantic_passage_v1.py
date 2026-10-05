@@ -144,6 +144,7 @@ def _coverage_remainders(
     *,
     document_id: str,
     selected_ranges_by_block: dict[str, list[tuple[int, int]]],
+    assessments: list[dict[str, Any]] | None = None,
 ) -> list[tuple[tuple[int, int], dict[str, Any]]]:
     out: list[tuple[tuple[int, int], dict[str, Any]]] = []
     for public, source in reconstructed:
@@ -167,7 +168,14 @@ def _coverage_remainders(
         if cursor < len(text):
             gaps.append((cursor, len(text)))
 
-        for start, end in gaps:
+        # Preserve every gap, split only at explicit source-role boundaries.
+        classified = [r for r in (assessments or []) if r["span"]["block_id"] == block_id]
+        split_gaps = []
+        for lo, hi in gaps:
+            cuts = sorted({lo, hi, *(v for r in classified for v in
+                (r["span"]["start"], r["span"]["end"]) if lo < v < hi)})
+            split_gaps.extend(zip(cuts, cuts[1:]))
+        for start, end in split_gaps:
             remainder_text = normalize_visible_prose(text[start:end])
             if not remainder_text:
                 continue
@@ -182,7 +190,7 @@ def _coverage_remainders(
                 "source_fragment_ids": fragment_ids,
                 "section_path": list(public["section_path"]),
                 "heading": public["heading"],
-                "review_track": "clinical",
+                "review_track": "technical",
                 "relations": [],
                 "confirmed_relations": [],
                 "semantic_passage": {
@@ -199,6 +207,11 @@ def _coverage_remainders(
                     "source_mapping": mapped_raw_spans(source, start=start, end=end),
                 },
             }
+            from src.source_accountability_v1 import KEY, record
+            assessment = next((r for r in classified if
+                r["span"]["start"] <= start and end <= r["span"]["end"]), None)
+            unit[KEY] = record(text=remainder_text, spans=unit["semantic_passage"]["spans"],
+                               assessment=assessment)
             out.append(((int(public["position"]), start), unit))
     return out
 
@@ -602,7 +615,7 @@ def semantic_units_from_proposal(
 
     if not isinstance(proposal, dict):
         _fail("semantic_proposal_invalid")
-    _require_only_keys(proposal, _TOP_LEVEL_KEYS, "semantic_proposal_contains_untrusted_fields")
+    _require_only_keys(proposal, _TOP_LEVEL_KEYS | ({"source_assessments"} if (field_contract_v2 or field_contract_v3) else set()), "semantic_proposal_contains_untrusted_fields")
 
     raw_objects = proposal.get("objects", [])
     raw_relations = proposal.get("relations", [])
@@ -614,8 +627,7 @@ def semantic_units_from_proposal(
     if abstain_reason:
         if raw_objects:
             _fail("semantic_abstain_with_objects")
-        return []
-    if not raw_objects:
+    if not raw_objects and not abstain_reason and not proposal.get("source_assessments"):
         _fail("semantic_empty_proposal")
 
     reconstructed = _reconstructed_blocks(fragments_list)
@@ -800,11 +812,18 @@ def semantic_units_from_proposal(
             unit["recommendation_semantics_evidence"] = semantics_evidence
         units_with_position.append(((first["position"], first["start"]), unit))
 
+    from src.source_accountability_v1 import validate_assessments
+    try:
+        assessments = validate_assessments(proposal.get("source_assessments", []),
+                                          [p for p, _ in reconstructed], raw_objects)
+    except ValueError as exc:
+        _fail(str(exc))
     units_with_position.extend(
         _coverage_remainders(
             reconstructed,
             document_id=document_id,
             selected_ranges_by_block=selected_ranges_by_block,
+            assessments=assessments,
         )
     )
     units_with_position.sort(key=lambda pair: pair[0])

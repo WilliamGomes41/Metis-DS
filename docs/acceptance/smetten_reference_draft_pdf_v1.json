@@ -1,0 +1,283 @@
+{
+  "status": "DRAFT_NOT_HUMAN_VALIDATED",
+  "source_sha256": "62dfd76e0683a372d54b6d7aea8b09b47b2b71022e60ff034d76223919bec47c",
+  "source_pages": 46,
+  "method": "Original PDF visually reviewed for pages 25–26 and text-located for references. Prior export provided an index of 21 candidate recommendations; two table-row labels were identified in the PDF. This draft is not independent of the prior export, is not an exhaustive clinical gold set, and must not serve as an automatic acceptance oracle.",
+  "required_types": [
+    "definition",
+    "explanation",
+    "condition",
+    "exception",
+    "recommendation"
+  ],
+  "recommendation_count_hypothesis": 19,
+  "entries": [
+    {
+      "reference_id": "D01",
+      "type_proposal": "definition",
+      "page": 6,
+      "anchor": "Smetten is een huidontsteking die ontstaat op plekken waar huid-op-huid contact is.",
+      "required_context": "Places of skin contact and uncertainty about exact cause; determine whether explanation should be a separate object.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "E01",
+      "type_proposal": "explanation",
+      "page": 16,
+      "anchor": "beoordeling van de bewijskracht van de literatuur",
+      "required_context": "The evidence-quality statement is about risk factors; keep its attribution and uncertainty.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "C01",
+      "type_proposal": "condition",
+      "page": 33,
+      "anchor": "Er druk aanwezig is ter hoogte van de huidafwijking",
+      "required_context": "Part of the numbered differential-diagnosis recommendation; link that parent and the other list conditions.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "X01",
+      "type_proposal": "exception",
+      "page": 12,
+      "anchor": "Het is mogelijk dat deze aanbevelingen in een individueel geval niet van toepassing zijn.",
+      "required_context": "Legal scope and grounds for deviating from the guideline; confirm whether independent exception or context.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "C02",
+      "type_proposal": "condition",
+      "page": 41,
+      "anchor": "basismaatregelen niet werken en de smetplek zich uitbreidt",
+      "required_context": "Must qualify the combination-preparation recommendation; cannot disappear from the actionable knowledge.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "N01",
+      "type_proposal": null,
+      "page": 1,
+      "anchor": "Versie: 1",
+      "source_role_proposal": "document_metadata",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "N02",
+      "type_proposal": null,
+      "page": 1,
+      "anchor": "Datum: juli 2026",
+      "source_role_proposal": "document_metadata",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "N03",
+      "type_proposal": null,
+      "page": 3,
+      "anchor": "Implementatietabel",
+      "source_role_proposal": "navigation_if_in_toc",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "N04",
+      "type_proposal": null,
+      "page": 25,
+      "anchor": "Conceptrichtlijn Smetten – commentaarronde juli 2026",
+      "source_role_proposal": "page_footer",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "T01",
+      "type_proposal": null,
+      "page": 26,
+      "anchor": "Voorkom overmatig",
+      "source_role_proposal": "table_row_context",
+      "required_context": "Table 1 on pages 25–26, referenced by recommendation R02; row label and right cell retained, not independently counted as recommendation.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "T02",
+      "type_proposal": null,
+      "page": 26,
+      "anchor": "Voorkom huid-op-huid",
+      "source_role_proposal": "table_row_context",
+      "required_context": "Table 1 on pages 25–26, referenced by recommendation R02; row label and right cell retained, not independently counted as recommendation.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R01",
+      "type_proposal": "recommendation",
+      "page": 18,
+      "anchor": "Breng bij iedere patiënt de risicofactoren voor smetten in kaart, om te bepalen of preventieve maatregelen nodig zijn.",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-af6336104011fc04",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R02",
+      "type_proposal": "recommendation",
+      "page": 25,
+      "anchor": "Overweeg (een combinatie van) de volgende preventieve maatregelen",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-01e90bd3893290b3",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R03",
+      "type_proposal": "recommendation",
+      "page": 26,
+      "anchor": "Gebruik geen poeders of pasta’s bij de preventie van smetten",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-6048047489be1187",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R04",
+      "type_proposal": "recommendation",
+      "page": 26,
+      "anchor": "Gebruik geen apparatuur (zoals een föhn) om de huidplooien te drogen bij de preventie van smetten",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-6096424c4cca2926",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R05",
+      "type_proposal": "recommendation",
+      "page": 32,
+      "anchor": "Stel de diagnose smetten aan de hand van klinische verschijnselen",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-2c78c172f0ccb22b",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R06",
+      "type_proposal": "recommendation",
+      "page": 32,
+      "anchor": "Stel de diagnose van geïnfecteerd smetten en smetten waarbij een gist of schimmel aanwezig is aan de hand van klinische verschijnselen",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-3b7506ff3330b1c4",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R07",
+      "type_proposal": "recommendation",
+      "page": 33,
+      "anchor": "Wees alert dat smetten een ander klinisch beeld",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-ebbb079ef9d609d7",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R08",
+      "type_proposal": "recommendation",
+      "page": 33,
+      "anchor": "Stel vast of er sprake kan zijn van een andere huidafwijking dan smetten wanneer:",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-e314586039df4c49",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R09",
+      "type_proposal": "recommendation",
+      "page": 33,
+      "anchor": "Zet geen aanvullende (laboratorium-)onderzoeken in voor de eerste diagnose van smetten.",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-8da441f91dbcca4e",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R10",
+      "type_proposal": "recommendation",
+      "page": 41,
+      "anchor": "Pas minimaal 2 keer per dag de basismaatregelen toe bij smetten in de huidplooien.",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-36899e2be5b62d75",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R11",
+      "type_proposal": "recommendation",
+      "page": 41,
+      "anchor": "Zet bij smetten in de huidplooien een zinkoxidesmeersel FNA (zinkolie) 2 keer per dag in of barrière product (volgens voorschrift)",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-a36eada918e0914f",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R12",
+      "type_proposal": "recommendation",
+      "page": 41,
+      "anchor": "Als smetten zich uitbreidt tot buiten de huidplooien, controleer of de basismaatregelen en de inzet van zinkoxidesmeersel FNA (zinkolie) of barrière crème of barrière spray correct",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-e48cb176015ab582",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R13",
+      "type_proposal": "recommendation",
+      "page": 41,
+      "anchor": "Zet lokaal een combinatiepreparaat",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-5d8712575c62b98c",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R14",
+      "type_proposal": "recommendation",
+      "page": 41,
+      "anchor": "Gebruik geen zalf",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-0fac2ae0eb0a05b7",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R15",
+      "type_proposal": "recommendation",
+      "page": 41,
+      "anchor": "Overweeg een zinkoxidesmeersel FNA",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-05676ac7d720062f",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R16",
+      "type_proposal": "recommendation",
+      "page": 41,
+      "anchor": "Gebruik een alternatief antimycoticum",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-7df7951b55fd820d",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R17",
+      "type_proposal": "recommendation",
+      "page": 46,
+      "anchor": "Evalueer de behandelopties na het starten van de behandeling:",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-70f4adcc9bdb1d92",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R18",
+      "type_proposal": "recommendation",
+      "page": 46,
+      "anchor": "Consulteer een deskundige (bijv. een dermatologie-verpleegkundige of verpleegkundig specialist, wondconsultent, huisarts, specialist ouderengeneeskunde of een dermatoloog) als de s",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-83fa6566434cdf8a",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    },
+    {
+      "reference_id": "R19",
+      "type_proposal": "recommendation",
+      "page": 46,
+      "anchor": "Gebruik geen kweek om de behandeling te bepalen bij smetten met een afwijkend beloop",
+      "prior_export_object_id": "console-smetten-richtlijn-smetten-1-0-62dfd76e-sem-4584f4ab68666116",
+      "needs_manual_check": "Verify the complete normative core, strength, conditions, lists and scope on the original PDF; do not inherit the prior admission verdict.",
+      "anchor_verification": "pdf_text_page_match"
+    }
+  ],
+  "human_validation": {
+    "reviewer": null,
+    "validated_at": null,
+    "per_entry_decisions": null,
+    "context_and_completeness_checked": false
+  }
+}

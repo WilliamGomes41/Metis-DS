@@ -103,6 +103,37 @@ def merge_proposals(primary, supplement):
     for relation in supplement.get("relations") or []:
         if relation not in result["relations"]:
             result["relations"].append(deepcopy(relation))
+    # A supplement can resolve an earlier unresolved assessment. Explicit
+    # non-knowledge proposals are never silently overwritten by this pass.
+    replacements = [s for obj in supplement.get("objects", []) for s in obj["spans"]]
+    replacements += [r["span"] for r in supplement.get("source_assessments", [])]
+    assessments = []
+    for row in result.get("source_assessments", []):
+        ref = row["span"]
+        overlaps = sorted((max(ref["start"], s["start"]), min(ref["end"], s["end"]))
+            for s in replacements if ref["block_id"] == s["block_id"] and
+            max(ref["start"], s["start"]) < min(ref["end"], s["end"]))
+        if not overlaps:
+            assessments.append(row)
+            continue
+        if row["role"] != "unresolved":
+            if row in supplement.get("source_assessments", []):
+                continue
+            raise ConsoleError("pre_review_llm_proposal_rejected", "source_assessment_overlap")
+        cursor = ref["start"]
+        for lo, hi in overlaps:
+            if cursor < lo:
+                assessments.append({**deepcopy(row), "span": {**ref, "start": cursor, "end": lo}})
+            cursor = max(cursor, hi)
+        if cursor < ref["end"]:
+            assessments.append({**deepcopy(row), "span": {**ref, "start": cursor}})
+    for row in supplement.get("source_assessments", []):
+        if row not in assessments:
+            assessments.append(deepcopy(row))
+    if "source_assessments" in primary or "source_assessments" in supplement:
+        result["source_assessments"] = assessments
+    if objects:
+        result["abstain_reason"] = None
     return result
 
 

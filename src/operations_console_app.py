@@ -356,7 +356,8 @@ ERROR_COPY = {
     "source_context_target_required": "Selecteer minstens één passage die deze context nodig heeft. Gebruik de aparte actie om alle koppelingen te verwijderen.",
     "source_context_target_invalid": "Kies een inhoudelijke passage uit dit document. Een kop, het label zelf of een ander contextfragment kan hier geen doel zijn.",
     "source_context_evidence_required": "Het exacte bronbewijs ontbreekt. Laat de koppeling open en vraag de beheerder de bronverwijzing te controleren.",
-    "source_context_not_knowledge": "Dit fragment is bevestigd als bronlabel of context. Het is geen zelfstandige kennispassage; beoordeel de gekoppelde passages.",
+    "source_exclusion_not_proposed": "Deze selectie bevat inhoudelijk of gewijzigd bronwerk. Controleer de bronafhandeling opnieuw; er is niets uitgesloten.",
+    "source_context_not_knowledge": "Dit is bronbewijs, geen gevormd kennisobject. Verantwoord het brongebruik of herstel de kennisvorming; keur deze bronregel niet als kennisobject goed.",
     "source_context_review_incomplete": "Een broncontextkoppeling verwijst naar gewijzigde of ontbrekende tekst. Controleer de koppeling en beoordeel de betrokken passages opnieuw.",
     "source_context_check_required": "Controleer de bron en bevestig dit voordat je de koppeling opslaat.",
     "source_context_independent_transaction_required": "De broncontext kon niet als zelfstandige opdracht worden opgeslagen. Er is niets bevestigd; laat de beheerder de workflowopslag controleren.",
@@ -2560,6 +2561,7 @@ def _review_inventory(
     bindings: list[dict[str, Any]] | None,
     reviewer_id: str,
     task: str,
+    snapshot_revision: str = "",
 ) -> str:
     """Every current passage remains reachable; no admission or finality writes."""
     followups = review_followup_queues(objects, review_path=review_path, bindings=bindings)
@@ -2583,6 +2585,9 @@ def _review_inventory(
         "invalid_disposition_state": "Afhandeling moet worden uitgezocht",
     }
     items = []
+    source_items = []
+    metadata_items = []
+    from src.source_accountability_v1 import is_source_record, evidence_of
     for obj in objects:
         if obj.get("object_type") == "document":
             continue
@@ -2600,6 +2605,28 @@ def _review_inventory(
         disposition = definitive_review_disposition(obj)
         category = route_task or followup_tasks.get(object_id) or "history"
         if task != "inventory" and category != task:
+            continue
+        if is_source_record(obj) and not disposition.get("final"):
+            evidence = evidence_of(obj)
+            text = str((obj.get("content") or {}).get("clean_text") or "")
+            reason = {
+                "document_metadata": "Voorgestelde documentmetadata",
+                "page_furniture": "Voorgestelde kop- of voettekst",
+                "navigation": "Voorgestelde navigatie of inhoudsopgave",
+                "document_structure": "Voorgestelde documentstructuur",
+                "unformed_meaning": "Geen complete kenniseenheid gevormd; controleer deze broninhoud",
+                "uncertain_source_role": "Bronrol onzeker; bepaal kennis, context of onderbouwing",
+            }.get(evidence.get("reason"), "Bronverantwoording ongeldig; herstel de verwerking")
+            link = f'/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task=disposition'
+            content = (f'<p>{_esc(text)}</p><p>{_esc(reason)}</p>'
+                       f'<a href="{link}">Bekijk bronpassage</a> · '
+                       f'<a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task=disposition">Brongebruik bepalen of herstellen</a>')
+            if evidence.get("proposed_role") in {"metadata", "structure"} and not role_of(obj):
+                metadata_items.append(f'<li data-source-record="{_esc(object_id)}"><label>'
+                    f'<input type="checkbox" name="source_object_ids" value="{_esc(object_id)}" checked>'
+                    f' Opnemen in mijn bronbesluit</label>{content}</li>')
+            else:
+                source_items.append(f'<li data-source-record="{_esc(object_id)}">{content}</li>')
             continue
         gate = str(admission_of(obj).get("gate_result") or "")
         outcome = outcomes.get(str(disposition.get("outcome") or ""), "Afhandeling controleren")
@@ -2635,6 +2662,27 @@ def _review_inventory(
             f'<a href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={_esc(target_task)}">Bekijk bronpassage</a>'
             f'<p class="muted">{_esc(origin)}</p></li>'
         )
+    source_html = ""
+    if metadata_items or source_items:
+        source_html = ('<section data-source-accountability><h3>Bronverantwoording</h3>'
+            '<p>Deze bronregels zijn geen gevormde kennisobjecten. De bron blijft behouden. '
+            'Open inhoudelijke bronafhandeling blokkeert publicatie.</p>')
+        if metadata_items:
+            source_html += ('<form method="post" action="/review/source-exclusions">'
+                f'<input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">'
+                + _snapshot_revision_input(snapshot_revision)
+                + f'<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
+                + f'<h4>Voorgestelde metadata en structuur ({len(metadata_items)})</h4>'
+                + '<p>Controleer de bron en de selectie. Dit modelvoorstel is nog geen uitsluiting.</p><ol>'
+                + "".join(metadata_items) + '</ol>'
+                + '<label>Reden voor mijn bronbesluit<input name="reason" required maxlength="4000"></label>'
+                + '<label><input type="checkbox" name="source_checked" value="1" required>'
+                + ' Ik heb de geselecteerde bronregels gecontroleerd; zij bevatten geen op te nemen kennis.</label>'
+                + '<button type="submit">Geselecteerde bronregels gemotiveerd uitsluiten</button></form>')
+        if source_items:
+            source_html += (f'<h4>Inhoudelijk bronherstel ({len(source_items)})</h4><ol>'
+                            + "".join(source_items) + '</ol>')
+        source_html += '</section>'
     title = "Alle passages en hun afhandeling" if task == "inventory" else labels[task]
     if task == "repair":
         title += f" ({len(items)})"
@@ -2642,10 +2690,10 @@ def _review_inventory(
     return (
         f'<section class="{panel_class}">'
         + _review_task_header(snapshot_id, title, "Beoordelingswerk en bronafhandeling zijn afzonderlijke controles; de aantallen mogen overlappen")
-        + f'<p>{len(items)} passages in dit overzicht.</p>'
+        + f'<p>{len(items)} beoordelings- of historieregels; {len(metadata_items) + len(source_items)} bronregels.</p>'
         + f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p>'
-        + '<ol class="object-index review-passage-inventory">' + "".join(items) + '</ol>'
-        + ('<p class="review-task-empty">Deze lijst is leeg. Controleer het volledige passage-overzicht voor ander werk.</p>' if not items else '')
+        + '<ol class="object-index review-passage-inventory">' + "".join(items) + '</ol>' + source_html
+        + ('<p class="review-task-empty">Deze lijst is leeg. Controleer het volledige passage-overzicht voor ander werk.</p>' if not items and not source_html else '')
         + '</section>'
     )
 
@@ -2657,6 +2705,7 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
     """Present existing context decisions; navigation never confirms a relation."""
     if obj.get("object_type") in {"document", "heading", "path"}:
         return ""
+    from src.source_accountability_v1 import is_source_record
     evidence = source_context_projections(objects)
     oid = str(obj["object_id"])
     current = evidence[oid]
@@ -2682,7 +2731,7 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
         return f'<p class="context-literal">{_esc((row.get("content") or {}).get("clean_text") or "")}</p>'
 
     role = current["role"]
-    is_source = bool(role or source_label_hint(obj) or target or source_mode)
+    is_source = bool(is_source_record(obj) or role or source_label_hint(obj) or target or source_mode)
     parts = ['<section class="review-step passage-context" id="passage-context" data-passage-context>',
              '<h3>Controleer de passage en de bijbehorende context</h3>',
              '<p>Staat in de bron een doelgroep, voorwaarde, uitzondering of label die nodig is om deze passage '
@@ -2834,7 +2883,8 @@ def _render_review_index(
     bindings = list(bindings) if bindings is not None else None
     if task in {"inventory", "disposition", "waiting"}:
         return _review_inventory(snapshot_id, snapshot_objects, review_path=review_path,
-                                 bindings=bindings, reviewer_id=reviewer_id, task=task)
+                                 bindings=bindings, reviewer_id=reviewer_id, task=task,
+                                 snapshot_revision=snapshot_revision)
     followups = review_followup_queues(snapshot_objects, review_path=review_path, bindings=bindings)
     koppen = _review_route_objects(
         snapshot_objects,
@@ -3177,7 +3227,8 @@ def _render_review_card(
 def _source_context_card(console: OperationsConsole, snapshot_id: str, obj: dict[str, Any],
                          panel: str, *, context_target: str, context_mode: str, task: str) -> str:
     """Keep fragment handling separate from approval of independent knowledge."""
-    if not (role_of(obj) or (panel and (context_target or context_mode == "source" or
+    from src.source_accountability_v1 import is_source_record
+    if not (is_source_record(obj) or role_of(obj) or (panel and (context_target or context_mode == "source" or
             (source_label_hint(obj) and context_mode != "review")))):
         return ""
     try:
@@ -3187,7 +3238,7 @@ def _source_context_card(console: OperationsConsole, snapshot_id: str, obj: dict
         passage_ok = False
     parts = ['<section data-source-role-card><h3>Brontekst koppelen of afhandelen</h3>',
              _broncontext_html(obj, snapshot_id, obj["object_id"], passage_ok, task=task)]
-    if source_label_hint(obj) and not role_of(obj):
+    if source_label_hint(obj) and not role_of(obj) and not is_source_record(obj):
         parts.append('<p>Metis herkent een mogelijk los label. Dit is nog geen bevestigd besluit.</p>'
                      f'<p><a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(obj["object_id"])}&amp;context_mode=review">Dit is zelfstandig te beoordelen tekst</a></p>')
     return ''.join(parts) + panel + '</section>'
@@ -4700,7 +4751,7 @@ def create_console_app(
         pre_review_blocked = receipt.get("publication_eligibility") == PRE_REVIEW_BLOCKED
         lead = (
             "Document opgeslagen. De verwerking is niet afgerond; beoordelen is nog niet beschikbaar."
-            if pre_review_blocked else "Vastgelegd en klaar voor review."
+            if pre_review_blocked else "Vastgelegd. Controleer de kennisobjecten en open bronafhandeling."
         )
         next_actions = (
             '<p><a class="btn-primary" href="/tree">Document bekijken</a></p>'
@@ -5382,6 +5433,20 @@ def create_console_app(
             _review_location(state, snapshot_id, task=safe_task),
             status_code=303,
         )
+
+    @app.post("/review/source-exclusions")
+    def review_source_exclusions(request: Request, snapshot_id: str = Form(...),
+            source_object_ids: list[str] = Form(default=[]), reason: str = Form(""),
+            command_id: str = Form(""), snapshot_revision: str = Form(""),
+            source_checked: str = Form("")) -> Response:
+        account = _require(request)
+        if source_checked != "1":
+            raise ConsoleError("source_context_check_required")
+        from src.source_context_review_v1 import confirm_source_exclusions
+        confirm_source_exclusions(state, actor_id=account["account_id"], snapshot_id=snapshot_id,
+            source_object_ids=source_object_ids, reason=reason, command_id=command_id,
+            expected_revision=snapshot_revision)
+        return RedirectResponse(_review_location(state, snapshot_id, task="disposition"), status_code=303)
 
     @app.post("/review/source-context")
     def review_source_context(request: Request, snapshot_id: str = Form(...), source_object_id: str = Form(...),

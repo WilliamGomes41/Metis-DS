@@ -116,6 +116,10 @@ def _initial_status(obj: dict[str, Any], *, context_headings: set[str]) -> tuple
     existing = passage_register_of(obj)
     if existing.get("source") == "review" and existing.get("status") in PASSAGE_REGISTER_STATUSES:
         return str(existing["status"]), list(existing.get("reason_codes") or [])
+    from src.source_accountability_v1 import is_source_record, evidence_of
+    if is_source_record(obj):
+        evidence = evidence_of(obj)
+        return "not_yet_assessed", [evidence.get("reason", "source_accountability_invalid")]
     admission = admission_of(obj)
     gate = admission.get("gate_result")
     reasons = [str(code) for code in (admission.get("reason_codes") or []) if str(code).strip()]

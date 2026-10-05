@@ -2944,6 +2944,9 @@ class OperationsConsole:
         ):
             raise ConsoleError("second_review_command_required")
         if decision != "later":
+            from src.source_accountability_v1 import is_source_record
+            if is_source_record(target) and (decision == "approve" or apply_type):
+                raise ConsoleError("source_context_not_knowledge")
             if is_admission_blocked(target, review_path=review_path) and (
                 decision == "approve" or apply_type
             ):

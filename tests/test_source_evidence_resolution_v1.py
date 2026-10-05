@@ -40,7 +40,7 @@ def proposal(block):
                 "strength": "strong", "strength_status": "explicit", "strength_evidence": ref("Sterk – voor")},
             "field_evidence": fields, "context_evidence": [
                 {"role": "target_group", "span": ref("iedere patiënt"), "unresolved_reason": None}]}],
-            "relations": [], "abstain_reason": None}
+            "relations": [], "abstain_reason": None, "source_assessments": []}
 
 
 def resolve(p, blocks):
