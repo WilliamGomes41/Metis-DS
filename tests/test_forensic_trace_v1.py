@@ -842,3 +842,142 @@ def test_formula_apostrophe_roundtrips_exactly(tmp_path):
 
 
 
+
+
+def test_recorded_run_retains_reconstruction_hash_inputs():
+    from src.quality_evidence_v1 import record_processing
+
+    fragment = {
+        "fragment_id": "frag-section",
+        "fragment_hash": "hash-section",
+        "raw_text": "Achtergrondinformatie.",
+        "clean_text": "Achtergrondinformatie.",
+        "source_page": 1,
+        "source_locator": {"locator_type": "web_line_range", "locator_value": "lines:1-1"},
+        "section_path": ["Achtergrond"],
+        "heading": "Achtergrond",
+        "parser_version": "fixture-parser",
+    }
+    derived = current_reconstruction_identity([fragment])
+    identity = {
+        "version": "semantic-replay-v1.0.0",
+        "hash": "fixture-replay",
+        "components": {
+            "snapshot_id": "snapshot",
+            "source_sha256": "source-sha",
+            "source_blocks_hash": derived["source_blocks_hash"],
+            "reconstruction_version": derived["reconstruction_version"],
+        },
+    }
+    envelope = {"sha256": "source-sha"}
+    record_processing(
+        envelope, [], fragments=[fragment],
+        replay={"identity": identity, "semantic_execution": "inference"},
+        started_at="2026-10-06T00:00:00+00:00",
+    )
+    stored = envelope["quality_processing_runs"][0]["source_fragments"][0]
+    assert stored["section_path"] == ["Achtergrond"]
+    assert stored["heading"] == "Achtergrond"
+    envelope["semantic_replay"] = {
+        "identity": identity,
+        "validation": "passed",
+        "proposal": {"objects": [], "source_assessments": []},
+        "provider_evidence": {"tasks": [], "task_policy": "bounded-formation-v1"},
+    }
+    tables, _manifest = processing_evidence_tables(
+        snapshot_id="snapshot", revision="rev", envelope=envelope, objects=[])
+    assert tables["source_blocks"]
+    assert all(row.get("provenance") == "verified_derived" for row in tables["source_blocks"])
+
+
+def test_normalized_whitespace_assessment_maps_back_to_exact_raw_source(tmp_path):
+    from src.semantic_passage_v1 import semantic_source_blocks
+    from src.source_layout_v1 import text_view
+
+    raw = "Achtergrond.\n   Meer context."
+    view = text_view(raw, [])
+    fragment = {
+        "fragment_id": "frag-layout",
+        "fragment_hash": "hash-layout",
+        "raw_text": raw,
+        "clean_text": view["text"],
+        "source_text_view": view,
+        "source_page": 1,
+    }
+    block = semantic_source_blocks([fragment])[0]
+    derived = current_reconstruction_identity([fragment])
+    identity = {
+        "version": "semantic-replay-v1.0.0",
+        "hash": "layout-replay",
+        "components": {
+            "snapshot_id": "snapshot",
+            "source_sha256": "source-sha",
+            "source_blocks_hash": derived["source_blocks_hash"],
+            "reconstruction_version": derived["reconstruction_version"],
+        },
+    }
+    span = {"block_id": block["block_id"], "start": 0, "end": len(block["text"])}
+    envelope = {
+        "semantic_replay": {
+            "identity": identity,
+            "validation": "passed",
+            "proposal": {"objects": [], "source_assessments": [{
+                "span": span, "role": "background", "reason": "historical_context",
+            }]},
+            "provider_evidence": {
+                "task_policy": "bounded-formation-v1",
+                "tasks": [{"task_id": "layout-task", "phase": "initial", "status": "completed",
+                           "target_spans": [span]}],
+            },
+        },
+        "quality_processing_runs": [{
+            "run_id": "run-layout",
+            "source_hash": "source-sha",
+            "semantic_identity": identity,
+            "source_fragments": [fragment],
+        }],
+    }
+    gold = {
+        "gold_version": "forensic-gold-v1",
+        "expected_identity": {},
+        "cases": [{
+            "case_id": "RAW-WHITESPACE",
+            "source_sha256": "source-sha",
+            "source_reconstruction_hash": derived["source_blocks_hash"],
+            "fragments": [{"fragment_id": "frag-layout", "start": 0, "end": len(raw)}],
+            "exact_raw_text": raw,
+            "expected_source_function": "background",
+            "expected_answer_bearing": False,
+            "expected_object_type": None,
+        }],
+    }
+    result = _zip_trace(tmp_path, envelope, [], gold)
+    assert result["divergences"][0]["verdict"] == "PASS"
+    record = next(row for row in result["records"] if row.get("expectation"))
+    assert record["source"]["raw_text"] == raw
+
+
+def test_source_span_identity_includes_reconstructed_bounds():
+    from src.forensic_trace_v1 import source_span_id
+
+    kwargs = {
+        "source_sha256": "source-sha",
+        "source_reconstruction_hash": "reconstruction-sha",
+        "fragments": [{"fragment_id": "frag-a", "start": 0, "end": 3}],
+        "block_id": "semblock-a",
+        "block_start": 0,
+    }
+    before_separator = source_span_id(**kwargs, block_end=3)
+    through_separator = source_span_id(**kwargs, block_end=4)
+    assert before_separator
+    assert through_separator
+    assert before_separator != through_separator
+
+
+def test_write_outputs_removes_stale_divergence_file(tmp_path):
+    output = tmp_path / "trace"
+    write_outputs(_graded(), output)
+    stale = output / "first_divergence.csv"
+    assert stale.exists()
+    write_outputs(trace(load_evidence(EVIDENCE)), output)
+    assert not stale.exists()
