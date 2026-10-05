@@ -118,6 +118,9 @@ def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path):
         envelope=state._envelope(sid), objects=state.snapshot_objects(sid))
     assert tables['formation_findings'][0]['reason_code'] == 'semantic_evidence_literal_not_found'
     assert tables['formation_findings'][0]['evidence_kind'] == 'rejected_producer_proposal_not_approved_knowledge'
+    assert len(tables['formation_progress']) == 1
+    assert tables['formation_progress'][0]['formation_state'] == 'pending'
+    assert tables['formation_progress'][0]['pending_task_count'] > 0
     client = TestClient(create_console_app(state))
     command = {'snapshot_id': sid, 'command_id': 'http-resume', 'expected_revision': state.objects_revision(sid)}
     assert client.post('/tree/resume-formation', data=command, follow_redirects=False).status_code in {302, 303, 401, 403}
@@ -125,6 +128,7 @@ def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path):
     client.cookies.set(COOKIE, state.authenticate('author', 'strong-test-password')['token'])
     page = client.get('/settings/technical/processing', params={'document': sid})
     assert 'Onopgeloste vorming herstellen' in page.text and 'publicatie is geblokkeerd' in page.text
+    assert 'Vormingstaken:' in page.text and 'nog open' in page.text
     mode['broken'] = False
     assert client.post('/tree/resume-formation', data=command, follow_redirects=False).status_code == 303
     assert len(calls) == 3
