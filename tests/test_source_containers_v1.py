@@ -126,6 +126,9 @@ def test_kernel_ui_export_and_manual_reset_survive_restart(tmp_path, make_consol
     assert not reopened.snapshot_containers(sid)['source'][0]['usage']['accounted']
     assert source_id in source_passage_closure(reopened.snapshot_objects(sid))['unresolved_source_passage_ids']
     assert confirm_source_context(reopened, **command)['idempotent']
+    from src.operations_console_v1 import ConsoleError
+    with pytest.raises(ConsoleError, match='pre_review_retry_existing_work'):
+        reopened.reextract_unpublished(actor_id=author['account_id'], snapshot_id=sid)
 
 
 from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401

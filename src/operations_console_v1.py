@@ -1879,6 +1879,7 @@ class OperationsConsole:
             and not self.object_review_bindings(snapshot_id) and not envelope.get("review_passes")
             and not any((row.get("governance") or {}).get("validation_status") not in {None, "needs_review"}
                 or ROLE_KEY in (row.get("metadata") or {}) or LINKS_KEY in (row.get("metadata") or {})
+                    or ((row.get("metadata") or {}).get("passage_register") or {}).get("source") == "review"
                 for row in self.snapshot_objects(snapshot_id)))
 
     def resume_formation(self, *, actor_id, snapshot_id, command_id, expected_revision):
@@ -2058,6 +2059,7 @@ class OperationsConsole:
         if (self._bindings.get(snapshot_id) or envelope.get("review_passes") or
                 any((row.get("governance") or {}).get("validation_status") not in {None, "needs_review"}
                     or ROLE_KEY in (row.get("metadata") or {}) or LINKS_KEY in (row.get("metadata") or {})
+                    or ((row.get("metadata") or {}).get("passage_register") or {}).get("source") == "review"
                     for row in self.snapshot_objects(snapshot_id))):
             raise ConsoleError("pre_review_retry_existing_work")
         processing_started = quality_instant()

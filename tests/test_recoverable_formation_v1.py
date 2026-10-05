@@ -285,3 +285,23 @@ def test_producer_cannot_supply_approval_or_omit_unknown_failures():
         prepare({'objects': [], 'relations': [], 'approved': True}, blocks=[], evidence_blocks=[], validator_input={})
     assert incomplete({'semantic_replay': {'provider_evidence': {
         'formation_incomplete': True, 'pending_rejections': [{'spans': [], 'reason_code': 'unknown_scope'}]}}}, objects=[])
+
+
+
+def test_manual_source_reset_blocks_resume_and_reextract(tmp_path):
+    state, sid, actor, reviewer, calls, mode, make, bind = system(tmp_path, containers=True)
+    assert state.processing_status(sid)['resume_allowed']
+    from src.source_context_review_v1 import confirm_source_context
+    metadata = next(o for o in state.snapshot_objects(sid) if evidence_of(o).get('text') == 'Versie: 1')
+    confirm_source_context(state, actor_id=reviewer, snapshot_id=sid, source_object_id=metadata['object_id'],
+        role='reset', target_object_ids=[], reason='Bronbesluit opnieuw beoordelen', command_id='reset-metadata',
+        expected_revision=state.objects_revision(sid))
+    restarted = make(); bind(restarted)
+    assert not restarted.processing_status(sid)['resume_allowed']
+    with pytest.raises(ConsoleError, match='pre_review_retry_existing_work'):
+        restarted.resume_formation(actor_id=actor, snapshot_id=sid, command_id='cannot-overwrite-reset',
+            expected_revision=restarted.objects_revision(sid))
+    with pytest.raises(ConsoleError, match='pre_review_retry_existing_work'):
+        restarted.reextract_unpublished(actor_id=actor, snapshot_id=sid)
+    assert len(calls) == 2
+    assert not next(r for r in restarted.snapshot_containers(sid)['source'] if r['record']['object_id'] == metadata['object_id'])['usage']['accounted']
