@@ -607,6 +607,7 @@ def semantic_units_from_proposal(
     allowed_candidate_block_ids: set[str] | None = None,
     field_contract_v2: bool = False,
     field_contract_v3: bool = False,
+    include_coverage: bool = True,
 ) -> list[dict[str, Any]]:
     """Validate provider proposal and reconstruct source-bound candidate data."""
 
@@ -818,13 +819,14 @@ def semantic_units_from_proposal(
                                           [p for p, _ in reconstructed], raw_objects)
     except ValueError as exc:
         _fail(str(exc))
-    units_with_position.extend(
-        _coverage_remainders(
-            reconstructed,
-            document_id=document_id,
-            selected_ranges_by_block=selected_ranges_by_block,
-            assessments=assessments,
+    if include_coverage:
+        units_with_position.extend(
+            _coverage_remainders(
+                reconstructed,
+                document_id=document_id,
+                selected_ranges_by_block=selected_ranges_by_block,
+                assessments=assessments,
+            )
         )
-    )
     units_with_position.sort(key=lambda pair: pair[0])
     return [unit for _position, unit in units_with_position]

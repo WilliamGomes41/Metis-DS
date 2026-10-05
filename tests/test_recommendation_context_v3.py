@@ -57,7 +57,7 @@ def response_for(payload, text, *, heading=None, include_context=True, stamp=Non
         "relations": [], "abstain_reason": None}
 
 
-def prepare(text="Gebruik geen zalf", *, heading=None, include_context=True, stamp=None, mutate=None, fragments=None):
+def prepare(text="Gebruik geen zalf", *, heading=None, include_context=True, stamp=None, mutate=None, fragments=None, allow_empty=False):
     fragments = fragments if fragments is not None else source(text, heading)
     def provider(_url, _headers, payload, _timeout):
         if json.loads(payload["input"][1]["content"]).get("selection_targets"):
@@ -78,7 +78,9 @@ def prepare(text="Gebruik geen zalf", *, heading=None, include_context=True, sta
         "integrity_status": "verified", "source_checksum": "a"*64, "version": "1"}}
     rows = transform(spec, manifest, fragments)
     rows = apply_admission_gate(rows, klasse="richtlijn", fragments=fragments, document_version="1", source_hash="a"*64)
-    obj = next(o for o in rows if (o.get("metadata") or {}).get("source_bound_fields"))
+    obj = next((o for o in rows if (o.get("metadata") or {}).get("source_bound_fields")), None)
+    if obj is None and not allow_empty:
+        raise AssertionError("Expected a source-bound candidate")
     return spec, rows, obj, fragments
 
 

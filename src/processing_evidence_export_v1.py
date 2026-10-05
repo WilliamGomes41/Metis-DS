@@ -13,10 +13,11 @@ from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v7"
-PROJECTOR_VERSION = "processing-evidence-export-v7"
+VERSION = "processing-evidence-export-v8"
+PROJECTOR_VERSION = "processing-evidence-export-v8"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
+    "formation_findings": ("call_id", "kind", "index", "reason_code", "spans", "requires_review", "finding", "evidence_kind"),
     "attempt_diagnostics": ("attempt_id", "state", "diagnostic", "evidence_kind"),
     "processing_recovery": ("authorization_id", "actor_id", "reason", "authorized_at", "source_hash", "source_version", "revision", "consumed_by", "consumed_at"),
     "processing_attempts": ("attempt_id", "command_id", "actor_id", "source_hash", "state", "started_at", "expires_at", "finished_at", "phase", "error_code", "validation_code", "processing_reference", "source_version", "kind", "retry_of", "limits", "transport", "retry_not_before", "replayed_call_id"),
@@ -111,6 +112,10 @@ def processing_evidence_tables(
     provider = replay.get("provider_evidence") or {}
     providers = [provider, *(provider.get("supplementary_calls") or [])]
     for provider in providers:
+        for rejection in (provider.get("formation") or {}).get("rejections", []):
+            add("formation_findings", call_id=(provider.get("response") or {}).get("id"),
+                **{k: rejection.get(k) for k in SCHEMAS["formation_findings"] if k not in {"call_id", "evidence_kind"}},
+                evidence_kind="rejected_producer_proposal_not_approved_knowledge")
         if provider.get("version") == "semantic-provider-evidence-v1":
             response = provider.get("response") or {}
             add("model_calls", call_id=response.get("id"), request=provider.get("request"),
@@ -188,6 +193,8 @@ def processing_evidence_tables(
                     evidence_kind="stored_scan_not_verified_dependency_resolution")
 
     statuses = {
+        "formation_findings": ("recorded" if any("formation" in p for p in providers) else "not_recorded",
+            "Versioned producer rejections; historical errors remain evidence after recovery. Not clinical validation or approval."),
         "attempt_diagnostics": ("recorded" if tables["attempt_diagnostics"] else "not_recorded", "Attempt-owned checkpoints, request/output, validator input and finding. Missing historical evidence is not reconstructed. Never admission/replay authority."),
         "processing_recovery": ("recorded" if recovery else "not_recorded", "One document-scoped authorization and its atomic consumption."),
         "processing_attempts": ("recorded" if "processing_attempts" in envelope else "not_recorded", "Durable retry outcomes; historical missing attempts are not reconstructed."),

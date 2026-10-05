@@ -88,9 +88,14 @@ def test_external_field_without_matching_condition_role_is_rejected(mutation):
         if mutation == "no_context": obj["context_evidence"] = []
         if mutation == "wrong_role": obj["context_evidence"][0]["role"] = "scope"
         if mutation == "action_from_context": f["recommended_action"] = deepcopy(f["scope_span"])
-    from src.operations_console_v1 import ConsoleError
-    with pytest.raises(ConsoleError, match="source_bound_field_outside_candidate"):
-        prepare("Bespreek de voorkeuren", heading="Bij een kwetsbare situatie:", mutate=mutate)
+    spec, rows, obj, _ = prepare("Bespreek de voorkeuren", heading="Bij een kwetsbare situatie:",
+                                mutate=mutate, allow_empty=True)
+    assert obj is None  # still no admission of invalid evidence
+    from src.source_accountability_v1 import evidence_of
+    assert any(evidence_of(o).get("text") == "Bespreek de voorkeuren" for o in rows)
+    # Read-only preparation without a snapshot does not create a replay record;
+    # the rejection is additionally durable on the workflow path (#516).
+    assert not any((o.get("metadata") or {}).get("admission", {}).get("gate_result") == "allowed" for o in rows)
 
 
 @pytest.mark.parametrize("items,allowed", [

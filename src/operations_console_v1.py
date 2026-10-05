@@ -1860,7 +1860,55 @@ class OperationsConsole:
         if (self.snapshot_is_published(snapshot_id) or self.snapshot_objects(snapshot_id)
                 or self._bindings.get(snapshot_id) or self._envelope(snapshot_id).get("review_passes")):
             result["retry_allowed"] = False
+        from src.recoverable_formation_v1 import incomplete
+        result["formation_incomplete"] = incomplete(self._envelope(snapshot_id), objects=self.snapshot_objects(snapshot_id))
+        result["resume_allowed"] = bool(self._can_resume_formation(snapshot_id)
+            and result["state"] != "running"
+            and (result["attempts_used"] < result["max_attempts"] or result["recovery_available"])
+            and result["reason_code"] not in {"processing_retry_cooldown", "processing_structural_limit"})
         return result
+
+    def _can_resume_formation(self, snapshot_id):
+        from src.recoverable_formation_v1 import incomplete, VERSION
+        from src.source_context_review_v1 import ROLE_KEY, LINKS_KEY
+        envelope = self._envelope(snapshot_id)
+        contract = ((envelope.get("semantic_replay") or {}).get("identity") or {}).get("components", {}).get("semantic_contract_version", "")
+        return bool(incomplete(envelope) and VERSION in contract
+            and not self.snapshot_is_published(snapshot_id)
+            and not self.object_review_bindings(snapshot_id) and not envelope.get("review_passes")
+            and not any((row.get("governance") or {}).get("validation_status") not in {None, "needs_review"}
+                or ROLE_KEY in (row.get("metadata") or {}) or LINKS_KEY in (row.get("metadata") or {})
+                for row in self.snapshot_objects(snapshot_id)))
+
+    def resume_formation(self, *, actor_id, snapshot_id, command_id, expected_revision):
+        """Resume open producer work; reviewed/published work requires successor."""
+        from src.processing_retry_v1 import reserve, now
+        limits = self._processing_limits()
+        deadline = time.monotonic() + limits.attempt
+        with self._reprocessing_transaction(snapshot_id):
+            account = self._account(actor_id)
+            envelope = deepcopy(self._envelope(snapshot_id))
+            if not {"researcher", "reviewer"}.intersection(account["roles"]):
+                raise ConsoleError("researcher_role_required")
+            if "researcher" not in account["roles"] and actor_id not in envelope.get("named_reviewers", []):
+                raise ConsoleError("reviewer_not_named_on_snapshot")
+            duplicate = next((a for a in envelope.get("processing_attempts", []) if a["command_id"] == command_id), None)
+            if duplicate is None:
+                if not self._can_resume_formation(snapshot_id):
+                    raise ConsoleError("pre_review_retry_existing_work")
+                if self.objects_revision(snapshot_id) != expected_revision:
+                    raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=self.objects_revision(snapshot_id))
+            attempt, fresh = reserve(envelope, command_id=command_id, actor_id=actor_id,
+                revision=expected_revision, clock=now(), limits=limits, kind="resume")
+            self._commit_prepared_store(envelopes={snapshot_id: envelope}, snapshot_id=snapshot_id)
+        if not fresh:
+            if attempt["kind"] != "resume" or attempt["expected_revision"] != expected_revision:
+                raise ConsoleError("processing_command_conflict")
+            if attempt["state"] == "succeeded":
+                return self._receipt(envelope)
+            raise ConsoleError("processing_attempt_in_progress" if attempt["state"] == "running"
+                               else attempt.get("error_code") or "processing_dependency_failed")
+        return self._execute_source_attempt(actor_id=actor_id, snapshot_id=snapshot_id, attempt=attempt, deadline=deadline)
 
     @contextmanager
     def _reprocessing_transaction(self, snapshot_id: str) -> Iterator[None]:
@@ -1902,7 +1950,9 @@ class OperationsConsole:
             if self.snapshot_is_published(snapshot_id):
                 raise ConsoleError("published_objects_must_not_be_rewritten")
             objects, revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
-            if envelope.get("publication_eligibility") != PRE_REVIEW_BLOCKED or objects or self._bindings.get(snapshot_id) or envelope.get("review_passes"):
+            if (not self._can_resume_formation(snapshot_id)
+                    and (envelope.get("publication_eligibility") != PRE_REVIEW_BLOCKED or objects
+                         or self._bindings.get(snapshot_id) or envelope.get("review_passes"))):
                 raise ConsoleError("pre_review_retry_existing_work")
             expire_running(envelope, now())
             attempts = envelope.get("processing_attempts") or []
@@ -2037,6 +2087,7 @@ class OperationsConsole:
                 "snapshot_id": snapshot_id,
                 "source_sha256": envelope["sha256"],
                 "semantic_replay": deepcopy(envelope.get("semantic_replay")),
+                "resume_formation": bool(_attempt_id and attempt.get("kind") == "resume"),
                 "explicit_decision_graph": "decision_graph" in envelope,
                 "model_call_limits": {key:attempt["limits"][key] for key in ("connect", "idle", "total", "attempt", "max_attempts")} if _attempt_id and attempt.get("limits") else None,
                 "attempt_deadline": _attempt_deadline,
@@ -2077,6 +2128,9 @@ class OperationsConsole:
         if envelope.get("review_policy"):
             from src.review_policy_v1 import project_policy
             project_policy(objects, envelope["review_policy"])
+        if _attempt_id is not None and attempt.get("kind") == "resume":
+            from src.recoverable_formation_v1 import preserve_unchanged
+            objects = preserve_unchanged(objects, self.snapshot_objects(snapshot_id))
         if "decision_graph" in envelope:
             from src.decision_graph_v1 import prepare_graph
             prepared_envelope.update(prepare_graph(freeze_path, freeze_bytes, envelope["content_kind"], fragments, objects, envelope["sha256"]))
@@ -3882,6 +3936,9 @@ class OperationsConsole:
             if row.get("reviewer_id") != envelope["uploader_account_id"]
         ]
         blockers: list[str] = []
+        from src.recoverable_formation_v1 import incomplete
+        if incomplete(envelope, objects=objects):
+            blockers.append("source_formation_incomplete")
         independence = bool(others)
         from src.review_policy_v1 import participants, object_policy, validate_policy
         policy = envelope.get("review_policy")
