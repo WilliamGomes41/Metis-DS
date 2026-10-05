@@ -1,7 +1,9 @@
 """Bounded task ownership, context references, budget failure and recovery.
 
-# release-control-evidence: scope/belofte kwaliteit metrics slop releasebewijs
+# release-control-evidence: scope/belofte kwaliteit metrics
 # release-control-evidence: opslag stale recovery beschikbaarheid toegang version-compat
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 import json
 from copy import deepcopy
