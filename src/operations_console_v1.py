@@ -1942,7 +1942,7 @@ class OperationsConsole:
 
     def authorize_processing_recovery(self, *, actor_id, snapshot_id, reason):
         """One grant per blocked snapshot; consumption belongs to reservation."""
-        from src.processing_retry_v1 import now, expire_running
+        from src.processing_retry_v1 import now, expire_running, status as processing_retry_status
         if not isinstance(reason, str) or not reason.strip() or len(reason) > 1000:
             raise ConsoleError("processing_recovery_reason_required")
         with self._reprocessing_transaction(snapshot_id):
