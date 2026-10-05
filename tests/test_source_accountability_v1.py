@@ -248,3 +248,35 @@ def test_damaged_source_evidence_cannot_close_after_human_disposition(tmp_path):
     assert evidence_of(metadata) == {}
     assert not source_passage_closure([metadata])["source_passage_review_complete"]
     assert review_duty_for(metadata, review_path="richtlijn", bindings=None) is None
+
+
+def test_exact_duplicate_source_occurrence_keeps_principal_span_and_role():
+    from src.source_accountability_v1 import record
+    from src.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
+    text = "A repeated source sentence."
+    summary_span = {"block_id": "summary", "start": 0, "end": len(text)}
+    primary_span = {"block_id": "primary", "start": 0, "end": len(text)}
+    def unit(span, path, role):
+        return {"text": text, "clean_text": text, "object_type": "unclassified",
+            "source_fragment_ids": [span["block_id"]], "section_path": path,
+            "semantic_passage": {"selection_origin": "coverage_remainder", "spans": [span]},
+            KEY: record(text=text, spans=[span], assessment=role)}
+    rows = prefer_authoritative_exact_occurrences([
+        unit(summary_span, ["Samenvatting"], {"role": "metadata", "reason": "document_metadata"}),
+        unit(primary_span, ["Klinische beschrijving"], {"role": "unresolved", "reason": "unformed_meaning"}),
+    ])
+    assert len(rows) == 1
+    assert rows[0]["semantic_passage"]["spans"] == [primary_span]
+    assert rows[0][KEY]["spans"] == [primary_span]
+    assert rows[0][KEY]["proposed_role"] == "unresolved"
+    assert len(rows[0]["metadata"]["source_occurrence_authority"]["alternate_occurrences"]) == 1
+    selected = unit(summary_span, ["Samenvatting"], {"role": "unresolved", "reason": "unformed_meaning"})
+    selected.pop(KEY)
+    selected["semantic_passage"]["selection_origin"] = "proposal_selected"
+    selected["proposed_object_type"] = "definition"
+    promoted = prefer_authoritative_exact_occurrences([
+        selected,
+        unit(primary_span, ["Klinische beschrijving"], {"role": "unresolved", "reason": "unformed_meaning"}),
+    ])
+    assert promoted[0]["semantic_passage"]["selection_origin"] == "proposal_selected"
+    assert KEY not in promoted[0]
