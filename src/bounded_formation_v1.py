@@ -233,16 +233,42 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
     for phase in phases:
         if phase == "recovery" and not resuming:
             targets = _remaining_targets(units())
-        for task in tasks_for(blocks, evidence_blocks, targets):
+        phase_tasks = tasks_for(blocks, evidence_blocks, targets)
+        for index, task in enumerate(phase_tasks):
             task_record = {key: deepcopy(task[key]) for key in ("task_id", "section_path", "target_spans")}
             task_record["phase"] = phase
             remaining = limits.total - (time.monotonic() - started)
             call = {"task_id": task["task_id"], "target_spans": task["target_spans"]}
-            error = task.get("error_code") or ("source_task_budget_exhausted" if remaining <= 0 else None)
+
+            if remaining <= 0:
+                # Budget exhaustion is one bounded lifecycle event, not N
+                # separate durable checkpoints. Record every unstarted source
+                # range in memory, persist once, then return control.
+                for pending_task in phase_tasks[index:]:
+                    pending_record = {key: deepcopy(pending_task[key])
+                                      for key in ("task_id", "section_path", "target_spans")}
+                    pending_record.update(phase=phase, status="not_started")
+                    pending_call = {
+                        "task_id": pending_task["task_id"],
+                        "target_spans": deepcopy(pending_task["target_spans"]),
+                        "error_code": "source_task_budget_exhausted",
+                        "failure_reason": "source_task_budget_exhausted",
+                    }
+                    evidence["tasks"].append(pending_record)
+                    if "target_spans" not in evidence and not evidence.get("supplementary_calls"):
+                        evidence.update(pending_call)
+                    else:
+                        evidence.setdefault("supplementary_calls", []).append(pending_call)
+                budget_exhausted = True
+                if checkpoint:
+                    checkpoint("proposal_received", {"provider_evidence": evidence,
+                        "resolved_proposal": proposal, "resolved_proposal_hash": stable_json_hash(proposal)})
+                break
+
+            error = task.get("error_code")
             if error:
                 call.update(error_code=error, failure_reason=error)
                 task_record["status"] = "not_started"
-                budget_exhausted |= remaining <= 0
             else:
                 call_limits = replace(limits, total=min(remaining, MAX_CALL_SECONDS),
                     connect=min(limits.connect, remaining, MAX_CALL_SECONDS), idle=min(limits.idle, remaining, MAX_CALL_SECONDS))
