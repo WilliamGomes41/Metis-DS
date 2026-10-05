@@ -5,6 +5,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+
 
 def test_to_spec_skill_is_wired_and_repository_native() -> None:
     skill = ROOT / ".agents/skills/to-spec/SKILL.md"
