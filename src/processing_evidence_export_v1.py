@@ -9,12 +9,13 @@ from datetime import datetime, timezone
 from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from src.forensic_trace_v1 import CSV_FIELDS, rows_for_export
 from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v10"
-PROJECTOR_VERSION = "processing-evidence-export-v10"
+VERSION = "processing-evidence-export-v11"
+PROJECTOR_VERSION = "processing-evidence-export-v11"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
     "source_usage": ("object_id", "object_version", "container", "kind", "reason", "target_ids", "accounted", "policy_version"),
@@ -43,6 +44,7 @@ SCHEMAS = {
                     "output_text", "response_status", "requested_at", "deployed_commit", "proposal_hash", "evidence_kind"),
     "object_events": ("run_id", "object_id", "event_id", "timestamp", "event", "reason"),
     "reference_review": ("object_id", "source_range", "expected_type", "expected_context", "reviewer", "judgment"),
+    "forensic_trace": CSV_FIELDS,
 }
 FIELDS = (
     "proposed_type", "type_evidence_spans", "actor_of_scope", "recommended_action",
@@ -214,6 +216,11 @@ def processing_evidence_tables(
                     source_bound_context=(obj.get("metadata") or {}).get("source_bound_context"),
                     evidence_kind="stored_scan_not_verified_dependency_resolution")
 
+    trace_rows, trace_availability, trace_limitation = rows_for_export(
+        snapshot_id=snapshot_id, revision=revision, envelope=envelope, objects=objects)
+    for row in trace_rows:
+        add("forensic_trace", **row)
+
     statuses = {
         "source_usage": ("derived", "Current source usage under the recorded policy; not a new approval or clinical completeness proof."),
         "formation_tasks": ("recorded" if tables["formation_tasks"] else "not_recorded", "Bounded task observations; historical statuses are retained and pending findings determine current recovery."),
@@ -243,6 +250,7 @@ def processing_evidence_tables(
                         "Deployment identifies the origin call, not the current export or replay."),
         "object_events": ("not_exported", "This package does not read the review ledger and does not claim that no historical events exist."),
         "reference_review": ("not_exported", "A human reference assessment must be supplied separately; system review state is not a gold standard."),
+        "forensic_trace": (trace_availability, trace_limitation),
     }
     manifest = [{**common, "schema_version": PROJECTOR_VERSION, "dataset": name + ".csv",
                  "row_count": len(tables[name]), "availability": statuses[name][0],
@@ -284,6 +292,7 @@ def processing_evidence_zip(**kwargs: Any) -> bytes:
             f"Metis {VERSION}\n"
             f"Exported at: {datetime.now(timezone.utc).isoformat()}\n"
             "Read manifest.csv first. This is a read-only projection of stored evidence.\n"
+            "CSV v11 adds forensic_trace.csv, a derived join of recorded evidence. It is not a new authority.\n"
             "CSV v10 adds formation_progress.csv with current planned, terminal and pending bounded-task counts.\n"
             "CSV v6 adds bounded attempt limits, transport observations and retry linkage; context evidence is retained.\n"
             "CSV v4 adds text, left_fragment_id and right_fragment_id to lineage.csv for inserted joins.\n"
