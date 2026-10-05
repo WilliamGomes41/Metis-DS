@@ -55,6 +55,14 @@ Before changing extraction, review, publication, or persistence, read the releva
 
 Run `python scripts/check_architecture_boundaries.py` before opening a PR. CI rejects Docling SDK imports outside the worker and infrastructure/HTTP dependencies in the selected SDK-independent contract modules. This is a bounded dependency check, not proof of lifecycle correctness; existing behavioral and lifecycle tests remain required.
 
+### To spec
+
+Turn an already-settled engineering conversation into an executable Metis GitHub issue. Skill files: `.agents/skills/to-spec/`. Invoke explicitly; it synthesizes existing context, verifies the current repository mechanism, applies Metis change classification and readiness gates, and does not restart discovery.
+
+### To tickets
+
+Break an approved Metis specification, plan, or settled engineering conversation into dependency-aware executable GitHub issues. Skill files: `.agents/skills/to-tickets/`. Invoke explicitly after the work is sufficiently decided; every ticket must preserve the repository change contract, readiness rules, and genuine blocking edges.
+
 ### Improve codebase architecture
 
-Periodic architecture survey (mattpocock). Skill files: `.agents/skills/improve-codebase-architecture/`. Invoke explicitly — do not auto-run. Companion vocabulary skills (`codebase-design`, `grilling`) live upstream at https://github.com/mattpocock/skills.
+Periodic architecture survey. Skill files: `.agents/skills/improve-codebase-architecture/`. Invoke explicitly — do not auto-run.
