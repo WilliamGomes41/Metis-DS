@@ -309,3 +309,42 @@ def test_entra_navigation_does_not_intercept_mcp_discovery(tmp_path, monkeypatch
     assert client.get('/mcp', follow_redirects=False).status_code == 401
     assert client.get('/settings/chatgpt', follow_redirects=False).status_code == 303
     assert client.post('/accounts/access', data={}).status_code == 403
+
+
+def test_processing_evidence_uses_only_current_object_versions(monkeypatch):
+    import src.metis_mcp_queries_v1 as queries_module
+
+    old = {"object_id": "obj-1", "object_version": "1.0"}
+    current = {"object_id": "obj-1", "object_version": "1.1"}
+    envelope = {
+        "snapshot_id": "snap-1",
+        "sha256": "source-sha",
+        "named_reviewers": [],
+        "uploader_account_id": "researcher",
+    }
+
+    class Console:
+        def _envelope(self, snapshot_id):
+            assert snapshot_id == "snap-1"
+            return envelope
+
+        def snapshot_objects_and_revision(self, snapshot_id, include_blocked=False):
+            assert snapshot_id == "snap-1"
+            assert include_blocked is True
+            return [old, current], "rev-1"
+
+    captured = {}
+
+    def fake_processing_evidence_tables(*, snapshot_id, revision, envelope, objects):
+        captured["objects"] = objects
+        return {"forensic_trace": []}, []
+
+    monkeypatch.setattr(queries_module, "processing_evidence_tables", fake_processing_evidence_tables)
+    queries = McpQueries(Console(), "https://testserver")
+    result = queries.read(
+        {"account_id": "publisher", "roles": ["publisher"]},
+        "get_processing_evidence",
+        {"snapshot_id": "snap-1", "table": "forensic_trace"},
+    )
+    assert result["items"] == []
+    assert captured["objects"] == [current]
