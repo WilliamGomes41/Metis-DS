@@ -995,3 +995,44 @@ def test_cli_removes_stale_differential_without_candidate(tmp_path):
         check=False, capture_output=True, text=True)
     assert completed.returncode == 0, completed.stderr
     assert not stale.exists()
+
+
+def test_reconstructed_bounds_keep_same_raw_range_as_two_trace_spans():
+    evidence = {
+        "evidence_kind": "forensic-evidence-v1",
+        "evidence_completeness": "partial",
+        "identity": {
+            "source_sha256": "source-sha",
+            "source_reconstruction_hash": "reconstruction-sha",
+        },
+        "spans": [],
+    }
+    for end in (3, 4):
+        evidence["spans"].append({
+            "source_fragment_ids": ["frag-a"],
+            "start": 0,
+            "end": 3,
+            "fragments": [{"fragment_id": "frag-a", "start": 0, "end": 3}],
+            "source": {
+                "status": "recorded",
+                "source_fragment_ids": ["frag-a"],
+                "raw_text": "abc",
+                "clean_text": "abc",
+                "source_page": 1,
+                "source_locator": None,
+                "section_path": [],
+                "start": 0,
+                "end": 3,
+            },
+            "reconstruction": {
+                "status": "recorded",
+                "semantic_block_id": "semblock-a",
+                "block_start": 0,
+                "block_end": end,
+                "section_role": None,
+            },
+        })
+    result = trace(evidence)
+    assert result["summary"]["span_count"] == 2
+    assert len({row["source_span_id"] for row in result["records"]}) == 2
+    assert all(row["reconstruction"]["status"] == "recorded" for row in result["records"])
