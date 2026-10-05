@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from src.forensic_trace_v1 import CSV_FIELDS, rows_for_export
+from src.forensic_trace_v1 import CSV_FIELDS, recorded_source_block_rows, rows_for_export
 from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
@@ -24,7 +24,7 @@ SCHEMAS = {
                            "failed_task_count", "partial_task_count", "not_started_task_count",
                            "unknown_pending_count", "pending_source_range_count", "pending_source_char_count",
                            "policy_version"),
-    "formation_findings": ("call_id", "kind", "index", "reason_code", "spans", "requires_review", "finding", "evidence_kind"),
+    "formation_findings": ("call_id", "kind", "index", "reason_code", "spans", "requires_review", "finding", "proposed_object_type", "source_assessment_role", "evidence_kind"),
     "attempt_diagnostics": ("attempt_id", "state", "diagnostic", "evidence_kind"),
     "processing_recovery": ("authorization_id", "actor_id", "reason", "authorized_at", "source_hash", "source_version", "revision", "consumed_by", "consumed_at"),
     "processing_attempts": ("attempt_id", "command_id", "actor_id", "source_hash", "state", "started_at", "expires_at", "finished_at", "phase", "error_code", "validation_code", "processing_reference", "source_version", "kind", "retry_of", "limits", "transport", "retry_not_before", "replayed_call_id", "formation_progress_made"),
@@ -38,6 +38,7 @@ SCHEMAS = {
     "proposal_fields": ("object_id", "object_version", "field", "value", "value_status", "stage", "producer_status", "contract_version", "source_span", "missing_reason"),
     "validation_findings": ("object_id", "object_version", "gate_result", "reason_code", "evidence_kind", "admission", "rule_execution_trace_status"),
     "context_evidence": ("object_id", "object_version", "context_scan", "expand_merge", "necessary_context_disposition", "source_context_review", "context_realization", "source_bound_context", "evidence_kind"),
+    "source_blocks": ("block_id", "reconstruction_version", "map_start", "map_end", "kind", "fragment_id", "raw_start", "raw_end", "text", "source_page", "left_fragment_id", "right_fragment_id"),
     "lineage": ("object_id", "object_version", "relation", "target_id", "start", "end", "locator", "page", "bbox", "raw_content_hash",
                 "text", "left_fragment_id", "right_fragment_id"),
     "model_calls": ("run_id", "call_id", "request", "raw_response", "stop_reason", "input_tokens", "output_tokens",
@@ -217,8 +218,15 @@ def processing_evidence_tables(
                     source_bound_context=(obj.get("metadata") or {}).get("source_bound_context"),
                     evidence_kind="stored_scan_not_verified_dependency_resolution")
 
+    block_rows = []
+    for run in runs:
+        block_rows.extend(recorded_source_block_rows(run.get("source_fragments") or []))
+    for row in block_rows:
+        add("source_blocks", **row)
+
     trace_rows, trace_availability, trace_limitation = rows_for_export(
-        snapshot_id=snapshot_id, revision=revision, envelope=envelope, objects=objects)
+        snapshot_id=snapshot_id, revision=revision,
+        envelope={**envelope, "source_block_map": block_rows}, objects=objects)
     for row in trace_rows:
         add("forensic_trace", **row)
 
@@ -243,7 +251,9 @@ def processing_evidence_tables(
         "proposal_fields": ("partial", "Stored admission fields; field producers and intermediate transformations are not recorded."),
         "validation_findings": ("partial", "Stored results and reasons; no individual execution trace. No reason does not prove all checks passed."),
         "context_evidence": ("partial", "Stored context scan; include does not by itself prove that context was attached."),
-        "lineage": ("partial", "Object-to-block and object-to-fragment relations are separate; no inferred block-to-fragment mapping."),
+        "source_blocks": ("recorded" if block_rows else "not_recorded",
+            "Version-bound reconstructed block-to-fragment map. The tracer slices a span only when the map covers it exactly."),
+        "lineage": ("partial", "Object-to-block and object-to-fragment relations are separate; block-to-fragment mapping is source_blocks, not inferred from object text."),
         "model_calls": ("partial" if tables["model_calls"] else "not_recorded",
                         "Origin call of latest saved validated proposal only, also on replay; not a new call. "
                         "Request payload excludes HTTP headers. Output text is stored; full raw response, failed attempts "

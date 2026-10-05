@@ -224,7 +224,7 @@ def test_export_projection_does_not_invent_a_missing_object_or_source_span():
     selected = by_type["explanation"]
     assert selected["provider_decision"] == "selected"
     assert selected["task_id"] == "task-b1"
-    assert selected["object_id"] == UNKNOWN
+    assert selected["object_id"] in ("", None)
     assert selected["source_text"] == UNKNOWN
     assert selected["source_span_id"] == UNKNOWN
     assessed = by_type[None]
@@ -250,7 +250,7 @@ def test_zip_reload_keeps_partial_status(tmp_path):
     assert evidence["evidence_completeness"] == "partial"
     assert "validator_input" in evidence["omitted_evidence"]
     assert evidence["spans"][0]["provider"]["proposed_object_type"] == "explanation"
-    assert evidence["spans"][0]["transformation"]["status"] == "unknown"
+    assert evidence["spans"][0]["transformation"]["object_id"] is None
 
 
 def test_module_does_not_import_workflow_or_provider_clients():
@@ -426,4 +426,209 @@ def test_missing_formation_mode_is_unavailable_not_a_false_mismatch():
     assert result["summary"]["comparison"] == "IDENTITY_UNAVAILABLE"
     assert result["summary"]["unavailable_identity_fields"] == ["passage_formation_mode"]
     assert result["divergences"][0]["actual_proposed_object_type"] is None
+
+
+def _source_case(text, fragment_id):
+    from src.semantic_passage_v1 import semantic_source_blocks
+    fragment = {
+        "fragment_id": fragment_id, "raw_text": text, "clean_text": text, "source_page": 1,
+    }
+    block = semantic_source_blocks([fragment])[0]
+    return fragment, block
+
+
+def _zip_trace(tmp_path, envelope, objects, gold):
+    payload = processing_evidence_zip(snapshot_id="snapshot", revision="rev", envelope=envelope, objects=objects)
+    path = tmp_path / "evidence.zip"
+    path.write_bytes(payload)
+    gold_path = tmp_path / "gold.json"
+    gold_path.write_text(json.dumps(gold), encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/trace_recorded_formation.py"),
+         str(path), "--gold", str(gold_path), "--output", str(tmp_path / "trace")],
+        check=False, capture_output=True, text=True)
+    assert completed.returncode == 0, completed.stderr
+    return trace(load_evidence(path), gold)
+
+
+def test_background_assessment_without_object_is_a_source_span(tmp_path):
+    text = "Dit is achtergrond en geen aanbeveling."
+    fragment, block = _source_case(text, "frag-bg")
+    envelope = {
+        "semantic_replay": {
+            "identity": {"components": {
+                "snapshot_id": "snapshot", "source_sha256": "source-sha",
+                "source_blocks_hash": "reconstruction-sha",
+            }},
+            "validation": "passed",
+            "proposal": {"objects": [], "source_assessments": [{
+                "span": {"block_id": block["block_id"], "start": 0, "end": len(block["text"])},
+                "role": "background", "reason": "historical_context",
+            }]},
+            "provider_evidence": {
+                "version": "semantic-provider-evidence-v1",
+                "task_policy": "bounded-formation-v1",
+                "response": {"id": "call-bg", "status": "completed", "output_text": "{}"},
+                "tasks": [{"task_id": "task-bg", "phase": "initial", "status": "completed",
+                           "target_spans": [{"block_id": block["block_id"], "start": 0, "end": len(block["text"])}]}],
+            },
+        },
+        "quality_processing_runs": [{
+            "run_id": "run-bg", "source_hash": "source-sha",
+            "semantic_identity": {"passage_formation_mode": "semantic-source-bound-v3"},
+            "source_fragments": [fragment],
+        }],
+    }
+    gold = {
+        "gold_version": "forensic-gold-v1",
+        "expected_identity": {"passage_formation_mode": "semantic-source-bound-v3"},
+        "cases": [{
+            "case_id": "BG-NO-OBJECT",
+            "source_sha256": "source-sha",
+            "source_reconstruction_hash": "reconstruction-sha",
+            "fragments": [{"fragment_id": "frag-bg", "start": 0, "end": len(text)}],
+            "exact_raw_text": text,
+            "expected_source_function": "background",
+            "expected_answer_bearing": False,
+            "expected_object_type": None,
+        }],
+    }
+    result = _zip_trace(tmp_path, envelope, [], gold)
+    row = result["divergences"][0]
+    assert row["verdict"] == "PASS"
+    assert row["first_divergence_stage"] is None
+    record = next(item for item in result["records"] if item.get("expectation"))
+    assert record["source_span_id"] not in (None, UNKNOWN)
+    assert record["source"]["status"] == "recorded"
+    assert record["source"]["raw_text"] == text
+    assert record["reconstruction"]["status"] == "recorded"
+    assert record["formation"]["status"] == "recorded"
+    assert record["provider"]["selected"] is False
+    assert record["provider"]["source_assessment_role"] == "background"
+    assert record["transformation"]["object_id"] is None
+
+
+def test_rejected_provider_proposal_stays_on_the_source_span(tmp_path):
+    text = "Dit is achtergrond en geen aanbeveling."
+    fragment, block = _source_case(text, "frag-bg")
+    span = {"block_id": block["block_id"], "start": 0, "end": len(block["text"])}
+    envelope = {
+        "semantic_replay": {
+            "identity": {"components": {
+                "snapshot_id": "snapshot", "source_sha256": "source-sha",
+                "source_blocks_hash": "reconstruction-sha",
+            }},
+            "validation": "passed",
+            "proposal": {"objects": [], "source_assessments": []},
+            "provider_evidence": {
+                "version": "semantic-provider-evidence-v1",
+                "task_policy": "bounded-formation-v1",
+                "response": {"id": "call-rej", "status": "completed", "output_text": "{}"},
+                "tasks": [{"task_id": "task-bg", "phase": "initial", "status": "completed",
+                           "target_spans": [span]}],
+                "formation": {"rejections": [{
+                    "kind": "object", "index": 0, "reason_code": "semantic_evidence_literal_not_found",
+                    "proposed_object_type": "explanation", "spans": [span],
+                }]},
+            },
+        },
+        "quality_processing_runs": [{
+            "run_id": "run-rej", "source_hash": "source-sha",
+            "semantic_identity": {"passage_formation_mode": "semantic-source-bound-v3"},
+            "source_fragments": [fragment],
+        }],
+    }
+    gold = {
+        "gold_version": "forensic-gold-v1",
+        "expected_identity": {"passage_formation_mode": "semantic-source-bound-v3"},
+        "cases": [{
+            "case_id": "BG-REJECTED-EXPLANATION",
+            "source_sha256": "source-sha",
+            "source_reconstruction_hash": "reconstruction-sha",
+            "fragments": [{"fragment_id": "frag-bg", "start": 0, "end": len(text)}],
+            "exact_raw_text": text,
+            "expected_source_function": "background",
+            "expected_answer_bearing": False,
+            "expected_object_type": None,
+        }],
+    }
+    result = _zip_trace(tmp_path, envelope, [], gold)
+    row = result["divergences"][0]
+    assert row["verdict"] == "FAIL"
+    assert row["first_divergence_stage"] == "provider_decision"
+    record = next(item for item in result["records"]
+                  if (item.get("provider") or {}).get("proposed_object_type") == "explanation")
+    assert record["source_span_id"] not in (None, UNKNOWN)
+    assert record["validation"]["validator_result"] == "rejected"
+    assert record["validation"]["reason_code"] == "semantic_evidence_literal_not_found"
+    assert record["transformation"]["object_id"] is None
+
+
+def test_multi_span_object_keeps_separate_source_identities(tmp_path):
+    from src.forensic_trace_v1 import source_span_id
+    left = "Eerste zin van de passage."
+    right = "Tweede zin van de passage."
+    frag_a, block_a = _source_case(left, "frag-a")
+    frag_b, block_b = _source_case(right, "frag-b")
+    envelope = {
+        "semantic_replay": {
+            "identity": {"components": {
+                "snapshot_id": "snapshot", "source_sha256": "source-sha",
+                "source_blocks_hash": "reconstruction-sha",
+            }},
+            "validation": "passed",
+            "proposal": {"objects": [{
+                "proposed_object_type": "explanation",
+                "spans": [
+                    {"block_id": block_a["block_id"], "start": 0, "end": len(block_a["text"])},
+                    {"block_id": block_b["block_id"], "start": 0, "end": len(block_b["text"])},
+                ],
+            }]},
+            "provider_evidence": {"tasks": [], "task_policy": "bounded-formation-v1"},
+        },
+        "quality_processing_runs": [{
+            "run_id": "run-multi", "source_hash": "source-sha",
+            "semantic_identity": {"passage_formation_mode": "semantic-source-bound-v3"},
+            "source_fragments": [frag_a, frag_b],
+        }],
+    }
+    objects = [{
+        "object_id": "obj-both",
+        "object_version": "1",
+        "object_type": "explanation",
+        "proposed_object_type": "explanation",
+        "content": {"clean_text": left + " " + right, "raw_text": left + " " + right},
+        "metadata": {
+            "semantic_passage": {
+                "selection_origin": "model_proposal",
+                "formation_mode": "semantic-source-bound-v3",
+                "spans": [
+                    {"block_id": block_a["block_id"], "start": 0, "end": len(block_a["text"])},
+                    {"block_id": block_b["block_id"], "start": 0, "end": len(block_b["text"])},
+                ],
+                "source_mapping": [
+                    {"fragment_id": "frag-a", "raw_start": 0, "raw_end": len(left)},
+                    {"fragment_id": "frag-b", "raw_start": 0, "raw_end": len(right)},
+                ],
+            },
+            "admission": {"gate_result": "allowed", "reason_codes": []},
+            "passage_register": {"status": "selected_as_candidate"},
+        },
+    }]
+    payload = processing_evidence_zip(snapshot_id="snapshot", revision="rev", envelope=envelope, objects=objects)
+    path = tmp_path / "multi.zip"
+    path.write_bytes(payload)
+    evidence = load_evidence(path)
+    located = [row for row in trace(evidence)["records"] if row.get("source_span_id")]
+    identities = {row["source_span_id"] for row in located}
+    assert len(identities) == 2
+    texts = {row["source"]["raw_text"] for row in located}
+    assert texts == {left, right}
+    assert all(row["source"].get("status") != "conflict" for row in located)
+    assert all(row["reconstruction"].get("status") != "conflict" for row in located)
+    assert source_span_id(
+        source_sha256="source-sha", source_reconstruction_hash="reconstruction-sha",
+        fragments=[{"fragment_id": "frag-a", "start": 0, "end": len(left)}],
+    ) in identities
+
 

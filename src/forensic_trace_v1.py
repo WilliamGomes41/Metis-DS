@@ -2,7 +2,9 @@
 
 This module does not form passages, call a provider, write a database, or
 decide publication. WorkingRevision evidence stays the authority. A missing
-stage stays unknown. Text is never used to couple two spans.
+stage stays unknown. Text is never used to couple two spans. The review stage
+is a review-queue projection from stored admission and the passage register,
+not a human review decision.
 """
 from __future__ import annotations
 
@@ -166,7 +168,9 @@ JSON_COLUMNS = frozenset({
     "expand_merge", "necessary_context_disposition", "context_realization",
     "source_context_review", "validation",
 })
-OFFSET_COLUMNS = frozenset({"start", "end", "block_start", "block_end", "raw_start", "raw_end"})
+OFFSET_COLUMNS = frozenset({
+    "start", "end", "block_start", "block_end", "raw_start", "raw_end", "map_start", "map_end",
+})
 
 
 def _unescape_formula(value: str) -> str:
@@ -314,6 +318,82 @@ def _objects_for_span(span: dict[str, Any], objects: list[dict[str, Any]]) -> li
     return found
 
 
+def recorded_source_block_rows(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Persist the reconstructed block map. The tracer does not rebuild it."""
+    from src.semantic_passage_v1 import _reconstructed_blocks
+    safe = []
+    for fragment in fragments or []:
+        if not isinstance(fragment, dict) or not fragment.get("fragment_id"):
+            continue
+        item = dict(fragment)
+        if not isinstance(item.get("source_locator"), dict):
+            item.pop("source_locator", None)
+        safe.append(item)
+    rows = []
+    for public, source in _reconstructed_blocks(safe):
+        version = (source.get("source_reconstruction") or {}).get("version")
+        for piece in source.get("_raw_source_mapping") or []:
+            kind = piece.get("kind") or "fragment_range"
+            rows.append({
+                "block_id": public["block_id"],
+                "reconstruction_version": version,
+                "map_start": piece.get("start"),
+                "map_end": piece.get("end"),
+                "kind": kind,
+                "fragment_id": piece.get("fragment_id"),
+                "raw_start": piece.get("raw_start"),
+                "raw_end": piece.get("raw_end"),
+                "text": piece.get("text") if kind == "join_separator" else None,
+                "source_page": piece.get("source_page"),
+                "left_fragment_id": piece.get("left_fragment_id"),
+                "right_fragment_id": piece.get("right_fragment_id"),
+            })
+    return rows
+
+
+def slice_block_mapping(rows: list[dict[str, Any]], block_id: Any, start: Any, end: Any) -> list[dict[str, Any]] | None:
+    """Exact cover of one block span. A partial or inexact piece is not a source span."""
+    if not block_id or type(start) is not int or type(end) is not int or not start < end:
+        return None
+    pieces = [row for row in rows if row.get("block_id") == block_id]
+    if not pieces:
+        return None
+    mapping: list[dict[str, Any]] = []
+    covered = 0
+    for row in pieces:
+        lo, hi = row.get("map_start"), row.get("map_end")
+        if type(lo) is not int or type(hi) is not int or lo >= hi:
+            return None
+        overlap_lo, overlap_hi = max(start, lo), min(end, hi)
+        if overlap_lo >= overlap_hi:
+            continue
+        if row.get("kind") == "join_separator":
+            if not (start <= lo and hi <= end) or not isinstance(row.get("text"), str):
+                return None
+            mapping.append({
+                "kind": "join_separator",
+                "text": row["text"],
+                "left_fragment_id": row.get("left_fragment_id"),
+                "right_fragment_id": row.get("right_fragment_id"),
+            })
+            covered += hi - lo
+            continue
+        raw_lo, raw_hi = row.get("raw_start"), row.get("raw_end")
+        if (type(raw_lo) is not int or type(raw_hi) is not int or raw_hi - raw_lo != hi - lo
+                or not row.get("fragment_id")):
+            return None
+        mapping.append({
+            "fragment_id": str(row["fragment_id"]),
+            "raw_start": raw_lo + overlap_lo - lo,
+            "raw_end": raw_lo + overlap_hi - lo,
+            "source_page": row.get("source_page"),
+        })
+        covered += overlap_hi - overlap_lo
+    if covered != end - start or not any(item.get("fragment_id") for item in mapping):
+        return None
+    return mapping
+
+
 def _fragment_text(fragments: Mapping[str, Any], mapping: list[Any]) -> tuple[str | None, list[dict[str, Any]], Any, Any]:
     """Exact slices in mapping order. A missing fragment or offset is not guessed."""
     parts: list[str] = []
@@ -398,17 +478,30 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
             identity["model"] = diagnostic.get("model")
         if attempt.get("attempt_id") and not identity["attempt_id"]:
             identity["attempt_id"] = attempt.get("attempt_id")
-    modes = []
+    run_modes = []
+    for run in runs:
+        blob = run.get("semantic_identity")
+        if isinstance(blob, dict) and blob.get("passage_formation_mode"):
+            run_modes.append(blob["passage_formation_mode"])
+    if provider.get("passage_formation_mode"):
+        run_modes.append(provider["passage_formation_mode"])
+    if components.get("passage_formation_mode"):
+        run_modes.append(components["passage_formation_mode"])
+    object_modes = []
     for obj in objects or []:
         semantic = (obj.get("metadata") or {}).get("semantic_passage") or {}
         admission = (obj.get("metadata") or {}).get("admission") or {}
-        mode = None
         if isinstance(semantic, dict):
             mode = semantic.get("formation_mode") or admission.get("field_formation_mode")
-        if mode:
-            modes.append(mode)
-    if len(set(modes)) == 1:
-        identity["passage_formation_mode"] = modes[0]
+            if mode:
+                object_modes.append(mode)
+    identity_conflicts = []
+    if run_modes and object_modes and set(run_modes) != set(object_modes):
+        identity_conflicts.append("passage_formation_mode")
+    elif len(set(run_modes or object_modes)) == 1:
+        identity["passage_formation_mode"] = (run_modes or object_modes)[0]
+    elif len(set(run_modes or object_modes)) > 1:
+        identity_conflicts.append("passage_formation_mode")
     proposal = replay.get("proposal") if isinstance(replay.get("proposal"), dict) else {}
     validation = replay.get("validation")
     fragments: dict[str, Any] = {}
@@ -420,7 +513,7 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
 
     def block_bucket(block_id: Any, start: Any, end: Any) -> dict[str, Any]:
         key = (block_id, start, end)
-        return by_block.setdefault(key, {"proposals": [], "assessments": [], "objects": []})
+        return by_block.setdefault(key, {"proposals": [], "assessments": [], "objects": [], "rejections": []})
 
     for raw in proposal.get("objects") or []:
         if not isinstance(raw, dict):
@@ -439,14 +532,23 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
                 block_bucket(item.get("block_id"), item.get("start"), item.get("end"))["objects"].append(obj)
         if not semantic.get("spans") and semantic.get("source_mapping"):
             block_bucket(None, None, None)["objects"].append(obj)
+    for rejection in ((provider.get("formation") or {}).get("rejections") or []):
+        if not isinstance(rejection, dict):
+            continue
+        for item in rejection.get("spans") or []:
+            if isinstance(item, dict):
+                block_bucket(item.get("block_id"), item.get("start"), item.get("end"))["rejections"].append(rejection)
 
     tasks = provider.get("tasks") if isinstance(provider.get("tasks"), list) else []
     call_id = (provider.get("response") or {}).get("id") if isinstance(provider.get("response"), dict) else None
     spans: list[dict[str, Any]] = []
     referenced: set[str] = set()
 
-    def provider_stage(proposals: list[dict[str, Any]], assessments: list[dict[str, Any]]) -> dict[str, Any]:
-        if len(proposals) == 1 and not assessments:
+    def provider_stage(proposals: list[dict[str, Any]], assessments: list[dict[str, Any]],
+                       rejections: list[dict[str, Any]]) -> dict[str, Any]:
+        if proposals and assessments:
+            return {"status": "conflict", "proposal_count": len(proposals), "assessment_count": len(assessments)}
+        if len(proposals) == 1 and not rejections:
             raw = proposals[0]
             return _recorded({
                 "provider_call_id": call_id,
@@ -455,7 +557,7 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
                 "source_assessment_role": None,
                 "proposal_ref": "semantic_replay.proposal.objects",
             })
-        if len(assessments) == 1 and not proposals:
+        if len(assessments) == 1 and not proposals and not rejections:
             raw = assessments[0]
             return _recorded({
                 "provider_call_id": call_id,
@@ -464,8 +566,26 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
                 "source_assessment_role": raw.get("role"),
                 "proposal_ref": "semantic_replay.proposal.source_assessments",
             })
-        if proposals or assessments:
-            return {"status": "conflict", "proposal_count": len(proposals), "assessment_count": len(assessments)}
+        if len(rejections) == 1 and not proposals and not assessments:
+            raw = rejections[0]
+            if raw.get("proposed_object_type"):
+                return _recorded({
+                    "provider_call_id": call_id,
+                    "selected": True,
+                    "proposed_object_type": raw.get("proposed_object_type"),
+                    "source_assessment_role": None,
+                    "proposal_ref": "provider_evidence.formation.rejections",
+                })
+            if raw.get("kind") == "source_assessment":
+                return _recorded({
+                    "provider_call_id": call_id,
+                    "selected": False,
+                    "proposed_object_type": None,
+                    "source_assessment_role": raw.get("source_assessment_role"),
+                    "proposal_ref": "provider_evidence.formation.rejections",
+                })
+        if proposals or assessments or rejections:
+            return {"status": "conflict"}
         return _unknown_stage()
 
     seen_objects: set[int] = set()
@@ -474,11 +594,15 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
         if len(bucket["objects"]) > 1:
             obj = None
         semantic = (obj.get("metadata") or {}).get("semantic_passage") or {} if obj else {}
-        mapping = list(semantic.get("source_mapping") or [])
+        block_id, start, end = key
+        object_spans = semantic.get("spans") or []
+        if obj is not None and len(object_spans) == 1 and semantic.get("source_mapping"):
+            mapping = list(semantic.get("source_mapping") or [])
+        else:
+            mapping = slice_block_mapping(list(envelope.get("source_block_map") or []), block_id, start, end) or []
         text, ranges, page, locator = _fragment_text(fragments, mapping) if mapping else (None, [], None, None)
         for item in ranges:
             referenced.add(item["fragment_id"])
-        block_id, start, end = key
         if obj is not None:
             seen_objects.add(id(obj))
         section = None
@@ -497,10 +621,46 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
             span["fragments"] = ranges
         elif ranges:
             span["fragments"] = ranges
-        decided = provider_stage(bucket["proposals"], bucket["assessments"])
+        decided = provider_stage(bucket["proposals"], bucket["assessments"], bucket["rejections"])
         if decided.get("status") != "unknown":
             span["provider"] = decided
-            span["validation"] = _validation_stage(validation)
+            rejection = bucket["rejections"][0] if len(bucket["rejections"]) == 1 and not bucket["proposals"] else None
+            if rejection is not None:
+                span["validation"] = _recorded({
+                    "validator_result": "rejected",
+                    "reason_code": rejection.get("reason_code"),
+                    "finding": rejection.get("finding"),
+                    "evidence_kind": "rejected_producer_proposal_not_approved_knowledge",
+                })
+            else:
+                span["validation"] = _validation_stage(validation)
+        no_object = not bucket["objects"]
+        if no_object and span["provider"].get("status") == "recorded":
+            span["transformation"] = _recorded({
+                "object_id": None,
+                "object_version": None,
+                "canonical_object_hash": None,
+                "proposed_object_type": None,
+            })
+            span["admission"] = _recorded({
+                "gate_result": None,
+                "reason_codes": [],
+                "evidence_kind": "not_a_knowledge_object",
+            })
+            span["review_projection"] = _recorded({
+                "kind": "review_queue_projection",
+                "shown_as_review_candidate": False,
+                "review_status": None,
+                "review_decision": None,
+                "review_decision_status": "not_recorded",
+                "evidence_kind": "no_knowledge_object_so_not_in_review_queue",
+            })
+            role = span["provider"].get("source_assessment_role")
+            if role:
+                span["source_accountability"] = _recorded({
+                    "source_role": role,
+                    "passage_disposition": None,
+                })
         if obj is not None and len(bucket["objects"]) == 1:
             admission = (obj.get("metadata") or {}).get("admission") or {}
             register = (obj.get("metadata") or {}).get("passage_register") or {}
@@ -552,7 +712,7 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
         "omitted_evidence": sorted(set(omitted)),
         "identity": identity,
         "spans": spans,
-        "identity_conflicts": ["passage_formation_mode"] if len(set(modes)) > 1 else [],
+        "identity_conflicts": identity_conflicts,
         "projection": "stored_evidence_join_not_a_new_authority",
     }
 
@@ -676,6 +836,8 @@ def evidence_from_zip(path: Path) -> dict[str, Any]:
         coverage = _read_csv(archive, "coverage.csv")
         findings = _read_csv(archive, "validation_findings.csv")
         stages = _read_csv(archive, "source_stages.csv")
+        formation_findings = _read_csv(archive, "formation_findings.csv")
+        source_blocks = _read_csv(archive, "source_blocks.csv")
     revision = revision_rows[0] if revision_rows else {}
     proposal_row = proposals[0] if proposals else {}
     proposal = proposal_row.get("proposal") if isinstance(proposal_row.get("proposal"), dict) else {}
@@ -705,10 +867,22 @@ def evidence_from_zip(path: Path) -> dict[str, Any]:
                 } for task in tasks],
                 "deployed_commit": deployed,
                 "response": {"id": call_ids[0]} if len(set(call_ids)) == 1 else {},
+                "formation": {"rejections": [{
+                    "kind": row.get("kind"),
+                    "index": row.get("index"),
+                    "reason_code": row.get("reason_code"),
+                    "spans": row.get("spans") if isinstance(row.get("spans"), list) else [],
+                    "proposed_object_type": row.get("proposed_object_type"),
+                    "source_assessment_role": row.get("source_assessment_role"),
+                    "finding": row.get("finding"),
+                    "requires_review": row.get("requires_review"),
+                } for row in formation_findings]},
             },
         },
+        "source_block_map": source_blocks,
         "quality_processing_runs": [{
             "source_hash": (runs[0].get("source_hash") if runs else None),
+            "semantic_identity": runs[0].get("semantic_identity") if runs and isinstance(runs[0].get("semantic_identity"), dict) else {},
             "source_fragments": [{
                 "fragment_id": view.get("fragment_id"),
                 "raw_text": view.get("raw_text"),
