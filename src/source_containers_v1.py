@@ -6,7 +6,7 @@ document information and validated, current target context.
 """
 import re
 
-from src.source_accountability_v1 import evidence_of, is_source_record, CONTAINERS_VERSION
+from src.source_accountability_v1 import evidence_of, is_source_record, CONTAINERS_VERSION, VERSION_V3, roles_for
 from src.source_bound_fields_v2 import context_matches_target, CONTEXT_KEY
 from src.review_disposition_v1 import definitive_review_disposition
 
@@ -62,26 +62,64 @@ def source_usage(objects):
             result[obj["object_id"]] = {"kind": "reviewed", "reason": disposition["outcome"],
                                         "target_ids": [], "accounted": True}
             continue
-        if evidence.get("version") != SOURCE_VERSION:
+        if evidence.get("version") == SOURCE_VERSION:
+            spans = evidence["spans"]
+            linked = [(target, span) for target, span in targets
+                      if obj.get("source", {}).get("source_checksum")
+                      and target.get("source", {}).get("source_checksum") == obj.get("source", {}).get("source_checksum")
+                      and any(span["block_id"] == s["block_id"] and max(span["start"],s["start"]) < min(span["end"],s["end"]) for s in spans)]
+            linked_spans = [span for _, span in linked]
+            final_spans = [span for target, span in linked if definitive_review_disposition(target)["outcome"] == "approved"]
+            # The existing reset command removes the role but retains its reviewed
+            # passage register. It must also override an automatic source decision.
+            metadata = obj.get("metadata") or {}
+            manual = metadata.get("source_role_review") or (metadata.get("passage_register") or {}).get("source") == "review"
+            machine_reason = metadata_reason(evidence["text"]) if not manual else None
+            context = not manual and bool(spans) and all(_covers(s, linked_spans) for s in spans)
+            result[obj["object_id"]] = {
+                "kind": "document_information" if machine_reason else "linked_context" if context else "unresolved",
+                "reason": machine_reason or evidence["reason"],
+                "target_ids": sorted({target["object_id"] for target, _ in linked}),
+                "accounted": bool(machine_reason) or (context and all(_covers(s, final_spans) for s in spans)),
+            }
+            continue
+        if evidence.get("version") != VERSION_V3:
             continue
         spans = evidence["spans"]
+        role = evidence.get("proposed_role")
         linked = [(target, span) for target, span in targets
                   if obj.get("source", {}).get("source_checksum")
                   and target.get("source", {}).get("source_checksum") == obj.get("source", {}).get("source_checksum")
-                  and any(span["block_id"] == s["block_id"] and max(span["start"],s["start"]) < min(span["end"],s["end"]) for s in spans)]
+                  and any(span["block_id"] == s["block_id"] and max(span["start"], s["start"]) < min(span["end"], s["end"]) for s in spans)]
         linked_spans = [span for _, span in linked]
         final_spans = [span for target, span in linked if definitive_review_disposition(target)["outcome"] == "approved"]
-        # The existing reset command removes the role but retains its reviewed
-        # passage register. It must also override an automatic source decision.
         metadata = obj.get("metadata") or {}
         manual = metadata.get("source_role_review") or (metadata.get("passage_register") or {}).get("source") == "review"
         machine_reason = metadata_reason(evidence["text"]) if not manual else None
-        context = not manual and bool(spans) and all(_covers(s, linked_spans) for s in spans)
+        allowed = roles_for(VERSION_V3).get(role, ())
+        context_bound = not manual and role == "context" and bool(spans) and all(_covers(s, linked_spans) for s in spans)
+        if role in {"metadata", "structure"} and machine_reason in allowed:
+            usage = {"kind": "document_information", "reason": machine_reason, "accounted": True}
+        elif context_bound:
+            usage = {
+                "kind": "linked_context",
+                "reason": evidence["reason"],
+                "accounted": all(_covers(s, final_spans) for s in spans),
+            }
+        else:
+            usage = {
+                "kind": {
+                    "background": "background",
+                    "support": "proposed_support",
+                    "answer_bearing": "answer_bearing",
+                    "context": "unresolved",
+                }.get(role, "unresolved"),
+                "reason": evidence["reason"],
+                "accounted": False,
+            }
         result[obj["object_id"]] = {
-            "kind": "document_information" if machine_reason else "linked_context" if context else "unresolved",
-            "reason": machine_reason or evidence["reason"],
+            **usage,
             "target_ids": sorted({target["object_id"] for target, _ in linked}),
-            "accounted": bool(machine_reason) or (context and all(_covers(s, final_spans) for s in spans)),
         }
     return result
 

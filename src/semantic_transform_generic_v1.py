@@ -256,7 +256,8 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
                 raise ValueError("decision_unit_source_fidelity_failure")
         from src.source_bound_fields_v2 import KEY, bind_fields, MODE
         from src.source_bound_fields_v3 import MODE as V3_MODE, bind_fields as bind_v3
-        if semantic_passage and semantic_passage.get("formation_mode") in {MODE, V3_MODE}:
+        from src.source_bound_fields_v4 import MODE as V4_MODE
+        if semantic_passage and semantic_passage.get("formation_mode") in {MODE, V3_MODE, V4_MODE}:
             from src.semantic_passage_v1 import semantic_source_blocks
             from src.object_taxonomy_v1 import extract_object_type
             if evidence_blocks is None:
@@ -271,8 +272,10 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
                     raise ValueError("source_bound_field_bounds_invalid")
                 selected.append({**span, "text": block["text"][span["start"]:span["end"]]})
             record = item.get(KEY)
-            binding = bind_v3 if semantic_passage.get("formation_mode") == V3_MODE else bind_fields
-            context_args = {"context": item.get("source_bound_context") or []} if binding is bind_v3 else {}
+            # V4 reuses the V3 literal binder. The formation mode stays v4.
+            use_v3_binding = semantic_passage.get("formation_mode") in {V3_MODE, V4_MODE}
+            binding = bind_v3 if use_v3_binding else bind_fields
+            context_args = {"context": item.get("source_bound_context") or []} if use_v3_binding else {}
             rebuilt = binding(record.get("evidence") if isinstance(record, dict) else None,
                                   selected=selected, candidate_text=item.get("clean_text", item["text"]),
                                   proposed_type=item.get("proposed_object_type", "unclassified"), **context_args)
@@ -283,7 +286,7 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
             raise ValueError("source_bound_fields_contract_mismatch")
         if semantic_passage is not None:
             system_metadata["semantic_passage"] = semantic_passage
-        from src.source_accountability_v1 import KEY as SOURCE_KEY, record as source_record
+        from src.source_accountability_v1 import KEY as SOURCE_KEY, record as source_record, roles_for
         if SOURCE_KEY in item:
             evidence = item[SOURCE_KEY]
             if not semantic_passage or semantic_passage["selection_origin"] != SELECTION_ORIGIN_COVERAGE:
@@ -292,9 +295,12 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
                 version=evidence.get("version"),
                 spans=semantic_passage["spans"], assessment={
                     "role": evidence.get("proposed_role"), "reason": evidence.get("reason")})
-            from src.source_accountability_v1 import ROLES
-            if (evidence != expected or evidence.get("proposed_role") not in ROLES
-                    or evidence.get("reason") not in ROLES[evidence["proposed_role"]]
+            try:
+                roles = roles_for(evidence.get("version"))
+            except ValueError as exc:
+                raise ValueError("source_accountability_invalid") from exc
+            if (evidence != expected or evidence.get("proposed_role") not in roles
+                    or evidence.get("reason") not in roles[evidence["proposed_role"]]
                     or item.get("review_track") != "technical"):
                 raise ValueError("source_accountability_invalid")
             system_metadata[SOURCE_KEY] = expected
@@ -381,9 +387,11 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
                 "revision_patch_hash": None,
             },
         }
-        from src.source_bound_fields_v2 import CONTEXT_KEY, bind_context, context_record
+        from src.source_bound_fields_v2 import CONTEXT_KEY, bind_context, context_record, MODE
+        from src.source_bound_fields_v3 import MODE as V3_MODE
+        from src.source_bound_fields_v4 import MODE as V4_MODE
         if CONTEXT_KEY in item:
-            if not semantic_passage or semantic_passage.get("formation_mode") not in {MODE, V3_MODE}:
+            if not semantic_passage or semantic_passage.get("formation_mode") not in {MODE, V3_MODE, V4_MODE}:
                 raise ValueError("source_bound_context_requires_v2")
             entries = item[CONTEXT_KEY]
             if not isinstance(entries, list):

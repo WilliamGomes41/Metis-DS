@@ -609,8 +609,9 @@ def admit_candidate(
     v2 = FIELD_EVIDENCE_KEY in row
     codes: list[str] = apply_bound_fields(row) if v2 else []
     from src.source_bound_fields_v3 import VERSION as V3_VERSION, MODE as V3_MODE
+    from src.source_bound_fields_v4 import MODE as V4_MODE
     v3 = isinstance(row.get(FIELD_EVIDENCE_KEY), dict) and row[FIELD_EVIDENCE_KEY].get("version") == V3_VERSION
-    if row.get("field_formation_mode") == V3_MODE and not v3:
+    if row.get("field_formation_mode") in {V3_MODE, V4_MODE} and not v3:
         codes.append("source_bound_fields_contract_mismatch")
     if not v2:
         _enrich_from_text(row)
@@ -860,11 +861,12 @@ def candidate_from_object(
     metadata = obj.get("metadata") or {}
     from src.source_bound_fields_v2 import MODE
     from src.source_bound_fields_v3 import MODE as V3_MODE
+    from src.source_bound_fields_v4 import MODE as V4_MODE
     fields["recommendation_coverage"] = metadata.get("recommendation_coverage") or {}
     fields["field_formation_mode"] = (metadata.get("semantic_passage") or {}).get("formation_mode")
-    if fields["field_formation_mode"] == V3_MODE:
+    if fields["field_formation_mode"] in {V3_MODE, V4_MODE}:
         fields["source_bound_context_entries"] = (metadata.get("source_bound_context") or {}).get("entries") or []
-    if FIELD_EVIDENCE_KEY in metadata or (metadata.get("semantic_passage") or {}).get("formation_mode") in {MODE, V3_MODE}:
+    if FIELD_EVIDENCE_KEY in metadata or (metadata.get("semantic_passage") or {}).get("formation_mode") in {MODE, V3_MODE, V4_MODE}:
         fields[FIELD_EVIDENCE_KEY] = metadata.get(FIELD_EVIDENCE_KEY)
     return build_candidate_record(**fields)
 
