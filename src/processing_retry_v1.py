@@ -16,6 +16,16 @@ def now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _retry_budget_attempts(attempts):
+    """Attempts that consume the failure/retry cap.
+
+    A successful formation resume is normal continuation work, not a failed
+    retry. Failed/interrupted resumes still consume the cap.
+    """
+    return [attempt for attempt in attempts
+            if attempt.get("kind") != "resume" or attempt.get("state") != "succeeded"]
+
+
 def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, clock: datetime, limits=None, kind="retry") -> tuple[dict, bool]:
     if not command_id or len(command_id) > 128 or not re.fullmatch(r"[A-Za-z0-9_-]+", command_id):
         raise ConsoleError("processing_command_id_invalid")
@@ -31,7 +41,7 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
     if any(attempt["state"] == "running" for attempt in attempts):
         raise ConsoleError("processing_attempt_in_progress")
     grant = envelope.get("processing_recovery") or {}
-    recovery = len(attempts) >= limits.max_attempts
+    recovery = len(_retry_budget_attempts(attempts)) >= limits.max_attempts
     if recovery and (grant.get("consumed_by") or grant.get("source_hash") != envelope["sha256"]
                      or grant.get("source_version") != envelope["version"] or grant.get("revision") != revision):
         raise ConsoleError("processing_attempt_limit_reached")
@@ -128,7 +138,8 @@ def status(envelope: dict, *, clock: datetime | None = None, retry_supported=Tru
     recovery_available = bool(grant and not grant.get("consumed_by")
                               and grant.get("source_hash") == envelope.get("sha256")
                               and grant.get("source_version") == envelope.get("version"))
-    if state != "running" and len(attempts) >= max_attempts and not recovery_available:
+    retry_attempts_used = len(_retry_budget_attempts(attempts))
+    if state != "running" and retry_attempts_used >= max_attempts and not recovery_available:
         allowed, reason = False, "processing_attempt_limit_reached"
     elif state != "running" and retry_at and datetime.fromisoformat(retry_at) > clock:
         allowed, reason = False, "processing_retry_cooldown"
@@ -136,5 +147,6 @@ def status(envelope: dict, *, clock: datetime | None = None, retry_supported=Tru
         allowed, reason = False, "processing_structural_limit"
     return {"state":state, "stored_state":latest.get("state"), "attempt_id":latest.get("attempt_id"),
             "reason_code":reason, "error_code":latest.get("error_code"), "retry_allowed":allowed, "retry_not_before":retry_at,
-            "recovery_available": recovery_available, "attempts_used":len(attempts), "max_attempts":max_attempts,
+            "recovery_available": recovery_available, "attempts_used":len(attempts),
+            "retry_attempts_used": retry_attempts_used, "max_attempts":max_attempts,
             "external_cancellation":(latest.get("transport") or {}).get("external_cancellation", "not_requested" if "replayed_call_id" in latest else "not_recorded")}
