@@ -165,7 +165,9 @@ def test_scope_export_equivalence_and_no_domain_writes(connection):
     assert call('get_storage_status', {'snapshot_id': first['snapshot_id']}).json()['result']['isError']
     sid = first['snapshot_id']
     objects, revision = console.snapshot_objects_and_revision(sid, include_blocked=True)
-    expected, _ = processing_evidence_tables(snapshot_id=sid, revision=revision, envelope=console._envelope(sid), objects=objects)
+    current_objects = list({row['object_id']: row for row in objects}.values())
+    expected, _ = processing_evidence_tables(
+        snapshot_id=sid, revision=revision, envelope=console._envelope(sid), objects=current_objects)
     evidence = call('get_processing_evidence', {'snapshot_id': sid, 'table': 'validation_findings'}).json()['result']['structuredContent']
     assert evidence['items'] == expected['validation_findings'][:25]
     assert evidence['objects_revision'] == revision
@@ -203,8 +205,9 @@ def test_lineage_preserves_source_locations_without_exposing_storage(connection)
         {'raw_object_id': 'raw-source-1', 'source_locator': locator, 'page': 2}]
     console._save_objects(sid, objects, expected_revision=revision)
     objects, revision = console.snapshot_objects_and_revision(sid, include_blocked=True)
+    current_objects = list({row['object_id']: row for row in objects}.values())
     expected, _ = processing_evidence_tables(snapshot_id=sid, revision=revision,
-                                            envelope=console._envelope(sid), objects=objects)
+                                            envelope=console._envelope(sid), objects=current_objects)
     evidence = call('get_processing_evidence', {'snapshot_id': sid, 'table': 'lineage',
                                               'object_id': target['object_id']}).json()['result']['structuredContent']
     expected_rows = [row for row in expected['lineage'] if row['object_id'] == target['object_id']]
