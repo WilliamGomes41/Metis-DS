@@ -74,6 +74,25 @@ def tasks_for(blocks, evidence_blocks, targets=None):
     return tasks
 
 
+def formation_progress(evidence):
+    """Summarize the latest durable disposition of each bounded task."""
+    latest = {}
+    for row in evidence.get("tasks", []):
+        task_id = str(row.get("task_id") or "")
+        if task_id:
+            latest[task_id] = row
+    statuses = [row.get("status") for row in latest.values()]
+    terminal = sum(status == "completed" for status in statuses)
+    return {
+        "planned_task_count": len(latest),
+        "terminal_task_count": terminal,
+        "pending_task_count": len(latest) - terminal,
+        "failed_task_count": sum(status == "failed" for status in statuses),
+        "partial_task_count": sum(status == "partial" for status in statuses),
+        "not_started_task_count": sum(status == "not_started" for status in statuses),
+    }
+
+
 def _remaining_targets(units):
     # Bound context is source use, not a second candidate search. It remains
     # reviewable on its target; source closure depends on target approval.
@@ -180,4 +199,6 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
     evidence["recommendation_coverage"] = assess(blocks, proposal)
     evidence["pending_rejections"] = pending_rejections(evidence, proposal)
     evidence["formation_incomplete"] = bool(evidence["pending_rejections"])
+    evidence["formation_state"] = "pending" if evidence["formation_incomplete"] else "complete"
+    evidence["formation_progress"] = formation_progress(evidence)
     return proposal, evidence
