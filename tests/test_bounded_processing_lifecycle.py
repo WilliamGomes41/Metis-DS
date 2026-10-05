@@ -277,12 +277,38 @@ def test_successful_formation_continuations_do_not_consume_failure_retry_budget(
             envelope, command_id=f'resume-{index}', actor_id='actor',
             revision='r', clock=now(), limits=limits, kind='resume')
         assert fresh
+        attempt['formation_progress_made'] = True
         finish(envelope, attempt['attempt_id'], state='succeeded')
     current = status(envelope, policy=limits)
     assert current['attempts_used'] == 6
     assert current['retry_attempts_used'] == 0
     assert current['reason_code'] != 'processing_attempt_limit_reached'
 
+    stalled, fresh = reserve(
+        envelope, command_id='stalled-resume', actor_id='actor',
+        revision='r', clock=now(), limits=limits, kind='resume')
+    assert fresh
+    stalled['formation_progress_made'] = False
+    finish(envelope, stalled['attempt_id'], state='succeeded')
+    assert status(envelope, policy=limits)['retry_attempts_used'] == 1
+
+    attempt, fresh = reserve(
+        envelope, command_id='failed-resume', actor_id='actor',
+        revision='r', clock=now(), limits=limits, kind='resume')
+    assert fresh
+    finish(envelope, attempt['attempt_id'], state='failed',
+           error=ConsoleError('pre_review_llm_connection_failed'))
+    capped = status(envelope, policy=limits)
+    assert capped['retry_attempts_used'] == 2
+    assert capped['reason_code'] == 'processing_attempt_limit_reached'
+    with pytest.raises(ConsoleError, match='processing_attempt_limit_reached'):
+        reserve(envelope, command_id='one-too-many', actor_id='actor',
+                revision='r', clock=now(), limits=limits, kind='resume')
+
+
+def test_failed_formation_resumes_consume_retry_budget():
+    envelope = {'sha256': 'a'*64, 'version': '1.0', 'publication_eligibility': PRE_REVIEW_BLOCKED}
+    limits = ModelCallLimits(max_attempts=2)
     for index in range(2):
         attempt, fresh = reserve(
             envelope, command_id=f'failed-{index}', actor_id='actor',
