@@ -273,6 +273,7 @@ ERROR_COPY = {
     "processing_structural_limit": "Deze opdracht overschrijdt een invoer- of uitvoergrens. Herhalen zonder de oorzaak te wijzigen is geen herstel.",
     "processing_timeout": "De verwerking is niet op tijd afgerond. Het bestaande werk is behouden; start zo nodig een nieuwe poging.",
     "pre_review_no_reviewable_candidates": "De voorcontrole heeft geen passages vrijgegeven die de toelatingscontroles doorstaan. Bekijk de technische diagnose.",
+    "source_formation_incomplete": "Geldige voorstellen zijn bewaard. Er staat nog onopgelost vormingswerk open; publicatie is geblokkeerd.",
     "public_signup_forbidden": "Je kunt zelf geen account aanmaken. Vraag de beheerder om toegang tot Metis.",
     "replaces_snapshot_id_required": "Kies welk bestaand document deze nieuwe versie vervangt.",
     "review_failed": "De beoordeling kon niet worden afgerond. Controleer de huidige passagestatus en meld dit bij de beheerder als de oorzaak niet zichtbaar is.",
@@ -3692,6 +3693,12 @@ def create_console_app(
         # Same authorization as processing_status/retry: researchers or assigned reviewers.
         processing = state.processing_status(document, actor_id=account["account_id"])
         controls = []
+        if processing.get("resume_allowed"):
+            controls.append(f'''<form method="post" action="/tree/resume-formation">
+              <input type="hidden" name="snapshot_id" value="{_esc(document)}">
+              <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
+              <input type="hidden" name="expected_revision" value="{_esc(state.objects_revision(document))}">
+              <button class="btn-primary" type="submit">Onopgeloste vorming herstellen</button></form>''')
         if processing["retry_allowed"]:
             controls.append(f'''<form method="post" action="/tree/reprocess">
               <input type="hidden" name="snapshot_id" value="{_esc(document)}">
@@ -3706,7 +3713,8 @@ def create_console_app(
               <input type="hidden" name="snapshot_id" value="{_esc(document)}">
               <label>Reden voor eenmalig herstel<input name="reason" required maxlength="1000"></label>
               <button type="submit">Een herstelpoging autoriseren</button></form>''')
-        code = processing.get("error_code") or processing.get("reason_code") or ""
+        code = ("source_formation_incomplete" if processing.get("formation_incomplete")
+                else processing.get("error_code") or processing.get("reason_code") or "")
         diagnostic = ((envelope.get("processing_attempts") or [{}])[-1].get("diagnostic") or {})
         detail = _esc(json.dumps(diagnostic, ensure_ascii=False, indent=2))
         reviewer_links = (f'<p><a href="/settings/technical?document={_esc(document)}">Passagediagnostiek en exports</a></p>'
@@ -4909,6 +4917,14 @@ def create_console_app(
             "/settings/technical/processing?" + urlencode({"document": snapshot_id}),
             status_code=303,
         )
+
+    @app.post("/tree/resume-formation")
+    def tree_resume_formation(request: Request, snapshot_id: str = Form(...),
+                              command_id: str = Form(...), expected_revision: str = Form(...)):
+        account = _require(request)
+        state.resume_formation(actor_id=account["account_id"], snapshot_id=snapshot_id,
+                               command_id=command_id, expected_revision=expected_revision)
+        return RedirectResponse("/settings/technical/processing?" + urlencode({"document": snapshot_id}), status_code=303)
 
     @app.post("/tree/move")
     def tree_move(

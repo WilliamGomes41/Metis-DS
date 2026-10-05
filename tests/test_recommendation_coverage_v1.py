@@ -93,10 +93,16 @@ def test_supplement_abstention_remains_open_in_existing_remainder_no_third_call(
     assert apply_passage_register(pending)[0]["metadata"]["passage_register"]["status"] == "not_yet_assessed"
 
 
-def test_invalid_supplement_is_not_applied_as_a_partial_bundle():
-    from src.operations_console_v1 import ConsoleError
-    with pytest.raises(ConsoleError, match="semantic_evidence_literal_not_found"):
-        run("corrupt")
+def test_invalid_supplement_keeps_valid_work_and_explicit_unresolved_source():
+    spec, rows, calls, _ = run("corrupt")
+    assert len(calls) == 2
+    candidates = [o for o in rows if (o.get("metadata") or {}).get("source_bound_fields")]
+    assert len(candidates) == 1 and candidates[0]["content"]["clean_text"] == FIRST
+    evidence = spec["_semantic_replay"]["provider_evidence"]
+    assert evidence["formation_incomplete"]
+    assert evidence["pending_rejections"][0]["reason_code"] == "semantic_evidence_literal_not_found"
+    from src.source_accountability_v1 import evidence_of
+    assert any(evidence_of(o).get("text") == SECOND for o in rows)
 
 
 def test_replay_revalidates_merged_proposal_without_another_provider_call():

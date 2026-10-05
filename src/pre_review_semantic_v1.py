@@ -555,7 +555,7 @@ def _replay_identity(
         extractor_version=_extractor_contract(source_fragments),
         reconstruction_version=RECONSTRUCTION_VERSION,
         formation_policy_version=PASSAGE_FORMATION_POLICY_VERSION,
-        semantic_contract_version="source-accountability-v1/" + (f"{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}"),
+        semantic_contract_version="source-accountability-v1/" + (f"recoverable-formation-v1/{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}"),
         prompt_hash=_stable_json_hash(SEMANTIC_DEVELOPER_PROMPT + _semantic_instruction(field_contract_v2, field_contract_v3)),
         schema_hash=_stable_json_hash(_proposal_schema(field_contract_v2, field_contract_v3)),
         provider_id=SEMANTIC_PROVIDER_ID,
@@ -591,6 +591,7 @@ def _provider_proposal(
     model_limits: ModelCallLimits | None = None,
     evidence: dict[str, Any] | None = None,
     checkpoint=None,
+    validator_input=None,
 ) -> dict[str, Any]:
     safe_key = str(api_key or "").strip()
     if not safe_key:
@@ -651,7 +652,8 @@ def _provider_proposal(
     if checkpoint:
         checkpoint("proposal_parsed", {"proposal": proposal, "proposal_hash": _stable_json_hash(proposal)})
     try:
-        validate_provider_proposal(proposal, field_contract_v2=field_contract_v2, field_contract_v3=field_contract_v3)
+        if not field_contract_v3:
+            validate_provider_proposal(proposal, field_contract_v2=field_contract_v2)
     except ConsoleError as error:
         if checkpoint:
             checkpoint("proposal_gate_rejected", {"finding": getattr(error, "validation_finding", {"reason_code": error.code})})
@@ -673,8 +675,15 @@ def _provider_proposal(
                                   "input_tokens": usage.get("input_tokens"),
                                   "output_tokens": usage.get("output_tokens")})
     try:
-        resolved = resolve_proposal_evidence(proposal, blocks=blocks, evidence_blocks=evidence_blocks,
-                                            field_contract_v3=field_contract_v3)
+        if field_contract_v3:
+            from src.recoverable_formation_v1 import prepare
+            resolved, formation = prepare(proposal, blocks=blocks, evidence_blocks=evidence_blocks,
+                                          validator_input=validator_input)
+            if evidence is not None:
+                evidence["formation"] = formation
+        else:
+            resolved = resolve_proposal_evidence(proposal, blocks=blocks, evidence_blocks=evidence_blocks,
+                                                field_contract_v3=False)
     except SemanticPassageError as exc:
         if checkpoint:
             checkpoint("validation_rejected", {"finding": exc.finding})
@@ -788,7 +797,7 @@ def _semantic_execution_before_review(
             field_contract_v2=field_contract_v2, field_contract_v3=field_contract_v3,
             model_limits=model_limits,
             evidence=provider_evidence,
-            checkpoint=checkpoint,
+            checkpoint=checkpoint, validator_input=validator_input,
         )
         if checkpoint:
             checkpoint("proposal_received", {"provider_evidence": provider_evidence})
@@ -806,7 +815,9 @@ def _semantic_execution_before_review(
                 checkpoint("validation_rejected", {"finding": exc.finding})
             LOGGER.error("METIS_VALIDATION rejected code=%s reference=%s", exc.code, _PROCESSING_REFERENCE.get())
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
-        if field_contract_v3:
+    if proposal is not None and blocks:
+        provider_evidence = locals().get("provider_evidence") or deepcopy((replay_record or {}).get("provider_evidence") or {})
+        if field_contract_v3 and (execution != EXECUTION_REPLAY or (formation_context or {}).get("resume_formation")):
             from dataclasses import replace
             from src.recommendation_coverage_v1 import assess, merge_proposals
             from src.source_accountability_v1 import supplementary_targets
@@ -816,7 +827,7 @@ def _semantic_execution_before_review(
                 limits = model_limits or ModelCallLimits(total=DEFAULT_TIMEOUT_SECONDS)
                 remaining = limits.total - (time.monotonic() - execution_started)
                 if remaining > 0:
-                    supplementary_evidence = {}
+                    supplementary_evidence = {"target_spans": [deepcopy(r["span"]) for r in targets]}
                     try:
                         supplement = _provider_proposal(api_key=api_key, model=safe_model,
                             blocks=[b for b in blocks if b["block_id"] in target_blocks], evidence_blocks=evidence_blocks,
@@ -825,33 +836,32 @@ def _semantic_execution_before_review(
                             model_limits=replace(limits, total=remaining, connect=min(limits.connect, remaining),
                                                  idle=min(limits.idle, remaining)),
                             evidence=supplementary_evidence,
-                            checkpoint=None)
+                            checkpoint=None, validator_input=validator_input)
                         semantic_units_from_proposal(content_fragments, document_id=document_id,
                             proposal=supplement, evidence_fragments=evidence_fragments,
                             allowed_candidate_block_ids=allowed_candidate_block_ids, field_contract_v3=True)
-                        # The supplemental producer cannot reselect earlier work or
-                        # escape the explicitly unselected ranges it was given.
-                        supplemental_spans = [ref for obj in supplement.get("objects", []) for ref in obj["spans"]]
-                        supplemental_spans += [r["span"] for r in supplement.get("source_assessments", [])]
-                        if any(not any(t["span"]["block_id"] == ref["block_id"]
-                            and t["span"]["start"] <= ref["start"] < ref["end"] <= t["span"]["end"]
-                            for t in targets) for ref in supplemental_spans):
-                            raise ConsoleError("pre_review_llm_proposal_rejected", "semantic_supplement_outside_target")
+                        from src.recoverable_formation_v1 import restrict_supplement
+                        supplement, rejected = restrict_supplement(supplement, primary=proposal, targets=targets)
+                        supplementary_evidence["formation"]["rejections"].extend(rejected)
+                        if rejected:
+                            supplementary_evidence["formation"]["status"] = "partial"
+                        supplementary_evidence["formation"]["accepted_object_count"] = len(supplement["objects"])
                         merged = merge_proposals(proposal, supplement)
                         content_units = semantic_units_from_proposal(content_fragments, document_id=document_id,
                             proposal=merged, evidence_fragments=evidence_fragments,
                             allowed_candidate_block_ids=allowed_candidate_block_ids, field_contract_v3=True)
                     except ConsoleError as exc:
-                        supplementary_evidence["error_code"] = exc.code
-                        if exc.code in {"pre_review_llm_proposal_rejected", "pre_review_llm_response_invalid"}:
+                        if exc.code.startswith("processing_"):
                             raise
+                        supplementary_evidence["error_code"] = exc.code
+                        supplementary_evidence["failure_reason"] = getattr(exc, "pre_review_diagnostics", {}).get("reason_code", exc.code)
                     except SemanticPassageError as exc:
                         supplementary_evidence["error_code"] = exc.code
-                        raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
+                        supplementary_evidence["failure_reason"] = exc.code
                     else:
                         proposal = merged
                     finally:
-                        provider_evidence["supplementary_calls"] = [supplementary_evidence]
+                        provider_evidence.setdefault("supplementary_calls", []).append(supplementary_evidence)
                         if checkpoint:
                             checkpoint("proposal_received", {"provider_evidence": provider_evidence})
                 else:
@@ -860,8 +870,15 @@ def _semantic_execution_before_review(
             if checkpoint:
                 checkpoint("proposal_received", {"provider_evidence": provider_evidence,
                     "resolved_proposal": proposal, "resolved_proposal_hash": _stable_json_hash(proposal)})
-        execution = EXECUTION_INFERENCE
-        if identity is not None:
+        if field_contract_v3:
+            from src.recoverable_formation_v1 import pending_rejections
+            provider_evidence["pending_rejections"] = pending_rejections(provider_evidence, proposal)
+            provider_evidence["formation_incomplete"] = bool(provider_evidence["pending_rejections"])
+            if checkpoint:
+                checkpoint("formation_accounted", {"provider_evidence": provider_evidence})
+        if execution != EXECUTION_REPLAY or (formation_context or {}).get("resume_formation"):
+            execution = EXECUTION_INFERENCE
+        if identity is not None and execution != EXECUTION_REPLAY:
             replay_record = validated_inference_record(
                 identity=identity,
                 proposal=proposal,

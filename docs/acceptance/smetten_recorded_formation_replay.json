@@ -1,0 +1,30 @@
+{
+  "proof_kind": "offline_recorded_responses_not_live_or_clinical_acceptance",
+  "evidence_sha256": "99662bcf53e172c9950bde94dd7b401c3c7a38ea7a6ee11802546c7a93cdd679",
+  "source_sha256": "62dfd76e0683a372d54b6d7aea8b09b47b2b71022e60ff034d76223919bec47c",
+  "original_deployed_commit": "0efb8f2b9c15f53946188c6380f075f8a7ee4ead",
+  "original_failure": "semantic_evidence_literal_not_found",
+  "provider_calls_replayed": 2,
+  "source_fragments": 1014,
+  "validated_proposals": 17,
+  "proposal_types": {
+    "recommendation": 16,
+    "definition": 1
+  },
+  "candidate_admission": {
+    "allowed": 13,
+    "blocked": 4
+  },
+  "admission_block_reasons": {
+    "unresolved_reference": 1,
+    "recommendation_scope_context_missing": 1,
+    "abbreviation_unresolved": 2,
+    "context_necessary_unresolved": 1
+  },
+  "source_accountability_records": 639,
+  "formation_incomplete": true,
+  "open_formation_reasons": {
+    "semantic_supplement_conflict": 12
+  },
+  "elapsed_seconds": 118.029
+}
