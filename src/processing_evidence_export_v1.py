@@ -13,12 +13,14 @@ from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v9"
-PROJECTOR_VERSION = "processing-evidence-export-v9"
+VERSION = "processing-evidence-export-v10"
+PROJECTOR_VERSION = "processing-evidence-export-v10"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
     "source_usage": ("object_id", "object_version", "container", "kind", "reason", "target_ids", "accounted", "policy_version"),
     "formation_tasks": ("task_id", "section_path", "target_spans", "phase", "status", "policy_version"),
+    "formation_progress": ("formation_state", "planned_task_count", "terminal_task_count", "pending_task_count",
+                           "failed_task_count", "partial_task_count", "not_started_task_count", "policy_version"),
     "formation_findings": ("call_id", "kind", "index", "reason_code", "spans", "requires_review", "finding", "evidence_kind"),
     "attempt_diagnostics": ("attempt_id", "state", "diagnostic", "evidence_kind"),
     "processing_recovery": ("authorization_id", "actor_id", "reason", "authorized_at", "source_hash", "source_version", "revision", "consumed_by", "consumed_at"),
@@ -115,6 +117,14 @@ def processing_evidence_tables(
     for task in provider.get("tasks") or []:
         add("formation_tasks", **{key: task.get(key) for key in SCHEMAS["formation_tasks"] if key != "policy_version"},
             policy_version=provider.get("task_policy"))
+    if provider.get("task_policy"):
+        from src.bounded_formation_v1 import formation_progress
+        progress = provider.get("formation_progress") or formation_progress(provider)
+        add("formation_progress",
+            formation_state=provider.get("formation_state") or ("pending" if provider.get("formation_incomplete") else "complete"),
+            **{key: progress.get(key) for key in SCHEMAS["formation_progress"]
+               if key not in {"formation_state", "policy_version"}},
+            policy_version=provider.get("task_policy"))
     from src.source_containers_v1 import partition, VERSION as CONTAINER_VERSION
     for source in partition(objects)["source"]:
         obj = source["record"]
@@ -205,6 +215,8 @@ def processing_evidence_tables(
     statuses = {
         "source_usage": ("derived", "Current source usage under the recorded policy; not a new approval or clinical completeness proof."),
         "formation_tasks": ("recorded" if tables["formation_tasks"] else "not_recorded", "Bounded task observations; historical statuses are retained and pending findings determine current recovery."),
+        "formation_progress": ("recorded" if tables["formation_progress"] else "not_recorded",
+            "Current bounded-formation progress projected against the original task plan; recovery subtasks may have different task ids."),
         "formation_findings": ("recorded" if any("formation" in p for p in providers) else "not_recorded",
             "Versioned producer rejections; historical errors remain evidence after recovery. Not clinical validation or approval."),
         "attempt_diagnostics": ("recorded" if tables["attempt_diagnostics"] else "not_recorded", "Attempt-owned checkpoints, request/output, validator input and finding. Missing historical evidence is not reconstructed. Never admission/replay authority."),
@@ -270,6 +282,7 @@ def processing_evidence_zip(**kwargs: Any) -> bytes:
             f"Metis {VERSION}\n"
             f"Exported at: {datetime.now(timezone.utc).isoformat()}\n"
             "Read manifest.csv first. This is a read-only projection of stored evidence.\n"
+            "CSV v10 adds formation_progress.csv with current planned, terminal and pending bounded-task counts.\n"
             "CSV v6 adds bounded attempt limits, transport observations and retry linkage; context evidence is retained.\n"
             "CSV v4 adds text, left_fragment_id and right_fragment_id to lineage.csv for inserted joins.\n"
             "CSV v3/v4: join snapshot_id + revision_id to revision.csv for the exact objects_revision.\n"
