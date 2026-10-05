@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from src.operations_console_v1 import ConsoleError
 
 KEY = "processing_attempts"
-VERSION = "source-reprocessing-v2"
+VERSION = "source-reprocessing-v3"
 
 
 def now() -> datetime:
