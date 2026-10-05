@@ -109,6 +109,24 @@ def partial_story(tmp_path, make_console=None):
                                 'expected_revision': final.objects_revision(sid)})
 
 
+
+
+def test_processing_status_projects_progress_for_pre_v10_bounded_evidence(tmp_path):
+    state, sid, _, _, _, _, make, bind = system(tmp_path)
+    envelope = deepcopy(state._envelope(sid))
+    provider = envelope['semantic_replay']['provider_evidence']
+    provider.pop('formation_progress', None)
+    provider.pop('formation_state', None)
+    state._commit_prepared_store(envelopes={sid: envelope}, snapshot_id=sid)
+
+    restarted = make()
+    bind(restarted)
+    processing = restarted.processing_status(sid)
+    assert processing['formation_state'] == 'pending'
+    assert processing['formation_progress']['planned_task_count'] > 0
+    assert processing['formation_progress']['pending_task_count'] > 0
+
+
 def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path):
     state, sid, actor, reviewer, calls, mode, _, _ = system(tmp_path)
     from fastapi.testclient import TestClient
