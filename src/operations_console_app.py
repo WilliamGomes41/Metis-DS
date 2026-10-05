@@ -2588,6 +2588,10 @@ def _review_inventory(
     items = []
     source_items = []
     metadata_items = []
+    source_groups = {}
+    from src.source_containers_v1 import partition
+    containers = partition(objects)
+    source_usage = {row["record"]["object_id"]: row["usage"] for row in containers["source"]}
     from src.source_accountability_v1 import is_source_record, evidence_of
     for obj in objects:
         if obj.get("object_type") == "document":
@@ -2607,7 +2611,28 @@ def _review_inventory(
         category = route_task or followup_tasks.get(object_id) or "history"
         if task != "inventory" and category != task:
             continue
-        if is_source_record(obj) and not disposition.get("final"):
+        if is_source_record(obj) and evidence_of(obj).get("version") == "source-accountability-v2":
+            usage = source_usage[object_id]
+            kind = "reviewed" if disposition["final"] else usage["kind"]
+            label = {"reviewed": "Handmatig afgehandeld", "document_information": "Documentinformatie",
+                     "linked_context": "Gekoppelde context", "unresolved": "Brongebruik nog te bepalen"}[kind]
+            section = " / ".join((obj.get("structure") or {}).get("section_path") or
+                                  (obj.get("metadata") or {}).get("section_path") or []) or "Document"
+            group = source_groups.setdefault((label, section), [])
+            status = ("Handmatig afgehandeld" if disposition["final"] else
+                      "Automatisch als documentinformatie aangemerkt" if kind == "document_information" else
+                      "Context bij goedgekeurde kennis" if usage["accounted"] else
+                      "Wacht op kennisbeoordeling" if kind == "linked_context" else "Open")
+            usage_reason = {"document_metadata": "Documentversie of datum", "page_furniture": "Documentlabel met editie en paginanummer",
+                            "navigation": "Inhoudsopgave of navigatieregel", "uncertain_source_role": "Brongebruik nog niet vastgesteld",
+                            "unformed_meaning": "Niet geselecteerde broninhoud"}.get(usage["reason"], "Bronbesluit controleren")
+            targets = "".join(f'<a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(oid)}">Kennisvoorstel</a> '
+                              for oid in usage["target_ids"])
+            group.append(f'<li data-source-record="{_esc(object_id)}"><p>{_esc((obj.get("content") or {}).get("clean_text"))}</p>'
+                f'<p>{_esc(status)} · {_esc(usage_reason)}</p>{targets}'
+                f'<a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task=disposition">Bronbesluit bekijken of wijzigen</a></li>')
+            continue
+        if is_source_record(obj):
             evidence = evidence_of(obj)
             text = str((obj.get("content") or {}).get("clean_text") or "")
             reason = {
@@ -2615,7 +2640,7 @@ def _review_inventory(
                 "page_furniture": "Voorgestelde kop- of voettekst",
                 "navigation": "Voorgestelde navigatie of inhoudsopgave",
                 "document_structure": "Voorgestelde documentstructuur",
-                "unformed_meaning": "Geen complete kenniseenheid gevormd; controleer deze broninhoud",
+                "unformed_meaning": "Niet geselecteerde broninhoud; bepaal het gebruik",
                 "uncertain_source_role": "Bronrol onzeker; bepaal kennis, context of onderbouwing",
             }.get(evidence.get("reason"), "Bronverantwoording ongeldig; herstel de verwerking")
             link = f'/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task=disposition'
@@ -2664,10 +2689,13 @@ def _review_inventory(
             f'<p class="muted">{_esc(origin)}</p></li>'
         )
     source_html = ""
-    if metadata_items or source_items:
+    if metadata_items or source_items or source_groups:
         source_html = ('<section data-source-accountability><h3>Bronverantwoording</h3>'
             '<p>Deze bronregels zijn geen gevormde kennisobjecten. De bron blijft behouden. '
             'Open inhoudelijke bronafhandeling blokkeert publicatie.</p>')
+        for (label, section), group in source_groups.items():
+            source_html += (f'<details data-source-group><summary>{_esc(label)} · {_esc(section)} ({len(group)} bronregels)</summary>'
+                            + '<ol>' + "".join(group) + '</ol></details>')
         if metadata_items:
             source_html += ('<form method="post" action="/review/source-exclusions">'
                 f'<input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">'
@@ -2681,19 +2709,19 @@ def _review_inventory(
                 + ' Ik heb de geselecteerde bronregels gecontroleerd; zij bevatten geen op te nemen kennis.</label>'
                 + '<button type="submit">Geselecteerde bronregels gemotiveerd uitsluiten</button></form>')
         if source_items:
-            source_html += (f'<h4>Inhoudelijk bronherstel ({len(source_items)})</h4><ol>'
+            source_html += (f'<h4>Brongebruik nog te bepalen ({len(source_items)})</h4><ol>'
                             + "".join(source_items) + '</ol>')
         source_html += '</section>'
-    title = "Alle passages en hun afhandeling" if task == "inventory" else labels[task]
+    title = ("Kennisvoorstellen en bronverantwoording" if source_groups else "Alle passages en hun afhandeling") if task == "inventory" else labels[task]
     if task == "repair":
         title += f" ({len(items)})"
     panel_class = "review-blocked-audit" if task == "repair" else "review-passage-inventory"
     return (
         f'<section class="{panel_class}">'
         + _review_task_header(snapshot_id, title, "Beoordelingswerk en bronafhandeling zijn afzonderlijke controles; de aantallen mogen overlappen")
-        + f'<p>{len(items)} beoordelings- of historieregels; {len(metadata_items) + len(source_items)} bronregels.</p>'
+        + f'<p>{len(items)} beoordelings- of historieregels; {len(metadata_items) + len(source_items) + sum(len(g) for g in source_groups.values())} bronregels.</p>'
         + f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p>'
-        + '<ol class="object-index review-passage-inventory">' + "".join(items) + '</ol>' + source_html
+        + '<ol data-knowledge-proposals class="object-index review-passage-inventory">' + "".join(items) + '</ol>' + source_html
         + ('<p class="review-task-empty">Deze lijst is leeg. Controleer het volledige passage-overzicht voor ander werk.</p>' if not items and not source_html else '')
         + '</section>'
     )

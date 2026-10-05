@@ -1,13 +1,15 @@
 """Source-only evidence in the existing passage register, never review approval.
 
-Classifications are proposals. Even exact metadata stays open until an explicit
-human disposition. Missing classifications mean unresolved source work.
+Classifications are proposals. Legacy v1 requires human disposition; v2 source
+usage is derived by source_containers_v1 under its versioned, reversible policy.
+Missing classifications mean unknown source use, not proven missing knowledge.
 """
 from copy import deepcopy
 
 from src.semantic_replay_v1 import stable_json_hash
 
 VERSION = "source-accountability-v1"
+CONTAINERS_VERSION = "source-accountability-v2"
 KEY = "source_accountability"
 ROLES = {
     "metadata": ("document_metadata", "page_furniture"),
@@ -50,10 +52,12 @@ def validate_assessments(raw, blocks, selected):
     return result
 
 
-def record(*, text, spans, assessment=None):
-    row = {"version": VERSION, "record_kind": "source_passage", "text": text,
+def record(*, text, spans, assessment=None, version=VERSION):
+    if version not in {VERSION, CONTAINERS_VERSION}:
+        raise ValueError("source_accountability_version_invalid")
+    row = {"version": version, "record_kind": "source_passage", "text": text,
            "spans": deepcopy(spans), "proposed_role": (assessment or {}).get("role", "unresolved"),
-           "reason": (assessment or {}).get("reason", "unformed_meaning")}
+           "reason": (assessment or {}).get("reason", "uncertain_source_role" if version == CONTAINERS_VERSION else "unformed_meaning")}
     return {**row, "binding_hash": stable_json_hash(row)}
 
 
@@ -65,7 +69,7 @@ def evidence_of(obj):
     payload = {k: v for k, v in raw.items() if k != "binding_hash"}
     semantic = md.get("semantic_passage") or {}
     if (set(payload) != {"version", "record_kind", "text", "spans", "proposed_role", "reason"}
-            or raw.get("version") != VERSION or raw.get("record_kind") != "source_passage"
+            or raw.get("version") not in {VERSION, CONTAINERS_VERSION} or raw.get("record_kind") != "source_passage"
             or raw.get("binding_hash") != stable_json_hash(payload)
             or semantic.get("selection_origin") != "coverage_remainder"
             or raw.get("spans") != semantic.get("spans")

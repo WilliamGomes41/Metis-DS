@@ -1873,7 +1873,8 @@ class OperationsConsole:
         from src.source_context_review_v1 import ROLE_KEY, LINKS_KEY
         envelope = self._envelope(snapshot_id)
         contract = ((envelope.get("semantic_replay") or {}).get("identity") or {}).get("components", {}).get("semantic_contract_version", "")
-        return bool(incomplete(envelope) and VERSION in contract
+        from src.bounded_formation_v1 import VERSION as TASK_VERSION
+        return bool(incomplete(envelope) and VERSION in contract and TASK_VERSION in contract
             and not self.snapshot_is_published(snapshot_id)
             and not self.object_review_bindings(snapshot_id) and not envelope.get("review_passes")
             and not any((row.get("governance") or {}).get("validation_status") not in {None, "needs_review"}
@@ -2494,6 +2495,11 @@ class OperationsConsole:
         for row in rows:
             current[row["object_id"]] = row
         return deepcopy(list(current.values()))
+
+    def snapshot_containers(self, snapshot_id: str) -> dict[str, Any]:
+        """Typed knowledge/source access over the current atomic revision."""
+        from src.source_containers_v1 import partition
+        return partition(self.snapshot_objects(snapshot_id))
 
     def snapshot_objects_and_revision(
         self,

@@ -8,8 +8,28 @@ transform can still resolve the exact source locators.
 from __future__ import annotations
 
 import re
+import hashlib
+import json
+from contextvars import ContextVar
+from functools import wraps
 from copy import deepcopy
 from typing import Any, Iterable
+
+_RUN_CACHE = ContextVar("source_reconstruction_run_cache", default=None)
+
+
+def with_reconstruction_cache(function):
+    """Reuse identical immutable input within one operation, never across runs."""
+    @wraps(function)
+    def scoped(*args, **kwargs):
+        if _RUN_CACHE.get() is not None:
+            return function(*args, **kwargs)
+        token = _RUN_CACHE.set({})
+        try:
+            return function(*args, **kwargs)
+        finally:
+            _RUN_CACHE.reset(token)
+    return scoped
 
 from src.object_taxonomy_v1 import (
     extract_object_type,
@@ -165,6 +185,17 @@ def reconstruct_source_fragments(
     is marked ``unresolved``; the admission gate can consequently keep the
     resulting incomplete object out of content review.
     """
+    fragments = list(fragments)
+    cache = _RUN_CACHE.get()
+    key = None
+    if cache is not None:
+        try:
+            key = hashlib.sha256(json.dumps(fragments, sort_keys=True, ensure_ascii=False,
+                                          separators=(",", ":")).encode()).hexdigest()
+        except (TypeError, ValueError):
+            pass  # Cache support must not redefine the source input contract.
+        if key in cache:
+            return deepcopy(cache[key])
     reconstructed: list[dict[str, Any]] = []
     pending: dict[str, Any] | None = None
 
@@ -183,6 +214,10 @@ def reconstruct_source_fragments(
 
     if pending is not None:
         reconstructed.append(_mark_unresolved_if_open(pending))
+    if cache is not None and key is not None:
+        if len(cache) >= 8:
+            cache.pop(next(iter(cache)))
+        cache[key] = deepcopy(reconstructed)
     return reconstructed
 
 

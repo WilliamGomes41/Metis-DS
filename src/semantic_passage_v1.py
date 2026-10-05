@@ -145,6 +145,8 @@ def _coverage_remainders(
     document_id: str,
     selected_ranges_by_block: dict[str, list[tuple[int, int]]],
     assessments: list[dict[str, Any]] | None = None,
+    context_spans: list[dict[str, Any]] | None = None,
+    source_version: str = "source-accountability-v1",
 ) -> list[tuple[tuple[int, int], dict[str, Any]]]:
     out: list[tuple[tuple[int, int], dict[str, Any]]] = []
     for public, source in reconstructed:
@@ -170,10 +172,11 @@ def _coverage_remainders(
 
         # Preserve every gap, split only at explicit source-role boundaries.
         classified = [r for r in (assessments or []) if r["span"]["block_id"] == block_id]
+        boundaries = [r["span"] for r in classified] + [s for s in (context_spans or []) if s["block_id"] == block_id]
         split_gaps = []
         for lo, hi in gaps:
-            cuts = sorted({lo, hi, *(v for r in classified for v in
-                (r["span"]["start"], r["span"]["end"]) if lo < v < hi)})
+            cuts = sorted({lo, hi, *(v for s in boundaries for v in
+                (s["start"], s["end"]) if lo < v < hi)})
             split_gaps.extend(zip(cuts, cuts[1:]))
         for start, end in split_gaps:
             remainder_text = normalize_visible_prose(text[start:end])
@@ -211,7 +214,7 @@ def _coverage_remainders(
             assessment = next((r for r in classified if
                 r["span"]["start"] <= start and end <= r["span"]["end"]), None)
             unit[KEY] = record(text=remainder_text, spans=unit["semantic_passage"]["spans"],
-                               assessment=assessment)
+                               assessment=assessment, version=source_version)
             out.append(((int(public["position"]), start), unit))
     return out
 
@@ -584,6 +587,7 @@ def semantic_coverage_units(
     fragments: Iterable[dict[str, Any]],
     *,
     document_id: str,
+    source_version: str = "source-accountability-v1",
 ) -> list[dict[str, Any]]:
     """Preserve source-only content when no candidate-selectable block exists."""
 
@@ -592,6 +596,7 @@ def semantic_coverage_units(
         reconstructed,
         document_id=document_id,
         selected_ranges_by_block={},
+        source_version=source_version,
     )
     rows.sort(key=lambda pair: pair[0])
     return [unit for _position, unit in rows]
@@ -826,6 +831,10 @@ def semantic_units_from_proposal(
                 document_id=document_id,
                 selected_ranges_by_block=selected_ranges_by_block,
                 assessments=assessments,
+                context_spans=[entry["span"] for _, unit in units_with_position
+                    for entry in unit.get("source_bound_context", [])
+                    if entry.get("span") and not entry.get("unresolved_reason")] if field_contract_v3 else None,
+                source_version="source-accountability-v2" if field_contract_v3 else "source-accountability-v1",
             )
         )
     units_with_position.sort(key=lambda pair: pair[0])

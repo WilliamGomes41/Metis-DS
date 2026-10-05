@@ -203,6 +203,10 @@ def _fragment_ref(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+from src.source_reconstruction_v1 import with_reconstruction_cache
+
+
+@with_reconstruction_cache
 def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     raw_by_id = {r["fragment_id"]: r for r in raw_rows}
     spec_hash = stable_hash(spec)
@@ -285,6 +289,7 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
             if not semantic_passage or semantic_passage["selection_origin"] != SELECTION_ORIGIN_COVERAGE:
                 raise ValueError("source_accountability_requires_source_record")
             expected = source_record(text=item.get("clean_text", item["text"]),
+                version=evidence.get("version"),
                 spans=semantic_passage["spans"], assessment={
                     "role": evidence.get("proposed_role"), "reason": evidence.get("reason")})
             from src.source_accountability_v1 import ROLES

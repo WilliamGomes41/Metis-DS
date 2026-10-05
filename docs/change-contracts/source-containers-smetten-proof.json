@@ -1,0 +1,39 @@
+{
+  "recommendation_signals": {
+    "selected": 13,
+    "open": 8
+  },
+  "source_sha256": "62dfd76e0683a372d54b6d7aea8b09b47b2b71022e60ff034d76223919bec47c",
+  "method": "recorded proposals routed through bounded tasks",
+  "limitation": "No live inference; no clinical completeness claim",
+  "fixture_calls": 134,
+  "knowledge_count": 14,
+  "knowledge_types": {
+    "definition": 1,
+    "recommendation": 13
+  },
+  "formation_incomplete": false,
+  "admission": {
+    "allowed": 13,
+    "blocked": 1
+  },
+  "blocked": [
+    {
+      "text": "Overweeg (een combinatie van) de volgende preventieve maatregelen [zie Tabel 1] toe te passen bij patiënten met een verhoogd risico op smetten en stem de keuze af op de individuele situatie, risicofactoren en voorkeuren van de patiënt.",
+      "reasons": [
+        "unresolved_reference"
+      ]
+    }
+  ],
+  "source_records": 639,
+  "source_usage": {
+    "document_information": 117,
+    "unresolved": 515,
+    "linked_context": 7
+  },
+  "context_entries": 7,
+  "tasks": 69,
+  "oversized_tasks": 0,
+  "max_candidate_chars": 10383,
+  "max_context_chars": 8779
+}

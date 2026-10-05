@@ -181,7 +181,7 @@ def test_console_opt_in_persists_evidence_replays_and_survives_restart(tmp_path)
         assert revision['objects_revision'] == before[1]
         assert all(r['revision_id'] == revision['revision_id'] for r in rows('source_stages'))
         assert 'objects_revision' not in call
-        assert 'processing-evidence-export-v8' in archive.read('README.txt').decode()
+        assert 'processing-evidence-export-v9' in archive.read('README.txt').decode()
     assert before == (restarted._envelope(sid), restarted.objects_revision(sid))
     # Even valid JSON from an explicitly incomplete response cannot replace work.
     from src.operations_console_v1 import ConsoleError

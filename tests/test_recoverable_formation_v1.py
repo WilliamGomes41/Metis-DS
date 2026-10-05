@@ -19,7 +19,7 @@ from tests.test_recommendation_coverage_v1 import FIRST, SECOND
 from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
 
 
-def system(tmp_path, *, broken=True, make_console=None):
+def system(tmp_path, *, broken=True, make_console=None, containers=False):
     make_console = make_console or (lambda: ReviewClosureConsole(
         root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime'))
     state = make_console()
@@ -38,6 +38,10 @@ def system(tmp_path, *, broken=True, make_console=None):
         if mode['dependency_failure']:
             raise ConsoleError('pre_review_llm_connection_failed')
         proposal = response_for(payload, target)
+        if containers and target == FIRST:
+            context = next(b for b in data['source_blocks'] + data['evidence_blocks'] if b['text'] == 'Bij volwassenen.')
+            proposal['objects'][0]['context_evidence'] = [{'role': 'scope', 'span': {
+                'block_id': context['block_id'], 'literal': context['text'], 'occurrence': 0}, 'unresolved_reason': None}]
         if mode['broken'] and target == SECOND:
             proposal['objects'][0]['field_evidence']['recommended_action']['span']['literal'] = 'invented'
         return {'id': f'call-{len(calls)}', 'status': 'completed', 'output': [
@@ -46,8 +50,9 @@ def system(tmp_path, *, broken=True, make_console=None):
         bind_pre_review_semantic_processing(state, environ={'METIS_PASSAGE_FORMATION_MODE': 'semantic-source-bound-v3',
             'METIS_LLM_API_KEY': 'fixture', 'METIS_LLM_MODEL': 'fixture'}, post_json=provider)
     bind(state)
+    extra = '<p>Versie: 1</p><p>Bij volwassenen.</p>' if containers else ''
     receipt = state.ingest(actor_id=author['account_id'], filename='test.html',
-        data=f'<html><body><h1>Aanbevelingen</h1><p>{FIRST}</p><p>{SECOND}</p></body></html>'.encode(),
+        data=f'<html><body><h1>Aanbevelingen</h1>{extra}<p>{FIRST}</p><p>{SECOND}</p></body></html>'.encode(),
         content_type='text/html', ingest_kind='new', title='Test', version='1.0', date='2026-10-05',
         live_url='', class_='richtlijn', family='test', named_reviewers=[reviewer['account_id']])
     return state, receipt['snapshot_id'], author['account_id'], reviewer['account_id'], calls, mode, make_console, bind
@@ -124,7 +129,7 @@ def test_recover_review_publish_restart_and_published_projection(tmp_path):
     def make():
         return DurablePublicationConsole(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime',
             immutable_source_store=source_store, canonical_publication_store=durable)
-    state, sid, actor, reviewer, calls, mode, _, bind = system(tmp_path, make_console=make)
+    state, sid, actor, reviewer, calls, mode, _, bind = system(tmp_path, make_console=make, containers=True)
     def product_client():
         ps = paths(tmp_path)
         return TestClient(create_product_app('real', paths=ps, tenant_registry=registry(docs=('*',)),
@@ -149,6 +154,12 @@ def test_recover_review_publish_restart_and_published_projection(tmp_path):
     assert len(projection) == 2
     served = api.get('/v1/knowledge/' + candidate_id, headers=headers())
     assert served.status_code == 200
+    assert 'Bij volwassenen.' in json.dumps(served.json())
+    containers = state.snapshot_containers(sid)
+    assert {r['usage']['kind'] for r in containers['source']} == {'document_information', 'linked_context'}
+    assert all(r['usage']['accounted'] for r in containers['source'])
+    for r in containers['source']:
+        assert api.get('/v1/knowledge/' + r['record']['object_id'], headers=headers()).status_code == 404
     restarted = make(); bind(restarted)
     assert restarted._projection_from_authority() == projection
     after_restart = product_client().get('/v1/knowledge/' + candidate_id, headers=headers())

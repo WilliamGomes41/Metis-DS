@@ -13,10 +13,12 @@ from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v8"
-PROJECTOR_VERSION = "processing-evidence-export-v8"
+VERSION = "processing-evidence-export-v9"
+PROJECTOR_VERSION = "processing-evidence-export-v9"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
+    "source_usage": ("object_id", "object_version", "container", "kind", "reason", "target_ids", "accounted", "policy_version"),
+    "formation_tasks": ("task_id", "section_path", "target_spans", "phase", "status", "policy_version"),
     "formation_findings": ("call_id", "kind", "index", "reason_code", "spans", "requires_review", "finding", "evidence_kind"),
     "attempt_diagnostics": ("attempt_id", "state", "diagnostic", "evidence_kind"),
     "processing_recovery": ("authorization_id", "actor_id", "reason", "authorized_at", "source_hash", "source_version", "revision", "consumed_by", "consumed_at"),
@@ -110,6 +112,14 @@ def processing_evidence_tables(
         add("semantic_proposals", **{key: replay.get(key) for key in SCHEMAS["semantic_proposals"] if key != "evidence_kind"},
             evidence_kind="stored_validated_proposal_not_raw_response")
     provider = replay.get("provider_evidence") or {}
+    for task in provider.get("tasks") or []:
+        add("formation_tasks", **{key: task.get(key) for key in SCHEMAS["formation_tasks"] if key != "policy_version"},
+            policy_version=provider.get("task_policy"))
+    from src.source_containers_v1 import partition, VERSION as CONTAINER_VERSION
+    for source in partition(objects)["source"]:
+        obj = source["record"]
+        add("source_usage", object_id=obj["object_id"], object_version=obj["object_version"], container="source",
+            **source["usage"], policy_version=CONTAINER_VERSION)
     providers = [provider, *(provider.get("supplementary_calls") or [])]
     for provider in providers:
         for rejection in (provider.get("formation") or {}).get("rejections", []):
@@ -193,6 +203,8 @@ def processing_evidence_tables(
                     evidence_kind="stored_scan_not_verified_dependency_resolution")
 
     statuses = {
+        "source_usage": ("derived", "Current source usage under the recorded policy; not a new approval or clinical completeness proof."),
+        "formation_tasks": ("recorded" if tables["formation_tasks"] else "not_recorded", "Bounded task observations; historical statuses are retained and pending findings determine current recovery."),
         "formation_findings": ("recorded" if any("formation" in p for p in providers) else "not_recorded",
             "Versioned producer rejections; historical errors remain evidence after recovery. Not clinical validation or approval."),
         "attempt_diagnostics": ("recorded" if tables["attempt_diagnostics"] else "not_recorded", "Attempt-owned checkpoints, request/output, validator input and finding. Missing historical evidence is not reconstructed. Never admission/replay authority."),

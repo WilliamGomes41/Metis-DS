@@ -212,6 +212,16 @@ def validate_object_fields(obj, fragments):
         raise ValueError("source_bound_fields_invalid")
 
 
+def _scope_present(scope, text):
+    """Match a complete literal scope, tolerating case and terminal heading colon.
+
+    Numbers, negation, conditions and word boundaries remain significant.
+    """
+    scope = normalize_visible_prose(scope).casefold().rstrip(": ")
+    text = normalize_visible_prose(text).casefold()
+    return bool(scope) and re.search(r"(?<!\w)" + re.escape(scope) + r"(?!\w)", text) is not None
+
+
 def additional_context_codes(row, realization, *, obj=None, fragments=None):
     """Known scope cues must be realized; absence of cues proves no completeness."""
     core = str(row.get("recommendation_evidence_span") or "")
@@ -230,8 +240,8 @@ def additional_context_codes(row, realization, *, obj=None, fragments=None):
                 for s in spans)]
     for item in entries:
         cue = item.get("scope_cue")
-        if cue and cue["text"] not in core and not any(
-            normalize_visible_prose(cue["text"]) in normalize_visible_prose(r.get("text") or "")
+        if cue and not _scope_present(cue["text"], core) and not any(
+            _scope_present(cue["text"], r.get("text") or "")
             and r.get("role") in {"scope", "condition", "exception", "row_header", "column_header"}
             for r in realized
         ):
@@ -239,8 +249,8 @@ def additional_context_codes(row, realization, *, obj=None, fragments=None):
     for heading in row.get("section_path") or []:
         if (re.match(r"^(?:Bij|Als|Wanneer|Indien|Tenzij)\b", heading, re.I)
                 or heading.rstrip().endswith(":")):
-            if heading not in core and not any(
-                normalize_visible_prose(heading) in normalize_visible_prose(r.get("text") or "")
+            if not _scope_present(heading, core) and not any(
+                _scope_present(heading, r.get("text") or "")
                 and r.get("role") in {"scope", "condition", "exception", "row_header", "column_header"}
                 for r in realized
             ):
