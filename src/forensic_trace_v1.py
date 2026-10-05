@@ -116,7 +116,12 @@ def source_span_id(*, source_sha256: str, source_reconstruction_hash: str,
         if (not isinstance(fragment_id, str) or not fragment_id or type(lo) is not int
                 or type(hi) is not int or not 0 <= lo < hi):
             return None
-        normalized.append({"fragment_id": fragment_id, "start": lo, "end": hi})
+        current = {"fragment_id": fragment_id, "start": lo, "end": hi}
+        if (normalized and normalized[-1]["fragment_id"] == fragment_id
+                and normalized[-1]["end"] == lo):
+            normalized[-1]["end"] = hi
+        else:
+            normalized.append(current)
     if not source_sha256 or not source_reconstruction_hash or not normalized:
         return None
     material = {
