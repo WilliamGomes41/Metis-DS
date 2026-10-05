@@ -266,3 +266,33 @@ def test_retry_caps_structural_errors_and_legacy_reader():
     with pytest.raises(ConsoleError,match='processing_structural_limit'):
         reserve(envelope,command_id='new',actor_id='actor',revision='r',clock=now(),limits=limits)
     assert status(envelope)['retry_allowed'] is False
+
+
+
+def test_successful_formation_continuations_do_not_consume_failure_retry_budget():
+    envelope = {'sha256': 'a'*64, 'version': '1.0', 'publication_eligibility': PRE_REVIEW_BLOCKED}
+    limits = ModelCallLimits(max_attempts=2)
+    for index in range(6):
+        attempt, fresh = reserve(
+            envelope, command_id=f'resume-{index}', actor_id='actor',
+            revision='r', clock=now(), limits=limits, kind='resume')
+        assert fresh
+        finish(envelope, attempt['attempt_id'], state='succeeded')
+    current = status(envelope, policy=limits)
+    assert current['attempts_used'] == 6
+    assert current['retry_attempts_used'] == 0
+    assert current['reason_code'] != 'processing_attempt_limit_reached'
+
+    for index in range(2):
+        attempt, fresh = reserve(
+            envelope, command_id=f'failed-{index}', actor_id='actor',
+            revision='r', clock=now(), limits=limits, kind='resume')
+        assert fresh
+        finish(envelope, attempt['attempt_id'], state='failed',
+               error=ConsoleError('pre_review_llm_connection_failed'))
+    capped = status(envelope, policy=limits)
+    assert capped['retry_attempts_used'] == 2
+    assert capped['reason_code'] == 'processing_attempt_limit_reached'
+    with pytest.raises(ConsoleError, match='processing_attempt_limit_reached'):
+        reserve(envelope, command_id='one-too-many', actor_id='actor',
+                revision='r', clock=now(), limits=limits, kind='resume')
