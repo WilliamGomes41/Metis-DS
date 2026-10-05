@@ -51,7 +51,7 @@ Required black-box scenario: Ingest exact source with metadata, a definition and
 Explicit non-goals: Gateway timeout/background jobs, new knowledge types, deployment/publication, free-prose API generation, broad console rewrite.
 
 ## Acceptance limitation
-The immutable original PDF and a human-validated frozen reference set are not yet present in the supplied attachments. Processing exports reconstruct evidence but do not prove original-byte extraction fidelity or clinical recall. Deliver code and executed proofs reviewably; do not claim complete extraction, production readiness, or task acceptance without that gate.
+The immutable original PDF was supplied on 2026-10-05 and matches the investigated source hash; exact fragment extraction fidelity is now verified below. The 30-anchor reference remains a draft without independent clinical validation and does not prove exhaustive recall. Deliver code and executed proofs reviewably; do not claim clinical completeness, production readiness, or task acceptance without that gate.
 
 
 ## Operator procedure
@@ -60,7 +60,7 @@ The immutable original PDF and a human-validated frozen reference set are not ye
 2. For reviewed or published work, use the existing explicit decision-successor command with its required review-policy revision and authorization. Re-extraction is only permissible where the existing unpublished/no-review guard allows it.
 3. Inspect formed candidates and source accountability separately. Metadata/structure roles are model proposals; a named reviewer must inspect source evidence and explicitly confirm selected exclusions with a reason. Unformed substantive text stays open and blocks source closure.
 4. Apply existing candidate admission, context resolution, named review, publication and entitlement gates. No command in this change publishes a release.
-5. Before production rollout, obtain original source bytes, verify their hash, and freeze a human-validated reference covering all five existing types, conditions, exceptions, context and genuine non-knowledge. The committed Smetten reference draft is evidence to review, not an acceptance oracle.
+5. Before production rollout, independently validate and extend a frozen reference against the now verified original PDF, covering all five existing types, conditions, exceptions, context and genuine non-knowledge. The committed Smetten reference draft is evidence to review, not an acceptance oracle.
 
 ## Verification boundaries
 
