@@ -102,6 +102,12 @@ def record_processing(envelope: dict[str, Any], objects: list[dict[str, Any]], *
     run["source_fragments"] = [{key: deepcopy(fragment[key]) for key in (
         "fragment_id", "fragment_hash", "raw_text", "clean_text", "source_page", "bbox", "source_locator", "source_text_view", "source_layout_findings")
         if key in fragment} for fragment in fragments]
+    contract = str((((replay or {}).get("identity") or {}).get("components") or {}).get("semantic_contract_version") or "")
+    if "bounded-formation-v2" in contract:
+        from src.integrity_kernel import stable_hash
+        retained = deepcopy(list(fragments))
+        run["formation_source_fragments"] = retained
+        run["formation_source_fragments_hash"] = stable_hash(retained)
 
 
 def review_evidence(envelope: dict[str, Any], before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:

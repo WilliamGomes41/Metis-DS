@@ -2089,6 +2089,16 @@ class OperationsConsole:
                 self._commit_prepared_store(envelopes={snapshot_id:reserved}, snapshot_id=snapshot_id)
             return self._execute_source_attempt(actor_id=actor_id, snapshot_id=snapshot_id, attempt=attempt, deadline=deadline)
         freeze_path, freeze_bytes = self._verified_source_bytes(envelope)
+        resume = bool(_attempt_id and attempt.get("kind") == "resume")
+        contract = (((envelope.get("semantic_replay") or {}).get("identity") or {}).get("components") or {}).get("semantic_contract_version") or ""
+        plan = ((envelope.get("semantic_replay") or {}).get("provider_evidence") or {}).get("formation_plan") or {}
+        retained = None
+        if resume and "bounded-formation-v2" in contract:
+            if plan.get("source_hash") and plan.get("source_hash") != envelope.get("sha256"):
+                raise ConsoleError("formation_source_representation_mismatch")
+            retained = self._persisted_formation_fragments(envelope)
+            if retained is None:
+                raise ConsoleError("formation_source_representation_missing")
         fragments, spec = self._fragments_and_spec(
             envelope["content_kind"],
             freeze_path,
@@ -2102,7 +2112,8 @@ class OperationsConsole:
                 "snapshot_id": snapshot_id,
                 "source_sha256": envelope["sha256"],
                 "semantic_replay": deepcopy(envelope.get("semantic_replay")),
-                "resume_formation": bool(_attempt_id and attempt.get("kind") == "resume"),
+                "resume_formation": resume,
+                "retained_fragments": retained,
                 "explicit_decision_graph": "decision_graph" in envelope,
                 "model_call_limits": {key:attempt["limits"][key] for key in ("connect", "idle", "total", "attempt", "max_attempts")} if _attempt_id and attempt.get("limits") else None,
                 "attempt_deadline": _attempt_deadline,
@@ -2412,6 +2423,24 @@ class OperationsConsole:
                     if enabled() else extract_pdf(path, document_id=document_id, source_id=source_id))
         except DoclingError as exc:
             raise ConsoleError(exc.code) from exc
+
+    def _persisted_formation_fragments(self, envelope):
+        """Load the source representation already committed for this freeze.
+
+        A formation resume must not parse the binary again. A missing or
+        damaged representation fails closed.
+        """
+        from src.integrity_kernel import stable_hash
+        for run in reversed(envelope.get("quality_processing_runs") or []):
+            if run.get("outcome") != "succeeded":
+                continue
+            rows = run.get("formation_source_fragments")
+            if rows is None:
+                continue
+            if run.get("source_hash") != envelope.get("sha256") or run.get("formation_source_fragments_hash") != stable_hash(rows):
+                raise ConsoleError("formation_source_representation_mismatch")
+            return deepcopy(rows)
+        return None
 
     def _read_source_fragments(self, envelope, path):
         from src.docling_contract_v1 import stored_fragments
