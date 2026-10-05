@@ -74,6 +74,41 @@ def tasks_for(blocks, evidence_blocks, targets=None):
     return tasks
 
 
+def pending_source_extent(evidence):
+    """Return current unresolved source extent without double-counting overlaps."""
+    by_block = {}
+    unknown = 0
+    for rejection in evidence.get("pending_rejections") or []:
+        spans = list(rejection.get("spans") or [])
+        if not spans:
+            unknown += 1
+            continue
+        for span in spans:
+            block_id = str(span.get("block_id") or "")
+            if not block_id:
+                unknown += 1
+                continue
+            start, end = int(span.get("start", 0)), int(span.get("end", 0))
+            if end > start:
+                by_block.setdefault(block_id, []).append((start, end))
+    merged_count = 0
+    chars = 0
+    for intervals in by_block.values():
+        merged = []
+        for start, end in sorted(intervals):
+            if merged and start <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+            else:
+                merged.append((start, end))
+        merged_count += len(merged)
+        chars += sum(end - start for start, end in merged)
+    return {
+        "unknown_pending_count": unknown,
+        "pending_source_range_count": merged_count,
+        "pending_source_char_count": chars,
+    }
+
+
 def formation_progress(evidence):
     """Summarize source-task completion against the original bounded plan.
 
@@ -135,6 +170,7 @@ def formation_progress(evidence):
         statuses.append(status)
 
     terminal = sum(status == "completed" for status in statuses)
+    extent = pending_source_extent(evidence)
     return {
         "planned_task_count": len(planned),
         "terminal_task_count": terminal,
@@ -142,6 +178,7 @@ def formation_progress(evidence):
         "failed_task_count": sum(status == "failed" for status in statuses),
         "partial_task_count": sum(status == "partial" for status in statuses),
         "not_started_task_count": sum(status == "not_started" for status in statuses),
+        **extent,
     }
 
 
