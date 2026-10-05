@@ -75,18 +75,70 @@ def tasks_for(blocks, evidence_blocks, targets=None):
 
 
 def formation_progress(evidence):
-    """Summarize the latest durable disposition of each bounded task."""
-    latest = {}
-    for row in evidence.get("tasks", []):
+    """Summarize source-task completion against the original bounded plan.
+
+    Recovery may regroup a pending source range and therefore produce a new
+    task_id. Progress is consequently derived from overlap with the original
+    initial task ranges plus the current pending-rejection truth, not by merely
+    counting unique historical task ids.
+    """
+    history = list(evidence.get("tasks", []))
+    initial = [row for row in history if row.get("phase") == "initial"]
+    basis = initial or history
+    planned = []
+    seen = set()
+    for row in basis:
         task_id = str(row.get("task_id") or "")
-        if task_id:
-            latest[task_id] = row
-    statuses = [row.get("status") for row in latest.values()]
+        if not task_id or task_id in seen:
+            continue
+        seen.add(task_id)
+        planned.append(row)
+
+    pending = list(evidence.get("pending_rejections") or [])
+
+    def overlaps(left, right):
+        return (
+            left.get("block_id") == right.get("block_id")
+            and max(int(left.get("start", 0)), int(right.get("start", 0)))
+                < min(int(left.get("end", 0)), int(right.get("end", 0)))
+        )
+
+    def is_open(task):
+        spans = list(task.get("target_spans") or [])
+        for rejection in pending:
+            refs = list(rejection.get("spans") or [])
+            if not refs:
+                return True
+            if any(overlaps(span, ref) for span in spans for ref in refs):
+                return True
+        return False
+
+    def latest_status(task):
+        spans = list(task.get("target_spans") or [])
+        status = str(task.get("status") or "")
+        for row in history:
+            refs = list(row.get("target_spans") or [])
+            if any(overlaps(span, ref) for span in spans for ref in refs):
+                status = str(row.get("status") or status)
+        return status
+
+    statuses = []
+    for task in planned:
+        open_ = is_open(task)
+        status = latest_status(task)
+        if not open_:
+            status = "completed"
+        elif status == "completed":
+            # A recovery subtask may be complete while another source range
+            # from the original task remains unresolved.
+            status = "partial"
+        statuses.append(status)
+
     terminal = sum(status == "completed" for status in statuses)
     return {
-        "planned_task_count": len(latest),
+        "planned_task_count": len(planned),
         "terminal_task_count": terminal,
-        "pending_task_count": len(latest) - terminal,
+        "pending_task_count": len(planned) - terminal,
         "failed_task_count": sum(status == "failed" for status in statuses),
         "partial_task_count": sum(status == "partial" for status in statuses),
         "not_started_task_count": sum(status == "not_started" for status in statuses),
