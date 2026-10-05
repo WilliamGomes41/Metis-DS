@@ -20,11 +20,14 @@ def main(argv=None) -> int:
     gold = load_gold(args.gold) if args.gold else None
     result = trace(evidence, gold)
     write_outputs(result, args.output)
+    differential_path = args.output / "forensic_differential.json"
     if args.candidate:
         other = trace(load_evidence(args.candidate), gold)
         differential = compare_traces(result, other)
-        (args.output / "forensic_differential.json").write_text(
+        differential_path.write_text(
             json.dumps(differential, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    else:
+        differential_path.unlink(missing_ok=True)
     verdicts = result["summary"]["verdicts"] or {"ungraded": result["summary"]["span_count"]}
     print(json.dumps({"comparison": result["summary"]["comparison"], "verdicts": verdicts}, sort_keys=True))
     return 0
