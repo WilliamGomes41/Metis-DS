@@ -1864,7 +1864,13 @@ class OperationsConsole:
         result["formation_incomplete"] = incomplete(self._envelope(snapshot_id), objects=self.snapshot_objects(snapshot_id))
         evidence = (self._envelope(snapshot_id).get("semantic_replay") or {}).get("provider_evidence") or {}
         result["formation_state"] = "pending" if result["formation_incomplete"] else "complete"
-        result["formation_progress"] = deepcopy(evidence.get("formation_progress") or {})
+        if evidence.get("task_policy"):
+            from src.bounded_formation_v1 import formation_progress as project_formation_progress
+            result["formation_progress"] = deepcopy(
+                evidence.get("formation_progress") or project_formation_progress(evidence)
+            )
+        else:
+            result["formation_progress"] = {}
         result["resume_allowed"] = bool(self._can_resume_formation(snapshot_id)
             and result["state"] != "running"
             and (result["retry_attempts_used"] < result["max_attempts"] or result["recovery_available"])
