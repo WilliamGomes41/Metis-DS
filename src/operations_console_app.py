@@ -3743,6 +3743,14 @@ def create_console_app(
               <button type="submit">Een herstelpoging autoriseren</button></form>''')
         code = ("source_formation_incomplete" if processing.get("formation_incomplete")
                 else processing.get("error_code") or processing.get("reason_code") or "")
+        progress = processing.get("formation_progress") or {}
+        progress_html = ""
+        if progress.get("planned_task_count"):
+            progress_html = (
+                f'<p>Vormingstaken: {int(progress.get("terminal_task_count") or 0)} van '
+                f'{int(progress.get("planned_task_count") or 0)} afgehandeld; '
+                f'{int(progress.get("pending_task_count") or 0)} nog open.</p>'
+            )
         diagnostic = ((envelope.get("processing_attempts") or [{}])[-1].get("diagnostic") or {})
         detail = _esc(json.dumps(diagnostic, ensure_ascii=False, indent=2))
         reviewer_links = (f'<p><a href="/settings/technical?document={_esc(document)}">Passagediagnostiek en exports</a></p>'
@@ -3752,6 +3760,7 @@ def create_console_app(
           <h1>Verwerkingsbeheer: {_esc(envelope.get("title"))}</h1>
           <p>{_esc(ERROR_COPY.get(code, "Controleer de actuele verwerking."))}</p>
           <p>Code: <code>{_esc(code)}</code></p>
+          {progress_html}
           <p>Nieuwe poging vanaf: {_esc(processing.get("retry_not_before") or "niet van toepassing")}</p>
           {"".join(controls)}<pre>{detail}</pre>{reviewer_links}
           <p><a href="/review?document={_esc(document)}">Naar beoordeling</a> · <a href="/tree">Naar Documenten</a></p>
