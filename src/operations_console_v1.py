@@ -1963,7 +1963,9 @@ class OperationsConsole:
             attempts = envelope.get("processing_attempts") or []
             if attempts and attempts[-1].get("error_code") in {"pre_review_llm_input_limit_exceeded", "pre_review_llm_output_limit_exceeded"}:
                 raise ConsoleError("processing_structural_limit")
-            if len(attempts) < self._processing_limits().max_attempts or any(a["state"] == "running" for a in attempts):
+            retry_policy = self._processing_limits()
+            retry_status = processing_retry_status(envelope, policy=retry_policy)
+            if retry_status["retry_attempts_used"] < retry_policy.max_attempts or any(a["state"] == "running" for a in attempts):
                 raise ConsoleError("processing_recovery_not_required")
             if envelope.get("processing_recovery"):
                 raise ConsoleError("processing_recovery_already_authorized")
@@ -2190,6 +2192,16 @@ class OperationsConsole:
                 merge_diagnostics(prepared_envelope, self._envelope(snapshot_id))
                 finish(prepared_envelope, _attempt_id, state="succeeded")
                 stored = next(a for a in prepared_envelope["processing_attempts"] if a["attempt_id"] == _attempt_id)
+                if stored.get("kind") == "resume":
+                    from src.bounded_formation_v1 import formation_progress
+                    before_provider = (envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
+                    after_provider = (prepared_envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
+                    before_progress = before_provider.get("formation_progress") or formation_progress(before_provider)
+                    after_progress = after_provider.get("formation_progress") or formation_progress(after_provider)
+                    stored["formation_progress_made"] = bool(
+                        after_progress.get("terminal_task_count", 0) > before_progress.get("terminal_task_count", 0)
+                        or after_progress.get("pending_task_count", 0) < before_progress.get("pending_task_count", 0)
+                    )
                 transport = (replay_record or {}).get("provider_evidence", {}).get("transport", {})
                 if (replay_record or {}).get("semantic_execution") == "replay":
                     stored["replayed_call_id"] = transport.get("call_id")
