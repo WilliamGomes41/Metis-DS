@@ -612,9 +612,15 @@ def semantic_units_from_proposal(
     allowed_candidate_block_ids: set[str] | None = None,
     field_contract_v2: bool = False,
     field_contract_v3: bool = False,
+    field_contract_v4: bool = False,
+    source_accountability_version: str | None = None,
     include_coverage: bool = True,
 ) -> list[dict[str, Any]]:
     """Validate provider proposal and reconstruct source-bound candidate data."""
+
+    use_v4 = bool(field_contract_v4)
+    if use_v4:
+        field_contract_v3 = True
 
     fragments_list = list(fragments)
     evidence_list = list(evidence_fragments) if evidence_fragments is not None else fragments_list
@@ -818,10 +824,14 @@ def semantic_units_from_proposal(
             unit["recommendation_semantics_evidence"] = semantics_evidence
         units_with_position.append(((first["position"], first["start"]), unit))
 
-    from src.source_accountability_v1 import validate_assessments
+    from src.source_accountability_v1 import validate_assessments, VERSION_V3, CONTAINERS_VERSION, VERSION as ACCOUNTABILITY_V1
+    accountability_version = VERSION_V3 if use_v4 else CONTAINERS_VERSION if field_contract_v3 else ACCOUNTABILITY_V1
+    if source_accountability_version and not use_v4 and not field_contract_v3:
+        accountability_version = source_accountability_version
     try:
         assessments = validate_assessments(proposal.get("source_assessments", []),
-                                          [p for p, _ in reconstructed], raw_objects)
+                                          [p for p, _ in reconstructed], raw_objects,
+                                          version=accountability_version)
     except ValueError as exc:
         _fail(str(exc))
     if include_coverage:
@@ -834,7 +844,7 @@ def semantic_units_from_proposal(
                 context_spans=[entry["span"] for _, unit in units_with_position
                     for entry in unit.get("source_bound_context", [])
                     if entry.get("span") and not entry.get("unresolved_reason")] if field_contract_v3 else None,
-                source_version="source-accountability-v2" if field_contract_v3 else "source-accountability-v1",
+                source_version=accountability_version,
             )
         )
     units_with_position.sort(key=lambda pair: pair[0])

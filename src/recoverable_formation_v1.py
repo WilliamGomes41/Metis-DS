@@ -135,7 +135,8 @@ quarantine to both endpoints, transitively, rather than disappearing silently.
     for index, raw in enumerate(proposal.get("source_assessments", [])):
         try:
             row = resolve(raw)
-            validate_assessments([*result["source_assessments"], row], blocks, result["objects"])
+            validate_assessments([*result["source_assessments"], row], blocks, result["objects"],
+                                 version=validator_input.get("source_accountability_version", "source-accountability-v2"))
             result["source_assessments"].append(row)
         except (SemanticPassageError, ValueError) as error:
             if not isinstance(error, SemanticPassageError):
@@ -182,7 +183,7 @@ def pending_rejections(evidence, proposal):
         # validated task, including an explicit abstention. Its unknown source
         # still blocks source closure; it is no longer an unexecuted task.
         answered = False
-        if evidence.get("task_policy") == "bounded-formation-v1" and call.get("target_spans"):
+        if evidence.get("task_policy") in {"bounded-formation-v1", "bounded-formation-v2"} and call.get("target_spans"):
             from src.source_containers_v1 import _covers
             later_spans = [s for later in calls[index + 1:]
                 if later.get("task_id") and not later.get("error_code")
