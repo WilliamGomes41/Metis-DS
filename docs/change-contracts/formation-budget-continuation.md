@@ -10,6 +10,14 @@ Touches lifecycle invariants: yes.
 
 Implementation basis: commit `8007b11d1f662f0151551b6647280d21d0ae9603`, the deployed bounded-formation line that produced the supplied Smetten processing evidence.
 
+## Checkpoint-storm follow-up (#523)
+
+The original continuation repair preserved pending source work but the deployed bounded executor still checkpointed once per remaining task after the shared task budget had already expired. On the supplied Smetten resume this produced a roughly 450-second request with 266 database queries.
+
+This follow-up keeps the same lifecycle and authorities. When the remaining task budget is exhausted, the executor records all remaining task ranges in memory as `not_started` with `source_task_budget_exhausted`, requests one durable checkpoint, exits the task loop, and returns control. It must not call the provider after exhaustion.
+
+The dedicated regression uses 50 planned tasks with a zero remaining budget and requires zero provider calls, 50 retained pending tasks, exactly one checkpoint, and `formation_state=pending`.
+
 ## Established failure
 
 The supplied Smetten run recorded 67 bounded formation tasks. Seventeen completed, eight were partial and 42 were never started because the shared source-task budget expired. The processing attempt nevertheless ended with transport state `succeeded` while provider evidence recorded `formation_incomplete=true`.

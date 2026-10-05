@@ -1,7 +1,9 @@
 """Bounded task ownership, context references, budget failure and recovery.
 
-# release-control-evidence: scope/belofte kwaliteit metrics slop releasebewijs
+# release-control-evidence: scope/belofte kwaliteit metrics
 # release-control-evidence: opslag stale recovery beschikbaarheid toegang version-compat
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 import json
 from copy import deepcopy
@@ -62,6 +64,46 @@ def test_budget_exhaustion_accounts_for_every_unstarted_task_and_cannot_publish(
     assert progress['unknown_pending_count'] == 0
     assert progress['pending_source_range_count'] == 2
     assert progress['pending_source_char_count'] == sum(len(block['text']) for block in blocks)
+
+
+def test_budget_exhaustion_bulk_records_remaining_tasks_with_single_checkpoint():
+    fragments = [
+        dict(source(f'Bronpassage {i} met voldoende klinische tekst voor een eigen taak.')[0],
+             fragment_id=str(i), fragment_hash=str(i), section_path=[str(i)])
+        for i in range(50)
+    ]
+    blocks = semantic_source_blocks(fragments)
+    checkpoints = []
+
+    def forbidden(**kwargs):
+        raise AssertionError('provider must not run after the bounded budget is exhausted')
+
+    proposal, evidence = execute(
+        blocks=blocks,
+        evidence_blocks=blocks,
+        validator_input={
+            'fragments': fragments,
+            'document_id': 'test',
+            'evidence_fragments': fragments,
+            'allowed_candidate_block_ids': [b['block_id'] for b in blocks],
+            'field_contract_v3': True,
+        },
+        provider=forbidden,
+        limits=ModelCallLimits(total=0),
+        checkpoint=lambda phase, values: checkpoints.append((phase, deepcopy(values))),
+    )
+
+    assert proposal['objects'] == []
+    assert len(evidence['tasks']) == 50
+    assert all(task['status'] == 'not_started' for task in evidence['tasks'])
+    assert len(checkpoints) == 1
+    assert checkpoints[0][0] == 'proposal_received'
+    checkpoint_evidence = checkpoints[0][1]['provider_evidence']
+    calls = [checkpoint_evidence, *checkpoint_evidence.get('supplementary_calls', [])]
+    assert len(calls) == 50
+    assert all(call.get('error_code') == 'source_task_budget_exhausted' for call in calls)
+    assert evidence['formation_incomplete']
+    assert evidence['formation_progress']['pending_task_count'] == 50
 
 
 def test_progress_tracks_original_task_when_recovery_regroups_source_ranges():
