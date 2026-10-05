@@ -104,3 +104,34 @@ jobs:
             ${{ runner.temp }}/metis-browser-proof/**/*.png
             ${{ runner.temp }}/metis-browser-proof/**/*.json
           if-no-files-found: warn
+
+
+  deployment-package-artifact:
+    name: Build exact main deployment ZIP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fe93afdfa22b9a2951e803ebe7e4d654b656b2f7
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build official Azure deployment ZIP
+        run: |
+          python -m pip install --upgrade pip
+          bash scripts/create_azure_deploy_package.sh "$RUNNER_TEMP/metis-console-fe93afdf-azure.zip"
+      - name: Verify ZIP and embedded commit marker
+        run: |
+          unzip -t "$RUNNER_TEMP/metis-console-fe93afdf-azure.zip"
+          test "$(unzip -p "$RUNNER_TEMP/metis-console-fe93afdf-azure.zip" config/deployed_commit.txt | tr -d '\r\n')" = "fe93afdfa22b9a2951e803ebe7e4d654b656b2f7"
+          sha256sum "$RUNNER_TEMP/metis-console-fe93afdf-azure.zip" | tee "$RUNNER_TEMP/metis-console-fe93afdf-azure.zip.sha256"
+      - name: Upload deployment package only
+        uses: actions/upload-artifact@v4
+        with:
+          name: metis-console-fe93afdf-azure-package
+          path: |
+            ${{ runner.temp }}/metis-console-fe93afdf-azure.zip
+            ${{ runner.temp }}/metis-console-fe93afdf-azure.zip.sha256
+          if-no-files-found: error
+          retention-days: 1
