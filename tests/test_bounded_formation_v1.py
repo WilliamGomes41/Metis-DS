@@ -6,7 +6,7 @@
 import json
 from copy import deepcopy
 
-from src.bounded_formation_v1 import tasks_for, execute, MAX_CANDIDATE_CHARS
+from src.bounded_formation_v1 import tasks_for, execute, formation_progress, MAX_CANDIDATE_CHARS
 from src.bounded_model_call_v1 import ModelCallLimits
 from src.semantic_passage_v1 import semantic_source_blocks
 from tests.test_recommendation_context_v3 import source, response_for
@@ -51,6 +51,48 @@ def test_budget_exhaustion_accounts_for_every_unstarted_task_and_cannot_publish(
     assert not proposal['objects'] and evidence['formation_incomplete']
     assert {s['block_id'] for r in evidence['pending_rejections'] for s in r['spans']} == {b['block_id'] for b in blocks}
     assert all(t['status'] == 'not_started' for t in evidence['tasks'])
+    assert evidence['formation_state'] == 'pending'
+    assert evidence['formation_progress'] == {
+        'planned_task_count': 2,
+        'terminal_task_count': 0,
+        'pending_task_count': 2,
+        'failed_task_count': 0,
+        'partial_task_count': 0,
+        'not_started_task_count': 2,
+    }
+
+
+def test_progress_tracks_original_task_when_recovery_regroups_source_ranges():
+    whole = {'block_id': 'b', 'start': 0, 'end': 100}
+    left = {'block_id': 'b', 'start': 0, 'end': 50}
+    right = {'block_id': 'b', 'start': 50, 'end': 100}
+    evidence = {
+        'tasks': [
+            {'task_id': 'initial', 'phase': 'initial', 'target_spans': [whole], 'status': 'not_started'},
+            {'task_id': 'recovery-left', 'phase': 'recovery', 'target_spans': [left], 'status': 'completed'},
+        ],
+        'pending_rejections': [{'kind': 'call', 'reason_code': 'source_task_budget_exhausted', 'spans': [right]}],
+    }
+    assert formation_progress(evidence) == {
+        'planned_task_count': 1,
+        'terminal_task_count': 0,
+        'pending_task_count': 1,
+        'failed_task_count': 0,
+        'partial_task_count': 1,
+        'not_started_task_count': 0,
+    }
+    evidence['tasks'].append(
+        {'task_id': 'recovery-right', 'phase': 'recovery', 'target_spans': [right], 'status': 'completed'}
+    )
+    evidence['pending_rejections'] = []
+    assert formation_progress(evidence) == {
+        'planned_task_count': 1,
+        'terminal_task_count': 1,
+        'pending_task_count': 0,
+        'failed_task_count': 0,
+        'partial_task_count': 0,
+        'not_started_task_count': 0,
+    }
 
 
 def test_context_only_block_cannot_become_candidate_and_valid_prior_selection_survives():
