@@ -898,8 +898,12 @@ def _semantic_execution_before_review(
         if field_contract_v3 or field_contract_v4:
             from src.recoverable_formation_v1 import pending_rejections
             provider_evidence["pending_rejections"] = pending_rejections(provider_evidence, proposal)
-            provider_evidence["formation_incomplete"] = bool(provider_evidence["pending_rejections"])
-            provider_evidence["formation_state"] = "pending" if provider_evidence["formation_incomplete"] else "complete"
+            if provider_evidence.get("task_policy") == "bounded-formation-v2":
+                from src.bounded_formation_v2 import apply_formation_completion
+                apply_formation_completion(provider_evidence)
+            else:
+                provider_evidence["formation_incomplete"] = bool(provider_evidence["pending_rejections"])
+                provider_evidence["formation_state"] = "pending" if provider_evidence["formation_incomplete"] else "complete"
             if checkpoint:
                 checkpoint("formation_accounted", {"provider_evidence": provider_evidence})
         if execution != EXECUTION_REPLAY or (formation_context or {}).get("resume_formation"):
