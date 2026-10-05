@@ -57,13 +57,15 @@ def source_passage_closure(objects: Iterable[dict[str, Any]]) -> dict[str, Any]:
 
     Existing review routing is the boundary: document objects and fast-lane
     structure (heading/path) are not substantive passage work. Every other
-    current object must have a final Slice 2 disposition. Admission failures
-    remain open through their existing ``not_yet_assessed`` disposition; this
-    function never mutates or auto-excludes them.
+    current knowledge object must have a final disposition. New source records
+    may instead be accounted by versioned document-information rules or current
+    context on an approved target. Legacy source policy remains unchanged.
     """
     required_ids: list[str] = []
     unresolved_ids: list[str] = []
     objects = list(objects)
+    from src.source_containers_v1 import source_usage
+    usage = source_usage(objects)
     context_conflicts = context_issues(objects)
     from src.source_accountability_v1 import is_source_record, evidence_of
     for obj in objects:
@@ -76,7 +78,7 @@ def source_passage_closure(objects: Iterable[dict[str, Any]]) -> dict[str, Any]:
         if not object_id:
             continue
         required_ids.append(object_id)
-        if not definitive_review_disposition(obj)["final"] or object_id in context_conflicts:
+        if (not definitive_review_disposition(obj)["final"] and not usage.get(object_id, {}).get("accounted")) or object_id in context_conflicts:
             unresolved_ids.append(object_id)
 
     return {
@@ -101,9 +103,15 @@ def review_followup_queues(
     never a new closure/publication rule.
     """
     unresolved = set(source_passage_closure(objects)["unresolved_source_passage_ids"])
+    from src.source_containers_v1 import source_usage
+    usage = source_usage(objects)
     queues: dict[str, list[dict[str, Any]]] = {"disposition": [], "repair": []}
     for obj in objects:
         if str(obj.get("object_id") or "") not in unresolved:
+            continue
+        if usage.get(obj.get("object_id"), {}).get("kind") == "linked_context":
+            # The target's knowledge review covers the proposed context. Its
+            # source closure remains open until that target is approved.
             continue
         if review_duty_for(obj, review_path=review_path, bindings=bindings):
             continue

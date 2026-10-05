@@ -299,6 +299,24 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             if row.get("relation_type") == "except_if"
         ]
         literal_context = links_of(obj)
+        # Source-bound context is part of the exact reviewed canonical object,
+        # just like reviewer-linked context. It must travel with its anchor to
+        # the Product API; a source record is never published separately.
+        from src.source_bound_fields_v2 import CONTEXT_KEY, CONTEXT_ROLES, context_matches_target
+        bound_record = (obj.get("metadata") or {}).get(CONTEXT_KEY)
+        bound_context = bound_record.get("entries", []) if isinstance(bound_record, dict) else []
+        if CONTEXT_KEY in (obj.get("metadata") or {}) and (
+            not context_matches_target(obj)
+            or any(not isinstance(entry, dict) or entry.get("role") not in CONTEXT_ROLES
+                   or entry.get("unresolved_reason") is not None
+                   or not isinstance(entry.get("text"), str) or not entry["text"].strip()
+                   or not isinstance(entry.get("span"), dict)
+                   or type(entry["span"].get("start")) is not int or type(entry["span"].get("end")) is not int
+                   or entry["span"]["start"] < 0 or entry["span"]["end"] - entry["span"]["start"] != len(entry["text"])
+                   or not entry.get("source_refs") for entry in bound_context)
+        ):
+            blocked.append({"object_id": obj["object_id"], "errors": ["source_bound_context_invalid"]})
+            continue
         raw_context = (obj.get("metadata") or {}).get("confirmed_source_context")
         if raw_context is not None and (
             not isinstance(raw_context, list) or len(literal_context) != len(raw_context)
@@ -341,6 +359,8 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
         for link in literal_context:
             label = "Bronlabel" if link["role"] == "label" else "Broncontext"
             text_parts.append(f"{label}: {link['text']}")
+        for entry in bound_context:
+            text_parts.append(f"Broncontext ({entry['role']}): {entry['text']}")
         if content.get("clean_text"):
             text_parts.append(content["clean_text"].strip())
         text_parts.extend(_logic_text(obj.get("logic")))
@@ -373,6 +393,7 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             "context_object_ids": context_ids,
             "context_relations": context_entries,
             **({"confirmed_source_context": deepcopy(literal_context)} if literal_context else {}),
+            **({"source_bound_context": deepcopy(bound_context)} if bound_context else {}),
             "applies_if_object_ids": applies_ids,
             "except_if_object_ids": except_ids,
             "confirmed_knowledge_relations": semantic_relations,

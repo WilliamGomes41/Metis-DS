@@ -45,7 +45,7 @@ def response_for(payload, text, *, heading=None, include_context=True, stamp=Non
         fields[field] = {"span": ref(literal), "missing_reason": None}
     context = []
     if heading and include_context:
-        owner = next(b for b in data["evidence_blocks"] if b["text"] == heading)
+        owner = next(b for b in [*data["source_blocks"], *data["evidence_blocks"]] if b["text"] == heading)
         context = [{"role": "condition", "span": ref(heading, owner), "unresolved_reason": None}]
         fields["scope_span"] = {"span": ref(heading, owner), "missing_reason": None}
     against = "geen" in core

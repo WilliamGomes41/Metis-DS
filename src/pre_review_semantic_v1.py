@@ -133,7 +133,7 @@ SEMANTIC_V2_INSTRUCTION = (
 )
 
 SEMANTIC_V3_INSTRUCTION = (
-    " Examine every supplied source block in source order. Perform document-wide curation, "
+    " Examine every selectable range in this bounded source task in source order. Perform complete curation of this task, "
     "not a sample or summary. Select all complete source-bound meaning units of the existing types: "
     "definition, explanation, condition, exception and recommendation. Examine all sections, "
     "including numbered and unnumbered recommendations. Preserve attribution, uncertainty, "
@@ -155,6 +155,9 @@ SEMANTIC_V3_INSTRUCTION = (
     "Missing punctuation is not missing meaning. If selection_targets are supplied, select only "
     "meaning units wholly within the unselected source ranges identified by those exact literals, "
     "across all five knowledge types, not prior selections. Never stop after a few examples. "
+    "formation_task.selectable_ranges is the authoritative candidate boundary, including for initial tasks. "
+    "evidence_blocks are context-only; never form a new candidate from them. Source blocks may contain "
+    "previous selections outside the selectable ranges: those ranges are context-only as well. "
 )
 
 SOURCE_ACCOUNTABILITY_INSTRUCTION = (
@@ -394,6 +397,7 @@ def _request_payload(
     field_contract_v2: bool = False,
     field_contract_v3: bool = False,
     selection_targets=None,
+    task=None,
 ) -> dict[str, Any]:
     return {
         "model": model,
@@ -409,6 +413,7 @@ def _request_payload(
                         "source_blocks": blocks,
                         "evidence_blocks": evidence_blocks,
                         **({"selection_targets": selection_targets} if selection_targets is not None else {}),
+                        **({"formation_task": task} if task is not None else {}),
                     },
                     ensure_ascii=False,
                 ),
@@ -555,7 +560,7 @@ def _replay_identity(
         extractor_version=_extractor_contract(source_fragments),
         reconstruction_version=RECONSTRUCTION_VERSION,
         formation_policy_version=PASSAGE_FORMATION_POLICY_VERSION,
-        semantic_contract_version="source-accountability-v1/" + (f"recoverable-formation-v1/{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}"),
+        semantic_contract_version=("source-accountability-v2/bounded-formation-v1/" if field_contract_v3 else "source-accountability-v1/") + (f"recoverable-formation-v1/{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}"),
         prompt_hash=_stable_json_hash(SEMANTIC_DEVELOPER_PROMPT + _semantic_instruction(field_contract_v2, field_contract_v3)),
         schema_hash=_stable_json_hash(_proposal_schema(field_contract_v2, field_contract_v3)),
         provider_id=SEMANTIC_PROVIDER_ID,
@@ -588,6 +593,7 @@ def _provider_proposal(
     field_contract_v2: bool = False,
     field_contract_v3: bool = False,
     selection_targets=None,
+    task=None,
     model_limits: ModelCallLimits | None = None,
     evidence: dict[str, Any] | None = None,
     checkpoint=None,
@@ -598,7 +604,7 @@ def _provider_proposal(
         raise ConsoleError("pre_review_llm_api_key_required")
     payload = _request_payload(model=model, blocks=blocks,
                                evidence_blocks=evidence_blocks,
-                               field_contract_v2=field_contract_v2, field_contract_v3=field_contract_v3, selection_targets=selection_targets)
+                               field_contract_v2=field_contract_v2, field_contract_v3=field_contract_v3, selection_targets=selection_targets, task=task)
     if len(json.dumps(payload, ensure_ascii=False).encode("utf-8")) > MAX_INPUT_BYTES:
         raise ConsoleError("pre_review_llm_input_limit_exceeded")
     request_evidence = deepcopy(payload)
@@ -705,7 +711,6 @@ def _semantic_execution_before_review(
     field_contract_v3: bool = False,
     model_limits: ModelCallLimits | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
-    execution_started = time.monotonic()
     safe_key = str(api_key or "").strip()
     safe_model = str(model or "").strip()
     if not safe_model:
@@ -786,6 +791,24 @@ def _semantic_execution_before_review(
         checkpoint("source_reconstructed", {"validator_input": validator_input,
             "validator_input_hash": _stable_json_hash(validator_input),
             "validator_identity": validator_identity(), "semantic_identity": identity})
+    if field_contract_v3 and blocks and (proposal is None or (formation_context or {}).get("resume_formation")):
+        if (formation_context or {}).get("resume_formation") and proposal is None:
+            raise ConsoleError("semantic_replay_policy_mismatch")
+        from src.bounded_formation_v1 import execute
+        limits = model_limits or ModelCallLimits(total=DEFAULT_TIMEOUT_SECONDS)
+        def provider(**kwargs):
+            return _provider_proposal(api_key=api_key, model=safe_model, post_json=post_json,
+                field_contract_v3=True, checkpoint=None, **kwargs)
+        proposal, provider_evidence = execute(blocks=blocks, evidence_blocks=evidence_blocks,
+            validator_input=validator_input, provider=provider, limits=limits,
+            proposal=proposal, evidence=(replay_record or {}).get("provider_evidence"), checkpoint=checkpoint)
+        errors = [call["error_code"] for call in [provider_evidence, *provider_evidence.get("supplementary_calls", [])]
+                  if call.get("error_code")]
+        if not proposal["objects"] and errors:
+            # A wholly failed new run must not replace existing valid work
+            # with source remainders. Partial success is retained separately.
+            raise ConsoleError(errors[0])
+        content_units = semantic_units_from_proposal(**validator_input, proposal=proposal)
     if blocks and proposal is None:
         provider_evidence: dict[str, Any] = {}
         proposal = _provider_proposal(
@@ -817,59 +840,6 @@ def _semantic_execution_before_review(
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
     if proposal is not None and blocks:
         provider_evidence = locals().get("provider_evidence") or deepcopy((replay_record or {}).get("provider_evidence") or {})
-        if field_contract_v3 and (execution != EXECUTION_REPLAY or (formation_context or {}).get("resume_formation")):
-            from dataclasses import replace
-            from src.recommendation_coverage_v1 import assess, merge_proposals
-            from src.source_accountability_v1 import supplementary_targets
-            targets = supplementary_targets(content_units)
-            target_blocks = {r["span"]["block_id"] for r in targets}
-            if targets:
-                limits = model_limits or ModelCallLimits(total=DEFAULT_TIMEOUT_SECONDS)
-                remaining = limits.total - (time.monotonic() - execution_started)
-                if remaining > 0:
-                    supplementary_evidence = {"target_spans": [deepcopy(r["span"]) for r in targets]}
-                    try:
-                        supplement = _provider_proposal(api_key=api_key, model=safe_model,
-                            blocks=[b for b in blocks if b["block_id"] in target_blocks], evidence_blocks=evidence_blocks,
-                            selection_targets=[{"block_id": r["span"]["block_id"], "literal": r["text"]} for r in targets],
-                            post_json=post_json, field_contract_v3=True,
-                            model_limits=replace(limits, total=remaining, connect=min(limits.connect, remaining),
-                                                 idle=min(limits.idle, remaining)),
-                            evidence=supplementary_evidence,
-                            checkpoint=None, validator_input=validator_input)
-                        semantic_units_from_proposal(content_fragments, document_id=document_id,
-                            proposal=supplement, evidence_fragments=evidence_fragments,
-                            allowed_candidate_block_ids=allowed_candidate_block_ids, field_contract_v3=True)
-                        from src.recoverable_formation_v1 import restrict_supplement
-                        supplement, rejected = restrict_supplement(supplement, primary=proposal, targets=targets)
-                        supplementary_evidence["formation"]["rejections"].extend(rejected)
-                        if rejected:
-                            supplementary_evidence["formation"]["status"] = "partial"
-                        supplementary_evidence["formation"]["accepted_object_count"] = len(supplement["objects"])
-                        merged = merge_proposals(proposal, supplement)
-                        content_units = semantic_units_from_proposal(content_fragments, document_id=document_id,
-                            proposal=merged, evidence_fragments=evidence_fragments,
-                            allowed_candidate_block_ids=allowed_candidate_block_ids, field_contract_v3=True)
-                    except ConsoleError as exc:
-                        if exc.code.startswith("processing_"):
-                            raise
-                        supplementary_evidence["error_code"] = exc.code
-                        supplementary_evidence["failure_reason"] = getattr(exc, "pre_review_diagnostics", {}).get("reason_code", exc.code)
-                    except SemanticPassageError as exc:
-                        supplementary_evidence["error_code"] = exc.code
-                        supplementary_evidence["failure_reason"] = exc.code
-                    else:
-                        proposal = merged
-                    finally:
-                        provider_evidence.setdefault("supplementary_calls", []).append(supplementary_evidence)
-                        if checkpoint:
-                            checkpoint("proposal_received", {"provider_evidence": provider_evidence})
-                else:
-                    provider_evidence["supplement_status"] = "not_started_budget_exhausted"
-            provider_evidence["recommendation_coverage"] = assess(blocks, proposal)
-            if checkpoint:
-                checkpoint("proposal_received", {"provider_evidence": provider_evidence,
-                    "resolved_proposal": proposal, "resolved_proposal_hash": _stable_json_hash(proposal)})
         if field_contract_v3:
             from src.recoverable_formation_v1 import pending_rejections
             provider_evidence["pending_rejections"] = pending_rejections(provider_evidence, proposal)
@@ -892,6 +862,7 @@ def _semantic_execution_before_review(
         content_units = semantic_coverage_units(
             content_fragments,
             document_id=document_id,
+            source_version="source-accountability-v2" if field_contract_v3 else "source-accountability-v1",
         )
 
     if proposal is not None:

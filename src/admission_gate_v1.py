@@ -869,6 +869,10 @@ def candidate_from_object(
     return build_candidate_record(**fields)
 
 
+from src.source_reconstruction_v1 import with_reconstruction_cache
+
+
+@with_reconstruction_cache
 def apply_admission_gate(
     objects: list[dict[str, Any]],
     *,

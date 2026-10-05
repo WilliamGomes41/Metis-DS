@@ -68,7 +68,7 @@ def run(supplement="selected", *, identity=True):
 
 def test_omitted_recommendation_gets_one_supplement_with_shared_budget_and_both_calls_exported():
     spec, rows, calls, _ = run()
-    assert len(calls) == 2 and calls[1][1] < calls[0][1]
+    assert len(calls) == 2 and 0 < calls[1][1] <= calls[0][1] <= 120
     data = json.loads(calls[1][0]["input"][1]["content"])
     assert len(data["source_blocks"]) == 1
     assert data["selection_targets"][0]["literal"] == SECOND

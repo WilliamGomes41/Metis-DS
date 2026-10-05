@@ -19,7 +19,7 @@ from tests.test_recommendation_coverage_v1 import FIRST, SECOND
 from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
 
 
-def system(tmp_path, *, broken=True, make_console=None):
+def system(tmp_path, *, broken=True, make_console=None, containers=False):
     make_console = make_console or (lambda: ReviewClosureConsole(
         root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime'))
     state = make_console()
@@ -38,6 +38,10 @@ def system(tmp_path, *, broken=True, make_console=None):
         if mode['dependency_failure']:
             raise ConsoleError('pre_review_llm_connection_failed')
         proposal = response_for(payload, target)
+        if containers and target == FIRST:
+            context = next(b for b in data['source_blocks'] + data['evidence_blocks'] if b['text'] == 'Bij volwassenen.')
+            proposal['objects'][0]['context_evidence'] = [{'role': 'scope', 'span': {
+                'block_id': context['block_id'], 'literal': context['text'], 'occurrence': 0}, 'unresolved_reason': None}]
         if mode['broken'] and target == SECOND:
             proposal['objects'][0]['field_evidence']['recommended_action']['span']['literal'] = 'invented'
         return {'id': f'call-{len(calls)}', 'status': 'completed', 'output': [
@@ -46,8 +50,9 @@ def system(tmp_path, *, broken=True, make_console=None):
         bind_pre_review_semantic_processing(state, environ={'METIS_PASSAGE_FORMATION_MODE': 'semantic-source-bound-v3',
             'METIS_LLM_API_KEY': 'fixture', 'METIS_LLM_MODEL': 'fixture'}, post_json=provider)
     bind(state)
+    extra = '<p>Versie: 1</p><p>Bij volwassenen.</p>' if containers else ''
     receipt = state.ingest(actor_id=author['account_id'], filename='test.html',
-        data=f'<html><body><h1>Aanbevelingen</h1><p>{FIRST}</p><p>{SECOND}</p></body></html>'.encode(),
+        data=f'<html><body><h1>Aanbevelingen</h1>{extra}<p>{FIRST}</p><p>{SECOND}</p></body></html>'.encode(),
         content_type='text/html', ingest_kind='new', title='Test', version='1.0', date='2026-10-05',
         live_url='', class_='richtlijn', family='test', named_reviewers=[reviewer['account_id']])
     return state, receipt['snapshot_id'], author['account_id'], reviewer['account_id'], calls, mode, make_console, bind
@@ -59,7 +64,12 @@ def partial_story(tmp_path, make_console=None):
     first = next(o for o in before if o['content']['clean_text'] == FIRST)
     assert first['metadata']['admission']['gate_result'] == 'allowed'
     assert any(evidence_of(o).get('text') == SECOND for o in before)
-    assert state.processing_status(sid)['resume_allowed']
+    processing = state.processing_status(sid)
+    assert processing['state'] == 'succeeded'
+    assert processing['formation_state'] == 'pending'
+    assert processing['formation_incomplete']
+    assert processing['resume_allowed']
+    assert processing['formation_progress']['pending_task_count'] > 0
     assert 'source_formation_incomplete' in state.publication_readiness(sid)['blockers']
     assert not state.publication_readiness(sid)['publish_allowed']
 
@@ -77,6 +87,13 @@ def partial_story(tmp_path, make_console=None):
     assert next(o for o in current if o['object_id'] == first['object_id']) == first
     assert len([o for o in current if o.get('proposed_object_type') == 'recommendation']) == 2
     assert not incomplete(restarted._envelope(sid))
+    processing = restarted.processing_status(sid)
+    assert processing['formation_state'] == 'complete'
+    assert processing['formation_progress']['pending_task_count'] == 0
+    resume_attempt = restarted._envelope(sid)['processing_attempts'][-1]
+    assert resume_attempt['kind'] == 'resume'
+    assert resume_attempt['state'] == 'succeeded'
+    assert resume_attempt['formation_progress_made'] is True
     assert 'source_formation_incomplete' not in restarted.publication_readiness(sid)['blockers']
     assert not restarted.publication_readiness(sid)['publish_allowed']  # reviews still required
     final = make(); bind(final)
@@ -92,6 +109,24 @@ def partial_story(tmp_path, make_console=None):
                                 'expected_revision': final.objects_revision(sid)})
 
 
+
+
+def test_processing_status_projects_progress_for_pre_v10_bounded_evidence(tmp_path):
+    state, sid, _, _, _, _, make, bind = system(tmp_path)
+    envelope = deepcopy(state._envelope(sid))
+    provider = envelope['semantic_replay']['provider_evidence']
+    provider.pop('formation_progress', None)
+    provider.pop('formation_state', None)
+    state._commit_prepared_store(envelopes={sid: envelope}, snapshot_id=sid)
+
+    restarted = make()
+    bind(restarted)
+    processing = restarted.processing_status(sid)
+    assert processing['formation_state'] == 'pending'
+    assert processing['formation_progress']['planned_task_count'] > 0
+    assert processing['formation_progress']['pending_task_count'] > 0
+
+
 def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path):
     state, sid, actor, reviewer, calls, mode, _, _ = system(tmp_path)
     from fastapi.testclient import TestClient
@@ -101,6 +136,9 @@ def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path):
         envelope=state._envelope(sid), objects=state.snapshot_objects(sid))
     assert tables['formation_findings'][0]['reason_code'] == 'semantic_evidence_literal_not_found'
     assert tables['formation_findings'][0]['evidence_kind'] == 'rejected_producer_proposal_not_approved_knowledge'
+    assert len(tables['formation_progress']) == 1
+    assert tables['formation_progress'][0]['formation_state'] == 'pending'
+    assert tables['formation_progress'][0]['pending_task_count'] > 0
     client = TestClient(create_console_app(state))
     command = {'snapshot_id': sid, 'command_id': 'http-resume', 'expected_revision': state.objects_revision(sid)}
     assert client.post('/tree/resume-formation', data=command, follow_redirects=False).status_code in {302, 303, 401, 403}
@@ -108,6 +146,7 @@ def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path):
     client.cookies.set(COOKIE, state.authenticate('author', 'strong-test-password')['token'])
     page = client.get('/settings/technical/processing', params={'document': sid})
     assert 'Onopgeloste vorming herstellen' in page.text and 'publicatie is geblokkeerd' in page.text
+    assert 'Vormingstaken:' in page.text and 'nog open' in page.text
     mode['broken'] = False
     assert client.post('/tree/resume-formation', data=command, follow_redirects=False).status_code == 303
     assert len(calls) == 3
@@ -124,7 +163,7 @@ def test_recover_review_publish_restart_and_published_projection(tmp_path):
     def make():
         return DurablePublicationConsole(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime',
             immutable_source_store=source_store, canonical_publication_store=durable)
-    state, sid, actor, reviewer, calls, mode, _, bind = system(tmp_path, make_console=make)
+    state, sid, actor, reviewer, calls, mode, _, bind = system(tmp_path, make_console=make, containers=True)
     def product_client():
         ps = paths(tmp_path)
         return TestClient(create_product_app('real', paths=ps, tenant_registry=registry(docs=('*',)),
@@ -149,6 +188,12 @@ def test_recover_review_publish_restart_and_published_projection(tmp_path):
     assert len(projection) == 2
     served = api.get('/v1/knowledge/' + candidate_id, headers=headers())
     assert served.status_code == 200
+    assert 'Bij volwassenen.' in json.dumps(served.json())
+    containers = state.snapshot_containers(sid)
+    assert {r['usage']['kind'] for r in containers['source']} == {'document_information', 'linked_context'}
+    assert all(r['usage']['accounted'] for r in containers['source'])
+    for r in containers['source']:
+        assert api.get('/v1/knowledge/' + r['record']['object_id'], headers=headers()).status_code == 404
     restarted = make(); bind(restarted)
     assert restarted._projection_from_authority() == projection
     after_restart = product_client().get('/v1/knowledge/' + candidate_id, headers=headers())
@@ -274,3 +319,23 @@ def test_producer_cannot_supply_approval_or_omit_unknown_failures():
         prepare({'objects': [], 'relations': [], 'approved': True}, blocks=[], evidence_blocks=[], validator_input={})
     assert incomplete({'semantic_replay': {'provider_evidence': {
         'formation_incomplete': True, 'pending_rejections': [{'spans': [], 'reason_code': 'unknown_scope'}]}}}, objects=[])
+
+
+
+def test_manual_source_reset_blocks_resume_and_reextract(tmp_path):
+    state, sid, actor, reviewer, calls, mode, make, bind = system(tmp_path, containers=True)
+    assert state.processing_status(sid)['resume_allowed']
+    from src.source_context_review_v1 import confirm_source_context
+    metadata = next(o for o in state.snapshot_objects(sid) if evidence_of(o).get('text') == 'Versie: 1')
+    confirm_source_context(state, actor_id=reviewer, snapshot_id=sid, source_object_id=metadata['object_id'],
+        role='reset', target_object_ids=[], reason='Bronbesluit opnieuw beoordelen', command_id='reset-metadata',
+        expected_revision=state.objects_revision(sid))
+    restarted = make(); bind(restarted)
+    assert not restarted.processing_status(sid)['resume_allowed']
+    with pytest.raises(ConsoleError, match='pre_review_retry_existing_work'):
+        restarted.resume_formation(actor_id=actor, snapshot_id=sid, command_id='cannot-overwrite-reset',
+            expected_revision=restarted.objects_revision(sid))
+    with pytest.raises(ConsoleError, match='pre_review_retry_existing_work'):
+        restarted.reextract_unpublished(actor_id=actor, snapshot_id=sid)
+    assert len(calls) == 2
+    assert not next(r for r in restarted.snapshot_containers(sid)['source'] if r['record']['object_id'] == metadata['object_id'])['usage']['accounted']

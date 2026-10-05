@@ -13,14 +13,20 @@ from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v8"
-PROJECTOR_VERSION = "processing-evidence-export-v8"
+VERSION = "processing-evidence-export-v10"
+PROJECTOR_VERSION = "processing-evidence-export-v10"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
+    "source_usage": ("object_id", "object_version", "container", "kind", "reason", "target_ids", "accounted", "policy_version"),
+    "formation_tasks": ("task_id", "section_path", "target_spans", "phase", "status", "policy_version"),
+    "formation_progress": ("formation_state", "planned_task_count", "terminal_task_count", "pending_task_count",
+                           "failed_task_count", "partial_task_count", "not_started_task_count",
+                           "unknown_pending_count", "pending_source_range_count", "pending_source_char_count",
+                           "policy_version"),
     "formation_findings": ("call_id", "kind", "index", "reason_code", "spans", "requires_review", "finding", "evidence_kind"),
     "attempt_diagnostics": ("attempt_id", "state", "diagnostic", "evidence_kind"),
     "processing_recovery": ("authorization_id", "actor_id", "reason", "authorized_at", "source_hash", "source_version", "revision", "consumed_by", "consumed_at"),
-    "processing_attempts": ("attempt_id", "command_id", "actor_id", "source_hash", "state", "started_at", "expires_at", "finished_at", "phase", "error_code", "validation_code", "processing_reference", "source_version", "kind", "retry_of", "limits", "transport", "retry_not_before", "replayed_call_id"),
+    "processing_attempts": ("attempt_id", "command_id", "actor_id", "source_hash", "state", "started_at", "expires_at", "finished_at", "phase", "error_code", "validation_code", "processing_reference", "source_version", "kind", "retry_of", "limits", "transport", "retry_not_before", "replayed_call_id", "formation_progress_made"),
     "source_views": ("run_id", "fragment_id", "fragment_hash", "source_page", "bbox", "source_locator", "raw_text", "clean_text", "source_text_view", "source_layout_findings"),
     "runs": ("run_id", "source_hash", "started_at", "finished_at", "outcome", "reason", "extractor_versions", "execution", "semantic_identity", "production_commit_status"),
     "run_candidates": ("run_id", "object_id", "object_version", "canonical_hash", "origin", "structural"),
@@ -110,6 +116,22 @@ def processing_evidence_tables(
         add("semantic_proposals", **{key: replay.get(key) for key in SCHEMAS["semantic_proposals"] if key != "evidence_kind"},
             evidence_kind="stored_validated_proposal_not_raw_response")
     provider = replay.get("provider_evidence") or {}
+    for task in provider.get("tasks") or []:
+        add("formation_tasks", **{key: task.get(key) for key in SCHEMAS["formation_tasks"] if key != "policy_version"},
+            policy_version=provider.get("task_policy"))
+    if provider.get("task_policy"):
+        from src.bounded_formation_v1 import formation_progress
+        progress = provider.get("formation_progress") or formation_progress(provider)
+        add("formation_progress",
+            formation_state=provider.get("formation_state") or ("pending" if provider.get("formation_incomplete") else "complete"),
+            **{key: progress.get(key) for key in SCHEMAS["formation_progress"]
+               if key not in {"formation_state", "policy_version"}},
+            policy_version=provider.get("task_policy"))
+    from src.source_containers_v1 import partition, VERSION as CONTAINER_VERSION
+    for source in partition(objects)["source"]:
+        obj = source["record"]
+        add("source_usage", object_id=obj["object_id"], object_version=obj["object_version"], container="source",
+            **source["usage"], policy_version=CONTAINER_VERSION)
     providers = [provider, *(provider.get("supplementary_calls") or [])]
     for provider in providers:
         for rejection in (provider.get("formation") or {}).get("rejections", []):
@@ -193,6 +215,10 @@ def processing_evidence_tables(
                     evidence_kind="stored_scan_not_verified_dependency_resolution")
 
     statuses = {
+        "source_usage": ("derived", "Current source usage under the recorded policy; not a new approval or clinical completeness proof."),
+        "formation_tasks": ("recorded" if tables["formation_tasks"] else "not_recorded", "Bounded task observations; historical statuses are retained and pending findings determine current recovery."),
+        "formation_progress": ("recorded" if tables["formation_progress"] else "not_recorded",
+            "Current bounded-formation progress projected against the original task plan; recovery subtasks may have different task ids."),
         "formation_findings": ("recorded" if any("formation" in p for p in providers) else "not_recorded",
             "Versioned producer rejections; historical errors remain evidence after recovery. Not clinical validation or approval."),
         "attempt_diagnostics": ("recorded" if tables["attempt_diagnostics"] else "not_recorded", "Attempt-owned checkpoints, request/output, validator input and finding. Missing historical evidence is not reconstructed. Never admission/replay authority."),
@@ -258,6 +284,7 @@ def processing_evidence_zip(**kwargs: Any) -> bytes:
             f"Metis {VERSION}\n"
             f"Exported at: {datetime.now(timezone.utc).isoformat()}\n"
             "Read manifest.csv first. This is a read-only projection of stored evidence.\n"
+            "CSV v10 adds formation_progress.csv with current planned, terminal and pending bounded-task counts.\n"
             "CSV v6 adds bounded attempt limits, transport observations and retry linkage; context evidence is retained.\n"
             "CSV v4 adds text, left_fragment_id and right_fragment_id to lineage.csv for inserted joins.\n"
             "CSV v3/v4: join snapshot_id + revision_id to revision.csv for the exact objects_revision.\n"

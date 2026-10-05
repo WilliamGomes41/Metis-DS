@@ -176,8 +176,21 @@ def pending_rejections(evidence, proposal):
     selected = [s for o in proposal.get("objects", []) for s in o["spans"]]
     selected += [r["span"] for r in proposal.get("source_assessments", [])]
     pending = []
-    for call in [evidence, *evidence.get("supplementary_calls", [])]:
-        if call.get("error_code"):
+    calls = [evidence, *evidence.get("supplementary_calls", [])]
+    for index, call in enumerate(calls):
+        # A bounded transport/budget failure can be answered by a later fully
+        # validated task, including an explicit abstention. Its unknown source
+        # still blocks source closure; it is no longer an unexecuted task.
+        answered = False
+        if evidence.get("task_policy") == "bounded-formation-v1" and call.get("target_spans"):
+            from src.source_containers_v1 import _covers
+            later_spans = [s for later in calls[index + 1:]
+                if later.get("task_id") and not later.get("error_code")
+                and (later.get("formation") or {}).get("status") == "validated"
+                and not (later.get("formation") or {}).get("rejections")
+                for s in later.get("target_spans", [])]
+            answered = all(_covers(ref, later_spans) for ref in call["target_spans"])
+        if call.get("error_code") and not answered:
             pending.append({"kind": "call", "reason_code": call.get("failure_reason") or call["error_code"],
                             "spans": call.get("target_spans", [])})
         for rejection in (call.get("formation") or {}).get("rejections", []):

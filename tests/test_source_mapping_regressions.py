@@ -120,7 +120,7 @@ def test_join_boundary_is_validated_and_exported():
         with pytest.raises(ValueError, match="semantic_(source_mapping|passage_metadata)_invalid"):
             transform(invalid, manifest, source)
     tables, projected_manifest = processing_evidence_tables(snapshot_id="snap", revision="r", envelope={}, objects=rows)
-    assert all(row["schema_version"] == "processing-evidence-export-v8" for row in projected_manifest)
+    assert all(row["schema_version"] == "processing-evidence-export-v10" for row in projected_manifest)
     boundaries = [row for row in tables["lineage"] if row["relation"] == "inserted_join_separator"]
     assert len(boundaries) == 2
     assert all(row["text"] == " " for row in boundaries)
@@ -128,7 +128,7 @@ def test_join_boundary_is_validated_and_exported():
     with ZipFile(io.BytesIO(processing_evidence_zip(
             snapshot_id="snap", revision="r", envelope={}, objects=rows))) as archive:
         manifest_rows = list(csv.DictReader(io.StringIO(archive.read("manifest.csv").decode("utf-8-sig"))))
-        assert all(row["schema_version"] == "processing-evidence-export-v8" for row in manifest_rows)
+        assert all(row["schema_version"] == "processing-evidence-export-v10" for row in manifest_rows)
         assert "CSV v4 adds text, left_fragment_id and right_fragment_id" in archive.read("README.txt").decode()
         exported = list(csv.DictReader(io.StringIO(archive.read("lineage.csv").decode("utf-8-sig"))))
         exported_boundaries = [row for row in exported if row["relation"] == "inserted_join_separator"]

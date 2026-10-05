@@ -1862,9 +1862,18 @@ class OperationsConsole:
             result["retry_allowed"] = False
         from src.recoverable_formation_v1 import incomplete
         result["formation_incomplete"] = incomplete(self._envelope(snapshot_id), objects=self.snapshot_objects(snapshot_id))
+        evidence = (self._envelope(snapshot_id).get("semantic_replay") or {}).get("provider_evidence") or {}
+        result["formation_state"] = "pending" if result["formation_incomplete"] else "complete"
+        if evidence.get("task_policy"):
+            from src.bounded_formation_v1 import formation_progress as project_formation_progress
+            result["formation_progress"] = deepcopy(
+                evidence.get("formation_progress") or project_formation_progress(evidence)
+            )
+        else:
+            result["formation_progress"] = {}
         result["resume_allowed"] = bool(self._can_resume_formation(snapshot_id)
             and result["state"] != "running"
-            and (result["attempts_used"] < result["max_attempts"] or result["recovery_available"])
+            and (result["retry_attempts_used"] < result["max_attempts"] or result["recovery_available"])
             and result["reason_code"] not in {"processing_retry_cooldown", "processing_structural_limit"})
         return result
 
@@ -1873,11 +1882,13 @@ class OperationsConsole:
         from src.source_context_review_v1 import ROLE_KEY, LINKS_KEY
         envelope = self._envelope(snapshot_id)
         contract = ((envelope.get("semantic_replay") or {}).get("identity") or {}).get("components", {}).get("semantic_contract_version", "")
-        return bool(incomplete(envelope) and VERSION in contract
+        from src.bounded_formation_v1 import VERSION as TASK_VERSION
+        return bool(incomplete(envelope) and VERSION in contract and TASK_VERSION in contract
             and not self.snapshot_is_published(snapshot_id)
             and not self.object_review_bindings(snapshot_id) and not envelope.get("review_passes")
             and not any((row.get("governance") or {}).get("validation_status") not in {None, "needs_review"}
                 or ROLE_KEY in (row.get("metadata") or {}) or LINKS_KEY in (row.get("metadata") or {})
+                    or ((row.get("metadata") or {}).get("passage_register") or {}).get("source") == "review"
                 for row in self.snapshot_objects(snapshot_id)))
 
     def resume_formation(self, *, actor_id, snapshot_id, command_id, expected_revision):
@@ -1937,7 +1948,7 @@ class OperationsConsole:
 
     def authorize_processing_recovery(self, *, actor_id, snapshot_id, reason):
         """One grant per blocked snapshot; consumption belongs to reservation."""
-        from src.processing_retry_v1 import now, expire_running
+        from src.processing_retry_v1 import now, expire_running, status as processing_retry_status
         if not isinstance(reason, str) or not reason.strip() or len(reason) > 1000:
             raise ConsoleError("processing_recovery_reason_required")
         with self._reprocessing_transaction(snapshot_id):
@@ -1958,7 +1969,9 @@ class OperationsConsole:
             attempts = envelope.get("processing_attempts") or []
             if attempts and attempts[-1].get("error_code") in {"pre_review_llm_input_limit_exceeded", "pre_review_llm_output_limit_exceeded"}:
                 raise ConsoleError("processing_structural_limit")
-            if len(attempts) < self._processing_limits().max_attempts or any(a["state"] == "running" for a in attempts):
+            retry_policy = self._processing_limits()
+            retry_status = processing_retry_status(envelope, policy=retry_policy)
+            if retry_status["retry_attempts_used"] < retry_policy.max_attempts or any(a["state"] == "running" for a in attempts):
                 raise ConsoleError("processing_recovery_not_required")
             if envelope.get("processing_recovery"):
                 raise ConsoleError("processing_recovery_already_authorized")
@@ -2057,6 +2070,7 @@ class OperationsConsole:
         if (self._bindings.get(snapshot_id) or envelope.get("review_passes") or
                 any((row.get("governance") or {}).get("validation_status") not in {None, "needs_review"}
                     or ROLE_KEY in (row.get("metadata") or {}) or LINKS_KEY in (row.get("metadata") or {})
+                    or ((row.get("metadata") or {}).get("passage_register") or {}).get("source") == "review"
                     for row in self.snapshot_objects(snapshot_id))):
             raise ConsoleError("pre_review_retry_existing_work")
         processing_started = quality_instant()
@@ -2184,6 +2198,23 @@ class OperationsConsole:
                 merge_diagnostics(prepared_envelope, self._envelope(snapshot_id))
                 finish(prepared_envelope, _attempt_id, state="succeeded")
                 stored = next(a for a in prepared_envelope["processing_attempts"] if a["attempt_id"] == _attempt_id)
+                if stored.get("kind") == "resume":
+                    from src.bounded_formation_v1 import formation_progress, pending_source_extent
+                    before_provider = (envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
+                    after_provider = (prepared_envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
+                    before_progress = before_provider.get("formation_progress") or formation_progress(before_provider)
+                    after_progress = after_provider.get("formation_progress") or formation_progress(after_provider)
+                    before_extent = pending_source_extent(before_provider)
+                    after_extent = pending_source_extent(after_provider)
+                    stored["formation_progress_made"] = bool(
+                        after_progress.get("terminal_task_count", 0) > before_progress.get("terminal_task_count", 0)
+                        or after_progress.get("pending_task_count", 0) < before_progress.get("pending_task_count", 0)
+                        or after_extent["unknown_pending_count"] < before_extent["unknown_pending_count"]
+                        or (
+                            after_extent["unknown_pending_count"] == before_extent["unknown_pending_count"]
+                            and after_extent["pending_source_char_count"] < before_extent["pending_source_char_count"]
+                        )
+                    )
                 transport = (replay_record or {}).get("provider_evidence", {}).get("transport", {})
                 if (replay_record or {}).get("semantic_execution") == "replay":
                     stored["replayed_call_id"] = transport.get("call_id")
@@ -2494,6 +2525,11 @@ class OperationsConsole:
         for row in rows:
             current[row["object_id"]] = row
         return deepcopy(list(current.values()))
+
+    def snapshot_containers(self, snapshot_id: str) -> dict[str, Any]:
+        """Typed knowledge/source access over the current atomic revision."""
+        from src.source_containers_v1 import partition
+        return partition(self.snapshot_objects(snapshot_id))
 
     def snapshot_objects_and_revision(
         self,
