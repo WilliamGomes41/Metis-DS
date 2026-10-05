@@ -635,6 +635,7 @@ def test_multi_span_object_keeps_separate_source_identities(tmp_path):
     assert source_span_id(
         source_sha256="source-sha", source_reconstruction_hash=derived["source_blocks_hash"],
         fragments=[{"fragment_id": "frag-a", "start": 0, "end": len(left)}],
+        block_id=block_a["block_id"], block_start=0, block_end=len(block_a["text"]),
     ) in identities
 
 
