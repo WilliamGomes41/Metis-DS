@@ -73,6 +73,8 @@ from src.source_occurrence_authority_v1 import prefer_authoritative_exact_occurr
 from src.source_reconstruction_v1 import RECONSTRUCTION_VERSION
 from src.source_bound_fields_v2 import MODE as SEMANTIC_V2_MODE, evidence_schema, context_evidence_schema, CONTEXT_VERSION
 from src.source_bound_fields_v3 import MODE as SEMANTIC_V3_MODE, VERSION as FIELDS_V3_VERSION
+from src.source_bound_fields_v4 import MODE as SEMANTIC_V4_MODE, VERSION as FIELDS_V4_VERSION
+from src.source_accountability_v1 import VERSION_V3 as SOURCE_ACCOUNTABILITY_V3
 from src.source_evidence_resolution_v1 import (
     resolve_proposal_evidence, VERSION as EVIDENCE_RESOLUTION_VERSION,
     V3_VERSION as V3_EVIDENCE_RESOLUTION_VERSION,
@@ -171,8 +173,29 @@ SOURCE_ACCOUNTABILITY_INSTRUCTION = (
     "human approval or proof of completeness. Omitted ranges remain explicitly unresolved. "
 )
 
+SOURCE_FUNCTION_V4_INSTRUCTION = (
+    " Separate three questions and do not collapse them: is this valid source text; "
+    "does it have independent meaning; may that meaning be answer-bearing knowledge on its own. "
+    "Understandable text is not automatically answer-bearing. "
+    "Select answer-bearing units only as the existing types definition, explanation, condition, "
+    "exception or recommendation. Do not invent a knowledge type named background. "
+    "Return source_assessments for every range you do not select as an answer-bearing object. "
+    "Each assessment has one exact span, one closed role and one matching reason. "
+    "metadata is document_metadata or page_furniture. structure is navigation or document_structure. "
+    "background is module_background, problem_description or historical_context, including clear "
+    "sentences about historical practice or variation that are not a current recommendation. "
+    "context is target_group, scope, timing, condition, negation or list_introduction and limits "
+    "another statement; do not emit context as its own recommendation. "
+    "support is proposed_support only. A support passage has no confirmed target yet. "
+    "unresolved is unformed_meaning or uncertain_source_role. Use unresolved when unsure. Do not guess. "
+    "These roles are machine proposals. They are not exclusion, human approval or publication. "
+    "Do not overlap assessments with selected objects or with each other."
+)
 
-def _semantic_instruction(field_contract_v2=False, field_contract_v3=False):
+
+def _semantic_instruction(field_contract_v2=False, field_contract_v3=False, field_contract_v4=False):
+    if field_contract_v4:
+        return SEMANTIC_V3_INSTRUCTION + SOURCE_FUNCTION_V4_INSTRUCTION
     if field_contract_v3:
         return SEMANTIC_V3_INSTRUCTION + SOURCE_ACCOUNTABILITY_INSTRUCTION
     if field_contract_v2:
@@ -256,7 +279,7 @@ def _bounded_provider_json(url, headers, payload, limits, observation=None):
     return result
 
 
-def _proposal_schema(field_contract_v2: bool = False, field_contract_v3: bool = False) -> dict[str, Any]:
+def _proposal_schema(field_contract_v2: bool = False, field_contract_v3: bool = False, field_contract_v4: bool = False) -> dict[str, Any]:
     span = {
         "type": "object",
         "additionalProperties": False,
@@ -340,9 +363,9 @@ def _proposal_schema(field_contract_v2: bool = False, field_contract_v3: bool = 
             "recommendation_semantics",
         ],
     }
-    if field_contract_v2 or field_contract_v3:
+    if field_contract_v2 or field_contract_v3 or field_contract_v4:
         from src.source_bound_fields_v3 import evidence_schema as schema_v3
-        obj["properties"]["field_evidence"] = schema_v3(span) if field_contract_v3 else evidence_schema(span)
+        obj["properties"]["field_evidence"] = schema_v3(span) if (field_contract_v3 or field_contract_v4) else evidence_schema(span)
         obj["required"].append("field_evidence")
         obj["properties"]["context_evidence"] = context_evidence_schema(span)
         obj["required"].append("context_evidence")
@@ -356,9 +379,9 @@ def _proposal_schema(field_contract_v2: bool = False, field_contract_v3: bool = 
         },
         "required": ["objects", "relations", "abstain_reason"],
     }
-    if field_contract_v2 or field_contract_v3:
-        from src.source_accountability_v1 import assessment_schema
-        result["properties"]["source_assessments"] = assessment_schema(span)
+    if field_contract_v2 or field_contract_v3 or field_contract_v4:
+        from src.source_accountability_v1 import assessment_schema, VERSION_V3
+        result["properties"]["source_assessments"] = assessment_schema(span, version=VERSION_V3 if field_contract_v4 else "source-accountability-v1")
         result["required"].append("source_assessments")
     return result
 
@@ -396,6 +419,7 @@ def _request_payload(
     evidence_blocks: list[dict[str, Any]],
     field_contract_v2: bool = False,
     field_contract_v3: bool = False,
+    field_contract_v4: bool = False,
     selection_targets=None,
     task=None,
 ) -> dict[str, Any]:
@@ -404,7 +428,7 @@ def _request_payload(
         "input": [
             {
                 "role": "developer",
-                "content": SEMANTIC_DEVELOPER_PROMPT + _semantic_instruction(field_contract_v2, field_contract_v3),
+                "content": SEMANTIC_DEVELOPER_PROMPT + _semantic_instruction(field_contract_v2, field_contract_v3, field_contract_v4),
             },
             {
                 "role": "user",
@@ -424,7 +448,7 @@ def _request_payload(
                 "type": "json_schema",
                 "name": "pre_review_semantic_passage_proposal",
                 "strict": True,
-                "schema": _proposal_schema(field_contract_v2, field_contract_v3),
+                "schema": _proposal_schema(field_contract_v2, field_contract_v3, field_contract_v4),
             }
         },
     }
@@ -541,6 +565,7 @@ def _replay_identity(
     formation_context: Mapping[str, Any] | None,
     field_contract_v2: bool = False,
     field_contract_v3: bool = False,
+    field_contract_v4: bool = False,
 ) -> dict[str, Any] | None:
     if not formation_context:
         return None
@@ -560,21 +585,25 @@ def _replay_identity(
         extractor_version=_extractor_contract(source_fragments),
         reconstruction_version=RECONSTRUCTION_VERSION,
         formation_policy_version=PASSAGE_FORMATION_POLICY_VERSION,
-        semantic_contract_version=("source-accountability-v2/bounded-formation-v1/" if field_contract_v3 else "source-accountability-v1/") + (f"recoverable-formation-v1/{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}"),
-        prompt_hash=_stable_json_hash(SEMANTIC_DEVELOPER_PROMPT + _semantic_instruction(field_contract_v2, field_contract_v3)),
-        schema_hash=_stable_json_hash(_proposal_schema(field_contract_v2, field_contract_v3)),
+        semantic_contract_version=(
+            f"{SOURCE_ACCOUNTABILITY_V3}/bounded-formation-v2/recoverable-formation-v1/{FIELDS_V4_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}"
+            if field_contract_v4 else
+            ("source-accountability-v2/bounded-formation-v1/" if field_contract_v3 else "source-accountability-v1/") + (f"recoverable-formation-v1/{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}")
+        ),
+        prompt_hash=_stable_json_hash(SEMANTIC_DEVELOPER_PROMPT + _semantic_instruction(field_contract_v2, field_contract_v3, field_contract_v4)),
+        schema_hash=_stable_json_hash(_proposal_schema(field_contract_v2, field_contract_v3, field_contract_v4)),
         provider_id=SEMANTIC_PROVIDER_ID,
         model_id=model,
         model_config_hash=_stable_json_hash(SEMANTIC_MODEL_CONFIG),
     )
 
-def validate_provider_proposal(proposal, *, field_contract_v2=False, field_contract_v3=False):
+def validate_provider_proposal(proposal, *, field_contract_v2=False, field_contract_v3=False, field_contract_v4=False):
     """Pure proposal gates shared with read-only diagnostic reproduction."""
     if not isinstance(proposal, dict):
         raise ConsoleError("pre_review_llm_response_invalid")
     if str(proposal.get("abstain_reason") or "").strip():
         raise ConsoleError("pre_review_llm_abstained")
-    if (field_contract_v2 or field_contract_v3) and isinstance(proposal.get("objects"), list):
+    if (field_contract_v2 or field_contract_v3 or field_contract_v4) and isinstance(proposal.get("objects"), list):
         for index, row in enumerate(proposal["objects"]):
             if not isinstance(row, dict) or "context_evidence" not in row:
                 error = ConsoleError("pre_review_llm_proposal_rejected", "source_bound_context_required")
@@ -592,6 +621,7 @@ def _provider_proposal(
     post_json: PostJson | None,
     field_contract_v2: bool = False,
     field_contract_v3: bool = False,
+    field_contract_v4: bool = False,
     selection_targets=None,
     task=None,
     model_limits: ModelCallLimits | None = None,
@@ -604,7 +634,8 @@ def _provider_proposal(
         raise ConsoleError("pre_review_llm_api_key_required")
     payload = _request_payload(model=model, blocks=blocks,
                                evidence_blocks=evidence_blocks,
-                               field_contract_v2=field_contract_v2, field_contract_v3=field_contract_v3, selection_targets=selection_targets, task=task)
+                               field_contract_v2=field_contract_v2, field_contract_v3=field_contract_v3,
+                               field_contract_v4=field_contract_v4, selection_targets=selection_targets, task=task)
     if len(json.dumps(payload, ensure_ascii=False).encode("utf-8")) > MAX_INPUT_BYTES:
         raise ConsoleError("pre_review_llm_input_limit_exceeded")
     request_evidence = deepcopy(payload)
@@ -658,7 +689,7 @@ def _provider_proposal(
     if checkpoint:
         checkpoint("proposal_parsed", {"proposal": proposal, "proposal_hash": _stable_json_hash(proposal)})
     try:
-        if not field_contract_v3:
+        if not field_contract_v3 and not field_contract_v4:
             validate_provider_proposal(proposal, field_contract_v2=field_contract_v2)
     except ConsoleError as error:
         if checkpoint:
@@ -681,7 +712,7 @@ def _provider_proposal(
                                   "input_tokens": usage.get("input_tokens"),
                                   "output_tokens": usage.get("output_tokens")})
     try:
-        if field_contract_v3:
+        if field_contract_v3 or field_contract_v4:
             from src.recoverable_formation_v1 import prepare
             resolved, formation = prepare(proposal, blocks=blocks, evidence_blocks=evidence_blocks,
                                           validator_input=validator_input)
@@ -709,6 +740,7 @@ def _semantic_execution_before_review(
     post_json: PostJson | None = None,
     field_contract_v2: bool = False,
     field_contract_v3: bool = False,
+    field_contract_v4: bool = False,
     model_limits: ModelCallLimits | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     safe_key = str(api_key or "").strip()
@@ -745,6 +777,7 @@ def _semantic_execution_before_review(
         evidence_blocks=evidence_blocks,
         source_fragments=fragments,
         field_contract_v2=field_contract_v2, field_contract_v3=field_contract_v3,
+        field_contract_v4=field_contract_v4,
         formation_context=formation_context,
     )
     existing_replay = (
@@ -766,7 +799,9 @@ def _semantic_execution_before_review(
                     proposal=lookup.proposal,
                     evidence_fragments=evidence_fragments,
                     allowed_candidate_block_ids=allowed_candidate_block_ids,
-                    field_contract_v2=field_contract_v2, field_contract_v3=field_contract_v3,
+                    field_contract_v2=field_contract_v2,
+                    field_contract_v3=field_contract_v3,
+                    field_contract_v4=field_contract_v4,
                 )
             except SemanticPassageError as exc:
                 replay_rejection_reason = exc.code
@@ -785,28 +820,46 @@ def _semantic_execution_before_review(
     validator_input = {"fragments": content_fragments, "document_id": document_id,
                        "evidence_fragments": evidence_fragments,
                        "allowed_candidate_block_ids": sorted(allowed_candidate_block_ids),
-                       "field_contract_v2": field_contract_v2, "field_contract_v3": field_contract_v3}
+                       "field_contract_v2": field_contract_v2,
+                       "field_contract_v3": field_contract_v3 or field_contract_v4,
+                       "field_contract_v4": field_contract_v4,
+                       "source_accountability_version": SOURCE_ACCOUNTABILITY_V3 if field_contract_v4 else "source-accountability-v2" if field_contract_v3 else "source-accountability-v1"}
     if checkpoint:
         from src.attempt_diagnostics_v1 import validator_identity
         checkpoint("source_reconstructed", {"validator_input": validator_input,
             "validator_input_hash": _stable_json_hash(validator_input),
             "validator_identity": validator_identity(), "semantic_identity": identity})
-    if field_contract_v3 and blocks and (proposal is None or (formation_context or {}).get("resume_formation")):
+    if (field_contract_v3 or field_contract_v4) and blocks and (proposal is None or (formation_context or {}).get("resume_formation")):
         if (formation_context or {}).get("resume_formation") and proposal is None:
             raise ConsoleError("semantic_replay_policy_mismatch")
-        from src.bounded_formation_v1 import execute
+        if field_contract_v4:
+            from src.bounded_formation_v2 import execute
+        else:
+            from src.bounded_formation_v1 import execute
         limits = model_limits or ModelCallLimits(total=DEFAULT_TIMEOUT_SECONDS)
         def provider(**kwargs):
             return _provider_proposal(api_key=api_key, model=safe_model, post_json=post_json,
-                field_contract_v3=True, checkpoint=None, **kwargs)
-        proposal, provider_evidence = execute(blocks=blocks, evidence_blocks=evidence_blocks,
+                field_contract_v3=not field_contract_v4 and field_contract_v3, field_contract_v4=field_contract_v4,
+                checkpoint=None, **kwargs)
+        plan_identity = {
+            "source_hash": str((formation_context or {}).get("source_sha256") or ""),
+            "extractor_version": _extractor_contract(fragments),
+            "reconstruction_version": RECONSTRUCTION_VERSION,
+            "semantic_contract_version": ((identity or {}).get("components") or {}).get("semantic_contract_version", ""),
+        } if field_contract_v4 else None
+        execute_kwargs = dict(blocks=blocks, evidence_blocks=evidence_blocks,
             validator_input=validator_input, provider=provider, limits=limits,
             proposal=proposal, evidence=(replay_record or {}).get("provider_evidence"), checkpoint=checkpoint)
-        errors = [call["error_code"] for call in [provider_evidence, *provider_evidence.get("supplementary_calls", [])]
-                  if call.get("error_code")]
-        if not proposal["objects"] and errors:
+        if plan_identity is not None:
+            execute_kwargs["plan_identity"] = plan_identity
+        proposal, provider_evidence = execute(**execute_kwargs)
+        calls = [provider_evidence, *provider_evidence.get("supplementary_calls", [])]
+        errors = [call["error_code"] for call in calls if call.get("error_code")]
+        only_budget = bool(errors) and set(errors) <= {"source_task_budget_exhausted"} and bool(provider_evidence.get("formation_plan"))
+        if not proposal["objects"] and errors and not only_budget:
             # A wholly failed new run must not replace existing valid work
             # with source remainders. Partial success is retained separately.
+            # V4 budget exhaustion keeps the plan and stays pending instead.
             raise ConsoleError(errors[0])
         content_units = semantic_units_from_proposal(**validator_input, proposal=proposal)
     if blocks and proposal is None:
@@ -831,7 +884,9 @@ def _semantic_execution_before_review(
                 proposal=proposal,
                 evidence_fragments=evidence_fragments,
                 allowed_candidate_block_ids=allowed_candidate_block_ids,
-                field_contract_v2=field_contract_v2, field_contract_v3=field_contract_v3,
+                field_contract_v2=field_contract_v2,
+                field_contract_v3=field_contract_v3,
+                field_contract_v4=field_contract_v4,
             )
         except SemanticPassageError as exc:
             if checkpoint:
@@ -840,10 +895,11 @@ def _semantic_execution_before_review(
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
     if proposal is not None and blocks:
         provider_evidence = locals().get("provider_evidence") or deepcopy((replay_record or {}).get("provider_evidence") or {})
-        if field_contract_v3:
+        if field_contract_v3 or field_contract_v4:
             from src.recoverable_formation_v1 import pending_rejections
             provider_evidence["pending_rejections"] = pending_rejections(provider_evidence, proposal)
             provider_evidence["formation_incomplete"] = bool(provider_evidence["pending_rejections"])
+            provider_evidence["formation_state"] = "pending" if provider_evidence["formation_incomplete"] else "complete"
             if checkpoint:
                 checkpoint("formation_accounted", {"provider_evidence": provider_evidence})
         if execution != EXECUTION_REPLAY or (formation_context or {}).get("resume_formation"):
@@ -862,11 +918,11 @@ def _semantic_execution_before_review(
         content_units = semantic_coverage_units(
             content_fragments,
             document_id=document_id,
-            source_version="source-accountability-v2" if field_contract_v3 else "source-accountability-v1",
+            source_version=SOURCE_ACCOUNTABILITY_V3 if field_contract_v4 else "source-accountability-v2" if field_contract_v3 else "source-accountability-v1",
         )
 
     if proposal is not None:
-        if field_contract_v3:
+        if field_contract_v3 or field_contract_v4:
             from src.recommendation_coverage_v1 import assess, attach
             attach(content_units, assess(blocks, proposal))
         source_blocks_hash = _stable_json_hash(semantic_input)
@@ -879,7 +935,7 @@ def _semantic_execution_before_review(
             ):
                 semantic_passage.update(
                     {
-                        "formation_mode": SEMANTIC_V3_MODE if field_contract_v3 else SEMANTIC_V2_MODE if field_contract_v2 else SEMANTIC_MODE,
+                        "formation_mode": SEMANTIC_V4_MODE if field_contract_v4 else SEMANTIC_V3_MODE if field_contract_v3 else SEMANTIC_V2_MODE if field_contract_v2 else SEMANTIC_MODE,
                         "model": safe_model,
                         "source_blocks_hash": source_blocks_hash,
                         "proposal_hash": proposal_hash,
@@ -913,6 +969,7 @@ def semantic_units_before_review(
     post_json: PostJson | None = None,
     field_contract_v2: bool = False,
     field_contract_v3: bool = False,
+    field_contract_v4: bool = False,
     model_limits: ModelCallLimits | None = None,
 ) -> list[dict[str, Any]]:
     """Return deterministic headings plus source-reconstructed semantic candidates."""
@@ -925,6 +982,7 @@ def semantic_units_before_review(
         formation_context=formation_context,
         post_json=post_json,
         field_contract_v2=field_contract_v2, field_contract_v3=field_contract_v3,
+        field_contract_v4=field_contract_v4,
         model_limits=model_limits,
     )
     return units
@@ -944,6 +1002,7 @@ def semantic_spec_from_fragments(
     post_json: PostJson | None = None,
     field_contract_v2: bool = False,
     field_contract_v3: bool = False,
+    field_contract_v4: bool = False,
     model_limits: ModelCallLimits | None = None,
 ) -> dict[str, Any]:
     reference = str((formation_context or {}).get("processing_reference") or uuid.uuid4().hex)
@@ -955,7 +1014,7 @@ def semantic_spec_from_fragments(
     checkpoint = (formation_context or {}).get("diagnostic_checkpoint")
     if checkpoint:
         checkpoint("validation_started", {"processing_reference": reference, "model": model,
-                    "field_contract": "v3" if field_contract_v3 else "v2" if field_contract_v2 else "v1"})
+                    "field_contract": "v4" if field_contract_v4 else "v3" if field_contract_v3 else "v2" if field_contract_v2 else "v1"})
     token = _PROCESSING_REFERENCE.set(reference)
     started = time.monotonic()
     LOGGER.info("METIS_PRE_REVIEW start reference=%s snapshot_id=%s", reference, snapshot_id)
@@ -968,6 +1027,7 @@ def semantic_spec_from_fragments(
             formation_context=formation_context,
             post_json=post_json,
             field_contract_v2=field_contract_v2, field_contract_v3=field_contract_v3,
+            field_contract_v4=field_contract_v4,
             model_limits=model_limits,
         )
     except ConsoleError as exc:
@@ -1130,6 +1190,7 @@ def bind_pre_review_semantic_processing(
             post_json=post_json,
             field_contract_v2=(mode == SEMANTIC_V2_MODE),
             field_contract_v3=(mode == SEMANTIC_V3_MODE),
+            field_contract_v4=(mode == SEMANTIC_V4_MODE),
             model_limits=limits,
         )
         return fragments, _stamp_passage_formation(spec, decision)

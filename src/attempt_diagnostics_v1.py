@@ -17,6 +17,7 @@ VALIDATOR_FILES = ("semantic_passage_v1.py", "recommendation_semantics_v1.py",
                    "serving_relations_v1.py", "source_context_review_v1.py",
                    "attempt_diagnostics_v1.py", "pre_review_semantic_v1.py",
                    "source_evidence_resolution_v1.py", "recoverable_formation_v1.py", "bounded_formation_v1.py",
+                   "bounded_formation_v2.py", "source_bound_fields_v4.py",
                    "source_containers_v1.py", "source_accountability_v1.py")
 
 

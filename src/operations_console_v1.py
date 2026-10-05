@@ -1883,7 +1883,8 @@ class OperationsConsole:
         envelope = self._envelope(snapshot_id)
         contract = ((envelope.get("semantic_replay") or {}).get("identity") or {}).get("components", {}).get("semantic_contract_version", "")
         from src.bounded_formation_v1 import VERSION as TASK_VERSION
-        return bool(incomplete(envelope) and VERSION in contract and TASK_VERSION in contract
+        from src.bounded_formation_v2 import VERSION as TASK_VERSION_V2
+        return bool(incomplete(envelope) and VERSION in contract and (TASK_VERSION in contract or TASK_VERSION_V2 in contract)
             and not self.snapshot_is_published(snapshot_id)
             and not self.object_review_bindings(snapshot_id) and not envelope.get("review_passes")
             and not any((row.get("governance") or {}).get("validation_status") not in {None, "needs_review"}

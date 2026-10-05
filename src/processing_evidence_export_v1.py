@@ -13,8 +13,8 @@ from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v10"
-PROJECTOR_VERSION = "processing-evidence-export-v10"
+VERSION = "processing-evidence-export-v11"
+PROJECTOR_VERSION = "processing-evidence-export-v11"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
     "source_usage": ("object_id", "object_version", "container", "kind", "reason", "target_ids", "accounted", "policy_version"),
@@ -22,6 +22,7 @@ SCHEMAS = {
     "formation_progress": ("formation_state", "planned_task_count", "terminal_task_count", "pending_task_count",
                            "failed_task_count", "partial_task_count", "not_started_task_count",
                            "unknown_pending_count", "pending_source_range_count", "pending_source_char_count",
+                           "plan_hash", "plan_version", "semantic_contract_version",
                            "policy_version"),
     "formation_findings": ("call_id", "kind", "index", "reason_code", "spans", "requires_review", "finding", "evidence_kind"),
     "attempt_diagnostics": ("attempt_id", "state", "diagnostic", "evidence_kind"),
@@ -284,6 +285,7 @@ def processing_evidence_zip(**kwargs: Any) -> bytes:
             f"Metis {VERSION}\n"
             f"Exported at: {datetime.now(timezone.utc).isoformat()}\n"
             "Read manifest.csv first. This is a read-only projection of stored evidence.\n"
+            "CSV v11 adds formation plan identity (plan_hash, plan_version, semantic_contract_version) to formation_progress.csv.\n"
             "CSV v10 adds formation_progress.csv with current planned, terminal and pending bounded-task counts.\n"
             "CSV v6 adds bounded attempt limits, transport observations and retry linkage; context evidence is retained.\n"
             "CSV v4 adds text, left_fragment_id and right_fragment_id to lineage.csv for inserted joins.\n"

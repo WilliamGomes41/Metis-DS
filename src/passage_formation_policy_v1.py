@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from src.source_bound_fields_v2 import MODE as SEMANTIC_V2_MODE
 from src.source_bound_fields_v3 import MODE as SEMANTIC_V3_MODE
+from src.source_bound_fields_v4 import MODE as SEMANTIC_V4_MODE
 
 
 PASSAGE_FORMATION_POLICY_VERSION = "passage-formation-policy-v1.0.0"
@@ -23,7 +24,7 @@ REASON_EXPLICIT_ROLLBACK = "explicit_operational_rollback"
 REASON_SEMANTIC_FREE_TEXT = "semantic_free_text_required"
 REASON_DETERMINISTIC_HEADING = "deterministic_heading_structure"
 
-_ALLOWED_MODES = frozenset({DETERMINISTIC_MODE, SEMANTIC_MODE, SEMANTIC_V2_MODE, SEMANTIC_V3_MODE})
+_ALLOWED_MODES = frozenset({DETERMINISTIC_MODE, SEMANTIC_MODE, SEMANTIC_V2_MODE, SEMANTIC_V3_MODE, SEMANTIC_V4_MODE})
 
 
 class PassageFormationPolicyError(ValueError):

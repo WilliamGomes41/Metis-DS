@@ -105,7 +105,7 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
                 raise ValueError("semantic_source_mapping_invalid")
         result["source_mapping"] = deepcopy(mapping)
     if origin == SELECTION_ORIGIN_PROPOSAL:
-        if str(value.get("formation_mode") or "") not in {"semantic-source-bound-v1", "semantic-source-bound-v2", "semantic-source-bound-v3"}:
+        if str(value.get("formation_mode") or "") not in {"semantic-source-bound-v1", "semantic-source-bound-v2", "semantic-source-bound-v3", "semantic-source-bound-v4"}:
             raise ValueError("semantic_passage_metadata_invalid")
         if not str(value.get("model") or "").strip():
             raise ValueError("semantic_passage_metadata_invalid")
