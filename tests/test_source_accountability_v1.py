@@ -274,9 +274,14 @@ def test_exact_duplicate_source_occurrence_keeps_principal_span_and_role():
     selected.pop(KEY)
     selected["semantic_passage"]["selection_origin"] = "proposal_selected"
     selected["proposed_object_type"] = "definition"
+    selected["review_track"] = "clinical"
+    selected["source_bound_fields"] = {"evidence": "selected_source"}
+    selected["source_bound_context"] = []
     promoted = prefer_authoritative_exact_occurrences([
         selected,
         unit(primary_span, ["Klinische beschrijving"], {"role": "unresolved", "reason": "unformed_meaning"}),
     ])
     assert promoted[0]["semantic_passage"]["selection_origin"] == "proposal_selected"
+    assert promoted[0]["review_track"] == "clinical"
+    assert promoted[0]["source_bound_fields"] == selected["source_bound_fields"]
     assert KEY not in promoted[0]

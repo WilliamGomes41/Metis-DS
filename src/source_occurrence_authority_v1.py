@@ -90,6 +90,9 @@ def _apply_candidate_semantics(
     row.pop("source_accountability", None)
     for key in (
         "semantic_passage",
+        "source_bound_fields",
+        "source_bound_context",
+        "review_track",
         "proposed_object_type",
         "proposed_recommendation_strength",
         "proposed_recommendation_semantics",
