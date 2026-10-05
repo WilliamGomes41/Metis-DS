@@ -10,6 +10,7 @@ import csv
 import hashlib
 import io
 import json
+import re
 from pathlib import Path
 from typing import Any, Mapping
 from zipfile import ZipFile
@@ -92,21 +93,33 @@ def _hash(value: Any) -> str:
 
 
 def source_span_id(*, source_sha256: str, source_reconstruction_hash: str,
-                   source_fragment_ids: list[str], start: int, end: int) -> str | None:
+                   source_fragment_ids: list[str] | None = None, start: int | None = None,
+                   end: int | None = None, fragments: list[dict[str, Any]] | None = None) -> str | None:
     """Identity of one reconstructed range. Not defined when a component is missing."""
-    if (not source_sha256 or not source_reconstruction_hash
-            or not source_fragment_ids or type(start) is not int or type(end) is not int
-            or start < 0 or end <= start):
-        return None
-    if not all(isinstance(item, str) and item for item in source_fragment_ids):
+    ranges = fragments
+    if ranges is None:
+        ids = list(source_fragment_ids or [])
+        if len(ids) == 1 and type(start) is int and type(end) is int and 0 <= start < end:
+            ranges = [{"fragment_id": ids[0], "start": start, "end": end}]
+        else:
+            ranges = []
+    normalized = []
+    for item in ranges:
+        if not isinstance(item, dict):
+            return None
+        fragment_id = item.get("fragment_id")
+        lo, hi = item.get("start"), item.get("end")
+        if (not isinstance(fragment_id, str) or not fragment_id or type(lo) is not int
+                or type(hi) is not int or not 0 <= lo < hi):
+            return None
+        normalized.append({"fragment_id": fragment_id, "start": lo, "end": hi})
+    if not source_sha256 or not source_reconstruction_hash or not normalized:
         return None
     return _hash({
-        "v": 1,
+        "v": 2,
         "source_sha256": source_sha256,
         "source_reconstruction_hash": source_reconstruction_hash,
-        "source_fragment_ids": list(source_fragment_ids),
-        "start": start,
-        "end": end,
+        "fragments": normalized,
     })
 
 
@@ -145,17 +158,37 @@ def _csv_bytes(fields: tuple[str, ...], rows: list[dict[str, Any]]) -> bytes:
     return output.getvalue().encode("utf-8-sig")
 
 
-def _parse_cell(value: str) -> Any:
-    text = value.strip()
-    if text.startswith("'") and len(text) > 1 and text[1] in "=-+@\t":
-        text = text[1:]
+JSON_COLUMNS = frozenset({
+    "diagnostic", "proposal", "identity", "target_spans", "spans", "section_path",
+    "admission", "reason_codes", "request", "finding", "limits", "transport",
+    "execution", "semantic_identity", "extractor_versions", "source_layout_findings",
+    "bbox", "context_scan", "context_evidence", "source_bound_context",
+    "expand_merge", "necessary_context_disposition", "context_realization",
+    "source_context_review", "validation",
+})
+OFFSET_COLUMNS = frozenset({"start", "end", "block_start", "block_end", "raw_start", "raw_end"})
+
+
+def _unescape_formula(value: str) -> str:
+    """Undo the export's leading apostrophe. Do not strip the recorded text."""
+    if value.startswith("'"):
+        rest = value[1:]
+        if rest[:1] in "=-+@\t\r\n" or rest.lstrip()[:1] in "=-+@":
+            return rest
+    return value
+
+
+def _parse_cell(column: str | None, value: str) -> Any:
+    text = _unescape_formula(value)
     if text == "":
         return None
-    if text[:1] in "{[":
+    if column in JSON_COLUMNS and text[:1] in "{[":
         try:
             return json.loads(text)
         except json.JSONDecodeError:
             return text
+    if column in OFFSET_COLUMNS and re.fullmatch(r"-?\d+", text):
+        return int(text)
     return text
 
 
@@ -165,7 +198,7 @@ def _read_csv(archive: ZipFile, name: str) -> list[dict[str, Any]]:
     except KeyError:
         return []
     rows = list(csv.DictReader(io.StringIO(raw.decode("utf-8-sig"))))
-    return [{key: _parse_cell(value) for key, value in row.items()} for row in rows]
+    return [{key: _parse_cell(key, value) for key, value in row.items()} for row in rows]
 
 
 def _identity_from(components: Mapping[str, Any]) -> dict[str, Any]:
@@ -231,23 +264,38 @@ def _exact_span(candidate: Any, block_id: Any, start: Any, end: Any) -> bool:
             and candidate.get("start") == start and candidate.get("end") == end)
 
 
+def _contains_span(target: Any, block_id: Any, start: Any, end: Any) -> bool:
+    return (isinstance(target, dict) and target.get("block_id") == block_id
+            and type(target.get("start")) is int and type(target.get("end")) is int
+            and type(start) is int and type(end) is int
+            and target["start"] <= start and end <= target["end"] and start < end)
+
+
 def _attach_formation(span: dict[str, Any], tasks: list[dict[str, Any]], task_policy: Any) -> None:
-    block = (span.get("reconstruction") or {}).get("semantic_block_id")
-    start, end = span.get("start"), span.get("end")
+    reconstruction = span.get("reconstruction") or {}
+    if reconstruction.get("status") != "recorded":
+        return
+    block = reconstruction.get("semantic_block_id")
+    start, end = reconstruction.get("block_start"), reconstruction.get("block_end")
     matches = []
     for task in tasks:
         targets = task.get("target_spans") or []
         if isinstance(targets, str):
             continue
-        if any(_exact_span(target, block, start, end) for target in targets):
+        if any(_contains_span(target, block, start, end) for target in targets):
             matches.append(task)
+    if not matches:
+        return
     if len(matches) != 1:
+        span["formation"] = {"status": "conflict", "task_ids": [task.get("task_id") for task in matches]}
         return
     task = matches[0]
     span["formation"] = _recorded({
         "task_id": task.get("task_id"),
         "phase": task.get("phase"),
         "selectable_range": {"block_id": block, "start": start, "end": end},
+        "task_target_spans": task.get("target_spans"),
+        "link": "exact" if any(_exact_span(target, block, start, end) for target in (task.get("target_spans") or [])) else "contained",
         "context_only_block_ids": [],
         "task_policy": task_policy,
         "selectable": task.get("status") not in {"not_selectable", "excluded"},
@@ -266,9 +314,66 @@ def _objects_for_span(span: dict[str, Any], objects: list[dict[str, Any]]) -> li
     return found
 
 
+def _fragment_text(fragments: Mapping[str, Any], mapping: list[Any]) -> tuple[str | None, list[dict[str, Any]], Any, Any]:
+    """Exact slices in mapping order. A missing fragment or offset is not guessed."""
+    parts: list[str] = []
+    ranges: list[dict[str, Any]] = []
+    page = None
+    locator = None
+    for item in mapping:
+        if not isinstance(item, dict):
+            return None, [], None, None
+        if item.get("kind") == "join_separator":
+            if not isinstance(item.get("text"), str):
+                return None, [], None, None
+            parts.append(item["text"])
+            continue
+        fragment_id = item.get("fragment_id")
+        fragment = fragments.get(str(fragment_id)) if fragment_id is not None else None
+        raw = fragment.get("raw_text") if isinstance(fragment, dict) else None
+        lo, hi = item.get("raw_start"), item.get("raw_end")
+        if not isinstance(raw, str) or type(lo) is not int or type(hi) is not int or not 0 <= lo < hi <= len(raw):
+            return None, [], None, None
+        parts.append(raw[lo:hi])
+        ranges.append({"fragment_id": str(fragment_id), "start": lo, "end": hi})
+        if page is None:
+            page = item.get("source_page") if item.get("source_page") is not None else fragment.get("source_page")
+            locator = fragment.get("source_locator")
+    if not ranges:
+        return None, [], None, None
+    return "".join(parts), ranges, page, locator
+
+
+def _review_stage(obj: Mapping[str, Any], admission: Mapping[str, Any], register: Mapping[str, Any]) -> dict[str, Any]:
+    gate = admission.get("gate_result")
+    decision = (obj.get("governance") or {}).get("validation_status") or None
+    status = register.get("status") or None
+    if gate not in {"allowed", "blocked"} and not status and not decision:
+        return _unknown_stage()
+    return _recorded({
+        "kind": "review_queue_projection",
+        "shown_as_review_candidate": True if gate == "allowed" else False if gate == "blocked" else None,
+        "review_status": status,
+        "review_decision": decision,
+        "review_decision_status": "recorded" if decision else "not_recorded",
+        "evidence_kind": "review_queue_projection_from_stored_admission_and_register",
+    })
+
+
+def _validation_stage(validation: Any) -> dict[str, Any]:
+    if validation in (None, ""):
+        return _unknown_stage()
+    return _recorded({
+        "validator_result": "accepted" if validation == "passed" else validation,
+        "reason_code": None,
+        "finding": None,
+        "evidence_kind": "stored_proposal_validation_not_a_span_finding",
+    })
+
+
 def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[str, Any],
                          objects: list[dict[str, Any]] | None) -> dict[str, Any]:
-    """Project stored envelope evidence. Absent stages stay unknown."""
+    """Join recorded fragments, mappings, proposals and objects. Do not invent a link."""
     replay = envelope.get("semantic_replay") if isinstance(envelope.get("semantic_replay"), dict) else {}
     components = (replay.get("identity") or {}).get("components") if isinstance(replay.get("identity"), dict) else {}
     components = components if isinstance(components, dict) else {}
@@ -293,115 +398,151 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
             identity["model"] = diagnostic.get("model")
         if attempt.get("attempt_id") and not identity["attempt_id"]:
             identity["attempt_id"] = attempt.get("attempt_id")
+    modes = []
+    for obj in objects or []:
+        semantic = (obj.get("metadata") or {}).get("semantic_passage") or {}
+        admission = (obj.get("metadata") or {}).get("admission") or {}
+        mode = None
+        if isinstance(semantic, dict):
+            mode = semantic.get("formation_mode") or admission.get("field_formation_mode")
+        if mode:
+            modes.append(mode)
+    if len(set(modes)) == 1:
+        identity["passage_formation_mode"] = modes[0]
     proposal = replay.get("proposal") if isinstance(replay.get("proposal"), dict) else {}
     validation = replay.get("validation")
-    spans: list[dict[str, Any]] = []
+    fragments: dict[str, Any] = {}
+    for run in runs:
+        for fragment in run.get("source_fragments") or []:
+            if fragment.get("fragment_id") not in (None, ""):
+                fragments[str(fragment["fragment_id"])] = fragment
+    by_block: dict[tuple[Any, Any, Any], dict[str, Any]] = {}
+
+    def block_bucket(block_id: Any, start: Any, end: Any) -> dict[str, Any]:
+        key = (block_id, start, end)
+        return by_block.setdefault(key, {"proposals": [], "assessments": [], "objects": []})
+
     for raw in proposal.get("objects") or []:
         if not isinstance(raw, dict):
             continue
         for item in raw.get("spans") or []:
-            if not isinstance(item, dict):
-                continue
-            span = _span_shell(
-                fragment_ids=[], start=item.get("start"), end=item.get("end"),
-                raw_text=None, clean_text=None, page=None, locator=None,
-                section_path=raw.get("section_path"), block_id=item.get("block_id"),
-                block_start=item.get("start"), block_end=item.get("end"))
-            span["provider"] = _recorded({
-                "provider_call_id": None,
+            if isinstance(item, dict):
+                block_bucket(item.get("block_id"), item.get("start"), item.get("end"))["proposals"].append(raw)
+    for raw in proposal.get("source_assessments") or []:
+        item = raw.get("span") if isinstance(raw, dict) else None
+        if isinstance(item, dict):
+            block_bucket(item.get("block_id"), item.get("start"), item.get("end"))["assessments"].append(raw)
+    for obj in objects or []:
+        semantic = (obj.get("metadata") or {}).get("semantic_passage") or {}
+        for item in semantic.get("spans") or []:
+            if isinstance(item, dict):
+                block_bucket(item.get("block_id"), item.get("start"), item.get("end"))["objects"].append(obj)
+        if not semantic.get("spans") and semantic.get("source_mapping"):
+            block_bucket(None, None, None)["objects"].append(obj)
+
+    tasks = provider.get("tasks") if isinstance(provider.get("tasks"), list) else []
+    call_id = (provider.get("response") or {}).get("id") if isinstance(provider.get("response"), dict) else None
+    spans: list[dict[str, Any]] = []
+    referenced: set[str] = set()
+
+    def provider_stage(proposals: list[dict[str, Any]], assessments: list[dict[str, Any]]) -> dict[str, Any]:
+        if len(proposals) == 1 and not assessments:
+            raw = proposals[0]
+            return _recorded({
+                "provider_call_id": call_id,
                 "selected": True,
                 "proposed_object_type": raw.get("proposed_object_type"),
                 "source_assessment_role": None,
                 "proposal_ref": "semantic_replay.proposal.objects",
             })
-            if validation not in (None, ""):
-                span["validation"] = _recorded({
-                    "validator_result": "accepted" if validation == "passed" else validation,
-                    "reason_code": None,
-                    "finding": None,
-                })
-            spans.append(span)
-    for raw in proposal.get("source_assessments") or []:
-        if not isinstance(raw, dict) or not isinstance(raw.get("span"), dict):
-            continue
-        item = raw["span"]
+        if len(assessments) == 1 and not proposals:
+            raw = assessments[0]
+            return _recorded({
+                "provider_call_id": call_id,
+                "selected": False,
+                "proposed_object_type": None,
+                "source_assessment_role": raw.get("role"),
+                "proposal_ref": "semantic_replay.proposal.source_assessments",
+            })
+        if proposals or assessments:
+            return {"status": "conflict", "proposal_count": len(proposals), "assessment_count": len(assessments)}
+        return _unknown_stage()
+
+    seen_objects: set[int] = set()
+    for key, bucket in by_block.items():
+        obj = bucket["objects"][0] if len(bucket["objects"]) == 1 else None
+        if len(bucket["objects"]) > 1:
+            obj = None
+        semantic = (obj.get("metadata") or {}).get("semantic_passage") or {} if obj else {}
+        mapping = list(semantic.get("source_mapping") or [])
+        text, ranges, page, locator = _fragment_text(fragments, mapping) if mapping else (None, [], None, None)
+        for item in ranges:
+            referenced.add(item["fragment_id"])
+        block_id, start, end = key
+        if obj is not None:
+            seen_objects.add(id(obj))
+        section = None
+        if bucket["proposals"]:
+            section = bucket["proposals"][0].get("section_path")
+        if section is None and obj is not None:
+            section = (obj.get("metadata") or {}).get("section_path")
         span = _span_shell(
-            fragment_ids=[], start=item.get("start"), end=item.get("end"),
-            raw_text=None, clean_text=None, page=None, locator=None,
-            section_path=None, block_id=item.get("block_id"),
-            block_start=item.get("start"), block_end=item.get("end"))
-        span["provider"] = _recorded({
-            "provider_call_id": None,
-            "selected": False,
-            "proposed_object_type": None,
-            "source_assessment_role": raw.get("role"),
-            "proposal_ref": "semantic_replay.proposal.source_assessments",
-        })
-        if validation not in (None, ""):
-            span["validation"] = _recorded({
-                "validator_result": "accepted" if validation == "passed" else validation,
-                "reason_code": None,
-                "finding": None,
+            fragment_ids=[item["fragment_id"] for item in ranges],
+            start=ranges[0]["start"] if len(ranges) == 1 else None,
+            end=ranges[0]["end"] if len(ranges) == 1 else None,
+            raw_text=text, clean_text=text, page=page, locator=locator,
+            section_path=section if isinstance(section, list) else None,
+            block_id=block_id, block_start=start, block_end=end)
+        if len(ranges) != 1:
+            span["fragments"] = ranges
+        elif ranges:
+            span["fragments"] = ranges
+        decided = provider_stage(bucket["proposals"], bucket["assessments"])
+        if decided.get("status") != "unknown":
+            span["provider"] = decided
+            span["validation"] = _validation_stage(validation)
+        if obj is not None and len(bucket["objects"]) == 1:
+            admission = (obj.get("metadata") or {}).get("admission") or {}
+            register = (obj.get("metadata") or {}).get("passage_register") or {}
+            proposed = obj.get("proposed_object_type")
+            if proposed in (None, "") and len(bucket["proposals"]) == 1:
+                proposed = bucket["proposals"][0].get("proposed_object_type")
+            span["transformation"] = _recorded({
+                "object_id": obj.get("object_id"),
+                "object_version": obj.get("object_version"),
+                "canonical_object_hash": obj.get("canonical_hash"),
+                "proposed_object_type": proposed,
             })
-        role = raw.get("role")
-        if role in PASSAGE_DISPOSITIONS or role == "unresolved":
-            disposition = "unresolved" if role == "unresolved" else None
-        else:
-            disposition = None
-        span["source_accountability"] = _recorded({
-            "source_role": role,
-            "passage_disposition": disposition,
-        })
-        spans.append(span)
-    tasks = provider.get("tasks") if isinstance(provider.get("tasks"), list) else []
-    for span in spans:
-        _attach_formation(span, tasks, identity.get("task_policy"))
-        if objects is None:
-            continue
-        matches = _objects_for_span(span, objects)
-        if len(matches) != 1:
-            continue
-        obj = matches[0]
-        admission = (obj.get("metadata") or {}).get("admission") or {}
-        register = (obj.get("metadata") or {}).get("passage_register") or {}
-        span["transformation"] = _recorded({
-            "object_id": obj.get("object_id"),
-            "object_version": obj.get("object_version"),
-            "canonical_object_hash": obj.get("canonical_hash"),
-            "proposed_object_type": obj.get("proposed_object_type"),
-        })
-        if admission:
-            span["admission"] = _recorded({
-                "gate_result": admission.get("gate_result"),
-                "reason_codes": list(admission.get("reason_codes") or []),
-            })
-            gate = admission.get("gate_result")
-            if gate in {"allowed", "blocked"}:
-                span["review_projection"] = _recorded({
-                    "shown_as_review_candidate": gate == "allowed",
-                    "review_status": register.get("status"),
-                    "review_decision": None,
-                    "evidence_kind": "derived_from_stored_admission_not_a_review_log",
+            if admission:
+                span["admission"] = _recorded({
+                    "gate_result": admission.get("gate_result"),
+                    "reason_codes": list(admission.get("reason_codes") or []),
                 })
-        status = register.get("status")
-        if status in PASSAGE_DISPOSITIONS:
-            current = span["source_accountability"]
-            role = current.get("source_role") if current.get("status") == "recorded" else None
-            span["source_accountability"] = _recorded({
-                "source_role": role,
-                "passage_disposition": status,
-            })
-    for run in runs:
-        for fragment in run.get("source_fragments") or []:
-            text = fragment.get("raw_text")
-            if not isinstance(text, str) or fragment.get("fragment_id") in (None, ""):
-                continue
-            spans.append(_span_shell(
-                fragment_ids=[str(fragment["fragment_id"])], start=0, end=len(text),
-                raw_text=text, clean_text=fragment.get("clean_text"),
-                page=fragment.get("source_page"), locator=fragment.get("source_locator"),
-                section_path=fragment.get("section_path"), block_id=None,
-                block_start=None, block_end=None))
+            span["review_projection"] = _review_stage(obj, admission, register)
+            role = None
+            if span["provider"].get("status") == "recorded":
+                role = span["provider"].get("source_assessment_role")
+            disposition = register.get("status") if register.get("status") in PASSAGE_DISPOSITIONS else None
+            if disposition or role:
+                span["source_accountability"] = _recorded({
+                    "source_role": role,
+                    "passage_disposition": disposition,
+                })
+        if len(bucket["objects"]) > 1:
+            span["transformation"] = {"status": "conflict", "object_ids": [item.get("object_id") for item in bucket["objects"]]}
+        _attach_formation(span, tasks, identity.get("task_policy"))
+        spans.append(span)
+
+    for fragment_id, fragment in fragments.items():
+        if fragment_id in referenced or not isinstance(fragment.get("raw_text"), str):
+            continue
+        text = fragment["raw_text"]
+        spans.append(_span_shell(
+            fragment_ids=[fragment_id], start=0, end=len(text),
+            raw_text=text, clean_text=fragment.get("clean_text"),
+            page=fragment.get("source_page"), locator=fragment.get("source_locator"),
+            section_path=fragment.get("section_path") if isinstance(fragment.get("section_path"), list) else None,
+            block_id=None, block_start=None, block_end=None))
     completeness = "unavailable" if not spans else "partial"
     if omitted:
         completeness = "partial"
@@ -411,6 +552,7 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
         "omitted_evidence": sorted(set(omitted)),
         "identity": identity,
         "spans": spans,
+        "identity_conflicts": ["passage_formation_mode"] if len(set(modes)) > 1 else [],
         "projection": "stored_evidence_join_not_a_new_authority",
     }
 
@@ -424,6 +566,102 @@ def load_evidence(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _objects_from_export(lineage: list[dict[str, Any]], coverage: list[dict[str, Any]],
+                         findings: list[dict[str, Any]], stages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Rebuild the recorded object join from export tables. Row order is mapping order."""
+    objects: dict[str, dict[str, Any]] = {}
+
+    def ensure(object_id: Any) -> dict[str, Any] | None:
+        if object_id in (None, ""):
+            return None
+        return objects.setdefault(str(object_id), {
+            "object_id": str(object_id),
+            "object_version": None,
+            "proposed_object_type": None,
+            "metadata": {
+                "semantic_passage": {"spans": [], "source_mapping": []},
+                "admission": {},
+                "passage_register": {},
+            },
+            "content": {},
+            "governance": {},
+        })
+
+    for row in lineage:
+        current = ensure(row.get("object_id"))
+        if current is None:
+            continue
+        if row.get("object_version") not in (None, ""):
+            current["object_version"] = row.get("object_version")
+        semantic = current["metadata"]["semantic_passage"]
+        relation = row.get("relation")
+        if relation == "selected_raw_fragment_range":
+            semantic["source_mapping"].append({
+                "fragment_id": row.get("target_id"),
+                "raw_start": row.get("start"),
+                "raw_end": row.get("end"),
+                "source_page": row.get("page"),
+                "bbox": row.get("bbox"),
+            })
+        elif relation == "inserted_join_separator":
+            semantic["source_mapping"].append({
+                "kind": "join_separator",
+                "text": row.get("text"),
+                "left_fragment_id": row.get("left_fragment_id"),
+                "right_fragment_id": row.get("right_fragment_id"),
+            })
+        elif relation == "selected_block_range":
+            semantic["spans"].append({
+                "block_id": row.get("target_id"),
+                "start": row.get("start"),
+                "end": row.get("end"),
+            })
+    for row in coverage:
+        current = ensure(row.get("object_id"))
+        if current is None:
+            continue
+        semantic = current["metadata"]["semantic_passage"]
+        if row.get("formation_mode"):
+            semantic["formation_mode"] = row.get("formation_mode")
+        if row.get("register_status"):
+            current["metadata"]["passage_register"]["status"] = row.get("register_status")
+        if row.get("gate_result"):
+            current["metadata"]["admission"]["gate_result"] = row.get("gate_result")
+        if row.get("selection_origin"):
+            semantic["selection_origin"] = row.get("selection_origin")
+        block = {"block_id": row.get("block_id"), "start": row.get("start"), "end": row.get("end")}
+        if block["block_id"] and not any(_exact_span(item, block["block_id"], block["start"], block["end"]) for item in semantic["spans"]):
+            semantic["spans"].append(block)
+    for row in findings:
+        current = ensure(row.get("object_id"))
+        if current is None:
+            continue
+        stored = current["metadata"]["admission"]
+        admission = row.get("admission") if isinstance(row.get("admission"), dict) else {}
+        for key, value in admission.items():
+            if key not in stored or stored.get(key) in (None, ""):
+                stored[key] = value
+        if admission.get("field_formation_mode") and not current["metadata"]["semantic_passage"].get("formation_mode"):
+            current["metadata"]["semantic_passage"]["formation_mode"] = admission.get("field_formation_mode")
+        if row.get("gate_result") and not stored.get("gate_result"):
+            stored["gate_result"] = row.get("gate_result")
+        reason = row.get("reason_code")
+        if reason:
+            codes = stored.setdefault("reason_codes", [])
+            if reason not in codes:
+                codes.append(reason)
+    for row in stages:
+        current = ensure(row.get("object_id"))
+        if current is None:
+            continue
+        if row.get("stage") == "current_object_raw_text" and isinstance(row.get("text"), str):
+            current["content"]["raw_text"] = row.get("text")
+        if row.get("section_path") and not current["metadata"].get("section_path"):
+            section = row.get("section_path")
+            current["metadata"]["section_path"] = section if isinstance(section, list) else None
+    return list(objects.values())
+
+
 def evidence_from_zip(path: Path) -> dict[str, Any]:
     with ZipFile(path) as archive:
         revision_rows = _read_csv(archive, "revision.csv")
@@ -433,6 +671,11 @@ def evidence_from_zip(path: Path) -> dict[str, Any]:
         attempts = _read_csv(archive, "attempt_diagnostics.csv")
         runs = _read_csv(archive, "runs.csv")
         manifest = _read_csv(archive, "manifest.csv")
+        calls = _read_csv(archive, "model_calls.csv")
+        lineage = _read_csv(archive, "lineage.csv")
+        coverage = _read_csv(archive, "coverage.csv")
+        findings = _read_csv(archive, "validation_findings.csv")
+        stages = _read_csv(archive, "source_stages.csv")
     revision = revision_rows[0] if revision_rows else {}
     proposal_row = proposals[0] if proposals else {}
     proposal = proposal_row.get("proposal") if isinstance(proposal_row.get("proposal"), dict) else {}
@@ -442,10 +685,10 @@ def evidence_from_zip(path: Path) -> dict[str, Any]:
     for row in attempts:
         diagnostic = row.get("diagnostic") if isinstance(row.get("diagnostic"), dict) else {}
         omitted.extend(str(item) for item in (diagnostic.get("omitted_evidence") or []))
-        attempt_rows.append({
-            "attempt_id": row.get("attempt_id"),
-            "diagnostic": diagnostic,
-        })
+        attempt_rows.append({"attempt_id": row.get("attempt_id"), "diagnostic": diagnostic})
+    commits = [row.get("deployed_commit") for row in calls if row.get("deployed_commit")]
+    call_ids = [row.get("call_id") for row in calls if row.get("call_id")]
+    deployed = commits[0] if len(set(commits)) == 1 else None
     envelope = {
         "semantic_replay": {
             "identity": identity if isinstance(identity, dict) else {},
@@ -460,7 +703,8 @@ def evidence_from_zip(path: Path) -> dict[str, Any]:
                     "phase": task.get("phase"),
                     "status": task.get("status"),
                 } for task in tasks],
-                "deployed_commit": None,
+                "deployed_commit": deployed,
+                "response": {"id": call_ids[0]} if len(set(call_ids)) == 1 else {},
             },
         },
         "quality_processing_runs": [{
@@ -479,12 +723,14 @@ def evidence_from_zip(path: Path) -> dict[str, Any]:
         snapshot_id=str(revision.get("snapshot_id") or ""),
         revision=str(revision.get("objects_revision") or revision.get("revision_id") or ""),
         envelope=envelope,
-        objects=None,
+        objects=_objects_from_export(lineage, coverage, findings, stages),
     )
-    partial_datasets = [row.get("dataset") for row in manifest if row.get("availability") in {"partial", "not_recorded", "not_exported"}]
-    if partial_datasets or omitted or evidence["evidence_completeness"] != "complete":
+    if omitted or any(row.get("availability") in {"partial", "not_recorded", "not_exported"} for row in manifest):
         evidence["evidence_completeness"] = "partial" if evidence["spans"] or omitted else "unavailable"
     evidence["omitted_evidence"] = sorted(set([*evidence["omitted_evidence"], *omitted]))
+    if len(set(commits)) > 1:
+        evidence["identity"]["deployed_commit"] = None
+        evidence.setdefault("identity_conflicts", []).append("deployed_commit")
     return evidence
 
 
@@ -497,17 +743,30 @@ def load_gold(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _identity_mismatch(evidence: Mapping[str, Any], gold: Mapping[str, Any]) -> list[str]:
+def _identity_gap(evidence: Mapping[str, Any], gold: Mapping[str, Any]) -> tuple[list[str], list[str]]:
     expected = gold.get("expected_identity") or {}
     recorded = evidence.get("identity") or {}
-    mismatched = []
+    missing, mismatched = [], []
     for key, value in expected.items():
-        if key not in IDENTITY_FIELDS or recorded.get(key) != value:
+        if key not in IDENTITY_FIELDS:
             mismatched.append(key)
-    return mismatched
+            continue
+        actual = recorded.get(key)
+        if actual in (None, ""):
+            missing.append(key)
+        elif actual != value:
+            mismatched.append(key)
+    return missing, mismatched
 
 
 def _case_span_id(case: Mapping[str, Any]) -> str | None:
+    fragments = case.get("fragments")
+    if isinstance(fragments, list) and fragments:
+        return source_span_id(
+            source_sha256=str(case.get("source_sha256") or ""),
+            source_reconstruction_hash=str(case.get("source_reconstruction_hash") or ""),
+            fragments=fragments,
+        )
     return source_span_id(
         source_sha256=str(case.get("source_sha256") or ""),
         source_reconstruction_hash=str(case.get("source_reconstruction_hash") or ""),
@@ -518,6 +777,8 @@ def _case_span_id(case: Mapping[str, Any]) -> str | None:
 
 
 def _provider_judgement(case: Mapping[str, Any], provider: Mapping[str, Any]) -> str:
+    if provider.get("status") == "conflict":
+        return "conflict"
     if provider.get("status") != "recorded":
         return "unknown"
     expected_type = case.get("expected_object_type")
@@ -556,6 +817,8 @@ def _stage_judgement(stage: str, case: Mapping[str, Any], span: Mapping[str, Any
         return "pass" if (span.get("reconstruction") or {}).get("status") == "recorded" else "unknown"
     if stage == "formation_target":
         formation = span.get("formation") or {}
+        if formation.get("status") == "conflict":
+            return "conflict"
         if formation.get("status") != "recorded":
             return "unknown"
         return "fail" if formation.get("selectable") is False else "pass"
@@ -599,17 +862,20 @@ def _stage_judgement(stage: str, case: Mapping[str, Any], span: Mapping[str, Any
         return "pass"
     if stage == "review_projection":
         review = span.get("review_projection") or {}
+        if review.get("status") == "conflict":
+            return "conflict"
         if review.get("status") != "recorded":
             return "unknown"
         expected = case.get("expected_review_visible")
         if expected is not None and review.get("shown_as_review_candidate") is not expected:
             return "fail"
         return "pass"
+    if "expected_blocks_publication" not in case:
+        return "skip"
     publication = span.get("publication_effect") or {}
     if publication.get("status") != "recorded":
         return "unknown"
-    expected = case.get("expected_blocks_publication")
-    if expected is not None and publication.get("blocks_publication") is not expected:
+    if publication.get("blocks_publication") is not case.get("expected_blocks_publication"):
         return "fail"
     return "pass"
 
@@ -621,6 +887,12 @@ def _grade_span(case: Mapping[str, Any], span: Mapping[str, Any]) -> dict[str, A
     for stage in STAGES:
         judgement = _stage_judgement(stage, case, span)
         judgements[stage] = judgement
+        if judgement == "skip":
+            continue
+        if judgement == "conflict":
+            first = stage
+            verdict = "CONFLICT"
+            break
         if judgement == "fail":
             first = stage
             verdict = "FAIL"
@@ -637,15 +909,30 @@ def _grade_span(case: Mapping[str, Any], span: Mapping[str, Any]) -> dict[str, A
     }
 
 
+def _ranges_of(span: Mapping[str, Any]) -> list[dict[str, Any]] | None:
+    fragments = span.get("fragments")
+    if isinstance(fragments, list) and fragments:
+        return fragments
+    return None
+
+
 def _public_span(evidence: Mapping[str, Any], span: Mapping[str, Any]) -> dict[str, Any]:
     identity = evidence.get("identity") or {}
-    span_id = source_span_id(
-        source_sha256=str(identity.get("source_sha256") or ""),
-        source_reconstruction_hash=str(identity.get("source_reconstruction_hash") or ""),
-        source_fragment_ids=list(span.get("source_fragment_ids") or []),
-        start=span.get("start") if type(span.get("start")) is int else -1,
-        end=span.get("end") if type(span.get("end")) is int else -1,
-    )
+    ranges = _ranges_of(span)
+    if ranges is None:
+        span_id = source_span_id(
+            source_sha256=str(identity.get("source_sha256") or ""),
+            source_reconstruction_hash=str(identity.get("source_reconstruction_hash") or ""),
+            source_fragment_ids=list(span.get("source_fragment_ids") or []),
+            start=span.get("start") if type(span.get("start")) is int else None,
+            end=span.get("end") if type(span.get("end")) is int else None,
+        )
+    else:
+        span_id = source_span_id(
+            source_sha256=str(identity.get("source_sha256") or ""),
+            source_reconstruction_hash=str(identity.get("source_reconstruction_hash") or ""),
+            fragments=ranges,
+        )
     return {
         "trace_version": TRACE_VERSION,
         "source_span_id": span_id,
@@ -665,13 +952,34 @@ def _public_span(evidence: Mapping[str, Any], span: Mapping[str, Any]) -> dict[s
     }
 
 
+def _merge_stage(left: Mapping[str, Any] | None, right: Mapping[str, Any] | None) -> dict[str, Any]:
+    if not left or left.get("status") == "unknown":
+        return dict(right or _unknown_stage())
+    if not right or right.get("status") == "unknown":
+        return dict(left)
+    left_payload = {key: value for key, value in left.items() if key != "status"}
+    right_payload = {key: value for key, value in right.items() if key != "status"}
+    if left.get("status") == "conflict" or right.get("status") == "conflict" or left_payload != right_payload:
+        return {"status": "conflict", "observed": [dict(left), dict(right)]}
+    return dict(left)
+
+
+def _merge_public(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(left)
+    for key in ("source", "reconstruction", "formation", "provider", "validation", "transformation",
+                "admission", "source_accountability", "review_projection", "publication_effect"):
+        merged[key] = _merge_stage(left.get(key), right.get(key))
+    return merged
+
+
 def _index_spans(evidence: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
-    indexed = {}
+    indexed: dict[str, dict[str, Any]] = {}
     for span in evidence.get("spans") or []:
         public = _public_span(evidence, span)
         span_id = public.get("source_span_id")
-        if span_id and span_id not in indexed:
-            indexed[span_id] = public
+        if not span_id:
+            continue
+        indexed[span_id] = _merge_public(indexed[span_id], public) if span_id in indexed else public
     return indexed
 
 
@@ -704,15 +1012,17 @@ def trace(evidence: Mapping[str, Any], gold: Mapping[str, Any] | None = None) ->
         summary["records_without_grades"] = True
         return {"records": [*records, *unindexed], "summary": summary, "divergences": divergences}
 
-    mismatched = _identity_mismatch(evidence, gold)
-    if mismatched:
-        summary["comparison"] = "TRACE_IDENTITY_MISMATCH"
+    missing, mismatched = _identity_gap(evidence, gold)
+    if mismatched or missing:
+        comparison = "TRACE_IDENTITY_MISMATCH" if mismatched else "IDENTITY_UNAVAILABLE"
+        summary["comparison"] = comparison
         summary["mismatched_identity_fields"] = mismatched
+        summary["unavailable_identity_fields"] = missing
         for case in gold.get("cases") or []:
             divergences.append({
                 "case_id": case.get("case_id"),
                 "source_span_id": _case_span_id(case),
-                "verdict": "TRACE_IDENTITY_MISMATCH",
+                "verdict": comparison,
                 "first_divergence_stage": "identity",
                 "divergence_class": "identity",
                 "expected_function": case.get("expected_source_function"),
@@ -720,7 +1030,7 @@ def trace(evidence: Mapping[str, Any], gold: Mapping[str, Any] | None = None) ->
                 "actual_provider_decision": None,
                 "actual_proposed_object_type": None,
             })
-        summary["verdicts"] = {"TRACE_IDENTITY_MISMATCH": len(divergences)}
+        summary["verdicts"] = {comparison: len(divergences)}
         summary["first_divergence_counts"] = {"identity": len(divergences)}
         summary["divergence_classes"] = {"identity": len(divergences)}
         return {"records": [*records, *unindexed], "summary": summary, "divergences": divergences}
@@ -847,6 +1157,7 @@ def compare_traces(base: Mapping[str, Any], candidate: Mapping[str, Any]) -> dic
             rows[span_id] = {
                 "proposed_object_type": provider.get("proposed_object_type") if provider.get("status") == "recorded" else UNKNOWN,
                 "selected": provider.get("selected") if provider.get("status") == "recorded" else UNKNOWN,
+                "source_assessment_role": provider.get("source_assessment_role") if provider.get("status") == "recorded" else UNKNOWN,
                 "object_id": formed.get("object_id") if formed.get("status") == "recorded" else UNKNOWN,
                 "object_type": formed.get("proposed_object_type") if formed.get("status") == "recorded" else UNKNOWN,
                 "first_divergence_stage": divergence.get("stage"),
@@ -862,7 +1173,7 @@ def compare_traces(base: Mapping[str, Any], candidate: Mapping[str, Any]) -> dic
         "objects_added": [span_id for span_id in shared if before[span_id]["object_id"] in (None, "", UNKNOWN) and after[span_id]["object_id"] not in (None, "", UNKNOWN)],
         "objects_removed": [span_id for span_id in shared if before[span_id]["object_id"] not in (None, "", UNKNOWN) and after[span_id]["object_id"] in (None, "", UNKNOWN)],
         "object_type_changed": [span_id for span_id in shared if before[span_id]["object_type"] != after[span_id]["object_type"]],
-        "source_role_changed": [span_id for span_id in shared if before[span_id]["proposed_object_type"] != after[span_id]["proposed_object_type"] or before[span_id]["selected"] != after[span_id]["selected"]],
+        "source_role_changed": [span_id for span_id in shared if before[span_id]["source_assessment_role"] != after[span_id]["source_assessment_role"]],
         "first_divergence_changed": [span_id for span_id in shared if before[span_id]["first_divergence_stage"] != after[span_id]["first_divergence_stage"] or before[span_id]["verdict"] != after[span_id]["verdict"]],
         "spans_only_in_base": sorted(set(before) - set(after)),
         "spans_only_in_candidate": sorted(set(after) - set(before)),
@@ -892,8 +1203,9 @@ def rows_for_export(*, snapshot_id: str, revision: str, envelope: Mapping[str, A
     else:
         availability = "partial" if evidence["evidence_completeness"] != "complete" else "derived"
     limitation = (
-        "Derived join of recorded evidence by exact block span or exact fragment identity. "
-        "Not a source-span identity when fragment ids are absent. Missing stages stay UNKNOWN. "
+        "Derived join of recorded source_mapping and lineage onto one source span. "
+        "Same span ids merge; conflicting recorded stages stay conflict. "
+        "Missing stages stay UNKNOWN. Text is not a join key. "
         "Not approval, publication, or clinical completeness."
     )
     return rows, availability, limitation

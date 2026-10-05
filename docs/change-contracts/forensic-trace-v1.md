@@ -2,7 +2,7 @@
 
 Change class: B
 Promise: A named reviewer can project one recorded source span through extraction, reconstruction, formation, provider decision, validation, transformation, admission and review, and can see the first stage that diverges from an explicit gold case.
-Proof: tests/test_forensic_trace_v1.py. The known Smetten background sentence stays a RED diagnostic baseline. No provider call, database write, or workflow mutation.
+Proof: tests/test_forensic_trace_v1.py, including a processing-evidence ZIP written to disk and reloaded by the CLI. The known Smetten background sentence stays a RED diagnostic baseline. No provider call, database write, or workflow mutation.
 Touches lifecycle invariants: no
 Rewrite risk: none
 

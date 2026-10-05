@@ -33,7 +33,7 @@ SCHEMAS = {
     "run_candidates": ("run_id", "object_id", "object_version", "canonical_hash", "origin", "structural"),
     "semantic_proposals": ("proposal_hash", "identity", "validation", "semantic_execution", "origin_execution", "replay_from_proposal_hash", "proposal", "evidence_kind"),
     "source_stages": ("object_id", "object_version", "stage", "text", "section_path", "source_checksum", "text_status"),
-    "coverage": ("object_id", "object_version", "block_id", "start", "end", "selection_origin", "register_status", "gate_result", "model_decision_status", "offset_text_status"),
+    "coverage": ("object_id", "object_version", "block_id", "start", "end", "selection_origin", "register_status", "gate_result", "model_decision_status", "offset_text_status", "formation_mode"),
     "recommendation_coverage": ("object_id", "object_version", "contract_version", "detection_completeness", "block_id", "start", "end", "text", "status", "scope_cue"),
     "proposal_fields": ("object_id", "object_version", "field", "value", "value_status", "stage", "producer_status", "contract_version", "source_span", "missing_reason"),
     "validation_findings": ("object_id", "object_version", "gate_result", "reason_code", "evidence_kind", "admission", "rule_execution_trace_status"),
@@ -182,7 +182,8 @@ def processing_evidence_tables(
             add("coverage", **keys, **{k: span.get(k) for k in ("block_id", "start", "end")},
                 selection_origin=row["selection_origin"], register_status=row["passage_register"].get("status"),
                 gate_result=admission.get("gate_result"), model_decision_status="not_recorded",
-                offset_text_status="original_block_text_not_recorded")
+                offset_text_status="original_block_text_not_recorded",
+                formation_mode=semantic.get("formation_mode") or None)
             if span.get("block_id"):
                 add("lineage", **keys, relation="selected_block_range", target_id=span["block_id"],
                     start=span.get("start"), end=span.get("end"))

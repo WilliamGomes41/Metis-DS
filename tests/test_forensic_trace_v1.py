@@ -257,3 +257,173 @@ def test_module_does_not_import_workflow_or_provider_clients():
     text = (ROOT / "src/forensic_trace_v1.py").read_text(encoding="utf-8")
     for banned in ("operations_console", "psycopg", "httpx", "docling", "openai", "requests"):
         assert banned not in text
+
+
+def test_recorded_zip_roundtrip_joins_one_span_and_keeps_the_provider_divergence(tmp_path):
+    """The acceptance path is the real export ZIP, not the handwritten fixture."""
+    left = "  - Om de implementatie van de richtlijn te bevorderen"
+    right = "heeft de werkgroep vijf vragen voor de kennisquiz opgesteld. "
+    exact = left + " " + right
+    decoy = exact.strip()
+    json_text = '{"a": 1}'
+    envelope = {
+        "semantic_replay": {
+            "identity": {"components": {
+                "snapshot_id": "snapshot",
+                "source_sha256": "source-sha",
+                "source_blocks_hash": "reconstruction-sha",
+                "extractor_version": "parser-1",
+                "reconstruction_version": "reconstruction-1",
+                "semantic_contract_version": "source-bound-fields-v2",
+                "prompt_hash": "prompt",
+                "schema_hash": "schema",
+                "model_id": "model-1",
+            }},
+            "validation": "passed",
+            "proposal": {"objects": [{
+                "proposed_object_type": "explanation",
+                "spans": [{"block_id": "block-quiz", "start": 120, "end": 190}],
+            }]},
+            "provider_evidence": {
+                "version": "semantic-provider-evidence-v1",
+                "deployed_commit": "8007b11d1f662f0151551b6647280d21d0ae9603",
+                "task_policy": "bounded-formation-v1",
+                "response": {"id": "call-1", "status": "completed", "output_text": "{}"},
+                "tasks": [{
+                    "task_id": "task-wide", "phase": "initial", "status": "completed",
+                    "target_spans": [{"block_id": "block-quiz", "start": 0, "end": 500}],
+                }],
+            },
+        },
+        "quality_processing_runs": [{
+            "run_id": "run-1", "source_hash": "source-sha",
+            "source_fragments": [
+                {"fragment_id": "frag-a", "raw_text": left, "clean_text": left, "source_page": 2, "source_locator": "p2"},
+                {"fragment_id": "frag-b", "raw_text": right, "clean_text": right, "source_page": 2, "source_locator": "p2"},
+                {"fragment_id": "frag-decoy", "raw_text": decoy, "clean_text": decoy, "source_page": 9, "source_locator": "p9"},
+                {"fragment_id": "frag-json", "raw_text": json_text, "clean_text": json_text, "source_page": 1, "source_locator": "p1"},
+            ],
+        }],
+    }
+    objects = [{
+        "object_id": "obj-quiz",
+        "object_version": "1",
+        "object_type": "explanation",
+        "proposed_object_type": "explanation",
+        "content": {"clean_text": exact, "raw_text": exact},
+        "metadata": {
+            "semantic_passage": {
+                "selection_origin": "model_proposal",
+                "formation_mode": "semantic-source-bound-v3",
+                "spans": [{"block_id": "block-quiz", "start": 120, "end": 190}],
+                "source_mapping": [
+                    {"fragment_id": "frag-a", "raw_start": 0, "raw_end": len(left), "source_page": 2},
+                    {"kind": "join_separator", "text": " ", "left_fragment_id": "frag-a", "right_fragment_id": "frag-b"},
+                    {"fragment_id": "frag-b", "raw_start": 0, "raw_end": len(right), "source_page": 2},
+                ],
+            },
+            "admission": {
+                "gate_result": "allowed", "reason_codes": [],
+                "field_formation_mode": "semantic-source-bound-v3",
+            },
+            "passage_register": {"status": "selected_as_candidate"},
+        },
+    }]
+    payload = processing_evidence_zip(snapshot_id="snapshot", revision="rev", envelope=envelope, objects=objects)
+    path = tmp_path / "evidence.zip"
+    path.write_bytes(payload)
+    gold = {
+        "gold_version": "forensic-gold-v1",
+        "expected_identity": {
+            "passage_formation_mode": "semantic-source-bound-v3",
+            "deployed_commit": "8007b11d1f662f0151551b6647280d21d0ae9603",
+        },
+        "cases": [{
+            "case_id": "SMETTEN-BG-QUIZ",
+            "source_sha256": "source-sha",
+            "source_reconstruction_hash": "reconstruction-sha",
+            "fragments": [
+                {"fragment_id": "frag-a", "start": 0, "end": len(left)},
+                {"fragment_id": "frag-b", "start": 0, "end": len(right)},
+            ],
+            "exact_raw_text": exact,
+            "expected_source_function": "background",
+            "expected_answer_bearing": False,
+            "expected_object_type": None,
+        }],
+    }
+    gold_path = tmp_path / "gold.json"
+    gold_path.write_text(json.dumps(gold), encoding="utf-8")
+    output = tmp_path / "trace"
+    completed = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/trace_recorded_formation.py"),
+         str(path), "--gold", str(gold_path), "--output", str(output)],
+        check=False, capture_output=True, text=True)
+    assert completed.returncode == 0, completed.stderr
+    result = trace(load_evidence(path), gold)
+    row = result["divergences"][0]
+    assert row["verdict"] == "FAIL"
+    assert row["first_divergence_stage"] == "provider_decision"
+    assert row["divergence_class"] == "semantic"
+    record = next(item for item in result["records"] if item.get("expectation"))
+    assert record["source"]["raw_text"] == exact
+    assert record["source"]["raw_text"].startswith("  - ")
+    assert record["reconstruction"]["semantic_block_id"] == "block-quiz"
+    assert record["reconstruction"]["block_start"] == 120
+    assert record["formation"]["task_id"] == "task-wide"
+    assert record["formation"]["link"] == "contained"
+    assert record["provider"]["proposed_object_type"] == "explanation"
+    assert record["validation"]["validator_result"] == "accepted"
+    assert record["transformation"]["object_id"] == "obj-quiz"
+    assert record["admission"]["gate_result"] == "allowed"
+    assert record["review_projection"]["kind"] == "review_queue_projection"
+    assert record["review_projection"]["shown_as_review_candidate"] is True
+    assert record["review_projection"]["review_decision_status"] == "not_recorded"
+    assert result["summary"]["identity"]["deployed_commit"] == "8007b11d1f662f0151551b6647280d21d0ae9603"
+    assert result["summary"]["identity"]["passage_formation_mode"] == "semantic-source-bound-v3"
+    json_span = next(item for item in result["records"] if (item.get("source") or {}).get("raw_text") == json_text)
+    assert isinstance(json_span["source"]["raw_text"], str)
+    assert json_span["source_span_id"] != record["source_span_id"]
+
+
+def test_duplicate_span_evidence_merges_or_conflicts():
+    evidence = load_evidence(EVIDENCE)
+    other = deepcopy(evidence["spans"][0])
+    other["provider"] = {
+        "status": "recorded", "provider_call_id": "call-1", "selected": False,
+        "proposed_object_type": None, "source_assessment_role": "context",
+        "proposal_ref": "proposal.source_assessments[0]",
+    }
+    evidence["spans"].append(other)
+    result = trace(evidence, load_gold(GOLD))
+    assert result["summary"]["span_count"] == 2
+    assert result["divergences"][0]["verdict"] == "CONFLICT"
+    assert result["divergences"][0]["first_divergence_stage"] == "provider_decision"
+
+
+def test_background_to_context_is_a_source_role_change():
+    evidence = load_evidence(EVIDENCE)
+    gold = load_gold(GOLD)
+    base_evidence = deepcopy(evidence)
+    span = base_evidence["spans"][0]
+    span["provider"]["selected"] = False
+    span["provider"]["proposed_object_type"] = None
+    span["provider"]["source_assessment_role"] = "background"
+    span["transformation"]["object_id"] = None
+    span["transformation"]["proposed_object_type"] = None
+    candidate_evidence = deepcopy(base_evidence)
+    candidate_evidence["spans"][0]["provider"]["source_assessment_role"] = "context"
+    diff = compare_traces(trace(base_evidence, gold), trace(candidate_evidence, gold))
+    assert diff["source_role_changed"]
+    assert diff["objects_removed"] == []
+
+
+def test_missing_formation_mode_is_unavailable_not_a_false_mismatch():
+    evidence = load_evidence(EVIDENCE)
+    evidence["identity"]["passage_formation_mode"] = None
+    gold = load_gold(GOLD)
+    result = trace(evidence, gold)
+    assert result["summary"]["comparison"] == "IDENTITY_UNAVAILABLE"
+    assert result["summary"]["unavailable_identity_fields"] == ["passage_formation_mode"]
+    assert result["divergences"][0]["actual_proposed_object_type"] is None
+
