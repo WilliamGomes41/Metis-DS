@@ -19,11 +19,14 @@ def now() -> datetime:
 def _retry_budget_attempts(attempts):
     """Attempts that consume the failure/retry cap.
 
-    A successful formation resume is normal continuation work, not a failed
-    retry. Failed/interrupted resumes still consume the cap.
+    A successful formation resume with proven source-range progress is normal
+    continuation work, not a failed retry. Failed, interrupted, or no-progress
+    resumes still consume the cap.
     """
     return [attempt for attempt in attempts
-            if attempt.get("kind") != "resume" or attempt.get("state") != "succeeded"]
+            if attempt.get("kind") != "resume"
+            or attempt.get("state") != "succeeded"
+            or not attempt.get("formation_progress_made")]
 
 
 def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, clock: datetime, limits=None, kind="retry") -> tuple[dict, bool]:
