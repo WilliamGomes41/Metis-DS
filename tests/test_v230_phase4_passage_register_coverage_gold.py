@@ -355,7 +355,8 @@ def test_review_save_maps_suitability_onto_register(tmp_path: Path) -> None:
     live = {obj["object_id"]: obj for obj in console.snapshot_objects(receipt["snapshot_id"])}
     assert passage_register_of(live[adviseert["object_id"]]).get("status") == "selected_as_candidate"
     assert passage_register_of(live[condition["object_id"]]).get("status") == "used_as_context"
-    assert passage_register_of(live[calcium["object_id"]]).get("status") == "linked_as_support"
+    assert passage_register_of(live[calcium["object_id"]]).get("status") == "not_yet_assessed"
+    assert "proposed_support_without_confirmed_target" in passage_register_of(live[calcium["object_id"]]).get("reason_codes")
     assert passage_register_of(live[djg["object_id"]]).get("status") == "excluded_with_reason"
     samenvoegen_target = live[adviseert["object_id"]]
     console.review_object(
@@ -707,7 +708,8 @@ def test_initial_register_disposition_uses_section_role_without_new_statuses() -
 
     assert passage_register_of(stamped["context-explanation"])["status"] == "used_as_context"
     assert passage_register_of(stamped["context-definition"])["status"] == "selected_as_candidate"
-    assert passage_register_of(stamped["support-recommendation"])["status"] == "linked_as_support"
+    assert passage_register_of(stamped["support-recommendation"])["status"] == "not_yet_assessed"
+    assert "proposed_support" in passage_register_of(stamped["support-recommendation"])["reason_codes"]
     assert passage_register_of(stamped["structural-recommendation"])["status"] == "not_yet_assessed"
     assert "structural_section" in passage_register_of(stamped["structural-recommendation"])["reason_codes"]
     assert passage_register_of(stamped["summary-recommendation"])["status"] == "selected_as_candidate"

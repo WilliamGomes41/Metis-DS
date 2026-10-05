@@ -112,7 +112,24 @@ def _context_heading_texts(objects: list[dict[str, Any]]) -> set[str]:
     return found
 
 
-def _initial_status(obj: dict[str, Any], *, context_headings: set[str]) -> tuple[str, list[str]]:
+def _has_confirmed_support(obj: dict[str, Any], objects: list[dict[str, Any]]) -> bool:
+    """linked_as_support requires a confirmed supported_by edge, not a section label."""
+    support_id = str(obj.get("object_id") or "")
+    if not support_id:
+        return False
+    from src.serving_relations_v1 import binding_relations
+    for other in objects:
+        if str(other.get("object_id") or "") == support_id:
+            continue
+        for rel in binding_relations(other):
+            if (rel.get("relation_type") == "supported_by"
+                    and rel.get("target_object_id") == support_id
+                    and rel.get("confirmed") is True):
+                return True
+    return False
+
+
+def _initial_status(obj: dict[str, Any], *, context_headings: set[str], objects: list[dict[str, Any]]) -> tuple[str, list[str]]:
     existing = passage_register_of(obj)
     if existing.get("source") == "review" and existing.get("status") in PASSAGE_REGISTER_STATUSES:
         return str(existing["status"]), list(existing.get("reason_codes") or [])
@@ -139,11 +156,15 @@ def _initial_status(obj: dict[str, Any], *, context_headings: set[str]) -> tuple
         if section_role == "structural":
             return "not_yet_assessed", ["structural_section"]
         if section_role == "support":
-            return "linked_as_support", []
+            if _has_confirmed_support(obj, objects):
+                return "linked_as_support", []
+            return "not_yet_assessed", ["proposed_support"]
         if section_role == "context" and proposed == "explanation":
             return "used_as_context", []
         if proposed == "explanation" or (proposed == "exception" and expand.get("performed")):
-            return "linked_as_support", []
+            if _has_confirmed_support(obj, objects):
+                return "linked_as_support", []
+            return "not_yet_assessed", ["proposed_support"]
         return "selected_as_candidate", []
     if _is_heading(obj):
         text = _text_of(obj)
@@ -179,7 +200,7 @@ def apply_passage_register(objects: list[dict[str, Any]]) -> list[dict[str, Any]
                 source = "review"
                 suitability = str(existing.get("suitability") or "")
             else:
-                status, reasons = _initial_status(obj, context_headings=context_headings)
+                status, reasons = _initial_status(obj, context_headings=context_headings, objects=objects)
                 source = "extract"
                 suitability = ""
             row = dict(obj)
@@ -201,6 +222,7 @@ def apply_register_from_review(
     obj: dict[str, Any],
     *,
     suitability: str = "",
+    confirmed_support: bool = False,
 ) -> dict[str, Any]:
     token = (suitability or "").strip()
     if token not in SUITABILITY_VALUES:
@@ -208,6 +230,10 @@ def apply_register_from_review(
     status = register_status_from_suitability(token)
     existing = passage_register_of(obj)
     reasons = list(existing.get("reason_codes") or [])
+    if status == "linked_as_support" and not confirmed_support:
+        status = "not_yet_assessed"
+        if "proposed_support_without_confirmed_target" not in reasons:
+            reasons.append("proposed_support_without_confirmed_target")
     if status == "excluded_with_reason":
         admission = admission_of(obj)
         reasons = reasons or [str(code) for code in (admission.get("reason_codes") or []) if str(code).strip()]

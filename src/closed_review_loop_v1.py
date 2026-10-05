@@ -552,7 +552,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             ):
                 continue
             row = apply_register_from_review(
-                deepcopy(row), suitability="alleen_onderbouwing"
+                deepcopy(row), suitability="alleen_onderbouwing", confirmed_support=True
             )
             metadata = dict(row.get("metadata") or {})
             metadata.pop("review_passage", None)
@@ -563,6 +563,116 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
         self._commit_prepared_store(
             objects=(snapshot_id, rows), expected_revision=revision
         )
+
+    def confirm_support_targets(
+        self,
+        *,
+        actor_id: str,
+        snapshot_id: str,
+        support_object_id: str,
+        claim_object_ids: list[str],
+        expected_revision: str,
+        command_id: str,
+    ) -> dict[str, Any]:
+        """Confirm many supported_by edges and the support disposition in one commit.
+
+        Direction is claim --supported_by--> support. The support object stays one
+        object. A failure before commit leaves the previous revision intact.
+        """
+        from src.knowledge_relation_proposal_v1 import relation_endpoint_compatible
+        from src.revision_workflow import bump_patch
+        from src.semantic_replay_v1 import stable_json_hash
+        from src.serving_relations_v1 import confirm_relation_set
+
+        self._require_role(actor_id, "reviewer")
+        if not isinstance(command_id, str) or not command_id.strip():
+            raise ConsoleError("support_command_required")
+        if not isinstance(claim_object_ids, list) or not claim_object_ids or not all(isinstance(item, str) and item.strip() for item in claim_object_ids):
+            raise ConsoleError("support_target_required")
+        claim_ids = [item.strip() for item in claim_object_ids]
+        if len(set(claim_ids)) != len(claim_ids) or support_object_id in claim_ids:
+            raise ConsoleError("support_target_duplicate")
+        payload_hash = stable_json_hash({"support_object_id": support_object_id, "claim_object_ids": sorted(claim_ids)})
+        envelope = self._envelope(snapshot_id)
+        if actor_id not in (envelope.get("named_reviewers") or []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        if not expected_revision:
+            raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+        with self._atomic_snapshot_mutation(snapshot_id):
+            if self.objects_revision(snapshot_id) != expected_revision:
+                raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=self.objects_revision(snapshot_id))
+            stored = deepcopy(self._envelope(snapshot_id))
+            prior = next((row for row in stored.get("support_target_commands") or [] if row.get("command_id") == command_id), None)
+            if prior is not None:
+                if prior.get("payload_hash") != payload_hash:
+                    raise ConsoleError("processing_command_conflict")
+                return deepcopy(prior["result"])
+            live = {row["object_id"]: deepcopy(row) for row in self.snapshot_objects(snapshot_id)}
+            support = live.get(support_object_id)
+            if support is None or any(claim_id not in live for claim_id in claim_ids):
+                raise ConsoleError("unknown_object")
+
+            def endpoint_type(obj: dict[str, Any]) -> str:
+                return str(obj.get("confirmed_object_type") or obj.get("object_type") or obj.get("proposed_object_type") or "")
+
+            support_type = endpoint_type(support)
+            updated: list[dict[str, Any]] = []
+            for claim_id in claim_ids:
+                claim = live[claim_id]
+                if not relation_endpoint_compatible("supported_by", source_type=endpoint_type(claim), target_type=support_type):
+                    raise ConsoleError("support_target_incompatible")
+                existing = list(binding_relations(claim))
+                if any(rel.get("relation_type") == "supported_by" and rel.get("target_object_id") == support_object_id for rel in existing):
+                    continue
+                try:
+                    confirmed = confirm_relation_set([*existing, {
+                        "relation_type": "supported_by",
+                        "target_object_id": support_object_id,
+                        "confirmed": True,
+                    }])
+                except ValueError as exc:
+                    raise ConsoleError("support_target_incompatible") from exc
+                claim["object_version"] = bump_patch(str(claim.get("object_version") or "1.0"))
+                claim["confirmed_relations"] = confirmed
+                stamp_canonical_hashes(claim)
+                updated.append(claim)
+            disposition = apply_register_from_review(
+                deepcopy(support), suitability="alleen_onderbouwing", confirmed_support=True,
+            )
+            if passage_register_of(disposition) != passage_register_of(support) or disposition.get("object_version") != support.get("object_version"):
+                disposition["object_version"] = bump_patch(str(support.get("object_version") or "1.0"))
+                stamp_canonical_hashes(disposition)
+                updated.append(disposition)
+                live[support_object_id] = disposition
+            result = {
+                "command_id": command_id,
+                "support_object_id": support_object_id,
+                "claim_object_ids": claim_ids,
+                "confirmed_edge_count": len(claim_ids),
+            }
+            stored.setdefault("support_target_commands", []).append({
+                "command_id": command_id,
+                "payload_hash": payload_hash,
+                "result": result,
+            })
+            self._append_audit_evidence(
+                actor_id=actor_id,
+                snapshot_id=snapshot_id,
+                target=live[support_object_id],
+                decision="confirm_support_targets",
+                original_suitability="alleen_onderbouwing",
+                final_disposition="linked_as_support",
+                comment="confirmed support targets: " + ",".join(claim_ids),
+                proposed_correction="",
+            )
+            history = list(self._load_objects(snapshot_id, remember=False))
+            history.extend(updated)
+            self._commit_prepared_store(
+                objects=(snapshot_id, history),
+                envelopes={snapshot_id: stored},
+                expected_revision=expected_revision,
+            )
+            return result
 
     def resolve_support_relation(
         self,
