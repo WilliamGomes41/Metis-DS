@@ -580,9 +580,15 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
         object. A failure before commit leaves the previous revision intact.
         """
         from src.knowledge_relation_proposal_v1 import relation_endpoint_compatible
+        from src.knowledge_relation_review_v1 import legacy_confirmed_mirror
+        from src.knowledge_relations_v1 import (
+            CONFIRMED_FIELD,
+            build_knowledge_relation,
+            canonicalize_knowledge_relation_set,
+            confirmed_knowledge_relations_of,
+        )
         from src.revision_workflow import bump_patch
         from src.semantic_replay_v1 import stable_json_hash
-        from src.serving_relations_v1 import confirm_relation_set
 
         self._require_role(actor_id, "reviewer")
         if not isinstance(command_id, str) or not command_id.strip():
@@ -615,32 +621,85 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             def endpoint_type(obj: dict[str, Any]) -> str:
                 return str(obj.get("confirmed_object_type") or obj.get("object_type") or obj.get("proposed_object_type") or "")
 
+            def already_linked(claim: dict[str, Any]) -> bool:
+                rows = confirmed_knowledge_relations_of(claim) if CONFIRMED_FIELD in claim else binding_relations(claim)
+                return any(
+                    rel.get("relation_type") == "supported_by" and rel.get("target_object_id") == support_object_id
+                    for rel in rows
+                )
+
+            def target_version(rel: dict[str, Any], support_version: str) -> str:
+                target_id = str(rel.get("target_object_id") or "")
+                if target_id == support_object_id:
+                    return support_version
+                stored = str(rel.get("target_object_version") or "").strip()
+                if stored:
+                    return stored
+                peer = live.get(target_id)
+                if peer is None:
+                    raise ValueError("knowledge_relation_target_missing")
+                return str(peer.get("object_version") or "")
+
             support_type = endpoint_type(support)
-            updated: list[dict[str, Any]] = []
             for claim_id in claim_ids:
-                claim = live[claim_id]
-                if not relation_endpoint_compatible("supported_by", source_type=endpoint_type(claim), target_type=support_type):
+                if not relation_endpoint_compatible(
+                    "supported_by", source_type=endpoint_type(live[claim_id]), target_type=support_type,
+                ):
                     raise ConsoleError("support_target_incompatible")
-                existing = list(binding_relations(claim))
-                if any(rel.get("relation_type") == "supported_by" and rel.get("target_object_id") == support_object_id for rel in existing):
-                    continue
-                try:
-                    confirmed = confirm_relation_set([*existing, {
-                        "relation_type": "supported_by",
-                        "target_object_id": support_object_id,
-                        "confirmed": True,
-                    }])
-                except ValueError as exc:
-                    raise ConsoleError("support_target_incompatible") from exc
-                claim["object_version"] = bump_patch(str(claim.get("object_version") or "1.0"))
-                claim["confirmed_relations"] = confirmed
-                stamp_canonical_hashes(claim)
-                updated.append(claim)
+
             disposition = apply_register_from_review(
                 deepcopy(support), suitability="alleen_onderbouwing", confirmed_support=True,
             )
-            if passage_register_of(disposition) != passage_register_of(support) or disposition.get("object_version") != support.get("object_version"):
-                disposition["object_version"] = bump_patch(str(support.get("object_version") or "1.0"))
+            support_version = str(support.get("object_version") or "1.0")
+            disposition_changed = (
+                passage_register_of(disposition) != passage_register_of(support)
+                or disposition.get("object_version") != support.get("object_version")
+            )
+            if disposition_changed:
+                support_version = bump_patch(support_version)
+                disposition["object_version"] = support_version
+
+            updated: list[dict[str, Any]] = []
+            for claim_id in claim_ids:
+                claim = live[claim_id]
+                if already_linked(claim):
+                    continue
+                claim["object_version"] = bump_patch(str(claim.get("object_version") or "1.0"))
+                prior = confirmed_knowledge_relations_of(claim) if CONFIRMED_FIELD in claim else binding_relations(claim)
+                rows = []
+                for rel in prior:
+                    if rel.get("relation_type") == "supported_by" and rel.get("target_object_id") == support_object_id:
+                        continue
+                    try:
+                        rows.append(build_knowledge_relation(
+                            source_object_id=claim_id,
+                            source_object_version=str(claim["object_version"]),
+                            relation_type=str(rel.get("relation_type") or ""),
+                            target_object_id=str(rel.get("target_object_id") or ""),
+                            target_object_version=target_version(rel, support_version),
+                        ))
+                    except ValueError as exc:
+                        raise ConsoleError("support_target_incompatible") from exc
+                try:
+                    rows.append(build_knowledge_relation(
+                        source_object_id=claim_id,
+                        source_object_version=str(claim["object_version"]),
+                        relation_type="supported_by",
+                        target_object_id=support_object_id,
+                        target_object_version=support_version,
+                    ))
+                    canonical = canonicalize_knowledge_relation_set(
+                        rows,
+                        source_object_id=claim_id,
+                        source_object_version=str(claim["object_version"]),
+                    )
+                except ValueError as exc:
+                    raise ConsoleError("support_target_incompatible") from exc
+                claim[CONFIRMED_FIELD] = canonical
+                claim["confirmed_relations"] = legacy_confirmed_mirror(canonical)
+                stamp_canonical_hashes(claim)
+                updated.append(claim)
+            if disposition_changed:
                 stamp_canonical_hashes(disposition)
                 updated.append(disposition)
                 live[support_object_id] = disposition
