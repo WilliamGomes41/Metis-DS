@@ -9,7 +9,10 @@ from datetime import datetime, timezone
 from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from src.forensic_trace_v1 import CSV_FIELDS, project_source_blocks, rows_for_export
+from src.forensic_trace_v1 import (
+    CSV_FIELDS, _escape_formula, pending_rejection_keys, project_source_blocks, rejection_key,
+    rows_for_export, select_producing_run,
+)
 from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
@@ -24,12 +27,12 @@ SCHEMAS = {
                            "failed_task_count", "partial_task_count", "not_started_task_count",
                            "unknown_pending_count", "pending_source_range_count", "pending_source_char_count",
                            "policy_version"),
-    "formation_findings": ("call_id", "kind", "index", "reason_code", "spans", "requires_review", "finding", "proposed_object_type", "source_assessment_role", "evidence_kind"),
+    "formation_findings": ("call_id", "kind", "index", "reason_code", "spans", "requires_review", "finding", "proposed_object_type", "source_assessment_role", "state", "evidence_kind"),
     "attempt_diagnostics": ("attempt_id", "state", "diagnostic", "evidence_kind"),
     "processing_recovery": ("authorization_id", "actor_id", "reason", "authorized_at", "source_hash", "source_version", "revision", "consumed_by", "consumed_at"),
     "processing_attempts": ("attempt_id", "command_id", "actor_id", "source_hash", "state", "started_at", "expires_at", "finished_at", "phase", "error_code", "validation_code", "processing_reference", "source_version", "kind", "retry_of", "limits", "transport", "retry_not_before", "replayed_call_id", "formation_progress_made"),
     "source_views": ("run_id", "fragment_id", "fragment_hash", "source_page", "bbox", "source_locator", "raw_text", "clean_text", "source_text_view", "source_layout_findings"),
-    "runs": ("run_id", "source_hash", "started_at", "finished_at", "outcome", "reason", "extractor_versions", "execution", "semantic_identity", "production_commit_status"),
+    "runs": ("run_id", "source_hash", "started_at", "finished_at", "outcome", "reason", "extractor_versions", "execution", "semantic_identity", "attempt_id", "production_commit_status"),
     "run_candidates": ("run_id", "object_id", "object_version", "canonical_hash", "origin", "structural"),
     "semantic_proposals": ("proposal_hash", "identity", "validation", "semantic_execution", "origin_execution", "replay_from_proposal_hash", "proposal", "evidence_kind"),
     "source_stages": ("object_id", "object_version", "stage", "text", "section_path", "source_checksum", "text_status"),
@@ -66,8 +69,8 @@ def _csv(fields: tuple[str, ...], rows: list[dict[str, Any]]) -> bytes:
                 cell = json.dumps(value, ensure_ascii=False)
             else:
                 cell = "" if value is None else str(value)
-            if cell.lstrip().startswith(("=", "+", "-", "@")) or cell.startswith(("\t", "\r", "\n")):
-                cell = "'" + cell
+            if cell.lstrip().startswith(("=", "+", "-", "@")) or cell.startswith(("'", "\t", "\r", "\n")):
+                cell = _escape_formula(cell)
             cells[field] = cell
         writer.writerow(cells)
     return output.getvalue().encode("utf-8-sig")
@@ -135,11 +138,15 @@ def processing_evidence_tables(
         obj = source["record"]
         add("source_usage", object_id=obj["object_id"], object_version=obj["object_version"], container="source",
             **source["usage"], policy_version=CONTAINER_VERSION)
-    providers = [provider, *(provider.get("supplementary_calls") or [])]
+    root_provider = provider
+    open_keys = pending_rejection_keys(root_provider, replay.get("proposal") if isinstance(replay.get("proposal"), dict) else {})
+    providers = [root_provider, *(root_provider.get("supplementary_calls") or [])]
     for provider in providers:
         for rejection in (provider.get("formation") or {}).get("rejections", []):
+            state = None if open_keys is None else ("pending" if rejection_key(rejection) in open_keys else "historical")
             add("formation_findings", call_id=(provider.get("response") or {}).get("id"),
-                **{k: rejection.get(k) for k in SCHEMAS["formation_findings"] if k not in {"call_id", "evidence_kind"}},
+                **{k: rejection.get(k) for k in SCHEMAS["formation_findings"] if k not in {"call_id", "evidence_kind", "state"}},
+                state=state,
                 evidence_kind="rejected_producer_proposal_not_approved_knowledge")
         if provider.get("version") == "semantic-provider-evidence-v1":
             response = provider.get("response") or {}
@@ -221,27 +228,15 @@ def processing_evidence_tables(
     replay_components = {}
     if isinstance(replay.get("identity"), dict) and isinstance(replay["identity"].get("components"), dict):
         replay_components = replay["identity"]["components"]
+    producing, _run_link = select_producing_run(runs, replay.get("identity") if isinstance(replay.get("identity"), dict) else None)
     block_rows = []
     block_provenance = {"status": "unavailable"}
-    saw_fragments = False
-    for run in runs:
-        fragments = run.get("source_fragments") or []
-        if not fragments:
-            continue
-        saw_fragments = True
+    fragments = (producing or {}).get("source_fragments") or []
+    if fragments:
         rows, status = project_source_blocks(
             fragments, replay_components.get("reconstruction_version"), replay_components.get("source_blocks_hash"))
-        if status["status"] == "RECONSTRUCTION_IDENTITY_MISMATCH":
-            block_rows = rows
-            block_provenance = status
-            break
-        if status["status"] != "verified_derived":
-            block_provenance = status
-            continue
-        block_rows.extend(rows)
+        block_rows = rows
         block_provenance = status
-    if not saw_fragments:
-        block_provenance = {"status": "unavailable"}
     for row in block_rows:
         add("source_blocks", **row)
     usable_rows = [row for row in block_rows if row.get("provenance") == "verified_derived"]

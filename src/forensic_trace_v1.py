@@ -153,8 +153,8 @@ def _csv_bytes(fields: tuple[str, ...], rows: list[dict[str, Any]]) -> bytes:
         cells = {}
         for field in fields:
             cell = _cell(row.get(field))
-            if cell.lstrip().startswith(("=", "+", "-", "@")) or cell.startswith(("\t", "\r", "\n")):
-                cell = "'" + cell
+            if cell.lstrip().startswith(("=", "+", "-", "@")) or cell.startswith(("'", "\t", "\r", "\n")):
+                cell = _escape_formula(cell)
             cells[field] = cell
         writer.writerow(cells)
     return output.getvalue().encode("utf-8-sig")
@@ -173,11 +173,18 @@ OFFSET_COLUMNS = frozenset({
 })
 
 
+def _escape_formula(cell: str) -> str:
+    """Prefix one apostrophe. A leading apostrophe in the source is preserved by doubling."""
+    if cell.startswith("'") or cell[:1] in "\t\r\n" or cell.lstrip()[:1] in "=-+@":
+        return "'" + cell
+    return cell
+
+
 def _unescape_formula(value: str) -> str:
-    """Undo the export's leading apostrophe. Do not strip the recorded text."""
+    """Undo exactly one export apostrophe. A source apostrophe stays."""
     if value.startswith("'"):
         rest = value[1:]
-        if rest[:1] in "=-+@\t\r\n" or rest.lstrip()[:1] in "=-+@":
+        if rest.startswith("'") or rest[:1] in "\t\r\n" or rest.lstrip()[:1] in "=-+@":
             return rest
     return value
 
@@ -290,19 +297,32 @@ def _attach_formation(span: dict[str, Any], tasks: list[dict[str, Any]], task_po
             matches.append(task)
     if not matches:
         return
+    current = matches[0]
+    history: list[dict[str, Any]] = []
     if len(matches) != 1:
-        span["formation"] = {"status": "conflict", "task_ids": [task.get("task_id") for task in matches]}
-        return
-    task = matches[0]
+        phases = [task.get("phase") for task in matches]
+        if set(phases) <= {"initial", "recovery"} and "recovery" in phases:
+            last = max(index for index, task in enumerate(matches) if task.get("phase") == "recovery")
+            if all(task.get("phase") != "initial" or index < last for index, task in enumerate(matches)):
+                current = matches[last]
+                history = [task for index, task in enumerate(matches) if index != last]
+            else:
+                span["formation"] = {"status": "conflict", "task_ids": [task.get("task_id") for task in matches]}
+                return
+        else:
+            span["formation"] = {"status": "conflict", "task_ids": [task.get("task_id") for task in matches]}
+            return
     span["formation"] = _recorded({
-        "task_id": task.get("task_id"),
-        "phase": task.get("phase"),
+        "task_id": current.get("task_id"),
+        "phase": current.get("phase"),
+        "status_recorded": current.get("status"),
         "selectable_range": {"block_id": block, "start": start, "end": end},
-        "task_target_spans": task.get("target_spans"),
-        "link": "exact" if any(_exact_span(target, block, start, end) for target in (task.get("target_spans") or [])) else "contained",
+        "task_target_spans": current.get("target_spans"),
+        "link": "exact" if any(_exact_span(target, block, start, end) for target in (current.get("target_spans") or [])) else "contained",
         "context_only_block_ids": [],
         "task_policy": task_policy,
-        "selectable": task.get("status") not in {"not_selectable", "excluded"},
+        "selectable": current.get("status") not in {"not_selectable", "excluded"},
+        "history": [{"task_id": task.get("task_id"), "phase": task.get("phase"), "status": task.get("status")} for task in history],
     })
 
 
@@ -507,6 +527,43 @@ def _validation_stage(validation: Any) -> dict[str, Any]:
     })
 
 
+def select_producing_run(runs: list[Any], replay_identity: Any) -> tuple[dict[str, Any] | None, str]:
+    """Bind the trace to the run whose semantic identity is the active replay."""
+    if not isinstance(runs, list) or not runs:
+        return None, "unavailable"
+    if isinstance(replay_identity, dict) and replay_identity:
+        exact = [run for run in runs if isinstance(run, dict) and run.get("semantic_identity") == replay_identity]
+        if len(exact) == 1:
+            return exact[0], "matched"
+        if len(exact) > 1:
+            return None, "ambiguous"
+    if len(runs) == 1 and isinstance(runs[0], dict):
+        return runs[0], "sole_run"
+    return None, "unmatched"
+
+
+def rejection_key(row: Mapping[str, Any]) -> str:
+    return json.dumps({
+        "kind": row.get("kind"),
+        "reason_code": row.get("reason_code"),
+        "spans": row.get("spans") or [],
+    }, ensure_ascii=False, sort_keys=True, default=str)
+
+
+def pending_rejection_keys(provider: Mapping[str, Any], proposal: Any) -> set[str] | None:
+    """Current open rejections. None means the call chain is not complete enough to decide."""
+    recorded = provider.get("pending_rejections") if isinstance(provider, Mapping) else None
+    if not isinstance(recorded, list):
+        if not isinstance(provider, Mapping) or not isinstance(proposal, dict):
+            return None
+        try:
+            from src.recoverable_formation_v1 import pending_rejections
+            recorded = pending_rejections(provider, proposal)
+        except (KeyError, TypeError, AttributeError, ValueError):
+            return None
+    return {rejection_key(row) for row in recorded if isinstance(row, dict)}
+
+
 def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[str, Any],
                          objects: list[dict[str, Any]] | None) -> dict[str, Any]:
     """Join recorded fragments, mappings, proposals and objects. Do not invent a link."""
@@ -517,8 +574,9 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
     identity["snapshot_id"] = identity["snapshot_id"] or snapshot_id
     identity["objects_revision"] = revision
     runs = envelope.get("quality_processing_runs") or []
-    if runs and not identity["source_sha256"]:
-        identity["source_sha256"] = runs[0].get("source_hash")
+    producing, _run_link = select_producing_run(runs, replay.get("identity") if isinstance(replay.get("identity"), dict) else None)
+    if producing and not identity["source_sha256"]:
+        identity["source_sha256"] = producing.get("source_hash")
     provider = replay.get("provider_evidence") if isinstance(replay.get("provider_evidence"), dict) else {}
     if provider.get("task_policy") and not identity["task_policy"]:
         identity["task_policy"] = provider.get("task_policy")
@@ -532,13 +590,16 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
             identity["deployed_commit"] = diagnostic.get("deployed_commit")
         if diagnostic.get("model") and not identity["model"]:
             identity["model"] = diagnostic.get("model")
-        if attempt.get("attempt_id") and not identity["attempt_id"]:
-            identity["attempt_id"] = attempt.get("attempt_id")
+    if producing and producing.get("attempt_id") not in (None, ""):
+        identity["attempt_id"] = str(producing.get("attempt_id"))
     run_modes = []
-    for run in runs:
-        blob = run.get("semantic_identity")
+    if producing:
+        blob = producing.get("semantic_identity")
         if isinstance(blob, dict) and blob.get("passage_formation_mode"):
             run_modes.append(blob["passage_formation_mode"])
+        components_blob = blob.get("components") if isinstance(blob, dict) and isinstance(blob.get("components"), dict) else {}
+        if components_blob.get("passage_formation_mode"):
+            run_modes.append(components_blob["passage_formation_mode"])
     if provider.get("passage_formation_mode"):
         run_modes.append(provider["passage_formation_mode"])
     if components.get("passage_formation_mode"):
@@ -561,15 +622,14 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
     proposal = replay.get("proposal") if isinstance(replay.get("proposal"), dict) else {}
     validation = replay.get("validation")
     fragments: dict[str, Any] = {}
-    for run in runs:
-        for fragment in run.get("source_fragments") or []:
-            if fragment.get("fragment_id") not in (None, ""):
-                fragments[str(fragment["fragment_id"])] = fragment
+    for fragment in (producing or {}).get("source_fragments") or []:
+        if fragment.get("fragment_id") not in (None, ""):
+            fragments[str(fragment["fragment_id"])] = fragment
     by_block: dict[tuple[Any, Any, Any], dict[str, Any]] = {}
 
     def block_bucket(block_id: Any, start: Any, end: Any) -> dict[str, Any]:
         key = (block_id, start, end)
-        return by_block.setdefault(key, {"proposals": [], "assessments": [], "objects": [], "rejections": []})
+        return by_block.setdefault(key, {"proposals": [], "assessments": [], "objects": [], "rejections": [], "historical_rejections": []})
 
     for raw in proposal.get("objects") or []:
         if not isinstance(raw, dict):
@@ -588,12 +648,24 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
                 block_bucket(item.get("block_id"), item.get("start"), item.get("end"))["objects"].append(obj)
         if not semantic.get("spans") and semantic.get("source_mapping"):
             block_bucket(None, None, None)["objects"].append(obj)
+    open_keys = pending_rejection_keys(provider, proposal)
     for rejection in ((provider.get("formation") or {}).get("rejections") or []):
         if not isinstance(rejection, dict):
             continue
-        for item in rejection.get("spans") or []:
-            if isinstance(item, dict):
-                block_bucket(item.get("block_id"), item.get("start"), item.get("end"))["rejections"].append(rejection)
+        state = rejection.get("state")
+        if state not in {"pending", "historical"}:
+            state = None if open_keys is None else ("pending" if rejection_key(rejection) in open_keys else "historical")
+        targets = rejection.get("spans") or [None]
+        for item in targets:
+            if item is None:
+                continue
+            if not isinstance(item, dict):
+                continue
+            bucket = block_bucket(item.get("block_id"), item.get("start"), item.get("end"))
+            if state == "historical":
+                bucket["historical_rejections"].append(rejection)
+            else:
+                bucket["rejections"].append(rejection)
 
     tasks = provider.get("tasks") if isinstance(provider.get("tasks"), list) else []
     call_id = (provider.get("response") or {}).get("id") if isinstance(provider.get("response"), dict) else None
@@ -678,6 +750,11 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
         elif ranges:
             span["fragments"] = ranges
         decided = provider_stage(bucket["proposals"], bucket["assessments"], bucket["rejections"])
+        if decided.get("status") == "recorded" and bucket["historical_rejections"]:
+            decided = {**decided, "historical_rejections": [
+                {"kind": item.get("kind"), "reason_code": item.get("reason_code"), "state": "historical"}
+                for item in bucket["historical_rejections"]
+            ]}
         if decided.get("status") != "unknown":
             span["provider"] = decided
             rejection = bucket["rejections"][0] if len(bucket["rejections"]) == 1 and not bucket["proposals"] else None
@@ -879,6 +956,46 @@ def _objects_from_export(lineage: list[dict[str, Any]], coverage: list[dict[str,
     return list(objects.values())
 
 
+def _fragment_from_view(view: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "fragment_id": view.get("fragment_id"),
+        "raw_text": view.get("raw_text"),
+        "clean_text": view.get("clean_text"),
+        "source_page": view.get("source_page"),
+        "source_locator": view.get("source_locator"),
+    }
+
+
+def _runs_from_export(run_rows: list[dict[str, Any]], views: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not run_rows and not views:
+        return []
+    if not run_rows:
+        return [{
+            "source_fragments": [_fragment_from_view(view) for view in views if view.get("fragment_id")],
+        }]
+    built = []
+    for row in run_rows:
+        run_id = row.get("run_id")
+        fragments = []
+        for view in views:
+            if not view.get("fragment_id"):
+                continue
+            view_run = view.get("run_id")
+            if run_id not in (None, "") and view_run == run_id:
+                fragments.append(_fragment_from_view(view))
+            elif run_id in (None, "") and view_run in (None, "") and len(run_rows) == 1:
+                fragments.append(_fragment_from_view(view))
+        identity = row.get("semantic_identity") if isinstance(row.get("semantic_identity"), dict) else {}
+        built.append({
+            "run_id": run_id,
+            "source_hash": row.get("source_hash"),
+            "attempt_id": row.get("attempt_id"),
+            "semantic_identity": identity,
+            "source_fragments": fragments,
+        })
+    return built
+
+
 def evidence_from_zip(path: Path) -> dict[str, Any]:
     with ZipFile(path) as archive:
         revision_rows = _read_csv(archive, "revision.csv")
@@ -950,22 +1067,13 @@ def evidence_from_zip(path: Path) -> dict[str, Any]:
                     "source_assessment_role": row.get("source_assessment_role"),
                     "finding": row.get("finding"),
                     "requires_review": row.get("requires_review"),
+                    "state": row.get("state"),
                 } for row in formation_findings]},
             },
         },
         "source_block_map": usable_blocks,
         "reconstruction_provenance": provenance,
-        "quality_processing_runs": [{
-            "source_hash": (runs[0].get("source_hash") if runs else None),
-            "semantic_identity": runs[0].get("semantic_identity") if runs and isinstance(runs[0].get("semantic_identity"), dict) else {},
-            "source_fragments": [{
-                "fragment_id": view.get("fragment_id"),
-                "raw_text": view.get("raw_text"),
-                "clean_text": view.get("clean_text"),
-                "source_page": view.get("source_page"),
-                "source_locator": view.get("source_locator"),
-            } for view in views if view.get("fragment_id")],
-        }] if views or runs else [],
+        "quality_processing_runs": _runs_from_export(runs, views),
         "processing_attempts": attempt_rows,
     }
     evidence = evidence_from_stored(

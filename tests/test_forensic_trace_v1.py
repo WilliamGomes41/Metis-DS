@@ -696,4 +696,149 @@ def test_changed_reconstruction_identity_does_not_link_a_derived_block_map(tmp_p
     assert result["divergences"][0]["first_divergence_stage"] == "reconstruction"
 
 
+def test_recovery_task_is_current_and_not_a_formation_conflict(tmp_path):
+    from src.forensic_trace_v1 import _attach_formation
+    span = {"block_id": "b1", "start": 0, "end": 8}
+    envelope = {"semantic_replay": {
+        "validation": "passed",
+        "proposal": {"objects": [], "source_assessments": [{
+            "span": span, "role": "background", "reason": "historical_context",
+        }]},
+        "provider_evidence": {"task_policy": "bounded-formation-v1", "tasks": [
+            {"task_id": "task-initial", "phase": "initial", "status": "failed", "target_spans": [span]},
+            {"task_id": "task-recovery", "phase": "recovery", "status": "completed", "target_spans": [span]},
+        ]},
+    }}
+    payload = processing_evidence_zip(snapshot_id="snapshot", revision="rev", envelope=envelope, objects=[])
+    path = tmp_path / "recovery.zip"
+    path.write_bytes(payload)
+    evidence = load_evidence(path)
+    formed = next(row["formation"] for row in evidence["spans"] if (row.get("formation") or {}).get("task_id") == "task-recovery")
+    assert formed["status"] == "recorded"
+    assert formed["phase"] == "recovery"
+    assert formed["history"][0]["task_id"] == "task-initial"
+    conflict = {"reconstruction": {"status": "recorded", "semantic_block_id": "b1", "block_start": 0, "block_end": 8}}
+    _attach_formation(conflict, [
+        {"task_id": "a", "phase": "initial", "status": "completed", "target_spans": [span]},
+        {"task_id": "c", "phase": "initial", "status": "completed", "target_spans": [span]},
+    ], "bounded-formation-v1")
+    assert conflict["formation"]["status"] == "conflict"
+
+
+def test_recovered_rejection_does_not_conflict_with_the_validated_proposal(tmp_path):
+    span = {"block_id": "b1", "start": 0, "end": 8}
+    envelope = {"semantic_replay": {
+        "validation": "passed",
+        "proposal": {"objects": [{
+            "proposed_object_type": "explanation", "spans": [span],
+        }], "source_assessments": []},
+        "provider_evidence": {"task_policy": "bounded-formation-v1", "tasks": [], "formation": {"rejections": [{
+            "kind": "object", "reason_code": "semantic_evidence_literal_not_found",
+            "proposed_object_type": "definition", "spans": [span],
+        }]}},
+    }}
+    payload = processing_evidence_zip(snapshot_id="snapshot", revision="rev", envelope=envelope, objects=[])
+    path = tmp_path / "recovered.zip"
+    path.write_bytes(payload)
+    evidence = load_evidence(path)
+    provider = next(row["provider"] for row in evidence["spans"] if (row.get("provider") or {}).get("proposed_object_type") == "explanation")
+    assert provider["status"] == "recorded"
+    assert provider["selected"] is True
+    assert provider["historical_rejections"][0]["state"] == "historical"
+    assert provider["status"] != "conflict"
+
+
+def test_trace_uses_only_the_producing_run(tmp_path):
+    active = "Actieve replayzin over smetten."
+    fragment, block = _source_case(active, "frag-active")
+    derived = current_reconstruction_identity([fragment])
+    identity = {
+        "version": "semantic-replay-v1.0.0",
+        "hash": "replay-hash",
+        "components": {
+            "snapshot_id": "snapshot",
+            "source_sha256": "source-sha",
+            "source_blocks_hash": derived["source_blocks_hash"],
+            "reconstruction_version": derived["reconstruction_version"],
+            "passage_formation_mode": "semantic-source-bound-v3",
+        },
+    }
+    span = {"block_id": block["block_id"], "start": 0, "end": len(block["text"])}
+    envelope = {
+        "semantic_replay": {
+            "identity": identity,
+            "validation": "passed",
+            "proposal": {"objects": [], "source_assessments": [{
+                "span": span, "role": "background", "reason": "historical_context",
+            }]},
+            "provider_evidence": {
+                "task_policy": "bounded-formation-v1",
+                "tasks": [{"task_id": "task-active", "phase": "initial", "status": "completed", "target_spans": [span]}],
+            },
+        },
+        "quality_processing_runs": [
+            {
+                "run_id": "run-old", "source_hash": "old-sha", "attempt_id": "attempt-1",
+                "semantic_identity": {"version": "old", "hash": "old", "components": {
+                    "reconstruction_version": "source-reconstruction-v0", "source_blocks_hash": "H",
+                }},
+                "source_fragments": [{"fragment_id": "frag-old", "raw_text": "Oude reconstructie.", "clean_text": "Oude reconstructie."}],
+            },
+            {
+                "run_id": "run-active", "source_hash": "source-sha", "attempt_id": "attempt-3",
+                "semantic_identity": identity,
+                "source_fragments": [fragment],
+            },
+        ],
+        "processing_attempts": [
+            {"attempt_id": "attempt-1", "state": "failed", "diagnostic": {"omitted_evidence": []}},
+            {"attempt_id": "attempt-3", "state": "succeeded", "diagnostic": {}},
+        ],
+    }
+    gold = {
+        "gold_version": "forensic-gold-v1",
+        "expected_identity": {
+            "passage_formation_mode": "semantic-source-bound-v3",
+            "attempt_id": "attempt-3",
+        },
+        "cases": [{
+            "case_id": "ACTIVE-RUN",
+            "source_sha256": "source-sha",
+            "source_reconstruction_hash": derived["source_blocks_hash"],
+            "fragments": [{"fragment_id": "frag-active", "start": 0, "end": len(active)}],
+            "exact_raw_text": active,
+            "expected_source_function": "background",
+            "expected_answer_bearing": False,
+            "expected_object_type": None,
+        }],
+    }
+    result = _zip_trace(tmp_path, envelope, [], gold)
+    evidence = load_evidence(tmp_path / "evidence.zip")
+    assert evidence["reconstruction_provenance"]["status"] != "RECONSTRUCTION_IDENTITY_MISMATCH"
+    assert evidence["identity"]["attempt_id"] == "attempt-3"
+    assert result["summary"]["comparison"] == "compared"
+    assert result["divergences"][0]["verdict"] == "PASS"
+    texts = [row.get("source", {}).get("raw_text") for row in evidence["spans"]]
+    assert active in texts
+    assert "Oude reconstructie." not in texts
+
+
+def test_formula_apostrophe_roundtrips_exactly(tmp_path):
+    envelope = {"semantic_replay": {"proposal": {"objects": []}}, "quality_processing_runs": [{
+        "run_id": "run-text",
+        "source_fragments": [
+            {"fragment_id": "plain", "raw_text": "=SUM(1)", "clean_text": "=SUM(1)"},
+            {"fragment_id": "quoted", "raw_text": "'=SUM(1)", "clean_text": "'=SUM(1)"},
+        ],
+    }]}
+    payload = processing_evidence_zip(snapshot_id="snapshot", revision="rev", envelope=envelope, objects=[])
+    path = tmp_path / "formula.zip"
+    path.write_bytes(payload)
+    evidence = load_evidence(path)
+    texts = {row["source"].get("raw_text") for row in evidence["spans"]}
+    assert "=SUM(1)" in texts
+    assert "'=SUM(1)" in texts
+
+
+
 
