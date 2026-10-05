@@ -231,28 +231,41 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
         finally:
             self._buffer.reset(token)
 
+    def _insert_buffered(self, con: Any, events: list[dict[str, Any]]) -> None:
+        self._lock_review_ledger(con)
+        row = con.execute(
+            "SELECT event_hash FROM workflow.review_events "
+            "ORDER BY event_id DESC LIMIT 1 FOR UPDATE"
+        ).fetchone()
+        current = str(row["event_hash"]) if row else None
+        if events[0].get("previous_event_hash") != current:
+            raise WorkflowReviewStoreError("workflow_review_chain_conflict")
+        previous = current
+        for event in events:
+            if event.get("previous_event_hash") != previous:
+                raise WorkflowReviewStoreError("workflow_review_buffer_chain_invalid")
+            body = dict(event)
+            got = body.pop("event_hash", None)
+            if stable_hash(body) != got:
+                raise WorkflowReviewStoreError("workflow_review_event_hash_invalid")
+            self._insert_event(con, event)
+            previous = str(got)
+
     def _flush_buffer(self, events: list[dict[str, Any]]) -> None:
+        from src.workflows.workflow_transaction_v1 import (
+            defer_until_workflow_commit,
+            workflow_transaction_active,
+        )
         try:
+            if workflow_transaction_active():
+                with self._connect() as con:
+                    with con.transaction():
+                        self._insert_buffered(con, events)
+                defer_until_workflow_commit(lambda rows=list(events): self._mirror_events(rows))
+                return
             with self._connect() as con:
                 with con.transaction():
-                    self._lock_review_ledger(con)
-                    row = con.execute(
-                        "SELECT event_hash FROM workflow.review_events "
-                        "ORDER BY event_id DESC LIMIT 1 FOR UPDATE"
-                    ).fetchone()
-                    current = str(row["event_hash"]) if row else None
-                    if events[0].get("previous_event_hash") != current:
-                        raise WorkflowReviewStoreError("workflow_review_chain_conflict")
-                    previous = current
-                    for event in events:
-                        if event.get("previous_event_hash") != previous:
-                            raise WorkflowReviewStoreError("workflow_review_buffer_chain_invalid")
-                        body = dict(event)
-                        got = body.pop("event_hash", None)
-                        if stable_hash(body) != got:
-                            raise WorkflowReviewStoreError("workflow_review_event_hash_invalid")
-                        self._insert_event(con, event)
-                        previous = str(got)
+                    self._insert_buffered(con, events)
             self._mirror_events(events)
         except WorkflowReviewStoreError:
             raise

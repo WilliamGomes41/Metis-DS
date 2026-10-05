@@ -15,6 +15,9 @@ from typing import Any, Iterator
 _ACTIVE_CONNECTION: ContextVar[Any | None] = ContextVar(
     "metis_workflow_transaction_connection", default=None
 )
+_POST_COMMIT: ContextVar[list[Any] | None] = ContextVar(
+    "metis_workflow_transaction_post_commit", default=None
+)
 _BOUND_MARKER = "_metis_workflow_transaction_bound"
 _ORIGINAL_CONNECT = "_metis_workflow_original_connect"
 
@@ -22,6 +25,19 @@ _ORIGINAL_CONNECT = "_metis_workflow_original_connect"
 def workflow_transaction_active() -> bool:
     """Whether a caller owns an outer transaction that has not committed yet."""
     return _ACTIVE_CONNECTION.get() is not None
+
+
+def defer_until_workflow_commit(callback: Any) -> None:
+    """Run a rebuildable projection after the outermost transaction commits.
+
+    The callback is not part of the durable unit. A caller that is not inside
+    a workflow transaction runs it immediately.
+    """
+    pending = _POST_COMMIT.get()
+    if pending is None or not workflow_transaction_active():
+        callback()
+        return
+    pending.append(callback)
 
 
 class WorkflowTransactionError(RuntimeError):
@@ -98,10 +114,26 @@ def workflow_transaction(owner: Any) -> Iterator[Any]:
     if original_connect is None:
         raise WorkflowTransactionError("workflow_transaction_store_not_bound")
 
+    pending: list[Any] = []
+    token_pending = _POST_COMMIT.set(pending)
+    committed = False
     with original_connect() as connection:
         token = _ACTIVE_CONNECTION.set(connection)
         try:
             with connection.transaction():
                 yield connection
+            committed = True
         finally:
             _ACTIVE_CONNECTION.reset(token)
+    try:
+        if committed:
+            # Projections run after the durable commit. A projection failure
+            # must not roll the domain transaction back; the next console start
+            # rebuilds the ledger mirror from PostgreSQL.
+            for callback in list(pending):
+                try:
+                    callback()
+                except Exception:
+                    pass
+    finally:
+        _POST_COMMIT.reset(token_pending)

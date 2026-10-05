@@ -17,7 +17,7 @@ from src.workflows.workflow_review_postgres_v1 import (
     PostgresWorkflowReviewStore,
     WorkflowReviewStoreError,
 )
-from src.workflows.workflow_transaction_v1 import workflow_transaction
+from src.workflows.workflow_transaction_v1 import bind_workflow_stores, workflow_transaction
 
 
 class _PostgresWorkflowReviewMixin:
@@ -36,6 +36,14 @@ class _PostgresWorkflowReviewMixin:
         self._bindings = self._remirror_review_runtime()
         self._bindings_baseline = deepcopy(self._bindings)
         register_backend(self._ledger_path, self.workflow_review_store)
+
+    def _bind_review_and_documents(self) -> None:
+        """Document writes and review evidence share one PostgreSQL transaction."""
+        participants = [self.workflow_review_store]
+        document_store = getattr(self, "workflow_document_store", None)
+        if document_store is not None:
+            participants.insert(0, document_store)
+        bind_workflow_stores(*participants)
 
     def _startup_local_mirror_is_authority(self, path: Path) -> bool:
         if path.name == "publish_authorizations.json":
@@ -142,6 +150,7 @@ class _PostgresWorkflowReviewMixin:
         snapshot_id: str | None = None,
     ) -> None:
         sid = snapshot_id or (objects[0] if objects is not None else None)
+        self._bind_review_and_documents()
         with self._store_write_lock():
             self._reload_store_locked()
             prior_bindings = deepcopy(self._bindings)
@@ -190,6 +199,7 @@ class _PostgresWorkflowReviewMixin:
         prior_envelope: dict[str, Any] | None = None
         prior_objects: list[dict[str, Any]] | None = None
         restore_snapshot_id: str | None = None
+        self._bind_review_and_documents()
         try:
             # The document context takes the process-shared store lock and
             # refreshes documents plus bindings before these rollback values

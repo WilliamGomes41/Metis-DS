@@ -714,22 +714,27 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                 "payload_hash": payload_hash,
                 "result": result,
             })
-            self._append_audit_evidence(
-                actor_id=actor_id,
-                snapshot_id=snapshot_id,
-                target=live[support_object_id],
-                decision="confirm_support_targets",
-                original_suitability="alleen_onderbouwing",
-                final_disposition="linked_as_support",
-                comment="confirmed support targets: " + ",".join(claim_ids),
-                proposed_correction="",
-            )
+            support_target = live[support_object_id]
+
+            def audit() -> None:
+                self._append_audit_evidence(
+                    actor_id=actor_id,
+                    snapshot_id=snapshot_id,
+                    target=support_target,
+                    decision="confirm_support_targets",
+                    original_suitability="alleen_onderbouwing",
+                    final_disposition="linked_as_support",
+                    comment="confirmed support targets: " + ",".join(claim_ids),
+                    proposed_correction="",
+                )
+
             history = list(self._load_objects(snapshot_id, remember=False))
             history.extend(updated)
             self._commit_prepared_store(
                 objects=(snapshot_id, history),
                 envelopes={snapshot_id: stored},
                 expected_revision=expected_revision,
+                ledger_fn=audit,
             )
             return result
 
