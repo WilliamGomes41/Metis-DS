@@ -6,7 +6,7 @@
 import json
 from copy import deepcopy
 
-from src.bounded_formation_v1 import tasks_for, execute, formation_progress, MAX_CANDIDATE_CHARS
+from src.bounded_formation_v1 import tasks_for, execute, formation_progress, pending_source_extent, MAX_CANDIDATE_CHARS
 from src.bounded_model_call_v1 import ModelCallLimits
 from src.semantic_passage_v1 import semantic_source_blocks
 from tests.test_recommendation_context_v3 import source, response_for
@@ -52,14 +52,16 @@ def test_budget_exhaustion_accounts_for_every_unstarted_task_and_cannot_publish(
     assert {s['block_id'] for r in evidence['pending_rejections'] for s in r['spans']} == {b['block_id'] for b in blocks}
     assert all(t['status'] == 'not_started' for t in evidence['tasks'])
     assert evidence['formation_state'] == 'pending'
-    assert evidence['formation_progress'] == {
-        'planned_task_count': 2,
-        'terminal_task_count': 0,
-        'pending_task_count': 2,
-        'failed_task_count': 0,
-        'partial_task_count': 0,
-        'not_started_task_count': 2,
-    }
+    progress = evidence['formation_progress']
+    assert progress['planned_task_count'] == 2
+    assert progress['terminal_task_count'] == 0
+    assert progress['pending_task_count'] == 2
+    assert progress['failed_task_count'] == 0
+    assert progress['partial_task_count'] == 0
+    assert progress['not_started_task_count'] == 2
+    assert progress['unknown_pending_count'] == 0
+    assert progress['pending_source_range_count'] == 2
+    assert progress['pending_source_char_count'] == sum(len(block['text']) for block in blocks)
 
 
 def test_progress_tracks_original_task_when_recovery_regroups_source_ranges():
@@ -73,26 +75,38 @@ def test_progress_tracks_original_task_when_recovery_regroups_source_ranges():
         ],
         'pending_rejections': [{'kind': 'call', 'reason_code': 'source_task_budget_exhausted', 'spans': [right]}],
     }
-    assert formation_progress(evidence) == {
-        'planned_task_count': 1,
-        'terminal_task_count': 0,
-        'pending_task_count': 1,
-        'failed_task_count': 0,
-        'partial_task_count': 1,
-        'not_started_task_count': 0,
-    }
+    progress = formation_progress(evidence)
+    assert progress['planned_task_count'] == 1
+    assert progress['terminal_task_count'] == 0
+    assert progress['pending_task_count'] == 1
+    assert progress['partial_task_count'] == 1
+    assert progress['pending_source_range_count'] == 1
+    assert progress['pending_source_char_count'] == 50
     evidence['tasks'].append(
         {'task_id': 'recovery-right', 'phase': 'recovery', 'target_spans': [right], 'status': 'completed'}
     )
     evidence['pending_rejections'] = []
-    assert formation_progress(evidence) == {
-        'planned_task_count': 1,
-        'terminal_task_count': 1,
-        'pending_task_count': 0,
-        'failed_task_count': 0,
-        'partial_task_count': 0,
-        'not_started_task_count': 0,
+    progress = formation_progress(evidence)
+    assert progress['planned_task_count'] == 1
+    assert progress['terminal_task_count'] == 1
+    assert progress['pending_task_count'] == 0
+    assert progress['pending_source_range_count'] == 0
+    assert progress['pending_source_char_count'] == 0
+
+
+def test_pending_source_extent_detects_progress_inside_one_original_task():
+    evidence = {'pending_rejections': [
+        {'spans': [{'block_id': 'b', 'start': 0, 'end': 100}]},
+    ]}
+    assert pending_source_extent(evidence) == {
+        'unknown_pending_count': 0,
+        'pending_source_range_count': 1,
+        'pending_source_char_count': 100,
     }
+    evidence['pending_rejections'] = [
+        {'spans': [{'block_id': 'b', 'start': 25, 'end': 100}]},
+    ]
+    assert pending_source_extent(evidence)['pending_source_char_count'] == 75
 
 
 def test_context_only_block_cannot_become_candidate_and_valid_prior_selection_survives():
