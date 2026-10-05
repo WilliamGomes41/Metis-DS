@@ -182,7 +182,7 @@ JSON_COLUMNS = frozenset({
     "diagnostic", "proposal", "identity", "target_spans", "spans", "section_path",
     "admission", "reason_codes", "request", "finding", "limits", "transport",
     "execution", "semantic_identity", "extractor_versions", "source_layout_findings",
-    "bbox", "context_scan", "context_evidence", "source_bound_context",
+    "source_text_view", "source_locator", "bbox", "context_scan", "context_evidence", "source_bound_context",
     "expand_merge", "necessary_context_disposition", "context_realization",
     "source_context_review", "validation",
 })
