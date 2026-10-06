@@ -191,6 +191,7 @@ JSON_COLUMNS = frozenset({
 })
 OFFSET_COLUMNS = frozenset({
     "start", "end", "block_start", "block_end", "raw_start", "raw_end", "map_start", "map_end",
+    "semantic_block_start", "semantic_block_end", "source_start", "source_end",
 })
 
 
@@ -2011,8 +2012,9 @@ def independent_source_lineage_acceptance(
     coverage_rows: list[Mapping[str, Any]],
     lineage_rows: list[Mapping[str, Any]],
     stage_rows: list[Mapping[str, Any]],
+    view_rows: list[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Judge trace coverage from export tables, not from the projector under test."""
+    """Judge the trace from independently exported coverage, lineage and source evidence."""
     absent = {None, "", UNKNOWN}
 
     def present(value: Any) -> bool:
@@ -2044,6 +2046,12 @@ def independent_source_lineage_acceptance(
         if present(row.get("object_id")):
             stages_by_object.setdefault(str(row["object_id"]), []).append(row)
 
+    fragment_texts: dict[str, set[str]] = {}
+    for row in view_rows or []:
+        fragment_id, raw = row.get("fragment_id"), row.get("raw_text")
+        if isinstance(fragment_id, str) and fragment_id and isinstance(raw, str):
+            fragment_texts.setdefault(fragment_id, set()).add(raw)
+
     def ranges(object_id: str) -> list[tuple[str, int, int]]:
         found = []
         for row in lineage_by_object.get(object_id, []):
@@ -2055,7 +2063,7 @@ def independent_source_lineage_acceptance(
         return found
 
     def recorded_stage_text(object_id: str) -> tuple[str | None, bool]:
-        """Prefer the selected object's own raw text; admission text may be broader context."""
+        """Current object text is the selected segment; admission text may be broader context."""
         current = []
         admission = []
         for row in stages_by_object.get(object_id, []):
@@ -2080,17 +2088,67 @@ def independent_source_lineage_acceptance(
             return admission[0], False
         return None, False
 
-    def trace_for_segment(object_id: str, block_id: str) -> list[Mapping[str, Any]]:
+    def independently_expected_texts(object_id: str) -> tuple[set[str], bool]:
+        """Return independently recorded valid text representations and a conflict flag."""
+        stage_text, stage_conflict = recorded_stage_text(object_id)
+        if stage_conflict:
+            return set(), True
+        expected = {stage_text} if stage_text else set()
+        if not view_rows:
+            return expected, False
+
+        parts: list[str] = []
+        saw_range = False
+        for row in lineage_by_object.get(object_id, []):
+            relation = row.get("relation")
+            if relation == "inserted_join_separator":
+                text = row.get("text")
+                if not isinstance(text, str):
+                    return set(), True
+                parts.append(text)
+                continue
+            if relation != "selected_raw_fragment_range":
+                continue
+            saw_range = True
+            fragment_id, lo, hi = row.get("target_id"), as_int(row.get("start")), as_int(row.get("end"))
+            values = fragment_texts.get(str(fragment_id), set()) if fragment_id not in (None, "") else set()
+            if len(values) > 1:
+                return set(), True
+            if not values:
+                # Fragment bodies were not exported; stage evidence remains usable.
+                return expected, False
+            raw = next(iter(values))
+            if lo is None or hi is None or not 0 <= lo < hi <= len(raw):
+                return set(), True
+            parts.append(raw[lo:hi])
+        if saw_range and parts:
+            expected.add("".join(parts))
+        return expected, False
+
+    def trace_for_segment(object_id: str, block_id: str, start: int, end: int) -> list[Mapping[str, Any]]:
         candidates = [
             row for row in trace_rows
             if str(row.get("coverage_object_id") or row.get("object_id") or "") == object_id
             and row.get("provider_decision") == "selected"
         ]
-        exact = [row for row in candidates if row.get("semantic_block_id") == block_id]
+        exact = [
+            row for row in candidates
+            if row.get("semantic_block_id") == block_id
+            and as_int(row.get("semantic_block_start")) == start
+            and as_int(row.get("semantic_block_end")) == end
+        ]
         if exact:
             return exact
+        # Backward-compatible matching is safe only for a one-segment object
+        # and only when the legacy trace has no reconstructed bounds.
         object_segments = [item for item in selected_segments if item[0] == object_id]
-        return candidates if len(object_segments) == 1 else []
+        legacy = [
+            row for row in candidates
+            if row.get("semantic_block_id") in (None, "", UNKNOWN, block_id)
+            and row.get("semantic_block_start") in (None, "", UNKNOWN)
+            and row.get("semantic_block_end") in (None, "", UNKNOWN)
+        ]
+        return legacy if len(object_segments) == 1 else []
 
     independently_resolvable = 0
     unknown_span = 0
@@ -2099,20 +2157,22 @@ def independent_source_lineage_acceptance(
     contaminated = 0
     conflicts = 0
     missing_trace = 0
+    projected_text_mismatch = 0
+    projected_range_mismatch = 0
 
-    for object_id, block_id, _start, _end in selected_segments:
+    for object_id, block_id, block_start, block_end in selected_segments:
         own_ranges = ranges(object_id)
-        own_text, stage_conflict = recorded_stage_text(object_id)
-        if stage_conflict:
+        expected_texts, evidence_conflict = independently_expected_texts(object_id)
+        if evidence_conflict:
             conflicts += 1
             unresolvable += 1
             continue
-        if not own_ranges or not own_text:
+        if not own_ranges or not expected_texts:
             unresolvable += 1
             continue
 
         independently_resolvable += 1
-        matches = trace_for_segment(object_id, block_id)
+        matches = trace_for_segment(object_id, block_id, block_start, block_end)
         if not matches:
             missing_trace += 1
             continue
@@ -2122,22 +2182,31 @@ def independent_source_lineage_acceptance(
         row = matches[0]
         if not present(row.get("source_span_id")):
             unknown_span += 1
-        if not present(row.get("source_text")):
+        source_text = row.get("source_text")
+        if not present(source_text):
             unknown_text += 1
+        elif str(source_text) not in expected_texts:
+            projected_text_mismatch += 1
+
+        if len(own_ranges) == 1:
+            _fragment_id, expected_start, expected_end = own_ranges[0]
+            if (as_int(row.get("source_start")) != expected_start
+                    or as_int(row.get("source_end")) != expected_end):
+                projected_range_mismatch += 1
 
         # Contamination means text from a distinct coverage object in the same
-        # semblock leaked into this selected span. A formatting difference
-        # between raw source and reconstructed object text is not contamination.
-        source_text = str(row.get("source_text") or "")
+        # reconstructed block leaked into this selected object's projection.
+        projected = str(source_text or "")
+        own_stage, _ = recorded_stage_text(object_id)
         for other_id, other_rows in coverage_by_object.items():
             if other_id == object_id:
                 continue
             if not any(other.get("block_id") == block_id for other in other_rows):
                 continue
             other_text, other_conflict = recorded_stage_text(other_id)
-            if other_conflict or not other_text or other_text == own_text:
+            if other_conflict or not other_text or other_text == own_stage:
                 continue
-            if other_text in source_text:
+            if other_text in projected:
                 contaminated += 1
                 break
 
@@ -2157,6 +2226,8 @@ def independent_source_lineage_acceptance(
         "selected_trace_without_selected_coverage": len(trace_only_selected),
         "selected_candidates_with_resolvable_lineage_and_unknown_source_span": unknown_span,
         "selected_candidates_with_resolvable_lineage_and_unknown_source_text": unknown_text,
+        "projected_source_text_mismatch": projected_text_mismatch,
+        "projected_source_range_mismatch": projected_range_mismatch,
         "unresolvable_selected_candidates": unresolvable,
         "selected_remainder_cross_contamination": contaminated,
         "lineage_conflicts": conflicts,
