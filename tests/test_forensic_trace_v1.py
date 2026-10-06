@@ -8,7 +8,7 @@ import subprocess
 import sys
 
 from src.forensic_trace_v1 import (
-    UNKNOWN, compare_traces, current_reconstruction_identity, evidence_from_stored, load_evidence, load_gold, trace, write_outputs,
+    UNKNOWN, compare_traces, current_reconstruction_identity, evidence_from_stored, load_evidence, load_gold, rows_for_export, trace, write_outputs,
 )
 from src.processing_evidence_export_v1 import processing_evidence_tables, processing_evidence_zip
 
@@ -1301,3 +1301,129 @@ def test_repeated_identical_rejection_keeps_only_latest_pending():
         "provider_call_id": "call-old",
         "state": "historical",
     }]
+
+
+def _segment_object(*, object_id, origin, start, end, text, fragment_id="frag-1"):
+    return {
+        "object_id": object_id,
+        "object_version": 1,
+        "proposed_object_type": "recommendation" if origin == "proposal_selected" else None,
+        "content": {"raw_text": text},
+        "metadata": {
+            "section_path": ["Huid", "Smetten"],
+            "semantic_passage": {
+                "selection_origin": origin,
+                "spans": [{"block_id": "semblock-a", "start": start, "end": end}],
+                "source_mapping": [{
+                    "fragment_id": fragment_id,
+                    "raw_start": start,
+                    "raw_end": end,
+                    "source_page": 2,
+                }],
+            },
+            "admission": {"gate_result": "allowed" if origin == "proposal_selected" else "blocked",
+                          "source_text_exact": text},
+            "passage_register": {"status": "selected_as_candidate" if origin == "proposal_selected" else "excluded_with_reason"},
+        },
+    }
+
+
+def test_selected_segment_keeps_its_own_source_span_when_block_map_is_absent():
+    """One semblock holds a selected segment and a remainder. The tracer must follow the segment."""
+    selected_text = "geselecteerde kennis"
+    remainder_text = "resttekst "
+    tail = " omringend"
+    full = remainder_text + selected_text + tail
+    selected_start = len(remainder_text)
+    selected_end = selected_start + len(selected_text)
+    assert full[selected_start:selected_end] == selected_text
+    assert tail not in selected_text
+    envelope = {
+        "semantic_replay": {
+            "identity": {"components": {
+                "source_sha256": "source-sha",
+                "source_blocks_hash": "reconstruction-sha",
+            }},
+            "validation": "passed",
+            "proposal": {"objects": [{
+                "proposed_object_type": "recommendation",
+                "spans": [{"block_id": "semblock-a", "start": selected_start, "end": selected_end}],
+            }]},
+            "provider_evidence": {
+                "task_policy": "bounded-formation-v1",
+                "task_id": "task-segment",
+                "target_spans": [{"block_id": "semblock-a", "start": 0, "end": len(full)}],
+                "response": {"id": "call-segment"},
+                "tasks": [{
+                    "task_id": "task-segment",
+                    "phase": "select",
+                    "status": "completed",
+                    "target_spans": [{"block_id": "semblock-a", "start": 0, "end": len(full)}],
+                }],
+            },
+        },
+        "quality_processing_runs": [
+            {"run_id": "run-producing", "source_hash": "source-sha", "semantic_identity": {"components": {"source_sha256": "source-sha"}}, "source_fragments": []},
+            {"run_id": "run-other", "source_hash": "other", "source_fragments": [{
+                "fragment_id": "frag-1",
+                "raw_text": full,
+                "source_page": 2,
+            }]},
+        ],
+        "source_block_map": [],
+    }
+    objects = [
+        _segment_object(object_id="cov-selected", origin="proposal_selected", start=selected_start, end=selected_end, text=selected_text),
+        _segment_object(object_id="cov-remainder", origin="coverage_remainder", start=0, end=selected_start, text=remainder_text),
+    ]
+    rows, _availability, _limitation = rows_for_export(
+        snapshot_id="snapshot", revision="rev", envelope=envelope, objects=objects)
+    selected = next(row for row in rows if row["usage_route"] == "proposal_selected")
+    remainder = next(row for row in rows if row["usage_route"] == "coverage_remainder")
+    assert selected["provider_decision"] == "selected"
+    assert selected["coverage_object_id"] == "cov-selected"
+    assert selected["source_span_id"] not in ("", None, UNKNOWN)
+    assert selected["source_text"] == selected_text
+    assert remainder_text.strip() not in selected["source_text"]
+    assert "omringend" not in selected["source_text"]
+    assert int(selected["source_start"]) == selected_start
+    assert int(selected["source_end"]) == selected_end
+    assert remainder["source_text"] == remainder_text
+    assert remainder["source_span_id"] != selected["source_span_id"]
+    assert remainder["coverage_object_id"] == "cov-remainder"
+    from src.forensic_trace_v1 import source_lineage_acceptance
+    acceptance = source_lineage_acceptance(rows)
+    assert acceptance["selected_candidates_with_resolvable_lineage_and_unknown_source_span"] == 0
+    assert acceptance["selected_candidates_with_resolvable_lineage_and_unknown_source_text"] == 0
+
+
+def test_missing_lineage_stays_unresolved_and_does_not_fabricate_a_source_span():
+    envelope = {
+        "semantic_replay": {
+            "identity": {"components": {
+                "source_sha256": "source-sha",
+                "source_blocks_hash": "reconstruction-sha",
+            }},
+            "validation": "passed",
+            "proposal": {"objects": [{
+                "proposed_object_type": "explanation",
+                "spans": [{"block_id": "semblock-missing", "start": 0, "end": 12}],
+            }]},
+            "provider_evidence": {"tasks": [{
+                "task_id": "task-missing", "phase": "select", "status": "completed",
+                "target_spans": [{"block_id": "semblock-missing", "start": 0, "end": 12}],
+            }]},
+        },
+        "source_block_map": [],
+    }
+    rows, _availability, _limitation = rows_for_export(
+        snapshot_id="snapshot", revision="rev", envelope=envelope, objects=[])
+    selected = next(row for row in rows if row["provider_decision"] == "selected")
+    assert selected["source_span_id"] == UNKNOWN
+    assert selected["source_text"] == UNKNOWN
+    assert selected["unresolved_reason"] == "coverage_object_missing"
+    assert selected["trace_evidence_status"] == "incomplete"
+    from src.forensic_trace_v1 import source_lineage_acceptance
+    acceptance = source_lineage_acceptance(rows)
+    assert acceptance["selected_candidates_with_resolvable_lineage_and_unknown_source_span"] == 0
+    assert acceptance["unresolvable_selected_candidates"] == 1
