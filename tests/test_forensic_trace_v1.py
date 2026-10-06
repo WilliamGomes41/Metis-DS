@@ -1199,3 +1199,46 @@ def test_validator_identity_comes_from_producing_attempt(tmp_path):
     reloaded = load_evidence(path)
     assert reloaded["identity"]["attempt_id"] == "attempt-producing"
     assert reloaded["identity"]["validator_identity"] == validator
+
+
+def test_repeated_identical_rejection_keeps_only_latest_pending():
+    span = {"block_id": "block-r", "start": 0, "end": 10}
+    rejection = {
+        "kind": "object",
+        "reason_code": "semantic_evidence_literal_not_found",
+        "proposed_object_type": "explanation",
+        "spans": [span],
+    }
+    envelope = {
+        "semantic_replay": {
+            "validation": "passed",
+            "proposal": {"objects": [], "source_assessments": []},
+            "provider_evidence": {
+                "task_policy": "bounded-formation-v1",
+                "task_id": "task-r",
+                "target_spans": [span],
+                "response": {"id": "call-old"},
+                "formation": {"rejections": [dict(rejection)]},
+                "supplementary_calls": [{
+                    "task_id": "task-r",
+                    "target_spans": [span],
+                    "response": {"id": "call-current"},
+                    "formation": {"rejections": [dict(rejection)]},
+                }],
+                "pending_rejections": [dict(rejection)],
+            },
+        },
+    }
+    evidence = evidence_from_stored(
+        snapshot_id="snapshot", revision="rev", envelope=envelope, objects=[])
+    target = next(
+        row for row in evidence["spans"]
+        if (row.get("reconstruction") or {}).get("semantic_block_id") == "block-r")
+    assert target["provider"]["status"] == "recorded"
+    assert target["provider"]["provider_call_id"] == "call-current"
+    assert target["provider"]["historical_rejections"] == [{
+        "kind": "object",
+        "reason_code": "semantic_evidence_literal_not_found",
+        "provider_call_id": "call-old",
+        "state": "historical",
+    }]
