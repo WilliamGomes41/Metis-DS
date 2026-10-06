@@ -26,6 +26,7 @@ def _tables(path: Path) -> dict[str, list[dict]]:
             "coverage_rows": _read_csv(archive, "coverage.csv"),
             "lineage_rows": _read_csv(archive, "lineage.csv"),
             "stage_rows": _read_csv(archive, "source_stages.csv"),
+            "view_rows": _read_csv(archive, "source_views.csv"),
         }
 
 
@@ -46,13 +47,17 @@ def main(argv: list[str] | None = None) -> int:
         coverage_rows=stored["coverage_rows"],
         lineage_rows=stored["lineage_rows"],
         stage_rows=stored["stage_rows"],
+        view_rows=stored["view_rows"],
     )
     print(json.dumps({"stored_trace": before, "reprojected_trace": after}, ensure_ascii=False, indent=2, sort_keys=True))
     failed = (
         after["selected_candidates_missing_trace"]
         or after["selected_candidates_with_resolvable_lineage_and_unknown_source_span"]
         or after["selected_candidates_with_resolvable_lineage_and_unknown_source_text"]
+        or after["projected_source_text_mismatch"]
+        or after["projected_source_range_mismatch"]
         or after["selected_remainder_cross_contamination"]
+        or after["lineage_conflicts"]
     )
     return 1 if failed else 0
 
