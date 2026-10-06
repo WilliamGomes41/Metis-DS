@@ -295,6 +295,10 @@ def test_invalid_candidate_quarantines_related_candidate_not_independent_one():
     assert result['objects'][0]['spans'][0]['block_id'] == blocks[2]['block_id']
     assert len(result['objects']) == 1 and not result['relations']
     assert {r['reason_code'] for r in evidence['rejections']} == {'semantic_evidence_literal_not_found', 'semantic_dependency_rejected'}
+    rejected_by_reason = {r['reason_code']: r for r in evidence['rejections']}
+    assert rejected_by_reason['semantic_evidence_literal_not_found']['proposed_object_type'] == objects[0]['proposed_object_type']
+    assert rejected_by_reason['semantic_evidence_literal_not_found']['spans'] == objects[0]['spans']
+    assert rejected_by_reason['semantic_dependency_rejected']['proposed_object_type'] == objects[1]['proposed_object_type']
 
 
 def test_conflicting_reselection_cannot_replace_primary_or_clear_itself():
