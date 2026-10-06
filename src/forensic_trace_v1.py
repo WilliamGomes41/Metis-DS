@@ -616,6 +616,50 @@ def _provider_call_for_span(provider: Mapping[str, Any], block_id: Any, start: A
     return calls[0] if len(calls) == 1 else None
 
 
+def classified_rejections(
+    provider: Mapping[str, Any], proposal: Any,
+) -> list[tuple[Mapping[str, Any], dict[str, Any], str | None]]:
+    """Classify repeated rejection history by multiplicity, newest pending first."""
+    pending = provider.get("pending_rejections") if isinstance(provider, Mapping) else None
+    if not isinstance(pending, list):
+        if isinstance(provider, Mapping) and isinstance(proposal, dict):
+            try:
+                from src.recoverable_formation_v1 import pending_rejections
+                pending = pending_rejections(provider, proposal)
+            except (KeyError, TypeError, AttributeError, ValueError):
+                pending = None
+        else:
+            pending = None
+    counts: dict[str, int] | None = None
+    if isinstance(pending, list):
+        counts = {}
+        for row in pending:
+            if isinstance(row, Mapping):
+                key = rejection_key(row)
+                counts[key] = counts.get(key, 0) + 1
+
+    classified: list[tuple[Mapping[str, Any], dict[str, Any], str | None]] = []
+    for call in reversed(_provider_calls(provider)):
+        response = call.get("response") if isinstance(call.get("response"), Mapping) else {}
+        call_id = response.get("id")
+        formation = call.get("formation") if isinstance(call.get("formation"), Mapping) else {}
+        rows = [row for row in (formation.get("rejections") or []) if isinstance(row, dict)]
+        for rejection in reversed(rows):
+            state = rejection.get("state") if rejection.get("state") in {"pending", "historical"} else None
+            key = rejection_key(rejection)
+            if state is None and counts is not None:
+                if counts.get(key, 0) > 0:
+                    state = "pending"
+                    counts[key] -= 1
+                else:
+                    state = "historical"
+            elif state == "pending" and counts is not None and counts.get(key, 0) > 0:
+                counts[key] -= 1
+            classified.append((call, {**rejection, "provider_call_id": call_id}, state))
+    classified.reverse()
+    return classified
+
+
 def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[str, Any],
                          objects: list[dict[str, Any]] | None) -> dict[str, Any]:
     """Join recorded fragments, mappings, proposals and objects. Do not invent a link."""
@@ -713,27 +757,16 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
                 block_bucket(item.get("block_id"), item.get("start"), item.get("end"))["objects"].append(obj)
         if not semantic.get("spans") and semantic.get("source_mapping"):
             block_bucket(None, None, None)["objects"].append(obj)
-    open_keys = pending_rejection_keys(provider, proposal)
-    for call in _provider_calls(provider):
-        response = call.get("response") if isinstance(call.get("response"), Mapping) else {}
-        provider_call_id = response.get("id")
-        formation = call.get("formation") if isinstance(call.get("formation"), Mapping) else {}
-        for rejection in formation.get("rejections") or []:
-            if not isinstance(rejection, dict):
+    for _call, recorded_rejection, state in classified_rejections(provider, proposal):
+        targets = recorded_rejection.get("spans") or [None]
+        for item in targets:
+            if item is None or not isinstance(item, dict):
                 continue
-            recorded_rejection = {**rejection, "provider_call_id": provider_call_id}
-            state = rejection.get("state")
-            if state not in {"pending", "historical"}:
-                state = None if open_keys is None else ("pending" if rejection_key(rejection) in open_keys else "historical")
-            targets = rejection.get("spans") or [None]
-            for item in targets:
-                if item is None or not isinstance(item, dict):
-                    continue
-                bucket = block_bucket(item.get("block_id"), item.get("start"), item.get("end"))
-                if state == "historical":
-                    bucket["historical_rejections"].append(recorded_rejection)
-                else:
-                    bucket["rejections"].append(recorded_rejection)
+            bucket = block_bucket(item.get("block_id"), item.get("start"), item.get("end"))
+            if state == "historical":
+                bucket["historical_rejections"].append(recorded_rejection)
+            else:
+                bucket["rejections"].append(recorded_rejection)
 
     tasks = provider.get("tasks") if isinstance(provider.get("tasks"), list) else []
     spans: list[dict[str, Any]] = []
