@@ -270,6 +270,7 @@ def restrict_supplement(proposal, *, primary, targets):
             assessments.append(row)
         else:
             rejections.append({"kind": "source_assessment", "spans": [ref],
+                               "source_assessment_role": row.get("role"),
                                "reason_code": "semantic_supplement_outside_target"})
     result["source_assessments"] = assessments
     result["abstain_reason"] = None if kept or assessments else "no_validated_proposals"
