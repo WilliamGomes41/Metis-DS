@@ -81,7 +81,8 @@ CSV_FIELDS = (
     "passage_disposition", "review_visible", "expected_function",
     "expected_object_type", "first_divergence_stage", "verdict",
     "trace_evidence_status", "coverage_object_id", "usage_route",
-    "semantic_block_id", "model_call_id", "source_start", "source_end",
+    "semantic_block_id", "semantic_block_start", "semantic_block_end",
+    "model_call_id", "source_start", "source_end",
     "unresolved_reason", "lineage_resolvable",
 )
 DIVERGENCE_FIELDS = (
@@ -574,6 +575,22 @@ def _mapping_ranges(mapping: list[Any]) -> list[dict[str, Any]] | None:
     return ranges
 
 
+def _mapping_disproven_by_fragments(mapping: list[Any], fragments: Mapping[str, Any]) -> bool:
+    """True only when an available fragment proves a recorded range invalid."""
+    for item in mapping:
+        if not isinstance(item, dict) or item.get("kind") == "join_separator":
+            continue
+        fragment_id = item.get("fragment_id")
+        fragment = fragments.get(str(fragment_id)) if fragment_id is not None else None
+        if fragment is None:
+            continue
+        raw = fragment.get("raw_text") if isinstance(fragment, dict) else None
+        lo, hi = item.get("raw_start"), item.get("raw_end")
+        if not isinstance(raw, str) or type(lo) is not int or type(hi) is not int or not 0 <= lo < hi <= len(raw):
+            return True
+    return False
+
+
 def _recorded_segment_text(obj: Mapping[str, Any] | None) -> str | None:
     if not isinstance(obj, Mapping):
         return None
@@ -642,6 +659,8 @@ def _resolve_recorded_source(*, candidates: list[dict[str, Any]], block_id: Any,
     else:
         mapping = slice_block_mapping(list(source_block_map or []), block_id, start, end) or []
     if mapping and _mapping_ranges(mapping) is None:
+        return _unresolved_source("lineage_conflict", obj)
+    if mapping and _mapping_disproven_by_fragments(mapping, fragments):
         return _unresolved_source("lineage_conflict", obj)
     recorded = _recorded_segment_text(obj) if owns_span else None
     sliced_text, sliced_ranges, page, locator = _fragment_text(fragments, mapping) if mapping else (None, [], None, None)
@@ -1917,6 +1936,8 @@ def _csv_row(record: Mapping[str, Any], evidence_status: str) -> dict[str, Any]:
         "coverage_object_id": record.get("coverage_object_id") or "",
         "usage_route": record.get("usage_route") or "",
         "semantic_block_id": reconstruction.get("semantic_block_id") if reconstruction.get("status") == "recorded" else UNKNOWN,
+        "semantic_block_start": reconstruction.get("block_start") if reconstruction.get("status") == "recorded" else UNKNOWN,
+        "semantic_block_end": reconstruction.get("block_end") if reconstruction.get("status") == "recorded" else UNKNOWN,
         "model_call_id": provider.get("provider_call_id") if provider.get("status") == "recorded" else UNKNOWN,
         "source_start": source.get("start") if source.get("status") == "recorded" else UNKNOWN,
         "source_end": source.get("end") if source.get("status") == "recorded" else UNKNOWN,
