@@ -44,7 +44,7 @@ SCHEMAS = {
     "source_blocks": ("block_id", "reconstruction_version", "map_start", "map_end", "kind", "fragment_id", "raw_start", "raw_end", "text", "source_page", "left_fragment_id", "right_fragment_id", "provenance", "recorded_reconstruction_version", "recorded_source_blocks_hash", "derived_source_blocks_hash"),
     "lineage": ("object_id", "object_version", "relation", "target_id", "start", "end", "locator", "page", "bbox", "raw_content_hash",
                 "text", "left_fragment_id", "right_fragment_id"),
-    "model_calls": ("run_id", "call_id", "request", "raw_response", "stop_reason", "input_tokens", "output_tokens",
+    "model_calls": ("run_id", "call_id", "task_id", "target_spans", "request", "raw_response", "stop_reason", "input_tokens", "output_tokens",
                     "output_text", "response_status", "requested_at", "deployed_commit", "proposal_hash", "evidence_kind"),
     "object_events": ("run_id", "object_id", "event_id", "timestamp", "event", "reason"),
     "reference_review": ("object_id", "source_range", "expected_type", "expected_context", "reviewer", "judgment"),
@@ -122,6 +122,8 @@ def processing_evidence_tables(
         add("semantic_proposals", **{key: replay.get(key) for key in SCHEMAS["semantic_proposals"] if key != "evidence_kind"},
             evidence_kind="stored_validated_proposal_not_raw_response")
     provider = replay.get("provider_evidence") or {}
+    producing_run, _producing_run_status = select_producing_run(
+        runs, replay.get("identity") if isinstance(replay.get("identity"), dict) else None)
     for task in provider.get("tasks") or []:
         add("formation_tasks", **{key: task.get(key) for key in SCHEMAS["formation_tasks"] if key != "policy_version"},
             policy_version=provider.get("task_policy"))
@@ -150,7 +152,9 @@ def processing_evidence_tables(
                 evidence_kind="rejected_producer_proposal_not_approved_knowledge")
         if provider.get("version") == "semantic-provider-evidence-v1":
             response = provider.get("response") or {}
-            add("model_calls", call_id=response.get("id"), request=provider.get("request"),
+            add("model_calls", run_id=(producing_run or {}).get("run_id"),
+                call_id=response.get("id"), task_id=provider.get("task_id"),
+                target_spans=provider.get("target_spans") or [], request=provider.get("request"),
                 output_text=response.get("output_text"), response_status=response.get("status"),
                 input_tokens=response.get("input_tokens"), output_tokens=response.get("output_tokens"),
                 requested_at=provider.get("requested_at"), deployed_commit=provider.get("deployed_commit"),
@@ -228,7 +232,7 @@ def processing_evidence_tables(
     replay_components = {}
     if isinstance(replay.get("identity"), dict) and isinstance(replay["identity"].get("components"), dict):
         replay_components = replay["identity"]["components"]
-    producing, _run_link = select_producing_run(runs, replay.get("identity") if isinstance(replay.get("identity"), dict) else None)
+    producing = producing_run
     block_rows = []
     block_provenance = {"status": "unavailable"}
     fragments = (producing or {}).get("source_fragments") or []
