@@ -1,0 +1,40 @@
+name: build-deployment-artifact-a4768ab4
+
+on:
+  push:
+    branches:
+      - artifact/deployment-zip-a4768ab4
+
+permissions:
+  contents: read
+
+jobs:
+  deployment-package-artifact:
+    name: Build exact main deployment ZIP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: a4768ab4d8d0474cf30af0b9f91b714d2d3b9309
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build official Azure deployment ZIP
+        run: |
+          python -m pip install --upgrade pip
+          bash scripts/create_azure_deploy_package.sh "$RUNNER_TEMP/metis-console-a4768ab4-azure.zip"
+      - name: Verify ZIP and embedded commit marker
+        run: |
+          unzip -t "$RUNNER_TEMP/metis-console-a4768ab4-azure.zip"
+          test "$(unzip -p "$RUNNER_TEMP/metis-console-a4768ab4-azure.zip" config/deployed_commit.txt | tr -d '\r\n')" = "a4768ab4d8d0474cf30af0b9f91b714d2d3b9309"
+          sha256sum "$RUNNER_TEMP/metis-console-a4768ab4-azure.zip" | tee "$RUNNER_TEMP/metis-console-a4768ab4-azure.zip.sha256"
+      - name: Upload deployment package only
+        uses: actions/upload-artifact@v4
+        with:
+          name: metis-console-a4768ab4-azure-package
+          path: |
+            ${{ runner.temp }}/metis-console-a4768ab4-azure.zip
+            ${{ runner.temp }}/metis-console-a4768ab4-azure.zip.sha256
+          if-no-files-found: error
+          retention-days: 1
