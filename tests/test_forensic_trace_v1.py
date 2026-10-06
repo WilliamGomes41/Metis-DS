@@ -510,6 +510,65 @@ def test_background_assessment_without_object_is_a_source_span(tmp_path):
     assert record["transformation"]["object_id"] is None
 
 
+def test_open_call_failure_stays_on_the_source_span(tmp_path):
+    text = "De werkgroep kon deze passage niet afronden."
+    fragment, block = _source_case(text, "frag-call")
+    derived = current_reconstruction_identity([fragment])
+    span = {"block_id": block["block_id"], "start": 0, "end": len(block["text"])}
+    envelope = {
+        "semantic_replay": {
+            "identity": {"components": {
+                "snapshot_id": "snapshot", "source_sha256": "source-sha",
+                "source_blocks_hash": derived["source_blocks_hash"],
+                "reconstruction_version": derived["reconstruction_version"],
+            }},
+            "proposal": {"objects": [], "source_assessments": []},
+            "provider_evidence": {
+                "version": "semantic-provider-evidence-v1",
+                "task_policy": "bounded-formation-v1",
+                "task_id": "task-budget",
+                "target_spans": [span],
+                "error_code": "source_task_budget_exhausted",
+                "failure_reason": "source_task_budget_exhausted",
+                "response": {"id": "call-budget"},
+                "tasks": [{"task_id": "task-budget", "phase": "initial", "status": "failed",
+                           "target_spans": [span]}],
+            },
+        },
+        "quality_processing_runs": [{
+            "run_id": "run-call", "source_hash": "source-sha",
+            "semantic_identity": {"passage_formation_mode": "semantic-source-bound-v3"},
+            "source_fragments": [fragment],
+        }],
+    }
+    gold = {
+        "gold_version": "forensic-gold-v1",
+        "expected_identity": {"passage_formation_mode": "semantic-source-bound-v3"},
+        "cases": [{
+            "case_id": "CALL-FAILED",
+            "source_sha256": "source-sha",
+            "source_reconstruction_hash": derived["source_blocks_hash"],
+            "fragments": [{"fragment_id": "frag-call", "start": 0, "end": len(text)}],
+            "exact_raw_text": text,
+            "expected_object_type": "explanation",
+            "expected_answer_bearing": True,
+        }],
+    }
+    result = _zip_trace(tmp_path, envelope, [], gold)
+    row = result["divergences"][0]
+    assert row["verdict"] == "FAIL"
+    assert row["first_divergence_stage"] == "provider_decision"
+    record = next(item for item in result["records"] if item.get("expectation"))
+    assert record["source"]["raw_text"] == text
+    assert record["reconstruction"]["status"] == "recorded"
+    assert record["formation"]["status"] == "recorded"
+    assert record["provider"]["status"] == "recorded"
+    assert record["provider"]["provider_call_id"] == "call-budget"
+    assert record["provider"]["error_code"] == "source_task_budget_exhausted"
+    assert record["provider"]["failure_reason"] == "source_task_budget_exhausted"
+    assert record["provider"]["selected"] is False
+
+
 def test_rejected_provider_proposal_stays_on_the_source_span(tmp_path):
     text = "Dit is achtergrond en geen aanbeveling."
     fragment, block = _source_case(text, "frag-bg")

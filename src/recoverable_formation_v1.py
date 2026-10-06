@@ -42,13 +42,17 @@ quarantine to both endpoints, transitively, rather than disappearing silently.
             evidence_fragments=validator_input["evidence_fragments"], object_version="1.0")
 
     rejected, objects, selections = [], {}, {}
-    def reject(kind, index, error, spans=(), *, proposed_object_type=None, source_assessment_role=None):
+    def reject(kind, index, error, spans=(), *, proposed_object_type=None, source_assessment_role=None, evidence_span=None):
         row = {"kind": kind, "index": index, "reason_code": error.code,
                "finding": deepcopy(error.finding), "spans": deepcopy(list(spans))}
         if proposed_object_type not in (None, ""):
             row["proposed_object_type"] = proposed_object_type
         if source_assessment_role not in (None, ""):
             row["source_assessment_role"] = source_assessment_role
+        if isinstance(evidence_span, dict):
+            # Diagnostic location only. pending_rejections() reads spans, and an
+            # empty span list stays an unknown failure location.
+            row["evidence_span"] = deepcopy(evidence_span)
         rejected.append(row)
 
     # Resolve source selections independently of field evidence. This keeps
@@ -156,9 +160,9 @@ quarantine to both endpoints, transitively, rather than disappearing silently.
                 error = SemanticPassageError(str(error))
             candidate = row if isinstance(row, dict) else raw if isinstance(raw, dict) else {}
             span = candidate.get("span") if isinstance(candidate.get("span"), dict) else None
-            located = [span] if span and isinstance(span.get("block_id"), str) and type(span.get("start")) is int and type(span.get("end")) is int else []
-            reject("source_assessment", index, error, located,
-                   source_assessment_role=candidate.get("role"))
+            evidence_span = span if span and isinstance(span.get("block_id"), str) and type(span.get("start")) is int and type(span.get("end")) is int else None
+            reject("source_assessment", index, error,
+                   source_assessment_role=candidate.get("role"), evidence_span=evidence_span)
     if not result["objects"] and not result["source_assessments"]:
         result["abstain_reason"] = "no_validated_proposals"
     # Joint validation is mandatory, including conflicts between independently

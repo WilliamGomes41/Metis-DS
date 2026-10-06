@@ -179,7 +179,7 @@ def _csv_bytes(fields: tuple[str, ...], rows: list[dict[str, Any]]) -> bytes:
 
 
 JSON_COLUMNS = frozenset({
-    "diagnostic", "proposal", "identity", "target_spans", "spans", "section_path",
+    "diagnostic", "proposal", "identity", "target_spans", "spans", "evidence_span", "section_path",
     "admission", "reason_codes", "request", "finding", "limits", "transport",
     "execution", "semantic_identity", "extractor_versions", "source_layout_findings",
     "source_text_view", "source_locator", "bbox", "context_scan", "context_evidence", "source_bound_context",
@@ -660,6 +660,44 @@ def classified_rejections(
     return classified
 
 
+def open_call_failures(provider: Mapping[str, Any], proposal: Any) -> list[dict[str, Any]]:
+    """Open call failures from pending_rejections(), not from every historical error_code."""
+    pending = provider.get("pending_rejections") if isinstance(provider, Mapping) else None
+    if not isinstance(pending, list):
+        if isinstance(provider, Mapping):
+            try:
+                from src.recoverable_formation_v1 import pending_rejections
+                safe_proposal = proposal if isinstance(proposal, dict) else {"objects": [], "source_assessments": []}
+                pending = pending_rejections(provider, safe_proposal)
+            except (KeyError, TypeError, AttributeError, ValueError):
+                pending = None
+        else:
+            pending = None
+    calls = [call for call in _provider_calls(provider) if call.get("error_code") and call.get("target_spans")]
+    if not isinstance(pending, list):
+        pending = [
+            {"kind": "call", "reason_code": call.get("failure_reason") or call.get("error_code"),
+             "spans": call.get("target_spans") or []}
+            for call in calls
+        ]
+    rows = []
+    for item in pending:
+        if not isinstance(item, dict) or item.get("kind") != "call":
+            continue
+        spans = item.get("spans") or []
+        match = next((call for call in calls if call.get("target_spans") == spans), None)
+        response = (match or {}).get("response") if isinstance((match or {}).get("response"), Mapping) else {}
+        rows.append({
+            "kind": "call",
+            "reason_code": item.get("reason_code"),
+            "spans": spans,
+            "provider_call_id": response.get("id") if isinstance(response, Mapping) else None,
+            "error_code": (match or {}).get("error_code") or item.get("reason_code"),
+            "failure_reason": (match or {}).get("failure_reason") or item.get("reason_code"),
+        })
+    return rows
+
+
 def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[str, Any],
                          objects: list[dict[str, Any]] | None) -> dict[str, Any]:
     """Join recorded fragments, mappings, proposals and objects. Do not invent a link."""
@@ -738,7 +776,7 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
 
     def block_bucket(block_id: Any, start: Any, end: Any) -> dict[str, Any]:
         key = (block_id, start, end)
-        return by_block.setdefault(key, {"proposals": [], "assessments": [], "objects": [], "rejections": [], "historical_rejections": []})
+        return by_block.setdefault(key, {"proposals": [], "assessments": [], "objects": [], "rejections": [], "historical_rejections": [], "call_failures": []})
 
     for raw in proposal.get("objects") or []:
         if not isinstance(raw, dict):
@@ -758,7 +796,9 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
         if not semantic.get("spans") and semantic.get("source_mapping"):
             block_bucket(None, None, None)["objects"].append(obj)
     for _call, recorded_rejection, state in classified_rejections(provider, proposal):
-        targets = recorded_rejection.get("spans") or [None]
+        targets = [item for item in (recorded_rejection.get("spans") or []) if isinstance(item, dict)]
+        if not targets and isinstance(recorded_rejection.get("evidence_span"), dict):
+            targets = [recorded_rejection["evidence_span"]]
         for item in targets:
             if item is None or not isinstance(item, dict):
                 continue
@@ -767,13 +807,31 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
                 bucket["historical_rejections"].append(recorded_rejection)
             else:
                 bucket["rejections"].append(recorded_rejection)
+    for failure in open_call_failures(provider, proposal):
+        for item in failure.get("spans") or []:
+            if isinstance(item, dict):
+                block_bucket(item.get("block_id"), item.get("start"), item.get("end"))["call_failures"].append(failure)
 
     tasks = provider.get("tasks") if isinstance(provider.get("tasks"), list) else []
     spans: list[dict[str, Any]] = []
     referenced: set[str] = set()
 
     def provider_stage(proposals: list[dict[str, Any]], assessments: list[dict[str, Any]],
-                       rejections: list[dict[str, Any]], provider_call_id: Any) -> dict[str, Any]:
+                       rejections: list[dict[str, Any]], provider_call_id: Any,
+                       call_failures: list[dict[str, Any]]) -> dict[str, Any]:
+        if call_failures and (proposals or assessments or rejections or len(call_failures) != 1):
+            return {"status": "conflict"}
+        if len(call_failures) == 1 and not proposals and not assessments and not rejections:
+            raw = call_failures[0]
+            return _recorded({
+                "provider_call_id": raw.get("provider_call_id") or provider_call_id,
+                "selected": False,
+                "proposed_object_type": None,
+                "source_assessment_role": None,
+                "error_code": raw.get("error_code"),
+                "failure_reason": raw.get("failure_reason"),
+                "proposal_ref": "provider_evidence.error_code",
+            })
         if proposals and assessments:
             return {"status": "conflict", "proposal_count": len(proposals), "assessment_count": len(assessments)}
         if len(proposals) == 1 and not rejections:
@@ -854,7 +912,7 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
         span_call_id = matched_response.get("id")
         if len(bucket["rejections"]) == 1 and bucket["rejections"][0].get("provider_call_id") not in (None, ""):
             span_call_id = bucket["rejections"][0].get("provider_call_id")
-        decided = provider_stage(bucket["proposals"], bucket["assessments"], bucket["rejections"], span_call_id)
+        decided = provider_stage(bucket["proposals"], bucket["assessments"], bucket["rejections"], span_call_id, bucket["call_failures"])
         if decided.get("status") == "recorded" and bucket["historical_rejections"]:
             decided = {**decided, "historical_rejections": [
                 {"kind": item.get("kind"), "reason_code": item.get("reason_code"),
@@ -1123,15 +1181,18 @@ def _provider_calls_from_export(
             "finding": row.get("finding"),
             "requires_review": row.get("requires_review"),
             "state": row.get("state"),
+            "evidence_span": row.get("evidence_span") if isinstance(row.get("evidence_span"), dict) else None,
             "provider_call_id": call_id,
         })
     built: list[dict[str, Any]] = []
     for row in calls:
         call_id = row.get("call_id")
         built.append({
-            "version": "semantic-provider-evidence-v1",
+            "version": "semantic-provider-evidence-v1" if row.get("call_id") or row.get("task_id") else None,
             "task_id": row.get("task_id"),
             "target_spans": row.get("target_spans") if isinstance(row.get("target_spans"), list) else [],
+            "error_code": row.get("error_code"),
+            "failure_reason": row.get("failure_reason"),
             "deployed_commit": row.get("deployed_commit"),
             "requested_at": row.get("requested_at"),
             "request": row.get("request"),
@@ -1142,7 +1203,10 @@ def _provider_calls_from_export(
                 "input_tokens": row.get("input_tokens"),
                 "output_tokens": row.get("output_tokens"),
             },
-            "formation": {"rejections": findings_by_call.pop(call_id, [])},
+            "formation": {
+                "status": row.get("formation_status"),
+                "rejections": findings_by_call.pop(call_id, []),
+            },
         })
     for call_id, rejections in findings_by_call.items():
         targets = [

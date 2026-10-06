@@ -27,7 +27,7 @@ SCHEMAS = {
                            "failed_task_count", "partial_task_count", "not_started_task_count",
                            "unknown_pending_count", "pending_source_range_count", "pending_source_char_count",
                            "policy_version"),
-    "formation_findings": ("call_id", "kind", "index", "reason_code", "spans", "requires_review", "finding", "proposed_object_type", "source_assessment_role", "state", "evidence_kind"),
+    "formation_findings": ("call_id", "kind", "index", "reason_code", "spans", "requires_review", "finding", "proposed_object_type", "source_assessment_role", "evidence_span", "state", "evidence_kind"),
     "attempt_diagnostics": ("attempt_id", "state", "diagnostic", "evidence_kind"),
     "processing_recovery": ("authorization_id", "actor_id", "reason", "authorized_at", "source_hash", "source_version", "revision", "consumed_by", "consumed_at"),
     "processing_attempts": ("attempt_id", "command_id", "actor_id", "source_hash", "state", "started_at", "expires_at", "finished_at", "phase", "error_code", "validation_code", "processing_reference", "source_version", "kind", "retry_of", "limits", "transport", "retry_not_before", "replayed_call_id", "formation_progress_made"),
@@ -44,7 +44,7 @@ SCHEMAS = {
     "source_blocks": ("block_id", "reconstruction_version", "map_start", "map_end", "kind", "fragment_id", "raw_start", "raw_end", "text", "source_page", "left_fragment_id", "right_fragment_id", "provenance", "recorded_reconstruction_version", "recorded_source_blocks_hash", "derived_source_blocks_hash"),
     "lineage": ("object_id", "object_version", "relation", "target_id", "start", "end", "locator", "page", "bbox", "raw_content_hash",
                 "text", "left_fragment_id", "right_fragment_id"),
-    "model_calls": ("run_id", "call_id", "task_id", "target_spans", "request", "raw_response", "stop_reason", "input_tokens", "output_tokens",
+    "model_calls": ("run_id", "call_id", "task_id", "target_spans", "error_code", "failure_reason", "formation_status", "request", "raw_response", "stop_reason", "input_tokens", "output_tokens",
                     "output_text", "response_status", "requested_at", "deployed_commit", "proposal_hash", "evidence_kind"),
     "object_events": ("run_id", "object_id", "event_id", "timestamp", "event", "reason"),
     "reference_review": ("object_id", "source_range", "expected_type", "expected_context", "reviewer", "judgment"),
@@ -149,11 +149,16 @@ def processing_evidence_tables(
             evidence_kind="rejected_producer_proposal_not_approved_knowledge")
     providers = [root_provider, *(root_provider.get("supplementary_calls") or [])]
     for provider in providers:
-        if provider.get("version") == "semantic-provider-evidence-v1":
-            response = provider.get("response") or {}
+        response = provider.get("response") or {}
+        failed = provider.get("error_code") not in (None, "")
+        if provider.get("version") == "semantic-provider-evidence-v1" or failed:
+            formation = provider.get("formation") if isinstance(provider.get("formation"), dict) else {}
             add("model_calls", run_id=(producing_run or {}).get("run_id"),
                 call_id=response.get("id"), task_id=provider.get("task_id"),
-                target_spans=provider.get("target_spans") or [], request=provider.get("request"),
+                target_spans=provider.get("target_spans") or [],
+                error_code=provider.get("error_code"), failure_reason=provider.get("failure_reason"),
+                formation_status=formation.get("status"),
+                request=provider.get("request"),
                 output_text=response.get("output_text"), response_status=response.get("status"),
                 input_tokens=response.get("input_tokens"), output_tokens=response.get("output_tokens"),
                 requested_at=provider.get("requested_at"), deployed_commit=provider.get("deployed_commit"),
