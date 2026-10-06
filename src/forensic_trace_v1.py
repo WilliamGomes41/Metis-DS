@@ -592,6 +592,30 @@ def pending_rejection_keys(provider: Mapping[str, Any], proposal: Any) -> set[st
     return {rejection_key(row) for row in recorded if isinstance(row, dict)}
 
 
+def _provider_calls(provider: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    calls: list[Mapping[str, Any]] = []
+    if isinstance(provider, Mapping):
+        calls.append(provider)
+        calls.extend(
+            call for call in (provider.get("supplementary_calls") or [])
+            if isinstance(call, Mapping)
+        )
+    return calls
+
+
+def _provider_call_for_span(provider: Mapping[str, Any], block_id: Any, start: Any, end: Any) -> Mapping[str, Any] | None:
+    """Latest recorded call whose selectable target contains this reconstructed span."""
+    calls = _provider_calls(provider)
+    matches = []
+    for call in calls:
+        targets = call.get("target_spans") or []
+        if isinstance(targets, list) and any(_contains_span(target, block_id, start, end) for target in targets):
+            matches.append(call)
+    if matches:
+        return matches[-1]
+    return calls[0] if len(calls) == 1 else None
+
+
 def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[str, Any],
                          objects: list[dict[str, Any]] | None) -> dict[str, Any]:
     """Join recorded fragments, mappings, proposals and objects. Do not invent a link."""
@@ -611,15 +635,28 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
     if provider.get("deployed_commit") and not identity["deployed_commit"]:
         identity["deployed_commit"] = provider.get("deployed_commit")
     omitted: list[str] = []
-    for attempt in envelope.get("processing_attempts") or []:
-        diagnostic = attempt.get("diagnostic") or {}
+    attempts = [
+        attempt for attempt in (envelope.get("processing_attempts") or [])
+        if isinstance(attempt, Mapping)
+    ]
+    for attempt in attempts:
+        diagnostic = attempt.get("diagnostic") if isinstance(attempt.get("diagnostic"), Mapping) else {}
         omitted.extend(str(item) for item in (diagnostic.get("omitted_evidence") or []))
+    producing_attempt = None
+    if producing and producing.get("attempt_id") not in (None, ""):
+        identity["attempt_id"] = str(producing.get("attempt_id"))
+        producing_attempt = next(
+            (attempt for attempt in attempts if str(attempt.get("attempt_id") or "") == identity["attempt_id"]),
+            None,
+        )
+    if producing_attempt is not None:
+        diagnostic = producing_attempt.get("diagnostic") if isinstance(producing_attempt.get("diagnostic"), Mapping) else {}
         if diagnostic.get("deployed_commit") and not identity["deployed_commit"]:
             identity["deployed_commit"] = diagnostic.get("deployed_commit")
         if diagnostic.get("model") and not identity["model"]:
             identity["model"] = diagnostic.get("model")
-    if producing and producing.get("attempt_id") not in (None, ""):
-        identity["attempt_id"] = str(producing.get("attempt_id"))
+        if diagnostic.get("validator_identity") not in (None, ""):
+            identity["validator_identity"] = diagnostic.get("validator_identity")
     run_modes = []
     if producing:
         blob = producing.get("semantic_identity")
@@ -677,37 +714,39 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
         if not semantic.get("spans") and semantic.get("source_mapping"):
             block_bucket(None, None, None)["objects"].append(obj)
     open_keys = pending_rejection_keys(provider, proposal)
-    for rejection in ((provider.get("formation") or {}).get("rejections") or []):
-        if not isinstance(rejection, dict):
-            continue
-        state = rejection.get("state")
-        if state not in {"pending", "historical"}:
-            state = None if open_keys is None else ("pending" if rejection_key(rejection) in open_keys else "historical")
-        targets = rejection.get("spans") or [None]
-        for item in targets:
-            if item is None:
+    for call in _provider_calls(provider):
+        response = call.get("response") if isinstance(call.get("response"), Mapping) else {}
+        provider_call_id = response.get("id")
+        formation = call.get("formation") if isinstance(call.get("formation"), Mapping) else {}
+        for rejection in formation.get("rejections") or []:
+            if not isinstance(rejection, dict):
                 continue
-            if not isinstance(item, dict):
-                continue
-            bucket = block_bucket(item.get("block_id"), item.get("start"), item.get("end"))
-            if state == "historical":
-                bucket["historical_rejections"].append(rejection)
-            else:
-                bucket["rejections"].append(rejection)
+            recorded_rejection = {**rejection, "provider_call_id": provider_call_id}
+            state = rejection.get("state")
+            if state not in {"pending", "historical"}:
+                state = None if open_keys is None else ("pending" if rejection_key(rejection) in open_keys else "historical")
+            targets = rejection.get("spans") or [None]
+            for item in targets:
+                if item is None or not isinstance(item, dict):
+                    continue
+                bucket = block_bucket(item.get("block_id"), item.get("start"), item.get("end"))
+                if state == "historical":
+                    bucket["historical_rejections"].append(recorded_rejection)
+                else:
+                    bucket["rejections"].append(recorded_rejection)
 
     tasks = provider.get("tasks") if isinstance(provider.get("tasks"), list) else []
-    call_id = (provider.get("response") or {}).get("id") if isinstance(provider.get("response"), dict) else None
     spans: list[dict[str, Any]] = []
     referenced: set[str] = set()
 
     def provider_stage(proposals: list[dict[str, Any]], assessments: list[dict[str, Any]],
-                       rejections: list[dict[str, Any]]) -> dict[str, Any]:
+                       rejections: list[dict[str, Any]], provider_call_id: Any) -> dict[str, Any]:
         if proposals and assessments:
             return {"status": "conflict", "proposal_count": len(proposals), "assessment_count": len(assessments)}
         if len(proposals) == 1 and not rejections:
             raw = proposals[0]
             return _recorded({
-                "provider_call_id": call_id,
+                "provider_call_id": provider_call_id,
                 "selected": True,
                 "proposed_object_type": raw.get("proposed_object_type"),
                 "source_assessment_role": None,
@@ -716,7 +755,7 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
         if len(assessments) == 1 and not proposals and not rejections:
             raw = assessments[0]
             return _recorded({
-                "provider_call_id": call_id,
+                "provider_call_id": provider_call_id,
                 "selected": False,
                 "proposed_object_type": None,
                 "source_assessment_role": raw.get("role"),
@@ -726,7 +765,7 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
             raw = rejections[0]
             if raw.get("proposed_object_type"):
                 return _recorded({
-                    "provider_call_id": call_id,
+                    "provider_call_id": provider_call_id,
                     "selected": True,
                     "proposed_object_type": raw.get("proposed_object_type"),
                     "source_assessment_role": None,
@@ -734,7 +773,7 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
                 })
             if raw.get("kind") == "source_assessment":
                 return _recorded({
-                    "provider_call_id": call_id,
+                    "provider_call_id": provider_call_id,
                     "selected": False,
                     "proposed_object_type": None,
                     "source_assessment_role": raw.get("source_assessment_role"),
@@ -777,10 +816,16 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
             span["fragments"] = ranges
         elif ranges:
             span["fragments"] = ranges
-        decided = provider_stage(bucket["proposals"], bucket["assessments"], bucket["rejections"])
+        matched_call = _provider_call_for_span(provider, block_id, start, end)
+        matched_response = matched_call.get("response") if isinstance(matched_call, Mapping) and isinstance(matched_call.get("response"), Mapping) else {}
+        span_call_id = matched_response.get("id")
+        if len(bucket["rejections"]) == 1 and bucket["rejections"][0].get("provider_call_id") not in (None, ""):
+            span_call_id = bucket["rejections"][0].get("provider_call_id")
+        decided = provider_stage(bucket["proposals"], bucket["assessments"], bucket["rejections"], span_call_id)
         if decided.get("status") == "recorded" and bucket["historical_rejections"]:
             decided = {**decided, "historical_rejections": [
-                {"kind": item.get("kind"), "reason_code": item.get("reason_code"), "state": "historical"}
+                {"kind": item.get("kind"), "reason_code": item.get("reason_code"),
+                 "provider_call_id": item.get("provider_call_id"), "state": "historical"}
                 for item in bucket["historical_rejections"]
             ]}
         if decided.get("status") != "unknown":
