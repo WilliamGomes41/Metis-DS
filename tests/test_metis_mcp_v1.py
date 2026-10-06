@@ -301,7 +301,7 @@ def test_entra_navigation_does_not_intercept_mcp_discovery(tmp_path, monkeypatch
     console, _, _, _ = _system(tmp_path)
     def deny(token):
         raise ConsoleError('not_authenticated')
-    identity = SimpleNamespace(config=EntraConfig(TENANT, AUDIENCE, 'test-only-secret', 'https://testserver'), session_account=deny)
+    identity = SimpleNamespace(config=EntraConfig(TENANT, AUDIENCE, 'test-only-secret', 'https://testserver'), session_account=deny, renew_session=deny)
     monkeypatch.setattr(entra, 'install_entra', lambda *args: identity)
     monkeypatch.setenv('METIS_MCP_ENABLED', '1')
     monkeypatch.setenv('METIS_MCP_AUDIENCE', AUDIENCE)
