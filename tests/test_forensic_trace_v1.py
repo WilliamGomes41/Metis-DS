@@ -1617,3 +1617,47 @@ def test_acceptance_population_comes_from_selected_coverage_when_trace_row_is_mi
     assert acceptance["selected_candidates"] == 1
     assert acceptance["independently_resolvable"] == 1
     assert acceptance["selected_candidates_missing_trace"] == 1
+
+
+def test_acceptance_rejects_conflicting_values_within_same_source_stage():
+    acceptance = independent_source_lineage_acceptance(
+        trace_rows=[{
+            "provider_decision": "selected",
+            "object_id": "cov-selected",
+            "coverage_object_id": "cov-selected",
+            "semantic_block_id": "semblock-a",
+            "source_span_id": "span-1",
+            "source_text": "tekst A",
+        }],
+        coverage_rows=[{
+            "object_id": "cov-selected",
+            "block_id": "semblock-a",
+            "start": 0,
+            "end": 7,
+            "selection_origin": "proposal_selected",
+        }],
+        lineage_rows=[{
+            "object_id": "cov-selected",
+            "relation": "selected_raw_fragment_range",
+            "target_id": "frag-1",
+            "start": 0,
+            "end": 7,
+        }],
+        stage_rows=[
+            {
+                "object_id": "cov-selected",
+                "stage": "current_object_raw_text",
+                "text": "tekst A",
+                "text_status": "recorded",
+            },
+            {
+                "object_id": "cov-selected",
+                "stage": "current_object_raw_text",
+                "text": "tekst B",
+                "text_status": "recorded",
+            },
+        ],
+    )
+    assert acceptance["independently_resolvable"] == 0
+    assert acceptance["lineage_conflicts"] == 1
+    assert acceptance["unresolvable_selected_candidates"] == 1
