@@ -502,7 +502,6 @@ try {{
     <p data-session-warning-text style="margin:.5rem 0;"></p>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
       <button class="btn-primary" type="button" data-session-renew>Blijf ingelogd</button>
-      <button class="btn-secondary" type="button" data-session-dismiss>Sluiten</button>
     </div>
   </div>
 </div>
@@ -510,7 +509,6 @@ try {{
 const sessionWarning = document.querySelector('[data-session-warning]');
 const sessionWarningText = document.querySelector('[data-session-warning-text]');
 const sessionRenew = document.querySelector('[data-session-renew]');
-const sessionDismiss = document.querySelector('[data-session-dismiss]');
 let sessionRemaining = null;
 let sessionReason = '';
 let sessionTimer = null;
@@ -591,9 +589,6 @@ if (sessionRenew) sessionRenew.addEventListener('click', async () => {{
     if (!response.ok) return;
     applySessionStatus(await response.json());
   }} catch (_) {{}}
-}});
-if (sessionDismiss) sessionDismiss.addEventListener('click', () => {{
-  if (sessionWarning) sessionWarning.hidden = true;
 }});
 if (sessionWarning) {{
   pollSessionStatus();
