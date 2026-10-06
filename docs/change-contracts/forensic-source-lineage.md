@@ -28,7 +28,7 @@ When the verified block map cannot slice a span, the projector follows the cover
 
 ## Acceptance gate
 
-`scripts/check_forensic_source_lineage.py` reads `coverage.csv`, `lineage.csv` and `source_stages.csv` itself. A selected trace row is resolvable only when those tables contain one coverage segment, one `selected_raw_fragment_range`, and one recorded source-stage text for its object. `lineage_resolvable` on the trace is ignored. The 802-row snapshot is not in the repository; the same command is the gate for that ZIP.
+`scripts/check_forensic_source_lineage.py` reads `coverage.csv`, `lineage.csv` and `source_stages.csv` itself. The selected population comes from `coverage.csv` (`selection_origin=proposal_selected`), not from the trace under test. Every independently selected coverage segment with recorded fragment lineage and source-stage text must have a matching trace row. `lineage_resolvable` on the trace is ignored. A verified raw fragment mapping remains authoritative when reconstructed object text normalizes whitespace/layout; broader `stored_admission_source_text` is contextual evidence, not a competing segment text. Conflicting values within the same recorded source stage remain unresolved. The 802-row snapshot is not in the repository; the same command is the gate for that ZIP.
 
 ## Non-changes
 
