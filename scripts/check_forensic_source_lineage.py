@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Reproject a processing-evidence ZIP and check selected source lineage.
+"""Compare forensic_trace.csv with coverage, lineage and source-stage tables.
 
-This does not mutate the snapshot. A selected candidate whose recorded coverage
-lineage can be followed must not keep UNKNOWN source_span_id or source_text.
+Resolvable lineage is decided only from those tables. The trace flag
+lineage_resolvable is ignored.
 """
 from __future__ import annotations
 
@@ -10,34 +10,48 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from zipfile import ZipFile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.forensic_trace_v1 import load_evidence, source_lineage_acceptance, trace, write_outputs
+from src.forensic_trace_v1 import (
+    _csv_row, _read_csv, independent_source_lineage_acceptance, load_evidence, trace, write_outputs,
+)
+
+
+def _tables(path: Path) -> dict[str, list[dict]]:
+    with ZipFile(path) as archive:
+        return {
+            "trace_rows": _read_csv(archive, "forensic_trace.csv"),
+            "coverage_rows": _read_csv(archive, "coverage.csv"),
+            "lineage_rows": _read_csv(archive, "lineage.csv"),
+            "stage_rows": _read_csv(archive, "source_stages.csv"),
+        }
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("evidence", type=Path, help="processing-evidence ZIP or forensic-evidence JSON")
-    parser.add_argument("--output", type=Path, help="optional directory for the reprojected trace")
+    parser.add_argument("evidence", type=Path, help="processing-evidence ZIP")
+    parser.add_argument("--output", type=Path, help="directory for the reprojected trace")
     args = parser.parse_args(argv)
+    stored = _tables(args.evidence)
+    before = independent_source_lineage_acceptance(**stored)
     evidence = load_evidence(args.evidence)
     result = trace(evidence)
     if args.output:
         write_outputs(result, args.output)
-        rows = []
-        import csv
-        import io
-        text = (args.output / "forensic_trace.csv").read_text(encoding="utf-8-sig")
-        rows = list(csv.DictReader(io.StringIO(text)))
-    else:
-        from src.forensic_trace_v1 import _csv_row
-        rows = [_csv_row(record, result["summary"]["trace_evidence_status"]) for record in result["records"]]
-    acceptance = source_lineage_acceptance(rows)
-    print(json.dumps(acceptance, ensure_ascii=False, indent=2, sort_keys=True))
+    after_rows = [_csv_row(record, result["summary"]["trace_evidence_status"]) for record in result["records"]]
+    after = independent_source_lineage_acceptance(
+        trace_rows=after_rows,
+        coverage_rows=stored["coverage_rows"],
+        lineage_rows=stored["lineage_rows"],
+        stage_rows=stored["stage_rows"],
+    )
+    print(json.dumps({"stored_trace": before, "reprojected_trace": after}, ensure_ascii=False, indent=2, sort_keys=True))
     failed = (
-        acceptance["selected_candidates_with_resolvable_lineage_and_unknown_source_span"]
-        or acceptance["selected_candidates_with_resolvable_lineage_and_unknown_source_text"]
+        after["selected_candidates_with_resolvable_lineage_and_unknown_source_span"]
+        or after["selected_candidates_with_resolvable_lineage_and_unknown_source_text"]
+        or after["selected_remainder_cross_contamination"]
     )
     return 1 if failed else 0
 

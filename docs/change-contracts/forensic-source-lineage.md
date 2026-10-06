@@ -2,7 +2,7 @@
 
 Change class: B
 Promise: A selected candidate whose recorded coverage lineage is present gets that segment's source span and source text. A missing or conflicting lineage stays unresolved and is not filled in.
-Proof: tests/test_forensic_trace_v1.py::test_selected_segment_keeps_its_own_source_span_when_block_map_is_absent and test_missing_lineage_stays_unresolved_and_does_not_fabricate_a_source_span. scripts/check_forensic_source_lineage.py reprojects a snapshot.
+Proof: tests/test_forensic_trace_v1.py::test_selected_segment_keeps_its_own_source_span_when_block_map_is_absent, test_missing_lineage_stays_unresolved_and_does_not_fabricate_a_source_span, and test_acceptance_ignores_the_resolver_flag_when_tables_have_lineage. scripts/check_forensic_source_lineage.py compares forensic_trace.csv with coverage.csv, lineage.csv and source_stages.csv. It does not read lineage_resolvable.
 Touches lifecycle invariants: no
 Rewrite risk: none
 

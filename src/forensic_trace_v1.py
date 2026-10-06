@@ -1979,28 +1979,121 @@ def write_outputs(result: Mapping[str, Any], directory: Path) -> None:
         divergence_path.unlink(missing_ok=True)
 
 
-def source_lineage_acceptance(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
-    """Separate lineage the tracer can follow from lineage that is absent."""
-    selected = [row for row in rows if row.get("provider_decision") == "selected"]
+def independent_source_lineage_acceptance(
+    *,
+    trace_rows: list[Mapping[str, Any]],
+    coverage_rows: list[Mapping[str, Any]],
+    lineage_rows: list[Mapping[str, Any]],
+    stage_rows: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Judge a trace against export tables. Do not read the resolver's own flag."""
+    absent = {None, "", UNKNOWN}
 
-    def resolvable(row: Mapping[str, Any]) -> bool:
-        return str(row.get("lineage_resolvable")).lower() == "true"
+    def present(value: Any) -> bool:
+        return value not in absent
 
-    unknown_span = [
-        row for row in selected
-        if resolvable(row) and row.get("source_span_id") in (None, "", UNKNOWN)
-    ]
-    unknown_text = [
-        row for row in selected
-        if resolvable(row) and row.get("source_text") in (None, "", UNKNOWN)
-    ]
-    unresolvable = [row for row in selected if not resolvable(row)]
+    def as_int(value: Any) -> int | None:
+        return value if type(value) is int else None
+
+    coverage_by_object: dict[str, list[Mapping[str, Any]]] = {}
+    for row in coverage_rows:
+        if present(row.get("object_id")):
+            coverage_by_object.setdefault(str(row["object_id"]), []).append(row)
+    lineage_by_object: dict[str, list[Mapping[str, Any]]] = {}
+    for row in lineage_rows:
+        if present(row.get("object_id")):
+            lineage_by_object.setdefault(str(row["object_id"]), []).append(row)
+    stages_by_object: dict[str, list[Mapping[str, Any]]] = {}
+    for row in stage_rows:
+        if present(row.get("object_id")):
+            stages_by_object.setdefault(str(row["object_id"]), []).append(row)
+
+    def segments(object_id: str) -> list[tuple[str, int, int]]:
+        found = []
+        for row in coverage_by_object.get(object_id, []):
+            block_id, start, end = row.get("block_id"), as_int(row.get("start")), as_int(row.get("end"))
+            if isinstance(block_id, str) and block_id and start is not None and end is not None and start < end:
+                found.append((block_id, start, end))
+        return found
+
+    def ranges(object_id: str) -> list[tuple[str, int, int]]:
+        found = []
+        for row in lineage_by_object.get(object_id, []):
+            if row.get("relation") != "selected_raw_fragment_range":
+                continue
+            fragment_id, start, end = row.get("target_id"), as_int(row.get("start")), as_int(row.get("end"))
+            if isinstance(fragment_id, str) and fragment_id and start is not None and end is not None and 0 <= start < end:
+                found.append((fragment_id, start, end))
+        return found
+
+    def stage_texts(object_id: str) -> list[str]:
+        found = []
+        for row in stages_by_object.get(object_id, []):
+            if row.get("stage") not in {"current_object_raw_text", "stored_admission_source_text"}:
+                continue
+            if row.get("text_status") == "not_recorded":
+                continue
+            text = row.get("text")
+            if isinstance(text, str) and text:
+                found.append(text)
+        return list(dict.fromkeys(found))
+
+    selected = [row for row in trace_rows if row.get("provider_decision") == "selected"]
+    resolvable_ids: list[str] = []
+    unknown_span = 0
+    unknown_text = 0
+    unresolvable = 0
+    contaminated = 0
+    conflicts = 0
+    for row in selected:
+        object_id = row.get("coverage_object_id") or row.get("object_id")
+        if not present(object_id):
+            unresolvable += 1
+            continue
+        object_id = str(object_id)
+        own_segments = segments(object_id)
+        own_ranges = ranges(object_id)
+        own_texts = stage_texts(object_id)
+        if len(own_texts) > 1:
+            conflicts += 1
+            unresolvable += 1
+            continue
+        if not own_segments or not own_ranges or not own_texts:
+            unresolvable += 1
+            continue
+        resolvable_ids.append(object_id)
+        if not present(row.get("source_span_id")):
+            unknown_span += 1
+        if not present(row.get("source_text")):
+            unknown_text += 1
+        own_text = own_texts[0]
+        own_blocks = {item[0] for item in own_segments}
+        leaked = False
+        if row.get("source_text") != own_text:
+            leaked = True
+        for other_id in coverage_by_object:
+            if other_id == object_id or not (own_blocks & {item[0] for item in segments(other_id)}):
+                continue
+            other_texts = stage_texts(other_id)
+            if len(other_texts) == 1 and other_texts[0] != own_text and other_texts[0] in str(row.get("source_text") or ""):
+                leaked = True
+        if leaked:
+            contaminated += 1
     return {
-        "selected_candidates_with_resolvable_lineage_and_unknown_source_span": len(unknown_span),
-        "selected_candidates_with_resolvable_lineage_and_unknown_source_text": len(unknown_text),
-        "unresolvable_selected_candidates": len(unresolvable),
-        "unresolvable_reasons": sorted({str(row.get("unresolved_reason") or "") for row in unresolvable}),
+        "selected_candidates": len(selected),
+        "independently_resolvable": len(resolvable_ids),
+        "selected_candidates_with_resolvable_lineage_and_unknown_source_span": unknown_span,
+        "selected_candidates_with_resolvable_lineage_and_unknown_source_text": unknown_text,
+        "unresolvable_selected_candidates": unresolvable,
+        "selected_remainder_cross_contamination": contaminated,
+        "lineage_conflicts": conflicts,
     }
+
+
+def source_lineage_acceptance(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
+    """Deprecated wrapper. A trace row cannot certify its own lineage."""
+    return independent_source_lineage_acceptance(
+        trace_rows=rows, coverage_rows=[], lineage_rows=[], stage_rows=[])
 
 
 def rows_for_export(*, snapshot_id: str, revision: str, envelope: Mapping[str, Any],

@@ -1,4 +1,7 @@
 """Forensic trace v1. The Smetten background case stays a RED baseline."""
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 import csv
 import io
 import json
@@ -8,7 +11,7 @@ import subprocess
 import sys
 
 from src.forensic_trace_v1 import (
-    UNKNOWN, compare_traces, current_reconstruction_identity, evidence_from_stored, load_evidence, load_gold, rows_for_export, trace, write_outputs,
+    UNKNOWN, compare_traces, current_reconstruction_identity, evidence_from_stored, independent_source_lineage_acceptance, load_evidence, load_gold, rows_for_export, trace, write_outputs,
 )
 from src.processing_evidence_export_v1 import processing_evidence_tables, processing_evidence_zip
 
@@ -1391,10 +1394,21 @@ def test_selected_segment_keeps_its_own_source_span_when_block_map_is_absent():
     assert remainder["source_text"] == remainder_text
     assert remainder["source_span_id"] != selected["source_span_id"]
     assert remainder["coverage_object_id"] == "cov-remainder"
-    from src.forensic_trace_v1 import source_lineage_acceptance
-    acceptance = source_lineage_acceptance(rows)
+    payload = processing_evidence_zip(
+        snapshot_id="snapshot", revision="rev", envelope=envelope, objects=objects)
+    from src.forensic_trace_v1 import _read_csv
+    from zipfile import ZipFile
+    with ZipFile(io.BytesIO(payload)) as archive:
+        acceptance = independent_source_lineage_acceptance(
+            trace_rows=_read_csv(archive, "forensic_trace.csv"),
+            coverage_rows=_read_csv(archive, "coverage.csv"),
+            lineage_rows=_read_csv(archive, "lineage.csv"),
+            stage_rows=_read_csv(archive, "source_stages.csv"),
+        )
+    assert acceptance["independently_resolvable"] == 1
     assert acceptance["selected_candidates_with_resolvable_lineage_and_unknown_source_span"] == 0
     assert acceptance["selected_candidates_with_resolvable_lineage_and_unknown_source_text"] == 0
+    assert acceptance["selected_remainder_cross_contamination"] == 0
 
 
 def test_missing_lineage_stays_unresolved_and_does_not_fabricate_a_source_span():
@@ -1423,7 +1437,46 @@ def test_missing_lineage_stays_unresolved_and_does_not_fabricate_a_source_span()
     assert selected["source_text"] == UNKNOWN
     assert selected["unresolved_reason"] == "coverage_object_missing"
     assert selected["trace_evidence_status"] == "incomplete"
-    from src.forensic_trace_v1 import source_lineage_acceptance
-    acceptance = source_lineage_acceptance(rows)
+    payload = processing_evidence_zip(
+        snapshot_id="snapshot", revision="rev", envelope=envelope, objects=[])
+    from src.forensic_trace_v1 import _read_csv
+    from zipfile import ZipFile
+    with ZipFile(io.BytesIO(payload)) as archive:
+        acceptance = independent_source_lineage_acceptance(
+            trace_rows=_read_csv(archive, "forensic_trace.csv"),
+            coverage_rows=_read_csv(archive, "coverage.csv"),
+            lineage_rows=_read_csv(archive, "lineage.csv"),
+            stage_rows=_read_csv(archive, "source_stages.csv"),
+        )
+    assert acceptance["independently_resolvable"] == 0
     assert acceptance["selected_candidates_with_resolvable_lineage_and_unknown_source_span"] == 0
     assert acceptance["unresolvable_selected_candidates"] == 1
+
+
+def test_acceptance_ignores_the_resolver_flag_when_tables_have_lineage():
+    trace_rows = [{
+        "provider_decision": "selected",
+        "object_id": "cov-selected",
+        "source_span_id": UNKNOWN,
+        "source_text": UNKNOWN,
+        "lineage_resolvable": "false",
+        "unresolved_reason": "coverage_object_missing",
+    }]
+    coverage_rows = [{
+        "object_id": "cov-selected", "block_id": "semblock-a", "start": 10, "end": 31,
+        "selection_origin": "proposal_selected",
+    }]
+    lineage_rows = [{
+        "object_id": "cov-selected", "relation": "selected_raw_fragment_range",
+        "target_id": "frag-1", "start": 10, "end": 31,
+    }]
+    stage_rows = [{
+        "object_id": "cov-selected", "stage": "current_object_raw_text",
+        "text": "geselecteerde kennis", "text_status": "recorded",
+    }]
+    acceptance = independent_source_lineage_acceptance(
+        trace_rows=trace_rows, coverage_rows=coverage_rows,
+        lineage_rows=lineage_rows, stage_rows=stage_rows)
+    assert acceptance["independently_resolvable"] == 1
+    assert acceptance["selected_candidates_with_resolvable_lineage_and_unknown_source_span"] == 1
+    assert acceptance["selected_candidates_with_resolvable_lineage_and_unknown_source_text"] == 1
