@@ -27,13 +27,40 @@ def _source_text(decision: dict[str, Any], blocks: dict[str, dict[str, Any]]) ->
         start = span["start"]
         end = span["end"]
         text = str(block["text"])
-        if not isinstance(start, int) or not isinstance(end, int) or start < 0 or end <= start or end > len(text):
+        if (
+            isinstance(start, bool)
+            or isinstance(end, bool)
+            or not isinstance(start, int)
+            or not isinstance(end, int)
+            or start < 0
+            or end <= start
+            or end > len(text)
+        ):
             raise ValueError("materialisation_span_invalid")
         parts.append(text[start:end])
     source_text = normalize_visible_prose(" ".join(parts))
     if source_text != decision.get("source_text"):
         raise ValueError("materialisation_text_mismatch")
     return source_text
+
+
+
+def _candidate_identity(document_id: str, spans: list[dict[str, Any]]) -> str:
+    """Identity is the materialiser's own function of document and ordered spans.
+
+    A selector-supplied identity field is not an input.
+    """
+
+    material = "\n".join(
+        [
+            str(document_id),
+            *[
+                f'{span["block_id"]}:{span["start"]}:{span["end"]}'
+                for span in spans
+            ],
+        ]
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
 
 
 def materialise_knowledge_candidates(
@@ -54,10 +81,7 @@ def materialise_knowledge_candidates(
         if decision.get("selection_origin") != SELECTION_ORIGIN_PROPOSAL:
             raise ValueError("materialiser_requires_proposal_selection")
         source_text = _source_text(decision, blocks)
-        identity_material = decision.get("_identity_material") or "|".join(
-            f'{span["block_id"]}:{span["start"]}:{span["end"]}' for span in decision["spans"]
-        )
-        identity = hashlib.sha256(str(identity_material).encode("utf-8")).hexdigest()[:16]
+        identity = _candidate_identity(document_id, decision["spans"])
         candidate: dict[str, Any] = {
             "object_id": f"{document_id}-sem-{identity}",
             "object_type": DEFAULT_OBJECT_TYPE,

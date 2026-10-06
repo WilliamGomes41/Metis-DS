@@ -203,11 +203,19 @@ def publish_authorization_contract(
     blockers: list[str] = []
     object_id = obj.get("object_id") or ""
     eligible = eligible_tuple_reviewers(bindings, object_id=object_id, uploader_id=uploader_id)
-    from src.knowledge_path_v1 import knowledge_publication_blockers
+    from src.knowledge_path_v1 import content_reviewable, knowledge_publication_blockers
     knowledge_blockers = knowledge_publication_blockers(obj)
     if knowledge_blockers:
         eligible = []
         blockers.extend(knowledge_blockers)
+    elif content_reviewable(obj):
+        from src.review_duty_v1 import exact_current_approver_ids
+        current_ids = set(exact_current_approver_ids(obj, bindings))
+        eligible = [
+            row
+            for row in eligible
+            if str(row.get("reviewer_id") or "") in current_ids
+        ]
     independence = any(str(row.get("reviewer_id")) != str(uploader_id) for row in eligible)
     from src.review_policy_v1 import object_policy, missing_reviewers
     policy = object_policy(obj)

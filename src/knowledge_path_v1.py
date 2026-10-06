@@ -72,8 +72,16 @@ def is_structural_projection(obj: dict[str, Any]) -> bool:
     return _origin(obj) == "not_applicable"
 
 
+def _exact_bound(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def spans_are_exact(spans: Any) -> bool:
-    """Exact source spans: block id plus integer bounds, never an unknown id."""
+    """Exact source spans: non-empty block id and real integer bounds.
+
+    A string, a bool, a negative start, an empty range, or an unknown
+    source-span id is not exact. This reader does not reconstruct the span.
+    """
 
     if not isinstance(spans, list) or not spans:
         return False
@@ -82,7 +90,11 @@ def spans_are_exact(spans: Any) -> bool:
             return False
         if not str(span.get("block_id") or "").strip():
             return False
-        if "start" not in span or "end" not in span:
+        start = span.get("start")
+        end = span.get("end")
+        if not _exact_bound(start) or not _exact_bound(end):
+            return False
+        if start < 0 or end <= start:
             return False
         if "source_span_id" in span and str(span.get("source_span_id") or "").strip() in _UNKNOWN_SPAN:
             return False
@@ -137,11 +149,19 @@ def candidate_lifecycle(obj: dict[str, Any]) -> str:
 
 
 def knowledge_publication_blockers(obj: dict[str, Any]) -> list[str]:
-    """Blockers that stop a binding from authorizing knowledge publication."""
+    """Blockers that stop a binding from authorizing knowledge publication.
+
+    Publication uses the same candidate boundary as content review. A stored
+    approval stays historical evidence and is not rewritten.
+    """
 
     blockers: list[str] = []
     if is_structural_projection(obj):
         blockers.append("structural_projection_not_knowledge")
     if _lineage_claimed(obj) and not has_exact_source_spans(obj):
         blockers.append("source_lineage_incomplete")
+    if _gate(obj) == GATE_BLOCKED:
+        blockers.append("admission_blocked")
+    if not content_reviewable(obj) and not blockers:
+        blockers.append("not_knowledge_candidate")
     return blockers

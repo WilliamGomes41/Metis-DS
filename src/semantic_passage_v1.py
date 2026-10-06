@@ -765,9 +765,6 @@ def _project_semantic_selection(
             evidence_by_id=evidence_by_id,
         )
 
-        identity_material = "|".join(
-            f'{row["block_id"]}:{row["start"]}:{row["end"]}' for row in selected
-        )
         first = selected[0]
         decision: dict[str, Any] = {
             "decision_kind": "semantic_selection",
@@ -794,7 +791,6 @@ def _project_semantic_selection(
                     by_id[row["block_id"]][1], start=row["start"], end=row["end"]
                 )
             ],
-            "_identity_material": identity_material,
         }
         if field_contract_v2 or field_contract_v3:
             from src.source_bound_fields_v2 import KEY, CONTEXT_KEY, bind_fields, bind_context
