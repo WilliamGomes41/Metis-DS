@@ -1661,3 +1661,54 @@ def test_acceptance_rejects_conflicting_values_within_same_source_stage():
     assert acceptance["independently_resolvable"] == 0
     assert acceptance["lineage_conflicts"] == 1
     assert acceptance["unresolvable_selected_candidates"] == 1
+
+
+def test_multispan_selected_object_uses_its_recorded_lineage_without_block_map():
+    full_text = "eerste geselecteerde betekenis tweede geselecteerde betekenis"
+    first = {"block_id": "semblock-a", "start": 0, "end": 28}
+    second = {"block_id": "semblock-b", "start": 0, "end": 29}
+    obj = _segment_object(
+        object_id="cov-multi",
+        origin="proposal_selected",
+        start=0,
+        end=28,
+        text=full_text,
+        fragment_id="frag-a",
+    )
+    obj["metadata"]["semantic_passage"]["spans"] = [first, second]
+    obj["metadata"]["semantic_passage"]["source_mapping"] = [
+        {"fragment_id": "frag-a", "raw_start": 0, "raw_end": 28, "source_page": 2},
+        {"fragment_id": "frag-b", "raw_start": 0, "raw_end": 29, "source_page": 2},
+    ]
+    envelope = {
+        "semantic_replay": {
+            "identity": {"components": {
+                "source_sha256": "source-sha",
+                "source_blocks_hash": "reconstruction-sha",
+            }},
+            "validation": "passed",
+            "proposal": {"objects": [{
+                "proposed_object_type": "recommendation",
+                "spans": [first, second],
+            }]},
+            "provider_evidence": {
+                "task_policy": "bounded-formation-v1",
+                "tasks": [{
+                    "task_id": "task-multi",
+                    "phase": "select",
+                    "status": "completed",
+                    "target_spans": [first, second],
+                }],
+            },
+        },
+        "quality_processing_runs": [],
+        "source_block_map": [],
+    }
+    rows, _availability, _limitation = rows_for_export(
+        snapshot_id="snapshot", revision="rev", envelope=envelope, objects=[obj])
+    selected = [row for row in rows if row["usage_route"] == "proposal_selected"]
+    assert len(selected) == 2
+    assert {row["semantic_block_id"] for row in selected} == {"semblock-a", "semblock-b"}
+    assert all(row["coverage_object_id"] == "cov-multi" for row in selected)
+    assert all(row["source_span_id"] not in ("", None, UNKNOWN) for row in selected)
+    assert all(row["source_text"] == full_text for row in selected)
