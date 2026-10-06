@@ -8,7 +8,7 @@ import subprocess
 import sys
 
 from src.forensic_trace_v1 import (
-    UNKNOWN, compare_traces, current_reconstruction_identity, load_evidence, load_gold, trace, write_outputs,
+    UNKNOWN, compare_traces, current_reconstruction_identity, evidence_from_stored, load_evidence, load_gold, trace, write_outputs,
 )
 from src.processing_evidence_export_v1 import processing_evidence_tables, processing_evidence_zip
 
@@ -1036,3 +1036,166 @@ def test_reconstructed_bounds_keep_same_raw_range_as_two_trace_spans():
     assert result["summary"]["span_count"] == 2
     assert len({row["source_span_id"] for row in result["records"]}) == 2
     assert all(row["reconstruction"]["status"] == "recorded" for row in result["records"])
+
+
+def test_supplementary_call_provenance_is_bound_to_its_span(tmp_path):
+    first = {"block_id": "block-a", "start": 0, "end": 10}
+    second = {"block_id": "block-b", "start": 0, "end": 12}
+    envelope = {
+        "semantic_replay": {
+            "validation": "passed",
+            "proposal": {
+                "objects": [{
+                    "proposed_object_type": "explanation",
+                    "spans": [second],
+                }],
+                "source_assessments": [],
+            },
+            "provider_evidence": {
+                "version": "semantic-provider-evidence-v1",
+                "task_policy": "bounded-formation-v1",
+                "task_id": "task-a",
+                "target_spans": [first],
+                "response": {"id": "call-a", "status": "completed", "output_text": "{}"},
+                "tasks": [
+                    {"task_id": "task-a", "phase": "initial", "status": "completed", "target_spans": [first]},
+                    {"task_id": "task-b", "phase": "initial", "status": "completed", "target_spans": [second]},
+                ],
+                "supplementary_calls": [{
+                    "version": "semantic-provider-evidence-v1",
+                    "task_id": "task-b",
+                    "target_spans": [second],
+                    "response": {"id": "call-b", "status": "completed", "output_text": "{}"},
+                    "formation": {"status": "validated", "rejections": []},
+                }],
+            },
+        },
+    }
+    direct = evidence_from_stored(
+        snapshot_id="snapshot", revision="rev", envelope=envelope, objects=[])
+    direct_span = next(
+        row for row in direct["spans"]
+        if (row.get("reconstruction") or {}).get("semantic_block_id") == "block-b")
+    assert direct_span["provider"]["provider_call_id"] == "call-b"
+
+    payload = processing_evidence_zip(
+        snapshot_id="snapshot", revision="rev", envelope=envelope, objects=[])
+    path = tmp_path / "calls.zip"
+    path.write_bytes(payload)
+    reloaded = load_evidence(path)
+    reloaded_span = next(
+        row for row in reloaded["spans"]
+        if (row.get("reconstruction") or {}).get("semantic_block_id") == "block-b")
+    assert reloaded_span["provider"]["provider_call_id"] == "call-b"
+
+
+def test_supplementary_rejection_is_joined_with_its_call(tmp_path):
+    span = {"block_id": "block-rejected", "start": 0, "end": 20}
+    rejection = {
+        "kind": "object",
+        "index": 0,
+        "reason_code": "semantic_evidence_literal_not_found",
+        "proposed_object_type": "explanation",
+        "spans": [span],
+    }
+    envelope = {
+        "semantic_replay": {
+            "validation": "passed",
+            "proposal": {"objects": [], "source_assessments": []},
+            "provider_evidence": {
+                "version": "semantic-provider-evidence-v1",
+                "task_policy": "bounded-formation-v1",
+                "task_id": "task-root",
+                "target_spans": [{"block_id": "block-root", "start": 0, "end": 5}],
+                "response": {"id": "call-root", "status": "completed", "output_text": "{}"},
+                "tasks": [
+                    {"task_id": "task-root", "phase": "initial", "status": "completed",
+                     "target_spans": [{"block_id": "block-root", "start": 0, "end": 5}]},
+                    {"task_id": "task-rejected", "phase": "recovery", "status": "partial",
+                     "target_spans": [span]},
+                ],
+                "supplementary_calls": [{
+                    "version": "semantic-provider-evidence-v1",
+                    "task_id": "task-rejected",
+                    "target_spans": [span],
+                    "response": {"id": "call-rejected", "status": "completed", "output_text": "{}"},
+                    "formation": {"status": "partial", "rejections": [rejection]},
+                }],
+            },
+        },
+    }
+    direct = evidence_from_stored(
+        snapshot_id="snapshot", revision="rev", envelope=envelope, objects=[])
+    target = next(
+        row for row in direct["spans"]
+        if (row.get("reconstruction") or {}).get("semantic_block_id") == "block-rejected")
+    assert target["provider"]["provider_call_id"] == "call-rejected"
+    assert target["provider"]["proposed_object_type"] == "explanation"
+    assert target["validation"]["validator_result"] == "rejected"
+
+    payload = processing_evidence_zip(
+        snapshot_id="snapshot", revision="rev", envelope=envelope, objects=[])
+    path = tmp_path / "rejection.zip"
+    path.write_bytes(payload)
+    reloaded = load_evidence(path)
+    target = next(
+        row for row in reloaded["spans"]
+        if (row.get("reconstruction") or {}).get("semantic_block_id") == "block-rejected")
+    assert target["provider"]["provider_call_id"] == "call-rejected"
+    assert target["validation"]["reason_code"] == "semantic_evidence_literal_not_found"
+
+
+def test_validator_identity_comes_from_producing_attempt(tmp_path):
+    validator = {"python_version": "3.13.0", "semantic_passage_v1.py": "validator-hash"}
+    replay_identity = {
+        "version": "semantic-replay-v1.0.0",
+        "hash": "replay-hash",
+        "components": {
+            "snapshot_id": "snapshot",
+            "source_sha256": "source-sha",
+            "source_blocks_hash": "blocks-hash",
+            "reconstruction_version": "source-reconstruction-v1.2.0",
+        },
+    }
+    envelope = {
+        "semantic_replay": {
+            "identity": replay_identity,
+            "validation": "passed",
+            "proposal": {"objects": [], "source_assessments": []},
+            "provider_evidence": {"tasks": []},
+        },
+        "quality_processing_runs": [{
+            "run_id": "run-old",
+            "attempt_id": "attempt-old",
+            "semantic_identity": {"hash": "old"},
+            "source_hash": "old-source",
+            "source_fragments": [],
+        }, {
+            "run_id": "run-producing",
+            "attempt_id": "attempt-producing",
+            "semantic_identity": replay_identity,
+            "source_hash": "source-sha",
+            "source_fragments": [],
+        }],
+        "processing_attempts": [{
+            "attempt_id": "attempt-old",
+            "state": "failed",
+            "diagnostic": {"validator_identity": {"python_version": "old"}},
+        }, {
+            "attempt_id": "attempt-producing",
+            "state": "succeeded",
+            "diagnostic": {"validator_identity": validator},
+        }],
+    }
+    evidence = evidence_from_stored(
+        snapshot_id="snapshot", revision="rev", envelope=envelope, objects=[])
+    assert evidence["identity"]["attempt_id"] == "attempt-producing"
+    assert evidence["identity"]["validator_identity"] == validator
+
+    payload = processing_evidence_zip(
+        snapshot_id="snapshot", revision="rev", envelope=envelope, objects=[])
+    path = tmp_path / "validator.zip"
+    path.write_bytes(payload)
+    reloaded = load_evidence(path)
+    assert reloaded["identity"]["attempt_id"] == "attempt-producing"
+    assert reloaded["identity"]["validator_identity"] == validator
