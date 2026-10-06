@@ -1,0 +1,176 @@
+{
+  "evidence_kind": "forensic-evidence-v1",
+  "evidence_completeness": "complete",
+  "omitted_evidence": [],
+  "notes": "Minimal recorded repro of the known V3 defect. Not the historical production ZIP. deployed_commit names the run where that defect was observed. These spans are not an export from that deploy, and they are not main fe93afdfa22b9a2951e803ebe7e4d654b656b2f7.",
+  "projection": "recorded_minimal_repro_not_a_new_authority",
+  "identity": {
+    "snapshot_id": "minimal-repro-snapshot",
+    "working_revision_id": "minimal-repro-working-revision",
+    "objects_revision": "minimal-repro-objects-revision",
+    "source_sha256": "minimal-repro-source-not-production",
+    "deployed_commit": "8007b11d1f662f0151551b6647280d21d0ae9603",
+    "parser_version": "minimal-repro-parser",
+    "source_reconstruction_version": "minimal-repro-reconstruction-v1",
+    "source_reconstruction_hash": "minimal-repro-reconstruction-not-production",
+    "passage_formation_mode": "semantic-source-bound-v3",
+    "field_contract": "source-bound-fields-v2",
+    "task_policy": "bounded-formation-v1",
+    "prompt_hash": "minimal-repro-prompt",
+    "schema_hash": "minimal-repro-schema",
+    "validator_identity": "minimal-repro-validator",
+    "model": "minimal-repro-model",
+    "provider_contract_version": "minimal-repro-provider-contract",
+    "attempt_id": "minimal-repro-attempt"
+  },
+  "spans": [
+    {
+      "source_fragment_ids": ["smetten-quiz"],
+      "start": 0,
+      "end": 111,
+      "source": {
+        "status": "recorded",
+        "source_fragment_ids": ["smetten-quiz"],
+        "raw_text": "Om de implementatie van de richtlijn te bevorderen heeft de werkgroep vijf vragen voor de kennisquiz opgesteld.",
+        "clean_text": "Om de implementatie van de richtlijn te bevorderen heeft de werkgroep vijf vragen voor de kennisquiz opgesteld.",
+        "source_page": 2,
+        "source_locator": "p2",
+        "section_path": ["Inleiding"],
+        "start": 0,
+        "end": 111
+      },
+      "reconstruction": {
+        "status": "recorded",
+        "semantic_block_id": "block-quiz",
+        "block_start": 0,
+        "block_end": 111,
+        "section_role": null
+      },
+      "formation": {
+        "status": "recorded",
+        "task_id": "task-quiz",
+        "phase": "select",
+        "selectable_range": {"block_id": "block-quiz", "start": 0, "end": 111},
+        "context_only_block_ids": [],
+        "task_policy": "bounded-formation-v1",
+        "selectable": true
+      },
+      "provider": {
+        "status": "recorded",
+        "provider_call_id": "call-1",
+        "selected": true,
+        "proposed_object_type": "explanation",
+        "source_assessment_role": null,
+        "proposal_ref": "proposal.objects[0]"
+      },
+      "validation": {
+        "status": "recorded",
+        "validator_result": "accepted",
+        "reason_code": null,
+        "finding": null
+      },
+      "transformation": {
+        "status": "recorded",
+        "object_id": "obj-quiz",
+        "object_version": 1,
+        "canonical_object_hash": "hash-quiz",
+        "proposed_object_type": "explanation"
+      },
+      "admission": {
+        "status": "recorded",
+        "gate_result": "allowed",
+        "reason_codes": []
+      },
+      "source_accountability": {
+        "status": "recorded",
+        "source_role": null,
+        "passage_disposition": "selected_as_candidate"
+      },
+      "review_projection": {
+        "status": "recorded",
+        "shown_as_review_candidate": true,
+        "review_status": "not_yet_assessed",
+        "review_decision": null
+      },
+      "publication_effect": {
+        "status": "recorded",
+        "blocks_publication": false,
+        "publication_readiness_reason": null
+      }
+    },
+    {
+      "source_fragment_ids": ["smetten-definition"],
+      "start": 0,
+      "end": 83,
+      "source": {
+        "status": "recorded",
+        "source_fragment_ids": ["smetten-definition"],
+        "raw_text": "Smetten is een huidontsteking die ontstaat op plekken waar huid-op-huid contact is.",
+        "clean_text": "Smetten is een huidontsteking die ontstaat op plekken waar huid-op-huid contact is.",
+        "source_page": 4,
+        "source_locator": "p4",
+        "section_path": ["Definitie"],
+        "start": 0,
+        "end": 83
+      },
+      "reconstruction": {
+        "status": "recorded",
+        "semantic_block_id": "block-definition",
+        "block_start": 0,
+        "block_end": 83,
+        "section_role": null
+      },
+      "formation": {
+        "status": "recorded",
+        "task_id": "task-definition",
+        "phase": "select",
+        "selectable_range": {"block_id": "block-definition", "start": 0, "end": 83},
+        "context_only_block_ids": [],
+        "task_policy": "bounded-formation-v1",
+        "selectable": true
+      },
+      "provider": {
+        "status": "recorded",
+        "provider_call_id": "call-1",
+        "selected": true,
+        "proposed_object_type": "definition",
+        "source_assessment_role": null,
+        "proposal_ref": "proposal.objects[1]"
+      },
+      "validation": {
+        "status": "recorded",
+        "validator_result": "accepted",
+        "reason_code": null,
+        "finding": null
+      },
+      "transformation": {
+        "status": "recorded",
+        "object_id": "obj-definition",
+        "object_version": 1,
+        "canonical_object_hash": "hash-definition",
+        "proposed_object_type": "definition"
+      },
+      "admission": {
+        "status": "recorded",
+        "gate_result": "allowed",
+        "reason_codes": []
+      },
+      "source_accountability": {
+        "status": "recorded",
+        "source_role": null,
+        "passage_disposition": "selected_as_candidate"
+      },
+      "review_projection": {
+        "status": "recorded",
+        "shown_as_review_candidate": true,
+        "review_status": "not_yet_assessed",
+        "review_decision": null
+      },
+      "publication_effect": {
+        "status": "recorded",
+        "blocks_publication": false,
+        "publication_readiness_reason": null
+      }
+    }
+  ]
+}

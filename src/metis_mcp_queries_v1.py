@@ -115,7 +115,9 @@ class McpQueries:
             rows = [pick(r, PASSAGE_FIELDS) for r in selected if not args.get('object_id') or r['object_id'] == args['object_id']]
             return {**result, **page(rows, args)}
         if name == 'get_processing_evidence':
-            tables, coverage = processing_evidence_tables(snapshot_id=sid, revision=revision, envelope=envelope, objects=objects)
+            current_objects = list({row['object_id']: row for row in objects}.values())
+            tables, coverage = processing_evidence_tables(
+                snapshot_id=sid, revision=revision, envelope=envelope, objects=current_objects)
             rows = tables[args.get('table', 'runs')]
             if args.get('object_id'):
                 rows = [r for r in rows if r.get('object_id') == args['object_id']]

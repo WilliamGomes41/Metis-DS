@@ -100,7 +100,7 @@ def record_processing(envelope: dict[str, Any], objects: list[dict[str, Any]], *
         })
     envelope[RUNS] = [*deepcopy(envelope.get(RUNS) or []), run]
     run["source_fragments"] = [{key: deepcopy(fragment[key]) for key in (
-        "fragment_id", "fragment_hash", "raw_text", "clean_text", "source_page", "bbox", "source_locator", "source_text_view", "source_layout_findings")
+        "fragment_id", "fragment_hash", "raw_text", "clean_text", "section_path", "heading", "source_page", "bbox", "source_locator", "source_text_view", "source_layout_findings")
         if key in fragment} for fragment in fragments]
 
 

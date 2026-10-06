@@ -165,7 +165,9 @@ def test_scope_export_equivalence_and_no_domain_writes(connection):
     assert call('get_storage_status', {'snapshot_id': first['snapshot_id']}).json()['result']['isError']
     sid = first['snapshot_id']
     objects, revision = console.snapshot_objects_and_revision(sid, include_blocked=True)
-    expected, _ = processing_evidence_tables(snapshot_id=sid, revision=revision, envelope=console._envelope(sid), objects=objects)
+    current_objects = list({row['object_id']: row for row in objects}.values())
+    expected, _ = processing_evidence_tables(
+        snapshot_id=sid, revision=revision, envelope=console._envelope(sid), objects=current_objects)
     evidence = call('get_processing_evidence', {'snapshot_id': sid, 'table': 'validation_findings'}).json()['result']['structuredContent']
     assert evidence['items'] == expected['validation_findings'][:25]
     assert evidence['objects_revision'] == revision
@@ -203,8 +205,9 @@ def test_lineage_preserves_source_locations_without_exposing_storage(connection)
         {'raw_object_id': 'raw-source-1', 'source_locator': locator, 'page': 2}]
     console._save_objects(sid, objects, expected_revision=revision)
     objects, revision = console.snapshot_objects_and_revision(sid, include_blocked=True)
+    current_objects = list({row['object_id']: row for row in objects}.values())
     expected, _ = processing_evidence_tables(snapshot_id=sid, revision=revision,
-                                            envelope=console._envelope(sid), objects=objects)
+                                            envelope=console._envelope(sid), objects=current_objects)
     evidence = call('get_processing_evidence', {'snapshot_id': sid, 'table': 'lineage',
                                               'object_id': target['object_id']}).json()['result']['structuredContent']
     expected_rows = [row for row in expected['lineage'] if row['object_id'] == target['object_id']]
@@ -309,3 +312,42 @@ def test_entra_navigation_does_not_intercept_mcp_discovery(tmp_path, monkeypatch
     assert client.get('/mcp', follow_redirects=False).status_code == 401
     assert client.get('/settings/chatgpt', follow_redirects=False).status_code == 303
     assert client.post('/accounts/access', data={}).status_code == 403
+
+
+def test_processing_evidence_uses_only_current_object_versions(monkeypatch):
+    import src.metis_mcp_queries_v1 as queries_module
+
+    old = {"object_id": "obj-1", "object_version": "1.0"}
+    current = {"object_id": "obj-1", "object_version": "1.1"}
+    envelope = {
+        "snapshot_id": "snap-1",
+        "sha256": "source-sha",
+        "named_reviewers": [],
+        "uploader_account_id": "researcher",
+    }
+
+    class Console:
+        def _envelope(self, snapshot_id):
+            assert snapshot_id == "snap-1"
+            return envelope
+
+        def snapshot_objects_and_revision(self, snapshot_id, include_blocked=False):
+            assert snapshot_id == "snap-1"
+            assert include_blocked is True
+            return [old, current], "rev-1"
+
+    captured = {}
+
+    def fake_processing_evidence_tables(*, snapshot_id, revision, envelope, objects):
+        captured["objects"] = objects
+        return {"forensic_trace": []}, []
+
+    monkeypatch.setattr(queries_module, "processing_evidence_tables", fake_processing_evidence_tables)
+    queries = McpQueries(Console(), "https://testserver")
+    result = queries.read(
+        {"account_id": "publisher", "roles": ["publisher"]},
+        "get_processing_evidence",
+        {"snapshot_id": "snap-1", "table": "forensic_trace"},
+    )
+    assert result["items"] == []
+    assert captured["objects"] == [current]

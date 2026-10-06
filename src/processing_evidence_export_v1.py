@@ -9,12 +9,16 @@ from datetime import datetime, timezone
 from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from src.forensic_trace_v1 import (
+    CSV_FIELDS, _escape_formula, classified_rejections, project_source_blocks,
+    rows_for_export, select_producing_run,
+)
 from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v10"
-PROJECTOR_VERSION = "processing-evidence-export-v10"
+VERSION = "processing-evidence-export-v11"
+PROJECTOR_VERSION = "processing-evidence-export-v11"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
     "source_usage": ("object_id", "object_version", "container", "kind", "reason", "target_ids", "accounted", "policy_version"),
@@ -23,26 +27,28 @@ SCHEMAS = {
                            "failed_task_count", "partial_task_count", "not_started_task_count",
                            "unknown_pending_count", "pending_source_range_count", "pending_source_char_count",
                            "policy_version"),
-    "formation_findings": ("call_id", "kind", "index", "reason_code", "spans", "requires_review", "finding", "evidence_kind"),
+    "formation_findings": ("call_id", "kind", "index", "reason_code", "spans", "requires_review", "finding", "proposed_object_type", "source_assessment_role", "evidence_span", "state", "evidence_kind"),
     "attempt_diagnostics": ("attempt_id", "state", "diagnostic", "evidence_kind"),
     "processing_recovery": ("authorization_id", "actor_id", "reason", "authorized_at", "source_hash", "source_version", "revision", "consumed_by", "consumed_at"),
     "processing_attempts": ("attempt_id", "command_id", "actor_id", "source_hash", "state", "started_at", "expires_at", "finished_at", "phase", "error_code", "validation_code", "processing_reference", "source_version", "kind", "retry_of", "limits", "transport", "retry_not_before", "replayed_call_id", "formation_progress_made"),
-    "source_views": ("run_id", "fragment_id", "fragment_hash", "source_page", "bbox", "source_locator", "raw_text", "clean_text", "source_text_view", "source_layout_findings"),
-    "runs": ("run_id", "source_hash", "started_at", "finished_at", "outcome", "reason", "extractor_versions", "execution", "semantic_identity", "production_commit_status"),
+    "source_views": ("run_id", "fragment_id", "fragment_hash", "section_path", "heading", "source_page", "bbox", "source_locator", "raw_text", "clean_text", "source_text_view", "source_layout_findings"),
+    "runs": ("run_id", "source_hash", "started_at", "finished_at", "outcome", "reason", "extractor_versions", "execution", "semantic_identity", "attempt_id", "production_commit_status"),
     "run_candidates": ("run_id", "object_id", "object_version", "canonical_hash", "origin", "structural"),
     "semantic_proposals": ("proposal_hash", "identity", "validation", "semantic_execution", "origin_execution", "replay_from_proposal_hash", "proposal", "evidence_kind"),
     "source_stages": ("object_id", "object_version", "stage", "text", "section_path", "source_checksum", "text_status"),
-    "coverage": ("object_id", "object_version", "block_id", "start", "end", "selection_origin", "register_status", "gate_result", "model_decision_status", "offset_text_status"),
+    "coverage": ("object_id", "object_version", "block_id", "start", "end", "selection_origin", "register_status", "gate_result", "model_decision_status", "offset_text_status", "formation_mode"),
     "recommendation_coverage": ("object_id", "object_version", "contract_version", "detection_completeness", "block_id", "start", "end", "text", "status", "scope_cue"),
     "proposal_fields": ("object_id", "object_version", "field", "value", "value_status", "stage", "producer_status", "contract_version", "source_span", "missing_reason"),
     "validation_findings": ("object_id", "object_version", "gate_result", "reason_code", "evidence_kind", "admission", "rule_execution_trace_status"),
     "context_evidence": ("object_id", "object_version", "context_scan", "expand_merge", "necessary_context_disposition", "source_context_review", "context_realization", "source_bound_context", "evidence_kind"),
+    "source_blocks": ("block_id", "reconstruction_version", "map_start", "map_end", "kind", "fragment_id", "raw_start", "raw_end", "text", "source_page", "left_fragment_id", "right_fragment_id", "provenance", "recorded_reconstruction_version", "recorded_source_blocks_hash", "derived_source_blocks_hash"),
     "lineage": ("object_id", "object_version", "relation", "target_id", "start", "end", "locator", "page", "bbox", "raw_content_hash",
                 "text", "left_fragment_id", "right_fragment_id"),
-    "model_calls": ("run_id", "call_id", "request", "raw_response", "stop_reason", "input_tokens", "output_tokens",
+    "model_calls": ("run_id", "call_id", "task_id", "target_spans", "error_code", "failure_reason", "formation_status", "request", "raw_response", "stop_reason", "input_tokens", "output_tokens",
                     "output_text", "response_status", "requested_at", "deployed_commit", "proposal_hash", "evidence_kind"),
     "object_events": ("run_id", "object_id", "event_id", "timestamp", "event", "reason"),
     "reference_review": ("object_id", "source_range", "expected_type", "expected_context", "reviewer", "judgment"),
+    "forensic_trace": CSV_FIELDS,
 }
 FIELDS = (
     "proposed_type", "type_evidence_spans", "actor_of_scope", "recommended_action",
@@ -63,8 +69,8 @@ def _csv(fields: tuple[str, ...], rows: list[dict[str, Any]]) -> bytes:
                 cell = json.dumps(value, ensure_ascii=False)
             else:
                 cell = "" if value is None else str(value)
-            if cell.lstrip().startswith(("=", "+", "-", "@")) or cell.startswith(("\t", "\r", "\n")):
-                cell = "'" + cell
+            if cell.lstrip().startswith(("=", "+", "-", "@")) or cell.startswith(("'", "\t", "\r", "\n")):
+                cell = _escape_formula(cell)
             cells[field] = cell
         writer.writerow(cells)
     return output.getvalue().encode("utf-8-sig")
@@ -116,6 +122,8 @@ def processing_evidence_tables(
         add("semantic_proposals", **{key: replay.get(key) for key in SCHEMAS["semantic_proposals"] if key != "evidence_kind"},
             evidence_kind="stored_validated_proposal_not_raw_response")
     provider = replay.get("provider_evidence") or {}
+    producing_run, _producing_run_status = select_producing_run(
+        runs, replay.get("identity") if isinstance(replay.get("identity"), dict) else None)
     for task in provider.get("tasks") or []:
         add("formation_tasks", **{key: task.get(key) for key in SCHEMAS["formation_tasks"] if key != "policy_version"},
             policy_version=provider.get("task_policy"))
@@ -132,15 +140,25 @@ def processing_evidence_tables(
         obj = source["record"]
         add("source_usage", object_id=obj["object_id"], object_version=obj["object_version"], container="source",
             **source["usage"], policy_version=CONTAINER_VERSION)
-    providers = [provider, *(provider.get("supplementary_calls") or [])]
+    root_provider = provider
+    proposal = replay.get("proposal") if isinstance(replay.get("proposal"), dict) else {}
+    for call, rejection, state in classified_rejections(root_provider, proposal):
+        add("formation_findings", call_id=(call.get("response") or {}).get("id"),
+            **{k: rejection.get(k) for k in SCHEMAS["formation_findings"] if k not in {"call_id", "evidence_kind", "state"}},
+            state=state,
+            evidence_kind="rejected_producer_proposal_not_approved_knowledge")
+    providers = [root_provider, *(root_provider.get("supplementary_calls") or [])]
     for provider in providers:
-        for rejection in (provider.get("formation") or {}).get("rejections", []):
-            add("formation_findings", call_id=(provider.get("response") or {}).get("id"),
-                **{k: rejection.get(k) for k in SCHEMAS["formation_findings"] if k not in {"call_id", "evidence_kind"}},
-                evidence_kind="rejected_producer_proposal_not_approved_knowledge")
-        if provider.get("version") == "semantic-provider-evidence-v1":
-            response = provider.get("response") or {}
-            add("model_calls", call_id=response.get("id"), request=provider.get("request"),
+        response = provider.get("response") or {}
+        failed = provider.get("error_code") not in (None, "")
+        if provider.get("version") == "semantic-provider-evidence-v1" or failed:
+            formation = provider.get("formation") if isinstance(provider.get("formation"), dict) else {}
+            add("model_calls", run_id=(producing_run or {}).get("run_id"),
+                call_id=response.get("id"), task_id=provider.get("task_id"),
+                target_spans=provider.get("target_spans") or [],
+                error_code=provider.get("error_code"), failure_reason=provider.get("failure_reason"),
+                formation_status=formation.get("status"),
+                request=provider.get("request"),
                 output_text=response.get("output_text"), response_status=response.get("status"),
                 input_tokens=response.get("input_tokens"), output_tokens=response.get("output_tokens"),
                 requested_at=provider.get("requested_at"), deployed_commit=provider.get("deployed_commit"),
@@ -180,7 +198,8 @@ def processing_evidence_tables(
             add("coverage", **keys, **{k: span.get(k) for k in ("block_id", "start", "end")},
                 selection_origin=row["selection_origin"], register_status=row["passage_register"].get("status"),
                 gate_result=admission.get("gate_result"), model_decision_status="not_recorded",
-                offset_text_status="original_block_text_not_recorded")
+                offset_text_status="original_block_text_not_recorded",
+                formation_mode=semantic.get("formation_mode") or None)
             if span.get("block_id"):
                 add("lineage", **keys, relation="selected_block_range", target_id=span["block_id"],
                     start=span.get("start"), end=span.get("end"))
@@ -214,6 +233,29 @@ def processing_evidence_tables(
                     source_bound_context=(obj.get("metadata") or {}).get("source_bound_context"),
                     evidence_kind="stored_scan_not_verified_dependency_resolution")
 
+    replay_components = {}
+    if isinstance(replay.get("identity"), dict) and isinstance(replay["identity"].get("components"), dict):
+        replay_components = replay["identity"]["components"]
+    producing = producing_run
+    block_rows = []
+    block_provenance = {"status": "unavailable"}
+    fragments = (producing or {}).get("source_fragments") or []
+    if fragments:
+        rows, status = project_source_blocks(
+            fragments, replay_components.get("reconstruction_version"), replay_components.get("source_blocks_hash"))
+        block_rows = rows
+        block_provenance = status
+    for row in block_rows:
+        add("source_blocks", **row)
+    usable_rows = [row for row in block_rows if row.get("provenance") == "verified_derived"]
+
+    trace_rows, trace_availability, trace_limitation = rows_for_export(
+        snapshot_id=snapshot_id, revision=revision,
+        envelope={**envelope, "source_block_map": usable_rows, "reconstruction_provenance": block_provenance},
+        objects=objects)
+    for row in trace_rows:
+        add("forensic_trace", **row)
+
     statuses = {
         "source_usage": ("derived", "Current source usage under the recorded policy; not a new approval or clinical completeness proof."),
         "formation_tasks": ("recorded" if tables["formation_tasks"] else "not_recorded", "Bounded task observations; historical statuses are retained and pending findings determine current recovery."),
@@ -235,7 +277,10 @@ def processing_evidence_tables(
         "proposal_fields": ("partial", "Stored admission fields; field producers and intermediate transformations are not recorded."),
         "validation_findings": ("partial", "Stored results and reasons; no individual execution trace. No reason does not prove all checks passed."),
         "context_evidence": ("partial", "Stored context scan; include does not by itself prove that context was attached."),
-        "lineage": ("partial", "Object-to-block and object-to-fragment relations are separate; no inferred block-to-fragment mapping."),
+        "source_blocks": (
+            "verified_derived" if block_provenance.get("status") == "verified_derived" else "not_recorded",
+            "Derived from current reconstruction only when reconstruction_version and source_blocks_hash equal the recorded replay identity. A mismatch is not used as a historical block map."),
+        "lineage": ("partial", "Object-to-block and object-to-fragment relations are separate; block-to-fragment mapping is source_blocks, not inferred from object text."),
         "model_calls": ("partial" if tables["model_calls"] else "not_recorded",
                         "Origin call of latest saved validated proposal only, also on replay; not a new call. "
                         "Request payload excludes HTTP headers. Output text is stored; full raw response, failed attempts "
@@ -243,6 +288,7 @@ def processing_evidence_tables(
                         "Deployment identifies the origin call, not the current export or replay."),
         "object_events": ("not_exported", "This package does not read the review ledger and does not claim that no historical events exist."),
         "reference_review": ("not_exported", "A human reference assessment must be supplied separately; system review state is not a gold standard."),
+        "forensic_trace": (trace_availability, trace_limitation),
     }
     manifest = [{**common, "schema_version": PROJECTOR_VERSION, "dataset": name + ".csv",
                  "row_count": len(tables[name]), "availability": statuses[name][0],
@@ -284,6 +330,7 @@ def processing_evidence_zip(**kwargs: Any) -> bytes:
             f"Metis {VERSION}\n"
             f"Exported at: {datetime.now(timezone.utc).isoformat()}\n"
             "Read manifest.csv first. This is a read-only projection of stored evidence.\n"
+            "CSV v11 adds forensic_trace.csv, a derived join of recorded evidence. It is not a new authority.\n"
             "CSV v10 adds formation_progress.csv with current planned, terminal and pending bounded-task counts.\n"
             "CSV v6 adds bounded attempt limits, transport observations and retry linkage; context evidence is retained.\n"
             "CSV v4 adds text, left_fragment_id and right_fragment_id to lineage.csv for inserted joins.\n"

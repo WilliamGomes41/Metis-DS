@@ -295,6 +295,29 @@ def test_invalid_candidate_quarantines_related_candidate_not_independent_one():
     assert result['objects'][0]['spans'][0]['block_id'] == blocks[2]['block_id']
     assert len(result['objects']) == 1 and not result['relations']
     assert {r['reason_code'] for r in evidence['rejections']} == {'semantic_evidence_literal_not_found', 'semantic_dependency_rejected'}
+    rejected_by_reason = {r['reason_code']: r for r in evidence['rejections']}
+    assert rejected_by_reason['semantic_evidence_literal_not_found']['proposed_object_type'] == objects[0]['proposed_object_type']
+    located = rejected_by_reason['semantic_evidence_literal_not_found']['spans']
+    assert located[0]['block_id'] == objects[0]['spans'][0]['block_id']
+    assert type(located[0]['start']) is int and type(located[0]['end']) is int
+    assert 'literal' not in located[0]
+    assert rejected_by_reason['semantic_dependency_rejected']['proposed_object_type'] == objects[1]['proposed_object_type']
+
+
+def test_source_assessment_diagnostic_span_does_not_close_pending():
+    from src.recoverable_formation_v1 import pending_rejections
+    span = {'block_id': 'b', 'start': 0, 'end': 4}
+    evidence = {'formation': {'rejections': [{
+        'kind': 'source_assessment',
+        'reason_code': 'semantic_source_assessment_invalid',
+        'spans': [],
+        'evidence_span': span,
+        'source_assessment_role': 'background',
+    }]}, 'supplementary_calls': []}
+    proposal = {'objects': [{'spans': [span]}], 'source_assessments': []}
+    pending = pending_rejections(evidence, proposal)
+    assert pending[0]['spans'] == []
+    assert pending[0]['evidence_span'] == span
 
 
 def test_conflicting_reselection_cannot_replace_primary_or_clear_itself():
@@ -305,9 +328,16 @@ def test_conflicting_reselection_cannot_replace_primary_or_clear_itself():
     supplement['objects'][0]['context_evidence'] = [{'unresolved_reason': 'uncertain'}]
     # Include independent new work: the conflicting duplicate may not discard it.
     supplement['objects'].append({'spans': [{'block_id': 'c', 'start': 0, 'end': 5}], 'context_evidence': []})
+    supplement['source_assessments'] = [{
+        'span': {'block_id': 'd', 'start': 0, 'end': 5},
+        'role': 'background',
+        'reason': 'historical_context',
+    }]
     retained, rejected = restrict_supplement(supplement, primary=primary,
         targets=[{'span': {'block_id': 'c', 'start': 0, 'end': 5}}])
     assert [o['spans'][0]['block_id'] for o in retained['objects']] == ['c']
+    source_rejection = next(r for r in rejected if r['kind'] == 'source_assessment')
+    assert source_rejection['source_assessment_role'] == 'background'
     evidence = {'formation': {'rejections': rejected}, 'supplementary_calls': []}
     assert pending_rejections(evidence, primary)[0]['requires_review']
     assert primary['objects'][0]['context_evidence'] == []
