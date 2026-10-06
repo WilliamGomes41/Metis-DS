@@ -309,9 +309,16 @@ def test_conflicting_reselection_cannot_replace_primary_or_clear_itself():
     supplement['objects'][0]['context_evidence'] = [{'unresolved_reason': 'uncertain'}]
     # Include independent new work: the conflicting duplicate may not discard it.
     supplement['objects'].append({'spans': [{'block_id': 'c', 'start': 0, 'end': 5}], 'context_evidence': []})
+    supplement['source_assessments'] = [{
+        'span': {'block_id': 'd', 'start': 0, 'end': 5},
+        'role': 'background',
+        'reason': 'historical_context',
+    }]
     retained, rejected = restrict_supplement(supplement, primary=primary,
         targets=[{'span': {'block_id': 'c', 'start': 0, 'end': 5}}])
     assert [o['spans'][0]['block_id'] for o in retained['objects']] == ['c']
+    source_rejection = next(r for r in rejected if r['kind'] == 'source_assessment')
+    assert source_rejection['source_assessment_role'] == 'background'
     evidence = {'formation': {'rejections': rejected}, 'supplementary_calls': []}
     assert pending_rejections(evidence, primary)[0]['requires_review']
     assert primary['objects'][0]['context_evidence'] == []
