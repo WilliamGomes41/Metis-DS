@@ -148,6 +148,7 @@ def test_selector_returns_a_decision_and_not_a_knowledge_candidate() -> None:
     assert "relation_id" not in decision["relations"][0]
     assert "target_object_id" not in decision["relations"][0]
     assert _CANONICAL_OBJECT_KEYS.isdisjoint(decision)
+    assert "_identity_material" not in decision
     assert materialise_knowledge_candidates(
         decisions, document_id="doc-t7", fragments=fragments
     )[0]["object_id"] not in {row.get("object_id") for row in decisions}
@@ -274,3 +275,54 @@ def test_same_source_has_one_semantic_candidate_and_a_separate_deterministic_row
     assert candidate["object_id"].startswith("doc-t7-sem-")
     assert is_inhoudelijk_candidate(candidate) is True
     assert is_inhoudelijk_candidate(deterministic) is False
+
+
+def test_forged_identity_material_cannot_change_candidate_identity() -> None:
+    text = "Bespreek met de patiënt welke behandeling het beste past."
+    fragments = [_fragment("frag-1", text)]
+    block = semantic_source_blocks(fragments)[0]
+    decisions = semantic_units_from_proposal(
+        fragments,
+        document_id="doc-t7",
+        proposal=_proposal(block),
+    )
+    [plain] = materialise_knowledge_candidates(
+        decisions, document_id="doc-t7", fragments=fragments
+    )
+    forged = dict(decisions[0])
+    forged["_identity_material"] = "forged-selector-identity"
+    [other] = materialise_knowledge_candidates(
+        [forged], document_id="doc-t7", fragments=fragments
+    )
+    assert other["object_id"] == plain["object_id"]
+
+
+def test_changed_ordered_spans_change_identity_despite_forged_material() -> None:
+    fragments = [
+        _fragment("frag-1", "Eerste volledige passage."),
+        _fragment("frag-2", "Tweede volledige passage."),
+    ]
+    blocks = semantic_source_blocks(fragments)
+
+    def decision(block: dict) -> dict:
+        return {
+            "decision_kind": "semantic_selection",
+            "selection_origin": "proposal_selected",
+            "spans": [
+                {"block_id": block["block_id"], "start": 0, "end": len(block["text"])}
+            ],
+            "source_text": block["text"],
+            "source_fragment_ids": [block["block_id"]],
+            "section_path": ["Behandeling"],
+            "_identity_material": "same-forged-material",
+        }
+
+    left = materialise_knowledge_candidates(
+        [decision(blocks[0])], document_id="doc-t7", fragments=fragments
+    )[0]["object_id"]
+    right = materialise_knowledge_candidates(
+        [decision(blocks[1])], document_id="doc-t7", fragments=fragments
+    )[0]["object_id"]
+    assert left != right
+    assert left.startswith("doc-t7-sem-")
+    assert right.startswith("doc-t7-sem-")

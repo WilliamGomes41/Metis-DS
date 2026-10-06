@@ -512,3 +512,74 @@ def test_approve_of_blocked_candidate_does_not_commit(tmp_path):
         row for row in console.snapshot_objects(snapshot_id) if row["object_id"] == blocked["object_id"]
     ))
     assert after == before
+
+
+def _authorize(obj: dict) -> dict:
+    stamped = _stamp_hash(obj)
+    stamped["governance"]["validation_status"] = "approved"
+    binding = _binding(stamped)
+    before_obj = _canonical(stamped)
+    before_binding = _canonical(binding)
+    contract = publish_authorization_contract(
+        obj=stamped,
+        bindings=[binding],
+        uploader_id="uploader-anne",
+        immutable_locator=None,
+    )
+    assert _canonical(stamped) == before_obj
+    assert _canonical(binding) == before_binding
+    assert binding["valid"] is True
+    return contract
+
+
+def test_deterministic_row_with_old_approval_has_no_publication_authority():
+    contract = _authorize(_deterministic_fragment())
+    assert contract["tuple_authorization"] is False
+
+
+def test_coverage_and_source_row_with_old_approval_has_no_publication_authority():
+    for factory in (_coverage_record, _coverage_origin_only):
+        contract = _authorize(factory())
+        assert contract["tuple_authorization"] is False
+
+
+def test_blocked_semantic_candidate_with_old_approval_has_no_publication_authority():
+    contract = _authorize(_blocked())
+    assert contract["tuple_authorization"] is False
+    assert "admission_blocked" in contract["blockers"]
+
+
+def test_matching_approval_keeps_knowledge_publication_authority():
+    contract = _authorize(_allowed_candidate())
+    assert contract["tuple_authorization"] is True
+
+
+def test_malformed_persisted_spans_are_not_exact_review_or_publication():
+    from src.knowledge_path_v1 import content_reviewable, spans_are_exact
+
+    exact = list(EXACT_SPANS)
+    assert spans_are_exact(exact) is True
+    malformed = [
+        [{"block_id": "p001-f001", "start": "0", "end": "28"}],
+        [{"block_id": "p001-f001", "start": -1, "end": 28}],
+        [{"block_id": "p001-f001", "start": 28, "end": 28}],
+        [{"block_id": "p001-f001", "start": 10, "end": 4}],
+        [{"block_id": "p001-f001", "start": True, "end": 28}],
+        [{"block_id": "p001-f001", "start": 0, "end": 28, "source_span_id": "UNKNOWN"}],
+        [{"block_id": "p001-f001", "start": 0, "end": 28, "source_span_id": ""}],
+    ]
+    assert all(spans_are_exact(spans) is False for spans in malformed)
+    obj = _row(
+        "doc-1-sem-malformed",
+        "definition",
+        proposed="definition",
+        confirmed="definition",
+        gate=GATE_ALLOWED,
+        origin=SELECTION_ORIGIN_PROPOSAL,
+        spans=[{"block_id": "p001-f001", "start": "0", "end": "28"}],
+        validation="approved",
+    )
+    assert content_reviewable(obj) is False
+    contract = _authorize(obj)
+    assert contract["tuple_authorization"] is False
+    assert "source_lineage_incomplete" in contract["blockers"]
