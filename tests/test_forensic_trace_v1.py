@@ -1712,3 +1712,165 @@ def test_multispan_selected_object_uses_its_recorded_lineage_without_block_map()
     assert all(row["coverage_object_id"] == "cov-multi" for row in selected)
     assert all(row["source_span_id"] not in ("", None, UNKNOWN) for row in selected)
     assert all(row["source_text"] == full_text for row in selected)
+
+
+def test_available_fragment_with_out_of_bounds_mapping_is_lineage_conflict():
+    obj = _segment_object(
+        object_id="cov-bad-range",
+        origin="proposal_selected",
+        start=0,
+        end=5,
+        text="abcde",
+        fragment_id="frag-1",
+    )
+    obj["metadata"]["semantic_passage"]["source_mapping"] = [{
+        "fragment_id": "frag-1",
+        "raw_start": 0,
+        "raw_end": 99,
+        "source_page": 1,
+    }]
+    envelope = {
+        "semantic_replay": {
+            "identity": {"components": {
+                "source_sha256": "source-sha",
+                "source_blocks_hash": "reconstruction-sha",
+            }},
+            "validation": "passed",
+            "proposal": {"objects": [{
+                "proposed_object_type": "recommendation",
+                "spans": [{"block_id": "semblock-a", "start": 0, "end": 5}],
+            }]},
+            "provider_evidence": {"tasks": [{
+                "task_id": "task-bad-range",
+                "phase": "select",
+                "status": "completed",
+                "target_spans": [{"block_id": "semblock-a", "start": 0, "end": 5}],
+            }]},
+        },
+        "quality_processing_runs": [{
+            "run_id": "run-producing",
+            "source_hash": "source-sha",
+            "semantic_identity": {"components": {"source_sha256": "source-sha"}},
+            "source_fragments": [{
+                "fragment_id": "frag-1",
+                "raw_text": "abcde",
+                "source_page": 1,
+            }],
+        }],
+        "source_block_map": [],
+    }
+    rows, _availability, _limitation = rows_for_export(
+        snapshot_id="snapshot", revision="rev", envelope=envelope, objects=[obj])
+    selected = next(row for row in rows if row["provider_decision"] == "selected")
+    assert selected["source_span_id"] == UNKNOWN
+    assert selected["source_text"] == UNKNOWN
+    assert selected["unresolved_reason"] == "lineage_conflict"
+
+
+def test_acceptance_rejects_wrong_nonempty_projected_source():
+    acceptance = independent_source_lineage_acceptance(
+        trace_rows=[{
+            "provider_decision": "selected",
+            "object_id": "cov-selected",
+            "coverage_object_id": "cov-selected",
+            "semantic_block_id": "semblock-a",
+            "semantic_block_start": 10,
+            "semantic_block_end": 31,
+            "source_span_id": "not-empty-but-wrong",
+            "source_text": "verkeerde tekst",
+            "source_start": 10,
+            "source_end": 31,
+        }],
+        coverage_rows=[{
+            "object_id": "cov-selected",
+            "block_id": "semblock-a",
+            "start": 10,
+            "end": 31,
+            "selection_origin": "proposal_selected",
+        }],
+        lineage_rows=[{
+            "object_id": "cov-selected",
+            "relation": "selected_raw_fragment_range",
+            "target_id": "frag-1",
+            "start": 10,
+            "end": 31,
+        }],
+        stage_rows=[{
+            "object_id": "cov-selected",
+            "stage": "current_object_raw_text",
+            "text": "geselecteerde kennis",
+            "text_status": "recorded",
+        }],
+        view_rows=[{
+            "fragment_id": "frag-1",
+            "raw_text": "0123456789geselecteerde kennisrest",
+        }],
+    )
+    assert acceptance["independently_resolvable"] == 1
+    assert acceptance["projected_source_text_mismatch"] == 1
+    assert acceptance["projected_source_range_mismatch"] == 0
+
+
+def test_acceptance_matches_two_selected_spans_in_same_block_by_offsets():
+    trace_rows = [
+        {
+            "provider_decision": "selected",
+            "object_id": "cov-selected",
+            "coverage_object_id": "cov-selected",
+            "semantic_block_id": "semblock-a",
+            "semantic_block_start": 0,
+            "semantic_block_end": 5,
+            "source_span_id": "span-a",
+            "source_text": "abcde",
+            "source_start": 0,
+            "source_end": 5,
+        },
+        {
+            "provider_decision": "selected",
+            "object_id": "cov-selected",
+            "coverage_object_id": "cov-selected",
+            "semantic_block_id": "semblock-a",
+            "semantic_block_start": 6,
+            "semantic_block_end": 11,
+            "source_span_id": "span-b",
+            "source_text": "abcde",
+            "source_start": 0,
+            "source_end": 5,
+        },
+    ]
+    coverage_rows = [
+        {
+            "object_id": "cov-selected", "block_id": "semblock-a",
+            "start": 0, "end": 5, "selection_origin": "proposal_selected",
+        },
+        {
+            "object_id": "cov-selected", "block_id": "semblock-a",
+            "start": 6, "end": 11, "selection_origin": "proposal_selected",
+        },
+    ]
+    lineage_rows = [{
+        "object_id": "cov-selected",
+        "relation": "selected_raw_fragment_range",
+        "target_id": "frag-1",
+        "start": 0,
+        "end": 5,
+    }]
+    stage_rows = [{
+        "object_id": "cov-selected",
+        "stage": "current_object_raw_text",
+        "text": "abcde",
+        "text_status": "recorded",
+    }]
+    view_rows = [{"fragment_id": "frag-1", "raw_text": "abcde"}]
+    acceptance = independent_source_lineage_acceptance(
+        trace_rows=trace_rows,
+        coverage_rows=coverage_rows,
+        lineage_rows=lineage_rows,
+        stage_rows=stage_rows,
+        view_rows=view_rows,
+    )
+    assert acceptance["independently_resolvable"] == 2
+    assert acceptance["selected_candidates_missing_trace"] == 0
+    assert acceptance["lineage_conflicts"] == 0
+    assert acceptance["projected_source_text_mismatch"] == 0
+    assert acceptance["projected_source_range_mismatch"] == 0
