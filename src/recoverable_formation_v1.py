@@ -42,9 +42,14 @@ quarantine to both endpoints, transitively, rather than disappearing silently.
             evidence_fragments=validator_input["evidence_fragments"], object_version="1.0")
 
     rejected, objects, selections = [], {}, {}
-    def reject(kind, index, error, spans=()):
-        rejected.append({"kind": kind, "index": index, "reason_code": error.code,
-                         "finding": deepcopy(error.finding), "spans": deepcopy(list(spans))})
+    def reject(kind, index, error, spans=(), *, proposed_object_type=None, source_assessment_role=None):
+        row = {"kind": kind, "index": index, "reason_code": error.code,
+               "finding": deepcopy(error.finding), "spans": deepcopy(list(spans))}
+        if proposed_object_type not in (None, ""):
+            row["proposed_object_type"] = proposed_object_type
+        if source_assessment_role not in (None, ""):
+            row["source_assessment_role"] = source_assessment_role
+        rejected.append(row)
 
     # Resolve source selections independently of field evidence. This keeps
     # failed-field locations accountable without pretending the field is valid.
@@ -57,7 +62,9 @@ quarantine to both endpoints, transitively, rather than disappearing silently.
                 raise SemanticPassageError("source_bound_context_required")
             objects[index] = bound
         except SemanticPassageError as error:
-            reject("object", index, error, selections.get(index, []))
+            raw_type = obj.get("proposed_object_type") if isinstance(obj, dict) else None
+            reject("object", index, error, selections.get(index, []),
+                   proposed_object_type=raw_type)
 
     # Validate the joint selection once, removing only a precisely identified
     # invalid candidate and revalidating. Do not reconstruct a long document
@@ -71,7 +78,9 @@ quarantine to both endpoints, transitively, rather than disappearing silently.
             if type(index) is not int or not 0 <= index < len(objects):
                 raise
             original = list(objects)[index]
-            reject("object", original, error, selections[original])
+            raw = proposal["objects"][original]
+            reject("object", original, error, selections[original],
+                   proposed_object_type=raw.get("proposed_object_type") if isinstance(raw, dict) else None)
             del objects[original]
         else:
             break
@@ -103,7 +112,9 @@ quarantine to both endpoints, transitively, rather than disappearing silently.
         if not changed:
             break
     for index in sorted(set(objects) & bad):
-        reject("object", index, SemanticPassageError("semantic_dependency_rejected"), selections[index])
+        raw = proposal["objects"][index]
+        reject("object", index, SemanticPassageError("semantic_dependency_rejected"), selections[index],
+               proposed_object_type=raw.get("proposed_object_type") if isinstance(raw, dict) else None)
     objects = {i: obj for i, obj in objects.items() if i not in bad}
     result = {"objects": list(objects.values()), "relations": [],
               "source_assessments": [], "abstain_reason": None}
@@ -128,11 +139,14 @@ quarantine to both endpoints, transitively, rather than disappearing silently.
                     bad.update(owners)
             changed = before != bad
         for index in sorted(set(objects) & bad):
-            reject("object", index, SemanticPassageError("semantic_dependency_rejected"), selections[index])
+            raw = proposal["objects"][index]
+            reject("object", index, SemanticPassageError("semantic_dependency_rejected"), selections[index],
+                   proposed_object_type=raw.get("proposed_object_type") if isinstance(raw, dict) else None)
         result["objects"] = [obj for i, obj in objects.items() if i not in bad]
         result["relations"] = [r for _, r, owners in relations if not owners & bad and r in result["relations"]]
 
     for index, raw in enumerate(proposal.get("source_assessments", [])):
+        row = None
         try:
             row = resolve(raw)
             validate_assessments([*result["source_assessments"], row], blocks, result["objects"])
@@ -140,7 +154,11 @@ quarantine to both endpoints, transitively, rather than disappearing silently.
         except (SemanticPassageError, ValueError) as error:
             if not isinstance(error, SemanticPassageError):
                 error = SemanticPassageError(str(error))
-            reject("source_assessment", index, error)
+            candidate = row if isinstance(row, dict) else raw if isinstance(raw, dict) else {}
+            span = candidate.get("span") if isinstance(candidate.get("span"), dict) else None
+            located = [span] if span and isinstance(span.get("block_id"), str) and type(span.get("start")) is int and type(span.get("end")) is int else []
+            reject("source_assessment", index, error, located,
+                   source_assessment_role=candidate.get("role"))
     if not result["objects"] and not result["source_assessments"]:
         result["abstain_reason"] = "no_validated_proposals"
     # Joint validation is mandatory, including conflicts between independently
@@ -221,6 +239,7 @@ def restrict_supplement(proposal, *, primary, targets):
         if same is not None or not inside:
             removed.append(obj["spans"])
             rejections.append({"kind": "object", "index": index, "spans": obj["spans"],
+                "proposed_object_type": obj.get("proposed_object_type"),
                 "requires_review": same is not None,
                 "reason_code": "semantic_supplement_conflict" if same is not None else "semantic_supplement_outside_target"})
         else:
@@ -237,6 +256,7 @@ def restrict_supplement(proposal, *, primary, targets):
                         kept.remove(obj)
                         removed.append(obj["spans"])
                         rejections.append({"kind": "object", "spans": obj["spans"],
+                                           "proposed_object_type": obj.get("proposed_object_type"),
                                            "reason_code": "semantic_dependency_rejected"})
                         changed = True
     result["objects"] = kept
