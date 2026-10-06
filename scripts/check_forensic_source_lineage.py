@@ -49,7 +49,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(json.dumps({"stored_trace": before, "reprojected_trace": after}, ensure_ascii=False, indent=2, sort_keys=True))
     failed = (
-        after["selected_candidates_with_resolvable_lineage_and_unknown_source_span"]
+        after["selected_candidates_missing_trace"]
+        or after["selected_candidates_with_resolvable_lineage_and_unknown_source_span"]
         or after["selected_candidates_with_resolvable_lineage_and_unknown_source_text"]
         or after["selected_remainder_cross_contamination"]
     )
