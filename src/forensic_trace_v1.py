@@ -651,14 +651,19 @@ def _resolve_recorded_source(*, candidates: list[dict[str, Any]], block_id: Any,
     semantic = (obj.get("metadata") or {}).get("semantic_passage") or {} if obj else {}
     object_spans = [item for item in (semantic.get("spans") or []) if isinstance(item, dict)]
     owns_span = bool(obj is not None and any(_exact_span(item, block_id, start, end) for item in object_spans))
-    if owns_span and semantic.get("source_mapping"):
-        # The coverage object's mapping is already the selected source evidence.
-        # A multi-span object may legitimately map several reconstructed blocks
-        # onto one combined source lineage; do not require a synthetic per-block
-        # split when the recorded object lineage is present.
-        mapping = list(semantic.get("source_mapping") or [])
+    block_mapping = slice_block_mapping(list(source_block_map or []), block_id, start, end) or []
+    object_mapping = list(semantic.get("source_mapping") or []) if owns_span and semantic.get("source_mapping") else []
+    if len(object_spans) <= 1 and object_mapping:
+        # One recorded span keeps its raw fragment mapping. That mapping stays
+        # authoritative when reconstructed object text only normalizes layout.
+        mapping = object_mapping
+    elif block_mapping:
+        # A verified per-block slice keeps each reconstructed span's own source.
+        mapping = block_mapping
     else:
-        mapping = slice_block_mapping(list(source_block_map or []), block_id, start, end) or []
+        # No verified slice: the recorded object lineage covers every span of
+        # that object. Do not invent a per-block split that was not recorded.
+        mapping = object_mapping
     if mapping and _mapping_ranges(mapping) is None:
         return _unresolved_source("lineage_conflict", obj)
     if mapping and _mapping_disproven_by_fragments(mapping, fragments):
