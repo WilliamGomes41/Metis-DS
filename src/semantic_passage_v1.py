@@ -603,7 +603,7 @@ def semantic_coverage_units(
 
 
 @_finding_scope
-def semantic_units_from_proposal(
+def _project_semantic_selection(
     fragments: Iterable[dict[str, Any]],
     *,
     document_id: str,
@@ -613,8 +613,8 @@ def semantic_units_from_proposal(
     field_contract_v2: bool = False,
     field_contract_v3: bool = False,
     include_coverage: bool = True,
-) -> list[dict[str, Any]]:
-    """Validate provider proposal and reconstruct source-bound candidate data."""
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Validate a proposal. Return selection decisions and, optionally, coverage."""
 
     fragments_list = list(fragments)
     evidence_list = list(evidence_fragments) if evidence_fragments is not None else fragments_list
@@ -768,55 +768,53 @@ def semantic_units_from_proposal(
         identity_material = "|".join(
             f'{row["block_id"]}:{row["start"]}:{row["end"]}' for row in selected
         )
-        identity = hashlib.sha256(identity_material.encode("utf-8")).hexdigest()[:16]
         first = selected[0]
-        unit: dict[str, Any] = {
-            "object_id": f"{document_id}-sem-{identity}",
-            "object_type": DEFAULT_OBJECT_TYPE,
-            "text": candidate_text,
-            "clean_text": candidate_text,
+        decision: dict[str, Any] = {
+            "decision_kind": "semantic_selection",
+            "selection_origin": SELECTION_ORIGIN_PROPOSAL,
+            "proposed_object_type": proposed_type,
+            "spans": [
+                {"block_id": row["block_id"], "start": row["start"], "end": row["end"]}
+                for row in selected
+            ],
             "source_fragment_ids": fragment_ids,
             "section_path": list(first["section_path"]),
             "heading": first["heading"],
-            "review_track": "clinical",
+            "context": [],
             "relations": [],
-            "confirmed_relations": [],
-            "semantic_passage": {
-                "version": SEMANTIC_PASSAGE_VERSION,
-                "source_bound": True,
-                "selection_origin": SELECTION_ORIGIN_PROPOSAL,
-                "spans": [
-                    {
-                        "block_id": row["block_id"],
-                        "start": row["start"],
-                        "end": row["end"],
-                    }
-                    for row in selected
-                ],
-                "source_mapping": [mapped for row in selected
-                    for mapped in mapped_raw_spans(by_id[row["block_id"]][1], start=row["start"], end=row["end"])],
-            },
+            "source_text": candidate_text,
+            "source_order": [int(first["position"]), int(first["start"])],
+            "emit_proposed_type": bool(
+                field_contract_v2 or field_contract_v3 or proposed_type != DEFAULT_OBJECT_TYPE
+            ),
+            "source_mapping": [
+                mapped
+                for row in selected
+                for mapped in mapped_raw_spans(
+                    by_id[row["block_id"]][1], start=row["start"], end=row["end"]
+                )
+            ],
+            "_identity_material": identity_material,
         }
         if field_contract_v2 or field_contract_v3:
             from src.source_bound_fields_v2 import KEY, CONTEXT_KEY, bind_fields, bind_context
             try:
                 context = bind_context(raw_object.get("context_evidence", []), fragments=evidence_list)
-                unit[CONTEXT_KEY] = context
+                decision["context"] = context
+                decision[CONTEXT_KEY] = context
                 if field_contract_v3:
                     from src.source_bound_fields_v3 import bind_fields as bind_v3
-                    unit[KEY] = bind_v3(raw_object.get("field_evidence"), selected=selected,
+                    decision[KEY] = bind_v3(raw_object.get("field_evidence"), selected=selected,
                         candidate_text=candidate_text, proposed_type=proposed_type, context=context)
                 else:
-                    unit[KEY] = bind_fields(raw_object.get("field_evidence"), selected=selected,
+                    decision[KEY] = bind_fields(raw_object.get("field_evidence"), selected=selected,
                         candidate_text=candidate_text, proposed_type=proposed_type)
             except ValueError as exc:
                 _fail(str(exc), **getattr(exc, "finding", {}))
-        if field_contract_v2 or field_contract_v3 or proposed_type != DEFAULT_OBJECT_TYPE:
-            unit["proposed_object_type"] = proposed_type
         if semantics is not None:
-            unit[PROPOSED_FIELD] = semantics
-            unit["recommendation_semantics_evidence"] = semantics_evidence
-        units_with_position.append(((first["position"], first["start"]), unit))
+            decision[PROPOSED_FIELD] = semantics
+            decision["recommendation_semantics_evidence"] = semantics_evidence
+        units_with_position.append(((first["position"], first["start"]), decision))
 
     from src.source_accountability_v1 import validate_assessments
     try:
@@ -831,11 +829,94 @@ def semantic_units_from_proposal(
                 document_id=document_id,
                 selected_ranges_by_block=selected_ranges_by_block,
                 assessments=assessments,
-                context_spans=[entry["span"] for _, unit in units_with_position
-                    for entry in unit.get("source_bound_context", [])
-                    if entry.get("span") and not entry.get("unresolved_reason")] if field_contract_v3 else None,
+                context_spans=[entry["span"] for _, decision in units_with_position
+                    for entry in decision.get("context", [])
+                    if isinstance(entry, dict) and entry.get("span") and not entry.get("unresolved_reason")] if field_contract_v3 else None,
                 source_version="source-accountability-v2" if field_contract_v3 else "source-accountability-v1",
             )
         )
     units_with_position.sort(key=lambda pair: pair[0])
-    return [unit for _position, unit in units_with_position]
+    decisions = [row for _position, row in units_with_position if row.get("decision_kind") == "semantic_selection"]
+    coverage = [row for _position, row in units_with_position if row.get("decision_kind") != "semantic_selection"]
+    raw_relations = proposal.get("relations") if isinstance(proposal.get("relations"), list) else []
+    for decision in decisions:
+        signature = tuple((span["block_id"], span["start"], span["end"]) for span in decision["spans"])
+        decision["relations"] = [
+            raw for raw in raw_relations
+            if isinstance(raw, dict) and (
+                _raw_relation_signature(raw.get("source_spans")) == signature
+                or _raw_relation_signature(raw.get("target_spans")) == signature
+            )
+        ]
+    return decisions, coverage
+
+
+def _raw_relation_signature(spans: Any) -> tuple:
+    if not isinstance(spans, list):
+        return ()
+    rows = []
+    for span in spans:
+        if not isinstance(span, dict):
+            return ()
+        rows.append((str(span.get("block_id") or ""), span.get("start"), span.get("end")))
+    return tuple(rows)
+
+
+@_finding_scope
+def semantic_units_from_proposal(
+    fragments: Iterable[dict[str, Any]],
+    *,
+    document_id: str,
+    proposal: dict[str, Any],
+    evidence_fragments: Iterable[dict[str, Any]] | None = None,
+    allowed_candidate_block_ids: set[str] | None = None,
+    field_contract_v2: bool = False,
+    field_contract_v3: bool = False,
+    include_coverage: bool = True,
+) -> list[dict[str, Any]]:
+    """Validate a proposal and return SemanticSelectionDecisions only.
+
+    This function does not create a KnowledgeCandidate. include_coverage is
+    ignored: coverage records are source accountability and are returned only
+    by source_coverage_records.
+    """
+
+    decisions, _coverage = _project_semantic_selection(
+        fragments,
+        document_id=document_id,
+        proposal=proposal,
+        evidence_fragments=evidence_fragments,
+        allowed_candidate_block_ids=allowed_candidate_block_ids,
+        field_contract_v2=field_contract_v2,
+        field_contract_v3=field_contract_v3,
+        include_coverage=False,
+    )
+    return decisions
+
+
+def source_coverage_records(
+    fragments: Iterable[dict[str, Any]],
+    *,
+    document_id: str,
+    proposal: dict[str, Any],
+    evidence_fragments: Iterable[dict[str, Any]] | None = None,
+    allowed_candidate_block_ids: set[str] | None = None,
+    field_contract_v2: bool = False,
+    field_contract_v3: bool = False,
+) -> list[dict[str, Any]]:
+    """Source-accountability rows for text the selection did not take.
+
+    These are not KnowledgeCandidates.
+    """
+
+    _decisions, coverage = _project_semantic_selection(
+        fragments,
+        document_id=document_id,
+        proposal=proposal,
+        evidence_fragments=evidence_fragments,
+        allowed_candidate_block_ids=allowed_candidate_block_ids,
+        field_contract_v2=field_contract_v2,
+        field_contract_v3=field_contract_v3,
+        include_coverage=True,
+    )
+    return coverage

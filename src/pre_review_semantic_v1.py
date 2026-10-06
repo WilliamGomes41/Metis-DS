@@ -438,6 +438,24 @@ def _content_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def _materialised_content(**kwargs: Any) -> list[dict[str, Any]]:
+    """Selection decides. The materialiser creates the only knowledge candidates."""
+
+    from src.knowledge_materialisation_v1 import (
+        materialise_knowledge_candidates,
+        ordered_source_projection,
+    )
+    from src.semantic_passage_v1 import _project_semantic_selection
+
+    decisions, coverage = _project_semantic_selection(**kwargs)
+    candidates = materialise_knowledge_candidates(
+        decisions,
+        document_id=str(kwargs["document_id"]),
+        fragments=kwargs["fragments"],
+    )
+    return ordered_source_projection(candidates, decisions, coverage, kwargs["fragments"])
+
+
 def _candidate_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return source fragments the provider may select as KnowledgeCandidates.
 
@@ -760,13 +778,14 @@ def _semantic_execution_before_review(
         )
         if lookup.status == LOOKUP_HIT and lookup.proposal is not None:
             try:
-                replay_units = semantic_units_from_proposal(
-                    content_fragments,
+                replay_units = _materialised_content(
+                    fragments=content_fragments,
                     document_id=document_id,
                     proposal=lookup.proposal,
                     evidence_fragments=evidence_fragments,
                     allowed_candidate_block_ids=allowed_candidate_block_ids,
-                    field_contract_v2=field_contract_v2, field_contract_v3=field_contract_v3,
+                    field_contract_v2=field_contract_v2,
+                    field_contract_v3=field_contract_v3,
                 )
             except SemanticPassageError as exc:
                 replay_rejection_reason = exc.code
@@ -808,7 +827,7 @@ def _semantic_execution_before_review(
             # A wholly failed new run must not replace existing valid work
             # with source remainders. Partial success is retained separately.
             raise ConsoleError(errors[0])
-        content_units = semantic_units_from_proposal(**validator_input, proposal=proposal)
+        content_units = _materialised_content(**validator_input, proposal=proposal)
     if blocks and proposal is None:
         provider_evidence: dict[str, Any] = {}
         proposal = _provider_proposal(
@@ -825,13 +844,14 @@ def _semantic_execution_before_review(
         if checkpoint:
             checkpoint("proposal_received", {"provider_evidence": provider_evidence})
         try:
-            content_units = semantic_units_from_proposal(
-                content_fragments,
+            content_units = _materialised_content(
+                fragments=content_fragments,
                 document_id=document_id,
                 proposal=proposal,
                 evidence_fragments=evidence_fragments,
                 allowed_candidate_block_ids=allowed_candidate_block_ids,
-                field_contract_v2=field_contract_v2, field_contract_v3=field_contract_v3,
+                field_contract_v2=field_contract_v2,
+                field_contract_v3=field_contract_v3,
             )
         except SemanticPassageError as exc:
             if checkpoint:

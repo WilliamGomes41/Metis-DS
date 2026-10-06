@@ -37,7 +37,13 @@ quarantine to both endpoints, transitively, rather than disappearing silently.
             evidence_blocks=evidence_blocks, field_contract_v3=True)
 
     def validate(value):
-        units = semantic_units_from_proposal(**validator_input, proposal=value, include_coverage=False)
+        from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
+        decisions = semantic_units_from_proposal(**validator_input, proposal=value, include_coverage=False)
+        units = materialise_knowledge_candidates(
+            decisions,
+            document_id=validator_input["document_id"],
+            fragments=validator_input["fragments"],
+        )
         attach_relation_proposals(units, raw_relations=value["relations"],
             evidence_fragments=validator_input["evidence_fragments"], object_version="1.0")
 

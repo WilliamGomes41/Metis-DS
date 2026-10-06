@@ -83,13 +83,13 @@ def regular_review_queue(
     rows = list(objects)
     if review_path == "boom":
         return [obj for obj in rows if is_slow_review_duty(obj, review_path=review_path)]
+    from src.knowledge_path_v1 import content_reviewable
     return sorted(
         [
             obj
             for obj in rows
-            if obj.get("object_type") != "document"
+            if content_reviewable(obj)
             and review_lane(obj, review_path=review_path) != "fast"
-            and admission_of(obj).get("gate_result") == GATE_ALLOWED
         ],
         key=review_priority_rank,
     )
@@ -97,6 +97,9 @@ def regular_review_queue(
 
 def normal_risk_batch_eligible(obj: dict[str, Any], *, review_path: str) -> bool:
     if review_path == "boom" or obj.get("object_type") == "document":
+        return False
+    from src.knowledge_path_v1 import content_reviewable
+    if not content_reviewable(obj):
         return False
     if review_lane(obj, review_path=review_path) == "fast":
         return False
@@ -185,14 +188,14 @@ def regular_individual_review_queue(
     }
     if review_path == "boom":
         return []
+    from src.knowledge_path_v1 import content_reviewable
     return sorted(
         [
             obj
             for obj in rows
-            if obj.get("object_type") != "document"
+            if content_reviewable(obj)
             and review_lane(obj, review_path=review_path) != "fast"
             and not is_slow_review_duty(obj, review_path=review_path)
-            and admission_of(obj).get("gate_result") == GATE_ALLOWED
             and str(obj.get("object_id") or "") not in batch_ids
         ],
         key=review_priority_rank,

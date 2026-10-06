@@ -7,10 +7,15 @@
 
 import pytest
 
+from src.knowledge_materialisation_v1 import (
+    materialise_knowledge_candidates,
+    ordered_source_projection,
+)
 from src.semantic_passage_v1 import (
     SemanticPassageError,
     semantic_source_blocks,
     semantic_units_from_proposal,
+    source_coverage_records,
 )
 
 
@@ -23,6 +28,27 @@ def _fragment(fragment_id: str, text: str, *, section: str = "Behandeling") -> d
     }
 
 
+def _materialised(fragments: list[dict], **kwargs):
+    decisions = semantic_units_from_proposal(fragments, **kwargs)
+    return materialise_knowledge_candidates(
+        decisions,
+        document_id=kwargs["document_id"],
+        fragments=fragments,
+    )
+
+
+def _projection(fragments: list[dict], **kwargs):
+    decisions = semantic_units_from_proposal(fragments, **kwargs)
+    candidates = materialise_knowledge_candidates(
+        decisions,
+        document_id=kwargs["document_id"],
+        fragments=fragments,
+    )
+    coverage_kwargs = {key: value for key, value in kwargs.items() if key != "include_coverage"}
+    coverage = source_coverage_records(fragments, **coverage_kwargs)
+    return ordered_source_projection(candidates, decisions, coverage, fragments)
+
+
 def test_semantic_proposal_reconstructs_only_selected_source_text() -> None:
     fragments = [
         _fragment(
@@ -33,7 +59,7 @@ def test_semantic_proposal_reconstructs_only_selected_source_text() -> None:
     blocks = semantic_source_blocks(fragments)
     text = blocks[0]["text"]
 
-    units = semantic_units_from_proposal(
+    units = _materialised(
         fragments,
         document_id="doc-1",
         proposal={
@@ -138,20 +164,28 @@ def test_unknown_source_block_fails_closed() -> None:
 
 def test_abstain_creates_no_candidate() -> None:
     fragments = [_fragment("frag-1", "Een moeilijk interpreteerbare passage.")]
+    proposal = {
+        "objects": [],
+        "abstain_reason": "insufficient_semantic_context",
+    }
 
-    units = semantic_units_from_proposal(
+    decisions = semantic_units_from_proposal(
         fragments,
         document_id="doc-1",
-        proposal={
-            "objects": [],
-            "abstain_reason": "insufficient_semantic_context",
-        },
+        proposal=proposal,
+    )
+    coverage = source_coverage_records(
+        fragments,
+        document_id="doc-1",
+        proposal=proposal,
     )
 
-    assert len(units) == 1
-    assert units[0]["semantic_passage"]["selection_origin"] == "coverage_remainder"
-    assert units[0]["review_track"] == "technical"
-    assert "proposed_object_type" not in units[0]
+    assert decisions == []
+    assert len(coverage) == 1
+    assert coverage[0]["semantic_passage"]["selection_origin"] == "coverage_remainder"
+    assert coverage[0]["review_track"] == "technical"
+    assert "proposed_object_type" not in coverage[0]
+    assert coverage[0]["object_id"].startswith("doc-1-semcov-")
 
 
 def test_model_order_cannot_override_source_order() -> None:
@@ -161,7 +195,7 @@ def test_model_order_cannot_override_source_order() -> None:
     ]
     blocks = semantic_source_blocks(fragments)
 
-    units = semantic_units_from_proposal(
+    units = _materialised(
         fragments,
         document_id="doc-1",
         proposal={
@@ -280,7 +314,7 @@ def test_unselected_source_block_remains_as_unclassified_coverage_passage() -> N
     ]
     blocks = semantic_source_blocks(fragments)
 
-    units = semantic_units_from_proposal(
+    units = _projection(
         fragments,
         document_id="doc-coverage",
         proposal={
@@ -330,7 +364,7 @@ def test_partial_source_selection_preserves_prefix_and_suffix_as_coverage() -> N
     start = block["text"].index(selected)
     end = start + len(selected)
 
-    units = semantic_units_from_proposal(
+    units = _projection(
         fragments,
         document_id="doc-partial",
         proposal={
@@ -363,7 +397,7 @@ def test_full_source_selection_does_not_create_coverage_duplicate() -> None:
     fragments = [_fragment("frag-1", "Gebruik behandeling X.")]
     block = semantic_source_blocks(fragments)[0]
 
-    units = semantic_units_from_proposal(
+    units = _materialised(
         fragments,
         document_id="doc-full",
         proposal={
@@ -465,7 +499,7 @@ def test_same_block_spans_separated_only_by_whitespace_are_allowed() -> None:
     second = "Controleer na vier weken."
     second_start = block["text"].index(second)
 
-    units = semantic_units_from_proposal(
+    units = _materialised(
         fragments,
         document_id="doc-whitespace",
         proposal={
@@ -502,7 +536,7 @@ def test_full_adjacent_blocks_may_form_one_candidate() -> None:
     ]
     blocks = semantic_source_blocks(fragments)
 
-    units = semantic_units_from_proposal(
+    units = _materialised(
         fragments,
         document_id="doc-adjacent",
         proposal={
@@ -541,7 +575,7 @@ def test_empty_extracted_fragment_does_not_create_a_false_hidden_gap() -> None:
     blocks = semantic_source_blocks(fragments)
     assert len(blocks) == 2
 
-    units = semantic_units_from_proposal(
+    units = _materialised(
         fragments,
         document_id="doc-empty-gap",
         proposal={

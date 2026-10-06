@@ -9,6 +9,8 @@
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -20,10 +22,46 @@ from src.closed_review_loop_v1 import (
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
 from src.passage_register_v1 import passage_register_of
+from src.pre_review_semantic_v1 import (
+    PASSAGE_FORMATION_MODE_ENV,
+    SEMANTIC_MODE,
+    bind_pre_review_semantic_processing,
+)
 from src.proportionate_review_v1 import normal_risk_batch_queue
 from src.review_cockpit_v1 import broncontext_parts, confirmable_proposed_type
 from src.review_ledger import read_events
 from src.serving_relations_v1 import binding_relations
+
+
+def _bind_semantic_candidates(console) -> None:
+    """The closed loop reviews semantic candidates, not deterministic fragments."""
+
+    def provider(_url, _headers, payload, _timeout):
+        blocks = json.loads(payload["input"][1]["content"])["source_blocks"]
+        objects = []
+        for needle in ("Dutch Job Group", "systematische waarneming"):
+            block = next(row for row in blocks if needle in row["text"])
+            objects.append({
+                "spans": [{
+                    "block_id": block["block_id"],
+                    "start": 0,
+                    "end": len(block["text"]),
+                }],
+                "proposed_object_type": "definition",
+                "recommendation_semantics": None,
+            })
+        proposal = {"objects": objects, "relations": [], "abstain_reason": None}
+        return {"output": [{"type": "message", "content": [{"type": "output_text", "text": json.dumps(proposal)}]}]}
+
+    bind_pre_review_semantic_processing(
+        console,
+        environ={
+            PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
+            "METIS_LLM_API_KEY": "fixture",
+            "METIS_LLM_MODEL": "fixture",
+        },
+        post_json=provider,
+    )
 
 
 def _system(tmp_path):
@@ -38,6 +76,7 @@ def _system(tmp_path):
     reviewer = console.create_account(
         username="bert", password="bert-secret", roles=("reviewer",)
     )
+    _bind_semantic_candidates(console)
     receipt = console.ingest(
         actor_id=researcher["account_id"],
         filename="begrippen.html",

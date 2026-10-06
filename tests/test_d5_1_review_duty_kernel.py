@@ -11,7 +11,6 @@ from src.review_duty_v1 import (
     FIRST_REVIEW,
     LANE_BATCH,
     LANE_CONTEXTUAL,
-    LANE_STRUCTURE,
     SECOND_REVIEW,
     repair_duty_count,
     review_duties,
@@ -46,7 +45,23 @@ def _obj(
             "admission": {
                 "gate_result": gate,
                 "section_path": list(section),
-            }
+            },
+            **(
+                {}
+                if object_type == "heading"
+                else {
+                    "semantic_passage": {
+                        "selection_origin": "proposal_selected",
+                        "spans": [
+                            {
+                                "block_id": f"block-{object_id}",
+                                "start": 0,
+                                "end": len(f"Passage {object_id}."),
+                            }
+                        ],
+                    }
+                }
+            ),
         },
         "governance": {
             "validation_status": status,
@@ -126,8 +141,7 @@ def test_structure_batch_and_relation_bearing_context_are_distinct_lanes() -> No
         review_path="richtlijn",
     )
 
-    assert heading_duty is not None
-    assert heading_duty["lane"] == LANE_STRUCTURE
+    assert heading_duty is None
     assert definition_duty is not None
     assert definition_duty["lane"] == LANE_BATCH
     assert relation_duty is not None
@@ -155,12 +169,12 @@ def test_review_duty_counts_do_not_mix_repair_or_correction_waiting_work() -> No
     duties = review_duties(rows, review_path="richtlijn")
     counts = review_duty_counts(rows, review_path="richtlijn")
 
-    assert len(duties) == 5
+    assert len(duties) == 4
     assert counts == {
-        "review_duties": 5,
-        "first_review_duties": 4,
+        "review_duties": 4,
+        "first_review_duties": 3,
         "second_review_duties": 1,
-        "structure_review_duties": 1,
+        "structure_review_duties": 0,
         "contextual_review_duties": 3,
         "batch_review_duties": 1,
     }

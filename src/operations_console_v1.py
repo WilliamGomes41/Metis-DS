@@ -445,6 +445,10 @@ def is_slow_review_duty(obj: dict[str, Any], review_path: str | None = None) -> 
     if obj.get("object_type") == "document":
         return False
     path = review_path or inferred_review_path(obj)
+    if path != "boom":
+        from src.knowledge_path_v1 import content_reviewable
+        if not content_reviewable(obj):
+            return False
     if is_admission_blocked(obj, review_path=path):
         return False
     if review_lane(obj, review_path=path) == "fast":
@@ -3033,6 +3037,17 @@ class OperationsConsole:
             and decision != "revise"
         ):
             raise ConsoleError("second_review_command_required")
+        if review_path != "boom" and current_duty is None and decision == "approve":
+            from src.knowledge_path_v1 import is_structural_projection
+            from src.source_accountability_v1 import is_source_record
+            structure_confirm = (
+                str(confirmed_object_type or "").strip() in {"heading", "path"}
+                and is_structural_projection(target)
+            )
+            if not structure_confirm and not is_source_record(target) and not is_structural_projection(target):
+                if is_admission_blocked(target, review_path=review_path):
+                    raise ConsoleError("blocked_candidate_not_reviewable")
+                raise ConsoleError("content_duty_required")
         if decision != "later":
             from src.source_accountability_v1 import is_source_record
             if is_source_record(target) and (decision == "approve" or apply_type):
@@ -3677,17 +3692,25 @@ class OperationsConsole:
             target = current.get(object_id)
             if target is None:
                 raise ConsoleError("unknown_object")
-            route = reviewer_route_for(
-                target,
-                review_path=review_path,
-                reviewer_id=actor_id,
-                bindings=bindings,
-            )
-            if not (
-                route
-                and route.get("actionable")
-                and route.get("canonical_task") == "structure"
-            ):
+            if review_path == "boom":
+                route = reviewer_route_for(
+                    target,
+                    review_path=review_path,
+                    reviewer_id=actor_id,
+                    bindings=bindings,
+                )
+                acceptable = bool(
+                    route
+                    and route.get("actionable")
+                    and route.get("canonical_task") == "structure"
+                )
+            else:
+                from src.knowledge_path_v1 import is_structural_projection
+                acceptable = (
+                    review_lane(target, review_path=review_path) == "fast"
+                    and is_structural_projection(target)
+                )
+            if not acceptable:
                 raise ConsoleError("fast_lane_heading_required")
         updated: list[dict[str, Any]] = []
         pin = expected_revision

@@ -107,6 +107,7 @@ from src.operations_console_v1 import (
     REPO_ROOT,
     SNAPSHOT_OBJECT_WRITE_CONFLICT,
     review_card_sentence,
+    review_lane,
     review_row_status,
     review_row_title,
     review_stacks,
@@ -2446,6 +2447,16 @@ def _review_route_objects(
     reviewer_id: str,
     canonical_task: str,
 ) -> list[dict[str, Any]]:
+    if canonical_task == "structure" and review_path != "boom":
+        from src.knowledge_path_v1 import is_structural_projection
+        rows = [
+            obj
+            for obj in objects
+            if review_lane(obj, review_path=review_path) == "fast"
+            and is_structural_projection(obj)
+            and not _review_is_final(obj)
+        ]
+        return sorted(rows, key=review_priority_rank)
     rows: list[dict[str, Any]] = []
     for obj in objects:
         if bindings is None:

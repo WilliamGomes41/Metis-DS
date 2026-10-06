@@ -45,7 +45,21 @@ def _obj(
                 "proposed_type": proposed_type,
                 "section_path": list(section),
                 "reason_codes": ["machine_reason"] if gate == "blocked" else [],
-            }
+            },
+            **(
+                {}
+                if gate != "allowed" or proposed_type == "heading"
+                else {
+                    "semantic_passage": {
+                        "selection_origin": "proposal_selected",
+                        "spans": [{
+                            "block_id": f"block-{object_id}",
+                            "start": 0,
+                            "end": len(f"Inhoud {object_id}."),
+                        }],
+                    }
+                }
+            ),
         },
         "risk": {
             "level": "high" if high else "standard",

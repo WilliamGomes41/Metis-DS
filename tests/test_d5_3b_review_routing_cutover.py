@@ -84,6 +84,14 @@ def _console(tmp_path: Path) -> tuple[OperationsConsole, dict[str, dict], str, s
         "review_date": None,
         "snapshot_hash": None,
     }
+    metadata = target.setdefault("metadata", {})
+    admission = metadata.setdefault("admission", {})
+    admission["gate_result"] = "allowed"
+    text = str((target.get("content") or {}).get("clean_text") or "")
+    metadata["semantic_passage"] = {
+        "selection_origin": "proposal_selected",
+        "spans": [{"block_id": "block-d53b", "start": 0, "end": len(text) or 1}],
+    }
     target["risk"] = {
         "level": "high",
         "risk_level": "high",
