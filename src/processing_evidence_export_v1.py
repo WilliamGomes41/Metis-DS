@@ -10,7 +10,7 @@ from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from src.forensic_trace_v1 import (
-    CSV_FIELDS, _escape_formula, pending_rejection_keys, project_source_blocks, rejection_key,
+    CSV_FIELDS, _escape_formula, classified_rejections, project_source_blocks,
     rows_for_export, select_producing_run,
 )
 from src.processing_diagnostics_v1 import passage_export_rows
@@ -141,15 +141,14 @@ def processing_evidence_tables(
         add("source_usage", object_id=obj["object_id"], object_version=obj["object_version"], container="source",
             **source["usage"], policy_version=CONTAINER_VERSION)
     root_provider = provider
-    open_keys = pending_rejection_keys(root_provider, replay.get("proposal") if isinstance(replay.get("proposal"), dict) else {})
+    proposal = replay.get("proposal") if isinstance(replay.get("proposal"), dict) else {}
+    for call, rejection, state in classified_rejections(root_provider, proposal):
+        add("formation_findings", call_id=(call.get("response") or {}).get("id"),
+            **{k: rejection.get(k) for k in SCHEMAS["formation_findings"] if k not in {"call_id", "evidence_kind", "state"}},
+            state=state,
+            evidence_kind="rejected_producer_proposal_not_approved_knowledge")
     providers = [root_provider, *(root_provider.get("supplementary_calls") or [])]
     for provider in providers:
-        for rejection in (provider.get("formation") or {}).get("rejections", []):
-            state = None if open_keys is None else ("pending" if rejection_key(rejection) in open_keys else "historical")
-            add("formation_findings", call_id=(provider.get("response") or {}).get("id"),
-                **{k: rejection.get(k) for k in SCHEMAS["formation_findings"] if k not in {"call_id", "evidence_kind", "state"}},
-                state=state,
-                evidence_kind="rejected_producer_proposal_not_approved_knowledge")
         if provider.get("version") == "semantic-provider-evidence-v1":
             response = provider.get("response") or {}
             add("model_calls", run_id=(producing_run or {}).get("run_id"),
