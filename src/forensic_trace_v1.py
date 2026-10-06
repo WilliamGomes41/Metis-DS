@@ -2116,10 +2116,20 @@ def independent_source_lineage_acceptance(
                 contaminated += 1
                 break
 
+    selected_object_ids = {item[0] for item in selected_segments}
+    trace_only_selected = [
+        row for row in trace_rows
+        if row.get("provider_decision") == "selected"
+        and str(row.get("coverage_object_id") or row.get("object_id") or "") not in selected_object_ids
+    ]
+    unresolvable += len(trace_only_selected)
+
     return {
-        "selected_candidates": len(selected_segments),
+        "selected_candidates": len(selected_segments) + len(trace_only_selected),
+        "independently_selected_coverage_segments": len(selected_segments),
         "independently_resolvable": independently_resolvable,
         "selected_candidates_missing_trace": missing_trace,
+        "selected_trace_without_selected_coverage": len(trace_only_selected),
         "selected_candidates_with_resolvable_lineage_and_unknown_source_span": unknown_span,
         "selected_candidates_with_resolvable_lineage_and_unknown_source_text": unknown_text,
         "unresolvable_selected_candidates": unresolvable,
