@@ -282,11 +282,14 @@ class EntraIdentity:
         idle_remaining = max(0, int((row["expires_at"] - now).total_seconds()))
         absolute_remaining = max(0, int((absolute_expires - now).total_seconds()))
         remaining = min(idle_remaining, absolute_remaining)
+        reason = "absolute" if absolute_remaining <= idle_remaining else "idle"
         return {
             "idle_remaining_seconds": idle_remaining,
             "absolute_remaining_seconds": absolute_remaining,
             "remaining_seconds": remaining,
             "warning": remaining <= SESSION_WARNING_SECONDS,
+            "warning_reason": reason,
+            "can_renew": reason == "idle",
         }
 
     def access_rows(self) -> dict[str, bool]:
