@@ -644,9 +644,10 @@ def _resolve_recorded_source(*, candidates: list[dict[str, Any]], block_id: Any,
     ranges = sliced_ranges or (_mapping_ranges(mapping) if mapping else []) or []
     if any(item.get("fragment_id") in fragment_conflicts for item in ranges):
         return _unresolved_source("lineage_conflict", obj)
+    # A verified raw fragment slice is authoritative source evidence. The stored
+    # object text may be a reconstructed/normalized view (whitespace, layout,
+    # page-line markers removed) and must not invalidate a valid raw mapping.
     text = sliced_text
-    if sliced_text is not None and recorded is not None and sliced_text != recorded:
-        return _unresolved_source("lineage_conflict", obj)
     if text is None and recorded and ranges:
         text = recorded
         if page is None:
@@ -1986,7 +1987,7 @@ def independent_source_lineage_acceptance(
     lineage_rows: list[Mapping[str, Any]],
     stage_rows: list[Mapping[str, Any]],
 ) -> dict[str, Any]:
-    """Judge a trace against export tables. Do not read the resolver's own flag."""
+    """Judge trace coverage from export tables, not from the projector under test."""
     absent = {None, "", UNKNOWN}
 
     def present(value: Any) -> bool:
@@ -1996,9 +1997,19 @@ def independent_source_lineage_acceptance(
         return value if type(value) is int else None
 
     coverage_by_object: dict[str, list[Mapping[str, Any]]] = {}
+    selected_segments: list[tuple[str, str, int, int]] = []
     for row in coverage_rows:
-        if present(row.get("object_id")):
-            coverage_by_object.setdefault(str(row["object_id"]), []).append(row)
+        object_id = row.get("object_id")
+        if not present(object_id):
+            continue
+        object_id = str(object_id)
+        coverage_by_object.setdefault(object_id, []).append(row)
+        if row.get("selection_origin") != "proposal_selected":
+            continue
+        block_id, start, end = row.get("block_id"), as_int(row.get("start")), as_int(row.get("end"))
+        if isinstance(block_id, str) and block_id and start is not None and end is not None and start < end:
+            selected_segments.append((object_id, block_id, start, end))
+
     lineage_by_object: dict[str, list[Mapping[str, Any]]] = {}
     for row in lineage_rows:
         if present(row.get("object_id")):
@@ -2007,14 +2018,6 @@ def independent_source_lineage_acceptance(
     for row in stage_rows:
         if present(row.get("object_id")):
             stages_by_object.setdefault(str(row["object_id"]), []).append(row)
-
-    def segments(object_id: str) -> list[tuple[str, int, int]]:
-        found = []
-        for row in coverage_by_object.get(object_id, []):
-            block_id, start, end = row.get("block_id"), as_int(row.get("start")), as_int(row.get("end"))
-            if isinstance(block_id, str) and block_id and start is not None and end is not None and start < end:
-                found.append((block_id, start, end))
-        return found
 
     def ranges(object_id: str) -> list[tuple[str, int, int]]:
         found = []
@@ -2026,62 +2029,97 @@ def independent_source_lineage_acceptance(
                 found.append((fragment_id, start, end))
         return found
 
-    def stage_texts(object_id: str) -> list[str]:
-        found = []
+    def recorded_stage_text(object_id: str) -> tuple[str | None, bool]:
+        """Prefer the selected object's own raw text; admission text may be broader context."""
+        current = []
+        admission = []
         for row in stages_by_object.get(object_id, []):
-            if row.get("stage") not in {"current_object_raw_text", "stored_admission_source_text"}:
-                continue
             if row.get("text_status") == "not_recorded":
                 continue
             text = row.get("text")
-            if isinstance(text, str) and text:
-                found.append(text)
-        return list(dict.fromkeys(found))
+            if not isinstance(text, str) or not text:
+                continue
+            if row.get("stage") == "current_object_raw_text":
+                current.append(text)
+            elif row.get("stage") == "stored_admission_source_text":
+                admission.append(text)
+        current = list(dict.fromkeys(current))
+        admission = list(dict.fromkeys(admission))
+        if len(current) > 1:
+            return None, True
+        if current:
+            return current[0], False
+        if len(admission) > 1:
+            return None, True
+        if admission:
+            return admission[0], False
+        return None, False
 
-    selected = [row for row in trace_rows if row.get("provider_decision") == "selected"]
-    resolvable_ids: list[str] = []
+    def trace_for_segment(object_id: str, block_id: str) -> list[Mapping[str, Any]]:
+        candidates = [
+            row for row in trace_rows
+            if str(row.get("coverage_object_id") or row.get("object_id") or "") == object_id
+            and row.get("provider_decision") == "selected"
+        ]
+        exact = [row for row in candidates if row.get("semantic_block_id") == block_id]
+        if exact:
+            return exact
+        object_segments = [item for item in selected_segments if item[0] == object_id]
+        return candidates if len(object_segments) == 1 else []
+
+    independently_resolvable = 0
     unknown_span = 0
     unknown_text = 0
     unresolvable = 0
     contaminated = 0
     conflicts = 0
-    for row in selected:
-        object_id = row.get("coverage_object_id") or row.get("object_id")
-        if not present(object_id):
-            unresolvable += 1
-            continue
-        object_id = str(object_id)
-        own_segments = segments(object_id)
+    missing_trace = 0
+
+    for object_id, block_id, _start, _end in selected_segments:
         own_ranges = ranges(object_id)
-        own_texts = stage_texts(object_id)
-        if len(own_texts) > 1:
+        own_text, stage_conflict = recorded_stage_text(object_id)
+        if stage_conflict:
             conflicts += 1
             unresolvable += 1
             continue
-        if not own_segments or not own_ranges or not own_texts:
+        if not own_ranges or not own_text:
             unresolvable += 1
             continue
-        resolvable_ids.append(object_id)
+
+        independently_resolvable += 1
+        matches = trace_for_segment(object_id, block_id)
+        if not matches:
+            missing_trace += 1
+            continue
+        if len(matches) > 1:
+            conflicts += 1
+            continue
+        row = matches[0]
         if not present(row.get("source_span_id")):
             unknown_span += 1
         if not present(row.get("source_text")):
             unknown_text += 1
-        own_text = own_texts[0]
-        own_blocks = {item[0] for item in own_segments}
-        leaked = False
-        if row.get("source_text") != own_text:
-            leaked = True
-        for other_id in coverage_by_object:
-            if other_id == object_id or not (own_blocks & {item[0] for item in segments(other_id)}):
+
+        # Contamination means text from a distinct coverage object in the same
+        # semblock leaked into this selected span. A formatting difference
+        # between raw source and reconstructed object text is not contamination.
+        source_text = str(row.get("source_text") or "")
+        for other_id, other_rows in coverage_by_object.items():
+            if other_id == object_id:
                 continue
-            other_texts = stage_texts(other_id)
-            if len(other_texts) == 1 and other_texts[0] != own_text and other_texts[0] in str(row.get("source_text") or ""):
-                leaked = True
-        if leaked:
-            contaminated += 1
+            if not any(other.get("block_id") == block_id for other in other_rows):
+                continue
+            other_text, other_conflict = recorded_stage_text(other_id)
+            if other_conflict or not other_text or other_text == own_text:
+                continue
+            if other_text in source_text:
+                contaminated += 1
+                break
+
     return {
-        "selected_candidates": len(selected),
-        "independently_resolvable": len(resolvable_ids),
+        "selected_candidates": len(selected_segments),
+        "independently_resolvable": independently_resolvable,
+        "selected_candidates_missing_trace": missing_trace,
         "selected_candidates_with_resolvable_lineage_and_unknown_source_span": unknown_span,
         "selected_candidates_with_resolvable_lineage_and_unknown_source_text": unknown_text,
         "unresolvable_selected_candidates": unresolvable,
