@@ -7,7 +7,7 @@ local fallback or refresh-token storage. See docs/ENTRA_SIGN_IN.md.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import os
 import secrets
@@ -278,9 +278,7 @@ class EntraIdentity:
     @staticmethod
     def _session_state(row: dict) -> dict:
         now = datetime.now(timezone.utc)
-        absolute_expires = row["created_at"] + __import__("datetime").timedelta(
-            seconds=SESSION_ABSOLUTE_SECONDS
-        )
+        absolute_expires = row["created_at"] + timedelta(seconds=SESSION_ABSOLUTE_SECONDS)
         idle_remaining = max(0, int((row["expires_at"] - now).total_seconds()))
         absolute_remaining = max(0, int((absolute_expires - now).total_seconds()))
         remaining = min(idle_remaining, absolute_remaining)
