@@ -495,7 +495,111 @@ try {{
 {body}
 </div>
 </div>
+<div data-session-warning hidden role="dialog" aria-live="assertive" aria-labelledby="session-warning-title"
+     style="position:fixed;inset:auto 1rem 1rem auto;z-index:1000;max-width:28rem;">
+  <div class="banner warn" style="box-shadow:0 8px 30px rgba(0,0,0,.18);">
+    <strong id="session-warning-title">Je sessie verloopt bijna</strong>
+    <p data-session-warning-text style="margin:.5rem 0;"></p>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+      <button class="btn-primary" type="button" data-session-renew>Blijf ingelogd</button>
+    </div>
+  </div>
+</div>
 <script>
+const sessionWarning = document.querySelector('[data-session-warning]');
+const sessionWarningText = document.querySelector('[data-session-warning-text]');
+const sessionRenew = document.querySelector('[data-session-renew]');
+let sessionRemaining = null;
+let sessionReason = '';
+let sessionTimer = null;
+const sessionPath = location.pathname + location.search;
+
+const formatSessionRemaining = (seconds) => {{
+  const value = Math.max(0, Number(seconds) || 0);
+  const minutes = Math.floor(value / 60);
+  const secs = Math.floor(value % 60);
+  return minutes ? `${{minutes}} min ${{secs}} sec` : `${{secs}} sec`;
+}};
+
+const renderSessionWarning = () => {{
+  if (!sessionWarning || sessionRemaining === null) return;
+  if (sessionRemaining > 120) {{
+    sessionWarning.hidden = true;
+    return;
+  }}
+  sessionWarning.hidden = false;
+  if (sessionReason === 'absolute') {{
+    sessionWarningText.textContent =
+      'Je maximale sessieduur is bijna bereikt. Meld opnieuw aan binnen ' +
+      formatSessionRemaining(sessionRemaining) + '.';
+    if (sessionRenew) sessionRenew.textContent = 'Opnieuw aanmelden';
+  }} else {{
+    sessionWarningText.textContent =
+      'Je wordt wegens inactiviteit automatisch uitgelogd over ' +
+      formatSessionRemaining(sessionRemaining) + '.';
+    if (sessionRenew) sessionRenew.textContent = 'Blijf ingelogd';
+  }}
+}};
+
+const applySessionStatus = (status) => {{
+  sessionRemaining = Number(status.remaining_seconds);
+  sessionReason = String(status.warning_reason || '');
+  renderSessionWarning();
+}};
+
+const pollSessionStatus = async () => {{
+  if (location.pathname === '/login' || location.pathname.startsWith('/auth/')) return;
+  try {{
+    const response = await fetch('/session/status', {{
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: {{'Accept': 'application/json'}}
+    }});
+    if (response.status === 404) return;
+    if (response.status === 401) {{
+      sessionRemaining = 0;
+      sessionReason = 'idle';
+      if (sessionWarningText) sessionWarningText.textContent =
+        'Je sessie is verlopen. Meld opnieuw aan om verder te gaan.';
+      if (sessionRenew) sessionRenew.textContent = 'Opnieuw aanmelden';
+      if (sessionWarning) sessionWarning.hidden = false;
+      return;
+    }}
+    if (!response.ok) return;
+    applySessionStatus(await response.json());
+  }} catch (_) {{}}
+}};
+
+if (sessionRenew) sessionRenew.addEventListener('click', async () => {{
+  if (sessionReason === 'absolute' || sessionRemaining === 0) {{
+    location.href = '/auth/microsoft?next=' + encodeURIComponent(sessionPath);
+    return;
+  }}
+  try {{
+    const response = await fetch('/session/renew', {{
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: {{'Accept': 'application/json'}}
+    }});
+    if (response.status === 401) {{
+      location.href = '/auth/microsoft?next=' + encodeURIComponent(sessionPath);
+      return;
+    }}
+    if (!response.ok) return;
+    applySessionStatus(await response.json());
+  }} catch (_) {{}}
+}});
+if (sessionWarning) {{
+  pollSessionStatus();
+  window.setInterval(pollSessionStatus, 30000);
+  sessionTimer = window.setInterval(() => {{
+    if (sessionRemaining === null || sessionRemaining <= 0) return;
+    sessionRemaining -= 1;
+    if (sessionRemaining <= 120) renderSessionWarning();
+  }}, 1000);
+}}
+
 document.querySelectorAll('[data-theme-toggle]').forEach((button) => {{
   const sync = () => {{
     const dark = document.documentElement.dataset.theme === 'dark';

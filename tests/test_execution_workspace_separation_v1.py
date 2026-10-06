@@ -156,8 +156,8 @@ def test_publish_keeps_review_recovery_and_hides_technical_diagnosis(tmp_path, m
 
 
 @pytest.mark.parametrize(('username', 'digest'), [
-    ('researcher.anne', 'ffe8730795faf00d002843a6d99cc039facca04cd634ece88a3fe682fae9efc8'),
-    ('reviewer.bert', 'a4f0c2233957f479b498aaea66c8015ec0ace604ed93bd339ce8c83d3b8dcac4'),
+    ('researcher.anne', '0ef4cdcba6a6250d23da2b108a75e56c981ce97d18bb4f5ee14a03d0a880ac99'),
+    ('reviewer.bert', '3379ed420ef02d5dbfc1fc976c9805e8c572d28c30a1b48ebacb0e420e35e3a4'),
 ])
 def test_mijn_werk_matches_reference_render_including_shared_navigation(tmp_path, username, digest):
     console, _, _, _ = _console_with_document(tmp_path)
@@ -165,7 +165,7 @@ def test_mijn_werk_matches_reference_render_including_shared_navigation(tmp_path
     login(client, username)
     response = client.get('/')
     assert response.status_code == 200
-    # Exact reference render from main 27ea123; only asset cache version may differ.
+    # Shared shell includes the session-expiry warning. Only the asset cache version may differ.
     html = re.sub(r'/brand/console.css\?v=[a-f0-9]+', '/brand/console.css?v=ASSET', response.text)
     assert hashlib.sha256(html.encode()).hexdigest() == digest, 'Out-of-scope Mijn werk changed'
     assert sum(tag == 'a' and 'home-tile' in attrs.get('class', '').split() for tag, attrs in Surface(html).tags) == 4

@@ -2,7 +2,7 @@
 from urllib.parse import urlencode, urlsplit
 
 from fastapi import Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from src.console_entra_v1 import FLOW_COOKIE, SESSION_SECONDS, MicrosoftLogin
 from src.operations_console_v1 import ConsoleError
@@ -28,11 +28,11 @@ def install_entra_routes(app, console, identity, *, render_page):
 
     @app.middleware("http")
     async def renew_on_navigation(request: Request, call_next):
-        public = request.url.path in {"/", "/login", "/health", "/auth/microsoft", "/auth/microsoft/callback", "/mcp", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"} or request.url.path.startswith("/brand/")
+        public = request.url.path in {"/", "/login", "/health", "/auth/microsoft", "/auth/microsoft/callback", "/session/status", "/mcp", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"} or request.url.path.startswith("/brand/")
         if request.method == "GET" and not public:
             from starlette.concurrency import run_in_threadpool
             try:
-                await run_in_threadpool(identity.session_account, request.cookies.get(SESSION_COOKIE))
+                await run_in_threadpool(identity.renew_session, request.cookies.get(SESSION_COOKIE))
             except ConsoleError as exc:
                 if exc.code == "workflow_identity_unavailable":
                     return failure(503)
@@ -40,6 +40,26 @@ def install_entra_routes(app, console, identity, *, render_page):
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-store"
         return response
+
+    @app.get("/session/status")
+    def session_status(request: Request):
+        try:
+            status = identity.session_status(request.cookies.get(SESSION_COOKIE))
+            return JSONResponse(status, headers={"Cache-Control": "no-store"})
+        except ConsoleError as exc:
+            if exc.code == "workflow_identity_unavailable":
+                return JSONResponse({"error": "temporarily_unavailable"}, status_code=503, headers={"Cache-Control": "no-store"})
+            return JSONResponse({"error": "not_authenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
+
+    @app.post("/session/renew")
+    def session_renew(request: Request):
+        try:
+            status = identity.renew_session(request.cookies.get(SESSION_COOKIE))
+            return JSONResponse(status, headers={"Cache-Control": "no-store"})
+        except ConsoleError as exc:
+            if exc.code == "workflow_identity_unavailable":
+                return JSONResponse({"error": "temporarily_unavailable"}, status_code=503, headers={"Cache-Control": "no-store"})
+            return JSONResponse({"error": "not_authenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
 
     @app.get("/auth/microsoft")
     def begin(request: Request):

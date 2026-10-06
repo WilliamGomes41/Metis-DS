@@ -7,7 +7,7 @@ local fallback or refresh-token storage. See docs/ENTRA_SIGN_IN.md.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import os
 import secrets
@@ -23,7 +23,13 @@ from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentity
 
 ROLE_MAP = {"Metis.Researcher": "researcher", "Metis.Reviewer": "reviewer", "Metis.Publisher": "publisher"}
 FLOW_COOKIE = "__Host-metis_oidc"
-SESSION_SECONDS = 300
+SESSION_IDLE_SECONDS = 30 * 60
+SESSION_ABSOLUTE_SECONDS = 8 * 60 * 60
+SESSION_WARNING_SECONDS = 2 * 60
+# Browser cookie lifetime follows the absolute session cap. Server-side expiry
+# remains authoritative and may end the session earlier through idle timeout,
+# revocation, blocking, retirement or role changes.
+SESSION_SECONDS = SESSION_ABSOLUTE_SECONDS
 
 
 def _uuid(value: Any) -> str:
@@ -210,30 +216,81 @@ class EntraIdentity:
             con.execute("DELETE FROM workflow.sessions WHERE token_hash IN "
                         "(SELECT s.token_hash FROM workflow.sessions s JOIN workflow.entra_sessions es USING(token_hash) "
                         "WHERE s.expires_at<=CURRENT_TIMESTAMP)")
-            con.execute("INSERT INTO workflow.sessions(token_hash,account_id,created_at,expires_at) "
-                        "VALUES(%s,%s,CURRENT_TIMESTAMP,LEAST(CURRENT_TIMESTAMP + interval '5 minutes',to_timestamp(%s)))",
-                        (_token_hash(token), aid, exp))
+            con.execute(
+                "INSERT INTO workflow.sessions(token_hash,account_id,created_at,expires_at) "
+                "VALUES(%s,%s,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + (%s * interval '1 second'))",
+                (_token_hash(token), aid, SESSION_IDLE_SECONDS),
+            )
             con.execute("INSERT INTO workflow.entra_sessions VALUES(%s,%s,%s)", (_token_hash(token), self.config.tenant_id, oid))
         return {"token": token, "account_id": aid}
 
-    def session_account(self, token: str | None) -> dict:
+    def _session_row(self, token: str | None, *, renew: bool = False) -> dict:
         if not token:
             raise ConsoleError("not_authenticated")
         try:
             with self.store._connect() as con:
-                row = con.execute(
-                    "SELECT a.* FROM workflow.sessions s JOIN workflow.entra_sessions es USING(token_hash) "
-                    "JOIN workflow.entra_identities e ON e.tenant_id=es.tenant_id AND e.object_id=es.object_id "
-                    "JOIN workflow.accounts a ON a.account_id=e.account_id AND a.account_id=s.account_id "
-                    "WHERE s.token_hash=%s AND es.tenant_id=%s AND NOT e.blocked AND to_jsonb(a)->>'retirement' IS NULL AND s.revoked_at IS NULL "
-                    "AND s.expires_at>CURRENT_TIMESTAMP AND s.created_at>CURRENT_TIMESTAMP - interval '5 minutes'",
-                    (_token_hash(token), self.config.tenant_id),
-                ).fetchone()
+                params = (_token_hash(token), self.config.tenant_id, SESSION_ABSOLUTE_SECONDS)
+                if renew:
+                    row = con.execute(
+                        "UPDATE workflow.sessions s SET expires_at=LEAST("
+                        "CURRENT_TIMESTAMP + (%s * interval '1 second'), "
+                        "s.created_at + (%s * interval '1 second')) "
+                        "FROM workflow.entra_sessions es, workflow.entra_identities e, workflow.accounts a "
+                        "WHERE s.token_hash=%s AND es.token_hash=s.token_hash "
+                        "AND e.tenant_id=es.tenant_id AND e.object_id=es.object_id "
+                        "AND a.account_id=e.account_id AND a.account_id=s.account_id "
+                        "AND es.tenant_id=%s AND NOT e.blocked "
+                        "AND to_jsonb(a)->>'retirement' IS NULL AND s.revoked_at IS NULL "
+                        "AND s.expires_at>CURRENT_TIMESTAMP "
+                        "AND s.created_at>CURRENT_TIMESTAMP - (%s * interval '1 second') "
+                        "RETURNING a.*,s.created_at AS session_created_at,s.expires_at AS session_expires_at",
+                        (SESSION_IDLE_SECONDS, SESSION_ABSOLUTE_SECONDS, *params),
+                    ).fetchone()
+                else:
+                    row = con.execute(
+                        "SELECT a.*,s.created_at AS session_created_at,s.expires_at AS session_expires_at FROM workflow.sessions s "
+                        "JOIN workflow.entra_sessions es USING(token_hash) "
+                        "JOIN workflow.entra_identities e ON e.tenant_id=es.tenant_id AND e.object_id=es.object_id "
+                        "JOIN workflow.accounts a ON a.account_id=e.account_id AND a.account_id=s.account_id "
+                        "WHERE s.token_hash=%s AND es.tenant_id=%s AND NOT e.blocked "
+                        "AND to_jsonb(a)->>'retirement' IS NULL AND s.revoked_at IS NULL "
+                        "AND s.expires_at>CURRENT_TIMESTAMP "
+                        "AND s.created_at>CURRENT_TIMESTAMP - (%s * interval '1 second')",
+                        params,
+                    ).fetchone()
         except Exception as exc:
             raise ConsoleError("workflow_identity_unavailable") from exc
         if not row:
             raise ConsoleError("not_authenticated")
+        return row
+
+    def session_account(self, token: str | None) -> dict:
+        row = self._session_row(token)
         return {k: row[k] for k in ("account_id", "username", "display_name", "roles")}
+
+    def renew_session(self, token: str | None) -> dict:
+        row = self._session_row(token, renew=True)
+        return self._session_state(row)
+
+    def session_status(self, token: str | None) -> dict:
+        return self._session_state(self._session_row(token))
+
+    @staticmethod
+    def _session_state(row: dict) -> dict:
+        now = datetime.now(timezone.utc)
+        absolute_expires = row["session_created_at"] + timedelta(seconds=SESSION_ABSOLUTE_SECONDS)
+        idle_remaining = max(0, int((row["session_expires_at"] - now).total_seconds()))
+        absolute_remaining = max(0, int((absolute_expires - now).total_seconds()))
+        remaining = min(idle_remaining, absolute_remaining)
+        reason = "absolute" if absolute_remaining <= idle_remaining else "idle"
+        return {
+            "idle_remaining_seconds": idle_remaining,
+            "absolute_remaining_seconds": absolute_remaining,
+            "remaining_seconds": remaining,
+            "warning": remaining <= SESSION_WARNING_SECONDS,
+            "warning_reason": reason,
+            "can_renew": reason == "idle",
+        }
 
     def access_rows(self) -> dict[str, bool]:
         with self.store._connect() as con:
@@ -250,8 +307,8 @@ class EntraIdentity:
                 "JOIN workflow.entra_identities e ON e.account_id=a.account_id AND e.tenant_id=es.tenant_id AND e.object_id=es.object_id "
                 "WHERE s.token_hash=%s AND e.tenant_id=%s AND NOT e.blocked AND to_jsonb(a)->>'retirement' IS NULL AND 'publisher'=ANY(a.roles) "
                 "AND s.revoked_at IS NULL AND s.expires_at>CURRENT_TIMESTAMP "
-                "AND s.created_at>CURRENT_TIMESTAMP - interval '5 minutes'",
-                (_token_hash(actor_token), self.config.tenant_id),
+                "AND s.created_at>CURRENT_TIMESTAMP - (%s * interval '1 second')",
+                (_token_hash(actor_token), self.config.tenant_id, SESSION_ABSOLUTE_SECONDS),
             ).fetchone()
             if not actor or actor["account_id"] == account_id:
                 raise ConsoleError("entra_access_denied")

@@ -31,10 +31,17 @@ publicatie-/documentlifecycle niet. Het volledige contract staat in issue #434.
   blokkeren. Elke volgende aanvraag controleert de blokkering in PostgreSQL.
   Eigen toegang blokkeren is uitgesloten om onbedoelde zelfuitsluiting te voorkomen.
   Opheffen van een blokkering geeft geen extra rol en herstelt geen oude sessie.
-- De sessie is absoluut maximaal vijf minuten geldig (ook als de browsercookie
-  langer wordt bewaard). Daarna is een nieuwe Microsoft-aanmelding vereist.
-  Bij navigatie gaat dit automatisch en keer je terug naar de gevraagde Metis-pagina.
-  Een bestaande Microsoft-SSO-sessie kan daarbij de wachtwoordstap overslaan.
+- De sessie verloopt na 30 minuten zonder echte gebruikersactiviteit. Geldige
+  beschermde navigatie schuift die idle-deadline opnieuw 30 minuten vooruit.
+  Passieve statuscontrole doet dat nadrukkelijk niet en kan dus geen verborgen
+  keep-alive worden.
+- Een sessie duurt absoluut maximaal acht uur vanaf de oorspronkelijke
+  Microsoft-aanmelding. Die grens schuift nooit mee.
+- Twee minuten voor idle- of absolute expiry toont de console een waarschuwing.
+  Bij idle-expiry kan de gebruiker expliciet kiezen voor "Blijf ingelogd"; bij
+  de absolute grens is opnieuw aanmelden vereist. Blokkeren, retirement,
+  relevante rolwijziging en expliciete logout blijven een sessie onmiddellijk
+  ongeldig maken.
   Onverwerkte POSTs worden nooit automatisch opnieuw uitgevoerd.
 - Verwijderen van een Entra-toewijzing werkt bij de volgende autorisatie, onder
   voorbehoud van Microsofts propagatietijd. Entra kan onze bestaande sessie niet
