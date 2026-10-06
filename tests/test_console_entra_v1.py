@@ -148,10 +148,62 @@ def test_http_login_migration_revocation_restart_and_no_password_bypass(recovery
         state.session_account(token)  # Unblocking cannot revive revoked sessions.
     assert login(client, state.workflow_identity_store).status_code == 303
     with state.workflow_identity_store._connect() as con:
-        con.execute("UPDATE workflow.sessions SET created_at=CURRENT_TIMESTAMP - interval '6 minutes', expires_at=CURRENT_TIMESTAMP + interval '1 hour' WHERE account_id=%s", (reviewer['account_id'],))
-    assert client.get('/accounts', follow_redirects=False).status_code == 303  # Absolute max age, not sliding TTL.
+        con.execute("UPDATE workflow.sessions SET created_at=CURRENT_TIMESTAMP - interval '8 hours 1 minute', expires_at=CURRENT_TIMESTAMP + interval '1 hour' WHERE account_id=%s", (reviewer['account_id'],))
+    assert client.get('/accounts', follow_redirects=False).status_code == 303  # Eight-hour absolute max age.
     assert admin_client.post('/accounts/access', data={'account_id': admin['account_id'], 'blocked': 'true'}).status_code >= 400
     assert admin_client.post('/accounts/access', headers={'Origin': 'https://evil.example'}, data={'account_id': reviewer['account_id'], 'blocked': 'true'}).status_code == 403
+
+
+def test_entra_session_slides_for_thirty_minutes_warns_and_keeps_eight_hour_cap(recovery_postgres, tmp_path, monkeypatch):
+    state = console(tmp_path, recovery_postgres)
+    client, _ = app_client(monkeypatch, state)
+    assert login(client, state.workflow_identity_store).status_code == 303
+    token = client.cookies['console_session']
+    account_id = state.session_account(token)['account_id']
+
+    # Status is observational: it must not silently extend the idle deadline.
+    with state.workflow_identity_store._connect() as con:
+        con.execute(
+            "UPDATE workflow.sessions SET created_at=CURRENT_TIMESTAMP - interval '29 minutes', "
+            "expires_at=CURRENT_TIMESTAMP + interval '1 minute' WHERE account_id=%s",
+            (account_id,),
+        )
+    status = client.get('/session/status')
+    assert status.status_code == 200
+    before = status.json()
+    assert 0 < before['idle_remaining_seconds'] <= 61
+    assert 7 * 60 * 60 < before['absolute_remaining_seconds'] < 8 * 60 * 60
+
+    # A real protected navigation renews idle time and the page carries the warning UI.
+    page = client.get('/accounts', follow_redirects=False)
+    assert page.status_code == 200
+    assert 'data-session-warning' in page.text
+    assert 'data-session-renew' in page.text
+    renewed = client.get('/session/status').json()
+    assert 29 * 60 <= renewed['idle_remaining_seconds'] <= 30 * 60
+    assert renewed['remaining_seconds'] <= renewed['absolute_remaining_seconds']
+
+    # Explicit user action may renew too; status polling itself never acts as keep-alive.
+    with state.workflow_identity_store._connect() as con:
+        con.execute(
+            "UPDATE workflow.sessions SET expires_at=CURRENT_TIMESTAMP + interval '1 minute' "
+            "WHERE account_id=%s",
+            (account_id,),
+        )
+    passive = client.get('/session/status').json()
+    assert passive['idle_remaining_seconds'] <= 61
+    active = client.post('/session/renew')
+    assert active.status_code == 200
+    assert active.json()['idle_remaining_seconds'] >= 29 * 60
+
+    # Idle timeout is still enforced server-side.
+    with state.workflow_identity_store._connect() as con:
+        con.execute(
+            "UPDATE workflow.sessions SET expires_at=CURRENT_TIMESTAMP - interval '1 second' "
+            "WHERE account_id=%s",
+            (account_id,),
+        )
+    assert client.get('/accounts', follow_redirects=False).status_code == 303
 
 
 def test_callback_browser_state_replay_denied_and_no_header_trust(recovery_postgres, tmp_path, monkeypatch):
