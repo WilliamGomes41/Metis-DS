@@ -243,12 +243,12 @@ class EntraIdentity:
                         "AND to_jsonb(a)->>'retirement' IS NULL AND s.revoked_at IS NULL "
                         "AND s.expires_at>CURRENT_TIMESTAMP "
                         "AND s.created_at>CURRENT_TIMESTAMP - (%s * interval '1 second') "
-                        "RETURNING a.*,s.created_at,s.expires_at",
+                        "RETURNING a.*,s.created_at AS session_created_at,s.expires_at AS session_expires_at",
                         (SESSION_IDLE_SECONDS, SESSION_ABSOLUTE_SECONDS, *params),
                     ).fetchone()
                 else:
                     row = con.execute(
-                        "SELECT a.*,s.created_at,s.expires_at FROM workflow.sessions s "
+                        "SELECT a.*,s.created_at AS session_created_at,s.expires_at AS session_expires_at FROM workflow.sessions s "
                         "JOIN workflow.entra_sessions es USING(token_hash) "
                         "JOIN workflow.entra_identities e ON e.tenant_id=es.tenant_id AND e.object_id=es.object_id "
                         "JOIN workflow.accounts a ON a.account_id=e.account_id AND a.account_id=s.account_id "
@@ -278,8 +278,8 @@ class EntraIdentity:
     @staticmethod
     def _session_state(row: dict) -> dict:
         now = datetime.now(timezone.utc)
-        absolute_expires = row["created_at"] + timedelta(seconds=SESSION_ABSOLUTE_SECONDS)
-        idle_remaining = max(0, int((row["expires_at"] - now).total_seconds()))
+        absolute_expires = row["session_created_at"] + timedelta(seconds=SESSION_ABSOLUTE_SECONDS)
+        idle_remaining = max(0, int((row["session_expires_at"] - now).total_seconds()))
         absolute_remaining = max(0, int((absolute_expires - now).total_seconds()))
         remaining = min(idle_remaining, absolute_remaining)
         reason = "absolute" if absolute_remaining <= idle_remaining else "idle"
