@@ -1073,6 +1073,59 @@ def _runs_from_export(run_rows: list[dict[str, Any]], views: list[dict[str, Any]
     return built
 
 
+def _provider_calls_from_export(
+    calls: list[dict[str, Any]], formation_findings: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Rehydrate call-local evidence without flattening the bounded call chain."""
+    findings_by_call: dict[Any, list[dict[str, Any]]] = {}
+    for row in formation_findings:
+        call_id = row.get("call_id")
+        findings_by_call.setdefault(call_id, []).append({
+            "kind": row.get("kind"),
+            "index": row.get("index"),
+            "reason_code": row.get("reason_code"),
+            "spans": row.get("spans") if isinstance(row.get("spans"), list) else [],
+            "proposed_object_type": row.get("proposed_object_type"),
+            "source_assessment_role": row.get("source_assessment_role"),
+            "finding": row.get("finding"),
+            "requires_review": row.get("requires_review"),
+            "state": row.get("state"),
+            "provider_call_id": call_id,
+        })
+    built: list[dict[str, Any]] = []
+    for row in calls:
+        call_id = row.get("call_id")
+        built.append({
+            "version": "semantic-provider-evidence-v1",
+            "task_id": row.get("task_id"),
+            "target_spans": row.get("target_spans") if isinstance(row.get("target_spans"), list) else [],
+            "deployed_commit": row.get("deployed_commit"),
+            "requested_at": row.get("requested_at"),
+            "request": row.get("request"),
+            "response": {
+                "id": call_id,
+                "status": row.get("response_status"),
+                "output_text": row.get("output_text"),
+                "input_tokens": row.get("input_tokens"),
+                "output_tokens": row.get("output_tokens"),
+            },
+            "formation": {"rejections": findings_by_call.pop(call_id, [])},
+        })
+    for call_id, rejections in findings_by_call.items():
+        targets = [
+            span for rejection in rejections
+            for span in (rejection.get("spans") or [])
+            if isinstance(span, dict)
+        ]
+        built.append({
+            "task_id": None,
+            "target_spans": targets,
+            "response": {"id": call_id},
+            "formation": {"rejections": rejections},
+        })
+    return built
+
+
 def evidence_from_zip(path: Path) -> dict[str, Any]:
     with ZipFile(path) as archive:
         revision_rows = _read_csv(archive, "revision.csv")
@@ -1119,12 +1172,15 @@ def evidence_from_zip(path: Path) -> dict[str, Any]:
     else:
         provenance = {"status": "unavailable"}
         usable_blocks = []
+    provider_calls = _provider_calls_from_export(calls, formation_findings)
+    root_call = provider_calls[0] if provider_calls else {}
     envelope = {
         "semantic_replay": {
             "identity": identity if isinstance(identity, dict) else {},
             "proposal": proposal if isinstance(proposal, dict) else {},
             "validation": proposal_row.get("validation"),
             "provider_evidence": {
+                **root_call,
                 "task_policy": (tasks[0].get("policy_version") if tasks else None),
                 "tasks": [{
                     "task_id": task.get("task_id"),
@@ -1134,18 +1190,7 @@ def evidence_from_zip(path: Path) -> dict[str, Any]:
                     "status": task.get("status"),
                 } for task in tasks],
                 "deployed_commit": deployed,
-                "response": {"id": call_ids[0]} if len(set(call_ids)) == 1 else {},
-                "formation": {"rejections": [{
-                    "kind": row.get("kind"),
-                    "index": row.get("index"),
-                    "reason_code": row.get("reason_code"),
-                    "spans": row.get("spans") if isinstance(row.get("spans"), list) else [],
-                    "proposed_object_type": row.get("proposed_object_type"),
-                    "source_assessment_role": row.get("source_assessment_role"),
-                    "finding": row.get("finding"),
-                    "requires_review": row.get("requires_review"),
-                    "state": row.get("state"),
-                } for row in formation_findings]},
+                "supplementary_calls": provider_calls[1:],
             },
         },
         "source_block_map": usable_blocks,
