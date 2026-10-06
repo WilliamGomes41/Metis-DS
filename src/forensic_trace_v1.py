@@ -80,7 +80,10 @@ CSV_FIELDS = (
     "validator_result", "validator_reason", "object_id", "admission_result",
     "passage_disposition", "review_visible", "expected_function",
     "expected_object_type", "first_divergence_stage", "verdict",
-    "trace_evidence_status",
+    "trace_evidence_status", "coverage_object_id", "usage_route",
+    "semantic_block_id", "semantic_block_start", "semantic_block_end",
+    "model_call_id", "source_start", "source_end",
+    "unresolved_reason", "lineage_resolvable",
 )
 DIVERGENCE_FIELDS = (
     "case_id", "source_span_id", "verdict", "first_divergence_stage",
@@ -188,6 +191,7 @@ JSON_COLUMNS = frozenset({
 })
 OFFSET_COLUMNS = frozenset({
     "start", "end", "block_start", "block_end", "raw_start", "raw_end", "map_start", "map_end",
+    "semantic_block_start", "semantic_block_end", "source_start", "source_end",
 })
 
 
@@ -528,6 +532,174 @@ def _fragment_text(fragments: Mapping[str, Any], mapping: list[Any]) -> tuple[st
     return "".join(parts), ranges, page, locator
 
 
+USAGE_ROUTES = frozenset({
+    "proposal_selected", "coverage_remainder", "linked_as_support",
+    "used_as_context", "blocked",
+})
+
+
+def _fragment_index(runs: list[Any], producing: Mapping[str, Any] | None) -> tuple[dict[str, Any], set[str]]:
+    """Fragment bodies of the producing run only. Another run is not a source join."""
+    del runs
+    fragments: dict[str, Any] = {}
+    conflicts: set[str] = set()
+    if not isinstance(producing, Mapping):
+        return fragments, conflicts
+    for fragment in producing.get("source_fragments") or []:
+        if not isinstance(fragment, dict) or fragment.get("fragment_id") in (None, ""):
+            continue
+        fragment_id = str(fragment["fragment_id"])
+        current = fragments.get(fragment_id)
+        if current is None:
+            fragments[fragment_id] = fragment
+            continue
+        if current.get("raw_text") != fragment.get("raw_text"):
+            conflicts.add(fragment_id)
+    for fragment_id in conflicts:
+        fragments.pop(fragment_id, None)
+    return fragments, conflicts
+
+
+def _mapping_ranges(mapping: list[Any]) -> list[dict[str, Any]] | None:
+    ranges: list[dict[str, Any]] = []
+    for item in mapping:
+        if not isinstance(item, dict):
+            return None
+        if item.get("kind") == "join_separator":
+            continue
+        fragment_id = item.get("fragment_id")
+        lo, hi = item.get("raw_start"), item.get("raw_end")
+        if (not isinstance(fragment_id, str) or not fragment_id or type(lo) is not int
+                or type(hi) is not int or not 0 <= lo < hi):
+            return None
+        ranges.append({"fragment_id": fragment_id, "start": lo, "end": hi})
+    return ranges
+
+
+def _mapping_disproven_by_fragments(mapping: list[Any], fragments: Mapping[str, Any]) -> bool:
+    """True only when an available fragment proves a recorded range invalid."""
+    for item in mapping:
+        if not isinstance(item, dict) or item.get("kind") == "join_separator":
+            continue
+        fragment_id = item.get("fragment_id")
+        fragment = fragments.get(str(fragment_id)) if fragment_id is not None else None
+        if fragment is None:
+            continue
+        raw = fragment.get("raw_text") if isinstance(fragment, dict) else None
+        lo, hi = item.get("raw_start"), item.get("raw_end")
+        if not isinstance(raw, str) or type(lo) is not int or type(hi) is not int or not 0 <= lo < hi <= len(raw):
+            return True
+    return False
+
+
+def _recorded_segment_text(obj: Mapping[str, Any] | None) -> str | None:
+    if not isinstance(obj, Mapping):
+        return None
+    text = (obj.get("content") or {}).get("raw_text")
+    if isinstance(text, str) and text:
+        return text
+    admission = (obj.get("metadata") or {}).get("admission") or {}
+    exact = admission.get("source_text_exact")
+    if isinstance(exact, str) and exact:
+        return exact
+    return None
+
+
+def _usage_route(obj: Mapping[str, Any] | None) -> str | None:
+    if not isinstance(obj, Mapping):
+        return None
+    semantic = (obj.get("metadata") or {}).get("semantic_passage") or {}
+    origin = semantic.get("selection_origin")
+    if origin in USAGE_ROUTES:
+        return origin
+    register = (obj.get("metadata") or {}).get("passage_register") or {}
+    status = register.get("status")
+    if status in USAGE_ROUTES:
+        return status
+    admission = (obj.get("metadata") or {}).get("admission") or {}
+    if admission.get("gate_result") == "blocked":
+        return "blocked"
+    return None
+
+
+def _unresolved_source(reason: str, obj: Mapping[str, Any] | None) -> dict[str, Any]:
+    return {
+        "text": None,
+        "ranges": [],
+        "page": None,
+        "locator": None,
+        "coverage_object_id": obj.get("object_id") if isinstance(obj, Mapping) else None,
+        "usage_route": _usage_route(obj),
+        "unresolved_reason": reason,
+        "lineage_resolvable": False,
+    }
+
+
+def _resolve_recorded_source(*, candidates: list[dict[str, Any]], block_id: Any, start: Any, end: Any,
+                            source_block_map: list[Any], fragments: Mapping[str, Any],
+                            fragment_conflicts: set[str]) -> dict[str, Any]:
+    """Follow one exact coverage segment. Do not take another segment of the same semblock."""
+    matches = []
+    for obj in candidates:
+        semantic = (obj.get("metadata") or {}).get("semantic_passage") or {}
+        spans = semantic.get("spans") or []
+        if any(_exact_span(item, block_id, start, end) for item in spans):
+            matches.append(obj)
+    if len(matches) > 1:
+        return _unresolved_source("ambiguous_semblock_mapping", None)
+    obj = matches[0] if matches else None
+    semantic = (obj.get("metadata") or {}).get("semantic_passage") or {} if obj else {}
+    object_spans = [item for item in (semantic.get("spans") or []) if isinstance(item, dict)]
+    owns_span = bool(obj is not None and any(_exact_span(item, block_id, start, end) for item in object_spans))
+    block_mapping = slice_block_mapping(list(source_block_map or []), block_id, start, end) or []
+    object_mapping = list(semantic.get("source_mapping") or []) if owns_span and semantic.get("source_mapping") else []
+    if len(object_spans) <= 1 and object_mapping:
+        # One recorded span keeps its raw fragment mapping. That mapping stays
+        # authoritative when reconstructed object text only normalizes layout.
+        mapping = object_mapping
+    elif block_mapping:
+        # A verified per-block slice keeps each reconstructed span's own source.
+        mapping = block_mapping
+    else:
+        # No verified slice: the recorded object lineage covers every span of
+        # that object. Do not invent a per-block split that was not recorded.
+        mapping = object_mapping
+    if mapping and _mapping_ranges(mapping) is None:
+        return _unresolved_source("lineage_conflict", obj)
+    if mapping and _mapping_disproven_by_fragments(mapping, fragments):
+        return _unresolved_source("lineage_conflict", obj)
+    recorded = _recorded_segment_text(obj) if owns_span else None
+    sliced_text, sliced_ranges, page, locator = _fragment_text(fragments, mapping) if mapping else (None, [], None, None)
+    ranges = sliced_ranges or (_mapping_ranges(mapping) if mapping else []) or []
+    if any(item.get("fragment_id") in fragment_conflicts for item in ranges):
+        return _unresolved_source("lineage_conflict", obj)
+    # A verified raw fragment slice is authoritative source evidence. The stored
+    # object text may be a reconstructed/normalized view (whitespace, layout,
+    # page-line markers removed) and must not invalidate a valid raw mapping.
+    text = sliced_text
+    if text is None and recorded and ranges:
+        text = recorded
+        if page is None:
+            page = next((item.get("source_page") for item in mapping
+                         if isinstance(item, dict) and item.get("source_page") is not None), None)
+    resolvable = bool(ranges) and isinstance(text, str) and bool(text)
+    reason = None
+    if not resolvable:
+        reason = "coverage_object_missing" if obj is None and not mapping else "source_stage_missing"
+        ranges = []
+        text = None
+    return {
+        "text": text,
+        "ranges": ranges,
+        "page": page,
+        "locator": locator,
+        "coverage_object_id": obj.get("object_id") if obj else None,
+        "usage_route": _usage_route(obj),
+        "unresolved_reason": reason,
+        "lineage_resolvable": resolvable,
+    }
+
+
 def _review_stage(obj: Mapping[str, Any], admission: Mapping[str, Any], register: Mapping[str, Any]) -> dict[str, Any]:
     gate = admission.get("gate_result")
     decision = (obj.get("governance") or {}).get("validation_status") or None
@@ -768,10 +940,7 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
         identity_conflicts.append("passage_formation_mode")
     proposal = replay.get("proposal") if isinstance(replay.get("proposal"), dict) else {}
     validation = replay.get("validation")
-    fragments: dict[str, Any] = {}
-    for fragment in (producing or {}).get("source_fragments") or []:
-        if fragment.get("fragment_id") not in (None, ""):
-            fragments[str(fragment["fragment_id"])] = fragment
+    fragments, fragment_conflicts = _fragment_index(runs, producing)
     by_block: dict[tuple[Any, Any, Any], dict[str, Any]] = {}
 
     def block_bucket(block_id: Any, start: Any, end: Any) -> dict[str, Any]:
@@ -879,14 +1048,17 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
         obj = bucket["objects"][0] if len(bucket["objects"]) == 1 else None
         if len(bucket["objects"]) > 1:
             obj = None
-        semantic = (obj.get("metadata") or {}).get("semantic_passage") or {} if obj else {}
         block_id, start, end = key
-        object_spans = semantic.get("spans") or []
-        if obj is not None and len(object_spans) == 1 and semantic.get("source_mapping"):
-            mapping = list(semantic.get("source_mapping") or [])
-        else:
-            mapping = slice_block_mapping(list(envelope.get("source_block_map") or []), block_id, start, end) or []
-        text, ranges, page, locator = _fragment_text(fragments, mapping) if mapping else (None, [], None, None)
+        resolved = _resolve_recorded_source(
+            candidates=list(objects or []),
+            block_id=block_id,
+            start=start,
+            end=end,
+            source_block_map=list(envelope.get("source_block_map") or []),
+            fragments=fragments,
+            fragment_conflicts=fragment_conflicts,
+        )
+        text, ranges, page, locator = resolved["text"], resolved["ranges"], resolved["page"], resolved["locator"]
         for item in ranges:
             referenced.add(item["fragment_id"])
         if obj is not None:
@@ -903,6 +1075,12 @@ def evidence_from_stored(*, snapshot_id: str, revision: str, envelope: Mapping[s
             raw_text=text, clean_text=text, page=page, locator=locator,
             section_path=section if isinstance(section, list) else None,
             block_id=block_id, block_start=start, block_end=end)
+        span["lineage"] = {
+            "coverage_object_id": resolved["coverage_object_id"],
+            "usage_route": resolved["usage_route"],
+            "unresolved_reason": resolved["unresolved_reason"],
+            "lineage_resolvable": resolved["lineage_resolvable"],
+        }
         if len(ranges) != 1:
             span["fragments"] = ranges
         elif ranges:
@@ -1550,6 +1728,10 @@ def _public_span(evidence: Mapping[str, Any], span: Mapping[str, Any]) -> dict[s
         "publication_effect": span.get("publication_effect") or _unknown_stage(),
         "expectation": None,
         "first_divergence": None,
+        "coverage_object_id": (span.get("lineage") or {}).get("coverage_object_id"),
+        "usage_route": (span.get("lineage") or {}).get("usage_route"),
+        "unresolved_reason": (span.get("lineage") or {}).get("unresolved_reason"),
+        "lineage_resolvable": (span.get("lineage") or {}).get("lineage_resolvable"),
     }
 
 
@@ -1733,6 +1915,7 @@ def _csv_row(record: Mapping[str, Any], evidence_status: str) -> dict[str, Any]:
     admission = record.get("admission") or {}
     account = record.get("source_accountability") or {}
     review = record.get("review_projection") or {}
+    reconstruction = record.get("reconstruction") or {}
     expectation = record.get("expectation") or {}
     divergence = record.get("first_divergence") or {}
     section = source.get("section_path") if source.get("status") == "recorded" else None
@@ -1755,7 +1938,17 @@ def _csv_row(record: Mapping[str, Any], evidence_status: str) -> dict[str, Any]:
         "expected_object_type": expectation.get("expected_object_type"),
         "first_divergence_stage": divergence.get("stage"),
         "verdict": divergence.get("verdict"),
-        "trace_evidence_status": evidence_status,
+        "trace_evidence_status": "incomplete" if record.get("unresolved_reason") else evidence_status,
+        "coverage_object_id": record.get("coverage_object_id") or "",
+        "usage_route": record.get("usage_route") or "",
+        "semantic_block_id": reconstruction.get("semantic_block_id") if reconstruction.get("status") == "recorded" else UNKNOWN,
+        "semantic_block_start": reconstruction.get("block_start") if reconstruction.get("status") == "recorded" else UNKNOWN,
+        "semantic_block_end": reconstruction.get("block_end") if reconstruction.get("status") == "recorded" else UNKNOWN,
+        "model_call_id": provider.get("provider_call_id") if provider.get("status") == "recorded" else UNKNOWN,
+        "source_start": source.get("start") if source.get("status") == "recorded" else UNKNOWN,
+        "source_end": source.get("end") if source.get("status") == "recorded" else UNKNOWN,
+        "unresolved_reason": record.get("unresolved_reason") or "",
+        "lineage_resolvable": "true" if record.get("lineage_resolvable") else "false",
     }
 
 
@@ -1816,6 +2009,240 @@ def write_outputs(result: Mapping[str, Any], directory: Path) -> None:
         divergence_path.write_bytes(_csv_bytes(DIVERGENCE_FIELDS, result["divergences"]))
     else:
         divergence_path.unlink(missing_ok=True)
+
+
+def independent_source_lineage_acceptance(
+    *,
+    trace_rows: list[Mapping[str, Any]],
+    coverage_rows: list[Mapping[str, Any]],
+    lineage_rows: list[Mapping[str, Any]],
+    stage_rows: list[Mapping[str, Any]],
+    view_rows: list[Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Judge the trace from independently exported coverage, lineage and source evidence."""
+    absent = {None, "", UNKNOWN}
+
+    def present(value: Any) -> bool:
+        return value not in absent
+
+    def as_int(value: Any) -> int | None:
+        return value if type(value) is int else None
+
+    coverage_by_object: dict[str, list[Mapping[str, Any]]] = {}
+    selected_segments: list[tuple[str, str, int, int]] = []
+    for row in coverage_rows:
+        object_id = row.get("object_id")
+        if not present(object_id):
+            continue
+        object_id = str(object_id)
+        coverage_by_object.setdefault(object_id, []).append(row)
+        if row.get("selection_origin") != "proposal_selected":
+            continue
+        block_id, start, end = row.get("block_id"), as_int(row.get("start")), as_int(row.get("end"))
+        if isinstance(block_id, str) and block_id and start is not None and end is not None and start < end:
+            selected_segments.append((object_id, block_id, start, end))
+
+    lineage_by_object: dict[str, list[Mapping[str, Any]]] = {}
+    for row in lineage_rows:
+        if present(row.get("object_id")):
+            lineage_by_object.setdefault(str(row["object_id"]), []).append(row)
+    stages_by_object: dict[str, list[Mapping[str, Any]]] = {}
+    for row in stage_rows:
+        if present(row.get("object_id")):
+            stages_by_object.setdefault(str(row["object_id"]), []).append(row)
+
+    fragment_texts: dict[str, set[str]] = {}
+    for row in view_rows or []:
+        fragment_id, raw = row.get("fragment_id"), row.get("raw_text")
+        if isinstance(fragment_id, str) and fragment_id and isinstance(raw, str):
+            fragment_texts.setdefault(fragment_id, set()).add(raw)
+
+    def ranges(object_id: str) -> list[tuple[str, int, int]]:
+        found = []
+        for row in lineage_by_object.get(object_id, []):
+            if row.get("relation") != "selected_raw_fragment_range":
+                continue
+            fragment_id, start, end = row.get("target_id"), as_int(row.get("start")), as_int(row.get("end"))
+            if isinstance(fragment_id, str) and fragment_id and start is not None and end is not None and 0 <= start < end:
+                found.append((fragment_id, start, end))
+        return found
+
+    def recorded_stage_text(object_id: str) -> tuple[str | None, bool]:
+        """Current object text is the selected segment; admission text may be broader context."""
+        current = []
+        admission = []
+        for row in stages_by_object.get(object_id, []):
+            if row.get("text_status") == "not_recorded":
+                continue
+            text = row.get("text")
+            if not isinstance(text, str) or not text:
+                continue
+            if row.get("stage") == "current_object_raw_text":
+                current.append(text)
+            elif row.get("stage") == "stored_admission_source_text":
+                admission.append(text)
+        current = list(dict.fromkeys(current))
+        admission = list(dict.fromkeys(admission))
+        if len(current) > 1:
+            return None, True
+        if current:
+            return current[0], False
+        if len(admission) > 1:
+            return None, True
+        if admission:
+            return admission[0], False
+        return None, False
+
+    def independently_expected_texts(object_id: str) -> tuple[set[str], bool]:
+        """Return independently recorded valid text representations and a conflict flag."""
+        stage_text, stage_conflict = recorded_stage_text(object_id)
+        if stage_conflict:
+            return set(), True
+        expected = {stage_text} if stage_text else set()
+        if not view_rows:
+            return expected, False
+
+        parts: list[str] = []
+        saw_range = False
+        for row in lineage_by_object.get(object_id, []):
+            relation = row.get("relation")
+            if relation == "inserted_join_separator":
+                text = row.get("text")
+                if not isinstance(text, str):
+                    return set(), True
+                parts.append(text)
+                continue
+            if relation != "selected_raw_fragment_range":
+                continue
+            saw_range = True
+            fragment_id, lo, hi = row.get("target_id"), as_int(row.get("start")), as_int(row.get("end"))
+            values = fragment_texts.get(str(fragment_id), set()) if fragment_id not in (None, "") else set()
+            if len(values) > 1:
+                return set(), True
+            if not values:
+                # Fragment bodies were not exported; stage evidence remains usable.
+                return expected, False
+            raw = next(iter(values))
+            if lo is None or hi is None or not 0 <= lo < hi <= len(raw):
+                return set(), True
+            parts.append(raw[lo:hi])
+        if saw_range and parts:
+            expected.add("".join(parts))
+        return expected, False
+
+    def trace_for_segment(object_id: str, block_id: str, start: int, end: int) -> list[Mapping[str, Any]]:
+        candidates = [
+            row for row in trace_rows
+            if str(row.get("coverage_object_id") or row.get("object_id") or "") == object_id
+            and row.get("provider_decision") == "selected"
+        ]
+        exact = [
+            row for row in candidates
+            if row.get("semantic_block_id") == block_id
+            and as_int(row.get("semantic_block_start")) == start
+            and as_int(row.get("semantic_block_end")) == end
+        ]
+        if exact:
+            return exact
+        # Backward-compatible matching is safe only for a one-segment object
+        # and only when the legacy trace has no reconstructed bounds.
+        object_segments = [item for item in selected_segments if item[0] == object_id]
+        legacy = [
+            row for row in candidates
+            if row.get("semantic_block_id") in (None, "", UNKNOWN, block_id)
+            and row.get("semantic_block_start") in (None, "", UNKNOWN)
+            and row.get("semantic_block_end") in (None, "", UNKNOWN)
+        ]
+        return legacy if len(object_segments) == 1 else []
+
+    independently_resolvable = 0
+    unknown_span = 0
+    unknown_text = 0
+    unresolvable = 0
+    contaminated = 0
+    conflicts = 0
+    missing_trace = 0
+    projected_text_mismatch = 0
+    projected_range_mismatch = 0
+
+    for object_id, block_id, block_start, block_end in selected_segments:
+        own_ranges = ranges(object_id)
+        expected_texts, evidence_conflict = independently_expected_texts(object_id)
+        if evidence_conflict:
+            conflicts += 1
+            unresolvable += 1
+            continue
+        if not own_ranges or not expected_texts:
+            unresolvable += 1
+            continue
+
+        independently_resolvable += 1
+        matches = trace_for_segment(object_id, block_id, block_start, block_end)
+        if not matches:
+            missing_trace += 1
+            continue
+        if len(matches) > 1:
+            conflicts += 1
+            continue
+        row = matches[0]
+        if not present(row.get("source_span_id")):
+            unknown_span += 1
+        source_text = row.get("source_text")
+        if not present(source_text):
+            unknown_text += 1
+        elif str(source_text) not in expected_texts:
+            projected_text_mismatch += 1
+
+        if len(own_ranges) == 1:
+            _fragment_id, expected_start, expected_end = own_ranges[0]
+            if (as_int(row.get("source_start")) != expected_start
+                    or as_int(row.get("source_end")) != expected_end):
+                projected_range_mismatch += 1
+
+        # Contamination means text from a distinct coverage object in the same
+        # reconstructed block leaked into this selected object's projection.
+        projected = str(source_text or "")
+        own_stage, _ = recorded_stage_text(object_id)
+        for other_id, other_rows in coverage_by_object.items():
+            if other_id == object_id:
+                continue
+            if not any(other.get("block_id") == block_id for other in other_rows):
+                continue
+            other_text, other_conflict = recorded_stage_text(other_id)
+            if other_conflict or not other_text or other_text == own_stage:
+                continue
+            if other_text in projected:
+                contaminated += 1
+                break
+
+    selected_object_ids = {item[0] for item in selected_segments}
+    trace_only_selected = [
+        row for row in trace_rows
+        if row.get("provider_decision") == "selected"
+        and str(row.get("coverage_object_id") or row.get("object_id") or "") not in selected_object_ids
+    ]
+    unresolvable += len(trace_only_selected)
+
+    return {
+        "selected_candidates": len(selected_segments) + len(trace_only_selected),
+        "independently_selected_coverage_segments": len(selected_segments),
+        "independently_resolvable": independently_resolvable,
+        "selected_candidates_missing_trace": missing_trace,
+        "selected_trace_without_selected_coverage": len(trace_only_selected),
+        "selected_candidates_with_resolvable_lineage_and_unknown_source_span": unknown_span,
+        "selected_candidates_with_resolvable_lineage_and_unknown_source_text": unknown_text,
+        "projected_source_text_mismatch": projected_text_mismatch,
+        "projected_source_range_mismatch": projected_range_mismatch,
+        "unresolvable_selected_candidates": unresolvable,
+        "selected_remainder_cross_contamination": contaminated,
+        "lineage_conflicts": conflicts,
+    }
+
+
+def source_lineage_acceptance(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
+    """Deprecated wrapper. A trace row cannot certify its own lineage."""
+    return independent_source_lineage_acceptance(
+        trace_rows=rows, coverage_rows=[], lineage_rows=[], stage_rows=[])
 
 
 def rows_for_export(*, snapshot_id: str, revision: str, envelope: Mapping[str, Any],
