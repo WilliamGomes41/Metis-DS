@@ -26,6 +26,10 @@ When the verified block map cannot slice a span, the projector follows the cover
 
 `first_divergence_stage` stays empty without a gold case. That column is the gold comparison, not a route-exit inference. Recorded provider, validation, admission and review decisions remain on their own fields. This slice does not invent a second divergence model.
 
+## Acceptance gate
+
+`scripts/check_forensic_source_lineage.py` reads `coverage.csv`, `lineage.csv` and `source_stages.csv` itself. A selected trace row is resolvable only when those tables contain one coverage segment, one `selected_raw_fragment_range`, and one recorded source-stage text for its object. `lineage_resolvable` on the trace is ignored. The 802-row snapshot is not in the repository; the same command is the gate for that ZIP.
+
 ## Non-changes
 
 No new source identity, no persisted provenance, no workflow mutation, no publication authority.
