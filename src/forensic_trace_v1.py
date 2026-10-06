@@ -632,14 +632,18 @@ def _resolve_recorded_source(*, candidates: list[dict[str, Any]], block_id: Any,
     obj = matches[0] if matches else None
     semantic = (obj.get("metadata") or {}).get("semantic_passage") or {} if obj else {}
     object_spans = [item for item in (semantic.get("spans") or []) if isinstance(item, dict)]
-    single = bool(obj is not None and len(object_spans) == 1 and _exact_span(object_spans[0], block_id, start, end))
-    if single and semantic.get("source_mapping"):
+    owns_span = bool(obj is not None and any(_exact_span(item, block_id, start, end) for item in object_spans))
+    if owns_span and semantic.get("source_mapping"):
+        # The coverage object's mapping is already the selected source evidence.
+        # A multi-span object may legitimately map several reconstructed blocks
+        # onto one combined source lineage; do not require a synthetic per-block
+        # split when the recorded object lineage is present.
         mapping = list(semantic.get("source_mapping") or [])
     else:
         mapping = slice_block_mapping(list(source_block_map or []), block_id, start, end) or []
     if mapping and _mapping_ranges(mapping) is None:
         return _unresolved_source("lineage_conflict", obj)
-    recorded = _recorded_segment_text(obj) if single else None
+    recorded = _recorded_segment_text(obj) if owns_span else None
     sliced_text, sliced_ranges, page, locator = _fragment_text(fragments, mapping) if mapping else (None, [], None, None)
     ranges = sliced_ranges or (_mapping_ranges(mapping) if mapping else []) or []
     if any(item.get("fragment_id") in fragment_conflicts for item in ranges):
