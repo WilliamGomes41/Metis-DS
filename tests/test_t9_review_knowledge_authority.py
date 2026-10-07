@@ -238,3 +238,24 @@ def test_standalone_second_review_cannot_bypass_current_working_revision(tmp_pat
     assert report["errors"]
     assert updated == [before]
     assert not ledger.exists()
+
+
+def test_explicit_reapproval_reuses_exact_authorization_without_erasing_events(tmp_path):
+    """A withdrawn authority needs a fresh command, not a new tuple row."""
+    from src.review_ledger import read_events
+    console, reviewer, sid, obj = _console(tmp_path)
+    _approve(console, reviewer, sid, obj, expected_revision=console.objects_revision(sid))
+    old = deepcopy(console.object_review_bindings(sid)[0])
+    first_events = deepcopy(read_events(console._ledger_path))
+    console._bindings[sid][0]["valid"] = False
+    console._save_bindings()
+    current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
+    assert exact_current_approver_ids(current, console.object_review_bindings(sid)) == ()
+    _approve(console, reviewer, sid, current, expected_revision=console.objects_revision(sid))
+    rows = console.object_review_bindings(sid)
+    assert len(rows) == 1, "One semantic approval tuple must not create duplicate authority rows"
+    assert rows[0] == old, "Exact reviewed evidence stays unchanged; only withdrawn validity can be renewed"
+    events = read_events(console._ledger_path)
+    assert events[:len(first_events)] == first_events
+    assert len(events) == len(first_events) + 1
+    assert exact_current_approver_ids(current, rows) == (reviewer["account_id"],)
