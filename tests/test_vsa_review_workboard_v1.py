@@ -46,9 +46,8 @@ class _QueueConsole(ProportionateReviewConsole):
         return deepcopy(self._test_objects)
 
     def object_review_bindings(self, _snapshot_id: str, **kwargs) -> list[dict[str, Any]]:
-        from test_t4_single_knowledge_path_invariants import _binding
-        return [_binding(o, "reviewer-1") for o in self._test_objects
-                if o.get("governance", {}).get("validation_status") == "approved"]
+        from tests.review_authority_fixture_support import approved_bindings
+        return approved_bindings(self._test_objects)
 
     def review_source_fragments(self, _snapshot_id, **kwargs):
         from test_t4_single_knowledge_path_invariants import _allowed_source

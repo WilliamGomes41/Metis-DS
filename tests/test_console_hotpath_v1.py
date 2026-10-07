@@ -265,6 +265,10 @@ class _HotPathRouteConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole):
             },
         }
 
+    def review_source_fragments(self, snapshot_id, **kwargs):
+        # The selected HTTP fixture has no content candidates.
+        return []
+
     def _navigation_review_count(self, account):
         # This HTTP fixture supplies the already computed navigation projection.
         # Kernel and native-store parity are exercised by NavigationProbe tests.

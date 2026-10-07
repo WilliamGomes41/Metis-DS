@@ -495,7 +495,7 @@ def slow_review_duty(
     return rows if review_path == "boom" else sorted(rows, key=review_priority_rank)
 
 
-def remaining_unclassified(objects: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+def remaining_unclassified(objects: Iterable[dict[str, Any]], *, bindings=None, fragments=None) -> list[dict[str, Any]]:
     """Leftover unclassified that MUST NOT be equal one-by-one duty cards.
 
     Stored objects remain. Presentation of duty is not deletion. Hiding
@@ -504,7 +504,7 @@ def remaining_unclassified(objects: Iterable[dict[str, Any]]) -> list[dict[str, 
     rows = [obj for obj in objects if obj.get("object_type") != "document"]
     leftover: list[dict[str, Any]] = []
     for obj in rows:
-        if is_slow_review_duty(obj) or review_lane(obj) == "fast":
+        if is_slow_review_duty(obj, bindings=bindings, fragments=fragments) or review_lane(obj) == "fast":
             continue
         if obj.get("confirmed_object_type"):
             continue
@@ -515,13 +515,13 @@ def remaining_unclassified(objects: Iterable[dict[str, Any]]) -> list[dict[str, 
     return leftover
 
 
-def remaining_not_duty(objects: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+def remaining_not_duty(objects: Iterable[dict[str, Any]], *, bindings=None, fragments=None) -> list[dict[str, Any]]:
     """Slow objects that are not the presented researcher duty."""
     rows = [obj for obj in objects if obj.get("object_type") != "document"]
     return [
         obj
         for obj in rows
-        if review_lane(obj) != "fast" and not is_slow_review_duty(obj)
+        if review_lane(obj) != "fast" and not is_slow_review_duty(obj, bindings=bindings, fragments=fragments)
     ]
 
 

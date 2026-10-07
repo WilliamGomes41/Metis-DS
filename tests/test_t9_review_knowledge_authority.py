@@ -360,3 +360,42 @@ def test_historical_binding_survives_changed_context_without_approval_carry(tmp_
     assert exact_current_approver_ids(current, console.object_review_bindings(sid)) == ()
     assert review_stage(current, review_path="richtlijn", bindings=console.object_review_bindings(sid),
                         fragments=console.review_source_fragments(sid)) == FIRST_REVIEW
+
+from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+
+
+def test_native_stale_review_does_not_attempt_a_restorative_write(workflow_postgres, tmp_path, monkeypatch):
+    from tests.test_review_batch_atomic_postgres import _console as native_console
+    console = native_console(tmp_path, workflow_postgres)
+    author = console.create_account(username="anne", password="anne-secret", roles=("researcher",))
+    reviewer = console.create_account(username="bert", password="bert-secret", roles=("reviewer",))
+    text = "Oedeem is een ophoping van vocht."
+    bind_fixture_selections(console, [(text, "definition")])
+    receipt = console.ingest(actor_id=author["account_id"], filename="source.html", content_type="text/html",
+        data=("<html><body><h1>Bron</h1><p>" + text + "</p></body></html>").encode(),
+        ingest_kind="new", title="T9 stale", version="1.0", date="2026-10-07", live_url="",
+        class_="richtlijn", family="test", named_reviewers=[reviewer["account_id"]])
+    sid = receipt["snapshot_id"]
+    obj = next(o for o in console.snapshot_objects(sid) if o.get("proposed_object_type") == "definition")
+    stale = console.objects_revision(sid)
+    rows = console._load_objects(sid)
+    document = next(o for o in rows if o["object_type"] == "document")
+    document.setdefault("metadata", {})["t9_winner"] = True
+    stamp_canonical_hashes(document)
+    console._save_objects(sid, rows)
+    store = console.workflow_document_store
+    before = deepcopy(store.list_document_objects(sid))
+    bindings = deepcopy(console.workflow_review_store.read_bindings())
+    events = deepcopy(console.workflow_review_store.read_events())
+    writes = []
+    original = store.write_bundle
+    def counted_write(**kwargs):
+        writes.append(deepcopy(kwargs))
+        return original(**kwargs)
+    monkeypatch.setattr(store, "write_bundle", counted_write)
+    with pytest.raises(ConsoleError, match=SNAPSHOT_OBJECT_WRITE_CONFLICT):
+        _approve(console, reviewer, sid, obj, expected_revision=stale)
+    assert writes == [], "A stale review must not commit even an unchanged restoration bundle"
+    assert store.list_document_objects(sid) == before
+    assert console.workflow_review_store.read_bindings() == bindings
+    assert console.workflow_review_store.read_events() == events

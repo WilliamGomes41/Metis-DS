@@ -186,6 +186,10 @@ class _ClosedQueueConsole(ProportionateReviewConsole):
         return []
 
 
+    def review_source_fragments(self, snapshot_id, **kwargs):
+        from tests.review_authority_fixture_support import source_fragments
+        return source_fragments()
+
     def document_lifecycle_status(self, _snapshot_id: str) -> dict[str, str]:
         return {
             "workflow_status": "closed",
@@ -215,6 +219,8 @@ def test_closed_historical_revision_never_reopens_from_stale_review_rows() -> No
         "governance": {"validation_status": "needs_review"},
         "content": {"clean_text": "Nog open volgens legacy reviewrij"},
     }
+    from tests.review_authority_fixture_support import materialised_row
+    stale_open_heading = materialised_row(stale_open_heading)
     console = _ClosedQueueConsole([stale_open_heading])
     item = review_work_item(
         console,

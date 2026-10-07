@@ -15,6 +15,7 @@ from __future__ import annotations
 from tests.review_authority_fixture_support import materialised_row, source_fragments
 
 import ast
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -147,6 +148,10 @@ def _queue_row(object_id: str, admitted: dict[str, Any], text: str) -> dict[str,
             "selection_origin": "proposal_selected",
             "spans": [{"block_id": f"block-{object_id}", "start": 0, "end": len(text)}]}},
     }
+    from test_t4_single_knowledge_path_invariants import _allowed_candidate
+    row["source"] = deepcopy(_allowed_candidate()["source"])
+    row["source"]["source_checksum"] = admitted.get("source_hash") or row["source"]["source_checksum"]
+    row["source"]["version"] = admitted.get("document_version") or row["source"]["version"]
     return materialised_row(row)
 
 

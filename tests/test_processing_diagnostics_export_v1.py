@@ -302,6 +302,7 @@ def test_all_passages_export_includes_every_current_passage_and_evidence(tmp_pat
     assert [row["candidate_text"] for row in exported] == [row["candidate_text"] for row in payload["rows"]]
     assert json.loads(exported[0]["admission"]) == payload["rows"][0]["admission"]
     assert client.get(url + "&format=xml").status_code == 400
+    monkeypatch.undo()  # The no-reextract guard applies to the evidence export endpoint.
     page = client.get(f"/settings/technical/exports?document={snapshot_id}")
     assert "Bronpassages:" in page.text
     assert "&amp;format=csv" in page.text

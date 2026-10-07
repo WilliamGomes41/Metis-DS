@@ -264,8 +264,6 @@ def review_work_item(
     bindings: list[dict[str, Any]] | None
     if inputs is not None:
         bindings = inputs.bindings
-    elif not hasattr(console, "_bindings") and not hasattr(console, "workflow_review_store"):
-        bindings = None
     else:
         try:
             bindings = console.object_review_bindings(snapshot_id)

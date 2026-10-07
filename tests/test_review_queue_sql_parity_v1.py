@@ -158,7 +158,11 @@ def test_sql_sets_match_domain_queues_including_missing_admission(summary_databa
         summary = subject.review_workboard_summaries(actor, "snap")["snap"]
         expected = reviewer_route_counts(objects, review_path=path, reviewer_id=actor, bindings=bindings, fragments=_allowed_source())
         for key, value in expected.items():
-            assert summary[key] == value, (kind, actor, key)
+            if key == "actionable_structure_duties" and kind == "richtlijn":
+                # Structure QA remains separate from content ReviewDuty.
+                assert summary[key] == 1
+            else:
+                assert summary[key] == value, (kind, actor, key)
         # The SQL projection selects documents. It cannot own a second duty predicate.
         assert "duty_rows" not in captured["sql"]
         assert "authorization_counts" not in captured["sql"]

@@ -351,7 +351,7 @@ def test_review_form_content_and_revision_are_read_together(tmp_path: Path) -> N
     snapshot_id = _ingest(console, accounts)["snapshot_id"]
     target = _content_rows(console, snapshot_id)[0]
     original_revision = _file_revision(console._objects_path(snapshot_id))
-    real_snapshot_objects = console.snapshot_objects
+    real_snapshot_objects = console.snapshot_objects_and_revision
 
     def raced_snapshot_objects(
         snapshot_id_arg: str,
@@ -359,11 +359,7 @@ def test_review_form_content_and_revision_are_read_together(tmp_path: Path) -> N
         *,
         for_update: bool = False,
     ) -> list[dict]:
-        rows = real_snapshot_objects(
-            snapshot_id_arg,
-            include_blocked,
-            for_update=for_update,
-        )
+        rows, revision = real_snapshot_objects(snapshot_id_arg, include_blocked)
         other = _console(tmp_path)
         loaded = other._load_objects(snapshot_id_arg)
         for row in loaded:
@@ -373,9 +369,9 @@ def test_review_form_content_and_revision_are_read_together(tmp_path: Path) -> N
                 passage = metadata.setdefault("review_passage", {})
                 passage["suitability"] = BERT_SUIT
         other._save_objects(snapshot_id_arg, loaded)
-        return rows
+        return rows, revision
 
-    console.snapshot_objects = raced_snapshot_objects  # type: ignore[method-assign]
+    console.snapshot_objects_and_revision = raced_snapshot_objects  # type: ignore[method-assign]
     client = _client(console, "researcher.anne")
     body, revision = _open_review_form(client, snapshot_id, target["object_id"])
     live_revision = _file_revision(console._objects_path(snapshot_id))

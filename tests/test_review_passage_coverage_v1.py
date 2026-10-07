@@ -73,9 +73,11 @@ def test_followup_counts_lists_and_final_blocked_history_are_disjoint():
 
 def test_open_second_review_is_not_reclassified_as_missing_disposition():
     obj = _obj("second", "exception")
-    obj.update(object_version="1.0", confirmed_object_type="exception", provenance={"canonical_object_hash": "hash"})
+    obj.update(object_version="1.0", confirmed_object_type="exception")
+    from src.integrity_kernel import stamp_canonical_hashes
+    stamp_canonical_hashes(obj)
     binding = dict(valid=True, decision="approve", object_id="second", object_version="1.0",
-                   canonical_object_hash="hash", confirmed_object_type="exception", reviewer_id="reviewer-a")
+                   canonical_object_hash=obj["provenance"]["canonical_object_hash"], confirmed_object_type="exception", reviewer_id="reviewer-a")
     queues = review_followup_queues([obj], review_path="tekst", bindings=[binding], fragments=_allowed_source())
     assert queues == {"repair": [], "disposition": []}
     waiting = _render_review_index("snap", [obj], "tekst", task="waiting", bindings=[binding], reviewer_id="reviewer-a", fragments=_allowed_source())
