@@ -531,3 +531,49 @@ def test_second_review_post_requires_the_reviewed_revision(tmp_path, pin):
     else:
         assert response.status_code == 400
         assert _state(console, sid) == before
+
+
+def test_completed_content_candidate_cannot_be_reopened_by_revise(tmp_path):
+    """RED: revise must obey the same current content duty as approve."""
+    console, reviewer, sid, obj = _console(tmp_path)
+    _approve(console, reviewer, sid, obj, expected_revision=console.objects_revision(sid))
+    before = _state(console, sid)
+    with pytest.raises(ConsoleError, match="content_duty_required"):
+        console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
+            object_id=obj["object_id"], decision="revise", comment="Opnieuw beoordelen",
+            expected_revision=console.objects_revision(sid))
+    assert _state(console, sid) == before
+
+
+@pytest.mark.parametrize("independent", [False, True])
+def test_second_stage_revise_requires_an_actionable_independent_reviewer(tmp_path, independent):
+    """RED for the first approver; GREEN GUARD for the authorized second human."""
+    from src.review_duty_v1 import review_stage, SECOND_REVIEW
+    console, reviewer, sid, obj = _console(tmp_path)
+    second = console.create_account(username="carla", password="carla-secret", roles=("reviewer",))
+    console._envelopes[sid]["named_reviewers"].append(second["account_id"])
+    console._save_envelopes()
+    rows = console._load_objects(sid)
+    target = next(o for o in rows if o["object_id"] == obj["object_id"])
+    target["risk"]["risk_level"] = "high"
+    stamp_canonical_hashes(target)
+    console._save_objects(sid, rows)
+    _approve(console, reviewer, sid, target, expected_revision=console.objects_revision(sid))
+    current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
+    assert review_stage(current, review_path="richtlijn", bindings=console.object_review_bindings(sid),
+                        fragments=console.review_source_fragments(sid)) == SECOND_REVIEW
+    before = _state(console, sid)
+    actor = second if independent else reviewer
+    def submit():
+        return console.review_object(actor_id=actor["account_id"], snapshot_id=sid,
+            object_id=obj["object_id"], decision="revise", comment="Tweede review: herzien",
+            expected_revision=console.objects_revision(sid))
+    if independent:
+        submit()
+        current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
+        assert exact_current_approver_ids(current, console.object_review_bindings(sid)) == ()
+        assert current["metadata"]["admission"]["gate_result"] == "allowed"
+    else:
+        with pytest.raises(ConsoleError, match="content_duty_required"):
+            submit()
+        assert _state(console, sid) == before
