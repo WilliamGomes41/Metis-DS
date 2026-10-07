@@ -109,6 +109,7 @@ def test_dedup_never_transfers_a_binding_from_the_other_candidate():
 def test_real_ingest_review_and_restart_keep_selected_identity_and_source(tmp_path, both):
     from src.operations_console_v1 import OperationsConsole
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.object_taxonomy_v1 import extract_object_type
     def console():
         return OperationsConsole(root=tmp_path, source_store=tmp_path / "sources",
                                  runtime=tmp_path / "runtime")
@@ -139,7 +140,7 @@ def test_real_ingest_review_and_restart_keep_selected_identity_and_source(tmp_pa
     envelope = state._envelope(sid)
     path, _ = state._verified_source_bytes(envelope)
     fragments = state._read_source_fragments(envelope, path)
-    blocks = semantic_source_blocks(f for f in fragments if f.get("object_type") != "heading")
+    blocks = semantic_source_blocks(f for f in fragments if extract_object_type(f)[0] != "heading")
     chosen = next(b for b in blocks if
                   ("2 Aanbevelingen" if both else "Samenvatting") in b["section_path"])
     span = {"block_id": chosen["block_id"], "start": 0, "end": len(chosen["text"])}
