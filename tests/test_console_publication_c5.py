@@ -73,6 +73,8 @@ def _ready_console(tmp_path: Path) -> tuple[OperationsConsole, dict[str, dict], 
             username="publisher.carla", password=TEST_PASSWORD, roles=("publisher",)
         ),
     }
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = console.ingest(
         actor_id=accounts["researcher"]["account_id"],
         filename="continentie.html",

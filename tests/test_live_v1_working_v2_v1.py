@@ -210,6 +210,8 @@ def test_published_v1_stays_live_while_successor_v2_is_mutable_and_unreleased(
     config = _config()
     source = MemorySourceStore()
     console = _console(tmp_path, config, source, runtime_name="repair5-a")
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     snapshots: list[str] = []
     releases: list[str] = []
     accounts: list[str] = []

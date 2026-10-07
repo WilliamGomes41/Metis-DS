@@ -85,6 +85,8 @@ def _object(
         "proposed_object_type": object_type,
         "governance": {"validation_status": validation_status},
         "metadata": {
+            "semantic_passage": {"selection_origin": "proposal_selected",
+                "spans": [{"block_id": f"block-{snapshot_id}-{index}", "start": 0, "end": 1}]},
             "admission": {
                 "gate_result": gate_result,
                 "section_path": [section],

@@ -268,6 +268,8 @@ def test_reject_stale_conflict_leaves_no_durable_event_or_authorization(
         password=TEST_PASSWORD,
         roles=("reviewer",),
     )
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = console.ingest(
         actor_id=researcher["account_id"],
         filename="atomicity.html",
@@ -345,6 +347,8 @@ def test_successful_approve_persists_authorization_and_survives_restart(
         password=TEST_PASSWORD,
         roles=("reviewer",),
     )
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = console.ingest(
         actor_id=researcher["account_id"],
         filename="approve-authority.html",
@@ -455,6 +459,8 @@ def test_approve_stale_conflict_leaves_no_durable_event_or_authorization(
         password=TEST_PASSWORD,
         roles=("reviewer",),
     )
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = console.ingest(
         actor_id=researcher["account_id"],
         filename="stale-approve.html",

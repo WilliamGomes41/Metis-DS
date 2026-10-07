@@ -26,11 +26,14 @@ def _console(root, config):
     documents = PostgresConcurrentWorkflowDocumentStore(config)
     reviews = PostgresWorkflowReviewStore(config)
     bind_workflow_stores(identity, documents, reviews)
-    return PostgresReviewWorkflowDurablePublicationConsole(
+    console = PostgresReviewWorkflowDurablePublicationConsole(
         root=root, source_store=root / "sources", runtime=root / "runtime",
         workflow_identity_store=identity, workflow_document_store=documents,
         workflow_review_store=reviews,
     )
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
+    return console
 
 
 def _client(console):

@@ -25,7 +25,7 @@ from src.review_ledger import read_events
 
 
 PASSWORD = "d54-secret"
-HTML = b"""<!doctype html><html><body><h1>Advies</h1><p>Gebruik interventie A.</p></body></html>"""
+HTML = b"""<!doctype html><html><body><h1>Advies</h1><p>Interventie A is een behandeling.</p></body></html>"""
 
 
 def _system(tmp_path: Path) -> tuple[OperationsConsole, dict[str, dict], str, str]:
@@ -49,6 +49,8 @@ def _system(tmp_path: Path) -> tuple[OperationsConsole, dict[str, dict], str, st
         password=PASSWORD,
         roles=("reviewer",),
     )
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console, [("Interventie A is een behandeling.", "definition")])
     receipt = console.ingest(
         actor_id=researcher["account_id"],
         filename="d54.html",
@@ -71,7 +73,7 @@ def _system(tmp_path: Path) -> tuple[OperationsConsole, dict[str, dict], str, st
     target = next(
         row
         for row in rows
-        if row.get("object_type") != "document"
+        if row.get("object_type") not in {"document", "heading"}
         and str((row.get("content") or {}).get("clean_text") or "").strip()
     )
     target["object_type"] = "definition"

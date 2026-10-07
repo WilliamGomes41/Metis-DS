@@ -71,6 +71,8 @@ def _html() -> bytes:
 
 
 def _ingest(console: OperationsConsole, accounts: dict) -> dict:
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console, [(RECOMMENDATION_TEXT, "recommendation")])
     return console.ingest(
         actor_id=accounts["researcher"]["account_id"],
         filename="d33.html",

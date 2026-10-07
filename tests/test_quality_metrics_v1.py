@@ -181,6 +181,8 @@ def test_final_context_stays_closed_but_second_review_remains_open():
     obj = doc['objects'][0]
     obj['metadata']['passage_register'] = {'status': 'used_as_context', 'source': 'extract'}
     obj['metadata']['admission'] = {'gate_result': 'allowed'}
+    obj['metadata']['semantic_passage'] = {'selection_origin': 'proposal_selected',
+        'spans': [{'block_id': 'stored-source-block', 'start': 0, 'end': 1}]}
     assert build_report([doc], as_of=NOW)['open_passages'] == 0
     obj['metadata']['passage_register']['status'] = 'selected_as_candidate'
     obj['governance'] = {'validation_status': 'approved', 'second_review': {'required': True, 'status': 'pending'}}
