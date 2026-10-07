@@ -77,7 +77,7 @@ def _exact_bound(value: Any) -> bool:
 
 
 def spans_are_exact(spans: Any) -> bool:
-    """Exact source spans: non-empty block id and real integer bounds.
+    """Validate span shape only; this is not proof of source resolution.
 
     A string, a bool, a negative start, an empty range, or an unknown
     source-span id is not exact. This reader does not reconstruct the span.
@@ -119,6 +119,9 @@ def content_reviewable(obj: dict[str, Any]) -> bool:
     is not a knowledge candidate. Boom construction does not use this predicate.
     """
 
+    from src.admission_gate_v1 import is_boom_object
+    if is_boom_object(obj):
+        return False
     if str(obj.get("object_type") or "").strip() == "document":
         return False
     if is_structural_projection(obj):
@@ -148,7 +151,7 @@ def candidate_lifecycle(obj: dict[str, Any]) -> str:
     return str((obj.get("governance") or {}).get("validation_status") or "")
 
 
-def knowledge_publication_blockers(obj: dict[str, Any]) -> list[str]:
+def knowledge_publication_blockers(obj: dict[str, Any], *, fragments=None) -> list[str]:
     """Blockers that stop a binding from authorizing knowledge publication.
 
     Publication uses the same candidate boundary as content review. A stored
@@ -158,10 +161,41 @@ def knowledge_publication_blockers(obj: dict[str, Any]) -> list[str]:
     blockers: list[str] = []
     if is_structural_projection(obj):
         blockers.append("structural_projection_not_knowledge")
-    if _lineage_claimed(obj) and not has_exact_source_spans(obj):
+    if _lineage_claimed(obj) and not source_lineage_resolves(obj, fragments=fragments):
         blockers.append("source_lineage_incomplete")
     if _gate(obj) == GATE_BLOCKED:
         blockers.append("admission_blocked")
     if not content_reviewable(obj) and not blockers:
         blockers.append("not_knowledge_candidate")
     return blockers
+
+def source_lineage_resolves(obj: dict[str, Any], *, fragments) -> bool:
+    """Fail closed on persisted lineage without authoritative source input.
+
+    Row-only predicates derive routing. New review/publication authority must
+    additionally resolve against the verified snapshot's retained extraction.
+    This reader never stamps or rewrites a persisted object or binding.
+    """
+    if fragments is None or not has_exact_source_spans(obj):
+        return False
+    from src.knowledge_materialisation_v1 import resolve_source_selection
+    try:
+        resolved = resolve_source_selection(_spans(obj), fragments=fragments)
+    except (ValueError, KeyError, TypeError):
+        return False
+    from src.object_taxonomy_v1 import normalize_visible_prose
+    content = obj.get("content") or {}
+    text = content.get("clean_text") if isinstance(content, dict) else None
+    if text is None:
+        text = obj.get("clean_text", obj.get("text", ""))
+    if normalize_visible_prose(str(text)) != resolved["source_text"]:
+        return False
+    semantic = _semantic(obj)
+    if "source_mapping" in semantic:
+        expected = resolved["source_mapping"]
+        from src.semantic_passage_v1 import LEGACY_SEMANTIC_PASSAGE_VERSION
+        if semantic.get("version") == LEGACY_SEMANTIC_PASSAGE_VERSION:
+            expected = [row for row in expected if row.get("kind") != "join_separator"]
+        if semantic["source_mapping"] != expected:
+            return False
+    return True

@@ -2432,6 +2432,17 @@ class OperationsConsole:
             return extract_pdf(path, **args)
         return self._extract(envelope["content_kind"], path, **args)
 
+    def _require_resolved_candidate_source(self, envelope, target):
+        """Validate against verified source without changing durable row bytes."""
+        from src.knowledge_path_v1 import source_lineage_resolves
+        try:
+            source_path, _ = self._verified_source_bytes(envelope)
+            fragments = self._read_source_fragments(envelope, source_path)
+        except (ConsoleError, ValueError, OSError) as exc:
+            raise ConsoleError("source_lineage_unavailable") from exc
+        if not source_lineage_resolves(target, fragments=fragments):
+            raise ConsoleError("source_lineage_incomplete")
+
     def _fragments_and_spec(
         self,
         kind: str,
@@ -3048,6 +3059,10 @@ class OperationsConsole:
                 if is_admission_blocked(target, review_path=review_path):
                     raise ConsoleError("blocked_candidate_not_reviewable")
                 raise ConsoleError("content_duty_required")
+        if decision == "approve" or apply_type:
+            from src.knowledge_path_v1 import content_reviewable
+            if review_path != "boom" and content_reviewable(target):
+                self._require_resolved_candidate_source(envelope, target)
         if decision != "later":
             from src.source_accountability_v1 import is_source_record
             if is_source_record(target) and (decision == "approve" or apply_type):
@@ -3566,6 +3581,11 @@ class OperationsConsole:
         target = next((row for row in objects if row.get("object_id") == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
+        if review_path_for_klasse(envelope["class"]) != "boom":
+            from src.knowledge_path_v1 import content_reviewable
+            if not content_reviewable(target):
+                raise ConsoleError("content_duty_required")
+            self._require_resolved_candidate_source(envelope, target)
         from src.review_policy_v1 import object_policy, required_reviewers
         policy = object_policy(target)
         if policy != envelope.get("review_policy"):
@@ -3981,11 +4001,14 @@ class OperationsConsole:
             for row in self.object_review_bindings(snapshot_id)
             if row.get("valid") and row.get("decision") == "approve"
         ]
+        from src.knowledge_path_v1 import is_structural_projection
+        review_path = review_path_for_klasse(envelope["class"])
         approved_ids = {str(row.get("object_id") or "") for row in bindings}
         publishable = [
             obj
             for obj in objects
             if obj.get("object_type") != "document"
+            and not is_structural_projection(obj)
             and str(obj.get("object_id") or "") in approved_ids
             and (obj.get("governance") or {}).get("validation_status") == "approved"
         ]
@@ -4038,6 +4061,13 @@ class OperationsConsole:
         four_eyes_needed = False
         four_eyes_ok = True
         contracts = []
+        fragments = None
+        if review_path != "boom" and publishable:
+            try:
+                source_path, _ = self._verified_source_bytes(envelope)
+                fragments = self._read_source_fragments(envelope, source_path)
+            except (ConsoleError, ValueError, OSError):
+                blockers.append("source_lineage_unavailable")
         for obj in publishable:
             if obj.get("object_type") == "document":
                 continue
@@ -4047,6 +4077,8 @@ class OperationsConsole:
                 uploader_id=envelope["uploader_account_id"],
                 immutable_locator=envelope.get("immutable_storage_locator"),
                 envelope_review_passes=envelope.get("review_passes"),
+                review_path=review_path,
+                fragments=fragments,
             )
             contracts.append(contract)
             blockers.extend(
@@ -4088,7 +4120,7 @@ class OperationsConsole:
         return {
             "snapshot_id": snapshot_id,
             "independence_satisfied": independence,
-            "tuple_authorization": bool(bindings),
+            "tuple_authorization": bool(contracts) and all(c["tuple_authorization"] for c in contracts),
             "four_eyes_required": four_eyes_needed,
             "four_eyes_satisfied": four_eyes_ok if four_eyes_needed else True,
             "envelope_review_passes_authorizes": False,

@@ -13,52 +13,76 @@ from src.semantic_passage_v1 import (
     SELECTION_ORIGIN_PROPOSAL,
     SEMANTIC_PASSAGE_VERSION,
     semantic_source_blocks,
+    _reconstructed_blocks,
 )
 
 _DECISION_KIND = "semantic_selection"
 
 
-def _source_text(decision: dict[str, Any], blocks: dict[str, dict[str, Any]]) -> str:
-    parts: list[str] = []
-    for span in decision["spans"]:
-        block = blocks.get(str(span["block_id"]))
-        if block is None:
-            raise ValueError("materialisation_unknown_block")
-        start = span["start"]
-        end = span["end"]
-        text = str(block["text"])
-        if (
-            isinstance(start, bool)
-            or isinstance(end, bool)
-            or not isinstance(start, int)
-            or not isinstance(end, int)
-            or start < 0
-            or end <= start
-            or end > len(text)
-        ):
-            raise ValueError("materialisation_span_invalid")
-        parts.append(text[start:end])
-    source_text = normalize_visible_prose(" ".join(parts))
-    if source_text != decision.get("source_text"):
-        raise ValueError("materialisation_text_mismatch")
-    return source_text
 
+def resolve_source_selection(
+    spans: Any, *, fragments: Iterable[dict[str, Any]]
+) -> dict[str, Any]:
+    """Rebuild text and provenance from authoritative extracted source only."""
+    from src.knowledge_path_v1 import spans_are_exact
+    from src.object_taxonomy_v1 import extract_object_type
+    from src.source_reconstruction_v1 import source_fragment_ids_for_text
+    from src.source_layout_v1 import mapped_raw_spans
+
+    if not spans_are_exact(spans):
+        raise ValueError("materialisation_span_invalid")
+    blocks = {
+        public["block_id"]: (public, source)
+        for public, source in _reconstructed_blocks(
+            row for row in fragments if extract_object_type(row)[0] != "heading"
+        )
+    }
+    parts, fragment_ids, mapping = [], [], []
+    first = None
+    previous_rank = None
+    seen = set()
+    for span in spans:
+        if span["block_id"] not in blocks:
+            raise ValueError("materialisation_unknown_block")
+        public, source = blocks[span["block_id"]]
+        start, end = span["start"], span["end"]
+        if end > len(public["text"]):
+            raise ValueError("materialisation_span_invalid")
+        rank = (public["position"], start, end)
+        if previous_rank is not None and (
+            rank <= previous_rank
+            or (rank[0] == previous_rank[0] and start < previous_rank[2])
+        ):
+            raise ValueError("materialisation_span_order_invalid")
+        previous_rank = rank
+        first = first or public
+        parts.append(public["text"][start:end])
+        for fragment_id in source_fragment_ids_for_text(source, start=start, end=end):
+            if fragment_id not in seen:
+                seen.add(fragment_id)
+                fragment_ids.append(fragment_id)
+        mapping.extend(mapped_raw_spans(source, start=start, end=end))
+    text = normalize_visible_prose(" ".join(parts))
+    if not text:
+        raise ValueError("materialisation_text_empty")
+    return {
+        "source_text": text,
+        "source_fragment_ids": fragment_ids,
+        "source_mapping": mapping,
+        "section_path": list(first["section_path"]),
+        "heading": first["heading"],
+    }
 
 
 def _candidate_identity(document_id: str, spans: list[dict[str, Any]]) -> str:
-    """Identity is the materialiser's own function of document and ordered spans.
+    """Preserve the pre-T7 identity of the same ordered source selection.
 
     A selector-supplied identity field is not an input.
     """
 
-    material = "\n".join(
-        [
-            str(document_id),
-            *[
-                f'{span["block_id"]}:{span["start"]}:{span["end"]}'
-                for span in spans
-            ],
-        ]
+    # Pre-T7 compatibility: document_id is the prefix, not a hash input.
+    material = "|".join(
+        f'{span["block_id"]}:{span["start"]}:{span["end"]}' for span in spans
     )
     return hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
 
@@ -71,7 +95,7 @@ def materialise_knowledge_candidates(
 ) -> list[dict[str, Any]]:
     """Create KnowledgeCandidates from selection decisions and exact source spans."""
 
-    blocks = {row["block_id"]: row for row in semantic_source_blocks(fragments)}
+    fragments = list(fragments)
     candidates: list[dict[str, Any]] = []
     for decision in decisions:
         if not isinstance(decision, dict) or decision.get("decision_kind") != _DECISION_KIND:
@@ -80,16 +104,19 @@ def materialise_knowledge_candidates(
             raise ValueError("selection_decision_is_not_a_candidate")
         if decision.get("selection_origin") != SELECTION_ORIGIN_PROPOSAL:
             raise ValueError("materialiser_requires_proposal_selection")
-        source_text = _source_text(decision, blocks)
+        resolved = resolve_source_selection(decision.get("spans"), fragments=fragments)
+        source_text = resolved["source_text"]
+        if source_text != decision.get("source_text"):
+            raise ValueError("materialisation_text_mismatch")
         identity = _candidate_identity(document_id, decision["spans"])
         candidate: dict[str, Any] = {
             "object_id": f"{document_id}-sem-{identity}",
             "object_type": DEFAULT_OBJECT_TYPE,
             "text": source_text,
             "clean_text": source_text,
-            "source_fragment_ids": list(decision.get("source_fragment_ids") or []),
-            "section_path": list(decision.get("section_path") or []),
-            "heading": decision.get("heading"),
+            "source_fragment_ids": resolved["source_fragment_ids"],
+            "section_path": resolved["section_path"],
+            "heading": resolved["heading"],
             "review_track": "clinical",
             "relations": [],
             "confirmed_relations": [],
@@ -101,7 +128,7 @@ def materialise_knowledge_candidates(
                     {"block_id": span["block_id"], "start": span["start"], "end": span["end"]}
                     for span in decision["spans"]
                 ],
-                "source_mapping": list(decision.get("source_mapping") or []),
+                "source_mapping": resolved["source_mapping"],
             },
         }
         if decision.get("emit_proposed_type"):

@@ -168,6 +168,21 @@ def _deterministic_fragment() -> dict:
     )
 
 
+def _allowed_source() -> list[dict]:
+    text = "Oedeem is een ophoping van vocht."
+    return [{
+        "fragment_id": "p001-f001", "fragment_hash": "hash-p001",
+        "raw_text": text, "clean_text": text, "section_path": [],
+        "source_locator": {"locator_type": "web_line_range", "locator_value": "lines:1-1"},
+    }]
+
+
+def _allowed_spans() -> list[dict]:
+    from src.semantic_passage_v1 import semantic_source_blocks
+    block = semantic_source_blocks(_allowed_source())[0]
+    return [{"block_id": block["block_id"], "start": 0, "end": len(block["text"])}]
+
+
 def _allowed_candidate() -> dict:
     return _stamp_hash(_row(
         "doc-1-sem-allowed",
@@ -177,7 +192,7 @@ def _allowed_candidate() -> dict:
         text="Oedeem is een ophoping van vocht.",
         gate=GATE_ALLOWED,
         origin=SELECTION_ORIGIN_PROPOSAL,
-        spans=list(EXACT_SPANS),
+        spans=_allowed_spans(),
     ))
 
 
@@ -525,6 +540,7 @@ def _authorize(obj: dict) -> dict:
         bindings=[binding],
         uploader_id="uploader-anne",
         immutable_locator=None,
+        fragments=_allowed_source(),
     )
     assert _canonical(stamped) == before_obj
     assert _canonical(binding) == before_binding
