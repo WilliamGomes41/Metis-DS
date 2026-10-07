@@ -3559,6 +3559,7 @@ class OperationsConsole:
                 metadata = updated_target.setdefault("metadata", {})
                 metadata["no_action"] = True
                 stamp_canonical_hashes(updated_target)
+            updated_target["governance"]["review_snapshot_hash"] = compute_canonical_object_hash(updated_target)
             history.append(updated_target)
             new_envelopes = None
             new_bindings = deepcopy(self._bindings)
@@ -3582,6 +3583,8 @@ class OperationsConsole:
                     reviewer_id=actor_id,
                     decision=decision,
                 )
+                binding["review_domain"] = review_domain if review_path != "boom" else "decision_tree"
+                binding["reviewed_at"] = utc_now()
                 if passage_meta:
                     binding["suitability"] = passage_meta.get("suitability")
                     binding["eindoordeel"] = passage_meta.get("eindoordeel")
@@ -3598,9 +3601,7 @@ class OperationsConsole:
             ledger_fn = None
             if decision != "later":
                 ledger_details = {
-                    "review_snapshot_hash": str(
-                        payload.get("reviewed_canonical_object_hash") or ""
-                    ),
+                    "review_snapshot_hash": compute_canonical_object_hash(updated_target),
                     "comment": str(comment or ""),
                     "proposed_correction": str(proposed_correction or ""),
                     "snapshot_id": snapshot_id,
@@ -3718,6 +3719,8 @@ class OperationsConsole:
                 reviewer_id=actor_id,
                 decision="approve",
             )
+            binding["review_domain"] = "content" if review_path != "boom" else "decision_tree"
+            binding["reviewed_at"] = utc_now()
             new_bindings = deepcopy(self._bindings)
             rows = list(new_bindings.get(snapshot_id, []))
             rows.append(binding)

@@ -47,6 +47,10 @@ def exact_current_approver_ids(
 ) -> tuple[str, ...]:
     """Unique human approvers whose binding still matches this exact tuple."""
 
+    from src.admission_gate_v1 import is_boom_object
+    from src.knowledge_path_v1 import content_reviewable
+    if not is_boom_object(obj) and not content_reviewable(obj):
+        return ()
     object_id = str(obj.get("object_id") or "")
     object_version = str(obj.get("object_version") or "")
     confirmed_type = str(obj.get("confirmed_object_type") or "")

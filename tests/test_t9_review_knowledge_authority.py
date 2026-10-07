@@ -224,3 +224,17 @@ def test_structure_confirmation_is_qa_and_general_content_approve_is_denied(tmp_
         bindings=console.object_review_bindings(sid), fragments=console.review_source_fragments(sid)) is None
     assert any(event["event_type"] == "structure_approve" for event in
         map(json.loads, console._ledger_path.read_text().splitlines()))
+
+def test_standalone_second_review_cannot_bypass_current_working_revision(tmp_path):
+    from src.second_review_workflow_v3 import apply_second
+    console, reviewer, sid, obj = _console(tmp_path)
+    _approve(console, reviewer, sid, obj)
+    current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
+    before = deepcopy(current)
+    ledger = tmp_path / "standalone-second.jsonl"
+    updated, report = apply_second([current], [{"object_id": current["object_id"], "decision": "approve",
+        "reviewer": "ai", "review_date": "2026-10-07",
+        "reviewed_canonical_object_hash": exact_review_snapshot_hash(current)}], ledger)
+    assert report["errors"]
+    assert updated == [before]
+    assert not ledger.exists()

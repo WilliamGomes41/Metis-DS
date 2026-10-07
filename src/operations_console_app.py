@@ -3493,7 +3493,7 @@ def _render_review_room(
                 normal_review_enabled=isinstance(console, ProportionateReviewConsole),
                 audit_signals=audit_signals,
                 bindings=bindings,
-                reviewer_id=str(account.get("account_id") or ""), fragments=console.review_source_fragments(snapshot_id)
+                reviewer_id=str(account.get("account_id") or ""), fragments=console.review_source_fragments(chosen)
             )
         else:
             obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
@@ -3526,7 +3526,7 @@ def _render_review_room(
                         obj,
                         review_path=review_path,
                         reviewer_id=str(account.get("account_id") or ""),
-                        bindings=current_bindings, fragments=console.review_source_fragments(snapshot_id)
+                        bindings=current_bindings, fragments=console.review_source_fragments(chosen)
                     )
                     if current_bindings is not None
                     else None

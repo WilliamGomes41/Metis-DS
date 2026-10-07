@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Strict four-eyes review bound to the exact canonical object hash."""
 # LEGACY-SUPPORTED: historical JSONL CLI and integrity regression tests.
-# Current console review uses its own live workflow; retain this compatibility API.
+# Historical state transformation is private; live authority enters the console command.
 from __future__ import annotations
 import argparse,json
 from copy import deepcopy
@@ -14,7 +14,7 @@ from src.review_ledger import append_event
 def read_jsonl(p:Path)->list[dict[str,Any]]:
     return [json.loads(x) for x in p.read_text(encoding='utf-8').splitlines() if x.strip()]
 
-def apply_second(rows:list[dict[str,Any]], decisions:list[dict[str,Any]], ledger:Path|None=None)->tuple[list[dict[str,Any]],dict[str,Any]]:
+def _apply_second_state(rows:list[dict[str,Any]], decisions:list[dict[str,Any]], ledger:Path|None=None)->tuple[list[dict[str,Any]],dict[str,Any]]:
     by={x['object_id']:x for x in decisions}; out=[]; errors=[]; stats={'approved':0,'rejected_to_revise':0,'pending':0,'snapshot_mismatch':0}
     for original in rows:
         o=deepcopy(original); g=o['governance']; sr=g['second_review']
@@ -35,6 +35,12 @@ def apply_second(rows:list[dict[str,Any]], decisions:list[dict[str,Any]], ledger
         if ledger: append_event(ledger,event_type=f'second_review_{decision}',object_id=o['object_id'],object_version=o['object_version'],actor=reviewer,details={'review_snapshot_hash':current,'comment':comment})
         out.append(o)
     return out,{'stats':stats,'errors':errors,'complete':stats['pending']==0 and stats['snapshot_mismatch']==0 and not errors}
+
+def apply_second(rows:list[dict[str,Any]], decisions:list[dict[str,Any]], ledger:Path|None=None)->tuple[list[dict[str,Any]],dict[str,Any]]:
+    """Standalone JSONL cannot create current independent review authority."""
+    return deepcopy(rows), {"stats": {}, "errors": [
+        {"object_id": decision.get("object_id"), "error": "working_revision_review_command_required"}
+        for decision in decisions], "complete": False}
 
 def main()->int:
     ap=argparse.ArgumentParser(); ap.add_argument('--input',type=Path,required=True); ap.add_argument('--decisions',type=Path,required=True); ap.add_argument('--out',type=Path,required=True); ap.add_argument('--report',type=Path,required=True); ap.add_argument('--ledger',type=Path)

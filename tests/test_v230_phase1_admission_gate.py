@@ -462,26 +462,20 @@ def test_false_recommendation_is_blocked_from_ordinary_queue_as_aanbeveling() ->
 
 
 def test_full_adviseert_recommendation_may_be_allowed_when_contract_complete() -> None:
-    admitted = admit_candidate(_complete_adviseert_candidate())
+    from tests.semantic_fixture_support import materialised_fixture
+    [obj], fragments = materialised_fixture(ADVISEERT)
+    candidate = _complete_adviseert_candidate()
+    candidate.update(source_hash=obj["source"]["source_checksum"], document_version=obj["source"]["version"])
+    admitted = admit_candidate(candidate)
     assert admitted["gate_result"] == GATE_ALLOWED
     assert admitted["reason_codes"] == []
     assert admitted["actor_of_scope"] == "de verpleegkundige"
     assert admitted["recommended_action"]
     assert admitted["action_object_or_goal"]
     assert admitted["recommendation_evidence_span"]
-    queue = ordinary_review_queue(
-        [
-            {
-                "object_id": "rec-ok",
-                "object_type": "unclassified",
-                "proposed_object_type": "recommendation",
-                "content": {"clean_text": ADVISEERT},
-                "metadata": {"admission": admitted,
-                    "semantic_passage": {"selection_origin": "proposal_selected",
-                        "spans": [{"block_id": "source-block", "start": 0, "end": len(ADVISEERT)}]}},
-            }
-        ]
-    )
+    obj["object_id"] = "rec-ok"
+    obj["metadata"]["admission"] = admitted
+    queue = ordinary_review_queue([obj], fragments=fragments, bindings=[])
     assert [row["object_id"] for row in queue] == ["rec-ok"]
 
 
@@ -641,7 +635,7 @@ def test_ingest_fixture_gates_named_regressions_and_keeps_adviseert(tmp_path: Pa
     assert rec_exc.get("proposed_object_type") == "recommendation"
     assert _admission(rec_exc)["exceptions_detected"]
 
-    ordinary = ordinary_review_queue(objects)
+    ordinary = ordinary_review_queue(objects, bindings=console.object_review_bindings(receipt["snapshot_id"]), fragments=console.review_source_fragments(receipt["snapshot_id"]))
     ordinary_texts = [_text_of(obj) for obj in ordinary]
     assert DJG not in ordinary_texts
     assert any("adviseert de verpleegkundige" in text for text in ordinary_texts)
@@ -895,7 +889,7 @@ def test_correct_object_can_readmit_a_source_invalid_revision(tmp_path: Path) ->
         },
     )
     assert _admission(revised)["gate_result"] == GATE_ALLOWED
-    assert is_slow_review_duty(revised) is True
+    assert is_slow_review_duty(revised, bindings=console.object_review_bindings(receipt["snapshot_id"]), fragments=console.review_source_fragments(receipt["snapshot_id"])) is True
 
 def test_admission_carries_section_role_from_existing_section_path(tmp_path: Path) -> None:
     html = (

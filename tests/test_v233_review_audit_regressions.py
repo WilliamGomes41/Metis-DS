@@ -74,7 +74,7 @@ def review_system(tmp_path):
         class_="richtlijn", family="begrippen", named_reviewers=[reviewer["account_id"]],
     )
     sid = receipt["snapshot_id"]
-    ids = [obj["object_id"] for obj in normal_risk_batch_queue(console.snapshot_objects(sid), review_path="richtlijn")]
+    ids = [obj["object_id"] for obj in normal_risk_batch_queue(console.snapshot_objects(sid), review_path="richtlijn", bindings=console.object_review_bindings(sid), fragments=console.review_source_fragments(sid))]
     assert len(ids) == 2
     app = create_console_app(console)
     install_proportionate_review_routes(app, console)
