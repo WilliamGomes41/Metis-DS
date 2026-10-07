@@ -105,14 +105,14 @@ def test_completed_candidate_cannot_be_reclassified_by_fresh_approve(tmp_path):
     _approve(console, reviewer, sid, obj, expected_revision=console.objects_revision(sid))
     before = console.snapshot_objects(sid)
     bindings = console.object_review_bindings(sid)
-    ledger = console._ledger_path.read_bytes()
+    ledger = console._ledger_path.read_bytes() if console._ledger_path.exists() else b""
     with pytest.raises(ConsoleError, match="content_duty_required|review_complete"):
         console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
             object_id=obj["object_id"], decision="approve", confirmed_object_type="explanation",
             expected_revision=console.objects_revision(sid))
     assert console.snapshot_objects(sid) == before
     assert console.object_review_bindings(sid) == bindings
-    assert console._ledger_path.read_bytes() == ledger
+    assert (console._ledger_path.read_bytes() if console._ledger_path.exists() else b"") == ledger
 
 
 def test_general_queue_does_not_reopen_completed_candidate(tmp_path):
@@ -126,7 +126,7 @@ def test_failed_review_store_commit_leaves_no_approval_ledger(tmp_path, monkeypa
     console, reviewer, sid, obj = _console(tmp_path)
     before = console.snapshot_objects(sid)
     bindings = console.object_review_bindings(sid)
-    ledger = console._ledger_path.read_bytes()
+    ledger = console._ledger_path.read_bytes() if console._ledger_path.exists() else b""
     def fail(**_kwargs):
         raise ConsoleError("injected_store_failure")
     monkeypatch.setattr(console, "_commit_prepared_store", fail)
@@ -134,7 +134,7 @@ def test_failed_review_store_commit_leaves_no_approval_ledger(tmp_path, monkeypa
         _approve(console, reviewer, sid, obj)
     assert console.snapshot_objects(sid) == before
     assert console.object_review_bindings(sid) == bindings
-    assert console._ledger_path.read_bytes() == ledger
+    assert (console._ledger_path.read_bytes() if console._ledger_path.exists() else b"") == ledger
 
 
 def test_stale_revision_does_not_commit_any_review_evidence(tmp_path):
@@ -145,12 +145,12 @@ def test_stale_revision_does_not_commit_any_review_evidence(tmp_path):
         object_ids=[heading["object_id"]], expected_revision=stale)
     before = console.snapshot_objects(sid)
     bindings = console.object_review_bindings(sid)
-    ledger = console._ledger_path.read_bytes()
+    ledger = console._ledger_path.read_bytes() if console._ledger_path.exists() else b""
     with pytest.raises(ConsoleError, match=SNAPSHOT_OBJECT_WRITE_CONFLICT):
         _approve(console, reviewer, sid, obj, expected_revision=stale)
     assert console.snapshot_objects(sid) == before
     assert console.object_review_bindings(sid) == bindings
-    assert console._ledger_path.read_bytes() == ledger
+    assert (console._ledger_path.read_bytes() if console._ledger_path.exists() else b"") == ledger
 
 
 def test_valid_candidate_approval_is_exact_and_reject_never_changes_admission(tmp_path):
