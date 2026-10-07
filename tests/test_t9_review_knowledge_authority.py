@@ -467,3 +467,24 @@ def test_actual_four_eyes_commands_require_an_independent_second_human(tmp_path)
     args["bindings"] = console.object_review_bindings(sid)
     assert review_stage(approved, **args) is None
     assert set(exact_current_approver_ids(approved, args["bindings"])) == {reviewer["account_id"], second["account_id"]}
+
+
+def test_forbidden_reviewer_account_alias_does_not_close_four_eyes():
+    from src.review_duty_v1 import review_stage, SECOND_REVIEW
+    obj = _allowed_candidate()
+    obj["risk"] = {"risk_level": "high"}
+    stamp_canonical_hashes(obj)
+    human = _binding(obj, "bert")
+    agent = _binding(obj, "ai")
+    agent["reviewer_account_id"] = agent.pop("reviewer_id")
+    assert exact_current_approver_ids(obj, [human, agent]) == ("bert",)
+    assert review_stage(obj, review_path="richtlijn", bindings=[human, agent],
+                        fragments=_allowed_source()) == SECOND_REVIEW
+
+
+@pytest.mark.parametrize("domain", ["structure", "source_disposition", "decision_tree"])
+def test_other_domain_binding_cannot_grant_knowledge_approval(domain):
+    obj = _allowed_candidate()
+    binding = _binding(obj, "bert")
+    binding["review_domain"] = domain
+    assert exact_current_approver_ids(obj, [binding]) == ()

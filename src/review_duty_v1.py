@@ -63,6 +63,9 @@ def exact_current_approver_ids(
             continue
         if reviewer_is_agent(row):
             continue
+        domain = str(row.get("review_domain") or "")
+        if domain and domain != ("decision_tree" if is_boom_object(obj) else "content"):
+            continue
         reviewer_id = str(row.get("reviewer_id") or row.get("reviewer_account_id") or "")
         if not reviewer_id or reviewer_id in seen:
             continue
