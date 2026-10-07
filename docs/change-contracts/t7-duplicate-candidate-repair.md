@@ -46,3 +46,7 @@ Explicit non-goals: T8 admission-integrity work, T9-T12, production migration, d
 ## Separate adversarial surface review
 
 The only production change is the shared exact occurrence operation; both callers retain it. Selecting complete rows removes cross-row semantic authority rather than adding a gate or marker. Canonical transformation, workflow revision/transaction checks, source readers and publication registry remain their existing owners. Source-only and deterministic inputs retain section priority. Boom construction is untouched. Alternate evidence cannot supply selection authority. There is no dual writer or new store.
+
+## Red proof
+
+Tests-only head 85abdc47d9a7b234ed21bb043476554b1d827cf0: 5 failed, 5 passed on Python 3.13 (and failing matrix on 3.12). Unit proof shows source-only promotion and cross-candidate span/mapping transfer. Actual ingest proof shows the wrong legacy span ID for summary-only selection and the wrong selected spans when both occurrences are selected. Actions: https://github.com/WilliamGomes41/Metis-DS/actions/runs/37605633099.
