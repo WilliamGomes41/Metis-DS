@@ -215,3 +215,69 @@ def test_confirm_reset_duplicate_conflict_restart_and_projection(tmp_path):
         "command_id": "reset", "expected_revision": restarted.objects_revision(sid)})
     assert project(restarted)[source["object_id"]]["closure"] == "open"
     assert all(event in read_events(restarted._ledger_path) for event in events)
+
+
+def test_corrupt_source_detail_requests_repair_not_a_human_disposition():
+    from src.operations_console_app import _source_context_panel
+    rows = context_story()
+    source = _linked(rows)
+    source["metadata"][KEY]["binding_hash"] = "bad"
+    page = _source_context_panel(source, rows, "snapshot", "revision")
+    assert "data-source-repair" in page
+    assert 'action="/review/source-context"' not in page
+
+
+def test_export_uses_same_current_target_authority_as_containers():
+    from src.processing_evidence_export_v1 import processing_evidence_tables
+    rows, fragments = _context_inputs()
+    source = _linked(rows)
+    target = partition(rows)["knowledge"][0]
+    bindings = _approve_bindings(target)
+    tables, _ = processing_evidence_tables(snapshot_id="snapshot", revision="revision",
+        envelope={"class": "richtlijn"}, objects=rows, bindings=bindings, fragments=fragments)
+    exported = next(r for r in tables["source_usage"] if r["object_id"] == source["object_id"])
+    usage = source_usage(rows, bindings=bindings, fragments=fragments)[source["object_id"]]
+    assert {key: exported[key] for key in usage} == usage
+    assert exported["closure"] == "accounted"
+
+
+@pytest.mark.parametrize("field", ["text", "source_mapping", "source_refs", "role"])
+def test_corrupt_machine_context_is_repair(field):
+    from src.source_containers_v1 import source_accountability
+    rows, fragments = _context_inputs()
+    source = _linked(rows)
+    target = partition(rows)["knowledge"][0]
+    entry = target["metadata"]["source_bound_context"]["entries"][0]
+    entry[field] = "corrupt" if field in {"text", "role"} else []
+    state = source_accountability(rows, fragments=fragments)[source["object_id"]]
+    assert state["human_action"] == "technical_repair"
+
+
+@pytest.mark.parametrize("refs", [[None], ["bad"]])
+def test_malformed_source_provenance_is_repair_not_reader_crash(refs):
+    from src.source_containers_v1 import source_accountability
+    rows, fragments = _context_inputs()
+    source = _linked(rows)
+    source["provenance"]["source_fragments"] = refs
+    assert source_accountability(rows, fragments=fragments)[source["object_id"]]["closure"] == "repair_required"
+
+
+@pytest.mark.parametrize("field", ["source_hash", "document_version"])
+def test_mismatched_admission_binding_has_repair_instead_of_disappearing(field):
+    from src.source_containers_v1 import source_accountability
+    rows, fragments = _context_inputs()
+    target = partition(rows)["knowledge"][0]
+    target["metadata"]["admission"][field] = "wrong"
+    assert review_duty_for(target, review_path="richtlijn", bindings=[], fragments=fragments) is None
+    state = source_accountability(rows, bindings=[], fragments=fragments)[target["object_id"]]
+    assert state["human_action"] == "technical_repair"
+
+
+@pytest.mark.parametrize("raw", ["bad", {"entries": "bad"}])
+def test_malformed_machine_context_target_requires_repair(raw):
+    from src.source_containers_v1 import source_accountability
+    rows, fragments = _context_inputs()
+    target = partition(rows)["knowledge"][0]
+    target["metadata"]["source_bound_context"] = raw
+    state = source_accountability(rows, fragments=fragments)[target["object_id"]]
+    assert state["human_action"] == "technical_repair"

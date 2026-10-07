@@ -455,7 +455,7 @@ def test_long_revision_is_stored_once_and_resolvable_for_every_dataset():
         {'object_id': f'object-{i}', 'object_version': '1.0'} for i in range(300)]}]}
     tables, projected = processing_evidence_tables(snapshot_id='snap-compact', revision=revision,
                                                    envelope=envelope, objects=[])
-    assert all(r['schema_version'] == 'processing-evidence-export-v11' for r in projected)
+    assert all(r['schema_version'] == 'processing-evidence-export-v12' for r in projected)
     assert tables['run_candidates'][0]['objects_revision'] == revision
     payload = processing_evidence_zip(snapshot_id='snap-compact', revision=revision,
                                       envelope=envelope, objects=[])

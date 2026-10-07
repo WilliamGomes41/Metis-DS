@@ -17,11 +17,11 @@ from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v11"
-PROJECTOR_VERSION = "processing-evidence-export-v11"
+VERSION = "processing-evidence-export-v12"
+PROJECTOR_VERSION = "processing-evidence-export-v12"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
-    "source_usage": ("object_id", "object_version", "container", "kind", "reason", "target_ids", "accounted", "policy_version"),
+    "source_usage": ("object_id", "object_version", "container", "kind", "reason", "target_ids", "accounted", "policy_version", "role", "closure", "human_action"),
     "formation_tasks": ("task_id", "section_path", "target_spans", "phase", "status", "policy_version"),
     "formation_progress": ("formation_state", "planned_task_count", "terminal_task_count", "pending_task_count",
                            "failed_task_count", "partial_task_count", "not_started_task_count",
@@ -90,7 +90,7 @@ def _field_producer_status(bound: dict, obj: dict) -> str:
 
 def processing_evidence_tables(
     *, snapshot_id: str, revision: str, envelope: dict[str, Any],
-    objects: list[dict[str, Any]],
+    objects: list[dict[str, Any]], bindings=None, fragments=None,
 ) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
     """Project stored values; absent data is not reconstructed from current code."""
     tables: dict[str, list[dict[str, Any]]] = {name: [] for name in SCHEMAS}
@@ -136,7 +136,9 @@ def processing_evidence_tables(
                if key not in {"formation_state", "policy_version"}},
             policy_version=provider.get("task_policy"))
     from src.source_containers_v1 import partition, VERSION as CONTAINER_VERSION
-    for source in partition(objects)["source"]:
+    from src.beslisboom_path_v1 import review_path_for_klasse
+    for source in partition(objects, review_path=review_path_for_klasse(str(envelope.get("class") or "")),
+                            bindings=bindings, fragments=fragments)["source"]:
         obj = source["record"]
         add("source_usage", object_id=obj["object_id"], object_version=obj["object_version"], container="source",
             **source["usage"], policy_version=CONTAINER_VERSION)

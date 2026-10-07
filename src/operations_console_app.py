@@ -2863,6 +2863,13 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
     if obj.get("object_type") in {"document", "heading", "path"}:
         return ""
     from src.source_accountability_v1 import is_source_record
+    from src.source_containers_v1 import source_accountability
+    state = source_accountability(objects).get(str(obj.get("object_id") or ""), {})
+    if is_source_record(obj) and state.get("human_action") == "technical_repair":
+        return ('<section data-source-repair><h3>Bronbewijs herstellen</h3>'
+                '<p>De opgeslagen bronverwijzing of contextkoppeling is ongeldig. '
+                'Laat de verwerking of koppeling herstellen voordat je een bronbesluit neemt.</p>'
+                f'<a href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(obj["object_id"])}">Bekijk oorspronkelijke bron</a></section>')
     evidence = source_context_projections(objects)
     oid = str(obj["object_id"])
     current = evidence[oid]
@@ -5243,7 +5250,9 @@ def create_console_app(
             raise ConsoleError("reviewer_not_named_on_snapshot")
         objects, revision = state.snapshot_objects_and_revision(snapshot_id)
         payload = processing_evidence_zip(snapshot_id=snapshot_id, revision=revision,
-                                          envelope=envelope, objects=objects)
+                                          envelope=envelope, objects=objects,
+                                          bindings=state.object_review_bindings(snapshot_id, objects=objects),
+                                          fragments=state.review_source_fragments(snapshot_id))
         filename = re.sub(r"[^A-Za-z0-9_-]", "_", snapshot_id)
         return Response(payload, media_type="application/zip", headers={
             "Content-Disposition": f'attachment; filename="{filename}-processing-evidence.zip"',

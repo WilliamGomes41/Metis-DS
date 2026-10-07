@@ -49,7 +49,8 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
     from src.knowledge_path_v1 import content_reviewable, source_lineage_resolves, spans_are_exact
     from src.operations_console_v1 import review_lane
     from src.review_duty_v1 import review_duty_for, review_stage, exact_current_approver_ids
-    from src.source_context_review_v1 import context_issues, role_of, links_of
+    from src.source_context_review_v1 import context_issues, role_of, links_of, verify_literal_source
+    from src.source_bound_fields_v2 import validated_context, CONTEXT_ROLES, CONTEXT_REASONS
 
     objects = list(objects)
     bindings = tuple(bindings or ())
@@ -81,12 +82,30 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
         if is_source_record(target) or is_boom_object(target):
             continue
         raw = (target.get("metadata") or {}).get(CONTEXT_KEY)
+        if raw is None:
+            continue
         if not isinstance(raw, dict):
+            conflicts.setdefault(str(target.get("object_id") or ""), []).append("source_bound_context_invalid")
             continue
         try:
             valid = context_matches_target(target)
+            entries = raw.get("entries")
+            valid = valid and all(isinstance(entry, dict)
+                and set(entry) == {"role", "span", "unresolved_reason", "text", "source_mapping", "source_refs"}
+                and entry["role"] in CONTEXT_ROLES
+                and entry["unresolved_reason"] in (None, *CONTEXT_REASONS)
+                and isinstance(entry["text"], str)
+                and isinstance(entry["source_mapping"], list)
+                and isinstance(entry["source_refs"], list)
+                and (spans_are_exact([entry["span"]]) or
+                     (entry["span"] is None and entry["unresolved_reason"] is not None))
+                for entry in entries or [])
+            if valid and fragments is not None:
+                validated_context(target, fragments, (target.get("source") or {}).get("source_checksum"))
         except (KeyError, TypeError, ValueError):
             valid = False
+        if not valid:
+            conflicts.setdefault(str(target.get("object_id") or ""), []).append("source_bound_context_invalid")
         state = target_state(target) if valid else "invalid"
         entries = raw.get("entries")
         for row in entries if isinstance(entries, list) else []:
@@ -114,7 +133,13 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
             finish("structure", "accounted", "none", "document")
             continue
         evidence = evidence_of(obj) if source_record else {}
-        if oid in conflicts or (source_record and (not evidence or not spans_are_exact(evidence.get("spans")))):
+        invalid_source = source_record and (not evidence or not spans_are_exact(evidence.get("spans")))
+        if source_record and not invalid_source and fragments is not None:
+            try:
+                invalid_source = not verify_literal_source(obj, fragments, (obj.get("source") or {}).get("source_checksum"))
+            except (AttributeError, KeyError, TypeError, ValueError):
+                invalid_source = True
+        if oid in conflicts or invalid_source:
             finish("invalid_evidence", "repair_required", "technical_repair",
                    (conflicts.get(oid) or ["source_accountability_invalid"])[0])
             continue
@@ -124,6 +149,8 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
             if review_lane(obj) == "fast":
                 row["required"] = False
                 finish("structure", "accounted", "none", "structure")
+            elif content_reviewable(obj) and target_state(obj) == "invalid":
+                finish("invalid_evidence", "repair_required", "technical_repair", "knowledge_source_invalid")
             elif disposition["final"]:
                 finish("knowledge_source" if content_reviewable(obj) else "explicitly_accounted",
                        "accounted", "none", disposition["outcome"], "reviewed")
