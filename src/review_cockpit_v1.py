@@ -259,8 +259,10 @@ def next_ordinary_object_id(
     current_id: str,
     *,
     review_path: str | None = None,
+    bindings=None,
+    fragments=None,
 ) -> str:
-    queue = ordinary_review_queue(objects, review_path=review_path)
+    queue = ordinary_review_queue(objects, review_path=review_path, bindings=bindings, fragments=fragments)
     ids = [str(obj.get("object_id") or "") for obj in queue if obj.get("object_id")]
     if current_id in ids:
         index = ids.index(current_id)

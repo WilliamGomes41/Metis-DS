@@ -244,7 +244,7 @@ def test_heading_needs_review_is_not_content_reviewable():
     assert review_duty_for(obj, review_path=REVIEW_PATH, fragments=_allowed_source()) is None
 
 
-def test_ineligible_candidate_has_no_review_stage(, fragments=_allowed_source()):
+def test_ineligible_candidate_has_no_review_stage():
     violations = []
     for obj in (_heading(), _coverage_record(), _no_duty_definition()):
         eligibility = assess_candidate_eligibility(obj)

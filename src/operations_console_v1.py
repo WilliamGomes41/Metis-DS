@@ -1356,7 +1356,15 @@ class OperationsConsole:
         if actor_id not in self._envelope(snapshot_id)["named_reviewers"]:
             raise ConsoleError("reviewer_not_named_on_snapshot")
         current = self.snapshot_objects(snapshot_id, for_update=True)
-        target = next((row for row in current if row["object_id"] == object_id), None)
+        target, history, new_bindings = self._prepare_relation_confirmation(
+            snapshot_id=snapshot_id, object_id=object_id, relations=relations, current=current)
+        self._commit_prepared_store(objects=(snapshot_id, history), bindings=new_bindings,
+                                    expected_revision=expected_revision)
+        return deepcopy(target)
+
+    def _prepare_relation_confirmation(self, *, snapshot_id, object_id, relations, current):
+        """Existing relation validation prepares rows; the caller owns the commit."""
+        target = next((deepcopy(row) for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
         for row in relations:
@@ -1451,13 +1459,7 @@ class OperationsConsole:
             new_bindings[snapshot_id] = invalidate_for_object(
                 new_bindings.get(snapshot_id, []), peer["object_id"]
             )
-        self._commit_prepared_store(
-            objects=(snapshot_id, history),
-            bindings=new_bindings,
-            expected_revision=expected_revision,
-        )
-        _ = reviewer
-        return deepcopy(target)
+        return target, history, new_bindings
 
     def _source_cache_path(self, envelope: dict[str, Any]) -> Path:
         digest = safe_path_token(str(envelope["sha256"]), pattern=STORE_DIGEST_RE)
@@ -2987,6 +2989,8 @@ class OperationsConsole:
             self.snapshot_objects(snapshot_id),
             object_id,
             review_path=review_path,
+            bindings=self.object_review_bindings(snapshot_id),
+            fragments=self.review_source_fragments(snapshot_id),
         )
 
     @contextmanager
@@ -3000,7 +3004,11 @@ class OperationsConsole:
             prior_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
             try:
                 yield
-            except Exception:
+            except Exception as exc:
+                if isinstance(exc, ConsoleError) and exc.code == SNAPSHOT_OBJECT_WRITE_CONFLICT:
+                    # Prepared review made no writes. Preserve the competing winner.
+                    self.refresh_objects_expected_revision(snapshot_id)
+                    raise
                 self._rollback_store_files(
                     objects_snapshot=(snapshot_id, prior_objects),
                     envelopes=prior_envelopes,
@@ -3116,6 +3124,7 @@ class OperationsConsole:
             if review_path != "boom" and content_reviewable(target):
                 source_fragments = self._require_resolved_candidate_source(envelope, target)
             from src.integrity_kernel import stable_hash
+            relation_choices = tuple(relation_choices or ())
             command_hash = stable_hash({
                 "decision": decision, "confirmed_object_type": confirmed_object_type,
                 "recommendation_strength": recommendation_strength,
@@ -3266,24 +3275,13 @@ class OperationsConsole:
                     )
                 except ValueError as exc:
                     raise ConsoleError(str(exc)) from exc
+            relation_history = None
+            relation_bindings = None
             if parent_id and parent_id != object_id and not d4_relation_review:
-                self.confirm_relations(
-                    actor_id=actor_id,
-                    snapshot_id=snapshot_id,
-                    object_id=object_id,
-                    relations=merge_heading_parent_relations(
-                        target.get("confirmed_relations"),
-                        parent_id,
-                    ),
-                    expected_revision=expected_revision,
-                )
-                if expected_revision is not None:
-                    expected_revision = self.objects_revision(snapshot_id)
-                current_revision = self.objects_revision(snapshot_id)
-                current = self.snapshot_objects(snapshot_id)
-                target = next((row for row in current if row["object_id"] == object_id), None)
-                if target is None:
-                    raise ConsoleError("unknown_object")
+                target, relation_history, relation_bindings = self._prepare_relation_confirmation(
+                    snapshot_id=snapshot_id, object_id=object_id, current=current,
+                    relations=merge_heading_parent_relations(target.get("confirmed_relations"), parent_id))
+                current = list({row["object_id"]: row for row in relation_history}.values())
             passage = (
                 review_passage_record(
                     suitability=suitability or "",
@@ -3304,11 +3302,12 @@ class OperationsConsole:
                     saved = apply_register_from_review(saved, suitability=suitability or "")
                 history = [
                     row
-                    for row in self._load_objects(snapshot_id)
+                    for row in (relation_history if relation_history is not None else self._load_objects(snapshot_id))
                     if not (row["object_id"] == object_id and row["object_version"] == saved["object_version"])
                 ]
                 history.append(saved)
-                self._save_objects_pinned(snapshot_id, history, expected_revision)
+                self._commit_prepared_store(objects=(snapshot_id, history), bindings=relation_bindings,
+                    expected_revision=current_revision, snapshot_id=snapshot_id)
                 return deepcopy(self.snapshot_objects(snapshot_id))
             review_semantics_base_version = str(target.get("object_version") or "1.0")
             if apply_type and confirmed:
@@ -3523,7 +3522,7 @@ class OperationsConsole:
                 raise ConsoleError("review_failed", json.dumps(report["errors"], ensure_ascii=False))
             history = [
                 row
-                for row in self._load_objects(snapshot_id)
+                for row in (relation_history if relation_history is not None else self._load_objects(snapshot_id))
                 if not (row["object_id"] == object_id and row["object_version"] == target["object_version"])
             ]
             updated_target = next(row for row in updated if row["object_id"] == object_id)
@@ -3582,7 +3581,7 @@ class OperationsConsole:
             updated_target["governance"]["review_snapshot_hash"] = compute_canonical_object_hash(updated_target)
             history.append(updated_target)
             new_envelopes = None
-            new_bindings = deepcopy(self._bindings)
+            new_bindings = deepcopy(relation_bindings if relation_bindings is not None else self._bindings)
             if decision == "approve":
                 new_envelopes = deepcopy(self._envelopes)
                 new_envelopes[snapshot_id] = deepcopy(envelope)

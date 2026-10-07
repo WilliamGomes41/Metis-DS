@@ -80,7 +80,7 @@ jobs:
           if-no-files-found: error
       - name: Product API v1 backward compatibility
         run: python scripts/product_api_contract.py --check --base-ref origin/main
-      - run: python -m compileall -q src
+      - run: python -m compileall -q src tests
       - name: Verify architecture invariants
         run: pytest -q tests/test_architecture_invariants.py
       - name: Verify T9 ReviewKnowledge authority

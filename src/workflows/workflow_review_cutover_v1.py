@@ -97,7 +97,7 @@ class _PostgresWorkflowReviewMixin:
         self._bindings_baseline = deepcopy(self._bindings)
         self._mirror_bindings()
 
-    def object_review_bindings(self, snapshot_id: str) -> list[dict[str, Any]]:
+    def object_review_bindings(self, snapshot_id: str, *, objects=None) -> list[dict[str, Any]]:
         """Refresh PostgreSQL authorizations before deriving the public view."""
         try:
             current = self.workflow_review_store.read_bindings()
@@ -105,7 +105,7 @@ class _PostgresWorkflowReviewMixin:
             raise ConsoleError("workflow_review_unavailable", str(exc)) from exc
         self._bindings = current
         self._bindings_baseline = deepcopy(current)
-        return super().object_review_bindings(snapshot_id)
+        return super().object_review_bindings(snapshot_id, objects=objects)
 
     def _restore_review_state(
         self,
