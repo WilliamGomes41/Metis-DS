@@ -332,6 +332,23 @@ def test_reprocessing_retirement_and_reappearance_preserve_strict_history(tmp_pa
     assert latest["governance"]["validation_status"] == "needs_review"
 
 
+def test_successor_object_diff_reports_retired_candidate_as_removed(tmp_path):
+    from src.revision_workflow import reprocessed_history
+    console, _, sid, candidate = _console(tmp_path)
+    history = reprocessed_history([candidate], [], snapshot_id=sid, actor="researcher")
+    before = deepcopy(history)
+    text = candidate["content"]["clean_text"]
+
+    diff = console._diff_objects([candidate], history)
+
+    assert diff["removed"] == [text]
+    assert text not in diff["changed"]
+    assert text not in diff["unchanged"]
+    assert history == before
+    assert history[0] == candidate
+    assert history[-1]["governance"]["validation_status"] == "superseded"
+
+
 def test_reprocessing_retains_nonknowledge_ancestor_of_promoted_candidate(tmp_path):
     from src.revision_workflow import revise_object, reprocessed_history, current_revisions, knowledge_revision
     from src.integrity_kernel import stamp_canonical_hashes
