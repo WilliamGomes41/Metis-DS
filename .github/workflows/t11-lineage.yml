@@ -29,3 +29,6 @@ jobs:
       - run: pip install -r requirements-dev.lock
       - run: pip install --no-deps --no-build-isolation -e .
       - run: pytest -q tests/test_t11_knowledge_revision_lineage.py tests/test_d3_3_human_recommendation_semantics.py tests/test_d4_3_human_relation_confirmation.py tests/test_source_bound_continuation_repair.py tests/test_t10_source_accountability_authority.py --tb=short
+      - name: Diagnose first remaining full-suite regression
+        if: always()
+        run: timeout 10m pytest -q -x --tb=short -o faulthandler_timeout=60

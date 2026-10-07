@@ -119,7 +119,10 @@ def _plant_proposals(
 
     rows = console._load_objects(snapshot_id)
     proposal_rows: list[dict] = []
+    current_keys = {(row["object_id"], row["object_version"]) for row in current.values()}
     for row in rows:
+        if (row["object_id"], row["object_version"]) not in current_keys:
+            continue
         if row["object_id"] == cond["object_id"]:
             row["proposed_object_type"] = "condition"
             stamp_canonical_hashes(row)
@@ -166,7 +169,8 @@ def _plant_proposals(
                 for item in proposal_rows
             ]
             stamp_canonical_hashes(row)
-    console._save_objects(snapshot_id, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, snapshot_id, rows)
     live = _rows(console, snapshot_id)[REC]
     return live, proposal_rows
 

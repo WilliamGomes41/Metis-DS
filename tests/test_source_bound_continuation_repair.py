@@ -240,7 +240,8 @@ def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: P
     continuation = next(row for row in rows if row["object_id"].endswith("-continuation"))
     continuation["structure"]["sequence"] += 1
     stamp_canonical_hashes(continuation)
-    console._save_objects(snapshot_id, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, snapshot_id, rows)
     stale = client.post(
         "/review/context/accept",
         data={
@@ -273,7 +274,10 @@ def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: P
     assert revised["governance"]["publication_status"] == "unpublished"
     assert len(revised["provenance"]["source_fragments"]) == 2
     assert admission_of(revised)["gate_result"] == GATE_ALLOWED
-    assert revised["provenance"]["previous_object_version"] == target["object_version"]
+    history = [row for row in console.snapshot_objects(snapshot_id, include_blocked=True) if row["object_id"] == object_id]
+    assert history[0] == target
+    assert revised["provenance"]["previous_object_version"] == history[-2]["object_version"]
+    assert history[-2]["provenance"]["previous_object_version"] == target["object_version"]
 
 
 def test_source_bound_repair_reopens_only_changed_candidate_and_survives_restart(tmp_path: Path) -> None:
@@ -345,7 +349,10 @@ def test_source_bound_repair_reopens_only_changed_candidate_and_survives_restart
 
     assert repaired["object_version"] != target_before["object_version"]
     assert repaired["governance"]["validation_status"] == "needs_review"
-    assert repaired["provenance"]["previous_object_version"] == target_before["object_version"]
+    history = [row for row in console.snapshot_objects(snapshot_id, include_blocked=True) if row["object_id"] == repaired_object_id]
+    assert history[0] == target_before
+    assert repaired["provenance"]["previous_object_version"] == history[-2]["object_version"]
+    assert history[-2]["provenance"]["previous_object_version"] == target_before["object_version"]
 
     stable_after = next(
         row

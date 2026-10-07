@@ -50,8 +50,11 @@ def legacy_recommendation_fixture(console, snapshot_id):
     """Represent a persisted pre-D3 candidate without rewriting review evidence."""
     from src.integrity_kernel import stamp_canonical_hashes
     rows = console._load_objects(snapshot_id)
+    current = {(row["object_id"], row["object_version"]) for row in console.snapshot_objects(snapshot_id)}
     changed = False
     for row in rows:
+        if (row["object_id"], row["object_version"]) not in current:
+            continue
         if (row.get("metadata") or {}).get("semantic_passage", {}).get("selection_origin") != "proposal_selected":
             continue
         if "proposed_recommendation_semantics" not in row:
