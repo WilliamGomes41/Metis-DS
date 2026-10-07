@@ -546,6 +546,11 @@ def test_status_middleware_slow_sync_read_does_not_block_event_loop(tmp_path: Pa
 
 
 class _ContextPropagationConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole):
+    def _navigation_review_count(self, account):
+        # This test exercises propagation of the tree's publication prefetch,
+        # with no review work in its independent route fixture.
+        return 0
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.canonical_publication_store = object()

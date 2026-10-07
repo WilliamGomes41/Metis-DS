@@ -302,7 +302,6 @@ def test_all_passages_export_includes_every_current_passage_and_evidence(tmp_pat
     assert [row["candidate_text"] for row in exported] == [row["candidate_text"] for row in payload["rows"]]
     assert json.loads(exported[0]["admission"]) == payload["rows"][0]["admission"]
     assert client.get(url + "&format=xml").status_code == 400
-    monkeypatch.undo()  # The no-reextract guard applies to the evidence export endpoint.
     page = client.get(f"/settings/technical/exports?document={snapshot_id}")
     assert "Bronpassages:" in page.text
     assert "&amp;format=csv" in page.text
@@ -429,6 +428,7 @@ def test_processing_evidence_download_preserves_recorded_and_missing_evidence(tm
         assert source["text"] == "'" + target["content"]["clean_text"]
         assert all("must-not-be-exported" not in archive.read(name).decode("utf-8-sig") for name in archive.namelist())
     assert (console.snapshot_objects(snapshot_id), console._envelope(snapshot_id), console.object_review_bindings(snapshot_id)) == before
+    monkeypatch.undo()  # The no-reextract guard applies to the export endpoint.
     page = client.get(f"/settings/technical/exports?document={snapshot_id}")
     assert f'/review/processing-evidence-export?document={snapshot_id}' in page.text
 

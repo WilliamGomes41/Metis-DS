@@ -410,3 +410,60 @@ def test_second_worker_rechecks_durable_bindings_before_duplicate_submit(tmp_pat
     _approve(second, reviewer, sid, current, expected_revision=second.objects_revision(sid))
     assert _state(console, sid) == before
     assert len(second.object_review_bindings(sid)) == 1
+
+
+@pytest.mark.parametrize("kind", ["blocked", "deterministic", "coverage", "heading", "malformed"])
+def test_direct_console_approve_cannot_create_authority_for_nonreview_work(tmp_path, kind):
+    console, reviewer, sid, obj = _console(tmp_path)
+    rows = console._load_objects(sid)
+    if kind in {"heading", "coverage"}:
+        from src.knowledge_path_v1 import is_structural_projection
+        from src.source_accountability_v1 import is_source_record
+        target = next(o for o in rows if (is_structural_projection(o) if kind == "heading" else is_source_record(o)))
+    else:
+        target = next(o for o in rows if o["object_id"] == obj["object_id"])
+        if kind == "blocked":
+            target["metadata"]["admission"]["gate_result"] = "blocked"
+        elif kind == "deterministic":
+            target["metadata"].pop("semantic_passage", None)
+        else:
+            target["content"]["clean_text"] += " Onjuiste nieuwe tekst."
+        stamp_canonical_hashes(target)
+        console._save_objects(sid, rows)
+    before = _state(console, sid)
+    with pytest.raises(ConsoleError):
+        console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
+            object_id=target["object_id"], decision="approve",
+            confirmed_object_type="heading" if kind == "heading" else "definition",
+            expected_revision=console.objects_revision(sid))
+    assert _state(console, sid) == before
+
+
+def test_actual_four_eyes_commands_require_an_independent_second_human(tmp_path):
+    from src.review_duty_v1 import review_stage, SECOND_REVIEW
+    console, reviewer, sid, obj = _console(tmp_path)
+    second = console.create_account(username="carla", password="carla-secret", roles=("reviewer",))
+    console._envelopes[sid]["named_reviewers"].append(second["account_id"])
+    console._save_envelopes()
+    rows = console._load_objects(sid)
+    target = next(o for o in rows if o["object_id"] == obj["object_id"])
+    target["risk"]["risk_level"] = "high"
+    stamp_canonical_hashes(target)
+    console._save_objects(sid, rows)
+    _approve(console, reviewer, sid, target, expected_revision=console.objects_revision(sid))
+    current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
+    args = {"review_path": "richtlijn", "bindings": console.object_review_bindings(sid),
+            "fragments": console.review_source_fragments(sid)}
+    assert review_stage(current, **args) == SECOND_REVIEW
+    before = _state(console, sid)
+    with pytest.raises(ConsoleError, match="independent_second_reviewer_required"):
+        console.approve_second_review(actor_id=reviewer["account_id"], snapshot_id=sid,
+            object_id=obj["object_id"], expected_revision=console.objects_revision(sid))
+    assert _state(console, sid) == before
+    approved = console.approve_second_review(actor_id=second["account_id"], snapshot_id=sid,
+        object_id=obj["object_id"], expected_revision=console.objects_revision(sid))
+    assert approved["object_version"] == current["object_version"]
+    assert exact_review_snapshot_hash(approved) == exact_review_snapshot_hash(current)
+    args["bindings"] = console.object_review_bindings(sid)
+    assert review_stage(approved, **args) is None
+    assert set(exact_current_approver_ids(approved, args["bindings"])) == {reviewer["account_id"], second["account_id"]}
