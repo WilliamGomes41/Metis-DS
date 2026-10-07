@@ -377,10 +377,12 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
         history = console._load_objects(snapshot_id, remember=False)
         bindings = deepcopy(console._bindings)
         for oid, updated in changed.items():
-            if oid != source_object_id:
-                updated = console._prepare_knowledge_revision(snapshot_id, by_id[oid], updated,
-                    reason="source-context change: " + reason.strip(), actor=reviewer["username"])
-                changed[oid] = updated
+            disposition = deepcopy(updated.get("governance") or {}) if oid == source_object_id else None
+            updated = console._prepare_knowledge_revision(snapshot_id, by_id[oid], updated,
+                reason="source-context change: " + reason.strip(), actor=reviewer["username"])
+            if disposition is not None:
+                updated["governance"] = disposition
+            changed[oid] = updated
             stamp_canonical_hashes(updated)
             errors = schema_errors(updated, console.schema_path)
             if errors:

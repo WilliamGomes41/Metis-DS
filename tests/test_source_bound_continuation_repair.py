@@ -131,7 +131,8 @@ def _split_existing_object(console: OperationsConsole, snapshot_id: str) -> str:
     )
     for row in rows:
         stamp_canonical_hashes(row)
-    console._save_objects(snapshot_id, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, snapshot_id, rows)
     return str(first["object_id"])
 
 

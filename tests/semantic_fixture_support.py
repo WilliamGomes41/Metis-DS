@@ -61,7 +61,7 @@ def legacy_recommendation_fixture(console, snapshot_id):
         row.get("metadata", {}).pop("recommendation_semantics_evidence", None)
         stamp_canonical_hashes(row)
     if changed:
-        console._save_objects(snapshot_id, rows)
+        install_fixture_history(console, snapshot_id, rows)
 
 
 def materialised_fixture(text, *, proposed_type="recommendation", document_id="doc-fixture"):
@@ -89,3 +89,16 @@ def materialised_fixture(text, *, proposed_type="recommendation", document_id="d
                 "source_url": "https://example.test/fixture", "source_level": 1, "canonicality": "canonical",
                 "integrity_status": "verified", "source_checksum": digest, "version": "1.0"}}
     return transform(spec, manifest, fragments), fragments
+
+
+def install_fixture_history(console, snapshot_id, rows):
+    """Seed synthetic file-backed history, never invoke a production mutation.
+
+    Legacy/corruption fixtures deliberately model already persisted states.
+    T11 storage commands must reject such in-place rewrites, so test setup writes
+    the isolated fixture file directly and then refreshes its concurrency token.
+    """
+    assert getattr(console, "workflow_document_store", None) is None
+    path = console._objects_path(snapshot_id)
+    path.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
+    console.refresh_objects_expected_revision(snapshot_id)

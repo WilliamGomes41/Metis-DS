@@ -3354,6 +3354,7 @@ class OperationsConsole:
                 self._commit_prepared_store(objects=(snapshot_id, history), bindings=relation_bindings,
                     expected_revision=current_revision, snapshot_id=snapshot_id)
                 return deepcopy(self.snapshot_objects(snapshot_id))
+            target = deepcopy(target)
             revision_predecessor = deepcopy(target)
             review_semantics_base_version = str(target.get("object_version") or "1.0")
             if apply_type and confirmed:

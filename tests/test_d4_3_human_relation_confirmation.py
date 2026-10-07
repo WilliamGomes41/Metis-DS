@@ -341,7 +341,8 @@ def test_target_version_change_rejects_entire_confirmation_without_partial_write
         if row["object_id"] == condition_id:
             row["object_version"] = "1.1"
             stamp_canonical_hashes(row)
-    console._save_objects(snapshot_id, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, snapshot_id, rows)
 
     with pytest.raises(ConsoleError, match="knowledge_relation_target_stale"):
         _approve(
@@ -450,7 +451,8 @@ def test_semantic_retry_preserves_relation_decisions(tmp_path: Path, choice_coun
         if row["object_id"] == rec["object_id"]:
             row[SEMANTICS_FIELD] = semantics
             stamp_canonical_hashes(row)
-    console._save_objects(sid, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, sid, rows)
     before = deepcopy(console.snapshot_objects(sid))
     selected = [relation_choice_value(row) for row in proposals[:choice_count]]
     client = TestClient(create_console_app(console))
