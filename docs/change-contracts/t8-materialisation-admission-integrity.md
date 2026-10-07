@@ -30,3 +30,6 @@ Unknown block, invalid/bool/out-of-bounds/overlapping/reversed spans, text misma
 
 ## Scope
 T8 only after the repaired T7 boundary at cd6a5c352e7b2802a926cc934c7ecea76fdfbed6. No T9-T12, alternative creator/resolver/gate/store, live data migration, Azure edits, merge or deployment.
+
+## Existing literal continuation repair
+The existing correction transaction may retain an object's identity while creating a new revision. Its expanded source selection is validated/materialised before review mutation, and rematerialised within correction preparation. The revision consumes the materialiser's spans and mapping, retains its existing identity/history, and receives fresh Admission only if the complete revised canonical source binding matches. Arbitrary edits acquire no Admission from stale source metadata. Existing continuation fixtures now use actual split source spans/mapping and authoritative fragments; the repaired revision must receive allowed Admission. No new correction transaction or field-formation policy.

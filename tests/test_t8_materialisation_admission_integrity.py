@@ -63,7 +63,7 @@ def test_materialisation_error_is_controlled_and_precisely_located(case, code):
 
 
 @pytest.mark.parametrize("case", ["unknown", "bounds", "text", "missing_mapping", "mapping",
-                                 "extra_ref", "missing_ref", "unknown_ref", "checksum", "version"])
+                                 "extra_ref", "missing_ref", "unknown_ref", "locator", "checksum", "version"])
 def test_invalid_persisted_candidate_gets_no_admission_decision(case):
     fragments, rows = _canonical()
     row = rows[0]
@@ -88,6 +88,8 @@ def test_invalid_persisted_candidate_gets_no_admission_decision(case):
         row["provenance"]["source_fragments"] = []
     elif case == "unknown_ref":
         row["provenance"]["source_fragments"][0]["raw_object_id"] = "UNKNOWN"
+    elif case == "locator":
+        row["provenance"]["source_fragments"][0]["source_locator"] = {"locator_type": "web_line_range", "locator_value": "lines:999-999"}
     elif case == "checksum":
         row["source"]["source_checksum"] = "c" * 64
     else:
@@ -179,7 +181,11 @@ def test_failed_preparation_keeps_previous_bundle_across_restart(tmp_path, monke
     def fail(*args, **kwargs):
         raise materialisation.MaterialisationError("materialisation_source_mapping_invalid")
     monkeypatch.setattr(materialisation, "validate_materialised_candidate", fail)
-    state.reextract_unpublished(actor_id=actor, snapshot_id=sid)
+    from src.operations_console_v1 import ConsoleError
+    with pytest.raises(ConsoleError) as caught:
+        state.reextract_unpublished(actor_id=actor, snapshot_id=sid)
+    assert caught.value.code == "pre_review_llm_proposal_rejected"
+    assert caught.value.pre_review_diagnostics["reason_code"] == "materialisation_source_mapping_invalid"
     assert state.snapshot_objects(sid) == before
     assert state.objects_revision(sid) == revision
     assert state._bindings.get(sid) == bindings
@@ -189,3 +195,53 @@ def test_failed_preparation_keeps_previous_bundle_across_restart(tmp_path, monke
     assert restarted.snapshot_objects(sid) == before
     assert restarted.objects_revision(sid) == revision
     assert restarted._bindings.get(sid) == bindings
+
+
+def test_incomplete_raw_mapping_cannot_materialise(monkeypatch):
+    from src import knowledge_materialisation_v1 as materialisation
+    fragments, decisions = _inputs()
+    original = materialisation._selection_blocks
+    def incomplete(rows):
+        blocks = deepcopy(original(rows))
+        for _public, source in blocks.values():
+            source["_raw_source_mapping"] = []
+        return blocks
+    monkeypatch.setattr(materialisation, "_selection_blocks", incomplete)
+    with pytest.raises(SemanticPassageError, match="materialisation_source_mapping_invalid"):
+        materialise_knowledge_candidates(decisions, document_id="doc-t8", fragments=fragments)
+
+
+def test_empty_selected_text_has_its_original_materialisation_reason():
+    fragments, decisions = _inputs()
+    decisions[0]["spans"][0].update(start=7, end=8)
+    with pytest.raises(SemanticPassageError) as caught:
+        materialise_knowledge_candidates(decisions, document_id="doc-t8", fragments=fragments)
+    assert caught.value.code == "materialisation_text_empty"
+    assert caught.value.finding["candidate_index"] == 0
+
+
+def test_producer_exposes_materialisation_reason_as_controlled_processing_evidence(monkeypatch):
+    from src import semantic_passage_v1 as selection
+    from src.pre_review_semantic_v1 import semantic_spec_from_fragments
+    from src.operations_console_v1 import ConsoleError
+    fragments, decisions = _inputs()
+    original = selection._project_semantic_selection
+    def corrupt(*args, **kwargs):
+        selected, coverage = original(*args, **kwargs)
+        selected[0]["source_text"] = "Corrupted selection."
+        return selected, coverage
+    monkeypatch.setattr(selection, "_project_semantic_selection", corrupt)
+    import json
+    def provider(_url, _headers, payload, _timeout):
+        data = json.loads(payload["input"][1]["content"])
+        proposal = _proposal(data["source_blocks"][0])
+        proposal["relations"] = []
+        return {"status": "completed", "output": [{"type": "message", "content": [
+            {"type": "output_text", "text": json.dumps(proposal)}]}]}
+    with pytest.raises(ConsoleError) as caught:
+        semantic_spec_from_fragments(document_id="doc-t8", title="Test", family="test",
+                                    class_="richtlijn", fragments=fragments,
+                                    content_kind="html", api_key="fixture", model="fixture",
+                                    post_json=provider)
+    assert caught.value.code == "pre_review_llm_proposal_rejected"
+    assert caught.value.pre_review_diagnostics["reason_code"] == "materialisation_text_mismatch"

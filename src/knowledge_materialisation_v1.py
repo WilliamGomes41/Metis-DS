@@ -24,8 +24,6 @@ class MaterialisationError(SemanticPassageError):
     """Processing failure, never an Admission decision."""
 
 
-
-
 def _selection_blocks(fragments):
     from src.object_taxonomy_v1 import extract_object_type
     return {
@@ -229,7 +227,15 @@ def validate_materialised_candidate(
         raw_by_id = {row.get("fragment_id"): row for row in fragments}
         for ref in refs:
             raw = raw_by_id.get(ref.get("raw_object_id"))
-            if raw is None or ref.get("raw_content_hash") != raw.get("fragment_hash"):
+            if (raw is None
+                    or not ref.get("raw_content_hash")
+                    or str(ref.get("raw_content_hash")).upper() == "UNKNOWN"
+                    or ref.get("raw_content_hash") != raw.get("fragment_hash")
+                    or ref.get("source_locator") != raw.get("source_locator")
+                    or ref.get("page") != raw.get("source_page")
+                    or ref.get("bbox") != raw.get("bbox")
+                    or ref.get("coordinate_status") != (
+                        "available" if raw.get("bbox") is not None else "not_applicable")):
                 raise MaterialisationError("materialisation_source_fragments_invalid")
     else:
         ids = obj.get("source_fragment_ids")
