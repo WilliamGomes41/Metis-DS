@@ -412,13 +412,29 @@ def test_actual_file_legacy_publication_seals_type_relation_and_review_after_res
 
 def test_source_context_rekeys_proposed_relations_before_readmission(tmp_path):
     from tests.test_d4_3_human_relation_confirmation import _console as relation_console, _accounts, _ingest, _plant_proposals
-    from src.source_context_review_v1 import role_of
+    from tests.semantic_fixture_support import install_fixture_history
+    from src.integrity_kernel import stamp_canonical_hashes
+    from src.knowledge_relation_proposal_v1 import relation_proposal_admission_codes
     from src.knowledge_relations_v1 import validate_knowledge_relation_set
     state = relation_console(tmp_path)
     accounts = _accounts(state)
     sid = _ingest(state, accounts)["snapshot_id"]
-    target, relations = _plant_proposals(state, sid)
-    source = next(o for o in state.snapshot_objects(sid) if role_of(o))
+    target, relations = _plant_proposals(state, sid, include_explanation=False)
+    live = state.snapshot_objects(sid)
+    source = next(o for o in live if o.get("object_type") == "heading")
+    peer = next(o for o in live if o["object_id"] == relations[0]["target_object_id"])
+    def spans(obj):
+        return [{**span, "source_fragment_ids": [ref["raw_object_id"] for ref in obj["provenance"]["source_fragments"]]}
+                for span in obj["metadata"]["semantic_passage"]["spans"]]
+    target["metadata"]["knowledge_relation_evidence"] = {
+        "version": "knowledge-relation-evidence-v1",
+        "relations": [{**{key: relations[0][key] for key in ("relation_id", "relation_type", "target_object_id", "target_object_version")},
+                       "source_spans": spans(target), "target_spans": spans(peer), "evidence_spans": spans(target)}]}
+    stamp_canonical_hashes(target)
+    rows = state.snapshot_objects(sid, include_blocked=True)
+    rows = [target if (row["object_id"], row["object_version"]) == (target["object_id"], target["object_version"]) else row for row in rows]
+    install_fixture_history(state, sid, rows)
+    assert not relation_proposal_admission_codes(target, objects=state.snapshot_objects(sid))
     before = deepcopy(current(state, sid, target["object_id"]))
     state.confirm_source_context(actor_id=accounts["reviewer"]["account_id"], snapshot_id=sid,
         source_object_id=source["object_id"], role="context", target_object_ids=[target["object_id"]],
@@ -429,7 +445,7 @@ def test_source_context_rekeys_proposed_relations_before_readmission(tmp_path):
     assert not validate_knowledge_relation_set(after["proposed_knowledge_relations"],
         source_object_id=after["object_id"], source_object_version=after["object_version"])
     assert "relation_proposal_invalid" not in after["metadata"]["admission"]["reason_codes"]
-    assert after["metadata"]["admission"]["gate_result"] == "allowed"
+    assert after["metadata"]["admission"]["gate_result"] == "allowed", after["metadata"]["admission"]["reason_codes"]
 
 
 @pytest.mark.parametrize("profile", ["base", "closure"])
