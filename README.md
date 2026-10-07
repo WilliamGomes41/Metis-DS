@@ -45,12 +45,14 @@ docker run --rm vvn-data-service:pilot
 
 ```bash
 vvn-data-service audit-current
-vvn-data-service review-queue --input <objects.jsonl> --track clinical --out <queue.jsonl>
+vvn-data-service review-queue --input <objects.jsonl> --track clinical --raw-extract <raw.jsonl> --bindings <bindings.jsonl> --review-path richtlijn --out <queue.jsonl>
 vvn-data-service source-register --source-id <id> --binary <file.pdf> --source-url <url> --out <registry.json>
 vvn-data-service source-bind --manifest data/source_manifest.v2.json --source-registry <registry.json> --out <verified-manifest.json>
 vvn-data-service prepublish --input <reviewed.jsonl> --schema schemas/knowledge_object.schema.v1.1.json --source-registry <registry.json> --raw-extract <raw.jsonl>
 vvn-data-service serve-console --host 127.0.0.1 --port 8090
 ```
+
+The review queue requires retained source fragments and the current exact review bindings as JSONL. For a working revision with no reviews yet, supply an empty bindings file. Queue export is a read-only projection; reviews are submitted through the operations console.
 
 The researcher path for Continentie (bron 2) is the operations console mailbox, not a parallel engineer-only ingest UX. Existing CLI extract/register tools remain for engineers and tests. Capture is not publication; G2 remains BLOCKED.
 ## Protocol v2.1 safe retrieval

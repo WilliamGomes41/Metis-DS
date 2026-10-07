@@ -88,3 +88,11 @@ The adversarial acceptance matrix also exercises direct console denial for block
 
 ## Closing HTTP concurrency audit
 On tests-only head 8cfe5b0a6798d816ea9f021e70ce9030a2875eda, GitHub CI run 37651082783 showed three genuine RED cases: omitted, empty and whitespace snapshot_revision on POST /review all returned 303 instead of refusing review (44 existing T9 cases passed). The HTTP first/second review boundaries now require the existing snapshot_revision pin before mutation, matching the existing normal-risk batch boundary. The kernel rechecks that revision under the existing atomic mutation/store transaction. Trusted Python compatibility helpers retain their existing optional argument; public content-review forms cannot discard the reviewed revision. No new authority/store or T10–T12 lifecycle was introduced.
+
+
+## Pre-merge review closure
+Automatic review on 6e23c625 found one blocking metrics regression and an outdated README CLI invocation. Tests-only 75ea9b3 followed by the focused CI step on 749c597 (run 37658526880, job 112919840344) proved 4 genuine RED / 42 passing: admitted recommendation/condition/exception workload was 0.0 instead of 1.0 and high-risk definition workload was 0.0 instead of 0.5.
+
+Extraction gold has no live WorkingRevision/source/binding input. Its offline workload diagnostic now reuses existing slow type, lane and risk facts without calling the live ordinary review queue. This diagnostic neither creates ReviewDuty nor grants approval; regression guards keep the live queue empty without authoritative fragments and prove input objects unchanged. Content duty/command authority remains source-valid and fail-closed. The README now supplies required raw-extract and bindings inputs and explains the read-only export.
+
+This bounded repair changes no Admission, materialisation, review store, schema or lifecycle semantics. The existing GitHub CI matrix runs both metrics suites before T9 and the full suite. Merge remains gated on the new head's complete checks and review.
