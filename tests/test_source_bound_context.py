@@ -87,7 +87,10 @@ def test_transform_and_admission_reject_forged_or_stale_context(change):
         if change=='source': target['source']['version'] = '2'
         else: target['content']['clean_text'] += ' Andere betekenis.'
         gated = apply_admission_gate(altered, klasse='richtlijn', fragments=source, document_version='1', source_hash='a'*64)
-        assert next(r for r in gated if r['object_id']==obj['object_id'])['metadata']['admission']['gate_result']=='blocked'
+        invalid = next(r for r in gated if r['object_id']==obj['object_id'])
+        assert 'admission' not in invalid['metadata']
+        from src.knowledge_path_v1 import content_reviewable
+        assert not content_reviewable(invalid)
 
 
 @pytest.mark.parametrize('limit', ['input','output','timeout'])

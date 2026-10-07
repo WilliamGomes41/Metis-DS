@@ -89,7 +89,7 @@ def test_transform_validates_mapping_and_export_retains_raw_and_view(tmp_path):
     forged = deepcopy(spec)
     item = next(item for item in forged["objects"] if item.get("semantic_passage", {}).get("source_mapping"))
     item["semantic_passage"]["source_mapping"][0]["raw_end"] += 1
-    with pytest.raises(ValueError, match="semantic_source_mapping_invalid"):
+    with pytest.raises(ValueError, match="materialisation_source_mapping_invalid"):
         transform(forged, manifest, fragments)
 
 

@@ -163,6 +163,8 @@ def test_transform_refuses_forged_candidate_before_returning_a_bundle():
     from src.knowledge_materialisation_v1 import MaterialisationError
     fragments, decisions = _inputs()
     candidates = materialise_knowledge_candidates(decisions, document_id="doc-t8", fragments=fragments)
+    candidates[0]["semantic_passage"].update(formation_mode="semantic-source-bound-v1", model="fixture",
+                                             source_blocks_hash="a" * 64, proposal_hash="b" * 64)
     candidates[0]["source_fragment_ids"].append("other")
     spec = {"spec_version": "console-ingest-1.0", "document_id": "doc-t8",
             "object_version": "1.0", "target_group": [], "care_setting": [], "topic": [],

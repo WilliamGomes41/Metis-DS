@@ -145,7 +145,9 @@ def test_real_get_pins_text_and_revision_together_and_preserves_conflict_selecti
     # card, but cannot re-enter the ordinary batch on a stale form.
     from src.admission_gate_v1 import admission_of
     corrected = next(o for o in console.snapshot_objects(sid) if o['object_id'] == ids[0])
-    assert 'source_fidelity_failure' in admission_of(corrected)['reason_codes']
+    assert admission_of(corrected) == {}
+    from src.knowledge_path_v1 import content_reviewable
+    assert not content_reviewable(corrected)
     assert new_text in client.get('/review', params={'document':sid, 'object':ids[0]}).text
     assert not console._bindings.get(sid)
     assert not Page(response.text).batches  # Only one eligible candidate remains.

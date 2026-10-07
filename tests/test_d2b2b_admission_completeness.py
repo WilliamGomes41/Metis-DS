@@ -119,37 +119,12 @@ def test_short_fragment_stays_incomplete_and_non_independent() -> None:
 
 
 def test_extract_admission_path_keeps_predicate_missing_separate() -> None:
-    objects = [
-        {
-            "object_id": "obj-d2b2b",
-            "document_id": "doc-d2b2b",
-            "object_type": "unclassified",
-            "proposed_object_type": "factual_finding",
-            "source": {"source_checksum": "b" * 64},
-            "content": {
-                "raw_text": COMPLETE_DISTINGUISHES,
-                "clean_text": COMPLETE_DISTINGUISHES,
-            },
-            "structure": {
-                "section_path": ["3. Vaststellen van eenzaamheid"],
-            },
-            "metadata": {
-                "semantic_passage": {"selection_origin": "proposal_selected",
-                    "spans": [{"block_id": "source-block", "start": 0, "end": len(COMPLETE_DISTINGUISHES)}]},
-                "source_locator": {
-                    "locator_type": "page_bbox",
-                    "locator_value": "page:1;bbox:1,1,2,2",
-                }
-            },
-        }
-    ]
-
+    from tests.semantic_fixture_support import materialised_fixture
+    objects, fragments = materialised_fixture(
+        COMPLETE_DISTINGUISHES, proposed_type="factual_finding", document_id="doc-d2b2b")
     stamped = apply_admission_gate(
-        objects,
-        klasse="richtlijn",
-        document_version="1.0",
-        source_hash="b" * 64,
-    )
+        objects, klasse="richtlijn", fragments=fragments, document_version="1.0",
+        source_hash=objects[0]["source"]["source_checksum"])
     admission = stamped[0]["metadata"]["admission"]
 
     assert admission["gate_result"] == GATE_BLOCKED

@@ -108,18 +108,11 @@ def test_explicit_deterministic_type_proposal_does_not_enter_admission() -> None
 
 
 def test_semantic_proposal_selected_is_candidate_even_when_type_is_unclassified() -> None:
-    source = _passage(
-        object_id="semantic-selected",
-        text="Deze passage is door de locator als kandidaat geselecteerd.",
-        proposed_type="unclassified",
-        metadata={
-            "semantic_passage": {
-                "selection_origin": "proposal_selected",
-            }
-        },
-    )
-
-    [row] = _gate([source])
+    from tests.semantic_fixture_support import materialised_fixture
+    objects, fragments = materialised_fixture(
+        "Deze passage is door de locator als kandidaat geselecteerd.", proposed_type="unclassified")
+    [row] = apply_admission_gate(objects, klasse="richtlijn", fragments=fragments,
+        document_version="1.0", source_hash=objects[0]["source"]["source_checksum"])
 
     eligibility = candidate_eligibility_of(row)
     assert eligibility["eligible"] is True

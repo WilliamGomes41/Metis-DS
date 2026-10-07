@@ -62,3 +62,30 @@ def legacy_recommendation_fixture(console, snapshot_id):
         stamp_canonical_hashes(row)
     if changed:
         console._save_objects(snapshot_id, rows)
+
+
+def materialised_fixture(text, *, proposed_type="recommendation", document_id="doc-fixture"):
+    """Build one source-valid canonical fixture through selection and its creator."""
+    from hashlib import sha256
+    from src.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal
+    from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
+    from src.semantic_transform_generic_v1 import transform
+    from src.integrity_kernel import stable_hash
+    digest = sha256(text.encode()).hexdigest()
+    fragments = [{"fragment_id": "fixture-source", "fragment_hash": digest,
+                  "raw_text": text, "clean_text": text, "section_path": ["Behandeling"],
+                  "source_locator": {"locator_type": "web_line_range", "locator_value": "lines:1-1"}}]
+    block = semantic_source_blocks(fragments)[0]
+    proposal = {"objects": [{"spans": [{"block_id": block["block_id"], "start": 0, "end": len(text)}],
+                             "proposed_object_type": proposed_type}], "relations": [], "abstain_reason": None}
+    decisions = semantic_units_from_proposal(fragments, document_id=document_id, proposal=proposal)
+    candidates = materialise_knowledge_candidates(decisions, document_id=document_id, fragments=fragments)
+    for candidate in candidates:
+        candidate["semantic_passage"].update(formation_mode="semantic-source-bound-v1", model="fixture",
+            source_blocks_hash=stable_hash([block]), proposal_hash=stable_hash(proposal))
+    spec = {"spec_version": "console-ingest-1.0", "document_id": document_id,
+            "object_version": "1.0", "target_group": [], "care_setting": [], "topic": [], "objects": candidates}
+    manifest = {"canonical_source": {"source_id": "fixture", "title": "Fixture", "source_type": "html",
+                "source_url": "https://example.test/fixture", "source_level": 1, "canonicality": "canonical",
+                "integrity_status": "verified", "source_checksum": digest, "version": "1.0"}}
+    return transform(spec, manifest, fragments), fragments

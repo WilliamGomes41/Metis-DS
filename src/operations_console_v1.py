@@ -3838,6 +3838,12 @@ class OperationsConsole:
                 semantic = revised.setdefault("metadata", {}).setdefault("semantic_passage", {})
                 semantic["spans"] = materialised["semantic_passage"]["spans"]
                 semantic["source_mapping"] = materialised["semantic_passage"]["source_mapping"]
+                from src.semantic_transform_generic_v1 import _fragment_ref
+                raw_by_id = {row["fragment_id"]: row for row in fragments}
+                revised["provenance"]["source_fragments"] = [
+                    deepcopy(_fragment_ref(raw_by_id[fragment_id]))
+                    for fragment_id in materialised["source_fragment_ids"]
+                ]
                 stamp_canonical_hashes(revised)
             peers = [
                 revised if row.get("object_id") == object_id else row
