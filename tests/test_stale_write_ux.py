@@ -162,31 +162,19 @@ def _install_concurrent_winner(
     *,
     marker: str = "concurrent-winner",
 ) -> None:
-    """On the first save of this snapshot, a concurrent console wins the file.
+    """Commit a real competing writer after form read, before review takes its lock.
 
-    TestClient may run the POST on another thread, so thread-local expected
-    pins from the test thread do not apply. The winner must land between this
-    request's remember and its ``_save_objects``.
+    A second console cannot synchronously acquire the same store lock from inside
+    the first console's save callback. The submitted form retains its old revision,
+    so this exercises the real stale-request path and preserves the winning write.
     """
-    real_save = OperationsConsole._save_objects
-    fired = {"done": False}
-
-    def losing_save(self: OperationsConsole, target_snapshot: str, rows: list[dict], **kwargs) -> None:
-        if target_snapshot == snapshot_id and not fired["done"]:
-            fired["done"] = True
-            other = OperationsConsole(
-                root=self.root,
-                source_store=self.source_store,
-                runtime=self.runtime,
-            )
-            other_rows = other._load_objects(target_snapshot)
-            for row in other_rows:
-                if row["object_id"] == other_object_id:
-                    row["reliability_marker"] = marker
-            other._save_objects(target_snapshot, other_rows)
-        return real_save(self, target_snapshot, rows, **kwargs)
-
-    console._save_objects = losing_save.__get__(console, OperationsConsole)  # type: ignore[method-assign]
+    other = OperationsConsole(
+        root=console.root, source_store=console.source_store, runtime=console.runtime)
+    other_rows = other._load_objects(snapshot_id)
+    for row in other_rows:
+        if row["object_id"] == other_object_id:
+            row["reliability_marker"] = marker
+    other._save_objects(snapshot_id, other_rows)
 
 
 def _stale_review_post(tmp_path: Path) -> tuple[TestClient, dict, str, object]:
