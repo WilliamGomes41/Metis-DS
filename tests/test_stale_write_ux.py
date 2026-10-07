@@ -135,10 +135,17 @@ def _textarea_value(html: str, name: str) -> str:
     return match.group(1) if match else ""
 
 
-def _review_payload(snapshot_id: str, object_id: str) -> dict[str, str]:
+def _form_revision(body: str) -> str:
+    match = re.search(r'<input[^>]*name="snapshot_revision"[^>]*value="([^"]+)"', body)
+    assert match, "Review and conflict forms must expose the revision being reviewed"
+    return html.unescape(match.group(1))
+
+
+def _review_payload(snapshot_id: str, object_id: str, revision: str) -> dict[str, str]:
     return {
         "snapshot_id": snapshot_id,
         "object_id": object_id,
+        "snapshot_revision": revision,
         "suitability": UNIQUE_SUITABILITY,
         "documentpositie_action": "dit_klopt",
         "type_action": "dit_klopt",
@@ -195,7 +202,7 @@ def _stale_review_post(tmp_path: Path) -> tuple[TestClient, dict, str, object]:
     _install_concurrent_winner(console, snapshot_id, second["object_id"])
     posted = client.post(
         "/review",
-        data=_review_payload(snapshot_id, first["object_id"]),
+        data=_review_payload(snapshot_id, first["object_id"], _form_revision(opened.text)),
         follow_redirects=False,
     )
     return client, receipt, first["object_id"], posted
@@ -247,7 +254,7 @@ def test_stale_review_save_retry_applies_input_after_fresh_revision(tmp_path: Pa
     assert UNIQUE_COMMENT in posted.text
     retried = client.post(
         "/review",
-        data=_review_payload(receipt["snapshot_id"], object_id),
+        data=_review_payload(receipt["snapshot_id"], object_id, _form_revision(posted.text)),
         follow_redirects=False,
     )
     assert retried.status_code in {303, 200}
@@ -281,7 +288,7 @@ def test_stale_review_conflicts_preserve_special_characters_exactly(tmp_path: Pa
 
     comment = 'Bij A & B: waarde < 5; "controle" > 1; café ☕ <script>alert("x")</script>'
     correction = "Gebruik 'één' & controleer > 2 < 9 — patiënt"
-    payload = _review_payload(snapshot_id, first["object_id"])
+    payload = _review_payload(snapshot_id, first["object_id"], _form_revision(opened.text))
     payload["comment"] = comment
     payload["proposed_correction"] = correction
 
@@ -299,6 +306,7 @@ def test_stale_review_conflicts_preserve_special_characters_exactly(tmp_path: Pa
     assert "&lt;script&gt;" in raw_comment
 
     retry_payload = dict(payload)
+    retry_payload["snapshot_revision"] = _form_revision(first_conflict.text)
     retry_payload["comment"] = html.unescape(raw_comment)
     retry_payload["proposed_correction"] = html.unescape(raw_correction)
 
@@ -316,6 +324,7 @@ def test_stale_review_conflicts_preserve_special_characters_exactly(tmp_path: Pa
     assert second_raw_correction == raw_correction
 
     final_payload = dict(retry_payload)
+    final_payload["snapshot_revision"] = _form_revision(second_conflict.text)
     final_payload["comment"] = html.unescape(second_raw_comment)
     final_payload["proposed_correction"] = html.unescape(second_raw_correction)
     final_payload["eindoordeel"] = "afwijzen"
