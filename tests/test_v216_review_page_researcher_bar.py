@@ -110,7 +110,11 @@ def _ingest(
         ],
     )
     defaults.update(kwargs)
-    return console.ingest(**defaults)
+    from tests.semantic_fixture_support import bind_fixture_selections, legacy_recommendation_fixture
+    bind_fixture_selections(console)
+    receipt = console.ingest(**defaults)
+    legacy_recommendation_fixture(console, receipt["snapshot_id"])
+    return receipt
 
 
 def _client(console: OperationsConsole, username: str = "reviewer.bert") -> TestClient:

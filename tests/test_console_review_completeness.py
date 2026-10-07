@@ -59,6 +59,8 @@ def _accounts(console: OperationsConsole) -> dict[str, dict]:
 
 
 def _ingest_html(console: OperationsConsole, accounts: dict, data: bytes | None = None, **kwargs) -> dict:
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     defaults = dict(
         actor_id=accounts["researcher"]["account_id"],
         filename="continentie.html",

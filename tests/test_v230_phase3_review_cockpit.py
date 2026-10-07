@@ -111,6 +111,16 @@ def _ingest(console: OperationsConsole, accounts: dict, fixture: Path = PHASE2_F
         "named_reviewers": [accounts["reviewer"]["account_id"]],
     }
     kwargs.update(overrides)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console, [
+        (ADVISEERT, "recommendation"),
+        ("De werkgroep adviseert calcium te geven.", "recommendation"),
+        ("De werkgroep adviseert calcium te geven tenzij er hypercalciëmie bestaat.", "recommendation"),
+        ("De werkgroep adviseert de verpleegkundige calciumsuppletie te starten bij iedere intake.", "recommendation"),
+        ("Tenzij er een recente fractuur is vastgesteld.", "exception"),
+        ("Overleg bij een vastgesteld verhoogd fractuurrisico met de cliënt over verwijzing.", "recommendation"),
+        ("De Dutch Job Group (dJG) is een meetinstrument voor werkbelasting.", "definition"),
+    ])
     receipt = console.ingest(**kwargs)
     from tests.context_test_support import bind_detected_context
     bind_detected_context(console, receipt["snapshot_id"], accounts["reviewer"]["account_id"])

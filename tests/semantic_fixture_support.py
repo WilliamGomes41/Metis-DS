@@ -44,3 +44,16 @@ def bind_fixture_selections(console, selections=None):
         "METIS_PASSAGE_FORMATION_MODE": "semantic-source-bound-v1",
         "METIS_LLM_API_KEY": "fixture", "METIS_LLM_MODEL": "fixture",
     }, post_json=provider)
+
+
+def legacy_recommendation_fixture(console, snapshot_id):
+    """Represent a persisted pre-D3 candidate without rewriting review evidence."""
+    from src.integrity_kernel import stamp_canonical_hashes
+    rows = console._load_objects(snapshot_id)
+    for row in rows:
+        if (row.get("metadata") or {}).get("semantic_passage", {}).get("selection_origin") != "proposal_selected":
+            continue
+        row.pop("proposed_recommendation_semantics", None)
+        row.get("metadata", {}).pop("recommendation_semantics_evidence", None)
+        stamp_canonical_hashes(row)
+    console._save_objects(snapshot_id, rows)

@@ -91,6 +91,14 @@ def _ingest_richtlijn(console: OperationsConsole, accounts: dict, **overrides) -
         "named_reviewers": [accounts["reviewer"]["account_id"]],
     }
     kwargs.update(overrides)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    selections = [
+        (ADVISEERT, "recommendation"),
+        (REC_PLUS_EXC, "recommendation"),
+        ("Tenzij er een recente fractuur is vastgesteld.", "exception"),
+        ("Continentie is een klinisch onderwerp in de ouderenzorg.", "definition"),
+    ]
+    bind_fixture_selections(console, selections)
     return console.ingest(**kwargs)
 
 
@@ -336,7 +344,9 @@ def test_djg_must_not_enter_ordinary_queue_as_aanbeveling() -> None:
                 "object_type": "unclassified",
                 "proposed_object_type": "recommendation",
                 "content": {"clean_text": DJG},
-                "metadata": {"admission": admitted},
+                "metadata": {"admission": admitted,
+                    "semantic_passage": {"selection_origin": "proposal_selected",
+                        "spans": [{"block_id": "source-block", "start": 0, "end": len(ADVISEERT)}]}},
             }
         ]
     )
@@ -347,7 +357,9 @@ def test_djg_must_not_enter_ordinary_queue_as_aanbeveling() -> None:
             "object_type": "unclassified",
             "proposed_object_type": "recommendation",
             "content": {"clean_text": DJG},
-            "metadata": {"admission": admitted},
+            "metadata": {"admission": admitted,
+                    "semantic_passage": {"selection_origin": "proposal_selected",
+                        "spans": [{"block_id": "source-block", "start": 0, "end": len(ADVISEERT)}]}},
         }
     )
 
@@ -441,7 +453,9 @@ def test_false_recommendation_is_blocked_from_ordinary_queue_as_aanbeveling() ->
                 "object_id": "false-rec",
                 "proposed_object_type": "recommendation",
                 "content": {"clean_text": FALSE_RECOMMENDATION},
-                "metadata": {"admission": admitted},
+                "metadata": {"admission": admitted,
+                    "semantic_passage": {"selection_origin": "proposal_selected",
+                        "spans": [{"block_id": "source-block", "start": 0, "end": len(ADVISEERT)}]}},
             }
         ]
     ) == []
@@ -462,7 +476,9 @@ def test_full_adviseert_recommendation_may_be_allowed_when_contract_complete() -
                 "object_type": "unclassified",
                 "proposed_object_type": "recommendation",
                 "content": {"clean_text": ADVISEERT},
-                "metadata": {"admission": admitted},
+                "metadata": {"admission": admitted,
+                    "semantic_passage": {"selection_origin": "proposal_selected",
+                        "spans": [{"block_id": "source-block", "start": 0, "end": len(ADVISEERT)}]}},
             }
         ]
     )
@@ -564,15 +580,15 @@ def test_boom_path_node_outcome_do_not_get_richtlijn_type_contract_incomplete() 
     assert {row["object_id"] for row in duty} >= {"node-1", "out-1"}
 
 
-def test_legacy_objects_without_admission_remain_in_v219_duty() -> None:
+def test_legacy_objects_without_selection_do_not_gain_content_duty() -> None:
     row = {
         "object_id": "r1",
         "object_type": "unclassified",
         "proposed_object_type": "recommendation",
         "content": {"clean_text": "Bespreek het onderwerp met de zorgvrager."},
     }
-    assert is_slow_review_duty(row) is True
-    assert ordinary_review_queue([row]) == [row]
+    assert is_slow_review_duty(row) is False
+    assert ordinary_review_queue([row]) == []
 
 
 # ---------------------------------------------------------------------------
@@ -606,14 +622,14 @@ def test_ingest_fixture_gates_named_regressions_and_keeps_adviseert(tmp_path: Pa
         eligibility = (passage.get("metadata") or {}).get("candidate_eligibility") or {}
         assert eligibility.get("eligible") is False
     assert ((djg.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
-        "deterministic_proposal_not_evidenced"
+        "semantic_coverage_remainder"
     )
     assert ((false_rec.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
-        "deterministic_proposal_not_evidenced"
+        "semantic_coverage_remainder"
     )
     for passage in (one_word, unresolved, comparison):
         assert ((passage.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
-            "deterministic_no_type_proposal"
+            "semantic_coverage_remainder"
         )
 
     assert _admission(adviseert)["gate_result"] == GATE_ALLOWED
@@ -747,6 +763,8 @@ def test_source_text_exact_comes_from_raw_fragment_not_only_clean_text() -> None
             "content": {"raw_text": dropped, "clean_text": cleaned},
             "structure": {"section_path": ["2 Aanbevelingen"]},
             "metadata": {
+                "semantic_passage": {"selection_origin": "proposal_selected",
+                    "spans": [{"block_id": "source-block", "start": 0, "end": len(dropped)}]},
                 "source_locator": {
                     "locator_type": "web_line_range",
                     "locator_value": "lines:20-20;p:1",

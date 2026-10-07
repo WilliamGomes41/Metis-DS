@@ -109,6 +109,8 @@ def test_http_zero_object_blocked_work_can_reprocess_from_blob(recovery_postgres
     source = MemorySourceStore()
     canonical = PostgresCanonicalPublicationStore(recovery_postgres)
     console = pg_console(tmp_path, recovery_postgres, canonical, source, runtime_name="runtime")
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
     sid = receipt["snapshot_id"]

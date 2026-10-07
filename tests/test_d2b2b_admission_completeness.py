@@ -134,6 +134,8 @@ def test_extract_admission_path_keeps_predicate_missing_separate() -> None:
                 "section_path": ["3. Vaststellen van eenzaamheid"],
             },
             "metadata": {
+                "semantic_passage": {"selection_origin": "proposal_selected",
+                    "spans": [{"block_id": "source-block", "start": 0, "end": len(COMPLETE_DISTINGUISHES)}]},
                 "source_locator": {
                     "locator_type": "page_bbox",
                     "locator_value": "page:1;bbox:1,1,2,2",

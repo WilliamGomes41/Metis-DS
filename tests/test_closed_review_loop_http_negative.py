@@ -30,6 +30,8 @@ def test_wrong_role_repair_post_fails_closed_without_writes(tmp_path):
     publisher = console.create_account(
         username="piet", password="piet-secret", roles=("publisher",)
     )
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = console.ingest(
         actor_id=researcher["account_id"],
         filename="begrippen.html",

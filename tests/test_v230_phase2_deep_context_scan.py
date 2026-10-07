@@ -108,6 +108,16 @@ def _ingest(console: OperationsConsole, accounts: dict, fixture: Path, **overrid
         "named_reviewers": [accounts["reviewer"]["account_id"]],
     }
     kwargs.update(overrides)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console, [
+        (ADVISEERT, "recommendation"),
+        ("De werkgroep adviseert calcium te geven.", "recommendation"),
+        ("De werkgroep adviseert calcium te geven tenzij er hypercalciëmie bestaat.", "recommendation"),
+        ("De werkgroep adviseert de verpleegkundige calciumsuppletie te starten bij iedere intake.", "recommendation"),
+        ("Tenzij er een recente fractuur is vastgesteld.", "exception"),
+        ("Overleg bij een vastgesteld verhoogd fractuurrisico met de cliënt over verwijzing.", "recommendation"),
+        ("De Dutch Job Group (dJG) is een meetinstrument voor werkbelasting.", "definition"),
+    ])
     return console.ingest(**kwargs)
 
 
@@ -616,6 +626,8 @@ def test_source_text_exact_stays_freeze_fragment() -> None:
             "content": {"raw_text": dropped, "clean_text": cleaned},
             "structure": {"section_path": ["2 Aanbevelingen"], "heading": "2 Aanbevelingen"},
             "metadata": {
+                "semantic_passage": {"selection_origin": "proposal_selected",
+                    "spans": [{"block_id": "source-block", "start": 0, "end": len(dropped)}]},
                 "source_locator": {
                     "locator_type": "web_line_range",
                     "locator_value": "lines:20-20;p:1",
@@ -713,11 +725,11 @@ def test_phase2_ingest_records_deep_window_and_wires_scan(tmp_path: Path) -> Non
         assert eligibility.get("eligible") is False
         assert ordinary_review_queue([passage]) == []
     assert ((djg.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
-        "deterministic_proposal_not_evidenced"
+        "semantic_coverage_remainder"
     )
     for passage in (unresolved, comparison):
         assert ((passage.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
-            "deterministic_no_type_proposal"
+            "semantic_coverage_remainder"
         )
 
     calcium = _find_by_text(objects, "adviseert calcium te geven")

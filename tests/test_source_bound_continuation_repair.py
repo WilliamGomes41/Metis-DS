@@ -70,6 +70,9 @@ def _console(tmp_path: Path) -> tuple[OperationsConsole, dict, dict]:
         roles=("reviewer",),
         display_name="Bert Reviewer",
     )
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console, [(MERGED, "recommendation"),
+        ("Eenzaamheid is een gevoel van gemis.", "definition")])
     return console, researcher, reviewer
 
 

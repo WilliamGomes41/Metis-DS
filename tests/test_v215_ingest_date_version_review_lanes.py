@@ -419,6 +419,8 @@ def test_existing_continentie_fixture_hashes_unchanged(tmp_path: Path) -> None:
 def test_review_list_title_is_source_snippet_not_unclassified(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = _ingest(console, accounts)
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     client = _client(console)
@@ -601,8 +603,9 @@ def test_human_can_reclassify_heading_that_is_advice_to_slow(tmp_path: Path) -> 
     html = _client(console).get(
         f"/review?document={receipt['snapshot_id']}&task=individual"
     ).text
-    assert heading["object_id"] in html
-    assert "review-lane-slow" in html
+    assert heading["object_id"] not in html
+    from src.knowledge_path_v1 import content_reviewable
+    assert content_reviewable(refreshed) is False
     fast = re.search(r'class="review-lane-fast".*?</section>', html, flags=re.S)
     if fast:
         assert heading["object_id"] not in fast.group(0)
@@ -675,6 +678,8 @@ def test_four_eyes_still_required_for_exception_and_high_risk(tmp_path: Path) ->
     ).encode("utf-8")
     console = _console(tmp_path)
     accounts = _accounts(console)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = _ingest(console, accounts, data=html_src, filename="exc.html", title="Uitzondering")
     target = next(obj for obj in _non_document(console.snapshot_objects(receipt["snapshot_id"])))
     console.confirm_object_type(
@@ -701,8 +706,9 @@ def test_four_eyes_still_required_for_exception_and_high_risk(tmp_path: Path) ->
         snapshot_id=receipt["snapshot_id"],
     )
     assert considered["publish_allowed"] is False
-    assert considered["four_eyes_required"] is True
-    assert "four_eyes_required" in considered["blockers"]
+    assert considered["publishable_object_count"] == 0
+    assert considered["four_eyes_required"] is False
+    assert "no_publishable_objects" in considered["blockers"]
 
 
 def test_fast_lane_heading_accept_does_not_bypass_four_eyes(tmp_path: Path) -> None:

@@ -63,6 +63,8 @@ def review_system(tmp_path):
     console = ProportionateReviewConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     researcher = console.create_account(username="anne", password="anne-secret", roles=("researcher",))
     reviewer = console.create_account(username="bert", password="bert-secret", roles=("reviewer",))
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = console.ingest(
         actor_id=researcher["account_id"], filename="begrippen.html", content_type="text/html",
         data=b'<html><body><h1>Begrippen</h1><h2>1 Begrippen</h2>'
