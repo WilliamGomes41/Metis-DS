@@ -210,6 +210,12 @@ def validate_revision_write(previous, submitted, *, snapshot_id):
     current_revisions(submitted, snapshot_id=snapshot_id)
     old = {(row["object_id"], row["object_version"]): row for row in previous}
     new = {(row["object_id"], row["object_version"]): row for row in submitted}
+    retained_order = [(row["object_id"], row["object_version"]) for row in submitted
+                      if (row["object_id"], row["object_version"]) in old
+                      and knowledge_revision(old[(row["object_id"], row["object_version"])])]
+    original_order = [identity for identity, row in old.items() if knowledge_revision(row)]
+    if retained_order != original_order:
+        raise ValueError("revision_history_reordered")
     for identity, before in old.items():
         after = new.get(identity)
         if not knowledge_revision(before):

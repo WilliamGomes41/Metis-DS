@@ -81,3 +81,167 @@ def test_stale_review_writes_nothing(tmp_path):
     with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
         _approve(console, reviewer, sid, obj, expected_revision=stale)
     assert console.snapshot_objects(sid, include_blocked=True) == rows
+
+
+def test_forward_cutover_chain_and_old_approval_does_not_carry(tmp_path):
+    from src.revision_workflow import current_revisions, LINEAGE_CONTRACT
+    console, _, reviewer, source, before, command = _system(tmp_path)
+    sid = command["snapshot_id"]
+    initial = deepcopy(console.snapshot_objects(sid, include_blocked=True))
+    console.confirm_source_context(**command)
+    first = current(console, sid, before["object_id"])
+    edge = first["metadata"]["revision_lineage"]
+    assert edge["contract"] == LINEAGE_CONTRACT
+    assert edge["previous_lineage"] == "legacy_unverified"
+    assert edge["previous_canonical_object_hash"] == compute_canonical_object_hash(before)
+    assert edge["snapshot_id"] == sid
+    console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
+        object_id=before["object_id"], decision="approve", confirmed_object_type="definition",
+        relation_review_ack=True)
+    approved = deepcopy(current(console, sid, before["object_id"]))
+    old_bindings = deepcopy(console.object_review_bindings(sid))
+    assert exact_current_approver_ids(approved, old_bindings)
+    console.confirm_source_context(**{**command, "command_id": "context-second", "reason": "Herbevestigd",
+                                    "expected_revision": console.objects_revision(sid)})
+    successor = current(console, sid, before["object_id"])
+    assert successor["provenance"]["previous_object_version"] == approved["object_version"]
+    assert successor["metadata"]["revision_lineage"]["previous_lineage"] == "strict"
+    assert exact_current_approver_ids(successor, old_bindings) == ()
+    rows = console.snapshot_objects(sid, include_blocked=True)
+    assert approved in rows
+    assert all(obj in rows for obj in initial)
+    assert current_revisions(rows, snapshot_id=sid) == console.snapshot_objects(sid)
+    from src.review_closure_v1 import ReviewClosureConsole
+    restarted = ReviewClosureConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    assert restarted.snapshot_objects(sid, include_blocked=True) == rows
+
+
+@pytest.mark.parametrize("corruption", ["missing", "hash", "cycle", "scope", "downgrade", "inplace"])
+def test_strict_history_corruption_is_rejected_without_writes(tmp_path, corruption):
+    from src.revision_workflow import current_revisions, validate_revision_write
+    from src.integrity_kernel import stamp_canonical_hashes
+    console, reviewer, sid, obj = _console(tmp_path)
+    _approve(console, reviewer, sid, obj)
+    rows = console.snapshot_objects(sid, include_blocked=True)
+    changed = deepcopy(rows)
+    last = next(o for o in reversed(changed) if o["object_id"] == obj["object_id"])
+    edge = last["metadata"]["revision_lineage"]
+    if corruption == "missing":
+        changed = [o for o in changed if not (o["object_id"] == obj["object_id"]
+                    and o["object_version"] == edge["previous_object_version"])]
+    elif corruption == "hash":
+        edge["previous_canonical_object_hash"] = "0" * 64
+    elif corruption == "cycle":
+        edge["previous_object_version"] = last["object_version"]
+    elif corruption == "scope":
+        edge["snapshot_id"] = "other-working-revision"
+    elif corruption == "downgrade":
+        last["metadata"].pop("revision_lineage")
+    else:
+        last["content"]["clean_text"] += " Changed."
+    stamp_canonical_hashes(last)
+    with pytest.raises(ValueError):
+        validate_revision_write(rows, changed, snapshot_id=sid)
+    assert console.snapshot_objects(sid, include_blocked=True) == rows
+
+
+def test_legacy_unknown_is_not_proven_root_and_new_edge_is_exact(tmp_path):
+    from src.revision_workflow import revise_object, current_revisions
+    from src.integrity_kernel import stamp_canonical_hashes
+    console, _, sid, original = _console(tmp_path)
+    legacy = deepcopy(original)
+    legacy["object_version"] = "1.0.1"
+    stamp_canonical_hashes(legacy)
+    desired = deepcopy(legacy)
+    desired["content"]["clean_text"] += " Mutatie."
+    strict = revise_object(legacy, desired, snapshot_id=sid, actor="reviewer", reason="explicit correction")
+    assert strict["object_version"] == "1.0.2"
+    assert strict["provenance"]["previous_object_version"] == "1.0.1"
+    assert strict["metadata"]["revision_lineage"]["previous_lineage"] == "legacy_unverified"
+    assert current_revisions([legacy, strict], snapshot_id=sid) == [strict]
+    assert legacy["provenance"]["previous_object_version"] is None
+
+
+def test_relation_supersedes_is_not_a_revision_predecessor(tmp_path):
+    from src.revision_workflow import revise_object
+    console, _, sid, original = _console(tmp_path)
+    desired = deepcopy(original)
+    desired["relations"] = [{"relation_type": "supersedes", "target_object_id": "different-object"}]
+    strict = revise_object(original, desired, snapshot_id=sid, actor="reviewer", reason="relation confirmation")
+    assert strict["provenance"]["previous_object_version"] == original["object_version"]
+    assert strict["metadata"]["revision_lineage"]["object_id"] == original["object_id"]
+    assert strict["relations"] == desired["relations"]
+
+
+from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: E402,F401
+
+
+def test_native_lineage_stale_fork_restart_and_reader_parity(recovery_postgres, tmp_path):
+    from src.revision_workflow import revise_object, current_revisions
+    from tests.test_lifecycle_withdrawal_recovery_v1 import _console as native_console
+    from tests.test_publication_chain_recovery_v1 import FakeBlobStore
+    from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+    blob = FakeBlobStore()
+    state = native_console(tmp_path, recovery_postgres, blob)
+    state, _, _, source, before, command = _system(tmp_path, state)
+    sid = command["snapshot_id"]
+    store = state.workflow_document_store
+    old_rows = deepcopy(store.list_document_objects(sid))
+    stale = store.objects_revision(sid)
+    state.confirm_source_context(**command)
+    committed = deepcopy(store.list_document_objects(sid))
+    after = current(state, sid, before["object_id"])
+    assert before in committed
+    assert after["metadata"]["revision_lineage"]["previous_canonical_object_hash"] == compute_canonical_object_hash(before)
+    # Attempt a different successor version from the same stale predecessor.
+    desired = deepcopy(before)
+    desired["object_version"] = "2.0"
+    desired["content"]["clean_text"] += " stale fork"
+    fork = revise_object(before, desired, snapshot_id=sid, actor="stale", reason="correction")
+    with pytest.raises((ValueError, WorkflowDocumentStoreError)):
+        store.write_bundle(envelope=state._envelope(sid), objects=old_rows + [fork],
+                           expected_revision=stale)
+    assert store.list_document_objects(sid) == committed
+    assert store.list_current_objects_batch([sid])[sid] == current_revisions(committed, snapshot_id=sid)
+    root = tmp_path / "restarted"
+    root.mkdir()
+    restarted = native_console(root, recovery_postgres, blob)
+    assert restarted.snapshot_objects(sid, include_blocked=True) == committed
+    assert restarted.confirm_source_context(**command)["idempotent"]
+
+
+def test_native_deferred_failure_rolls_back_strict_revision_and_review(recovery_postgres, tmp_path):
+    import psycopg
+    from src.review_ledger import read_events
+    from tests.test_lifecycle_withdrawal_recovery_v1 import _console as native_console
+    from tests.test_publication_chain_recovery_v1 import FakeBlobStore
+    state = native_console(tmp_path, recovery_postgres, FakeBlobStore())
+    state, _, _, _, _, command = _system(tmp_path, state)
+    sid = command["snapshot_id"]
+    rows = deepcopy(state.snapshot_objects(sid, include_blocked=True))
+    events = deepcopy(read_events(state._ledger_path))
+    bindings = deepcopy(state.object_review_bindings(sid))
+    with psycopg.connect(recovery_postgres.dsn) as connection:
+        connection.execute("CREATE FUNCTION workflow.fail_t11() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 't11_commit_failure'; END; $$")
+        connection.execute("CREATE CONSTRAINT TRIGGER fail_t11 AFTER INSERT ON workflow.document_objects DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION workflow.fail_t11()")
+    try:
+        with pytest.raises(Exception, match="t11_commit_failure"):
+            state.confirm_source_context(**command)
+        assert state.snapshot_objects(sid, include_blocked=True) == rows
+        assert state.object_review_bindings(sid) == bindings
+        assert read_events(state._ledger_path) == events
+    finally:
+        with psycopg.connect(recovery_postgres.dsn) as connection:
+            connection.execute("DROP TRIGGER fail_t11 ON workflow.document_objects")
+            connection.execute("DROP FUNCTION workflow.fail_t11()")
+
+
+def test_legacy_history_reorder_cannot_restore_old_current_approval(tmp_path):
+    from src.revision_workflow import validate_revision_write
+    from src.integrity_kernel import stamp_canonical_hashes
+    console, _, sid, first = _console(tmp_path)
+    second = deepcopy(first)
+    second["object_version"] = "1.0.1"
+    stamp_canonical_hashes(second)
+    with pytest.raises(ValueError, match="revision_history_reordered"):
+        validate_revision_write([first, second], [second, first], snapshot_id=sid)
