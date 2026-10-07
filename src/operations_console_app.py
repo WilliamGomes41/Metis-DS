@@ -5449,6 +5449,8 @@ def create_console_app(
             raise ConsoleError("review_comment_required")
         if (suitability or "").strip() not in SUITABILITY_VALUES:
             raise ConsoleError("suitability_required")
+        if not snapshot_revision.strip():
+            raise ConsoleError("snapshot_revision_required")
         if type_action == "dit_klopt" and not confirmed_object_type.strip():
             confirmed_object_type = proposed_object_type
         current_rows = state.snapshot_objects(snapshot_id)
@@ -5783,6 +5785,8 @@ def create_console_app(
         interaction_id: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
+        if not snapshot_revision.strip():
+            raise ConsoleError("snapshot_revision_required")
         current_rows = state.snapshot_objects(snapshot_id)
         focal = next(
             (row for row in current_rows if row.get("object_id") == object_id),

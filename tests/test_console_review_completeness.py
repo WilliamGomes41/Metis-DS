@@ -425,6 +425,7 @@ def test_type_confirm_succeeds_after_open_original(tmp_path: Path) -> None:
         data={
             "snapshot_id": receipt["snapshot_id"],
             "object_id": target["object_id"],
+            "snapshot_revision": console.objects_revision(receipt["snapshot_id"]),
             "decision": "approve",
             "confirmed_object_type": "explanation",
             "suitability": "ja",

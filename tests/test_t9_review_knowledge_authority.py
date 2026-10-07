@@ -502,3 +502,32 @@ def test_direct_review_post_requires_the_reviewed_revision(tmp_path, pin):
     response = client.post("/review", data=payload, follow_redirects=False)
     assert response.status_code == 400
     assert _state(console, sid) == before
+
+
+@pytest.mark.parametrize("pin", [None, "", "   ", "current"])
+def test_second_review_post_requires_the_reviewed_revision(tmp_path, pin):
+    console, reviewer, sid, obj = _console(tmp_path)
+    second = console.create_account(username="carla", password="carla-secret", roles=("reviewer",))
+    console._envelopes[sid]["named_reviewers"].append(second["account_id"])
+    console._save_envelopes()
+    rows = console._load_objects(sid)
+    target = next(o for o in rows if o["object_id"] == obj["object_id"])
+    target["risk"]["risk_level"] = "high"
+    stamp_canonical_hashes(target)
+    console._save_objects(sid, rows)
+    _approve(console, reviewer, sid, target, expected_revision=console.objects_revision(sid))
+    client = _http(console)
+    client.post("/login", data={"username": "carla", "password": "carla-secret"})
+    before = _state(console, sid)
+    payload = {"snapshot_id": sid, "object_id": obj["object_id"], "action": "approve"}
+    if pin is not None:
+        payload["snapshot_revision"] = console.objects_revision(sid) if pin == "current" else pin
+    response = client.post("/review/second-review", data=payload, follow_redirects=False)
+    if pin == "current":
+        assert response.status_code == 303
+        current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
+        assert set(exact_current_approver_ids(current, console.object_review_bindings(sid))) == {
+            reviewer["account_id"], second["account_id"]}
+    else:
+        assert response.status_code == 400
+        assert _state(console, sid) == before

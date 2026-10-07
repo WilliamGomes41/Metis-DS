@@ -85,3 +85,6 @@ All review relation changes are prepared before the final pinned commit. Stale c
 PR: #532. CI and a separate T9 audit are required before release consideration.
 
 The adversarial acceptance matrix also exercises direct console denial for blocked/deterministic/coverage/heading/malformed rows, actual first/independent-second commands, forbidden reviewer-account aliases, and explicit cross-domain binding exclusion. Legacy bindings without a domain retain their exact-current contract; a binding explicitly recorded for another domain cannot authorize richtlijn KnowledgeCandidate review.
+
+## Closing HTTP concurrency audit
+On tests-only head 8cfe5b0a6798d816ea9f021e70ce9030a2875eda, GitHub CI run 37651082783 showed three genuine RED cases: omitted, empty and whitespace snapshot_revision on POST /review all returned 303 instead of refusing review (44 existing T9 cases passed). The HTTP first/second review boundaries now require the existing snapshot_revision pin before mutation, matching the existing normal-risk batch boundary. The kernel rechecks that revision under the existing atomic mutation/store transaction. Trusted Python compatibility helpers retain their existing optional argument; public content-review forms cannot discard the reviewed revision. No new authority/store or T10–T12 lifecycle was introduced.
