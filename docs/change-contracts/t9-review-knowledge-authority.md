@@ -29,11 +29,11 @@ Baseline tests exercise direct apply_reviews on blocked/deterministic/coverage/h
 Current main before T9: 0e312a151907afef743f4ca4b65d924f5d56ffb0, merged PR #529, T8 implementation c98c77127ce8d8f68746d7c42a3e03c2f51ba33f. Existing creator/materialisation/Admission/source command boundaries inspected on that exact main. T9 works only on t9-review-knowledge-authority. No merge authorized.
 
 ## Machine-readable contract
-T9 closes review authority on exact current materialised and admitted richtlijn candidates. Tests preceded production changes. Implementation and compatibility verification are in progress on draft PR #532.
+T9 closes review authority on exact current materialised and admitted richtlijn candidates. Tests preceded production changes. Implementation and compatibility evidence are recorded on PR #532; this contract does not grant merge authority.
 
 Change class: A
 Promise: One kernel candidate → ReviewDuty → authorized command → exact binding boundary.
-Proof: tests/test_t9_review_knowledge_authority.py against baseline, then regression and full GitHub CI; 14 RED and 2 GREEN GUARD on baseline; renewal regression RED before its fix; final CI pending.
+Proof: tests/test_t9_review_knowledge_authority.py against baseline, then regression and full GitHub CI; 14 RED and 2 GREEN GUARD on baseline; renewal regression RED before its fix; final-head acceptance and CI results are recorded on PR #532.
 Touches lifecycle invariants: yes
 Rewrite risk: high
 Rewrite target: Existing ReviewDuty readers and review command boundary, with no new store or lifecycle.
@@ -74,7 +74,7 @@ Baseline main: 0e312a151907afef743f4ca4b65d924f5d56ffb0 (merged #529).
 Branch: t9-review-knowledge-authority.
 Contract: docs/change-contracts/t9-review-knowledge-authority.md.
 
-T9: NOT DONE
+T9 result: see the exact-head evidence report on PR #532.
 Merge nieuwe T9-PR: NO-GO
 
 ## Storage and concurrency refinement
@@ -83,3 +83,5 @@ The existing PostgreSQL UNIQUE tuple already represents one authorization per ex
 All review relation changes are prepared before the final pinned commit. Stale conflicts skip restorative writes in file/document/review adapters, preserving competing writers. File-backed commands reload durable envelope and bindings while holding the store lock, so a second worker cannot authorize against an old in-memory approval view.
 
 PR: #532. CI and a separate T9 audit are required before release consideration.
+
+The adversarial acceptance matrix also exercises direct console denial for blocked/deterministic/coverage/heading/malformed rows, actual first/independent-second commands, forbidden reviewer-account aliases, and explicit cross-domain binding exclusion. Legacy bindings without a domain retain their exact-current contract; a binding explicitly recorded for another domain cannot authorize richtlijn KnowledgeCandidate review.
