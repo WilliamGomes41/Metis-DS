@@ -13,7 +13,7 @@ Trigger: named human submits a review decision with current revision/hash/versio
 Validation: candidate integrity, allowed Admission, open current duty, actor policy/stage authorization, expected revision and exact tuple.
 Success: object governance, exact binding, reconstructable review ledger and working revision commit together through existing snapshot/store transaction.
 Failure: no object/binding/ledger authority commits. Concurrent stale submissions fail closed. A duplicate approval cannot count twice or reclassify a completed candidate.
-Mutable owner: existing WorkingRevision kernel/store transaction. Immutable evidence: historical source, decisions and exact bindings; no rewriting of old evidence.
+Mutable owner: existing WorkingRevision kernel/store transaction. Immutable evidence: historical source, decisions and distinct exact tuples. Existing authorization validity is a mutable projection: only a new authorized review may renew a withdrawn identical tuple; the original record remains and each decision has immutable ledger evidence.
 Release/serving state: unchanged. No deployment or merge.
 
 ## Boundaries and topologies
@@ -23,17 +23,17 @@ Structure confirmation remains separate QA. Source disposition remains source ev
 No T10 source-accountability redesign, T11 durable KnowledgeUnit revision lifecycle or T12 publication-readiness redesign. Changed reviewable content invalidates exact-current authority while preserving history. Existing policy, independent second-review and forbidden agent rules remain enforced. Rollback reverts this follow-up branch; no baseline or data migration.
 
 ## Proof matrix
-Baseline tests exercise direct apply_reviews on blocked/deterministic/coverage/heading/malformed rows, unstamped text/spans/context/type/relations changes, generator bindings, completed-candidate reclassification, general queue closure, failed commit ledger leakage, stale revision and valid exact approval/reject semantics. RED versus GREEN GUARD classification will be recorded from baseline CI before production changes. Subsequent proof includes queue parity, direct POST, source/structure/boom separation, four-eyes, duplicate submits, existing T4/T7/T8/T7R and full GitHub CI.
+Baseline tests exercise direct apply_reviews on blocked/deterministic/coverage/heading/malformed rows, unstamped text/spans/context/type/relations changes, generator bindings, completed-candidate reclassification, general queue closure, failed commit ledger leakage, stale revision and valid exact approval/reject semantics. Tests-only baseline 45cfc121edaf33f265a787fe2d270840690c15e1 / run 37623790345 demonstrates 14 RED and 2 GREEN GUARD. A separate tests-only renewal regression 9f2c5497afda0d4cfc0995bf9ade4c6893d12a38 / run 37633383488 demonstrates 1 RED and 23 passing checks before the renewal fix. Later tests are additional acceptance coverage, not retrospectively labelled baseline RED. Subsequent proof includes queue parity, direct POST, source/structure/boom separation, four-eyes, duplicate submits, existing T4/T7/T8/T7R and full GitHub CI.
 
 ## Baseline
 Current main before T9: 0e312a151907afef743f4ca4b65d924f5d56ffb0, merged PR #529, T8 implementation c98c77127ce8d8f68746d7c42a3e03c2f51ba33f. Existing creator/materialisation/Admission/source command boundaries inspected on that exact main. T9 works only on t9-review-knowledge-authority. No merge authorized.
 
 ## Machine-readable contract
-T9 closes review authority on exact current materialised and admitted richtlijn candidates. Tests precede production changes; implementation is pending.
+T9 closes review authority on exact current materialised and admitted richtlijn candidates. Tests preceded production changes. Implementation and compatibility verification are in progress on draft PR #532.
 
 Change class: A
 Promise: One kernel candidate → ReviewDuty → authorized command → exact binding boundary.
-Proof: tests/test_t9_review_knowledge_authority.py against baseline, then regression and full GitHub CI; baseline results pending.
+Proof: tests/test_t9_review_knowledge_authority.py against baseline, then regression and full GitHub CI; 14 RED and 2 GREEN GUARD on baseline; renewal regression RED before its fix; final CI pending.
 Touches lifecycle invariants: yes
 Rewrite risk: high
 Rewrite target: Existing ReviewDuty readers and review command boundary, with no new store or lifecycle.
@@ -53,7 +53,7 @@ Initial durable state: Source-valid materialised candidate, allowed Admission, c
 Trigger: Named human submits review decision.
 Authorization: Existing roles, named reviewers, policy stage, independent human reviewer, forbidden agents.
 Validation: Source integrity, allowed Admission, current ReviewDuty, current revision and exact tuple.
-Mutable entities: Existing working objects/governance, review bindings and ledger within snapshot store transaction.
+Mutable entities: Existing working objects/governance and binding validity within snapshot store transaction; review ledger is append-only.
 Immutable entities: Source bytes, historical revisions and review evidence, published releases.
 Workflow state before: Admitted candidate with required content ReviewDuty.
 Workflow state after: Exact approve/reject/revise/later evidence, optional independent second duty; non-approval gives no authority.
@@ -76,3 +76,10 @@ Contract: docs/change-contracts/t9-review-knowledge-authority.md.
 
 T9: NOT DONE
 Merge nieuwe T9-PR: NO-GO
+
+## Storage and concurrency refinement
+The existing PostgreSQL UNIQUE tuple already represents one authorization per exact approval. `record_authorization` preserves distinct historical tuples and the original identical tuple record, updating only validity after an explicitly authorized renewal. Reassigning a reviewer does not renew it. Ledger and participation history retain decisions and withdrawn evidence. No schema/migration is required.
+
+All review relation changes are prepared before the final pinned commit. Stale conflicts skip restorative writes in file/document/review adapters, preserving competing writers. File-backed commands reload durable envelope and bindings while holding the store lock, so a second worker cannot authorize against an old in-memory approval view.
+
+PR: #532. CI and a separate T9 audit are required before release consideration.

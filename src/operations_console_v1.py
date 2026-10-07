@@ -2997,6 +2997,7 @@ class OperationsConsole:
     def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
         """Rollback object/binding/envelope writes together with ledger evidence."""
         with self._store_write_lock():
+            self._reload_store_locked()
             path = self._objects_path(snapshot_id)
             prior_objects = path.read_bytes() if path.exists() else None
             prior_envelopes = deepcopy(self._envelopes)

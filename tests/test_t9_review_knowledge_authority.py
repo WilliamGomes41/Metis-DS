@@ -399,3 +399,14 @@ def test_native_stale_review_does_not_attempt_a_restorative_write(workflow_postg
     assert store.list_document_objects(sid) == before
     assert console.workflow_review_store.read_bindings() == bindings
     assert console.workflow_review_store.read_events() == events
+
+
+def test_second_worker_rechecks_durable_bindings_before_duplicate_submit(tmp_path):
+    console, reviewer, sid, obj = _console(tmp_path)
+    second = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    _approve(console, reviewer, sid, obj, expected_revision=console.objects_revision(sid))
+    current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
+    before = _state(console, sid)
+    _approve(second, reviewer, sid, current, expected_revision=second.objects_revision(sid))
+    assert _state(console, sid) == before
+    assert len(second.object_review_bindings(sid)) == 1
