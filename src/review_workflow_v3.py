@@ -20,7 +20,7 @@ def read_jsonl(p:Path)->list[dict[str,Any]]:
 def write_jsonl(p:Path,rows:list[dict[str,Any]])->None:
     p.parent.mkdir(parents=True,exist_ok=True); p.write_text(''.join(json.dumps(x,ensure_ascii=False,sort_keys=True)+'\n' for x in rows),encoding='utf-8')
 
-def apply_reviews(objects:list[dict[str,Any]], decisions:list[dict[str,Any]], *, track:str, schema_path:Path,
+def _apply_review_state(objects:list[dict[str,Any]], decisions:list[dict[str,Any]], *, track:str, schema_path:Path,
                   ledger_path:Path|None=None)->tuple[list[dict[str,Any]],dict[str,Any]]:
     by={d['object_id']:d for d in decisions}; out=[]; errors=[]; stats={"approved":0,"revise":0,"rejected":0,"pending":0,"snapshot_mismatch":0}
     for original in objects:
@@ -70,6 +70,41 @@ def apply_reviews(objects:list[dict[str,Any]], decisions:list[dict[str,Any]], *,
     report={'track':track,'input_objects':len(objects),'decision_rows':len(decisions),'stats':stats,'errors':errors,
             'complete':stats['pending']==0 and stats['snapshot_mismatch']==0 and not errors}
     return out,report
+
+def apply_reviews(objects:list[dict[str,Any]], decisions:list[dict[str,Any]], *, track:str, schema_path:Path,
+                  ledger_path:Path|None=None, review_path:str="richtlijn", bindings=(),
+                  fragments=None, reviewer_accounts=None)->tuple[list[dict[str,Any]],dict[str,Any]]:
+    """Review only with current domain inputs; raw JSONL/queue visibility is insufficient.
+
+    Console commands validate current snapshot ownership and named actors before
+    preparing their transition. The legacy state transformer is private and gives
+    no binding authority. Standalone content calls fail closed without source and
+    actor inputs.
+    """
+    from src.review_duty_v1 import FIRST_REVIEW, reviewer_route_for
+    from src.four_eyes_v1 import reviewer_is_agent
+    accounts = reviewer_accounts or {}
+    bound = tuple(bindings)
+    source = tuple(fragments) if fragments is not None else None
+    errors = []
+    by_id = {row["object_id"]: row for row in objects}
+    for decision in decisions:
+        obj = by_id.get(decision.get("object_id"))
+        account = accounts.get(str(decision.get("reviewer") or ""))
+        if obj is None:
+            errors.append({"error": "review_rows_without_object", "object_id": decision.get("object_id")})
+            continue
+        if not account or reviewer_is_agent(account):
+            errors.append({"object_id": obj["object_id"], "error": "authorized_reviewer_required"})
+            continue
+        route = reviewer_route_for(obj, review_path=review_path, bindings=bound,
+                                   fragments=source, reviewer_id=str(account.get("account_id") or ""))
+        if not route or not route["actionable"] or route["stage"] != FIRST_REVIEW:
+            errors.append({"object_id": obj["object_id"], "error": "content_duty_required"})
+    if errors:
+        return deepcopy(objects), {"track": track, "input_objects": len(objects),
+            "decision_rows": len(decisions), "stats": {}, "errors": errors, "complete": False}
+    return _apply_review_state(objects, decisions, track=track, schema_path=schema_path, ledger_path=ledger_path)
 
 def main()->int:
     ap=argparse.ArgumentParser(); ap.add_argument('--input',type=Path,required=True); ap.add_argument('--decisions',type=Path,required=True)

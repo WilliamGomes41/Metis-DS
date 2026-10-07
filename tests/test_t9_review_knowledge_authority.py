@@ -20,7 +20,7 @@ from src.proportionate_review_v1 import regular_review_queue
 from src.review_duty_v1 import exact_current_approver_ids, reviewer_route_for
 from src.review_workflow_v3 import apply_reviews
 from tests.semantic_fixture_support import bind_fixture_selections
-from test_t4_single_knowledge_path_invariants import _allowed_candidate, _binding
+from test_t4_single_knowledge_path_invariants import _allowed_candidate, _allowed_source, _binding
 
 
 def _console(tmp_path):
@@ -95,7 +95,7 @@ def test_binding_iterator_cannot_make_existing_approver_actionable():
     obj["risk"] = {"risk_level": "high", "requires_second_review": True}
     stamp_canonical_hashes(obj)
     binding = _binding(obj, "bert")
-    route = reviewer_route_for(obj, review_path="richtlijn", reviewer_id="bert", bindings=iter([binding]))
+    route = reviewer_route_for(obj, review_path="richtlijn", reviewer_id="bert", bindings=iter([binding]), fragments=_allowed_source())
     assert route and not route["actionable"]
     assert route["current_approver_ids"] == ["bert"]
 

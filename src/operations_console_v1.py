@@ -20,6 +20,7 @@ import uuid
 import time
 import zipfile
 from contextlib import contextmanager, nullcontext, suppress
+from contextvars import ContextVar
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
@@ -105,7 +106,7 @@ from src.open_original_v1 import OpenOriginalError, open_source_passage, researc
 from src.publish_authorization_v1 import invalidate_for_object, still_matches, tuple_record
 from src.review_ledger import append_event, read_events
 from src.review_interaction_v1 import validate_review_interaction_identity
-from src.review_workflow_v3 import apply_reviews
+from src.review_workflow_v3 import _apply_review_state
 from src.revision_workflow import bump_patch, create_revision
 from src.retrieval.retrieval_projection_v2 import build_projection
 from src.published_projection_v1 import atomic_replace_projection
@@ -440,6 +441,8 @@ def review_stacks(
     inhoud = [obj for obj in rows if review_lane(obj, review_path=review_path) != "fast"]
     return koppen, inhoud
 
+
+_STRUCTURE_CONFIRMATION = ContextVar("metis_structure_confirmation", default=False)
 
 SLOW_REVIEW_DUTY_TYPES = frozenset({"recommendation", "condition", "exception"})
 SLOW_BOOM_DUTY_TYPES = frozenset({"node", "outcome"})
@@ -2454,6 +2457,19 @@ class OperationsConsole:
             raise ConsoleError("source_lineage_unavailable") from exc
         if not source_lineage_resolves(target, fragments=fragments):
             raise ConsoleError("source_lineage_incomplete")
+        return fragments
+
+    def review_source_fragments(self, snapshot_id):
+        """Call-local authoritative extraction for content-duty readers."""
+        envelope = self._envelope(snapshot_id)
+        if review_path_for_klasse(envelope["class"]) == "boom":
+            return None
+        try:
+            source_path, _ = self._verified_source_bytes(envelope)
+            return self._read_source_fragments(envelope, source_path)
+        except (ConsoleError, ValueError, OSError):
+            # A reader may show repair/disposition, never content authority.
+            return None
 
     def _fragments_and_spec(
         self,
@@ -3011,8 +3027,8 @@ class OperationsConsole:
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
+        current_revision = self.objects_revision(snapshot_id)
         if expected_revision is not None:
-            current_revision = self.objects_revision(snapshot_id)
             if current_revision != expected_revision:
                 raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=current_revision)
         from src.review_policy_v1 import object_policy
@@ -3053,30 +3069,41 @@ class OperationsConsole:
         apply_type = bool(confirmed_object_type)
         review_path = review_path_for_klasse(envelope["class"])
         binding_authority = self.object_review_bindings(snapshot_id)
-        current_duty = review_duty_for(
-            target,
-            review_path=review_path,
-            bindings=binding_authority,
-        )
-        if (
-            current_duty
-            and current_duty.get("stage") == SECOND_REVIEW
-            and decision != "revise"
-        ):
-            raise ConsoleError("second_review_command_required")
-        from src.knowledge_path_v1 import content_reviewable
-        if (review_path != "boom" and current_duty is None and decision == "approve"
-                and not content_reviewable(target)):
-            from src.knowledge_path_v1 import is_structural_projection
-            from src.source_accountability_v1 import is_source_record
-            structure_confirm = (
-                str(confirmed_object_type or "").strip() in {"heading", "path"}
-                and is_structural_projection(target)
-            )
-            if not structure_confirm and not is_source_record(target) and not is_structural_projection(target):
+        from src.knowledge_path_v1 import content_reviewable, is_structural_projection
+        from src.source_accountability_v1 import is_source_record
+        source_fragments = None
+        if review_path != "boom" and content_reviewable(target):
+            source_fragments = self._require_resolved_candidate_source(envelope, target)
+        current_duty = review_duty_for(target, review_path=review_path,
+                                      bindings=binding_authority, fragments=source_fragments)
+        route = reviewer_route_for(target, review_path=review_path, reviewer_id=actor_id,
+                                   bindings=binding_authority, fragments=source_fragments)
+        review_domain = "content"
+        if review_path != "boom":
+            if is_structural_projection(target):
+                review_domain = "structure"
+                if decision == "approve" and not (
+                    _STRUCTURE_CONFIRMATION.get() and str(confirmed_object_type or "") == "heading"
+                ):
+                    raise ConsoleError("structure_confirmation_command_required")
+            elif is_source_record(target):
+                review_domain = "source_disposition"
+                if decision == "approve" or apply_type:
+                    raise ConsoleError("source_context_not_knowledge")
+            elif not content_reviewable(target) or decision == "revise":
+                review_domain = "technical_repair"
+            if decision == "approve" and review_domain != "structure":
                 if is_admission_blocked(target, review_path=review_path):
                     raise ConsoleError("blocked_candidate_not_reviewable")
+                if not current_duty:
+                    raise ConsoleError("content_duty_required")
+            if review_domain == "content" and (
+                not current_duty or not route or not route.get("actionable")
+            ):
                 raise ConsoleError("content_duty_required")
+        if (current_duty and current_duty.get("stage") == SECOND_REVIEW
+                and decision != "revise"):
+            raise ConsoleError("second_review_command_required")
         if decision == "approve" or apply_type:
             if review_path != "boom" and content_reviewable(target):
                 self._require_resolved_candidate_source(envelope, target)
@@ -3423,12 +3450,12 @@ class OperationsConsole:
         if interaction_evidence is not None and decision != "later":
             payload["review_interaction"] = deepcopy(interaction_evidence)
         interaction_atomic = interaction_evidence is not None and decision != "later"
-        updated, report = apply_reviews(
+        updated, report = _apply_review_state(
             current,
             [payload],
             track=track,
             schema_path=self.schema_path,
-            ledger_path=None if interaction_atomic else self._ledger_path,
+            ledger_path=None,
         )
         if report["errors"]:
             raise ConsoleError("review_failed", json.dumps(report["errors"], ensure_ascii=False))
@@ -3517,11 +3544,8 @@ class OperationsConsole:
                 binding["suitability"] = passage_meta.get("suitability")
                 binding["eindoordeel"] = passage_meta.get("eindoordeel")
                 binding["documentpositie"] = passage_meta.get("documentpositie")
-            rows = [
-                item
-                for item in new_bindings.get(snapshot_id, [])
-                if not (item.get("object_id") == object_id and item.get("reviewer_id") == actor_id)
-            ]
+            # Retain historical exact tuples. Current authority matches only this tuple.
+            rows = list(new_bindings.get(snapshot_id, []))
             rows.append(binding)
             new_bindings[snapshot_id] = rows
         else:
@@ -3530,7 +3554,7 @@ class OperationsConsole:
                 object_id,
             )
         ledger_fn = None
-        if interaction_atomic:
+        if decision != "later":
             ledger_details = {
                 "review_snapshot_hash": str(
                     payload.get("reviewed_canonical_object_hash") or ""
@@ -3539,11 +3563,15 @@ class OperationsConsole:
                 "proposed_correction": str(proposed_correction or ""),
                 "snapshot_id": snapshot_id,
                 "review_interaction": deepcopy(interaction_evidence),
+                "reviewer_id": actor_id,
+                "confirmed_object_type": updated_target.get("confirmed_object_type"),
+                "review_domain": review_domain,
                 "quality_evidence": review_evidence(envelope, quality_before, updated_target),
             }
             ledger_fn = lambda: append_event(
                 self._ledger_path,
-                event_type=f"{track}_review_{decision}",
+                event_type=(f"{track}_review_{decision}" if review_domain == "content"
+                            else f"{review_domain}_{decision}"),
                 object_id=object_id,
                 object_version=str(updated_target.get("object_version") or ""),
                 actor=reviewer["username"],
@@ -3553,8 +3581,8 @@ class OperationsConsole:
             objects=(snapshot_id, history),
             envelopes=new_envelopes,
             bindings=new_bindings,
-            expected_revision=expected_revision,
-            snapshot_id=snapshot_id if interaction_atomic else None,
+            expected_revision=current_revision,
+            snapshot_id=snapshot_id,
             ledger_fn=ledger_fn,
         )
         return deepcopy(updated)
@@ -3577,6 +3605,8 @@ class OperationsConsole:
         """
 
         reviewer = self._require_role(actor_id, "reviewer")
+        if _is_forbidden_identity(reviewer["username"]) or _is_forbidden_identity(reviewer["display_name"]):
+            raise ConsoleError("forbidden_reviewer_identity")
         envelope = self._envelope(snapshot_id)
         if actor_id not in set(envelope.get("named_reviewers") or []):
             raise ConsoleError("reviewer_not_named_on_snapshot")
@@ -3598,11 +3628,13 @@ class OperationsConsole:
         target = next((row for row in objects if row.get("object_id") == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
-        if review_path_for_klasse(envelope["class"]) != "boom":
+        review_path = review_path_for_klasse(envelope["class"])
+        source_fragments = None
+        if review_path != "boom":
             from src.knowledge_path_v1 import content_reviewable
             if not content_reviewable(target):
                 raise ConsoleError("content_duty_required")
-            self._require_resolved_candidate_source(envelope, target)
+            source_fragments = self._require_resolved_candidate_source(envelope, target)
         from src.review_policy_v1 import object_policy, required_reviewers
         policy = object_policy(target)
         if policy != envelope.get("review_policy"):
@@ -3626,6 +3658,11 @@ class OperationsConsole:
             raise ConsoleError("first_review_required")
         if actor_id in set(approvers):
             raise ConsoleError("independent_second_reviewer_required")
+        if review_path != "boom":
+            route = reviewer_route_for(target, review_path=review_path, reviewer_id=actor_id,
+                                       bindings=bindings, fragments=source_fragments)
+            if not route or route["stage"] != SECOND_REVIEW or not route["actionable"]:
+                raise ConsoleError("second_review_not_available")
         self._require_open_original(snapshot_id, object_id)
 
         canonical_hash = compute_canonical_object_hash(target)
@@ -3639,14 +3676,7 @@ class OperationsConsole:
             decision="approve",
         )
         new_bindings = deepcopy(self._bindings)
-        rows = [
-            item
-            for item in new_bindings.get(snapshot_id, [])
-            if not (
-                item.get("object_id") == object_id
-                and item.get("reviewer_id") == actor_id
-            )
-        ]
+        rows = list(new_bindings.get(snapshot_id, []))
         rows.append(binding)
         new_bindings[snapshot_id] = rows
 
@@ -3671,7 +3701,7 @@ class OperationsConsole:
         self._commit_prepared_store(
             objects=(snapshot_id, history),
             bindings=new_bindings,
-            expected_revision=expected_revision,
+            expected_revision=revision,
             snapshot_id=snapshot_id,
             ledger_fn=lambda: append_event(
                 self._ledger_path,
@@ -3752,15 +3782,19 @@ class OperationsConsole:
         updated: list[dict[str, Any]] = []
         pin = expected_revision
         for object_id in ids:
-            rows = self.review_object(
-                actor_id=actor_id,
-                snapshot_id=snapshot_id,
-                object_id=object_id,
-                decision="approve",
-                confirmed_object_type=structure_type,
-                expected_revision=pin,
-                interaction_evidence=interaction_evidence,
-            )
+            token = _STRUCTURE_CONFIRMATION.set(review_path != "boom")
+            try:
+                rows = self.review_object(
+                    actor_id=actor_id,
+                    snapshot_id=snapshot_id,
+                    object_id=object_id,
+                    decision="approve",
+                    confirmed_object_type=structure_type,
+                    expected_revision=pin,
+                    interaction_evidence=interaction_evidence,
+                )
+            finally:
+                _STRUCTURE_CONFIRMATION.reset(token)
             if pin is not None:
                 pin = self.objects_revision(snapshot_id)
             refreshed = next(row for row in rows if row["object_id"] == object_id)

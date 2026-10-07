@@ -68,138 +68,52 @@ def _object_text(obj: dict[str, Any]) -> str:
     return str(content.get("clean_text") or obj.get("candidate_text") or "").strip()
 
 
-def regular_review_queue(
-    objects: Iterable[dict[str, Any]],
-    *,
-    review_path: str,
-) -> list[dict[str, Any]]:
-    """All ordinary reviewable content; priority is not eligibility.
+def regular_review_queue(objects: Iterable[dict[str, Any]], *, review_path: str,
+                         bindings=None, fragments=None) -> list[dict[str, Any]]:
+    """Ordinary content work derives only from the kernel's current duty."""
+    bound = tuple(bindings or ())
+    source = tuple(fragments) if fragments is not None else None
+    return sorted([obj for obj in objects if review_duty_for(
+        obj, review_path=review_path, bindings=bound, fragments=source)],
+        key=review_priority_rank)
 
-    Boom keeps its established hand-duty semantics. For the richtlijn path,
-    every admission-allowed non-structure object has a regular review route.
-    Admission-blocked content stays visible as open disposition work but is
-    not approvable until corrected.
-    """
-    rows = list(objects)
+
+def normal_risk_batch_eligible(obj: dict[str, Any], *, review_path: str,
+                               bindings=None, fragments=None) -> bool:
     if review_path == "boom":
-        return [obj for obj in rows if is_slow_review_duty(obj, review_path=review_path)]
-    from src.knowledge_path_v1 import content_reviewable
-    return sorted(
-        [
-            obj
-            for obj in rows
-            if content_reviewable(obj)
-            and review_lane(obj, review_path=review_path) != "fast"
-        ],
-        key=review_priority_rank,
-    )
+        return False
+    duty = review_duty_for(obj, review_path=review_path, bindings=bindings, fragments=fragments)
+    return bool(duty and duty["stage"] == FIRST_REVIEW and duty["lane"] == LANE_BATCH)
 
 
-def normal_risk_batch_eligible(obj: dict[str, Any], *, review_path: str) -> bool:
-    if review_path == "boom" or obj.get("object_type") == "document":
-        return False
-    from src.knowledge_path_v1 import content_reviewable
-    if not content_reviewable(obj):
-        return False
-    if review_lane(obj, review_path=review_path) == "fast":
-        return False
-    admission = admission_of(obj)
-    if admission.get("gate_result") in {None, GATE_BLOCKED}:
-        return False
-    if admission.get("gate_result") != GATE_ALLOWED:
-        return False
-    if _batch_type(obj) not in NORMAL_RISK_BATCH_TYPES:
-        return False
-    if not _section_key(obj):
-        return False
-    uncertainty = obj.get("uncertainty") if isinstance(obj.get("uncertainty"), dict) else {}
-    if bool(uncertainty.get("has_uncertainty")):
-        return False
-    risk = obj.get("risk") if isinstance(obj.get("risk"), dict) else {}
-    if risk.get("level") == "high" or bool(risk.get("requires_second_review")):
-        return False
-    if requires_four_eyes(obj, confirmed_type=obj.get("confirmed_object_type") or None):
-        return False
-    governance = obj.get("governance") if isinstance(obj.get("governance"), dict) else {}
-    if governance.get("validation_status") not in {None, "needs_review"}:
-        return False
-    return True
+def normal_risk_batch_queue(objects: Iterable[dict[str, Any]], *, review_path: str,
+                            bindings=None, fragments=None) -> list[dict[str, Any]]:
+    bound = tuple(bindings or ())
+    source = tuple(fragments) if fragments is not None else None
+    return sorted([obj for obj in objects if normal_risk_batch_eligible(
+        obj, review_path=review_path, bindings=bound, fragments=source)], key=review_priority_rank)
 
 
-def normal_risk_batch_queue(
-    objects: Iterable[dict[str, Any]],
-    *,
-    review_path: str,
-    bindings: Iterable[dict[str, Any]] | None = None,
-) -> list[dict[str, Any]]:
-    rows = list(objects)
-    if bindings is None:
-        selected = [
-            obj for obj in rows
-            if normal_risk_batch_eligible(obj, review_path=review_path)
-        ]
-    else:
-        selected = []
-        bound = list(bindings)
-        for obj in rows:
-            duty = review_duty_for(
-                obj,
-                review_path=review_path,
-                bindings=bound,
-            )
-            if (
-                duty
-                and duty.get("stage") == FIRST_REVIEW
-                and duty.get("lane") == LANE_BATCH
-            ):
-                selected.append(obj)
-    return sorted(selected, key=review_priority_rank)
-
-
-def normal_risk_batch_counts(
-    objects: Iterable[dict[str, Any]],
-    *,
-    review_path: str,
-    bindings: Iterable[dict[str, Any]] | None = None,
-) -> tuple[int, int]:
-    """Return pending passage and bounded batch counts for task navigation."""
+def normal_risk_batch_counts(objects: Iterable[dict[str, Any]], *, review_path: str,
+                             bindings=None, fragments=None) -> tuple[int, int]:
     groups: dict[tuple[tuple[str, ...], str], int] = defaultdict(int)
-    for obj in normal_risk_batch_queue(
-        objects,
-        review_path=review_path,
-        bindings=bindings,
-    ):
+    for obj in normal_risk_batch_queue(objects, review_path=review_path,
+                                      bindings=bindings, fragments=fragments):
         groups[(_section_key(obj), _batch_type(obj))] += 1
-    passages = sum(groups.values())
-    batches = sum((count + NORMAL_RISK_BATCH_MAX - 1) // NORMAL_RISK_BATCH_MAX for count in groups.values())
-    return passages, batches
+    return sum(groups.values()), sum((count + NORMAL_RISK_BATCH_MAX - 1) // NORMAL_RISK_BATCH_MAX
+                                     for count in groups.values())
 
 
-def regular_individual_review_queue(
-    objects: Iterable[dict[str, Any]],
-    *,
-    review_path: str,
-) -> list[dict[str, Any]]:
-    """Allowed passages that need their own review instead of a batch."""
-    rows = list(objects)
-    batch_ids = {
-        str(obj.get("object_id") or "")
-        for obj in normal_risk_batch_queue(rows, review_path=review_path)
-    }
+def regular_individual_review_queue(objects: Iterable[dict[str, Any]], *, review_path: str,
+                                     bindings=None, fragments=None) -> list[dict[str, Any]]:
     if review_path == "boom":
         return []
-    from src.knowledge_path_v1 import content_reviewable
-    return sorted(
-        [
-            obj
-            for obj in rows
-            if content_reviewable(obj)
-            and review_lane(obj, review_path=review_path) != "fast"
-            and not is_slow_review_duty(obj, review_path=review_path)
-            and str(obj.get("object_id") or "") not in batch_ids
-        ],
-        key=review_priority_rank,
-    )
+    bound = tuple(bindings or ())
+    source = tuple(fragments) if fragments is not None else None
+    return sorted([obj for obj in objects if (
+        duty := review_duty_for(obj, review_path=review_path, bindings=bound, fragments=source)
+    ) and duty["lane"] != LANE_BATCH and not is_slow_review_duty(obj, review_path=review_path)],
+    key=review_priority_rank)
 
 
 def render_normal_risk_batch_panel(
@@ -214,10 +128,12 @@ def render_normal_risk_batch_panel(
     objects, revision = snapshot if snapshot is not None else console.snapshot_objects_and_revision(snapshot_id)
     all_objects = objects
     bindings = _review_bindings_or_legacy(console, snapshot_id)
+    fragments = console.review_source_fragments(snapshot_id)
     queue = normal_risk_batch_queue(
         all_objects,
         review_path=review_path,
         bindings=bindings,
+        fragments=fragments,
     )
     if not queue:
         return ""
@@ -282,7 +198,7 @@ def render_normal_risk_batch_panel(
                 f'<span class="sr-only">Batch {batch_index}</span></form>'
             )
     if include_individual:
-        individual = regular_individual_review_queue(all_objects, review_path=review_path)
+        individual = regular_individual_review_queue(all_objects, review_path=review_path, bindings=bindings, fragments=fragments)
         if individual:
             panels.append(
                 '<details class="review-normal-risk-individual">'
@@ -469,6 +385,7 @@ def install_proportionate_review_routes(app: FastAPI, console: ProportionateRevi
                     current.values(),
                     review_path=review_path,
                     bindings=_review_bindings_or_legacy(console, snapshot_id),
+                    fragments=console.review_source_fragments(snapshot_id),
                 )
             }
             retry_selection = [
@@ -494,6 +411,7 @@ def install_proportionate_review_routes(app: FastAPI, console: ProportionateRevi
             console.snapshot_objects(snapshot_id),
             review_path=review_path,
             bindings=_review_bindings_or_legacy(console, snapshot_id),
+                    fragments=console.review_source_fragments(snapshot_id),
         )
         target = (
             f"/review?document={snapshot_id}&task=batch"

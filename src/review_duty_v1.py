@@ -50,12 +50,8 @@ def exact_current_approver_ids(
     object_id = str(obj.get("object_id") or "")
     object_version = str(obj.get("object_version") or "")
     confirmed_type = str(obj.get("confirmed_object_type") or "")
-    provenance = obj.get("provenance")
-    canonical_hash = (
-        str(provenance.get("canonical_object_hash") or "")
-        if isinstance(provenance, dict)
-        else ""
-    )
+    from src.integrity_kernel import exact_review_snapshot_hash
+    canonical_hash = exact_review_snapshot_hash(obj)
     seen: set[str] = set()
     out: list[str] = []
     for row in bindings:
@@ -94,6 +90,7 @@ def review_stage(
     *,
     review_path: str,
     bindings: Iterable[dict[str, Any]] | None = None,
+    fragments: Iterable[dict[str, Any]] | None = None,
 ) -> str | None:
     """Return the open review stage from current tuple approvals.
 
@@ -102,11 +99,12 @@ def review_stage(
     already has two independent current human approvals.
     """
 
-    from src.knowledge_path_v1 import content_reviewable
+    from src.knowledge_path_v1 import content_reviewable, source_lineage_resolves
     from src.source_accountability_v1 import is_source_record
     # Boom construction keeps its current duty until that creator is cut.
     # On every other path only a content-reviewable knowledge candidate opens a duty.
-    if review_path != "boom" and not content_reviewable(obj):
+    if review_path != "boom" and (not content_reviewable(obj)
+                                  or not source_lineage_resolves(obj, fragments=fragments)):
         return None
     if is_source_record(obj):
         return None
@@ -127,7 +125,7 @@ def review_stage(
     ):
         return None
 
-    if bindings is None:
+    if review_path == "boom" and bindings is None:
         governance = obj.get("governance")
         status = (
             str(governance.get("validation_status") or "")
@@ -145,6 +143,8 @@ def review_stage(
             return SECOND_REVIEW
         return None
 
+    # Governance is a compatibility mirror, never exact-current approval authority.
+    bindings = tuple(bindings or ())
     approvers = exact_current_approver_ids(obj, bindings)
     from src.review_policy_v1 import object_policy, required_reviewers
     policy = object_policy(obj)
@@ -186,11 +186,13 @@ def first_review_open(
     *,
     review_path: str,
     bindings: Iterable[dict[str, Any]] | None = None,
+    fragments: Iterable[dict[str, Any]] | None = None,
 ) -> bool:
     return review_stage(
         obj,
         review_path=review_path,
         bindings=bindings,
+        fragments=fragments,
     ) == FIRST_REVIEW
 
 
@@ -249,6 +251,7 @@ def review_duty_for(
     *,
     review_path: str,
     bindings: Iterable[dict[str, Any]] | None = None,
+    fragments: Iterable[dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     """Project the one currently open human review duty for this object.
 
@@ -261,6 +264,7 @@ def review_duty_for(
         obj,
         review_path=review_path,
         bindings=bindings,
+        fragments=fragments,
     )
     if stage is None:
         return None
@@ -286,7 +290,10 @@ def review_duties(
     *,
     review_path: str,
     bindings: Iterable[dict[str, Any]] | None = None,
+    fragments: Iterable[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
+    bindings = tuple(bindings or ())
+    fragments = tuple(fragments) if fragments is not None else None
     out: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
     for obj in objects:
@@ -294,6 +301,7 @@ def review_duties(
             obj,
             review_path=review_path,
             bindings=bindings,
+            fragments=fragments,
         )
         if duty is None:
             continue
@@ -314,11 +322,13 @@ def review_duty_counts(
     *,
     review_path: str,
     bindings: Iterable[dict[str, Any]] | None = None,
+    fragments: Iterable[dict[str, Any]] | None = None,
 ) -> dict[str, int]:
     duties = review_duties(
         objects,
         review_path=review_path,
         bindings=bindings,
+        fragments=fragments,
     )
     return {
         "review_duties": len(duties),
@@ -346,13 +356,17 @@ def reviewer_route_for(
     review_path: str,
     reviewer_id: str,
     bindings: Iterable[dict[str, Any]] = (),
+    fragments: Iterable[dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     """Actor-specific actionability over one current ReviewDuty."""
 
+    bindings = tuple(bindings)
+    fragments = tuple(fragments) if fragments is not None else None
     duty = review_duty_for(
         obj,
         review_path=review_path,
         bindings=bindings,
+        fragments=fragments,
     )
     if duty is None:
         return None
@@ -360,7 +374,7 @@ def reviewer_route_for(
     approvers = exact_current_approver_ids(obj, bindings)
     already_approved = reviewer_id in set(approvers)
     stage = str(duty["stage"])
-    actionable = not already_approved
+    actionable = not already_approved and not reviewer_is_agent({"reviewer_id": reviewer_id})
     from src.review_policy_v1 import object_policy, required_reviewers
     policy = object_policy(obj)
     if policy is not None:
@@ -385,7 +399,10 @@ def reviewer_route_counts(
     review_path: str,
     reviewer_id: str,
     bindings: Iterable[dict[str, Any]] = (),
+    fragments: Iterable[dict[str, Any]] | None = None,
 ) -> dict[str, int]:
+    bindings = tuple(bindings)
+    fragments = tuple(fragments) if fragments is not None else None
     routes = [
         route
         for obj in objects
@@ -395,6 +412,7 @@ def reviewer_route_counts(
                 review_path=review_path,
                 reviewer_id=reviewer_id,
                 bindings=bindings,
+                fragments=fragments,
             )
         ) is not None
     ]
