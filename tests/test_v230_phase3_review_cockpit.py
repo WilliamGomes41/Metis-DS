@@ -536,6 +536,7 @@ def test_one_save_stores_suitability_documentpositie_type_and_eindoordeel(tmp_pa
         data={
             "snapshot_id": receipt["snapshot_id"],
             "object_id": adviseert["object_id"],
+            "snapshot_revision": console.objects_revision(receipt["snapshot_id"]),
             "suitability": "ja",
             "documentpositie_action": "dit_klopt",
             "parent_choice": parent_id,
@@ -579,6 +580,7 @@ def test_later_beoordelen_saves_without_approving(tmp_path: Path) -> None:
         data={
             "snapshot_id": receipt["snapshot_id"],
             "object_id": adviseert["object_id"],
+            "snapshot_revision": console.objects_revision(receipt["snapshot_id"]),
             "suitability": "mist_context",
             "documentpositie_action": "dit_klopt",
             "found_under": CURRENT_HEADING,
@@ -623,6 +625,7 @@ def test_save_redirects_to_next_ordinary_object(tmp_path: Path) -> None:
         data={
             "snapshot_id": receipt["snapshot_id"],
             "object_id": adviseert["object_id"],
+            "snapshot_revision": console.objects_revision(receipt["snapshot_id"]),
             "suitability": "ja",
             "documentpositie_action": "dit_klopt",
             "found_under": CURRENT_HEADING,
@@ -947,6 +950,7 @@ def test_empty_suitability_is_rejected_and_creates_no_approval_binding(tmp_path:
         data={
             "snapshot_id": receipt["snapshot_id"],
             "object_id": adviseert["object_id"],
+            "snapshot_revision": console.objects_revision(receipt["snapshot_id"]),
             "suitability": "",
             "documentpositie_action": "dit_klopt",
             "type_action": "dit_klopt",
