@@ -207,6 +207,19 @@ def current_revisions(rows, *, snapshot_id=None):
     return list(current.values())
 
 
+
+def with_current_revision(rows, revision):
+    """Replace only the final occurrence, or append a genuinely new version."""
+    result = list(rows)
+    identity = (revision["object_id"], revision["object_version"])
+    for position in range(len(result) - 1, -1, -1):
+        if (result[position]["object_id"], result[position]["object_version"]) == identity:
+            result[position] = revision
+            return result
+    result.append(revision)
+    return result
+
+
 def validate_revision_write(previous, submitted, *, snapshot_id):
     """Called under the existing file lock / PostgreSQL row lock and CAS."""
     from src.integrity_kernel import compute_canonical_object_hash

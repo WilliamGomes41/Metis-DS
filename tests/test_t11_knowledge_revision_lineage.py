@@ -531,3 +531,26 @@ def test_identical_legacy_duplicate_ancestor_is_immutable_when_successor_is_adde
     with pytest.raises(ValueError, match="revision_history_changed"):
         validate_revision_write(rows, tampered + [successor], snapshot_id=sid)
     validate_revision_write(rows, rows + [successor], snapshot_id=sid)
+
+
+def test_unchanged_legacy_duplicate_review_retry_preserves_prior_occurrences(tmp_path):
+    from tests.semantic_fixture_support import install_fixture_history
+    from src.integrity_kernel import stamp_canonical_hashes
+    state, reviewer, sid, candidate = _console(tmp_path)
+    candidate["object_type"] = candidate["confirmed_object_type"] = "definition"
+    stamp_canonical_hashes(candidate)
+    rows = [deepcopy(candidate), deepcopy(candidate)]
+    install_fixture_history(state, sid, rows)
+    for _ in range(2):
+        state.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
+            object_id=candidate["object_id"], decision="later",
+            expected_revision=state.objects_revision(sid))
+        history = state.snapshot_objects(sid, include_blocked=True)
+        assert len(history) == 2
+        assert history[0] == rows[0]
+        assert history[-1]["object_version"] == candidate["object_version"]
+    _approve(state, reviewer, sid, candidate)
+    history = state.snapshot_objects(sid, include_blocked=True)
+    assert len(history) == 2
+    assert history[0] == rows[0]
+    assert history[-1]["governance"]["validation_status"] == "approved"

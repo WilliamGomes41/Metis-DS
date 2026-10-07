@@ -108,7 +108,8 @@ from src.review_ledger import append_event, read_events
 from src.review_interaction_v1 import validate_review_interaction_identity
 from src.review_workflow_v3 import _apply_review_state
 from src.revision_workflow import (bump_patch, create_revision, revise_object, current_revisions,
-                                   validate_revision_write, knowledge_revision, reprocessed_history, lineage_evidence)
+                                   validate_revision_write, knowledge_revision, reprocessed_history, lineage_evidence,
+                                   with_current_revision)
 from src.retrieval.retrieval_projection_v2 import build_projection
 from src.published_projection_v1 import atomic_replace_projection
 from src.semantic_replay_v1 import SEMANTIC_REPLAY_SPEC_KEY
@@ -1376,11 +1377,7 @@ class OperationsConsole:
         if retain_revise and proposed.get("governance", {}).get("validation_status") == "revise":
             updated["governance"]["validation_status"] = "revise"
         rows = self._load_objects(snapshot_id, remember=False)
-        if updated["object_version"] == previous["object_version"]:
-            rows = [updated if (row["object_id"], row["object_version"]) ==
-                    (previous["object_id"], previous["object_version"]) else row for row in rows]
-        else:
-            rows.append(updated)
+        rows = with_current_revision(rows, updated)
         bindings = deepcopy(self._bindings)
         bindings[snapshot_id] = invalidate_for_object(bindings.get(snapshot_id, []), previous["object_id"])
         self._commit_prepared_store(objects=(snapshot_id, rows), bindings=bindings,
@@ -1424,12 +1421,7 @@ class OperationsConsole:
         target = self._prepare_knowledge_revision(snapshot_id, previous, target,
             reason="type confirmation", actor=reviewer["username"])
         stamp_canonical_hashes(target)
-        history = [
-            row
-            for row in self._load_objects(snapshot_id)
-            if not (row["object_id"] == object_id and row["object_version"] == target["object_version"])
-        ]
-        history.append(target)
+        history = with_current_revision(self._load_objects(snapshot_id), target)
         new_bindings = deepcopy(self._bindings)
         new_bindings[snapshot_id] = invalidate_for_object(new_bindings.get(snapshot_id, []), object_id)
         self._commit_prepared_store(
@@ -1547,12 +1539,7 @@ class OperationsConsole:
                 reason="parent relation confirmation", actor=actor)
             stamp_canonical_hashes(updated_peer)
             peer_updates.append(updated_peer)
-        history = [
-            row
-            for row in self._load_objects(snapshot_id)
-            if not (row["object_id"] == object_id and row["object_version"] == target["object_version"])
-        ]
-        history.append(target)
+        history = with_current_revision(self._load_objects(snapshot_id), target)
         history.extend(peer_updates)
         new_bindings = deepcopy(self._bindings)
         new_bindings[snapshot_id] = invalidate_for_object(new_bindings.get(snapshot_id, []), object_id)
@@ -3412,12 +3399,8 @@ class OperationsConsole:
                     saved = apply_register_from_review(saved, suitability=suitability or "")
                 saved = self._prepare_knowledge_revision(snapshot_id, target, saved,
                     reason="review context change", actor=reviewer["username"])
-                history = [
-                    row
-                    for row in (relation_history if relation_history is not None else self._load_objects(snapshot_id))
-                    if not (row["object_id"] == object_id and row["object_version"] == saved["object_version"])
-                ]
-                history.append(saved)
+                history = with_current_revision(
+                    relation_history if relation_history is not None else self._load_objects(snapshot_id), saved)
                 self._commit_prepared_store(objects=(snapshot_id, history), bindings=relation_bindings,
                     expected_revision=current_revision, snapshot_id=snapshot_id)
                 return deepcopy(self.snapshot_objects(snapshot_id))
@@ -3643,11 +3626,7 @@ class OperationsConsole:
             )
             if report["errors"]:
                 raise ConsoleError("review_failed", json.dumps(report["errors"], ensure_ascii=False))
-            history = [
-                row
-                for row in (relation_history if relation_history is not None else self._load_objects(snapshot_id))
-                if not (row["object_id"] == object_id and row["object_version"] == target["object_version"])
-            ]
+            history = relation_history if relation_history is not None else self._load_objects(snapshot_id)
             updated_target = next(row for row in updated if row["object_id"] == object_id)
             passage_meta = dict(passage) if passage else {}
             if passage_meta:
@@ -3702,7 +3681,7 @@ class OperationsConsole:
                 metadata["no_action"] = True
                 stamp_canonical_hashes(updated_target)
             updated_target["governance"]["review_snapshot_hash"] = compute_canonical_object_hash(updated_target)
-            history.append(updated_target)
+            history = with_current_revision(history, updated_target)
             new_envelopes = None
             new_bindings = deepcopy(relation_bindings if relation_bindings is not None else self._bindings)
             if decision == "approve":
@@ -3869,7 +3848,7 @@ class OperationsConsole:
 
             history = self._load_objects(snapshot_id)
             current_target = next(
-                row for row in history
+                row for row in reversed(history)
                 if row.get("object_id") == object_id
                 and row.get("object_version") == target.get("object_version")
             )
