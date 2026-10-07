@@ -248,3 +248,30 @@ def test_producer_exposes_materialisation_reason_as_controlled_processing_eviden
                                     post_json=provider)
     assert caught.value.code == "pre_review_llm_proposal_rejected"
     assert caught.value.pre_review_diagnostics["reason_code"] == "materialisation_text_mismatch"
+
+
+def test_revision_materialisation_discards_unselected_additional_refs(tmp_path):
+    from tests.test_recoverable_formation_v1 import system
+    from tests.test_recommendation_coverage_v1 import FIRST, SECOND
+    from src.knowledge_materialisation_v1 import validate_materialised_candidate
+    state, sid, actor, reviewer, _calls, _mode, _make, _bind = system(tmp_path, broken=False)
+    rows = state.snapshot_objects(sid)
+    first = next(row for row in rows if row["content"]["clean_text"] == FIRST)
+    second = next(row for row in rows if row["content"]["clean_text"] == SECOND)
+    state.review_object(actor_id=reviewer, snapshot_id=sid, object_id=first["object_id"],
+                        decision="revise", comment="Bronselectie opnieuw materialiseren.")
+    revised = state.correct_object(actor_id=actor, snapshot_id=sid, object_id=first["object_id"],
+        patch={"reason": "Behoud alleen de geselecteerde provenance", "operations": [
+            {"op": "set", "path": "content.clean_text", "value": FIRST}]},
+        additional_source_fragments=second["provenance"]["source_fragments"],
+        materialisation_decision={"decision_kind": "semantic_selection", "selection_origin": "proposal_selected",
+                                 "spans": first["metadata"]["semantic_passage"]["spans"], "source_text": FIRST},
+        rereview_scope="object")
+    envelope = state._envelope(sid)
+    source_path, _ = state._verified_source_bytes(envelope)
+    fragments = state._read_source_fragments(envelope, source_path)
+    validate_materialised_candidate(revised, fragments=fragments)
+    assert revised["provenance"]["source_fragments"] == first["provenance"]["source_fragments"]
+    assert revised["provenance"]["source_fragments"] != second["provenance"]["source_fragments"]
+    assert first["object_id"] == revised["object_id"]
+    assert first["object_version"] != revised["object_version"]

@@ -121,7 +121,9 @@ def test_short_fragment_stays_incomplete_and_non_independent() -> None:
 def test_extract_admission_path_keeps_predicate_missing_separate() -> None:
     from tests.semantic_fixture_support import materialised_fixture
     objects, fragments = materialised_fixture(
-        COMPLETE_DISTINGUISHES, proposed_type="factual_finding", document_id="doc-d2b2b")
+        COMPLETE_DISTINGUISHES, proposed_type="unclassified", document_id="doc-d2b2b")
+    # Preserve the persisted legacy factual classification; do not extend selector taxonomy.
+    objects[0]["proposed_object_type"] = "factual_finding"
     stamped = apply_admission_gate(
         objects, klasse="richtlijn", fragments=fragments, document_version="1.0",
         source_hash=objects[0]["source"]["source_checksum"])
