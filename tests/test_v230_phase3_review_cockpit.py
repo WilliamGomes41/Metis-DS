@@ -906,7 +906,7 @@ def test_failed_review_does_not_persist_parent_relation(tmp_path: Path) -> None:
     before_parent = before.get("parent_object_id")
     before_version = before.get("object_version")
     _strip_locator(console, receipt["snapshot_id"], adviseert["object_id"])
-    with pytest.raises(ConsoleError, match="open_original|source_locator"):
+    with pytest.raises(ConsoleError, match="source_lineage_incomplete"):
         console.review_object(
             actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=receipt["snapshot_id"],
@@ -927,6 +927,10 @@ def test_failed_review_does_not_persist_parent_relation(tmp_path: Path) -> None:
     assert live.get("parent_object_id") == before_parent
     assert live.get("object_version") == before_version
     assert (live.get("confirmed_relations") or []) == before_rels
+    assert not [
+        row for row in console.object_review_bindings(receipt["snapshot_id"])
+        if row.get("object_id") == adviseert["object_id"] and row.get("decision") == "approve"
+    ]
 
 
 def test_empty_suitability_is_rejected_and_creates_no_approval_binding(tmp_path: Path) -> None:
