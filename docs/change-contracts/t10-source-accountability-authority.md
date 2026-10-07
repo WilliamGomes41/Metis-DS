@@ -66,5 +66,10 @@ The existing complete T9/T8/T5-T7, decision-tree, lifecycle and PostgreSQL suite
 ## T11 and T12
 T11 durable KnowledgeUnit revisions/supersession are not implemented. T12 overall publication-readiness design is not implemented. Existing candidate review closure and technical publication gates remain separate from T10 source usage. No deployment or merge is authorized.
 
-T10: NOT DONE (final verification pending)
+## CI corrections and acceptance record
+Full CI on aa58d911 found three remaining issues: repair detail swallowed the stale-write banner/draft; forensic export tried native reextraction; the long-text presentation fixture changed text without its evidence. The follow-up preserves escaped conflict/draft information, uses only accepted stored fragments for export, and makes the presentation fixture self-consistent. Existing corrupt-evidence regressions remain intact.
+
+Export boundary: the same source projection is used, with current bindings and supplied or validated retained source fragments. Historical native exports without authoritative retained fragments report source_usage as partial and cannot prove target closure; they never reextract or elevate forensic fragment copies to authority. Invalid retained extraction fails closed to repair and is reported invalid. Complete runtime/export parity applies when authoritative inputs are present; historical missing evidence remains an explicit limitation.
+
+Acceptance status: final-head CI, independent audit and T10 DONE/NOT DONE are recorded in draft PR #535. This committed contract is the design/proof plan, not a claim that its own future CI has passed.
 Merge T10 PR: NO-GO

@@ -331,3 +331,29 @@ def test_admission_blocked_keeps_existing_correction_card(tmp_path):
     page = _render_review_room(console, reviewer, document=sid, object=current["object_id"],
         task="repair", snapshot=(rows, console.objects_revision(sid)))
     assert "Correctie specificeren" in page
+
+
+@pytest.mark.parametrize("retained", ["valid", "missing", "corrupt"])
+def test_export_retained_evidence_is_used_without_reextraction(retained):
+    from src.integrity_kernel import stable_hash
+    from src.processing_evidence_export_v1 import processing_evidence_tables
+    rows, fragments = _context_inputs()
+    source = _linked(rows)
+    target = partition(rows)["knowledge"][0]
+    bindings = _approve_bindings(target)
+    extraction = {"source_sha256": "source-sha", "prepared_fragments": fragments,
+                  "prepared_fragments_hash": stable_hash(fragments)}
+    extraction["record_hash"] = stable_hash(extraction)
+    if retained == "corrupt":
+        extraction["prepared_fragments_hash"] = "bad"
+    envelope = {"class": "richtlijn", "sha256": "source-sha"}
+    if retained != "missing":
+        envelope["quality_processing_runs"] = [
+            {"outcome": "succeeded", "document_extraction": extraction}]
+    tables, manifest = processing_evidence_tables(snapshot_id="snapshot", revision="revision",
+        envelope=envelope, objects=rows, bindings=bindings)
+    exported = next(r for r in tables["source_usage"] if r["object_id"] == source["object_id"])
+    availability = next(r["availability"] for r in manifest if r["dataset"] == "source_usage.csv")
+    assert exported["closure"] == {"valid": "accounted", "missing": "waiting_on_target",
+                                    "corrupt": "repair_required"}[retained]
+    assert availability == {"valid": "derived", "missing": "partial", "corrupt": "invalid"}[retained]

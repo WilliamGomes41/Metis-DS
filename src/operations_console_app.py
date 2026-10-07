@@ -3562,7 +3562,13 @@ def _render_review_room(
                 source_card = _source_context_card(console, chosen, obj, context_html,
                     context_target=context_target, context_mode=context_mode, task=chosen_task)
                 if source_card:
-                    objects_html += source_card
+                    objects_html += conflict_html + source_card
+                    if conflict:
+                        for field, label in (("comment", "Niet opgeslagen toelichting"),
+                                             ("proposed_correction", "Niet opgeslagen correctie")):
+                            if draft.get(field):
+                                objects_html += (f'<aside data-unsaved-review-draft><h3>{label}</h3>'
+                                                 f'<p>{_esc(draft[field])}</p></aside>')
                 elif route and route.get("canonical_task") == "second_review":
                     if route.get("actionable"):
                         objects_html += _render_second_review_card(
@@ -5260,8 +5266,7 @@ def create_console_app(
         objects, revision = state.snapshot_objects_and_revision(snapshot_id)
         payload = processing_evidence_zip(snapshot_id=snapshot_id, revision=revision,
                                           envelope=envelope, objects=objects,
-                                          bindings=state.object_review_bindings(snapshot_id, objects=objects),
-                                          fragments=state.review_source_fragments(snapshot_id))
+                                          bindings=state.object_review_bindings(snapshot_id, objects=objects))
         filename = re.sub(r"[^A-Za-z0-9_-]", "_", snapshot_id)
         return Response(payload, media_type="application/zip", headers={
             "Content-Disposition": f'attachment; filename="{filename}-processing-evidence.zip"',
