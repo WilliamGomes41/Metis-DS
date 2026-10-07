@@ -79,7 +79,7 @@ New successors carry `metadata.revision_lineage.contract = knowledge-revision-li
 
 A canonical change resets first/second review state; old exact bindings do not satisfy the successor. A review command that also changes semantics authorizes only its resulting exact tuple. Governance-only unchanged review does not manufacture a successor. Historical rows are immutable, including review evidence once a successor exists.
 
-Append order remains the legacy current-selection contract. T11 does not reinterpret old versions using semver sorting. Strict chains reject missing predecessor, forged scope/hash/evidence, cycles/regression, stale forks, marker downgrade, reordered per-object history and in-place canonical rewrites.
+Append order remains the legacy current-selection contract. Wholly unmarked historical duplicate versions remain readable with append-last selection, because the former correction writer permitted them. Persistence preserves their complete occurrence order and multiplicity; even byte-identical historical occurrences are immutable. It rejects newly introduced duplicates or unmarked successor batches. A strict successor may bind the exact final legacy occurrence's version/hash without claiming older history. T11 does not reinterpret old versions using semver sorting. Strict chains reject missing predecessor, forged scope/hash/evidence, cycles/regression, stale forks, marker downgrade, reordered per-object history and in-place canonical rewrites.
 
 ## Tests-first and audit evidence
 

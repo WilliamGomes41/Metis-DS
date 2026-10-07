@@ -167,13 +167,16 @@ def current_revisions(rows, *, snapshot_id=None):
     from src.integrity_kernel import compute_canonical_object_hash
     current = {}
     seen = set()
+    strict_identities = set()
     for row in rows:
         oid, version = row["object_id"], row["object_version"]
         identity = (oid, version)
-        if identity in seen and (knowledge_revision(row) or knowledge_revision(current.get(oid, {}))):
+        edge = lineage_evidence(row)
+        if identity in seen and (edge is not None or identity in strict_identities):
             raise ValueError("revision_identity_duplicate")
         seen.add(identity)
-        edge = lineage_evidence(row)
+        if edge is not None:
+            strict_identities.add(identity)
         if edge is None and oid in current and lineage_evidence(current[oid]) is not None:
             raise ValueError("revision_lineage_downgrade")
         if edge is not None:
@@ -212,35 +215,39 @@ def validate_revision_write(previous, submitted, *, snapshot_id):
     old = {(row["object_id"], row["object_version"]): row for row in previous}
     new = {(row["object_id"], row["object_version"]): row for row in submitted}
     protected_ids = {row["object_id"] for row in previous + submitted if knowledge_revision(row)}
-    retained_order = [(row["object_id"], row["object_version"]) for row in submitted
-                      if (row["object_id"], row["object_version"]) in old
-                      and row["object_id"] in protected_ids]
-    original_order = [identity for identity, row in old.items() if identity[0] in protected_ids]
+    # Keep occurrence order/multiplicity: old writers could repeat a legacy version.
+    # A dict keyed only by identity would erase those immutable historical rows.
     for oid in protected_ids:
-        if ([identity for identity in retained_order if identity[0] == oid]
-                != [identity for identity in original_order if identity[0] == oid]):
+        prior_rows = [row for row in previous if row["object_id"] == oid]
+        retained_rows = [row for row in submitted if row["object_id"] == oid
+                         and (oid, row["object_version"]) in old]
+        if ([row["object_version"] for row in retained_rows]
+                != [row["object_version"] for row in prior_rows]):
             raise ValueError("revision_history_reordered")
-    for identity, before in old.items():
-        after = new.get(identity)
-        if identity[0] not in protected_ids:
-            continue
-        if after is None:
-            raise ValueError("revision_history_removed")
-        if compute_canonical_object_hash(before) != compute_canonical_object_hash(after):
-            raise ValueError("revision_content_changed_in_place")
-        if (new_current[identity[0]]["object_version"] != identity[1]
-                or old_current[identity[0]] != before) and after != before:
-            raise ValueError("revision_history_changed")
+        for position, (before, after) in enumerate(zip(prior_rows, retained_rows)):
+            if compute_canonical_object_hash(before) != compute_canonical_object_hash(after):
+                raise ValueError("revision_content_changed_in_place")
+            if (position != len(prior_rows) - 1
+                    or new_current[oid]["object_version"] != before["object_version"]) and after != before:
+                raise ValueError("revision_history_changed")
+    # Duplicate identities may only be retained from legacy history, never created.
+    new_identities = [(row["object_id"], row["object_version"]) for row in submitted
+                      if (row["object_id"], row["object_version"]) not in old
+                      and row["object_id"] in protected_ids]
+    if len(new_identities) != len(set(new_identities)):
+        raise ValueError("revision_identity_duplicate")
     sealed = any((row.get("governance") or {}).get("publication_status") == "published" for row in previous)
+    write_current = dict(old_current)
     for identity, after in new.items():
         if identity in old:
             continue
-        before = old_current.get(identity[0])
+        before = write_current.get(identity[0])
         if before is not None and (knowledge_revision(before) or knowledge_revision(after)):
             if sealed:
                 raise ValueError("published_working_revision_immutable")
             if not lineage_evidence(after):
                 raise ValueError("revision_predecessor_required")
+        write_current[identity[0]] = after
     # No stale command can add an alternative successor to the now-current row.
     appended = [row for row in submitted if (row["object_id"], row["object_version"]) not in old]
     if appended:
