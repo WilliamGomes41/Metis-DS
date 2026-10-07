@@ -955,13 +955,14 @@ def blocked_audit_lane(objects: Iterable[dict[str, Any]]) -> list[dict[str, Any]
 def ordinary_review_queue(
     objects: Iterable[dict[str, Any]],
     review_path: str | None = None,
+    *, bindings=None, fragments=None,
 ) -> list[dict[str, Any]]:
     from src.operations_console_v1 import is_slow_review_duty
 
     rows = [
         obj
         for obj in objects
-        if is_slow_review_duty(obj, review_path=review_path)
+        if is_slow_review_duty(obj, review_path=review_path, bindings=bindings, fragments=fragments)
         and admission_of(obj).get("gate_result") != GATE_BLOCKED
     ]
     return rows if review_path == "boom" else sorted(rows, key=review_priority_rank)

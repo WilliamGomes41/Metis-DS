@@ -52,7 +52,8 @@ def test_wrong_role_repair_post_fails_closed_without_writes(tmp_path):
     )
     sid = receipt["snapshot_id"]
     oid = normal_risk_batch_queue(
-        console.snapshot_objects(sid), review_path="richtlijn"
+        console.snapshot_objects(sid), review_path="richtlijn",
+        bindings=console.object_review_bindings(sid), fragments=console.review_source_fragments(sid)
     )[0]["object_id"]
     obj = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
     console.review_object(

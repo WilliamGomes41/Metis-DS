@@ -653,7 +653,7 @@ def test_phase1_ingest_still_keeps_adviseert_and_leaves_djg_as_coverage(tmp_path
         "context_scan_done"
     )
     assert "context_scan_not_done" not in (_admission(adviseert).get("reason_codes") or [])
-    ordinary = ordinary_review_queue(objects)
+    ordinary = ordinary_review_queue(objects, bindings=console.object_review_bindings(receipt["snapshot_id"]), fragments=console.review_source_fragments(receipt["snapshot_id"]))
     ordinary_texts = [_text_of(obj) for obj in ordinary]
     assert DJG not in ordinary_texts
     assert any("adviseert de verpleegkundige" in text for text in ordinary_texts)

@@ -161,7 +161,7 @@ def build_report(documents: list[dict[str, Any]], *, as_of: str,
             dispositions[disposition.get("status", "unknown")] += 1
             if authoritative_review_type(obj) in {"heading", "path"}:
                 continue
-            stage = review_stage(obj, review_path=review_path_for_klasse(env.get("class", "richtlijn")), bindings=doc.get("bindings"))
+            stage = review_stage(obj, review_path=review_path_for_klasse(env.get("class", "richtlijn")), bindings=doc.get("bindings"), fragments=doc.get("fragments"))
             disposition_state = definitive_review_disposition(obj)
             pending_approval = (disposition_state["register_status"] == "selected_as_candidate"
                                 and disposition_state["review_status"] == "approved" and stage is not None)

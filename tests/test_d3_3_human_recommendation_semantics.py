@@ -397,11 +397,10 @@ def test_type_change_away_clears_active_semantics_but_keeps_history(tmp_path: Pa
     approved_version = approved["object_version"]
     assert CONFIRMED_FIELD in approved
 
-    console.review_object(
+    console.confirm_object_type(
         actor_id=accounts["reviewer"]["account_id"],
         snapshot_id=snapshot_id,
         object_id=target["object_id"],
-        decision="approve",
         confirmed_object_type="explanation",
         expected_revision=console.objects_revision(snapshot_id),
     )

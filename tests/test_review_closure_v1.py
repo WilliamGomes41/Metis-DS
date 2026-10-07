@@ -354,8 +354,11 @@ def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_p
 def test_approval_ui_uses_existing_admission_policy(tmp_path, gate):
     import re
 
-    console, client, _researcher, _reviewer, sid, objects = _system(tmp_path)
-    obj = objects[0]
+    from tests.semantic_fixture_support import bind_fixture_selections
+    console = ReviewClosureConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    bind_fixture_selections(console, [("De verpleegkundige bespreekt passende ondersteuning met de client.", "definition")])
+    console, client, _researcher, _reviewer, sid, objects = _system(tmp_path, console)
+    obj = next(row for row in objects if row.get("proposed_object_type") == "definition")
     rows = console._load_objects(sid)
     target = next(row for row in rows if row["object_id"] == obj["object_id"])
     admission = target.setdefault("metadata", {}).setdefault("admission", {})
@@ -368,4 +371,4 @@ def test_approval_ui_uses_existing_admission_policy(tmp_path, gate):
     assert page.status_code == 200
     approval = re.search(r'<input[^>]*name="eindoordeel"[^>]*value="goedkeuren"[^>]*>', page.text)
     assert approval
-    assert ("disabled" in approval.group()) == (gate == "blocked")
+    assert ("disabled" in approval.group()) == (gate != "allowed")

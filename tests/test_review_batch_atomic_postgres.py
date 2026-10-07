@@ -57,7 +57,7 @@ def test_http_batch_failure_retry_stale_and_restart(workflow_postgres, tmp_path,
         class_="richtlijn", family="begrippen", named_reviewers=[reviewer["account_id"]],
     )
     sid = receipt["snapshot_id"]
-    ids = [obj["object_id"] for obj in normal_risk_batch_queue(console.snapshot_objects(sid), review_path="richtlijn")]
+    ids = [obj["object_id"] for obj in normal_risk_batch_queue(console.snapshot_objects(sid), review_path="richtlijn", fragments=console.review_source_fragments(sid), bindings=console.object_review_bindings(sid))]
     assert len(ids) == 2
     client = _client(console)
     before = deepcopy(console.snapshot_objects(sid))

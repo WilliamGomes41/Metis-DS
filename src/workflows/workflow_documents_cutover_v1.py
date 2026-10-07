@@ -691,7 +691,11 @@ class _PostgresWorkflowDocumentsMixin:
             before_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
             try:
                 yield
-            except Exception:
+            except Exception as exc:
+                if isinstance(exc, ConsoleError) and exc.code == "snapshot_object_write_conflict":
+                    self.refresh_workflow_documents()
+                    self.refresh_objects_expected_revision(snapshot_id)
+                    raise
                 with suppress(Exception):
                     self.workflow_document_store.write_bundle(
                         envelope=before_envelope,

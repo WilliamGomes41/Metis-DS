@@ -45,9 +45,13 @@ class _QueueConsole(ProportionateReviewConsole):
     def snapshot_objects(self, _snapshot_id: str) -> list[dict[str, Any]]:
         return deepcopy(self._test_objects)
 
-    def object_review_bindings(self, _snapshot_id: str) -> list[dict[str, Any]]:
-        return []
+    def object_review_bindings(self, _snapshot_id: str, **kwargs) -> list[dict[str, Any]]:
+        from tests.review_authority_fixture_support import approved_bindings
+        return approved_bindings(self._test_objects)
 
+    def review_source_fragments(self, _snapshot_id, **kwargs):
+        from test_t4_single_knowledge_path_invariants import _allowed_source
+        return _allowed_source()
 
     def document_status(self, _snapshot_id: str) -> str:
         return self._test_status
@@ -81,14 +85,26 @@ def _obj(
                 "end": max(len(object_id), 1),
             }],
         }
-    return {
+    row = {
         "object_id": object_id,
+        "object_version": "1.0",
+        "confirmed_object_type": object_type,
         "object_type": object_type,
         "proposed_object_type": object_type,
         "metadata": metadata,
         "governance": {"validation_status": validation_status},
         "content": {"clean_text": object_id},
     }
+
+    if gate_result == "allowed" and object_type != "heading":
+        from test_t4_single_knowledge_path_invariants import _allowed_candidate
+        fixture = _allowed_candidate()
+        for key in ("content", "source", "provenance"):
+            row[key] = deepcopy(fixture[key])
+        row["metadata"]["semantic_passage"] = deepcopy(fixture["metadata"]["semantic_passage"])
+    from src.integrity_kernel import stamp_canonical_hashes
+    stamp_canonical_hashes(row)
+    return row
 
 
 def _envelope(*, reviewer: str = "reviewer-1") -> dict[str, Any]:

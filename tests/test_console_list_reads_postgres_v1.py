@@ -17,6 +17,7 @@ import pytest
 
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.operations_console_v1 import PRE_REVIEW_BLOCKED
+from src.proportionate_review_v1 import ProportionateReviewConsole
 from src.workflows.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin
 from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
 from src.workflows.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
@@ -78,7 +79,7 @@ def _object(
     register_status: str = "selected_as_candidate",
     section: str = "Sectie A",
 ) -> dict[str, Any]:
-    return {
+    row = {
         "object_id": f"{snapshot_id}-object-{index:03d}",
         "object_version": "1.0",
         "object_type": object_type,
@@ -106,6 +107,8 @@ def _object(
         "uncertainty": {"has_uncertainty": False},
         "content": {"clean_text": f"Fixture {index}"},
     }
+    from tests.review_authority_fixture_support import materialised_row
+    return materialised_row(row)
 
 
 def _open_objects(snapshot_id: str) -> list[dict[str, Any]]:
@@ -192,11 +195,20 @@ def _closed_objects(snapshot_id: str) -> list[dict[str, Any]]:
     return rows
 
 
-class _ListReadSubject(_PostgresBadgeCountsMixin):
+class _ListReadSubject(_PostgresBadgeCountsMixin, ProportionateReviewConsole):
     def __init__(self, store: PostgresWorkflowDocumentRuntimeStore, account_id: str) -> None:
         self.workflow_document_store = store
         self.canonical_publication_store = None
         self.account_id = account_id
+        from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+        self.workflow_review_store = PostgresWorkflowReviewStore(store.config)
+
+    def review_source_fragments(self, snapshot_id, **kwargs):
+        from tests.review_authority_fixture_support import source_fragments
+        return source_fragments()
+
+    def snapshot_is_published(self, snapshot_id):
+        return False
 
     def _account(self, account_id: str) -> dict[str, Any]:
         assert account_id == self.account_id
@@ -303,7 +315,7 @@ def test_list_status_and_workboard_are_set_based_at_pilot_scale() -> None:
 
         workflow_connects = 0
         summaries = subject.review_workboard_summaries(account_id)
-        assert workflow_connects == 1
+        assert workflow_connects == 3
         assert set(summaries) == set(snapshots)
 
         opened = summaries[snapshots[0]]
@@ -368,7 +380,6 @@ def test_review_workboard_summary_uses_exact_authorizations_for_four_eyes() -> N
     )
     target["object_version"] = "2.0"
     target["confirmed_object_type"] = "recommendation"
-    target["provenance"] = {"canonical_object_hash": "c" * 64}
     target["risk"] = {
         "level": "high",
         "risk_level": "high",
@@ -408,6 +419,8 @@ def test_review_workboard_summary_uses_exact_authorizations_for_four_eyes() -> N
                 ),
             )
 
+    from src.integrity_kernel import stamp_canonical_hashes
+    stamp_canonical_hashes(target)
     try:
         store.write_bundle(envelope=envelope, objects=[document, target])
         with store._connect() as con:

@@ -536,6 +536,7 @@ def test_one_save_stores_suitability_documentpositie_type_and_eindoordeel(tmp_pa
         data={
             "snapshot_id": receipt["snapshot_id"],
             "object_id": adviseert["object_id"],
+            "snapshot_revision": console.objects_revision(receipt["snapshot_id"]),
             "suitability": "ja",
             "documentpositie_action": "dit_klopt",
             "parent_choice": parent_id,
@@ -579,6 +580,7 @@ def test_later_beoordelen_saves_without_approving(tmp_path: Path) -> None:
         data={
             "snapshot_id": receipt["snapshot_id"],
             "object_id": adviseert["object_id"],
+            "snapshot_revision": console.objects_revision(receipt["snapshot_id"]),
             "suitability": "mist_context",
             "documentpositie_action": "dit_klopt",
             "found_under": CURRENT_HEADING,
@@ -613,7 +615,7 @@ def test_save_redirects_to_next_ordinary_object(tmp_path: Path) -> None:
         for obj in console.snapshot_objects(receipt["snapshot_id"])
         if obj.get("object_type") != "document"
     ]
-    ordinary = [obj for obj in ordinary_review_queue(objects) if is_slow_review_duty(obj)]
+    ordinary = [obj for obj in ordinary_review_queue(objects, fragments=console.review_source_fragments(receipt["snapshot_id"]), bindings=console.object_review_bindings(receipt["snapshot_id"])) if is_slow_review_duty(obj, fragments=console.review_source_fragments(receipt["snapshot_id"]), bindings=console.object_review_bindings(receipt["snapshot_id"]))]
     assert len(ordinary) >= 2
     current_index = next(i for i, obj in enumerate(ordinary) if obj["object_id"] == adviseert["object_id"])
     nxt = ordinary[current_index + 1]
@@ -623,6 +625,7 @@ def test_save_redirects_to_next_ordinary_object(tmp_path: Path) -> None:
         data={
             "snapshot_id": receipt["snapshot_id"],
             "object_id": adviseert["object_id"],
+            "snapshot_revision": console.objects_revision(receipt["snapshot_id"]),
             "suitability": "ja",
             "documentpositie_action": "dit_klopt",
             "found_under": CURRENT_HEADING,
@@ -651,7 +654,7 @@ def test_ineligible_source_passage_stays_out_of_candidate_lanes(tmp_path: Path) 
     assert _admission(djg) == {}
     eligibility = (djg.get("metadata") or {}).get("candidate_eligibility") or {}
     assert eligibility.get("eligible") is False
-    assert djg not in ordinary_review_queue(objects)
+    assert djg not in ordinary_review_queue(objects, fragments=console.review_source_fragments(receipt["snapshot_id"]), bindings=console.object_review_bindings(receipt["snapshot_id"]))
     assert djg not in blocked_audit_lane(objects)
 
 def test_ordinary_queue_and_index_remain_allowed_only(tmp_path: Path) -> None:
@@ -663,7 +666,7 @@ def test_ordinary_queue_and_index_remain_allowed_only(tmp_path: Path) -> None:
         for obj in console.snapshot_objects(receipt["snapshot_id"])
         if obj.get("object_type") != "document"
     ]
-    ordinary = ordinary_review_queue(objects)
+    ordinary = ordinary_review_queue(objects, fragments=console.review_source_fragments(receipt["snapshot_id"]), bindings=console.object_review_bindings(receipt["snapshot_id"]))
     assert all(_admission(obj).get("gate_result") == GATE_ALLOWED for obj in ordinary)
     assert not any(obj in ordinary for obj in blocked_audit_lane(objects))
     client = _client(console)
@@ -799,17 +802,18 @@ def test_review_and_correction_do_not_change_sibling_canonical_hash(tmp_path: Pa
         for obj in console.snapshot_objects(receipt["snapshot_id"])
         if obj["object_id"] == adviseert["object_id"]
     )
-    console.review_object(
-        actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=live_adviseert["object_id"],
-        decision="later",
-        suitability="ja",
-        eindoordeel="later_beoordelen",
-        documentpositie_action="dit_klopt",
-        type_action="dit_klopt",
-        found_under="2 Aanbevelingen",
-    )
+    with pytest.raises(ConsoleError, match="content_duty_required"):
+        console.review_object(
+            actor_id=accounts["reviewer"]["account_id"],
+            snapshot_id=receipt["snapshot_id"],
+            object_id=live_adviseert["object_id"],
+            decision="later",
+            suitability="ja",
+            eindoordeel="later_beoordelen",
+            documentpositie_action="dit_klopt",
+            type_action="dit_klopt",
+            found_under="2 Aanbevelingen",
+        )
     still_sibling = next(
         obj
         for obj in console.snapshot_objects(receipt["snapshot_id"])
@@ -946,6 +950,7 @@ def test_empty_suitability_is_rejected_and_creates_no_approval_binding(tmp_path:
         data={
             "snapshot_id": receipt["snapshot_id"],
             "object_id": adviseert["object_id"],
+            "snapshot_revision": console.objects_revision(receipt["snapshot_id"]),
             "suitability": "",
             "documentpositie_action": "dit_klopt",
             "type_action": "dit_klopt",

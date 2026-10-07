@@ -240,15 +240,15 @@ def test_heading_needs_review_is_not_content_reviewable():
     obj = _heading()
     assert obj["governance"]["validation_status"] == "needs_review"
     assert obj["object_type"] == "heading"
-    assert review_stage(obj, review_path=REVIEW_PATH) is None
-    assert review_duty_for(obj, review_path=REVIEW_PATH) is None
+    assert review_stage(obj, review_path=REVIEW_PATH, fragments=_allowed_source()) is None
+    assert review_duty_for(obj, review_path=REVIEW_PATH, fragments=_allowed_source()) is None
 
 
 def test_ineligible_candidate_has_no_review_stage():
     violations = []
     for obj in (_heading(), _coverage_record(), _no_duty_definition()):
         eligibility = assess_candidate_eligibility(obj)
-        stage = review_stage(obj, review_path=REVIEW_PATH)
+        stage = review_stage(obj, review_path=REVIEW_PATH, fragments=_allowed_source())
         if eligibility.eligible is False and stage is not None:
             violations.append(f"{obj['object_id']}:{eligibility.reason}:{stage}")
     assert violations == []
@@ -256,39 +256,39 @@ def test_ineligible_candidate_has_no_review_stage():
 
 def test_blocked_admission_is_not_content_review():
     obj = _blocked()
-    assert review_duty_for(obj, review_path=REVIEW_PATH) is None
-    counts = review_duty_counts([obj], review_path=REVIEW_PATH)
+    assert review_duty_for(obj, review_path=REVIEW_PATH, fragments=_allowed_source()) is None
+    counts = review_duty_counts([obj], review_path=REVIEW_PATH, fragments=_allowed_source())
     assert counts["review_duties"] == 0
     assert "inhoudelijke beoordeling" not in _content_phrase(counts["review_duties"]) or counts["review_duties"] == 0
-    emitted = {row["object_id"] for row in build_review_queue([obj], "clinical")}
+    emitted = {row["object_id"] for row in build_review_queue([obj], "clinical", fragments=_allowed_source())}
     assert emitted == set()
 
 
 def test_coverage_remainder_has_no_content_duty():
     recorded = _coverage_record()
     leaked = _coverage_origin_only()
-    assert review_duty_for(recorded, review_path=REVIEW_PATH) is None
+    assert review_duty_for(recorded, review_path=REVIEW_PATH, fragments=_allowed_source()) is None
     assert leaked["metadata"]["semantic_passage"]["selection_origin"] == SELECTION_ORIGIN_COVERAGE
     assert SOURCE_KEY not in leaked["metadata"]
-    assert review_duty_for(leaked, review_path=REVIEW_PATH) is None
-    assert build_review_queue([recorded, leaked], "clinical") == []
-    assert build_review_queue([recorded], "technical") == []
+    assert review_duty_for(leaked, review_path=REVIEW_PATH, fragments=_allowed_source()) is None
+    assert build_review_queue([recorded, leaked], "clinical", fragments=_allowed_source()) == []
+    assert build_review_queue([recorded], "technical", fragments=_allowed_source()) == []
 
 
 def test_deterministic_fragment_without_selection_has_no_content_duty():
     obj = _deterministic_fragment()
     assert "semantic_passage" not in obj["metadata"]
     assert assess_candidate_eligibility(obj).source != "semantic" or not assess_candidate_eligibility(obj).eligible
-    assert review_duty_for(obj, review_path=REVIEW_PATH) is None
-    assert build_review_queue([obj], "clinical") == []
+    assert review_duty_for(obj, review_path=REVIEW_PATH, fragments=_allowed_source()) is None
+    assert build_review_queue([obj], "clinical", fragments=_allowed_source()) == []
 
 
 def test_allowed_candidate_with_exact_spans_is_content_reviewable():
     obj = _allowed_candidate()
     assert obj["metadata"]["semantic_passage"]["selection_origin"] == SELECTION_ORIGIN_PROPOSAL
     assert obj["metadata"]["admission"]["gate_result"] == GATE_ALLOWED
-    assert review_stage(obj, review_path=REVIEW_PATH) == "first_review"
-    duty = review_duty_for(obj, review_path=REVIEW_PATH)
+    assert review_stage(obj, review_path=REVIEW_PATH, fragments=_allowed_source()) == "first_review"
+    duty = review_duty_for(obj, review_path=REVIEW_PATH, fragments=_allowed_source())
     assert duty is not None
     assert duty["stage"] == "first_review"
 
@@ -298,10 +298,10 @@ def test_candidate_without_exact_spans_fails_materialisation_and_review():
     problems = []
     if _observed_lifecycle(obj) != "materialisation_failed":
         problems.append(f"lifecycle={_observed_lifecycle(obj)}")
-    stage = review_stage(obj, review_path=REVIEW_PATH)
+    stage = review_stage(obj, review_path=REVIEW_PATH, fragments=_allowed_source())
     if stage is not None:
         problems.append(f"stage={stage}")
-    if build_review_queue([obj], "clinical"):
+    if build_review_queue([obj], "clinical", fragments=_allowed_source()):
         problems.append("review-queue emitted the row")
     assert problems == []
 
@@ -316,18 +316,18 @@ def test_review_queue_cli_emits_only_content_reviewable_rows():
         _unspanned_candidate(),
         _no_duty_definition(),
     ]
-    emitted = {row["object_id"] for row in build_review_queue(rejected, "clinical")}
-    emitted.update(row["object_id"] for row in build_review_queue(rejected, "technical"))
+    emitted = {row["object_id"] for row in build_review_queue(rejected, "clinical", fragments=_allowed_source())}
+    emitted.update(row["object_id"] for row in build_review_queue(rejected, "technical", fragments=_allowed_source()))
     assert emitted == set()
 
 
 def test_partition_knowledge_gives_no_review_authority():
     obj = _deterministic_fragment()
     bucket = [row["object_id"] for row in partition([obj])["knowledge"]]
-    assert review_duty_for(obj, review_path=REVIEW_PATH) is None
-    assert build_review_queue([obj], "clinical") == []
+    assert review_duty_for(obj, review_path=REVIEW_PATH, fragments=_allowed_source()) is None
+    assert build_review_queue([obj], "clinical", fragments=_allowed_source()) == []
     for object_id in bucket:
-        assert object_id != obj["object_id"] or review_duty_for(obj, review_path=REVIEW_PATH) is None
+        assert object_id != obj["object_id"] or review_duty_for(obj, review_path=REVIEW_PATH, fragments=_allowed_source()) is None
 
 
 def test_structural_binding_stays_history_and_does_not_authorize_publication():
@@ -362,7 +362,7 @@ def test_matching_review_hash_keeps_existing_content_review_valid():
     obj = _allowed_candidate()
     binding = _binding(obj)
     assert exact_current_approver_ids(obj, [binding]) == ("reviewer-bert",)
-    assert review_stage(obj, review_path=REVIEW_PATH, bindings=[binding]) is None
+    assert review_stage(obj, review_path=REVIEW_PATH, bindings=[binding], fragments=_allowed_source()) is None
 
 
 def test_unknown_lineage_cannot_be_newly_published():
@@ -406,8 +406,8 @@ def test_side_index_classification_does_not_rewrite_bytes_or_bindings():
     assert side_index["review_authority"] == "non_content"
     assert _canonical(obj) == before_obj
     assert _canonical(binding) == before_binding
-    assert review_stage(obj, review_path=REVIEW_PATH) is None
-    assert review_duty_for(obj, review_path=REVIEW_PATH) is None
+    assert review_stage(obj, review_path=REVIEW_PATH, fragments=_allowed_source()) is None
+    assert review_duty_for(obj, review_path=REVIEW_PATH, fragments=_allowed_source()) is None
 
 
 def test_changed_spans_do_not_inherit_review_authority():
@@ -493,8 +493,8 @@ def test_console_post_cannot_review_without_an_open_content_duty(tmp_path):
     stored = {row["object_id"]: row for row in console.snapshot_objects(snapshot_id, include_blocked=False)}
     assert blocked["object_id"] in stored
     assert stored[blocked["object_id"]]["metadata"]["admission"]["gate_result"] == GATE_BLOCKED
-    assert review_duty_for(stored[no_duty["object_id"]], review_path=REVIEW_PATH) is None
-    assert review_duty_for(stored[blocked["object_id"]], review_path=REVIEW_PATH) is None
+    assert review_duty_for(stored[no_duty["object_id"]], review_path=REVIEW_PATH, fragments=_allowed_source()) is None
+    assert review_duty_for(stored[blocked["object_id"]], review_path=REVIEW_PATH, fragments=_allowed_source()) is None
     problems = []
     if _approve(console, reviewer, snapshot_id, no_duty["object_id"]) is None:
         problems.append("console POST approved an object without an open content duty")
@@ -507,7 +507,7 @@ def test_console_post_cannot_review_without_an_open_content_duty(tmp_path):
     ]
     if not blocked_visible:
         problems.append("include_blocked=False hid the blocked row; it is not a content filter")
-    elif build_review_queue(blocked_visible, "clinical"):
+    elif build_review_queue(blocked_visible, "clinical", fragments=_allowed_source()):
         problems.append("review-queue emitted a blocked row returned by include_blocked=False")
     assert problems == []
 

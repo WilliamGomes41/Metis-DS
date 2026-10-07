@@ -278,25 +278,26 @@ def test_overlapping_review_object_does_not_silently_lose_a_decision(tmp_path: P
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
     first, second = _content_rows(console, snapshot_id)[:2]
+    expected_revision = console.objects_revision(snapshot_id)
     barrier = threading.Barrier(2)
     errors: list[BaseException] = []
     real_save = OperationsConsole._save_objects
 
-    def gated_save(self, target_snapshot: str, rows: list[dict]) -> None:
-        if target_snapshot == snapshot_id:
-            barrier.wait(timeout=5)
-        return real_save(self, target_snapshot, rows)
+    def gated_save(self, target_snapshot: str, rows: list[dict], **kwargs) -> None:
+        return real_save(self, target_snapshot, rows, **kwargs)
 
     console._save_objects = gated_save.__get__(console, OperationsConsole)  # type: ignore[method-assign]
 
     def reviewer(actor_id: str, object_id: str, suitability: str) -> None:
         try:
+            barrier.wait(timeout=5)
             console.review_object(
                 actor_id=actor_id,
                 snapshot_id=snapshot_id,
                 object_id=object_id,
                 decision="later",
                 suitability=suitability,
+                expected_revision=expected_revision,
             )
         except ConsoleError as exc:
             errors.append(exc)

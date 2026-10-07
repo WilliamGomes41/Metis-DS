@@ -314,7 +314,7 @@ def test_approve_without_explicit_closed_type_fails(tmp_path: Path) -> None:
         for obj in console.snapshot_objects(receipt["snapshot_id"])
         if obj["object_type"] == "heading" and not obj.get("confirmed_object_type")
     )
-    with pytest.raises(ConsoleError, match="unknown_object_type|object_type_not_confirmed"):
+    with pytest.raises(ConsoleError, match="structure_confirmation_command_required"):
         console.review_object(
             actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=receipt["snapshot_id"],
@@ -379,7 +379,7 @@ def test_type_and_approve_disabled_when_open_source_passage_fails(tmp_path: Path
     assert 'value="goedkeuren_na_correctie"' in html
     assert 'value="afwijzen"' in html
 
-    with pytest.raises(ConsoleError, match="open_original|source_locator"):
+    with pytest.raises(ConsoleError, match="structure_confirmation_command_required"):
         console.review_object(
             actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=receipt["snapshot_id"],
@@ -425,6 +425,7 @@ def test_type_confirm_succeeds_after_open_original(tmp_path: Path) -> None:
         data={
             "snapshot_id": receipt["snapshot_id"],
             "object_id": target["object_id"],
+            "snapshot_revision": console.objects_revision(receipt["snapshot_id"]),
             "decision": "approve",
             "confirmed_object_type": "explanation",
             "suitability": "ja",

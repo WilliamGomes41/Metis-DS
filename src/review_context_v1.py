@@ -108,6 +108,8 @@ def _endpoint_projection(
     expected_version: str,
     current_by_id: dict[str, dict[str, Any]],
     review_path: str,
+    bindings=(),
+    fragments=None,
 ) -> dict[str, Any]:
     current = current_by_id.get(object_id)
     if current is None:
@@ -139,7 +141,7 @@ def _endpoint_projection(
             or ""
         ),
         "text": str((current.get("content") or {}).get("clean_text") or ""),
-        "review_duty": review_duty_for(current, review_path=review_path),
+        "review_duty": review_duty_for(current, review_path=review_path, bindings=bindings, fragments=fragments),
     }
 
 
@@ -189,6 +191,8 @@ def _outgoing_links(
     *,
     current_by_id: dict[str, dict[str, Any]],
     review_path: str,
+    bindings=(),
+    fragments=None,
     include_proposed: bool,
 ) -> list[dict[str, Any]]:
     source_id = str(focal.get("object_id") or "")
@@ -204,13 +208,13 @@ def _outgoing_links(
             object_id=source_id,
             expected_version=source_version,
             current_by_id=current_by_id,
-            review_path=review_path,
+            review_path=review_path, bindings=bindings, fragments=fragments
         )
         target_endpoint = _endpoint_projection(
             object_id=target_id,
             expected_version=target_version,
             current_by_id=current_by_id,
-            review_path=review_path,
+            review_path=review_path, bindings=bindings, fragments=fragments
         )
         resolution, stale_endpoint = _relation_resolution(
             source_endpoint,
@@ -242,6 +246,8 @@ def _incoming_links(
     objects: Iterable[dict[str, Any]],
     current_by_id: dict[str, dict[str, Any]],
     review_path: str,
+    bindings=(),
+    fragments=None,
     include_proposed: bool,
 ) -> list[dict[str, Any]]:
     focal_id = str(focal.get("object_id") or "")
@@ -266,13 +272,13 @@ def _incoming_links(
                 object_id=source_id,
                 expected_version=source_version,
                 current_by_id=current_by_id,
-                review_path=review_path,
+                review_path=review_path, bindings=bindings, fragments=fragments
             )
             target_endpoint = _endpoint_projection(
                 object_id=focal_id,
                 expected_version=target_version,
                 current_by_id=current_by_id,
-                review_path=review_path,
+                review_path=review_path, bindings=bindings, fragments=fragments
             )
             resolution, stale_endpoint = _relation_resolution(
                 source_endpoint,
@@ -319,6 +325,8 @@ def review_context(
     *,
     objects: Iterable[dict[str, Any]],
     review_path: str,
+    bindings=(),
+    fragments=None,
     stage: str | None = None,
 ) -> dict[str, Any]:
     """Project one-hop semantic context around a current focal ReviewDuty."""
@@ -327,7 +335,7 @@ def review_context(
     current_by_id = _current_by_id(rows)
     focal_id = str(focal.get("object_id") or "")
     focal_version = str(focal.get("object_version") or "")
-    duty = review_duty_for(focal, review_path=review_path)
+    duty = review_duty_for(focal, review_path=review_path, bindings=bindings, fragments=fragments)
     effective_stage = str(stage or (duty or {}).get("stage") or FIRST_REVIEW)
     include_proposed = effective_stage == FIRST_REVIEW
 
@@ -336,14 +344,14 @@ def review_context(
             focal,
             current_by_id=current_by_id,
             review_path=review_path,
-            include_proposed=include_proposed,
+            include_proposed=include_proposed, bindings=bindings, fragments=fragments
         ),
         *_incoming_links(
             focal,
             objects=rows,
             current_by_id=current_by_id,
             review_path=review_path,
-            include_proposed=include_proposed,
+            include_proposed=include_proposed, bindings=bindings, fragments=fragments
         ),
     ]
     links.sort(key=_link_sort_key)

@@ -414,10 +414,10 @@ def test_form_content_and_revision_are_co_read_not_separate_gets(tmp_path: Path)
     snapshot_id = receipt["snapshot_id"]
     target = _content_rows(console, snapshot_id)[0]
     original = _file_revision(console._objects_path(snapshot_id))
-    real = console.snapshot_objects
+    real = console.snapshot_objects_and_revision
 
     def raced(snapshot_id_arg: str, include_blocked: bool = False, *, for_update: bool = False):
-        rows = real(snapshot_id_arg, include_blocked, for_update=for_update)
+        rows, revision = real(snapshot_id_arg, include_blocked)
         other = OperationsConsole(
             root=tmp_path,
             source_store=tmp_path / "sources" / "private",
@@ -428,9 +428,9 @@ def test_form_content_and_revision_are_co_read_not_separate_gets(tmp_path: Path)
             if row["object_id"] == target["object_id"]:
                 row["reliability_marker"] = "form-coread-winner"
         other._save_objects(snapshot_id_arg, loaded)
-        return rows
+        return rows, revision
 
-    console.snapshot_objects = raced  # type: ignore[method-assign]
+    console.snapshot_objects_and_revision = raced  # type: ignore[method-assign]
     client = _client(console, "researcher.anne")
     body, revision = _open_review_form(client, snapshot_id, target["object_id"])
     live = _file_revision(console._objects_path(snapshot_id))

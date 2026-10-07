@@ -29,7 +29,8 @@ def capture(state, account):
             envelopes = [e for e in state.list_envelopes()
                          if e.get("uploader_account_id") == aid or aid in (e.get("named_reviewers") or [])]
             docs = [{"envelope": deepcopy(e), "objects": state.snapshot_objects(e["snapshot_id"]),
-                     "events": [], "bindings": state.object_review_bindings(e["snapshot_id"])} for e in envelopes]
+                     "events": [], "bindings": state.object_review_bindings(e["snapshot_id"]),
+                     "fragments": state.review_source_fragments(e["snapshot_id"], envelope=e)} for e in envelopes]
             by_id = {d["envelope"]["snapshot_id"]: d for d in docs}
             # Legacy events are attributed only when their object ID is unique globally.
             ownership = {}

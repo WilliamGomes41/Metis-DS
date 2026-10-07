@@ -155,6 +155,7 @@ def test_reviewer_decision_during_native_reextract_survives_stale_activation(wor
     review_events=[]
     def reviewed(payload):
         second=_console(tmp_path,workflow_postgres)
+        second._extract = console._extract
         second.review_object(actor_id=reviewer,snapshot_id=sid,object_id=target['object_id'],
                              decision='reject',comment='Behoud deze beoordeling')
         retained.extend(deepcopy(second.snapshot_objects(sid)))

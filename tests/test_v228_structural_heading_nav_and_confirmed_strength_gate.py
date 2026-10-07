@@ -955,13 +955,11 @@ def test_block_b_type_change_away_clears_active_strength_audit_may_keep(
         for row in console._load_objects(receipt["snapshot_id"])
         if row["object_id"] == rec["object_id"]
     ]
-    console.review_object(
+    console.confirm_object_type(
         actor_id=accounts["reviewer"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
         object_id=rec["object_id"],
-        decision="approve",
         confirmed_object_type="explanation",
-        recommendation_strength="doen",
     )
     live = next(
         obj

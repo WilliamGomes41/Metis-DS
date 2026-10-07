@@ -44,7 +44,7 @@ def is_forbidden_reviewer(value: str) -> bool:
 
 
 def reviewer_is_agent(binding_or_account: dict[str, Any]) -> bool:
-    for key in ("reviewer", "username", "display_name", "reviewer_id"):
+    for key in ("reviewer", "username", "display_name", "reviewer_id", "reviewer_account_id", "account_id"):
         if is_forbidden_reviewer(str(binding_or_account.get(key) or "")):
             return True
     return False

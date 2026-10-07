@@ -8,6 +8,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.review_authority_fixture_support import materialised_row, source_fragments, approved_bindings
 
 from copy import deepcopy
 
@@ -36,7 +37,7 @@ def _obj(
     gate: str = GATE_ALLOWED,
     register_status: str = "selected_as_candidate",
 ) -> dict:
-    return {
+    row = {
         "object_id": object_id,
         "object_type": "unclassified",
         "proposed_object_type": proposed_type,
@@ -56,6 +57,7 @@ def _obj(
         "governance": {"validation_status": "needs_review"},
         "content": {"clean_text": f"Passage {object_id}."},
     }
+    return materialised_row(row)
 
 
 def _ids(rows: list[dict]) -> list[str]:
@@ -91,9 +93,9 @@ def test_priority_queues_are_focus_regular_secondary_and_stable_within_tier() ->
         "summary-2",
     ]
 
-    assert _ids(slow_review_duty(rows, review_path="richtlijn")) == expected
-    assert _ids(ordinary_review_queue(rows, review_path="richtlijn")) == expected
-    assert _ids(regular_review_queue(rows, review_path="richtlijn")) == expected
+    assert _ids(slow_review_duty(rows, review_path="richtlijn", fragments=source_fragments())) == expected
+    assert _ids(ordinary_review_queue(rows, review_path="richtlijn", fragments=source_fragments())) == expected
+    assert _ids(regular_review_queue(rows, review_path="richtlijn", fragments=source_fragments())) == expected
 
 
 def test_regular_individual_queue_uses_same_priority_without_changing_state() -> None:
@@ -116,7 +118,7 @@ def test_regular_individual_queue_uses_same_priority_without_changing_state() ->
     ]
     before = deepcopy(rows)
 
-    queue = regular_individual_review_queue(rows, review_path="richtlijn")
+    queue = regular_individual_review_queue(rows, review_path="richtlijn", fragments=source_fragments())
 
     assert _ids(queue) == ["focus", "regular", "summary"]
     assert rows == before
@@ -130,7 +132,7 @@ def test_normal_risk_batches_follow_section_priority() -> None:
         _obj("focus", ["Richtlijn", "Conclusies"], proposed_type="definition"),
     ]
 
-    assert _ids(normal_risk_batch_queue(rows, review_path="richtlijn")) == [
+    assert _ids(normal_risk_batch_queue(rows, review_path="richtlijn", fragments=source_fragments())) == [
         "focus",
         "regular",
         "summary",
@@ -150,8 +152,7 @@ def test_priority_never_opens_admission_gate() -> None:
 
     queue = ordinary_review_queue(
         [allowed_summary, blocked_focus],
-        review_path="richtlijn",
-    )
+        review_path="richtlijn", fragments=source_fragments())
 
     assert _ids(queue) == ["allowed-summary"]
     assert blocked_focus["metadata"]["admission"]["gate_result"] == GATE_BLOCKED
@@ -198,7 +199,6 @@ def test_individual_review_surface_orders_focus_before_secondary_across_duty_lan
         [summary_recommendation, focus_unclassified],
         "richtlijn",
         task="individual",
-        normal_review_enabled=False,
-    )
+        normal_review_enabled=False, fragments=source_fragments())
 
     assert html.index("Conclusies") < html.index("Samenvatting")

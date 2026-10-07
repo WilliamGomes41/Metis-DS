@@ -621,24 +621,9 @@ def test_g2_still_blocks_publish(tmp_path: Path) -> None:
         for obj in console.snapshot_objects(receipt["snapshot_id"])
         if obj["object_type"] != "document"
     )
-    console.confirm_object_type(
-        actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=target["object_id"],
-        confirmed_object_type="heading" if target["object_type"] == "heading" else "explanation",
-    )
-    console.review_object(
-        actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=target["object_id"],
-        decision="approve",
-    )
-    console.review_object(
-        actor_id=accounts["researcher"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=target["object_id"],
-        decision="approve",
-    )
+    for actor in (accounts["reviewer"]["account_id"], accounts["researcher"]["account_id"]):
+        console.batch_confirm_headings(actor_id=actor, snapshot_id=receipt["snapshot_id"],
+            object_ids=[target["object_id"]], expected_revision=console.objects_revision(receipt["snapshot_id"]))
     result = console.publish(
         actor_id=accounts["publisher"]["account_id"],
         snapshot_id=receipt["snapshot_id"],

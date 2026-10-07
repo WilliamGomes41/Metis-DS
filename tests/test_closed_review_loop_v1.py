@@ -100,8 +100,7 @@ def _system(tmp_path):
     ids = [
         obj["object_id"]
         for obj in normal_risk_batch_queue(
-            console.snapshot_objects(sid), review_path="richtlijn"
-        )
+            console.snapshot_objects(sid), review_path="richtlijn", fragments=console.review_source_fragments(sid), bindings=console.object_review_bindings(sid))
     ]
     assert len(ids) >= 2
     return console, researcher, reviewer, sid, ids

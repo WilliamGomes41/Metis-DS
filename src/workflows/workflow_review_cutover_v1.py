@@ -97,7 +97,7 @@ class _PostgresWorkflowReviewMixin:
         self._bindings_baseline = deepcopy(self._bindings)
         self._mirror_bindings()
 
-    def object_review_bindings(self, snapshot_id: str) -> list[dict[str, Any]]:
+    def object_review_bindings(self, snapshot_id: str, *, objects=None) -> list[dict[str, Any]]:
         """Refresh PostgreSQL authorizations before deriving the public view."""
         try:
             current = self.workflow_review_store.read_bindings()
@@ -105,7 +105,7 @@ class _PostgresWorkflowReviewMixin:
             raise ConsoleError("workflow_review_unavailable", str(exc)) from exc
         self._bindings = current
         self._bindings_baseline = deepcopy(current)
-        return super().object_review_bindings(snapshot_id)
+        return super().object_review_bindings(snapshot_id, objects=objects)
 
     def _restore_review_state(
         self,
@@ -175,7 +175,11 @@ class _PostgresWorkflowReviewMixin:
                     objects=prior_objects,
                 )
                 raise ConsoleError("workflow_review_write_failed", str(exc)) from exc
-            except Exception:
+            except Exception as exc:
+                if isinstance(exc, ConsoleError) and exc.code == "snapshot_object_write_conflict":
+                    self._remirror_review_runtime()
+                    self._bindings_baseline = deepcopy(self._bindings)
+                    raise
                 self._restore_review_state(
                     bindings=prior_bindings,
                     snapshot_id=sid,
@@ -202,7 +206,11 @@ class _PostgresWorkflowReviewMixin:
                 with workflow_transaction(self.workflow_review_store):
                     with buffer_events(self._ledger_path):
                         yield
-        except Exception:
+        except Exception as exc:
+            if isinstance(exc, ConsoleError) and exc.code == "snapshot_object_write_conflict":
+                self._remirror_review_runtime()
+                self._bindings_baseline = deepcopy(self._bindings)
+                raise
             self._restore_review_state(
                 bindings=prior_bindings,
                 snapshot_id=restore_snapshot_id,

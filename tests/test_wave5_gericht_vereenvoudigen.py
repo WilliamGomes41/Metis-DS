@@ -12,8 +12,10 @@ G2-BLOCKED. No wave 6. No store/session change.
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.review_authority_fixture_support import materialised_row, source_fragments
 
 import ast
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -137,7 +139,7 @@ def _djg_candidate(**overrides: Any) -> dict[str, Any]:
 
 
 def _queue_row(object_id: str, admitted: dict[str, Any], text: str) -> dict[str, Any]:
-    return {
+    row = {
         "object_id": object_id,
         "object_type": "unclassified",
         "proposed_object_type": admitted.get("proposed_type") or "recommendation",
@@ -146,6 +148,11 @@ def _queue_row(object_id: str, admitted: dict[str, Any], text: str) -> dict[str,
             "selection_origin": "proposal_selected",
             "spans": [{"block_id": f"block-{object_id}", "start": 0, "end": len(text)}]}},
     }
+    from test_t4_single_knowledge_path_invariants import _allowed_candidate
+    row["source"] = deepcopy(_allowed_candidate()["source"])
+    row["source"]["source_checksum"] = admitted.get("source_hash") or row["source"]["source_checksum"]
+    row["source"]["version"] = admitted.get("document_version") or row["source"]["version"]
+    return materialised_row(row)
 
 
 def _heading(object_id: str, text: str) -> dict[str, Any]:
@@ -177,7 +184,7 @@ def test_soft_scores_must_not_open_blocked_admission() -> None:
         "abbreviation_unresolved",
     ):
         assert code in blocked["reason_codes"], code
-    assert ordinary_review_queue([_queue_row("djg-1", blocked, DJG)]) == []
+    assert ordinary_review_queue([_queue_row("djg-1", blocked, DJG)], fragments=source_fragments()) == []
     assert is_admission_blocked(_queue_row("djg-1", blocked, DJG)) is True
 
 
@@ -233,7 +240,7 @@ def test_complete_adviseert_stays_allowed_and_boom_is_not_gated() -> None:
     allowed = admit_candidate(_complete_adviseert())
     assert allowed["gate_result"] == GATE_ALLOWED
     assert allowed["reason_codes"] == []
-    queue = ordinary_review_queue([_queue_row("rec-ok", allowed, ADVISEERT)])
+    queue = ordinary_review_queue([_queue_row("rec-ok", allowed, ADVISEERT)], fragments=source_fragments())
     assert [row["object_id"] for row in queue] == ["rec-ok"]
 
     boom = {

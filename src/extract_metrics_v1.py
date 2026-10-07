@@ -34,7 +34,6 @@ from src.admission_gate_v1 import (
     admission_of,
     admit_candidate,
     build_candidate_record,
-    ordinary_review_queue,
 )
 from src.extract_coverage_v1 import coverage_by_section, coverage_by_section_role
 from src.passage_register_v1 import apply_passage_register, passage_register_of
@@ -648,7 +647,23 @@ def compute_extract_metrics(
                 annotated_hits += 1
     neighbor_total = len(selected)
     neighbor_hits = sum(1 for obj in selected if _context_complete(obj))
-    ordinary = ordinary_review_queue(passages)
+    # Extraction gold measures offline workload, not a live ReviewDuty. It has
+    # neither a WorkingRevision nor retained source/binding inputs. Using the
+    # live queue here would turn absent runtime evidence into a false zero.
+    from src.four_eyes_v1 import requires_four_eyes
+    from src.operations_console_v1 import SLOW_REVIEW_DUTY_TYPES, review_lane
+    ordinary = [
+        obj for obj in passages
+        if admission_of(obj).get("gate_result") == GATE_ALLOWED
+        and review_lane(obj, review_path="richtlijn") != "fast"
+        and (
+            requires_four_eyes(obj, confirmed_type=obj.get("confirmed_object_type") or None)
+            or any(
+                str(obj.get(field) or "") in SLOW_REVIEW_DUTY_TYPES
+                for field in ("confirmed_object_type", "object_type", "proposed_object_type")
+            )
+        )
+    ]
     burden, burden_defined = _review_burden_value(gold if isinstance(gold, dict) else None, len(ordinary))
     claim = gold_supports_independent_quality_claim(
         gold, holdout=holdout, lock=lock, repo_root=repo_root

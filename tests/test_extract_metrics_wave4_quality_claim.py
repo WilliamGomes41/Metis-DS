@@ -648,3 +648,37 @@ def test_language_variation_admission_still_green() -> None:
     assert report["false_admits"] or report["misses"]
     assert report["precision"] < 1.0 or report["recall"] < 1.0
     assert gold_supports_independent_quality_claim(gold) is False
+
+
+@pytest.mark.parametrize("object_type", ["recommendation", "condition", "exception"])
+def test_extract_workload_counts_admitted_slow_rows_without_runtime_fragments(object_type):
+    """Offline gold workload is a diagnostic count, not a live ReviewDuty."""
+    from copy import deepcopy
+    from src.admission_gate_v1 import ordinary_review_queue
+
+    obj = _obj(TRUE_A, source_id="src-a", object_type=object_type)
+    blocked = _obj(TRUE_B, source_id="src-a", selected=False, object_type=object_type)
+    heading = _obj("Aanbevelingen", source_id="src-a", object_type="heading")
+    gold = {
+        "kind": "extract_quality", "version": "0.1", "status": "fixture_gold",
+        "expected_ordinary_review_count": 1,
+        "passages": [_row(TRUE_A, "G-A", source_id="src-a", expected_type=object_type)],
+    }
+    objects = [obj, blocked, heading]
+    before = deepcopy(objects)
+    metrics = compute_extract_metrics(objects, gold=gold)
+    assert metrics["review_burden_defined"] is True
+    assert metrics["review_burden"] == 1.0
+    assert ordinary_review_queue(objects) == [], "The diagnostic must not open live review authority"
+    assert objects == before
+
+
+def test_extract_workload_high_risk_definition_is_counted_without_authorizing_review():
+    obj = _obj(TRUE_A, source_id="src-a", object_type="definition")
+    obj["risk"] = {"risk_level": "high"}
+    gold = {
+        "kind": "extract_quality", "version": "0.1", "status": "fixture_gold",
+        "expected_ordinary_review_count": 2,
+        "passages": [_row(TRUE_A, "G-A", source_id="src-a", expected_type="definition")],
+    }
+    assert compute_extract_metrics([obj], gold=gold)["review_burden"] == 0.5

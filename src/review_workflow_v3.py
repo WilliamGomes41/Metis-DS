@@ -20,7 +20,7 @@ def read_jsonl(p:Path)->list[dict[str,Any]]:
 def write_jsonl(p:Path,rows:list[dict[str,Any]])->None:
     p.parent.mkdir(parents=True,exist_ok=True); p.write_text(''.join(json.dumps(x,ensure_ascii=False,sort_keys=True)+'\n' for x in rows),encoding='utf-8')
 
-def apply_reviews(objects:list[dict[str,Any]], decisions:list[dict[str,Any]], *, track:str, schema_path:Path,
+def _apply_review_state(objects:list[dict[str,Any]], decisions:list[dict[str,Any]], *, track:str, schema_path:Path,
                   ledger_path:Path|None=None)->tuple[list[dict[str,Any]],dict[str,Any]]:
     by={d['object_id']:d for d in decisions}; out=[]; errors=[]; stats={"approved":0,"revise":0,"rejected":0,"pending":0,"snapshot_mismatch":0}
     for original in objects:
@@ -70,6 +70,19 @@ def apply_reviews(objects:list[dict[str,Any]], decisions:list[dict[str,Any]], *,
     report={'track':track,'input_objects':len(objects),'decision_rows':len(decisions),'stats':stats,'errors':errors,
             'complete':stats['pending']==0 and stats['snapshot_mismatch']==0 and not errors}
     return out,report
+
+def apply_reviews(objects:list[dict[str,Any]], decisions:list[dict[str,Any]], *, track:str, schema_path:Path,
+                  ledger_path:Path|None=None)->tuple[list[dict[str,Any]],dict[str,Any]]:
+    """Raw JSONL is not a current WorkingRevision and cannot authorize review.
+
+    Live first review must enter OperationsConsole.review_object, which owns
+    source/duty/actor validation and the atomic exact-binding transaction.
+    The private transformer only prepares governance inside that command.
+    """
+    errors = [{"object_id": decision.get("object_id"),
+               "error": "working_revision_review_command_required"} for decision in decisions]
+    return deepcopy(objects), {"track": track, "input_objects": len(objects),
+        "decision_rows": len(decisions), "stats": {}, "errors": errors, "complete": False}
 
 def main()->int:
     ap=argparse.ArgumentParser(); ap.add_argument('--input',type=Path,required=True); ap.add_argument('--decisions',type=Path,required=True)

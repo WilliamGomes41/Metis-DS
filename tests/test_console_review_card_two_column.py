@@ -358,7 +358,7 @@ def test_type_and_approve_still_disabled_when_passage_cannot_open(tmp_path: Path
     assert 'value="goedkeuren_na_correctie"' in html
     assert 'value="afwijzen"' in html
 
-    with pytest.raises(ConsoleError, match="open_original|source_locator"):
+    with pytest.raises(ConsoleError, match="structure_confirmation_command_required"):
         console.review_object(
             actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=receipt["snapshot_id"],

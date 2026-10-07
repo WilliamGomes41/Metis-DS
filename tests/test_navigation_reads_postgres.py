@@ -55,6 +55,7 @@ def test_native_navigation_count_matches_workboard_with_five_connections(
         project_policy(objects, policy)
         documents.write_bundle(envelope=envelope, objects=objects)
 
+    console.review_source_fragments = fixture.review_source_fragments
     account = console._account(primary)
     expected = sum(item["work_state"] in {"review", "disposition", "technical_repair"}
                    for item in review_workboard_items(console, account=account))

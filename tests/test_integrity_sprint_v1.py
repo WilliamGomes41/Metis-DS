@@ -10,9 +10,9 @@ from src.integrity_kernel import (
     schema_errors, stamp_canonical_hashes, validate_source_fragments,
 )
 from src.review_ledger import append_event, verify_ledger
-from src.review_workflow_v3 import apply_reviews
+from src.review_workflow_v3 import _apply_review_state as apply_reviews
 from src.revision_workflow import create_revision
-from src.second_review_workflow_v3 import apply_second
+from src.second_review_workflow_v3 import _apply_second_state as apply_second
 
 SCHEMA=ROOT/'schemas/knowledge_object.schema.v1.1.json'
 SEM=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v21.jsonl'

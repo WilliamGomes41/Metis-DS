@@ -88,7 +88,14 @@ def _objects(snapshot_id: str, count: int, status: str) -> list[dict[str, Any]]:
                 },
             }
         )
-    return rows
+    from tests.review_authority_fixture_support import materialised_row
+    for row in rows[1:]:
+        row["proposed_object_type"] = "recommendation"
+        row["metadata"] = {"admission": {"gate_result": "allowed", "section_path": ["Advies"], "proposed_type": "recommendation"}}
+        row["content"] = {"clean_text": "Deze passage bevat een bronvast advies."}
+        if row["object_id"].endswith("-001") and status != "approved":
+            row["governance"]["validation_status"] = "needs_review"
+    return [materialised_row(row) for row in rows]
 
 
 class _Result:
@@ -114,7 +121,7 @@ class _CanonicalConnection:
         assert "release_published" in sql
         candidates = set(str(value) for value in params[0])
         return _Result(
-            [{"snapshot_id": snapshot_id} for snapshot_id in sorted(candidates & self.owner.published)]
+            [{"snapshot_id": snapshot_id, "status": "published", "item_count": 1, "active_same_release": 1} for snapshot_id in sorted(candidates & self.owner.published)]
         )
 
 
@@ -137,6 +144,12 @@ class _BadgeSubject(_PostgresBadgeCountsMixin):
         self.workflow_document_store = store
         self.canonical_publication_store = canonical
         self.account_id = account_id
+        from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+        self.workflow_review_store = PostgresWorkflowReviewStore(store.config)
+
+    def review_source_fragments(self, snapshot_id, **kwargs):
+        from tests.review_authority_fixture_support import source_fragments
+        return source_fragments()
 
     def _account(self, account_id: str) -> dict[str, Any]:
         assert account_id == self.account_id
@@ -298,16 +311,21 @@ def test_badges_use_constant_round_trips_and_reflect_next_read() -> None:
         canonical = _CanonicalStore({snapshots[0]})
         subject = _BadgeSubject(store, canonical, account_id)
 
+        from tests.review_authority_fixture_support import approved_bindings
+        for sid, objects in zip(snapshots, object_sets, strict=True):
+            subject.workflow_review_store.replace_snapshot_bindings(sid, approved_bindings(objects, account_id))
+        workflow_connects = 0
+        subject.workflow_review_store._connect = counted_connect
         first = subject.waiting_task_counts(account_id)
         assert first == {
             "ingest": 1,
             "tree": 1,
-            "review": 2,
+            "review": 1,
             "publish": 2,
             "accounts": 0,
         }
-        assert workflow_connects == 1
-        assert canonical.execute_calls == 1
+        assert workflow_connects == 4
+        assert canonical.execute_calls == 2
 
         store._connect = original_connect  # type: ignore[method-assign]
         changed = deepcopy(object_sets[0])
@@ -321,8 +339,8 @@ def test_badges_use_constant_round_trips_and_reflect_next_read() -> None:
         assert second["ingest"] == 0
         assert second["review"] == 1
         assert second["publish"] == 2
-        assert workflow_connects == 1
-        assert canonical.execute_calls == 1
+        assert workflow_connects == 4
+        assert canonical.execute_calls == 2
     finally:
         store._connect = original_connect  # type: ignore[method-assign]
         with store._connect() as con:

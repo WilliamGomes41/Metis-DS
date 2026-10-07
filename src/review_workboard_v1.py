@@ -261,15 +261,25 @@ def review_work_item(
 
     objects = inputs.objects if inputs is not None else console.snapshot_objects(snapshot_id)
     closure = source_passage_closure(objects)
+    bindings: list[dict[str, Any]] | None
+    if inputs is not None:
+        bindings = inputs.bindings
+    else:
+        try:
+            bindings = console.object_review_bindings(snapshot_id)
+        except AttributeError:
+            bindings = None
+
+    fragments = console.review_source_fragments(snapshot_id, envelope=envelope)
 
     review_path = review_path_for_klasse(str(envelope.get("class") or ""))
     headings, _ = review_stacks(objects, review_path=review_path)
     open_headings = [row for row in headings if not _review_is_final(row)]
     heading_pending = len(open_headings)
 
-    duty = slow_review_duty(objects, review_path=review_path)
+    duty = slow_review_duty(objects, review_path=review_path, bindings=bindings, fragments=fragments)
     regular_individual = (
-        regular_individual_review_queue(objects, review_path=review_path)
+        regular_individual_review_queue(objects, review_path=review_path, fragments=fragments, bindings=bindings)
         if review_path != "boom"
         else []
     )
@@ -282,28 +292,17 @@ def review_work_item(
     if isinstance(console, ProportionateReviewConsole):
         normal_passages, normal_batches = normal_risk_batch_counts(
             objects,
-            review_path=review_path,
+            review_path=review_path, fragments=fragments, bindings=bindings
         )
 
-    bindings: list[dict[str, Any]] | None
-    if inputs is not None:
-        bindings = inputs.bindings
-    elif not hasattr(console, "_bindings") and not hasattr(console, "workflow_review_store"):
-        bindings = None
-    else:
-        try:
-            bindings = console.object_review_bindings(snapshot_id)
-        except AttributeError:
-            bindings = None
-
-    followups = review_followup_queues(objects, review_path=review_path, bindings=bindings)
+    followups = review_followup_queues(objects, review_path=review_path, bindings=bindings, fragments=fragments)
     blocked_count = len(followups["repair"])
     closure_gap_ids = [str(obj["object_id"]) for obj in followups["disposition"]]
 
     duty_counts = review_duty_counts(
         objects,
         review_path=review_path,
-        bindings=bindings,
+        bindings=bindings, fragments=fragments
     )
     if bindings is None:
         route_counts = {
@@ -319,7 +318,7 @@ def review_work_item(
             objects,
             review_path=review_path,
             reviewer_id=account_id,
-            bindings=bindings,
+            bindings=bindings, fragments=fragments
         )
     if review_path != "boom":
         # Koppen stay a structure check. They are not content-review duties.
@@ -341,6 +340,9 @@ def review_work_item(
         **duty_counts,
         **route_counts,
     )
+    item["heading_total"] = len(headings)
+    item["individual_total"] = console_ui._lane_total(
+        objects, review_path=review_path, lane="contextual", open_rows=individual)
     item["progress"] = console_ui._review_progress_summary(objects)
     item["has_review_decision"] = any(
         str((obj.get("governance") or {}).get("validated_by") or "").strip()
@@ -387,7 +389,7 @@ def review_workboard_items(
             envelope = {"snapshot_id": snapshot_id, **summary["envelope"]}
             if str(envelope.get("publication_eligibility") or "") == PRE_REVIEW_BLOCKED:
                 continue
-            if envelope.get("review_policy"):
+            if "work_item" in summary or envelope.get("review_policy"):
                 item = (summary["work_item"] if "work_item" in summary else
                         review_work_item(console, envelope=envelope, account=account))
                 if item is not None:

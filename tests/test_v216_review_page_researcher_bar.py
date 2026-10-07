@@ -491,7 +491,7 @@ def test_human_confirms_strength_on_recommendation_not_heading(tmp_path: Path) -
     row = next(obj for obj in confirmed if obj["object_id"] == rec["object_id"])
     assert row["confirmed_object_type"] == "recommendation"
     assert row.get("confirmed_recommendation_strength") == "doen"
-    with pytest.raises(ConsoleError, match="recommendation_strength_requires_recommendation"):
+    with pytest.raises(ConsoleError, match="structure_confirmation_command_required"):
         console.review_object(
             actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=receipt["snapshot_id"],

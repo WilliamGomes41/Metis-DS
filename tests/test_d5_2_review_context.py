@@ -7,6 +7,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.review_authority_fixture_support import materialised_row, source_fragments, approved_bindings
 
 from copy import deepcopy
 
@@ -38,7 +39,7 @@ def _obj(
     second_status: str = "not_required",
     text: str | None = None,
 ) -> dict:
-    return {
+    row = {
         "object_id": object_id,
         "object_version": version,
         "object_type": object_type,
@@ -60,12 +61,14 @@ def _obj(
             },
         },
         "risk": {
-            "level": "normal",
+            "level": "high" if second_required else "normal",
+            "risk_level": "high" if second_required else "standard",
             "requires_second_review": second_required,
         },
         "uncertainty": {"has_uncertainty": False, "items": []},
         "provenance": {"canonical_object_hash": f"hash-{object_id}-{version}"},
     }
+    return materialised_row(row)
 
 
 def _edge(source: dict, relation_type: str, target: dict) -> dict:
@@ -91,8 +94,7 @@ def test_first_review_projects_confirmed_and_proposed_one_hop_context() -> None:
     context = review_context(
         rec,
         objects=[rec, condition, explanation],
-        review_path="richtlijn",
-    )
+        review_path="richtlijn", fragments=source_fragments())
 
     assert context["stage"] == "first_review"
     assert [(row["authority"], row["relation_type"]) for row in context["links"]] == [
@@ -120,8 +122,7 @@ def test_second_review_projects_confirmed_only() -> None:
     context = review_context(
         rec,
         objects=[rec, condition, explanation],
-        review_path="richtlijn",
-    )
+        review_path="richtlijn", fragments=source_fragments(), bindings=approved_bindings([rec, condition, explanation]))
 
     assert context["stage"] == "second_review"
     assert len(context["links"]) == 1
@@ -139,8 +140,7 @@ def test_incoming_context_shows_multiple_sources_without_reversing_edges() -> No
     context = review_context(
         condition,
         objects=[condition, rec_a, rec_b],
-        review_path="richtlijn",
-    )
+        review_path="richtlijn", fragments=source_fragments())
 
     incoming = [row for row in context["links"] if row["direction"] == DIRECTION_INCOMING]
     assert {row["source"]["object_id"] for row in incoming} == {"rec-a", "rec-b"}
@@ -157,8 +157,7 @@ def test_incoming_relation_marks_stale_focal_target_version() -> None:
     context = review_context(
         condition_v2,
         objects=[condition_v2, rec],
-        review_path="richtlijn",
-    )
+        review_path="richtlijn", fragments=source_fragments())
 
     [link] = context["links"]
     assert link["direction"] == DIRECTION_INCOMING
@@ -179,8 +178,7 @@ def test_exact_duplicate_confirmed_edge_suppresses_proposed_duplicate() -> None:
     context = review_context(
         rec,
         objects=[rec, condition],
-        review_path="richtlijn",
-    )
+        review_path="richtlijn", fragments=source_fragments())
 
     assert len(context["links"]) == 1
     assert context["links"][0]["authority"] == AUTHORITY_CONFIRMED
@@ -206,8 +204,7 @@ def test_blocked_proposal_legacy_and_structural_relations_are_not_context_author
         rec,
         objects=[rec, condition, heading],
         review_path="richtlijn",
-        stage="first_review",
-    )
+        stage="first_review", fragments=source_fragments())
 
     assert context["links"] == []
 
@@ -225,8 +222,7 @@ def test_target_version_mismatch_and_missing_are_explicit_without_rebinding() ->
     context = review_context(
         rec,
         objects=[rec, condition_v2],
-        review_path="richtlijn",
-    )
+        review_path="richtlijn", fragments=source_fragments())
 
     by_target = {row["target"]["object_id"]: row for row in context["links"]}
     stale = by_target["condition"]["target"]
@@ -251,8 +247,7 @@ def test_related_review_duty_is_observation_not_shared_approval() -> None:
     context = review_context(
         rec,
         objects=[rec, condition],
-        review_path="richtlijn",
-    )
+        review_path="richtlijn", fragments=source_fragments())
 
     [link] = context["links"]
     assert link["target"]["review_duty"]["object_id"] == "condition"
@@ -303,8 +298,7 @@ def test_confirmed_relation_reuses_semantic_proposal_evidence_after_relation_id_
     context = review_context(
         rec,
         objects=[rec, condition],
-        review_path="richtlijn",
-    )
+        review_path="richtlijn", fragments=source_fragments())
 
     [link] = context["links"]
     assert link["relation_id"] == confirmed["relation_id"]
@@ -322,8 +316,7 @@ def test_malformed_new_format_relation_set_fails_closed() -> None:
     context = review_context(
         rec,
         objects=[rec, condition],
-        review_path="richtlijn",
-    )
+        review_path="richtlijn", fragments=source_fragments())
 
     assert context["links"] == []
 
@@ -339,13 +332,11 @@ def test_review_context_ui_marks_stale_version_and_does_not_change_relation_choi
         rec,
         [rec, condition_v2],
         snapshot_id="snap-1",
-        review_path="richtlijn",
-    )
+        review_path="richtlijn", fragments=source_fragments())
     review_html = _knowledge_relation_review_block(
         rec,
         [rec, condition_v2],
-        review_path="richtlijn",
-    )
+        review_path="richtlijn", fragments=source_fragments())
 
     assert "Samenhang met andere kennisobjecten" in context_html
     assert "verwacht versie 1.0; actuele versie 2.0" in context_html

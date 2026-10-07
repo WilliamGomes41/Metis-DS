@@ -265,10 +265,20 @@ class _HotPathRouteConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole):
             },
         }
 
+    def review_source_fragments(self, snapshot_id, **kwargs):
+        # The selected HTTP fixture has no content candidates.
+        return []
+
+    def _navigation_review_count(self, account):
+        # This HTTP fixture supplies the already computed navigation projection.
+        # Kernel and native-store parity are exercised by NavigationProbe tests.
+        return 1
+
     def review_workboard_summaries(
         self,
         account_id: str,
         snapshot_id: str | None = None,
+        *, navigation_only: bool = False,
     ) -> dict[str, dict[str, Any]]:
         self.workboard_summary_calls += 1
         assert account_id == "acc-hotpath"
@@ -536,6 +546,11 @@ def test_status_middleware_slow_sync_read_does_not_block_event_loop(tmp_path: Pa
 
 
 class _ContextPropagationConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole):
+    def _navigation_review_count(self, account):
+        # This test exercises propagation of the tree's publication prefetch,
+        # with no review work in its independent route fixture.
+        return 0
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.canonical_publication_store = object()

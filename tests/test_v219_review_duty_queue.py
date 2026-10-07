@@ -8,6 +8,7 @@ never served. Tests hit the real functions.
 PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 """
 from __future__ import annotations
+from tests.review_authority_fixture_support import materialised_row, source_fragments
 
 import re
 from html.parser import HTMLParser
@@ -218,6 +219,8 @@ def _knowledge_obj(
             "risk_level": risk_level or "standard",
             "risk_fields": list(risk_fields or []),
         }
+    if selected:
+        row = materialised_row(row)
     return row
 
 
@@ -362,8 +365,8 @@ def _eval(query: str, records: list[dict]) -> dict:
 def test_old_queue_would_require_2008_inhoud_cards_new_duty_does_not() -> None:
     objects = _koppen_78_inhoud_2008_style()
     koppen, old_inhoud = review_stacks(objects)
-    duty = slow_review_duty(objects)
-    leftover = remaining_unclassified(objects)
+    duty = slow_review_duty(objects, fragments=source_fragments())
+    leftover = remaining_unclassified(objects, fragments=source_fragments())
     assert len(koppen) == KOPPEN_78
     assert len(old_inhoud) == INHOUD_2008 + 4
     assert len(leftover) == INHOUD_2008
@@ -389,8 +392,8 @@ def test_researchers_are_not_required_to_open_thousands_of_inhoud_cards(
     bind_detected_context(console, receipt['snapshot_id'], accounts['reviewer']['account_id'])
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     koppen, old_inhoud = review_stacks(objects)
-    duty = slow_review_duty(objects)
-    leftover = remaining_unclassified(objects)
+    duty = slow_review_duty(objects, fragments=console.review_source_fragments(receipt["snapshot_id"]))
+    leftover = remaining_unclassified(objects, fragments=source_fragments())
     assert koppen
     assert len(old_inhoud) >= leftover_n
     assert len(leftover) >= leftover_n
@@ -425,8 +428,7 @@ def test_leftover_unclassified_stays_in_store_and_is_openable_not_duty(
         console, accounts, data=_duty_html(leftover=8), filename="open.html", title="Open"
     )
     leftover = remaining_unclassified(
-        _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    )
+        _non_document(console.snapshot_objects(receipt["snapshot_id"])), fragments=source_fragments())
     planted = leftover[0]
     list_html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
     slow = _section(list_html, "review-lane-slow")
@@ -490,7 +492,7 @@ def test_batch_confirm_rejects_slow_duty_and_leftover_unclassified(
         console, accounts, data=_duty_html(leftover=5), filename="batch.html", title="Batch"
     )
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    leftover = remaining_unclassified(objects)
+    leftover = remaining_unclassified(objects, fragments=source_fragments())
     prose = next(obj for obj in objects if obj.get("object_type") != "heading")
     assert leftover
     with pytest.raises(ConsoleError, match="fast_lane_heading_required"):
@@ -530,14 +532,14 @@ def test_slow_duty_is_recommendation_condition_exception_and_high_risk() -> None
             proposed="explanation",
         )
     )
-    duty_ids = {obj["object_id"] for obj in slow_review_duty(objects)}
+    duty_ids = {obj["object_id"] for obj in slow_review_duty(objects, fragments=source_fragments())}
     assert duty_ids == {"r1", "c1", "e1", "hr1"}
-    leftover_ids = {obj["object_id"] for obj in remaining_unclassified(objects)}
+    leftover_ids = {obj["object_id"] for obj in remaining_unclassified(objects, fragments=source_fragments())}
     assert "u1" in leftover_ids
     assert "d1" in leftover_ids
     assert "x1" in leftover_ids
     assert leftover_ids.isdisjoint(duty_ids)
-    not_duty = {obj["object_id"] for obj in remaining_not_duty(objects)}
+    not_duty = {obj["object_id"] for obj in remaining_not_duty(objects, fragments=source_fragments())}
     assert "d1" in not_duty and "x1" in not_duty
     high = next(obj for obj in objects if obj["object_id"] == "hr1")
     assert requires_four_eyes(high) is True
@@ -550,8 +552,8 @@ def test_console_inhoud_lists_only_slow_duty_cards(tmp_path: Path) -> None:
         console, accounts, data=_duty_html(leftover=12), filename="plicht.html", title="Plicht"
     )
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    duty = slow_review_duty(objects)
-    leftover = remaining_unclassified(objects)
+    duty = slow_review_duty(objects, fragments=console.review_source_fragments(receipt["snapshot_id"]))
+    leftover = remaining_unclassified(objects, fragments=source_fragments())
     client = _client(console)
     html = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
     slow = _section(html, "review-lane-slow")
@@ -588,7 +590,7 @@ def test_no_zwaar_licht_switch_no_auto_confirm_no_auto_promote(tmp_path: Path) -
         console, accounts, data=_duty_html(leftover=6), filename="geen-switch.html", title="Geen switch"
     )
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    leftover = remaining_unclassified(objects)
+    leftover = remaining_unclassified(objects, fragments=source_fragments())
     assert leftover
     assert all(obj.get("object_type") == "unclassified" for obj in leftover)
     assert all(not obj.get("confirmed_object_type") for obj in leftover)
@@ -817,7 +819,7 @@ def test_unpublished_continentie_reextract_on_same_sha256_allowed(tmp_path: Path
     after = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     after_ids = {obj["object_id"] for obj in after}
     assert after_ids
-    assert remaining_unclassified(after) is not None
+    assert remaining_unclassified(after, fragments=source_fragments()) is not None
     fixture = HTML_FIXTURE.read_bytes()
     fixture_receipt = _ingest(
         console,
@@ -869,8 +871,7 @@ def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path) -> None:
     ]
     assert planted_text in stored
     leftover = remaining_unclassified(
-        _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    )
+        _non_document(console.snapshot_objects(receipt["snapshot_id"])), fragments=source_fragments())
     assert any(obj["object_id"] == planted["object_id"] for obj in leftover)
     html = _client(console).get(
         f"/review?document={receipt['snapshot_id']}&task=inventory"

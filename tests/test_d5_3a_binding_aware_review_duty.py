@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+from test_t4_single_knowledge_path_invariants import _allowed_source
+
 from src.review_duty_v1 import (
     FIRST_REVIEW,
     SECOND_REVIEW,
@@ -26,7 +28,7 @@ def _obj(
     status: str = "approved",
     four_eyes: bool = True,
 ) -> dict:
-    return {
+    row = {
         "object_id": object_id,
         "object_version": version,
         "object_type": "recommendation",
@@ -64,6 +66,16 @@ def _obj(
         },
     }
 
+    from copy import deepcopy
+    from test_t4_single_knowledge_path_invariants import _allowed_candidate
+    from src.integrity_kernel import stamp_canonical_hashes
+    fixture = _allowed_candidate()
+    for key in ("content", "source", "provenance"):
+        row[key] = deepcopy(fixture[key])
+    row["metadata"]["semantic_passage"] = deepcopy(fixture["metadata"]["semantic_passage"])
+    stamp_canonical_hashes(row)
+    return row
+
 
 def _binding(
     obj: dict,
@@ -91,7 +103,7 @@ def _binding(
 
 def test_no_current_approval_projects_first_review_even_if_governance_says_approved() -> None:
     obj = _obj()
-    duty = review_duty_for(obj, review_path="richtlijn", bindings=[])
+    duty = review_duty_for(obj, review_path="richtlijn", bindings=[], fragments=_allowed_source())
 
     assert duty is not None
     assert duty["stage"] == FIRST_REVIEW
@@ -101,7 +113,7 @@ def test_one_exact_current_approver_projects_second_review() -> None:
     obj = _obj()
     bindings = [_binding(obj, "reviewer-a")]
 
-    duty = review_duty_for(obj, review_path="richtlijn", bindings=bindings)
+    duty = review_duty_for(obj, review_path="richtlijn", bindings=bindings, fragments=_allowed_source())
 
     assert duty is not None
     assert duty["stage"] == SECOND_REVIEW
@@ -116,12 +128,11 @@ def test_two_unique_exact_current_approvers_close_four_eyes_despite_pending_mirr
     ]
 
     assert obj["governance"]["second_review"]["status"] == "pending"
-    assert review_duty_for(obj, review_path="richtlijn", bindings=bindings) is None
+    assert review_duty_for(obj, review_path="richtlijn", bindings=bindings, fragments=_allowed_source()) is None
     assert review_duty_counts(
         [obj],
         review_path="richtlijn",
-        bindings=bindings,
-    )["review_duties"] == 0
+        bindings=bindings, fragments=_allowed_source())["review_duties"] == 0
 
 
 def test_duplicate_binding_from_same_reviewer_counts_once() -> None:
@@ -132,7 +143,7 @@ def test_duplicate_binding_from_same_reviewer_counts_once() -> None:
     ]
 
     assert exact_current_approver_ids(obj, bindings) == ("reviewer-a",)
-    duty = review_duty_for(obj, review_path="richtlijn", bindings=bindings)
+    duty = review_duty_for(obj, review_path="richtlijn", bindings=bindings, fragments=_allowed_source())
     assert duty is not None
     assert duty["stage"] == SECOND_REVIEW
 
@@ -148,7 +159,7 @@ def test_stale_version_hash_type_invalid_and_reject_bindings_do_not_count() -> N
     ]
 
     assert exact_current_approver_ids(obj, bindings) == ()
-    duty = review_duty_for(obj, review_path="richtlijn", bindings=bindings)
+    duty = review_duty_for(obj, review_path="richtlijn", bindings=bindings, fragments=_allowed_source())
     assert duty is not None
     assert duty["stage"] == FIRST_REVIEW
 
@@ -161,14 +172,12 @@ def test_first_reviewer_waits_while_other_named_reviewer_can_act_on_second_revie
         obj,
         review_path="richtlijn",
         reviewer_id="reviewer-a",
-        bindings=bindings,
-    )
+        bindings=bindings, fragments=_allowed_source())
     second = reviewer_route_for(
         obj,
         review_path="richtlijn",
         reviewer_id="reviewer-b",
-        bindings=bindings,
-    )
+        bindings=bindings, fragments=_allowed_source())
 
     assert first is not None
     assert first["canonical_task"] == "second_review"
@@ -190,14 +199,12 @@ def test_reviewer_route_counts_separate_actionable_from_waiting() -> None:
         [first_review, second_review],
         review_path="richtlijn",
         reviewer_id="reviewer-a",
-        bindings=bindings,
-    )
+        bindings=bindings, fragments=_allowed_source())
     counts_b = reviewer_route_counts(
         [first_review, second_review],
         review_path="richtlijn",
         reviewer_id="reviewer-b",
-        bindings=bindings,
-    )
+        bindings=bindings, fragments=_allowed_source())
 
     assert counts_a["actionable_review_duties"] == 1
     assert counts_a["waiting_for_reviewer_duties"] == 1
@@ -212,12 +219,12 @@ def test_non_four_eyes_object_closes_after_one_exact_current_approval() -> None:
     obj = _obj(four_eyes=False)
     bindings = [_binding(obj, "reviewer-a")]
 
-    assert review_duty_for(obj, review_path="richtlijn", bindings=bindings) is None
+    assert review_duty_for(obj, review_path="richtlijn", bindings=bindings, fragments=_allowed_source()) is None
 
 
-def test_governance_only_fallback_remains_for_non_cutover_d52_callers() -> None:
+def test_governance_only_mirror_cannot_close_first_review() -> None:
     obj = _obj()
-    duty = review_duty_for(obj, review_path="richtlijn")
+    duty = review_duty_for(obj, review_path="richtlijn", fragments=_allowed_source())
 
     assert duty is not None
-    assert duty["stage"] == SECOND_REVIEW
+    assert duty["stage"] == FIRST_REVIEW
