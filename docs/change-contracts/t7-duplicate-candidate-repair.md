@@ -50,3 +50,7 @@ The only production change is the shared exact occurrence operation; both caller
 ## Red proof
 
 Tests-only head 85abdc47d9a7b234ed21bb043476554b1d827cf0: 5 failed, 5 passed on Python 3.13 (and failing matrix on 3.12). Unit proof shows source-only promotion and cross-candidate span/mapping transfer. Actual ingest proof shows the wrong legacy span ID for summary-only selection and the wrong selected spans when both occurrences are selected. Actions: https://github.com/WilliamGomes41/Metis-DS/actions/runs/37605633099.
+
+## Compatibility evidence
+
+The first repaired full suite passed 3014 tests with two failures. One historical test explicitly expected selected summary semantics on primary coverage; it now requires the original selected summary candidate and primary alternate evidence. A deterministic splitter test expected a summary-only OVERWEEG label to transfer onto an unstamped primary occurrence; it now requires no inherited strength. The dedicated same-occurrence stamp test remains unchanged and is included in the focused step. No source-derived label is fabricated and no candidate/admission gate is relaxed.

@@ -1021,13 +1021,16 @@ def test_source_authority_does_not_erase_selected_semantics_when_primary_is_cove
 
     assert len(units) == 1
     row = units[0]
-    assert row["section_path"] == ["Richtlijn", "2 Aanbevelingen"]
-    assert row["source_fragment_ids"] == ["primary-coverage"]
+    assert row["section_path"] == ["Richtlijn", "Samenvatting", "Aanbevelingen"]
+    assert row["source_fragment_ids"] == ["summary-selected"]
     assert row["proposed_object_type"] == "recommendation"
     assert row["semantic_passage"]["selection_origin"] == "proposal_selected"
     authority = row["metadata"]["source_occurrence_authority"]
-    assert authority["principal_section_role"] == "primary"
-    assert authority["alternate_occurrences"][0]["section_role"] == "summary"
+    assert authority["principal_section_role"] == "summary"
+    assert authority["alternate_occurrences"][0]["section_role"] == "primary"
+    assert authority["alternate_occurrences"][0]["source_fragment_ids"] == ["primary-coverage"]
+    assert row["object_id"].startswith("doc-authority-selected-sem-")
+    assert "-semcov-" not in row["object_id"]
 
 
 
