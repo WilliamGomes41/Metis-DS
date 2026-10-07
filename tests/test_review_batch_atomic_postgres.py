@@ -31,8 +31,6 @@ def _console(root, config):
         workflow_identity_store=identity, workflow_document_store=documents,
         workflow_review_store=reviews,
     )
-    from tests.semantic_fixture_support import bind_fixture_selections
-    bind_fixture_selections(console)
     return console
 
 
@@ -46,6 +44,8 @@ def _client(console):
 
 def test_http_batch_failure_retry_stale_and_restart(workflow_postgres, tmp_path, monkeypatch):
     console = _console(tmp_path, workflow_postgres)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     researcher = console.create_account(username="anne", password="anne-secret", roles=("researcher",))
     reviewer = console.create_account(username="bert", password="bert-secret", roles=("reviewer",))
     receipt = console.ingest(

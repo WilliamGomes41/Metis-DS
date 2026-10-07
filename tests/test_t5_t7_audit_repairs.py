@@ -209,3 +209,39 @@ def test_corrupt_persisted_source_cannot_acquire_review_binding(tmp_path, comman
             )
     assert console.snapshot_objects(snapshot) == before_rows
     assert console.object_review_bindings(snapshot) == before_bindings
+
+
+
+def test_reviewed_selected_candidate_can_repeat_approval_and_change_type(tmp_path):
+    from src.operations_console_v1 import OperationsConsole, ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
+    from tests.semantic_fixture_support import bind_fixture_selections
+    console = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    author = console.create_account(username="anne", password="anne-secret", roles=("researcher",))
+    reviewer = console.create_account(username="bert", password="bert-secret", roles=("reviewer",))
+    bind_fixture_selections(console, [("Oedeem is een ophoping van vocht.", "definition")])
+    receipt = console.ingest(actor_id=author["account_id"], filename="source.html", content_type="text/html",
+        data=b"<html><body><h1>Begrippen</h1><p>Oedeem is een ophoping van vocht.</p></body></html>",
+        ingest_kind="new", title="Begrippen", version="1.0", date="2026-10-07", live_url="",
+        class_="richtlijn", family="test", named_reviewers=[reviewer["account_id"]])
+    sid = receipt["snapshot_id"]
+    candidate = next(o for o in console.snapshot_objects(sid) if content_reviewable(o))
+    def approve(type_):
+        console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
+            object_id=candidate["object_id"], decision="approve", confirmed_object_type=type_,
+            expected_revision=console.objects_revision(sid))
+        return next(o for o in console.snapshot_objects(sid) if o["object_id"] == candidate["object_id"])
+    first = approve("definition")
+    repeated = approve("definition")
+    assert repeated["object_version"] == first["object_version"]
+    changed = approve("explanation")
+    assert changed["confirmed_object_type"] == "explanation"
+    assert changed["object_version"] != first["object_version"]
+    before = console.snapshot_objects(sid)
+    bindings = console.object_review_bindings(sid)
+    with pytest.raises(ConsoleError) as caught:
+        console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
+            object_id=candidate["object_id"], decision="approve", confirmed_object_type="explanation",
+            expected_revision="stale")
+    assert caught.value.code == SNAPSHOT_OBJECT_WRITE_CONFLICT
+    assert console.snapshot_objects(sid) == before
+    assert console.object_review_bindings(sid) == bindings

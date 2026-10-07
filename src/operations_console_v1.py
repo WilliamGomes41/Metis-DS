@@ -2999,6 +2999,10 @@ class OperationsConsole:
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
+        if expected_revision is not None:
+            current_revision = self.objects_revision(snapshot_id)
+            if current_revision != expected_revision:
+                raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=current_revision)
         from src.review_policy_v1 import object_policy
         policy = object_policy(target)
         if policy != envelope.get("review_policy"):
@@ -3048,7 +3052,9 @@ class OperationsConsole:
             and decision != "revise"
         ):
             raise ConsoleError("second_review_command_required")
-        if review_path != "boom" and current_duty is None and decision == "approve":
+        from src.knowledge_path_v1 import content_reviewable
+        if (review_path != "boom" and current_duty is None and decision == "approve"
+                and not content_reviewable(target)):
             from src.knowledge_path_v1 import is_structural_projection
             from src.source_accountability_v1 import is_source_record
             structure_confirm = (

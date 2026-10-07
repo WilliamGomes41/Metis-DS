@@ -447,6 +447,8 @@ def test_legacy_recommendation_compatibility_does_not_auto_migrate(tmp_path: Pat
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
+    from tests.semantic_fixture_support import legacy_recommendation_fixture
+    legacy_recommendation_fixture(console, snapshot_id)
     target = _target(console, snapshot_id)
 
     console.review_object(

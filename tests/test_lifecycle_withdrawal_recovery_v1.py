@@ -67,6 +67,8 @@ def _client(console, username="publisher.carla"):
 
 
 def _ingest(console, accounts, title, version, prior=None):
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = console.ingest(
         actor_id=accounts["researcher"]["account_id"], title=title, version=version,
         ingest_kind="new_version" if prior else "new", replaces_snapshot_id=prior,
