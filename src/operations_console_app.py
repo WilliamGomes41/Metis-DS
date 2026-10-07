@@ -3240,9 +3240,12 @@ def _render_review_card(
             if gate == "blocked" else
             "Deze passage is nog niet beschikbaar voor goedkeuring."
         )
-    approval_disabled = disabled or (
-        " disabled" if is_admission_blocked(obj, review_path=review_path) else ""
+    current_duty = review_duty_for(
+        obj, review_path=review_path,
+        bindings=console.object_review_bindings(snapshot_id, objects=snapshot_objects),
+        fragments=console.review_source_fragments(snapshot_id),
     )
+    approval_disabled = disabled or (" disabled" if current_duty is None else "")
     repair_guidance = (
         '<aside class="banner warn"><b>Eerst de passage herstellen.</b> '
         'Kies hieronder wat ontbreekt en vervolgens <b>Correctie specificeren</b>. '

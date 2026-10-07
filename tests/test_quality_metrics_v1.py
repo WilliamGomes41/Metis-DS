@@ -178,15 +178,23 @@ def test_postgres_concurrent_reports_restart_retry_and_no_local_fallback(tmp_pat
 
 
 def test_final_context_stays_closed_but_second_review_remains_open():
+    from tests.review_authority_fixture_support import materialised_row, source_fragments, approved_bindings
     doc = fixture()
-    obj = doc['objects'][0]
-    obj['metadata']['passage_register'] = {'status': 'used_as_context', 'source': 'extract'}
-    obj['metadata']['admission'] = {'gate_result': 'allowed'}
-    obj['metadata']['semantic_passage'] = {'selection_origin': 'proposal_selected',
-        'spans': [{'block_id': 'stored-source-block', 'start': 0, 'end': 1}]}
-    assert build_report([doc], as_of=NOW)['open_passages'] == 0
-    obj['metadata']['passage_register']['status'] = 'selected_as_candidate'
-    obj['governance'] = {'validation_status': 'approved', 'second_review': {'required': True, 'status': 'pending'}}
-    assert build_report([doc], as_of=NOW)['open_passages'] == 1
-    obj['governance']['second_review']['status'] = 'approved'
-    assert build_report([doc], as_of=NOW)['open_passages'] == 0
+    obj = doc["objects"][0]
+    obj["metadata"]["admission"] = {"gate_result": "allowed"}
+    obj = materialised_row(obj)
+    doc["objects"] = [obj]
+    doc["fragments"] = source_fragments()
+    obj["metadata"]["passage_register"] = {"status": "used_as_context", "source": "extract"}
+    assert build_report([doc], as_of=NOW)["open_passages"] == 0
+    obj["metadata"]["passage_register"]["status"] = "selected_as_candidate"
+    obj["governance"] = {"validation_status": "approved", "second_review": {"required": True, "status": "pending"}}
+    obj["confirmed_object_type"] = "definition"
+    obj["risk"] = {"risk_level": "high", "requires_second_review": True}
+    doc["bindings"] = approved_bindings([obj], "reviewer-a")
+    assert build_report([doc], as_of=NOW)["open_passages"] == 1
+    obj["governance"]["second_review"]["status"] = "approved"
+    # A compatibility flag alone is insufficient; the exact independent binding closes review.
+    assert build_report([doc], as_of=NOW)["open_passages"] == 1
+    doc["bindings"] += approved_bindings([obj], "reviewer-b")
+    assert build_report([doc], as_of=NOW)["open_passages"] == 0

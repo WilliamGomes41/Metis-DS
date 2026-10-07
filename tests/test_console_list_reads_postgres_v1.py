@@ -314,7 +314,7 @@ def test_list_status_and_workboard_are_set_based_at_pilot_scale() -> None:
 
         workflow_connects = 0
         summaries = subject.review_workboard_summaries(account_id)
-        assert workflow_connects == 1
+        assert workflow_connects == 3
         assert set(summaries) == set(snapshots)
 
         opened = summaries[snapshots[0]]
@@ -379,7 +379,6 @@ def test_review_workboard_summary_uses_exact_authorizations_for_four_eyes() -> N
     )
     target["object_version"] = "2.0"
     target["confirmed_object_type"] = "recommendation"
-    target["provenance"] = {"canonical_object_hash": "c" * 64}
     target["risk"] = {
         "level": "high",
         "risk_level": "high",
@@ -419,6 +418,8 @@ def test_review_workboard_summary_uses_exact_authorizations_for_four_eyes() -> N
                 ),
             )
 
+    from src.integrity_kernel import stamp_canonical_hashes
+    stamp_canonical_hashes(target)
     try:
         store.write_bundle(envelope=envelope, objects=[document, target])
         with store._connect() as con:

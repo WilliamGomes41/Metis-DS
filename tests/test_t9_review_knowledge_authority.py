@@ -29,7 +29,7 @@ def _console(tmp_path):
     reviewer = console.create_account(username="bert", password="bert-secret", roles=("reviewer",))
     bind_fixture_selections(console, [("Oedeem is een ophoping van vocht.", "definition")])
     receipt = console.ingest(actor_id=author["account_id"], filename="source.html", content_type="text/html",
-        data=b"<html><body><h1>Begrippen</h1><p>Oedeem is een ophoping van vocht.</p></body></html>",
+        data=b"<html><body><h1>Begrippen</h1><p>Oedeem is een ophoping van vocht.</p><p>Een aanvullende bronpassage.</p></body></html>",
         ingest_kind="new", title="Begrippen", version="1.0", date="2026-10-07", live_url="",
         class_="richtlijn", family="test", named_reviewers=[reviewer["account_id"]])
     sid = receipt["snapshot_id"]
@@ -259,3 +259,104 @@ def test_explicit_reapproval_reuses_exact_authorization_without_erasing_events(t
     assert events[:len(first_events)] == first_events
     assert len(events) == len(first_events) + 1
     assert exact_current_approver_ids(current, rows) == (reviewer["account_id"],)
+
+
+def _state(console, sid):
+    from src.review_ledger import read_events
+    return deepcopy(console.snapshot_objects(sid)), deepcopy(console.object_review_bindings(sid)), deepcopy(read_events(console._ledger_path)) if console._ledger_path.exists() else []
+
+
+def _http(console):
+    from fastapi.testclient import TestClient
+    from src.operations_console_app import create_console_app
+    client = TestClient(create_console_app(console))
+    response = client.post("/login", data={"username": "bert", "password": "bert-secret"})
+    assert response.status_code in {200, 303}
+    return client
+
+
+def _post_review(client, sid, obj, revision):
+    return client.post("/review", data={"snapshot_id": sid, "object_id": obj["object_id"],
+        "decision": "approve", "confirmed_object_type": "definition", "suitability": "ja",
+        "snapshot_revision": revision}, follow_redirects=False)
+
+
+def test_direct_post_cannot_force_blocked_content_review(tmp_path):
+    console, reviewer, sid, obj = _console(tmp_path)
+    rows = console._load_objects(sid)
+    for row in rows:
+        if row["object_id"] == obj["object_id"]:
+            row["metadata"]["admission"]["gate_result"] = "blocked"
+            stamp_canonical_hashes(row)
+    console._save_objects(sid, rows)
+    before = _state(console, sid)
+    response = _post_review(_http(console), sid, obj, console.objects_revision(sid))
+    assert response.status_code == 400
+    assert _state(console, sid) == before
+
+
+def test_stale_browser_post_commits_no_object_binding_or_event(tmp_path):
+    console, reviewer, sid, obj = _console(tmp_path)
+    client = _http(console)
+    revision = console.objects_revision(sid)
+    rows = console._load_objects(sid)
+    document = next(o for o in rows if o["object_type"] == "document")
+    document.setdefault("metadata", {})["t9_competing_writer"] = True
+    stamp_canonical_hashes(document)
+    console._save_objects(sid, rows)
+    before = _state(console, sid)
+    response = _post_review(client, sid, obj, revision)
+    assert response.status_code == 409
+    assert _state(console, sid) == before
+
+
+@pytest.mark.parametrize("decision", ["later", "revise", "reject"])
+def test_nonapproval_decisions_never_grant_approval(tmp_path, decision):
+    console, reviewer, sid, obj = _console(tmp_path)
+    console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid, object_id=obj["object_id"],
+        decision=decision, comment="Beoordeling blijft zonder approval.",
+        expected_revision=console.objects_revision(sid))
+    current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
+    assert current["metadata"]["admission"]["gate_result"] == "allowed"
+    assert exact_current_approver_ids(current, console.object_review_bindings(sid)) == ()
+    assert not any(b.get("valid") and b.get("decision") == "approve" for b in console.object_review_bindings(sid))
+
+
+def test_duplicate_submit_is_no_transition_and_not_a_second_reviewer(tmp_path):
+    console, reviewer, sid, obj = _console(tmp_path)
+    _approve(console, reviewer, sid, obj, expected_revision=console.objects_revision(sid))
+    before = _state(console, sid)
+    _approve(console, reviewer, sid, obj, expected_revision=console.objects_revision(sid))
+    assert _state(console, sid) == before
+    current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
+    assert exact_current_approver_ids(current, console.object_review_bindings(sid)) == (reviewer["account_id"],)
+
+
+def test_four_eyes_uses_unique_exact_human_bindings():
+    from src.review_duty_v1 import review_stage, FIRST_REVIEW, SECOND_REVIEW
+    obj = _allowed_candidate()
+    obj["risk"] = {"risk_level": "high", "requires_second_review": True}
+    stamp_canonical_hashes(obj)
+    a, b, agent = _binding(obj, "bert"), _binding(obj, "carla"), _binding(obj, "ai")
+    args = {"review_path": "richtlijn", "fragments": _allowed_source()}
+    assert review_stage(obj, bindings=[], **args) == FIRST_REVIEW
+    assert review_stage(obj, bindings=[a, a, agent], **args) == SECOND_REVIEW
+    assert review_stage(obj, bindings=[a, b], **args) is None
+
+
+def test_historical_binding_survives_changed_context_without_approval_carry(tmp_path):
+    from src.review_duty_v1 import review_stage, FIRST_REVIEW
+    console, reviewer, sid, obj = _console(tmp_path)
+    _approve(console, reviewer, sid, obj, expected_revision=console.objects_revision(sid))
+    old = deepcopy(console.object_review_bindings(sid))
+    rows = console._load_objects(sid)
+    for row in rows:
+        if row["object_id"] == obj["object_id"] and row["object_version"] == old[0]["object_version"]:
+            row.setdefault("metadata", {})["review_context"] = {"t9_changed": True}
+            stamp_canonical_hashes(row)
+    console._save_objects(sid, rows)
+    current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
+    assert console._bindings[sid] == old
+    assert exact_current_approver_ids(current, console.object_review_bindings(sid)) == ()
+    assert review_stage(current, review_path="richtlijn", bindings=console.object_review_bindings(sid),
+                        fragments=console.review_source_fragments(sid)) == FIRST_REVIEW

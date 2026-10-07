@@ -342,6 +342,9 @@ def review_work_item(
         **duty_counts,
         **route_counts,
     )
+    item["heading_total"] = len(headings)
+    item["individual_total"] = console_ui._lane_total(
+        objects, review_path=review_path, lane="contextual", open_rows=individual)
     item["progress"] = console_ui._review_progress_summary(objects)
     item["has_review_decision"] = any(
         str((obj.get("governance") or {}).get("validated_by") or "").strip()
