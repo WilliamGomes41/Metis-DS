@@ -310,3 +310,24 @@ def test_legacy_explicit_context_follows_current_target(status, tmp_path):
     projected = source_accountability(rows, bindings=[], fragments=state.review_source_fragments(command["snapshot_id"]))
     assert projected[source["object_id"]]["closure"] == "open"
     assert projected[source["object_id"]]["human_action"] == "source_disposition"
+
+
+def test_admission_blocked_keeps_existing_correction_card(tmp_path):
+    from tests.test_t9_review_knowledge_authority import _console
+    from src.operations_console_app import _source_context_panel, _source_context_card, _render_review_card
+    from src.source_containers_v1 import source_accountability
+    console, reviewer, sid, target = _console(tmp_path)
+    rows = console.snapshot_objects(sid)
+    current = next(o for o in rows if o["object_id"] == target["object_id"])
+    current["metadata"]["admission"]["gate_result"] = "blocked"
+    projection = source_accountability(rows, bindings=[], fragments=console.review_source_fragments(sid))
+    panel = _source_context_panel(current, rows, sid, console.objects_revision(sid), projection=projection)
+    assert "data-source-repair" not in panel
+    assert not _source_context_card(console, sid, current, panel, context_target="", context_mode="", task="repair")
+    card = _render_review_card(console, sid, current, rows, "richtlijn", {}, "")
+    assert "Correctie specificeren" in card
+
+    from src.operations_console_app import _render_review_room
+    page = _render_review_room(console, reviewer, document=sid, object=current["object_id"],
+        task="repair", snapshot=(rows, console.objects_revision(sid)))
+    assert "Correctie specificeren" in page

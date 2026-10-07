@@ -2868,7 +2868,7 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
     if projection is None:
         projection = source_accountability(objects)
     state = projection.get(str(obj.get("object_id") or ""), {})
-    if state.get("human_action") == "technical_repair":
+    if state.get("role") == "invalid_evidence":
         return ('<section data-source-repair><h3>Bronbewijs herstellen</h3>'
                 '<p>De opgeslagen bronverwijzing of contextkoppeling is ongeldig. '
                 'Laat de verwerking of koppeling herstellen voordat je een bronbesluit neemt.</p>'
