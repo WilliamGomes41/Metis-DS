@@ -2649,9 +2649,21 @@ class OperationsConsole:
         return fragments, spec
 
     def _diff_objects(self, previous: list[dict[str, Any]], current: list[dict[str, Any]]) -> dict[str, Any]:
+        def current_candidates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            # Reprocessing passes the complete append-only T11 history. Reuse
+            # its current-revision authority before deriving this projection.
+            if len({row["object_id"] for row in rows}) != len(rows):
+                rows = current_revisions(rows)
+            return [
+                row for row in rows
+                if (row.get("governance") or {}).get("validation_status") != "superseded"
+            ]
+
         def key(row: dict[str, Any]) -> str:
             return (row.get("content") or {}).get("clean_text") or ""
 
+        previous = current_candidates(previous)
+        current = current_candidates(current)
         prev = {key(row): compute_canonical_object_hash(row) for row in previous if row.get("object_type") != "document" and key(row)}
         curr = {key(row): compute_canonical_object_hash(row) for row in current if row.get("object_type") != "document" and key(row)}
         return {
