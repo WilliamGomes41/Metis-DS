@@ -8,12 +8,9 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from src.operations_console_v1 import review_lane
 from src.passage_register_v1 import passage_register_of
 from src.review_disposition_v1 import definitive_review_disposition
-from src.admission_gate_v1 import admission_of
-from src.review_duty_v1 import review_duty_for
-from src.source_context_review_v1 import context_issues
+from src.source_containers_v1 import source_accountability, source_closure
 
 REVIEW_WORK_INCOMPLETE = "review_work_incomplete"
 SOURCE_PASSAGE_REVIEW_INCOMPLETE = "source_passage_review_incomplete"
@@ -52,77 +49,28 @@ def publication_review_readiness(objects: Iterable[dict[str, Any]]) -> dict[str,
     }
 
 
-def source_passage_closure(objects: Iterable[dict[str, Any]]) -> dict[str, Any]:
-    """Return whether every substantive current source passage is final.
-
-    Existing review routing is the boundary: document objects and fast-lane
-    structure (heading/path) are not substantive passage work. Every other
-    current knowledge object must have a final disposition. New source records
-    may instead be accounted by versioned document-information rules or current
-    context on an approved target. Legacy source policy remains unchanged.
-    """
-    required_ids: list[str] = []
-    unresolved_ids: list[str] = []
-    objects = list(objects)
-    from src.source_containers_v1 import source_usage
-    usage = source_usage(objects)
-    context_conflicts = context_issues(objects)
-    from src.source_accountability_v1 import is_source_record, evidence_of
-    for obj in objects:
-        if is_source_record(obj) and not evidence_of(obj):
-            context_conflicts.setdefault(str(obj.get("object_id") or ""), []).append("source_accountability_invalid")
-    for obj in objects:
-        if obj.get("object_type") == "document" or (review_lane(obj) == "fast" and str(obj.get("object_id") or "") not in context_conflicts):
-            continue
-        object_id = str(obj.get("object_id") or "")
-        if not object_id:
-            continue
-        required_ids.append(object_id)
-        if (not definitive_review_disposition(obj)["final"] and not usage.get(object_id, {}).get("accounted")) or object_id in context_conflicts:
-            unresolved_ids.append(object_id)
-
-    return {
-        "source_passage_review_complete": not unresolved_ids,
-        "review_required_source_passage_ids": required_ids,
-        "review_required_source_passage_count": len(required_ids),
-        "unresolved_source_passage_ids": unresolved_ids,
-        "unresolved_source_passage_count": len(unresolved_ids),
-    }
+def source_passage_closure(objects: Iterable[dict[str, Any]], *, review_path="richtlijn",
+                           bindings=None, fragments=None, projection=None) -> dict[str, Any]:
+    """Compatibility reader: source-domain authority alone decides closure."""
+    if projection is None:
+        projection = source_accountability(objects, review_path=review_path, bindings=bindings, fragments=fragments)
+    return source_closure(projection)
 
 
 def review_followup_queues(
-    objects: list[dict[str, Any]],
-    *,
-    review_path: str,
-    bindings: list[dict[str, Any]] | None = None,
-    fragments=None,
+    objects: list[dict[str, Any]], *, review_path: str,
+    bindings: list[dict[str, Any]] | None = None, fragments=None, projection=None,
 ) -> dict[str, list[dict[str, Any]]]:
-    """Open source work not represented by an existing ReviewDuty.
-
-    Includes missing Admission and invalid disposition; excludes finished work
-    and duties waiting for another reviewer. This is a read-only projection,
-    never a new closure/publication rule.
-    """
-    unresolved = set(source_passage_closure(objects)["unresolved_source_passage_ids"])
-    from src.source_containers_v1 import source_usage
-    usage = source_usage(objects)
+    """Map source-domain actions to existing queues without another decision."""
+    if projection is None:
+        projection = source_accountability(objects, review_path=review_path, bindings=bindings, fragments=fragments)
     queues: dict[str, list[dict[str, Any]]] = {"disposition": [], "repair": []}
     for obj in objects:
-        if str(obj.get("object_id") or "") not in unresolved:
-            continue
-        if usage.get(obj.get("object_id"), {}).get("kind") == "linked_context":
-            # The target's knowledge review covers the proposed context. Its
-            # source closure remains open until that target is approved.
-            continue
-        if review_duty_for(obj, review_path=review_path, bindings=bindings, fragments=fragments):
-            continue
-        task = (
-            "repair"
-            if admission_of(obj).get("gate_result") == "blocked"
-            and (review_path != "boom" or (obj.get("metadata") or {}).get("decision_unit_construction"))
-            else "disposition"
-        )
-        queues[task].append(obj)
+        action = projection.get(str(obj.get("object_id") or ""), {}).get("human_action")
+        if action == "source_disposition":
+            queues["disposition"].append(obj)
+        elif action == "technical_repair":
+            queues["repair"].append(obj)
     return queues
 
 
@@ -186,7 +134,12 @@ class PublicationReadinessMixin:
         existing = _existing_gate_readiness(considered)
         objects = self.snapshot_objects(snapshot_id)  # type: ignore[attr-defined]
         readiness = publication_review_readiness(objects)
-        closure = source_passage_closure(objects)
+        from src.beslisboom_path_v1 import review_path_for_klasse
+        envelope = self._envelope(snapshot_id) if hasattr(self, "_envelope") else {}
+        bindings = self.object_review_bindings(snapshot_id) if hasattr(self, "object_review_bindings") else None
+        fragments = self.review_source_fragments(snapshot_id) if hasattr(self, "review_source_fragments") else None
+        closure = source_passage_closure(objects, review_path=review_path_for_klasse(str(envelope.get("class") or "")),
+                                         bindings=bindings, fragments=fragments)
         considered.update(readiness)
         considered.update(closure)
 

@@ -44,14 +44,16 @@ def test_exact_context_is_separate_and_only_approved_current_target_closes_it():
     followups = review_followup_queues(rows, review_path='richtlijn')
     assert sid not in {o['object_id'] for group in followups.values() for o in group}
     target = groups['knowledge'][0]
-    target['governance']['validation_status'] = 'approved'
-    assert partition(rows)['source'][0]['usage']['accounted']
-    assert sid not in source_passage_closure(rows)['unresolved_source_passage_ids']
+    from tests.test_t10_source_accountability_authority import _context_inputs, _approve_bindings
+    _, fragments = _context_inputs()
+    bindings = _approve_bindings(target)
+    assert partition(rows, bindings=bindings, fragments=fragments)['source'][0]['usage']['accounted']
+    assert sid not in source_passage_closure(rows, bindings=bindings, fragments=fragments)['unresolved_source_passage_ids']
     target['governance']['validation_status'] = 'rejected'
     assert partition(rows)['source'][0]['usage']['kind'] == 'unresolved'
     target['governance']['validation_status'] = 'approved'
     target['content']['clean_text'] += ' veranderd'
-    assert partition(rows)['source'][0]['usage']['kind'] == 'unresolved'
+    assert partition(rows)['source'][0]['usage']['kind'] == 'invalid_evidence'
 
 
 @pytest.mark.parametrize('text', ['Versie: 1', 'Datum: juli 2026', 'Inhoud......................3'])

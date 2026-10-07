@@ -85,6 +85,8 @@ jobs:
         run: pytest -q tests/test_architecture_invariants.py
       - name: Verify extraction workload metrics
         run: pytest -q tests/test_extract_metrics_wave4_quality_claim.py tests/test_extract_metrics_independent_quality.py
+      - name: Verify T10 source accountability authority
+        run: pytest -q tests/test_t10_source_accountability_authority.py tests/test_source_containers_v1.py tests/test_source_context_review_v1.py
       - name: Verify T9 ReviewKnowledge authority
         run: pytest -q tests/test_t9_review_knowledge_authority.py
       - name: Verify T8 materialisation and Admission integrity

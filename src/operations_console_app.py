@@ -2688,7 +2688,9 @@ def _review_inventory(
     fragments=None,
 ) -> str:
     """Every current passage remains reachable; no admission or finality writes."""
-    followups = review_followup_queues(objects, review_path=review_path, bindings=bindings, fragments=fragments)
+    from src.source_containers_v1 import source_accountability, partition
+    projection = source_accountability(objects, review_path=review_path, bindings=bindings, fragments=fragments)
+    followups = review_followup_queues(objects, review_path=review_path, projection=projection)
     followup_tasks = {
         str(obj["object_id"]): name
         for name, rows in followups.items() for obj in rows
@@ -2712,8 +2714,7 @@ def _review_inventory(
     source_items = []
     metadata_items = []
     source_groups = {}
-    from src.source_containers_v1 import partition
-    containers = partition(objects)
+    containers = partition(objects, projection=projection)
     source_usage = {row["record"]["object_id"]: row["usage"] for row in containers["source"]}
     from src.source_accountability_v1 import is_source_record, evidence_of
     for obj in objects:
@@ -2734,15 +2735,17 @@ def _review_inventory(
         category = route_task or followup_tasks.get(object_id) or "history"
         if task != "inventory" and category != task:
             continue
-        if is_source_record(obj) and evidence_of(obj).get("version") == "source-accountability-v2":
+        if is_source_record(obj) and (evidence_of(obj).get("version") == "source-accountability-v2" or projection[object_id]["human_action"] == "technical_repair"):
             usage = source_usage[object_id]
-            kind = "reviewed" if disposition["final"] else usage["kind"]
+            kind = usage["kind"]
             label = {"reviewed": "Handmatig afgehandeld", "document_information": "Documentinformatie",
-                     "linked_context": "Gekoppelde context", "unresolved": "Brongebruik nog te bepalen"}[kind]
+                     "linked_context": "Gekoppelde context", "unresolved": "Brongebruik nog te bepalen",
+                     "invalid_evidence": "Bronbewijs herstellen"}[kind]
             section = " / ".join((obj.get("structure") or {}).get("section_path") or
                                   (obj.get("metadata") or {}).get("section_path") or []) or "Document"
             group = source_groups.setdefault((label, section), [])
-            status = ("Handmatig afgehandeld" if disposition["final"] else
+            status = ("Technisch herstel nodig" if usage["human_action"] == "technical_repair" else
+                      "Handmatig afgehandeld" if kind == "reviewed" else
                       "Automatisch als documentinformatie aangemerkt" if kind == "document_information" else
                       "Context bij goedgekeurde kennis" if usage["accounted"] else
                       "Wacht op kennisbeoordeling" if kind == "linked_context" else "Open")
@@ -2751,9 +2754,11 @@ def _review_inventory(
                             "unformed_meaning": "Niet geselecteerde broninhoud"}.get(usage["reason"], "Bronbesluit controleren")
             targets = "".join(f'<a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(oid)}">Kennisvoorstel</a> '
                               for oid in usage["target_ids"])
+            source_task = "repair" if usage["human_action"] == "technical_repair" else "disposition"
+            source_link = "Bronbewijs herstellen" if source_task == "repair" else "Bronbesluit bekijken of wijzigen"
             group.append(f'<li data-source-record="{_esc(object_id)}"><p>{_esc((obj.get("content") or {}).get("clean_text"))}</p>'
                 f'<p>{_esc(status)} · {_esc(usage_reason)}</p>{targets}'
-                f'<a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task=disposition">Bronbesluit bekijken of wijzigen</a></li>')
+                f'<a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={source_task}">{source_link}</a></li>')
             continue
         if is_source_record(obj):
             evidence = evidence_of(obj)
