@@ -31,6 +31,7 @@ steps:
 
 - bash: |
     set -euo pipefail
+    export LC_ALL=C
 
     git clone --bare \
       https://github.com/WilliamGomes41/Metis-DS.git \
@@ -43,8 +44,11 @@ steps:
     export GIT_CONFIG_KEY_0="http.${TARGET_URL}.extraheader"
     export GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${AZURE_TOKEN}"
 
-    git push "$TARGET_URL" --all
-    git push "$TARGET_URL" --tags
+    # GitHub is de bron; alleen branches en tags worden gespiegeld.
+    # Dit neemt ook herschreven geschiedenis en verwijderingen over.
+    git push --prune "$TARGET_URL" \
+      '+refs/heads/*:refs/heads/*' \
+      '+refs/tags/*:refs/tags/*'
 
     git for-each-ref \
       --format='%(objectname) %(refname)' \
@@ -55,14 +59,13 @@ steps:
       awk '{print $1 " " $2}' |
       sort > target-refs.txt
 
-    missing=$(comm -23 source-refs.txt target-refs.txt)
-    if [ -n "$missing" ]; then
-      echo "Controle mislukt: branches of tags verschillen."
-      printf '%s\n' "$missing"
+    if ! cmp -s source-refs.txt target-refs.txt; then
+      echo "Controle mislukt: bron- en doelbranches of tags verschillen."
+      diff -u source-refs.txt target-refs.txt || true
       exit 1
     fi
 
-    echo "Controle geslaagd: alle bronbranches en tags zijn gekopieerd."
+    echo "Controle geslaagd: bron- en doelbranches en tags zijn gelijk."
   displayName: GitHub naar Azure Repos kopiëren
   condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
   env:
