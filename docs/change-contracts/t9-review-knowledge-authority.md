@@ -27,3 +27,52 @@ Baseline tests exercise direct apply_reviews on blocked/deterministic/coverage/h
 
 ## Baseline
 Current main before T9: 0e312a151907afef743f4ca4b65d924f5d56ffb0, merged PR #529, T8 implementation c98c77127ce8d8f68746d7c42a3e03c2f51ba33f. Existing creator/materialisation/Admission/source command boundaries inspected on that exact main. T9 works only on t9-review-knowledge-authority. No merge authorized.
+
+## Machine-readable contract
+T9 closes review authority on exact current materialised and admitted richtlijn candidates. Tests precede production changes; implementation is pending.
+
+Change class: A
+Promise: One kernel candidate → ReviewDuty → authorized command → exact binding boundary.
+Proof: tests/test_t9_review_knowledge_authority.py against baseline, then regression and full GitHub CI; baseline results pending.
+Touches lifecycle invariants: yes
+Rewrite risk: high
+Rewrite target: Existing ReviewDuty readers and review command boundary, with no new store or lifecycle.
+Why local patching is insufficient: Queue and command rules differ; centralize existing domain helpers rather than independent guards.
+Current authority/writer/reader map: Materialiser creates candidates; Admission gates; review_duty_v1 derives stages/routes; OperationsConsole owns current working mutation/bindings/ledger; queues, UI, CLI and SQL consume projections.
+Supported runtime topologies: Existing file and PostgreSQL workflow stores; shared kernel, unchanged deployment.
+Persisted-state impact: New review transitions only; preserve historical bindings and decisions.
+Compatibility/migration plan: No migrations or historical rewrite; structure, source handling and boom stay separate.
+Rollback/recovery plan: Revert this unmerged follow-up; existing atomic snapshot rollback/recovery remains owner.
+Cutover trigger: Green full CI and separate T9 audit; no merge in this task.
+Cleanup/decommission criteria: Remove divergent content-review eligibility rules only after live callers consume the existing kernel.
+Failure blast radius: One WorkingRevision; failed/stale review commits no object, binding or approval ledger.
+Adversarial proof matrix: A–T in user contract, plus generator bindings, failed store commits and unstamped content mutations.
+Lifecycle entity: Current WorkingRevision containing KnowledgeCandidates.
+Lifecycle transition: Required first/second human review to exact-current decision/binding.
+Initial durable state: Source-valid materialised candidate, allowed Admission, current working revision, historical bindings.
+Trigger: Named human submits review decision.
+Authorization: Existing roles, named reviewers, policy stage, independent human reviewer, forbidden agents.
+Validation: Source integrity, allowed Admission, current ReviewDuty, current revision and exact tuple.
+Mutable entities: Existing working objects/governance, review bindings and ledger within snapshot store transaction.
+Immutable entities: Source bytes, historical revisions and review evidence, published releases.
+Workflow state before: Admitted candidate with required content ReviewDuty.
+Workflow state after: Exact approve/reject/revise/later evidence, optional independent second duty; non-approval gives no authority.
+Release state before: Unchanged existing release.
+Release state after: Unchanged existing release.
+Serving state before: Unchanged.
+Serving state after: Unchanged.
+Expected API result: Authorized current review succeeds; stale or unauthorized command fails closed.
+Expected UI result: All content review surfaces consume same duty; separate structure/source/boom routes remain.
+Failure result: No partial object/binding/audit authority.
+Restart result: Durable exact-current binding matches committed candidate only.
+Recovery result: Existing technical repair routes; no new repair lifecycle.
+Legacy-data result: Historical evidence retained; malformed/noncandidate rows acquire no content review authority.
+Required black-box scenario: Open candidate X; another actor changes working revision; old submit conflicts and commits no approval evidence.
+Explicit non-goals: T8 redesign, T10 source lifecycle, T11 revisions/supersedes, T12 readiness, migrations, Azure, deployment or merge.
+
+Baseline main: 0e312a151907afef743f4ca4b65d924f5d56ffb0 (merged #529).
+Branch: t9-review-knowledge-authority.
+Contract: docs/change-contracts/t9-review-knowledge-authority.md.
+
+T9: NOT DONE
+Merge nieuwe T9-PR: NO-GO
