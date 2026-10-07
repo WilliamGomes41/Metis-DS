@@ -488,3 +488,17 @@ def test_other_domain_binding_cannot_grant_knowledge_approval(domain):
     binding = _binding(obj, "bert")
     binding["review_domain"] = domain
     assert exact_current_approver_ids(obj, [binding]) == ()
+
+@pytest.mark.parametrize("pin", [None, "", "   "])
+def test_direct_review_post_requires_the_reviewed_revision(tmp_path, pin):
+    """A client cannot discard its reviewed revision and approve current state."""
+    console, reviewer, sid, obj = _console(tmp_path)
+    client = _http(console)
+    before = _state(console, sid)
+    payload = {"snapshot_id": sid, "object_id": obj["object_id"], "decision": "approve",
+               "confirmed_object_type": "definition", "suitability": "ja"}
+    if pin is not None:
+        payload["snapshot_revision"] = pin
+    response = client.post("/review", data=payload, follow_redirects=False)
+    assert response.status_code == 400
+    assert _state(console, sid) == before
