@@ -83,6 +83,8 @@ jobs:
       - run: python -m compileall -q src
       - name: Verify architecture invariants
         run: pytest -q tests/test_architecture_invariants.py
+      - name: Verify T8 materialisation and Admission integrity
+        run: pytest -q tests/test_t8_materialisation_admission_integrity.py
       - name: Verify T7 duplicate candidate integrity
         run: pytest -q tests/test_t7_duplicate_candidate_integrity.py tests/test_pre_review_semantic_v1.py::test_source_authority_does_not_erase_selected_semantics_when_primary_is_coverage tests/test_v221_wave_a_knowledge_object_bounds.py::test_splitter_yields_complete_units_with_bronpassage_and_locator tests/test_v221_wave_a_knowledge_object_bounds.py::test_stamps_attach_to_following_advice_and_are_not_objects
       - name: Verify T5-T7 audit regressions
