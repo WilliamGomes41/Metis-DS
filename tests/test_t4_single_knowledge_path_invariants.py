@@ -184,16 +184,20 @@ def _allowed_spans() -> list[dict]:
 
 
 def _allowed_candidate() -> dict:
-    return _stamp_hash(_row(
-        "doc-1-sem-allowed",
-        "definition",
-        proposed="definition",
-        confirmed="definition",
-        text="Oedeem is een ophoping van vocht.",
-        gate=GATE_ALLOWED,
-        origin=SELECTION_ORIGIN_PROPOSAL,
-        spans=_allowed_spans(),
-    ))
+    from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
+    from src.semantic_transform_generic_v1 import _fragment_ref
+    fragments = _allowed_source()
+    [candidate] = materialise_knowledge_candidates(
+        [{"decision_kind": "semantic_selection", "selection_origin": SELECTION_ORIGIN_PROPOSAL,
+          "spans": _allowed_spans(), "source_text": fragments[0]["clean_text"]}],
+        document_id="doc-1", fragments=fragments)
+    row = _row(
+        "doc-1-sem-allowed", "definition", proposed="definition", confirmed="definition",
+        text=candidate["clean_text"], gate=GATE_ALLOWED, origin=SELECTION_ORIGIN_PROPOSAL,
+        spans=candidate["semantic_passage"]["spans"])
+    row["metadata"]["semantic_passage"] = candidate["semantic_passage"]
+    row["provenance"]["source_fragments"] = [_fragment_ref(fragment) for fragment in fragments]
+    return _stamp_hash(row)
 
 
 def _unspanned_candidate() -> dict:

@@ -48,6 +48,8 @@ def _console(tmp_path: Path) -> tuple[OperationsConsole, dict[str, dict], str, s
         password=PASSWORD,
         roles=("reviewer",),
     )
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console, [("Gebruik interventie A bij verhoogd risico.", "recommendation")])
     result = console.ingest(
         actor_id=researcher["account_id"],
         filename="d53b.html",
@@ -93,10 +95,9 @@ def _console(tmp_path: Path) -> tuple[OperationsConsole, dict[str, dict], str, s
     source_path, _ = console._verified_source_bytes(envelope)
     fragments = console._read_source_fragments(envelope, source_path)
     block = next(b for b in semantic_source_blocks(fragments) if b["text"] == text)
-    metadata["semantic_passage"] = {
-        "selection_origin": "proposal_selected",
-        "spans": [{"block_id": block["block_id"], "start": 0, "end": len(text)}],
-    }
+    assert metadata["semantic_passage"]["spans"] == [
+        {"block_id": block["block_id"], "start": 0, "end": len(text)}
+    ]
     target["risk"] = {
         "level": "high",
         "risk_level": "high",

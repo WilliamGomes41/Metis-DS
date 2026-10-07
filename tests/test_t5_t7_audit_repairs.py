@@ -158,10 +158,9 @@ def test_historical_heading_does_not_enter_publish_set_or_change_knowledge_gate(
     obj.update(object_id="selected", object_type="definition", confirmed_object_type="definition")
     obj["governance"]["validation_status"] = "approved"
     obj.setdefault("metadata", {})["admission"] = {"gate_result": "allowed"}
-    obj["metadata"]["semantic_passage"] = {
-        "selection_origin": "proposal_selected",
-        "spans": [{"block_id": block["block_id"], "start": 0, "end": len(block["text"])}],
-    }
+    obj["metadata"]["semantic_passage"]["spans"] = [
+        {"block_id": block["block_id"], "start": 0, "end": len(block["text"])}
+    ]
     _project_policy(console, snapshot, obj)
     _stamp_hash(obj)
     _append(console, snapshot, obj)
