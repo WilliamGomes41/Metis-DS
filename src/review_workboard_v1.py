@@ -321,6 +321,9 @@ def review_work_item(
             reviewer_id=account_id,
             bindings=bindings,
         )
+    if review_path != "boom":
+        # Koppen stay a structure check. They are not content-review duties.
+        route_counts["actionable_structure_duties"] = heading_pending
 
     item = _work_item_from_counts(
         envelope=envelope,

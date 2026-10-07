@@ -83,6 +83,16 @@ jobs:
       - run: python -m compileall -q src
       - name: Verify architecture invariants
         run: pytest -q tests/test_architecture_invariants.py
+      - name: Verify T8 materialisation and Admission integrity
+        run: pytest -q tests/test_t8_materialisation_admission_integrity.py
+      - name: Verify T8 compatibility regressions
+        run: pytest -q tests/test_d2b2b_admission_completeness.py tests/test_d2b2c_candidate_eligibility.py tests/test_source2_html_pipeline.py tests/test_source_bound_context.py tests/test_source_bound_fields_v2.py tests/test_source_layout_v1.py tests/test_source_mapping_regressions.py tests/test_v230_phase1_admission_gate.py tests/test_v230_phase2_deep_context_scan.py tests/test_v233_review_audit_regressions.py
+      - name: Verify T7 duplicate candidate integrity
+        run: pytest -q tests/test_t7_duplicate_candidate_integrity.py tests/test_pre_review_semantic_v1.py::test_source_authority_does_not_erase_selected_semantics_when_primary_is_coverage tests/test_v221_wave_a_knowledge_object_bounds.py::test_splitter_yields_complete_units_with_bronpassage_and_locator tests/test_v221_wave_a_knowledge_object_bounds.py::test_stamps_attach_to_following_advice_and_are_not_objects
+      - name: Verify T5-T7 audit regressions
+        run: pytest -q tests/test_t4_single_knowledge_path_invariants.py tests/test_t5_t7_audit_repairs.py tests/test_t7_creator_cut.py tests/test_d5_3a_binding_aware_review_duty.py tests/test_d5_3b_review_routing_cutover.py tests/test_review_queue_sql_parity_v1.py
+      - name: Verify lifecycle compatibility regressions
+        run: pytest -q tests/test_console_review_completeness.py tests/test_d3_3_human_recommendation_semantics.py tests/test_d4_3_human_relation_confirmation.py tests/test_processing_retry_postgres.py tests/test_protocol_v2_13_kernel.py tests/test_v212_kernel_v211_ingest_v210_console.py tests/test_v215_ingest_date_version_review_lanes.py tests/test_v216_review_page_researcher_bar.py tests/test_v228_structural_heading_nav_and_confirmed_strength_gate.py tests/test_v230_phase3_review_cockpit.py tests/test_v230_phase4_passage_register_coverage_gold.py tests/test_wave5_gericht_vereenvoudigen.py tests/test_lifecycle_withdrawal_recovery_v1.py tests/test_source_bound_continuation_repair.py
       - run: pytest -q
       - name: Install isolated browser test tooling
         if: matrix.python-version == '3.12'

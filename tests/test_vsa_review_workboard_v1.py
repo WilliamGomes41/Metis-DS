@@ -72,6 +72,15 @@ def _obj(
             "gate_result": gate_result,
             "section_path": section_path or ["Hoofdstuk"],
         }
+    if gate_result == "allowed" and object_type != "heading":
+        metadata["semantic_passage"] = {
+            "selection_origin": "proposal_selected",
+            "spans": [{
+                "block_id": f"block-{object_id}",
+                "start": 0,
+                "end": max(len(object_id), 1),
+            }],
+        }
     return {
         "object_id": object_id,
         "object_type": object_type,

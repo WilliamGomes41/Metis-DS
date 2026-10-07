@@ -223,6 +223,8 @@ def _ready_console(
             roles=("publisher",),
         ),
     }
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = console.ingest(
         actor_id=accounts["researcher"]["account_id"],
         filename="continentie.html",

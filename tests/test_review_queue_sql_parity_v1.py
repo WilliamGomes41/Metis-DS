@@ -88,6 +88,20 @@ def test_sql_sets_match_domain_queues_including_missing_admission(summary_databa
         _obj("empty-section", "definition", section_path=[" "]),
         _obj("unknown-gate", "recommendation", gate_result="unknown"),
     ]
+    # Routing projections must reject malformed/forged semantic lineage too.
+    objects += [_obj("forged-deterministic", "recommendation")]
+    objects[-1]["metadata"].pop("semantic_passage", None)
+    for name, spans in (
+        ("empty", []),
+        ("bool", [{"block_id": "b", "start": True, "end": 10}]),
+        ("string", [{"block_id": "b", "start": "0", "end": 10}]),
+        ("negative", [{"block_id": "b", "start": -1, "end": 10}]),
+        ("reversed", [{"block_id": "b", "start": 10, "end": 1}]),
+        ("unknown-id", [{"block_id": "b", "start": 0, "end": 10, "source_span_id": "UNKNOWN"}]),
+    ):
+        malformed = _obj("malformed-" + name, "recommendation")
+        malformed["metadata"]["semantic_passage"]["spans"] = spans
+        objects.append(malformed)
     for obj in objects:
         obj.update(object_version="1.0", provenance={"canonical_object_hash": obj["object_id"]})
     by_id = {o["object_id"]: o for o in objects}

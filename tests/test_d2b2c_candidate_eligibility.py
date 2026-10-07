@@ -88,7 +88,7 @@ def test_deterministic_unclassified_passage_is_coverage_not_candidate() -> None:
     assert passage_register_of(row)["source"] == "extract"
 
 
-def test_explicit_deterministic_type_proposal_enters_admission() -> None:
+def test_explicit_deterministic_type_proposal_does_not_enter_admission() -> None:
     source = _passage(
         object_id="definition-1",
         text="Continentie is een klinisch onderwerp in de ouderenzorg.",
@@ -98,26 +98,21 @@ def test_explicit_deterministic_type_proposal_enters_admission() -> None:
     [row] = _gate([source])
 
     eligibility = candidate_eligibility_of(row)
-    assert eligibility["eligible"] is True
+    assert eligibility["eligible"] is False
     assert eligibility["reason"] == REASON_EXPLICIT_TYPE
     assert eligibility["source"] == "deterministic"
-    assert admission_of(row)
-    assert is_inhoudelijk_candidate(row) is True
+    assert admission_of(row) == {}
+    from src.knowledge_path_v1 import content_reviewable
+    assert content_reviewable(row) is False
+    assert is_inhoudelijk_candidate(row) is False
 
 
 def test_semantic_proposal_selected_is_candidate_even_when_type_is_unclassified() -> None:
-    source = _passage(
-        object_id="semantic-selected",
-        text="Deze passage is door de locator als kandidaat geselecteerd.",
-        proposed_type="unclassified",
-        metadata={
-            "semantic_passage": {
-                "selection_origin": "proposal_selected",
-            }
-        },
-    )
-
-    [row] = _gate([source])
+    from tests.semantic_fixture_support import materialised_fixture
+    objects, fragments = materialised_fixture(
+        "Deze passage is door de locator als kandidaat geselecteerd.", proposed_type="unclassified")
+    [row] = apply_admission_gate(objects, klasse="richtlijn", fragments=fragments,
+        document_version="1.0", source_hash=objects[0]["source"]["source_checksum"])
 
     eligibility = candidate_eligibility_of(row)
     assert eligibility["eligible"] is True
@@ -194,7 +189,7 @@ def test_legacy_persisted_admission_remains_candidate_projection_until_reprocess
     )
 
     assert candidate_eligibility_of(legacy) == {}
-    assert is_inhoudelijk_candidate(legacy) is True
+    assert is_inhoudelijk_candidate(legacy) is False
 
 
 def test_weak_recommendation_proposal_does_not_make_prevalence_a_candidate() -> None:

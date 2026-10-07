@@ -55,6 +55,8 @@ def _object(
     passage_source: str = "extract",
 ) -> dict[str, Any]:
     metadata: dict[str, Any] = {
+        "semantic_passage": {"selection_origin": "proposal_selected",
+            "spans": [{"block_id": f"block-{object_id}", "start": 0, "end": 1}]},
         "passage_register": {
             "status": register_status,
             "source": passage_source,
@@ -186,6 +188,8 @@ def test_exact_object_decisions_close_document_review_only_after_last_passage(
         password="publisher-secret",
         roles=("publisher",),
     )
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = console.ingest(
         actor_id=researcher["account_id"],
         filename="begrippen.html",

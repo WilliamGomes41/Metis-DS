@@ -67,6 +67,8 @@ def _client(console, username="publisher.carla"):
 
 
 def _ingest(console, accounts, title, version, prior=None):
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = console.ingest(
         actor_id=accounts["researcher"]["account_id"], title=title, version=version,
         ingest_kind="new_version" if prior else "new", replaces_snapshot_id=prior,
@@ -236,6 +238,8 @@ def test_http_withdrawal_complete_recovery_and_open_work_resume(recovery_postgre
     assert target_sources.blobs == source.blobs
 
     fresh = _console(tmp_path / "restored", config, target_sources)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(fresh)
     fresh.reconcile_durable_publications()
     restarted_client = _client(fresh)
     restored_review_client = _client(fresh, "reviewer.bert")

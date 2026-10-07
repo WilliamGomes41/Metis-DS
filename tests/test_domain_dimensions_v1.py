@@ -33,6 +33,8 @@ def _obj(
     validation_status: str = "needs_review",
 ) -> dict:
     metadata: dict = {
+        "semantic_passage": {"selection_origin": "proposal_selected",
+                             "spans": [{"block_id": f"block-{object_id}", "start": 0, "end": 1}]},
         "passage_register": {
             "status": register_status,
             "source": register_source,

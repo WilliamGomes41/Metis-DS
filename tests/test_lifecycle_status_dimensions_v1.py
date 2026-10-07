@@ -198,9 +198,11 @@ class _ClosedQueueConsole(ProportionateReviewConsole):
 def test_closed_historical_revision_never_reopens_from_stale_review_rows() -> None:
     stale_open_heading = {
         "object_id": "heading-open",
-        "object_type": "heading",
-        "proposed_object_type": "heading",
+        "object_type": "unclassified",
+        "proposed_object_type": "definition",
         "metadata": {
+            "semantic_passage": {"selection_origin": "proposal_selected",
+                "spans": [{"block_id": "stored-source-block", "start": 0, "end": 1}]},
             "passage_register": {
                 "status": "selected_as_candidate",
                 "source": "extract",

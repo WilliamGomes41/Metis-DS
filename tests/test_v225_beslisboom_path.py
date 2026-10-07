@@ -254,9 +254,10 @@ def test_other_klassen_do_not_get_boom_types(tmp_path: Path) -> None:
     target = next(
         row
         for row in content
-        if (row.get("content") or {}).get("clean_text")
+        if row.get("object_type") != "heading"
+        and (row.get("content") or {}).get("clean_text")
     )
-    with pytest.raises(ConsoleError, match="unknown_object_type"):
+    with pytest.raises(ConsoleError, match="content_duty_required"):
         console.review_object(
             actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=receipt["snapshot_id"],

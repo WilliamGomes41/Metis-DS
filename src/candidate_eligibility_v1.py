@@ -65,9 +65,8 @@ def _semantic_origin(obj: dict[str, Any]) -> str:
 def assess_candidate_eligibility(obj: dict[str, Any]) -> CandidateEligibility:
     """Return current machine eligibility without consulting stale Admission.
 
-    Semantic source-bound selection evidence is authoritative when present.
-    Otherwise deterministic prose requires an explicit, non-structural type
-    proposal. No type inference occurs here.
+    Only a semantic selection is eligible for admission. A deterministic type
+    label is evidence about the prose, not a KnowledgeCandidate.
     """
 
     object_type = str(obj.get("object_type") or "").strip()
@@ -81,26 +80,26 @@ def assess_candidate_eligibility(obj: dict[str, Any]) -> CandidateEligibility:
         return CandidateEligibility(False, REASON_SEMANTIC_COVERAGE, SOURCE_SEMANTIC)
 
     existing = candidate_eligibility_of(obj)
-    if existing.get("eligible") is True:
-        return CandidateEligibility(
-            True,
-            REASON_CANDIDATE_LINEAGE,
-            str(existing.get("source") or SOURCE_DETERMINISTIC),
-        )
-
     origin = _semantic_origin(obj)
     if origin == SELECTION_ORIGIN_PROPOSAL:
+        if existing.get("eligible") is True:
+            return CandidateEligibility(
+                True,
+                REASON_CANDIDATE_LINEAGE,
+                str(existing.get("source") or SOURCE_SEMANTIC),
+            )
         return CandidateEligibility(True, REASON_SEMANTIC_PROPOSAL, SOURCE_SEMANTIC)
     if origin == SELECTION_ORIGIN_COVERAGE:
         return CandidateEligibility(False, REASON_SEMANTIC_COVERAGE, SOURCE_SEMANTIC)
 
     if proposed and proposed != "unclassified":
-        if proposed == "factual_finding":
-            return CandidateEligibility(True, REASON_EXPLICIT_TYPE, SOURCE_DETERMINISTIC)
         content = obj.get("content") if isinstance(obj.get("content"), dict) else {}
         text = str(content.get("clean_text") or obj.get("text") or "").strip()
-        if has_candidate_type_evidence(text, proposed):
-            return CandidateEligibility(True, REASON_EXPLICIT_TYPE, SOURCE_DETERMINISTIC)
-        return CandidateEligibility(False, REASON_UNEVIDENCED_TYPE, SOURCE_DETERMINISTIC)
+        evidenced = proposed == "factual_finding" or has_candidate_type_evidence(text, proposed)
+        return CandidateEligibility(
+            False,
+            REASON_EXPLICIT_TYPE if evidenced else REASON_UNEVIDENCED_TYPE,
+            SOURCE_DETERMINISTIC,
+        )
 
     return CandidateEligibility(False, REASON_NO_TYPE, SOURCE_DETERMINISTIC)

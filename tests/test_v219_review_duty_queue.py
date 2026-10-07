@@ -195,6 +195,7 @@ def _knowledge_obj(
     confirmed: str | None = None,
     risk_level: str | None = None,
     risk_fields: list[str] | None = None,
+    selected: bool = False,
 ) -> dict:
     row: dict = {
         "object_id": oid,
@@ -204,6 +205,14 @@ def _knowledge_obj(
         "content": {"clean_text": text, "raw_text": text},
         "governance": {"validation_status": "needs_review"},
     }
+    if selected:
+        row["metadata"] = {
+            "admission": {"gate_result": "allowed"},
+            "semantic_passage": {
+                "selection_origin": "proposal_selected",
+                "spans": [{"block_id": f"block-{oid}", "start": 0, "end": len(text)}],
+            },
+        }
     if risk_level or risk_fields:
         row["risk"] = {
             "risk_level": risk_level or "standard",
@@ -240,6 +249,7 @@ def _koppen_78_inhoud_2008_style() -> list[dict]:
             "unclassified",
             "Bespreek het onderwerp met de zorgvrager.",
             proposed="recommendation",
+            selected=True,
         )
     )
     objects.append(
@@ -248,6 +258,7 @@ def _koppen_78_inhoud_2008_style() -> list[dict]:
             "unclassified",
             "Wanneer de cliënt een alarmsignaal heeft.",
             proposed="condition",
+            selected=True,
         )
     )
     objects.append(
@@ -256,6 +267,7 @@ def _koppen_78_inhoud_2008_style() -> list[dict]:
             "unclassified",
             "Tenzij de huisarts al is ingeschakeld.",
             proposed="exception",
+            selected=True,
         )
     )
     objects.append(
@@ -264,6 +276,7 @@ def _koppen_78_inhoud_2008_style() -> list[dict]:
             "unclassified",
             "Leeftijdsgrens volgt het protocol van de voorschrijver.",
             risk_level="high",
+            selected=True,
         )
     )
     return objects
@@ -381,20 +394,18 @@ def test_researchers_are_not_required_to_open_thousands_of_inhoud_cards(
     assert koppen
     assert len(old_inhoud) >= leftover_n
     assert len(leftover) >= leftover_n
-    assert len(duty) < leftover_n
-    assert len(duty) >= 3
+    assert duty == []
     client = _client(console)
     dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
     html = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
     control = client.get(f"/review?document={receipt['snapshot_id']}&task=inventory").text
     visible = _visible_text(dashboard + html + control)
     assert f"{len(koppen)} te controleren" in dashboard
-    assert f"{len(duty)} te beoordelen" in dashboard
     assert f"Inhoud ({len(old_inhoud)})" not in dashboard
     assert f"Inhoud ({len(leftover)})" not in dashboard
     slow = _section(html, "review-lane-slow")
     duty_titles = _index_link_titles(slow)
-    assert len(duty_titles) == len(duty)
+    assert duty_titles == []
     leftover_snips = [_text_of(obj)[:40] for obj in leftover]
     for snip in leftover_snips:
         assert not any(snip in title for title in duty_titles)
@@ -479,14 +490,14 @@ def test_batch_confirm_rejects_slow_duty_and_leftover_unclassified(
         console, accounts, data=_duty_html(leftover=5), filename="batch.html", title="Batch"
     )
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    duty = slow_review_duty(objects)
     leftover = remaining_unclassified(objects)
-    assert duty and leftover
+    prose = next(obj for obj in objects if obj.get("object_type") != "heading")
+    assert leftover
     with pytest.raises(ConsoleError, match="fast_lane_heading_required"):
         console.batch_confirm_headings(
             actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=receipt["snapshot_id"],
-            object_ids=[duty[0]["object_id"]],
+            object_ids=[prose["object_id"]],
         )
     with pytest.raises(ConsoleError, match="fast_lane_heading_required"):
         console.batch_confirm_headings(

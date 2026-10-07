@@ -79,6 +79,8 @@ def _accounts(console: OperationsConsole) -> dict[str, dict]:
 
 
 def _ingest_html(console: OperationsConsole, accounts: dict, **kwargs) -> dict:
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     defaults = dict(
         actor_id=accounts["researcher"]["account_id"],
         filename="continentie.html",
@@ -97,7 +99,10 @@ def _ingest_html(console: OperationsConsole, accounts: dict, **kwargs) -> dict:
         ],
     )
     defaults.update(kwargs)
-    return console.ingest(**defaults)
+    receipt = console.ingest(**defaults)
+    from tests.semantic_fixture_support import legacy_recommendation_fixture
+    legacy_recommendation_fixture(console, receipt["snapshot_id"])
+    return receipt
 
 
 def _tiny_pdf(tmp_path: Path, text: str = "Richtlijn test PDF") -> bytes:

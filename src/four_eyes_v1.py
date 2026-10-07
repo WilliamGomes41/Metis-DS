@@ -198,16 +198,38 @@ def publish_authorization_contract(
     uploader_id: str,
     immutable_locator: str | None,
     envelope_review_passes: dict[str, Any] | None = None,
+    review_path: str = "richtlijn",
+    fragments: Iterable[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Contract any future publish path MUST check. Does not convert G2 to PASS."""
+    bindings = list(bindings)
     blockers: list[str] = []
     object_id = obj.get("object_id") or ""
     eligible = eligible_tuple_reviewers(bindings, object_id=object_id, uploader_id=uploader_id)
+    from src.knowledge_path_v1 import knowledge_publication_blockers
+    from src.admission_gate_v1 import is_boom_object
+    if review_path == "boom":
+        knowledge_blockers = [] if is_boom_object(obj) else ["invalid_boom_object"]
+    elif review_path == "richtlijn":
+        knowledge_blockers = knowledge_publication_blockers(obj, fragments=fragments)
+    else:
+        knowledge_blockers = ["invalid_review_path"]
+    if knowledge_blockers:
+        eligible = []
+        blockers.extend(knowledge_blockers)
+    else:
+        from src.review_duty_v1 import exact_current_approver_ids
+        current_ids = set(exact_current_approver_ids(obj, bindings))
+        eligible = [
+            row
+            for row in eligible
+            if str(row.get("reviewer_id") or "") in current_ids
+        ]
     independence = any(str(row.get("reviewer_id")) != str(uploader_id) for row in eligible)
     from src.review_policy_v1 import object_policy, missing_reviewers
     policy = object_policy(obj)
     if policy is not None:
-        missing = missing_reviewers(obj, list(bindings))
+        missing = missing_reviewers(obj, eligible)
         independence = not missing
         if missing:
             blockers.append("required_policy_review_missing")
@@ -216,7 +238,7 @@ def publish_authorization_contract(
     if policy is None and not independence:
         blockers.append("second_named_reviewer_required")
     four_eyes_needed = requires_four_eyes(obj)
-    four_ok = four_eyes_satisfied(bindings, object_id=object_id, uploader_id=uploader_id) if four_eyes_needed else True
+    four_ok = four_eyes_satisfied(eligible, object_id=object_id, uploader_id=uploader_id) if four_eyes_needed else True
     if policy is not None:
         four_ok = not missing
     if four_eyes_needed and not four_ok:

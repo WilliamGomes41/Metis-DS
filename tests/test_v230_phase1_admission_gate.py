@@ -91,6 +91,14 @@ def _ingest_richtlijn(console: OperationsConsole, accounts: dict, **overrides) -
         "named_reviewers": [accounts["reviewer"]["account_id"]],
     }
     kwargs.update(overrides)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    selections = [
+        (ADVISEERT, "recommendation"),
+        (REC_PLUS_EXC, "recommendation"),
+        ("Tenzij er een recente fractuur is vastgesteld.", "exception"),
+        ("Continentie is een klinisch onderwerp in de ouderenzorg.", "definition"),
+    ]
+    bind_fixture_selections(console, selections)
     return console.ingest(**kwargs)
 
 
@@ -336,7 +344,9 @@ def test_djg_must_not_enter_ordinary_queue_as_aanbeveling() -> None:
                 "object_type": "unclassified",
                 "proposed_object_type": "recommendation",
                 "content": {"clean_text": DJG},
-                "metadata": {"admission": admitted},
+                "metadata": {"admission": admitted,
+                    "semantic_passage": {"selection_origin": "proposal_selected",
+                        "spans": [{"block_id": "source-block", "start": 0, "end": len(ADVISEERT)}]}},
             }
         ]
     )
@@ -347,7 +357,9 @@ def test_djg_must_not_enter_ordinary_queue_as_aanbeveling() -> None:
             "object_type": "unclassified",
             "proposed_object_type": "recommendation",
             "content": {"clean_text": DJG},
-            "metadata": {"admission": admitted},
+            "metadata": {"admission": admitted,
+                    "semantic_passage": {"selection_origin": "proposal_selected",
+                        "spans": [{"block_id": "source-block", "start": 0, "end": len(ADVISEERT)}]}},
         }
     )
 
@@ -441,7 +453,9 @@ def test_false_recommendation_is_blocked_from_ordinary_queue_as_aanbeveling() ->
                 "object_id": "false-rec",
                 "proposed_object_type": "recommendation",
                 "content": {"clean_text": FALSE_RECOMMENDATION},
-                "metadata": {"admission": admitted},
+                "metadata": {"admission": admitted,
+                    "semantic_passage": {"selection_origin": "proposal_selected",
+                        "spans": [{"block_id": "source-block", "start": 0, "end": len(ADVISEERT)}]}},
             }
         ]
     ) == []
@@ -462,7 +476,9 @@ def test_full_adviseert_recommendation_may_be_allowed_when_contract_complete() -
                 "object_type": "unclassified",
                 "proposed_object_type": "recommendation",
                 "content": {"clean_text": ADVISEERT},
-                "metadata": {"admission": admitted},
+                "metadata": {"admission": admitted,
+                    "semantic_passage": {"selection_origin": "proposal_selected",
+                        "spans": [{"block_id": "source-block", "start": 0, "end": len(ADVISEERT)}]}},
             }
         ]
     )
@@ -564,15 +580,15 @@ def test_boom_path_node_outcome_do_not_get_richtlijn_type_contract_incomplete() 
     assert {row["object_id"] for row in duty} >= {"node-1", "out-1"}
 
 
-def test_legacy_objects_without_admission_remain_in_v219_duty() -> None:
+def test_legacy_objects_without_selection_do_not_gain_content_duty() -> None:
     row = {
         "object_id": "r1",
         "object_type": "unclassified",
         "proposed_object_type": "recommendation",
         "content": {"clean_text": "Bespreek het onderwerp met de zorgvrager."},
     }
-    assert is_slow_review_duty(row) is True
-    assert ordinary_review_queue([row]) == [row]
+    assert is_slow_review_duty(row) is False
+    assert ordinary_review_queue([row]) == []
 
 
 # ---------------------------------------------------------------------------
@@ -606,14 +622,14 @@ def test_ingest_fixture_gates_named_regressions_and_keeps_adviseert(tmp_path: Pa
         eligibility = (passage.get("metadata") or {}).get("candidate_eligibility") or {}
         assert eligibility.get("eligible") is False
     assert ((djg.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
-        "deterministic_proposal_not_evidenced"
+        "semantic_coverage_remainder"
     )
     assert ((false_rec.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
-        "deterministic_proposal_not_evidenced"
+        "semantic_coverage_remainder"
     )
     for passage in (one_word, unresolved, comparison):
         assert ((passage.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
-            "deterministic_no_type_proposal"
+            "semantic_coverage_remainder"
         )
 
     assert _admission(adviseert)["gate_result"] == GATE_ALLOWED
@@ -737,39 +753,23 @@ def test_source_text_exact_comes_from_raw_fragment_not_only_clean_text() -> None
         "De werkgroep adviseert calcium te geven tenzij er hypercalciëmie bestaat."
     )
     cleaned = "De werkgroep adviseert calcium te geven."
-    objects = [
-        {
-            "object_id": "rec-drop",
-            "document_id": "doc-phase1",
-            "object_type": "unclassified",
-            "proposed_object_type": "recommendation",
-            "source": {"source_checksum": "c" * 64},
-            "content": {"raw_text": dropped, "clean_text": cleaned},
-            "structure": {"section_path": ["2 Aanbevelingen"]},
-            "metadata": {
-                "source_locator": {
-                    "locator_type": "web_line_range",
-                    "locator_value": "lines:20-20;p:1",
-                }
-            },
-            "provenance": {
-                "source_fragments": [{"raw_object_id": "frag-1"}],
-            },
-        }
-    ]
-    fragments = [{"fragment_id": "frag-1", "raw_text": dropped, "clean_text": cleaned}]
-    stamped = apply_admission_gate(
-        objects,
-        klasse="richtlijn",
-        fragments=fragments,
-        document_version="1.0",
-        source_hash="c" * 64,
-    )
-    admission = _admission(stamped[0])
-    assert admission["source_text_exact"] == dropped
-    assert admission["candidate_text"] == cleaned
-    assert admission["gate_result"] == GATE_BLOCKED
-    assert "source_fidelity_failure" in admission["reason_codes"]
+    from tests.semantic_fixture_support import materialised_fixture
+    from src.admission_gate_v1 import candidate_from_object
+    from src.knowledge_path_v1 import content_reviewable
+    from copy import deepcopy
+    objects, fragments = materialised_fixture(dropped)
+    objects[0]["content"]["clean_text"] = cleaned
+    before = deepcopy(objects)
+    fields = candidate_from_object(objects[0], objects=objects, index=0,
+        document_version="1.0", source_hash=objects[0]["source"]["source_checksum"],
+        fragments_by_id={row["fragment_id"]: row for row in fragments})
+    assert fields["source_text_exact"] == dropped
+    assert fields["candidate_text"] == cleaned
+    stamped = apply_admission_gate(objects, klasse="richtlijn", fragments=fragments,
+        document_version="1.0", source_hash=objects[0]["source"]["source_checksum"])
+    assert _admission(stamped[0]) == {}
+    assert not content_reviewable(stamped[0])
+    assert objects == before
 
 
 def test_blocked_candidate_cannot_be_confirmed_or_approved(tmp_path: Path) -> None:
@@ -837,11 +837,11 @@ def test_correct_object_reruns_admission_gate(tmp_path: Path) -> None:
             ],
         },
     )
-    assert _admission(revised)["gate_result"] == GATE_BLOCKED
+    assert _admission(revised) == {}
     assert is_slow_review_duty(revised) is False
 
 
-def test_correct_object_can_readmit_a_blocked_candidate(tmp_path: Path) -> None:
+def test_correct_object_can_readmit_a_source_invalid_revision(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
@@ -871,7 +871,8 @@ def test_correct_object_can_readmit_a_blocked_candidate(tmp_path: Path) -> None:
             ],
         },
     )
-    assert _admission(blocked)["gate_result"] == GATE_BLOCKED
+    assert _admission(blocked) == {}
+    assert is_slow_review_duty(blocked) is False
 
     console.review_object(
         actor_id=accounts["reviewer"]["account_id"],

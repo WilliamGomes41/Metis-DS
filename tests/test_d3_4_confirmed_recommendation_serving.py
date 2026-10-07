@@ -95,6 +95,8 @@ def _reviewed_source_objects(
 ) -> tuple[list[dict], str]:
     console = _console(tmp_path)
     researcher, reviewer = _accounts(console)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console, [(text, "recommendation")])
     receipt = console.ingest(
         actor_id=researcher["account_id"],
         filename="d34.html",

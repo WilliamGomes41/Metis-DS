@@ -5,6 +5,7 @@ import argparse, json
 from pathlib import Path
 from typing import Any
 from src.integrity_kernel import exact_review_snapshot_hash
+from src.knowledge_path_v1 import content_reviewable
 
 def read_jsonl(p:Path)->list[dict[str,Any]]:
     return [json.loads(x) for x in p.read_text(encoding='utf-8').splitlines() if x.strip()]
@@ -12,6 +13,8 @@ def read_jsonl(p:Path)->list[dict[str,Any]]:
 def build(rows:list[dict[str,Any]], track:str)->list[dict[str,Any]]:
     q=[]
     for o in rows:
+        if not content_reviewable(o):
+            continue
         if o['governance']['review_track']!=track or o['governance']['validation_status'] not in {'needs_review','draft'}: continue
         q.append({
           'object_id':o['object_id'],'object_version':o['object_version'],'review_track':track,

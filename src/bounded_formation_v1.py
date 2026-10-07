@@ -220,7 +220,20 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
         if proposal["source_assessments"]:
             proposal["abstain_reason"] = None
     def units():
-        return semantic_units_from_proposal(**validator_input, proposal=proposal)
+        from src.knowledge_materialisation_v1 import (
+            materialise_knowledge_candidates,
+            ordered_source_projection,
+        )
+        from src.semantic_passage_v1 import _project_semantic_selection
+        decisions, coverage = _project_semantic_selection(**validator_input, proposal=proposal)
+        candidates = materialise_knowledge_candidates(
+            decisions,
+            document_id=validator_input["document_id"],
+            fragments=validator_input["fragments"],
+        )
+        return ordered_source_projection(
+            candidates, decisions, coverage, validator_input["fragments"]
+        )
     targets = _remaining_targets(units())
     if resuming:
         pending = evidence.get("pending_rejections") or []

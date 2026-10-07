@@ -459,6 +459,42 @@ class _PostgresBadgeCountsMixin:
                                    THEN 'explanation'
                                    ELSE b.admission_proposed_type
                                END AS batch_type,
+                               COALESCE((
+                                   b.gate_result='allowed'
+                                   AND b.object_type<>'document'
+                                   AND b.review_type<>'heading'
+                                   AND b.object_type NOT IN ('path','node','outcome')
+                                   AND b.confirmed_type NOT IN ('path','node','outcome')
+                                   AND b.proposed_type NOT IN ('path','node','outcome')
+                                   AND NOT (
+                                       b.object_type IN ('','unclassified','heading')
+                                       AND b.confirmed_type IN ('','heading')
+                                       AND COALESCE(b.payload->'metadata'->'semantic_passage'->'structural'='true'::jsonb,FALSE)
+                                   )
+                                   AND b.payload->'metadata'->'semantic_passage'->>'selection_origin'='proposal_selected'
+                                   AND CASE
+                                       WHEN jsonb_typeof(b.payload->'metadata'->'semantic_passage'->'spans')='array'
+                                       THEN jsonb_array_length(b.payload->'metadata'->'semantic_passage'->'spans')>0
+                                            AND NOT EXISTS (
+                                                SELECT 1 FROM jsonb_array_elements(
+                                                    b.payload->'metadata'->'semantic_passage'->'spans'
+                                                ) span
+                                                WHERE NOT COALESCE((
+                                                    jsonb_typeof(span)='object'
+                                                    AND BTRIM(COALESCE(span->>'block_id',''))<>''
+                                                    AND jsonb_typeof(span->'start')='number'
+                                                    AND jsonb_typeof(span->'end')='number'
+                                                    AND CASE WHEN span->>'start' ~ '^[0-9]+$'
+                                                                  AND span->>'end' ~ '^[0-9]+$'
+                                                        THEN (span->>'end')::numeric > (span->>'start')::numeric
+                                                        ELSE FALSE END
+                                                    AND (NOT (span ? 'source_span_id')
+                                                         OR BTRIM(COALESCE(span->>'source_span_id','')) NOT IN ('','UNKNOWN'))
+                                                ), FALSE)
+                                            )
+                                       ELSE FALSE
+                                   END
+                               ), FALSE) AS content_candidate,
                                (b.class='beslisboom') AS boom,
                                CASE
                                    WHEN b.class='beslisboom' THEN b.review_type='path'
@@ -542,7 +578,7 @@ class _PostgresBadgeCountsMixin:
                                        )
                                        OR (
                                            NOT c.boom
-                                           AND c.gate_result<>'blocked'
+                                           AND c.content_candidate
                                            AND (
                                                c.four_eyes
                                                OR c.confirmed_type IN (
@@ -562,7 +598,7 @@ class _PostgresBadgeCountsMixin:
                                    NOT c.boom
                                    AND c.object_type<>'document'
                                    AND NOT c.queue_fast
-                                   AND c.gate_result='allowed'
+                                   AND c.content_candidate
                                    AND c.review_type IN ('definition','explanation')
                                    AND jsonb_typeof(c.section_path)='array'
                                    AND jsonb_array_length(c.section_path)>0
@@ -593,7 +629,7 @@ class _PostgresBadgeCountsMixin:
                                    AND r.object_type<>'document'
                                    AND NOT r.queue_fast
                                    AND NOT r.slow_duty
-                                   AND r.gate_result='allowed'
+                                   AND r.content_candidate
                                    AND NOT r.batch_eligible
                                ) AS regular_individual,
                                (
@@ -602,9 +638,7 @@ class _PostgresBadgeCountsMixin:
                                        'rejected','superseded','revise'
                                    )
                                    AND (
-                                       r.boom OR r.review_type='heading'
-                                       OR r.gate_result='allowed'
-                                       OR (BTRIM(r.confirmed_type)<>'' AND r.gate_result='')
+                                       r.boom OR r.content_candidate
                                    )
                                    AND r.exact_approver_count=0
                                ) AS first_review_open,
@@ -614,9 +648,7 @@ class _PostgresBadgeCountsMixin:
                                        'rejected','superseded','revise'
                                    )
                                    AND (
-                                       r.boom OR r.review_type='heading'
-                                       OR r.gate_result='allowed'
-                                       OR (BTRIM(r.confirmed_type)<>'' AND r.gate_result='')
+                                       r.boom OR r.content_candidate
                                    )
                                    AND r.four_eyes
                                    AND r.exact_approver_count=1

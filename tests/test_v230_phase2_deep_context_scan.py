@@ -108,6 +108,16 @@ def _ingest(console: OperationsConsole, accounts: dict, fixture: Path, **overrid
         "named_reviewers": [accounts["reviewer"]["account_id"]],
     }
     kwargs.update(overrides)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console, [
+        (ADVISEERT, "recommendation"),
+        ("De werkgroep adviseert calcium te geven.", "recommendation"),
+        ("De werkgroep adviseert calcium te geven tenzij er hypercalciëmie bestaat.", "recommendation"),
+        ("De werkgroep adviseert de verpleegkundige calciumsuppletie te starten bij iedere intake.", "recommendation"),
+        ("Tenzij er een recente fractuur is vastgesteld.", "exception"),
+        ("Overleg bij een vastgesteld verhoogd fractuurrisico met de cliënt over verwijzing.", "recommendation"),
+        ("De Dutch Job Group (dJG) is een meetinstrument voor werkbelasting.", "definition"),
+    ])
     return console.ingest(**kwargs)
 
 
@@ -606,40 +616,23 @@ def test_boom_path_node_outcome_do_not_get_phase2_deep_scan() -> None:
 def test_source_text_exact_stays_freeze_fragment() -> None:
     dropped = "De werkgroep adviseert calcium te geven tenzij er hypercalciëmie bestaat."
     cleaned = "De werkgroep adviseert calcium te geven."
-    objects = [
-        {
-            "object_id": "rec-drop",
-            "document_id": "doc-phase2",
-            "object_type": "unclassified",
-            "proposed_object_type": "recommendation",
-            "source": {"source_checksum": "c" * 64},
-            "content": {"raw_text": dropped, "clean_text": cleaned},
-            "structure": {"section_path": ["2 Aanbevelingen"], "heading": "2 Aanbevelingen"},
-            "metadata": {
-                "source_locator": {
-                    "locator_type": "web_line_range",
-                    "locator_value": "lines:20-20;p:1",
-                }
-            },
-            "provenance": {"source_fragments": [{"raw_object_id": "frag-1"}]},
-        }
-    ]
-    fragments = [{"fragment_id": "frag-1", "raw_text": dropped, "clean_text": cleaned}]
-    stamped = apply_admission_gate(
-        objects,
-        klasse="richtlijn",
-        fragments=fragments,
-        document_version="1.0",
-        source_hash="c" * 64,
-    )
-    admission = _admission(stamped[0])
-    assert admission["source_text_exact"] == dropped
-    assert admission["candidate_text"] == cleaned
-
-
-# ---------------------------------------------------------------------------
-# Extract path + existing review card
-# ---------------------------------------------------------------------------
+    from tests.semantic_fixture_support import materialised_fixture
+    from src.admission_gate_v1 import candidate_from_object
+    from src.knowledge_path_v1 import content_reviewable
+    from copy import deepcopy
+    objects, fragments = materialised_fixture(dropped)
+    objects[0]["content"]["clean_text"] = cleaned
+    before = deepcopy(objects)
+    fields = candidate_from_object(objects[0], objects=objects, index=0,
+        document_version="1.0", source_hash=objects[0]["source"]["source_checksum"],
+        fragments_by_id={row["fragment_id"]: row for row in fragments})
+    assert fields["source_text_exact"] == dropped
+    assert fields["candidate_text"] == cleaned
+    stamped = apply_admission_gate(objects, klasse="richtlijn", fragments=fragments,
+        document_version="1.0", source_hash=objects[0]["source"]["source_checksum"])
+    assert _admission(stamped[0]) == {}
+    assert not content_reviewable(stamped[0])
+    assert objects == before
 
 
 def test_phase1_ingest_still_keeps_adviseert_and_leaves_djg_as_coverage(tmp_path: Path) -> None:
@@ -713,11 +706,11 @@ def test_phase2_ingest_records_deep_window_and_wires_scan(tmp_path: Path) -> Non
         assert eligibility.get("eligible") is False
         assert ordinary_review_queue([passage]) == []
     assert ((djg.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
-        "deterministic_proposal_not_evidenced"
+        "semantic_coverage_remainder"
     )
     for passage in (unresolved, comparison):
         assert ((passage.get("metadata") or {}).get("candidate_eligibility") or {}).get("reason") == (
-            "deterministic_no_type_proposal"
+            "semantic_coverage_remainder"
         )
 
     calcium = _find_by_text(objects, "adviseert calcium te geven")

@@ -206,11 +206,10 @@ def is_boom_object(obj: dict[str, Any]) -> bool:
 
 
 def is_inhoudelijk_candidate(obj: dict[str, Any]) -> bool:
-    """Project whether the row represents a KnowledgeCandidate.
+    """True only for a materialised semantic selection with exact source spans.
 
-    New D2b2-C records carry explicit eligibility evidence. Existing persisted
-    Admission remains evidence that an older row was treated as a candidate,
-    so historical snapshots are not silently reinterpreted.
+    A stored type, a deterministic label, or an old admission stamp does not
+    make a fragment a KnowledgeCandidate.
     """
 
     if obj.get("object_type") in {"document", "heading"}:
@@ -219,20 +218,19 @@ def is_inhoudelijk_candidate(obj: dict[str, Any]) -> bool:
         return False
     if is_boom_object(obj):
         return False
-
-    confirmed = str(obj.get("confirmed_object_type") or "").strip()
-    stored = str(obj.get("object_type") or "").strip()
-    if confirmed or stored not in {"", "unclassified", "document", "heading"}:
-        return True
-
-    eligibility = candidate_eligibility_of(obj)
-    if isinstance(eligibility.get("eligible"), bool):
-        return bool(eligibility["eligible"])
-
-    if admission_of(obj):
-        return True
-
-    return assess_candidate_eligibility(obj).eligible
+    from src.source_accountability_v1 import is_source_record
+    if is_source_record(obj):
+        return False
+    metadata = obj.get("metadata") if isinstance(obj.get("metadata"), dict) else {}
+    semantic = metadata.get("semantic_passage")
+    if not isinstance(semantic, dict) and isinstance(obj.get("semantic_passage"), dict):
+        semantic = obj.get("semantic_passage")
+    if not isinstance(semantic, dict):
+        return False
+    if str(semantic.get("selection_origin") or "") != "proposal_selected":
+        return False
+    from src.knowledge_path_v1 import spans_are_exact
+    return spans_are_exact(semantic.get("spans"))
 
 
 def build_candidate_record(**fields: Any) -> dict[str, Any]:
@@ -884,6 +882,12 @@ def apply_admission_gate(
     if review_path_for_klasse(klasse) == "boom":
         from src.decision_unit_construction_v1 import apply_gate
         return apply_gate(objects, source_hash=source_hash)
+    from src.knowledge_materialisation_v1 import validate_materialised_candidate, _selection_blocks
+    fragments = list(fragments or [])
+    try:
+        source_blocks = _selection_blocks(fragments)
+    except (ValueError, KeyError, TypeError):
+        source_blocks = {}
     fragments_by_id = {
         str(fragment.get("fragment_id") or ""): fragment
         for fragment in (fragments or [])
@@ -897,8 +901,21 @@ def apply_admission_gate(
         row = dict(obj)
         metadata = dict(row.get("metadata") or {})
         metadata["candidate_eligibility"] = eligibility.as_metadata()
+        semantic = metadata.get("semantic_passage") if isinstance(metadata.get("semantic_passage"), dict) else {}
+        semantic_candidate = str(semantic.get("selection_origin") or "") == "proposal_selected"
 
-        if eligibility.eligible:
+        source_valid = False
+        if eligibility.eligible and semantic_candidate:
+            try:
+                validate_materialised_candidate(row, fragments=fragments, source_blocks=source_blocks)
+                source = row.get("source") or {}
+                source_valid = (
+                    source.get("source_checksum") == source_hash
+                    and source.get("version") == document_version
+                )
+            except (ValueError, KeyError, TypeError):
+                source_valid = False
+        if eligibility.eligible and semantic_candidate and source_valid:
             candidate = candidate_from_object(
                 row,
                 objects=source_order,

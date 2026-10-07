@@ -63,6 +63,8 @@ def review_system(tmp_path):
     console = ProportionateReviewConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     researcher = console.create_account(username="anne", password="anne-secret", roles=("researcher",))
     reviewer = console.create_account(username="bert", password="bert-secret", roles=("reviewer",))
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = console.ingest(
         actor_id=researcher["account_id"], filename="begrippen.html", content_type="text/html",
         data=b'<html><body><h1>Begrippen</h1><h2>1 Begrippen</h2>'
@@ -143,7 +145,9 @@ def test_real_get_pins_text_and_revision_together_and_preserves_conflict_selecti
     # card, but cannot re-enter the ordinary batch on a stale form.
     from src.admission_gate_v1 import admission_of
     corrected = next(o for o in console.snapshot_objects(sid) if o['object_id'] == ids[0])
-    assert 'source_fidelity_failure' in admission_of(corrected)['reason_codes']
+    assert admission_of(corrected) == {}
+    from src.knowledge_path_v1 import content_reviewable
+    assert not content_reviewable(corrected)
     assert new_text in client.get('/review', params={'document':sid, 'object':ids[0]}).text
     assert not console._bindings.get(sid)
     assert not Page(response.text).batches  # Only one eligible candidate remains.

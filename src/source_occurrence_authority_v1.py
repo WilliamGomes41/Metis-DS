@@ -74,41 +74,6 @@ def _proposal_rank(unit: dict[str, Any]) -> int:
     return 1 if semantic.get("selection_origin") == "proposal_selected" else 0
 
 
-def _apply_candidate_semantics(
-    principal: dict[str, Any],
-    donor: dict[str, Any],
-) -> dict[str, Any]:
-    """Keep candidate semantics independent from source-location authority."""
-
-    if donor is principal or (
-        not _proposal_rank(donor)
-        and (principal.get("source_accountability") or donor.get("source_accountability"))
-    ):
-        return principal
-    row = deepcopy(principal)
-    # A selected exact duplicate may supply candidate semantics to a more
-    # authoritative source occurrence. Its prior source-only disposition must
-    # not travel with those candidate semantics. For source-only duplicates,
-    # keep the principal occurrence's exact span and bound role together.
-    row.pop("source_accountability", None)
-    for key in (
-        "semantic_passage",
-        "source_bound_fields",
-        "source_bound_context",
-        "review_track",
-        "proposed_object_type",
-        "proposed_recommendation_strength",
-        "proposed_recommendation_semantics",
-        "recommendation_semantics_evidence",
-        "proposed_knowledge_relations",
-        "knowledge_relation_evidence",
-        "relations",
-    ):
-        if key in donor:
-            row[key] = deepcopy(donor[key])
-    return row
-
-
 def _with_authority_metadata(
     principal: dict[str, Any],
     *,
@@ -132,8 +97,11 @@ def prefer_authoritative_exact_occurrences(
 ) -> list[dict[str, Any]]:
     """Deduplicate exact visible prose and retain authoritative provenance.
 
-    Groups are keyed only by normalized exact visible text. The selected
-    principal occurrence determines object identity, section path and heading.
+    Groups are keyed only by normalized exact visible text. If candidates are
+    present, choose a complete candidate by section priority among candidates.
+    Otherwise retain source-only section priority. Identity, text, spans, fields,
+    fragment references and source mapping always belong to that same row.
+    Other occurrences provide evidence only, never candidate semantics.
     Principal source_fragment_ids remain principal-only so existing source
     reconstruction and Review UI never treat duplicate occurrences as one
     composite passage. Within the same section role, a source occurrence carried
@@ -158,25 +126,21 @@ def prefer_authoritative_exact_occurrences(
             groups[key] = {
                 "principal": unit,
                 "principal_position": position,
-                "semantic_donor": unit,
                 "occurrences": [_occurrence(unit)],
             }
             continue
 
         current["occurrences"].append(_occurrence(unit))
         principal = current["principal"]
-        if _rank(unit) > _rank(principal):
+        # A source-only occurrence cannot displace a selected candidate. Choose
+        # a complete materialised row; never move its semantics to another ID.
+        if (_proposal_rank(unit), _rank(unit)) > (_proposal_rank(principal), _rank(principal)):
             current["principal"] = unit
             current["principal_position"] = position
-        if _proposal_rank(unit) > _proposal_rank(current["semantic_donor"]):
-            current["semantic_donor"] = unit
 
     out: list[tuple[int, dict[str, Any]]] = list(passthrough)
     for group in groups.values():
-        principal = _apply_candidate_semantics(
-            group["principal"],
-            group["semantic_donor"],
-        )
+        principal = group["principal"]
         occurrences = list(group["occurrences"])
         principal_occurrence = _occurrence(principal)
 

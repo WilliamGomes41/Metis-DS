@@ -42,6 +42,8 @@ def _obj(
         "proposed_object_type": proposed_type,
         "structure": {"section_path": list(section_path)},
         "metadata": {
+            "semantic_passage": {"selection_origin": "proposal_selected",
+                                 "spans": [{"block_id": f"block-{object_id}", "start": 0, "end": 1}]},
             "admission": {
                 "gate_result": gate,
                 "section_path": list(section_path),

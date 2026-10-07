@@ -124,9 +124,25 @@ def _ingest(console: OperationsConsole, accounts: dict, fixture: Path = PHASE2_F
         "named_reviewers": [accounts["reviewer"]["account_id"]],
     }
     kwargs.update(overrides)
+    if "data" not in overrides:
+        from tests.semantic_fixture_support import bind_fixture_selections
+        bind_fixture_selections(console, [
+            (ADVISEERT, "recommendation"),
+            ("De werkgroep adviseert calcium te geven.", "recommendation"),
+            ("De werkgroep adviseert calcium te geven tenzij er hypercalciëmie bestaat.", "recommendation"),
+            ("De werkgroep adviseert de verpleegkundige calciumsuppletie te starten bij iedere intake.", "recommendation"),
+            ("Tenzij er een recente fractuur is vastgesteld.", "exception"),
+            ("Overleg bij een vastgesteld verhoogd fractuurrisico met de cliënt over verwijzing.", "recommendation"),
+            ("De Dutch Job Group (dJG) is een meetinstrument voor werkbelasting.", "definition"),
+        ])
+    else:
+        from tests.semantic_fixture_support import bind_fixture_selections
+        bind_fixture_selections(console)
     receipt = console.ingest(**kwargs)
     from tests.context_test_support import bind_detected_context
     bind_detected_context(console, receipt['snapshot_id'], accounts['reviewer']['account_id'])
+    from tests.semantic_fixture_support import legacy_recommendation_fixture
+    legacy_recommendation_fixture(console, receipt["snapshot_id"])
     return receipt
 
 
@@ -287,7 +303,7 @@ def test_allowed_candidate_is_selected_and_djg_remains_unassessed_coverage(tmp_p
     eligibility = (djg.get("metadata") or {}).get("candidate_eligibility") or {}
     assert eligibility.get("eligible") is False
     assert passage_register_of(djg).get("status") == "not_yet_assessed"
-    assert passage_register_of(djg).get("reason_codes") == []
+    assert passage_register_of(djg).get("reason_codes") == ["unformed_meaning"]
 
     ordinary = ordinary_review_queue(_passages(objects))
     assert adviseert["object_id"] in {obj["object_id"] for obj in ordinary}
@@ -537,9 +553,9 @@ def test_section_role_distribution_exposes_summary_bias_without_opening_quality_
     assert distribution["content_passages"] == sum(
         int(row["passages"]) for row in distribution["roles"].values()
     )
-    # Current extraction keeps this exact duplicate unresolved for admission;
-    # diagnostics must preserve that disposition rather than promote it.
-    assert distribution["roles"]["primary"]["counts"]["not_yet_assessed"] == 1
+    # The fixture explicitly selects this repeated recommendation through the
+    # creator; diagnostics retain one candidate at its principal source role.
+    assert distribution["roles"]["primary"]["counts"]["selected_as_candidate"] == 1
     assert distribution["roles"]["summary"]["counts"]["selected_as_candidate"] >= 1
     assert distribution["roles"]["context"]["counts"]["selected_as_candidate"] >= 1
 
@@ -686,6 +702,8 @@ def test_initial_register_disposition_uses_section_role_without_new_statuses() -
             "content": {"clean_text": f"Volledige passage voor {object_id}."},
             "structure": {"section_path": [role]},
             "metadata": {
+                "semantic_passage": {"selection_origin": "proposal_selected",
+                    "spans": [{"block_id": f"block-{object_id}", "start": 0, "end": 1}]},
                 "admission": {
                     "gate_result": GATE_ALLOWED,
                     "proposed_type": proposed,

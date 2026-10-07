@@ -102,24 +102,26 @@ def review_stage(
     already has two independent current human approvals.
     """
 
+    from src.knowledge_path_v1 import content_reviewable
     from src.source_accountability_v1 import is_source_record
+    # Boom construction keeps its current duty until that creator is cut.
+    # On every other path only a content-reviewable knowledge candidate opens a duty.
+    if review_path != "boom" and not content_reviewable(obj):
+        return None
     if is_source_record(obj):
         return None
     if str(obj.get("object_type") or "") == "document":
         return None
     if _terminal_without_open_review(obj):
         return None
-    obj_type = authoritative_review_type(obj)
     gate = str(admission_of(obj).get("gate_result") or "")
     if gate == GATE_BLOCKED and (review_path != "boom" or (obj.get("metadata") or {}).get("decision_unit_construction")):
         return None
     confirmed = str(obj.get("confirmed_object_type") or "").strip()
-    # Headings are structural and have no Admission. A human-confirmed type
-    # without a gate is also reviewable: the reviewer already classified it.
-    # An explicit non-allowed gate stays out, including after confirmation.
+    # A non-allowed gate stays out, including after confirmation.
+    # Headings never use this branch: content_reviewable already refused them.
     if (
         review_path != "boom"
-        and obj_type != "heading"
         and gate != GATE_ALLOWED
         and not (confirmed and not gate)
     ):

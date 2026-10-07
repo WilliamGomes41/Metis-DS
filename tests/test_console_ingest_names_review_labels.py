@@ -70,6 +70,8 @@ def upload(tmp_path):
     password = token_urlsafe(24)
     actor = console.create_account("uploader", password, roles=("researcher", "reviewer"), display_name="Onderzoeker")
     reviewer = console.create_account("reviewer", token_urlsafe(24), roles=("reviewer",), display_name="Reviewer")
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     with pymupdf.open() as pdf:
         page = pdf.new_page()
         page.insert_text((72, 72), "Eenzaamheid bij ouderen", fontsize=18)

@@ -15,12 +15,19 @@ import pytest
 from src.operations_console_v1 import ConsoleError, PRE_REVIEW_BLOCKED
 from src.processing_retry_v1 import KEY, now
 from src.processing_evidence_export_v1 import processing_evidence_tables
-from tests.test_review_batch_atomic_postgres import _console, _client
+from tests.test_review_batch_atomic_postgres import _console as _raw_console, _client
+from tests.semantic_fixture_support import bind_fixture_selections
+
+
+def _console(root, config):
+    console = _raw_console(root, config)
+    bind_fixture_selections(console)
+    return console
 from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
 
 
 def blocked(root, config, monkeypatch):
-    console = _console(root, config)
+    console = _raw_console(root, config)
     researcher = console.create_account(username="anne", password="anne-secret", roles=("researcher",))
     reviewer = console.create_account(username="bert", password="bert-secret", roles=("reviewer",))
     original = console._fragments_and_spec
@@ -34,6 +41,7 @@ def blocked(root, config, monkeypatch):
         ingest_kind="new", title="Begrippen", version="1.0", date="2026-09-20", live_url="",
         class_="richtlijn", family="begrippen", named_reviewers=[reviewer["account_id"]])
     monkeypatch.setattr(console, "_fragments_and_spec", original)
+    bind_fixture_selections(console)
     return console, researcher["account_id"], receipt["snapshot_id"], reject
 
 

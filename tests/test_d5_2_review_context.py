@@ -45,6 +45,8 @@ def _obj(
         "confirmed_object_type": object_type,
         "content": {"clean_text": text or f"Tekst van {object_id}."},
         "metadata": {
+            "semantic_passage": {"selection_origin": "proposal_selected",
+                                 "spans": [{"block_id": f"block-{object_id}", "start": 0, "end": 1}]},
             "admission": {
                 "gate_result": gate,
                 "section_path": ["Inhoud"],

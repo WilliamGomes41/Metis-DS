@@ -419,6 +419,8 @@ def test_existing_continentie_fixture_hashes_unchanged(tmp_path: Path) -> None:
 def test_review_list_title_is_source_snippet_not_unclassified(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = _ingest(console, accounts)
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     client = _client(console)
@@ -601,8 +603,9 @@ def test_human_can_reclassify_heading_that_is_advice_to_slow(tmp_path: Path) -> 
     html = _client(console).get(
         f"/review?document={receipt['snapshot_id']}&task=individual"
     ).text
-    assert heading["object_id"] in html
-    assert "review-lane-slow" in html
+    assert heading["object_id"] not in html
+    from src.knowledge_path_v1 import content_reviewable
+    assert content_reviewable(refreshed) is False
     fast = re.search(r'class="review-lane-fast".*?</section>', html, flags=re.S)
     if fast:
         assert heading["object_id"] not in fast.group(0)
@@ -670,31 +673,43 @@ def test_four_eyes_still_required_for_exception_and_high_risk(tmp_path: Path) ->
     html_src = (
         "<!doctype html><html lang=\"nl\"><body>"
         "<h1>Voorbeeldrichtlijn</h1>"
-        "<p>Tenzij samen met de cliënt hiervan wordt afgezien.</p>"
+        "<p>Continentie is een klinisch onderwerp in de ouderenzorg.</p>"
         "</body></html>"
     ).encode("utf-8")
     console = _console(tmp_path)
     accounts = _accounts(console)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = _ingest(console, accounts, data=html_src, filename="exc.html", title="Uitzondering")
-    target = next(obj for obj in _non_document(console.snapshot_objects(receipt["snapshot_id"])))
+    target = next(obj for obj in _non_document(console.snapshot_objects(receipt["snapshot_id"]))
+                  if obj["object_type"] == "unclassified")
+    from src.integrity_kernel import stamp_canonical_hashes
+    rows = console._load_objects(receipt["snapshot_id"])
+    for row in rows:
+        if row["object_id"] == target["object_id"]:
+            row.setdefault("risk", {})["risk_level"] = "high"
+            row["risk"]["risk_fields"] = ["exception"]
+            stamp_canonical_hashes(row)
+    console._save_objects(receipt["snapshot_id"], rows)
     console.confirm_object_type(
         actor_id=accounts["reviewer"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
         object_id=target["object_id"],
-        confirmed_object_type="exception",
+        confirmed_object_type="definition",
     )
     refreshed = next(
         obj
         for obj in console.snapshot_objects(receipt["snapshot_id"])
         if obj["object_id"] == target["object_id"]
     )
-    assert requires_four_eyes(refreshed, confirmed_type="exception") is True
+    assert requires_four_eyes({"confirmed_object_type": "exception"}) is True
+    assert requires_four_eyes(refreshed, confirmed_type="definition") is True
     console.review_object(
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
         object_id=target["object_id"],
         decision="approve",
-        confirmed_object_type="exception",
+        confirmed_object_type="definition",
     )
     considered = console.consider_publish(
         actor_id=accounts["publisher"]["account_id"],
@@ -743,8 +758,10 @@ def test_fast_lane_heading_accept_does_not_bypass_four_eyes(tmp_path: Path) -> N
         snapshot_id=receipt["snapshot_id"],
     )
     assert considered["publish_allowed"] is False
-    assert considered["four_eyes_required"] is True
-    assert "four_eyes_required" in considered["blockers"]
+    assert considered["publishable_object_count"] == 0
+    assert considered["four_eyes_required"] is False
+    assert considered["object_contracts"] == []
+    assert considered["tuple_authorization"] is False
 
 
 def test_reclassify_heading_onto_exception_still_needs_four_eyes(tmp_path: Path) -> None:

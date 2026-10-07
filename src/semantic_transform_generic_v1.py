@@ -215,6 +215,10 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
     evidence_blocks = None
     mapping_blocks = None
     for seq, item in enumerate(spec["objects"], 1):
+        semantic_passage = _semantic_passage_metadata(item)
+        if semantic_passage and semantic_passage["selection_origin"] == SELECTION_ORIGIN_PROPOSAL:
+            from src.knowledge_materialisation_v1 import validate_materialised_candidate
+            validate_materialised_candidate(item, fragments=raw_rows)
         refs = []
         for rid in item.get("source_fragment_ids", []):
             if rid not in raw_by_id:
@@ -225,7 +229,6 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
         risk_fields = list(dict.fromkeys(item.get("risk_fields", [])))
         high = bool(risk_fields)
         page = next((r.get("source_page") for r in (raw_by_id[x] for x in item.get("source_fragment_ids", [])) if r.get("source_page")), None)
-        semantic_passage = _semantic_passage_metadata(item)
         if semantic_passage is not None and "source_mapping" in semantic_passage:
             from src.semantic_passage_v1 import _reconstructed_blocks
             from src.source_layout_v1 import mapped_raw_spans

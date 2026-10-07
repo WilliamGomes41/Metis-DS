@@ -151,7 +151,9 @@ def test_join_boundary_is_validated_and_exported():
         elif change == "missing": mapping.remove(boundary)
         elif change == "source": boundary["left_fragment_id"] = "unknown"
         else: boundary["raw_start"] = 0
-        with pytest.raises(ValueError, match="semantic_source_mapping_invalid"):
+        reason = ("semantic_source_mapping_invalid" if change in {"text", "extra"}
+                  else "materialisation_source_mapping_invalid")
+        with pytest.raises(ValueError, match=reason):
             transform(forged, manifest, source)
 
 

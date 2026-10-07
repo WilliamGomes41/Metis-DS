@@ -67,6 +67,8 @@ def _html() -> bytes:
 
 
 def _ingest(console: OperationsConsole, accounts: dict) -> dict:
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console, [(REC, "recommendation"), (COND, "condition"), (EXPL, "explanation")])
     receipt = console.ingest(
         actor_id=accounts["researcher"]["account_id"],
         filename="d43.html",
@@ -87,6 +89,8 @@ def _ingest(console: OperationsConsole, accounts: dict) -> dict:
 
     from tests.context_test_support import bind_detected_context
     bind_detected_context(console, receipt["snapshot_id"], accounts["reviewer"]["account_id"])
+    from tests.semantic_fixture_support import legacy_recommendation_fixture
+    legacy_recommendation_fixture(console, receipt["snapshot_id"])
     return receipt
 
 

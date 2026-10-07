@@ -14,6 +14,7 @@ import jsonschema
 import pytest
 
 from src.source_evidence_resolution_v1 import resolve_proposal_evidence
+from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
 from src.semantic_passage_v1 import SemanticPassageError, semantic_source_blocks, semantic_units_from_proposal
 from src.pre_review_semantic_v1 import _request_payload, semantic_units_before_review
 from src.source_bound_fields_v2 import FIELDS, KEY, MODE
@@ -71,7 +72,8 @@ def test_recorded_failure_and_canonical_unicode_are_reproduced():
     assert resolved["objects"][0]["spans"][0] == {"block_id": offered["block_id"], "start": 0, "end": 131}
     assert resolved["objects"][0]["recommendation_semantics"]["strength_evidence"] == {
         "block_id": offered["block_id"], "start": 119, "end": 131}
-    units = semantic_units_from_proposal(fragments, document_id="doc", proposal=resolved, field_contract_v2=True)
+    decisions = semantic_units_from_proposal(fragments, document_id="doc", proposal=resolved, field_contract_v2=True)
+    units = materialise_knowledge_candidates(decisions, document_id="doc", fragments=fragments)
     assert units[0]["clean_text"] == TEXT
     assert units[0]["proposed_recommendation_semantics"]["strength"] == "strong"
     assert units[0]["proposed_recommendation_semantics"]["direction"] == "for"

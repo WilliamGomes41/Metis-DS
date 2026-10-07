@@ -28,11 +28,13 @@ from src.recommendation_semantics_v1 import (
     PROPOSED_FIELD,
     source_literal_strength,
 )
+from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
 from src.semantic_passage_v1 import (
     SemanticPassageError,
     semantic_coverage_units,
     semantic_source_blocks,
     semantic_units_from_proposal,
+    source_coverage_records,
 )
 from src.semantic_transform_generic_v1 import transform, validate
 
@@ -566,7 +568,7 @@ def test_unmapped_semantic_strength_is_blocked_and_diagnostic_family_is_semantic
     )
     candidate_block = semantic_source_blocks([candidate])[0]
     strength_block = semantic_source_blocks([heading, candidate])[0]
-    [unit] = semantic_units_from_proposal(
+    decisions = semantic_units_from_proposal(
         [candidate],
         evidence_fragments=[heading, candidate],
         document_id="doc-d32",
@@ -576,6 +578,9 @@ def test_unmapped_semantic_strength_is_blocked_and_diagnostic_family_is_semantic
             status="unmapped",
             strength_block=strength_block,
         ),
+    )
+    [unit] = materialise_knowledge_candidates(
+        decisions, document_id="doc-d32", fragments=[candidate]
     )
     _stamp_semantic_runtime_metadata([unit])
     spec = {
@@ -617,7 +622,7 @@ def test_coverage_remainder_has_no_semantics_and_no_admission() -> None:
     )
     remainder = _fragment("b", "Aanvullende achtergrondinformatie.")
     blocks = semantic_source_blocks([selected, remainder])
-    units = semantic_units_from_proposal(
+    decisions = semantic_units_from_proposal(
         [selected, remainder],
         document_id="doc-d32",
         proposal=_proposal(
@@ -627,6 +632,21 @@ def test_coverage_remainder_has_no_semantics_and_no_admission() -> None:
             strength_block=None,
         ),
     )
+    units = [
+        *materialise_knowledge_candidates(
+            decisions, document_id="doc-d32", fragments=[selected, remainder]
+        ),
+        *source_coverage_records(
+            [selected, remainder],
+            document_id="doc-d32",
+            proposal=_proposal(
+                blocks[0],
+                strength=None,
+                status="not_stated",
+                strength_block=None,
+            ),
+        ),
+    ]
     _stamp_semantic_runtime_metadata(units)
     spec = {
         "spec_version": "test",
@@ -661,7 +681,7 @@ def test_semantic_recommendation_without_new_semantics_is_hard_blocked_not_legac
         "De werkgroep adviseert de verpleegkundige de interventie te gebruiken.",
     )
     block = semantic_source_blocks([candidate])[0]
-    units = semantic_units_from_proposal(
+    decisions = semantic_units_from_proposal(
         [candidate],
         document_id="doc-d32",
         proposal={
@@ -673,6 +693,9 @@ def test_semantic_recommendation_without_new_semantics_is_hard_blocked_not_legac
             ],
             "abstain_reason": None,
         },
+    )
+    units = materialise_knowledge_candidates(
+        decisions, document_id="doc-d32", fragments=[candidate]
     )
     _stamp_semantic_runtime_metadata(units)
     spec = {

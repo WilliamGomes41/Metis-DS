@@ -13,6 +13,7 @@ import fitz
 import pytest
 
 from src.extract_pdf_v2 import extract
+from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
 from src.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal, SemanticPassageError
 from src.source_layout_v1 import text_view
 from src.source_reconstruction_v1 import reconstruct_source_fragments
@@ -43,7 +44,8 @@ def test_ambiguous_margin_markers_keep_original_extract_and_map_every_clinical_c
     assert any("geen 5 mg binnen 4 uur, tenzij" in block["text"] for block in blocks)
     proposal = {"objects": [{"spans": [{"block_id": blocks[0]["block_id"], "start": 0, "end": len(blocks[0]["text"])}],
                               "proposed_object_type": "recommendation", "recommendation_semantics": None}]}
-    units = semantic_units_from_proposal(fragments, document_id="doc", proposal=proposal)
+    decisions = semantic_units_from_proposal(fragments, document_id="doc", proposal=proposal)
+    units = materialise_knowledge_candidates(decisions, document_id="doc", fragments=fragments)
     mapping = units[0]["semantic_passage"]["source_mapping"]
     by_id = {row["fragment_id"]: row for row in fragments}
     from src.object_taxonomy_v1 import normalize_visible_prose
@@ -87,7 +89,7 @@ def test_transform_validates_mapping_and_export_retains_raw_and_view(tmp_path):
     forged = deepcopy(spec)
     item = next(item for item in forged["objects"] if item.get("semantic_passage", {}).get("source_mapping"))
     item["semantic_passage"]["source_mapping"][0]["raw_end"] += 1
-    with pytest.raises(ValueError, match="semantic_source_mapping_invalid"):
+    with pytest.raises(ValueError, match="materialisation_source_mapping_invalid"):
         transform(forged, manifest, fragments)
 
 

@@ -13,7 +13,8 @@ def _obj(object_id: str, proposed: str, *, status: str = "needs_review", section
         "proposed_object_type": proposed,
         "content": {"clean_text": f"Passage {object_id}."},
         "structure": {"section_path": [section]},
-        "metadata": {"admission": {"gate_result": "allowed", "section_path": [section]}},
+        "metadata": {"semantic_passage": {"selection_origin": "proposal_selected",
+                     "spans": [{"block_id": f"block-{object_id}", "start": 0, "end": 1}]}, "admission": {"gate_result": "allowed", "section_path": [section]}},
         "governance": {"validation_status": status},
         "risk": {"level": "normal", "requires_second_review": False},
     }

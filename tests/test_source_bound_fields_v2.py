@@ -58,7 +58,7 @@ def prepare(mutate=None):
     spec = semantic_spec_from_fragments(document_id="doc", title="Test", family="test", class_="richtlijn",
           fragments=fragments, content_kind="html", api_key="test", model="test", post_json=post,
           formation_context={"snapshot_id": "snap", "source_sha256": "a"*64}, field_contract_v2=True)
-    manifest = {"canonical_source": {"source_id": "s1", "title": "Test", "source_type": "html", "source_url": "test", "source_level": "national", "canonicality": "canonical", "integrity_status": "verified", "source_checksum": "a"*64}}
+    manifest = {"canonical_source": {"source_id": "s1", "title": "Test", "source_type": "html", "source_url": "test", "source_level": "national", "canonicality": "canonical", "integrity_status": "verified", "source_checksum": "a"*64, "version": "1"}}
     rows = transform(spec, manifest, fragments)
     gated = apply_admission_gate(rows, klasse="richtlijn", fragments=fragments, document_version="1", source_hash="a"*64)
     return spec, gated, captured
@@ -111,8 +111,13 @@ def test_correction_cannot_reuse_stale_or_missing_v2_evidence(change):
     if change=='type': changed[1]['proposed_object_type']='definition'
     if change=='missing': del changed[1]['metadata'][KEY]
     result=apply_admission_gate(changed, klasse='richtlijn', fragments=[fragment()], document_version='1', source_hash='a'*64)
-    assert result[1]['metadata']['admission']['gate_result']=='blocked'
-    assert any(code.startswith('source_bound_') for code in result[1]['metadata']['admission']['reason_codes'])
+    if change == 'text':
+        assert 'admission' not in result[1]['metadata']
+        from src.knowledge_path_v1 import content_reviewable
+        assert not content_reviewable(result[1])
+    else:
+        assert result[1]['metadata']['admission']['gate_result']=='blocked'
+        assert any(code.startswith('source_bound_') for code in result[1]['metadata']['admission']['reason_codes'])
 
 
 def test_console_opt_in_persists_evidence_replays_and_survives_restart(tmp_path):
@@ -228,8 +233,10 @@ def test_transform_rechecks_source_instead_of_trusting_derived_metadata(corrupti
     record['binding_hash']=stable_json_hash({k:v for k,v in record.items() if k!='binding_hash'})
     manifest={'canonical_source': {'source_id':'s','title':'t','source_url':'u','source_type':'html',
                                   'source_level':'national','canonicality':'canonical','integrity_status':'verified'}}
-    with pytest.raises(ValueError, match='source_bound_candidate_text_mismatch|source_bound_field_bounds_invalid'):
+    reason = 'materialisation_text_mismatch' if corruption == 'text' else 'materialisation_span_invalid'
+    with pytest.raises(ValueError, match=reason) as caught:
         transform(changed, manifest, [fragment()])
+    assert caught.value.code == reason
 
 
 def test_unclassified_v2_preserves_bound_type_and_evidence():
@@ -259,5 +266,5 @@ def test_export_marks_stale_or_invalid_evidence(corruption):
     rows = apply_admission_gate(rows, klasse='richtlijn', fragments=[fragment()], document_version='1', source_hash='a'*64)
     tables, _ = processing_evidence_tables(snapshot_id='snap', revision='r2', envelope={}, objects=rows)
     field = next(r for r in tables['proposal_fields'] if r['field']=='recommended_action' and r['object_id']==obj['object_id'])
-    assert field['value'] == ''
+    assert field['value'] == (None if corruption == 'text' else '')
     assert field['producer_status'] == ('invalid_source_bound_proposal' if corruption == 'hash' else 'stale_source_bound_proposal')

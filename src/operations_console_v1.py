@@ -111,7 +111,7 @@ from src.retrieval.retrieval_projection_v2 import build_projection
 from src.published_projection_v1 import atomic_replace_projection
 from src.semantic_replay_v1 import SEMANTIC_REPLAY_SPEC_KEY
 from src.quality_evidence_v1 import record_processing, review_evidence, instant as quality_instant
-from src.semantic_transform_generic_v1 import transform as transform_generic
+from src.semantic_transform_generic_v1 import transform as _transform_generic
 from src.serving_relations_v1 import (
     binding_relations,
     confirm_relation_set,
@@ -205,6 +205,18 @@ class ConsoleError(ValueError):
         self.code = code
         self.current_revision = current_revision
         super().__init__(message or code)
+
+
+def transform_generic(spec, manifest, fragments):
+    """Keep materialisation failures in the existing command error channel."""
+    from src.knowledge_materialisation_v1 import MaterialisationError
+    try:
+        return _transform_generic(spec, manifest, fragments)
+    except MaterialisationError as exc:
+        error = ConsoleError("pre_review_llm_proposal_rejected", exc.code)
+        error.validation_finding = deepcopy(exc.finding)
+        error.pre_review_diagnostics = {"reason_code": exc.code}
+        raise error from exc
 
 
 UrlFetcher = Callable[[str], tuple[bytes, str, str]]
@@ -445,6 +457,10 @@ def is_slow_review_duty(obj: dict[str, Any], review_path: str | None = None) -> 
     if obj.get("object_type") == "document":
         return False
     path = review_path or inferred_review_path(obj)
+    if path != "boom":
+        from src.knowledge_path_v1 import content_reviewable
+        if not content_reviewable(obj):
+            return False
     if is_admission_blocked(obj, review_path=path):
         return False
     if review_lane(obj, review_path=path) == "fast":
@@ -2428,6 +2444,17 @@ class OperationsConsole:
             return extract_pdf(path, **args)
         return self._extract(envelope["content_kind"], path, **args)
 
+    def _require_resolved_candidate_source(self, envelope, target):
+        """Validate against verified source without changing durable row bytes."""
+        from src.knowledge_path_v1 import source_lineage_resolves
+        try:
+            source_path, _ = self._verified_source_bytes(envelope)
+            fragments = self._read_source_fragments(envelope, source_path)
+        except (ConsoleError, ValueError, OSError) as exc:
+            raise ConsoleError("source_lineage_unavailable") from exc
+        if not source_lineage_resolves(target, fragments=fragments):
+            raise ConsoleError("source_lineage_incomplete")
+
     def _fragments_and_spec(
         self,
         kind: str,
@@ -2984,6 +3011,10 @@ class OperationsConsole:
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
+        if expected_revision is not None:
+            current_revision = self.objects_revision(snapshot_id)
+            if current_revision != expected_revision:
+                raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=current_revision)
         from src.review_policy_v1 import object_policy
         policy = object_policy(target)
         if policy != envelope.get("review_policy"):
@@ -3033,6 +3064,22 @@ class OperationsConsole:
             and decision != "revise"
         ):
             raise ConsoleError("second_review_command_required")
+        from src.knowledge_path_v1 import content_reviewable
+        if (review_path != "boom" and current_duty is None and decision == "approve"
+                and not content_reviewable(target)):
+            from src.knowledge_path_v1 import is_structural_projection
+            from src.source_accountability_v1 import is_source_record
+            structure_confirm = (
+                str(confirmed_object_type or "").strip() in {"heading", "path"}
+                and is_structural_projection(target)
+            )
+            if not structure_confirm and not is_source_record(target) and not is_structural_projection(target):
+                if is_admission_blocked(target, review_path=review_path):
+                    raise ConsoleError("blocked_candidate_not_reviewable")
+                raise ConsoleError("content_duty_required")
+        if decision == "approve" or apply_type:
+            if review_path != "boom" and content_reviewable(target):
+                self._require_resolved_candidate_source(envelope, target)
         if decision != "later":
             from src.source_accountability_v1 import is_source_record
             if is_source_record(target) and (decision == "approve" or apply_type):
@@ -3551,6 +3598,11 @@ class OperationsConsole:
         target = next((row for row in objects if row.get("object_id") == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
+        if review_path_for_klasse(envelope["class"]) != "boom":
+            from src.knowledge_path_v1 import content_reviewable
+            if not content_reviewable(target):
+                raise ConsoleError("content_duty_required")
+            self._require_resolved_candidate_source(envelope, target)
         from src.review_policy_v1 import object_policy, required_reviewers
         policy = object_policy(target)
         if policy != envelope.get("review_policy"):
@@ -3677,17 +3729,25 @@ class OperationsConsole:
             target = current.get(object_id)
             if target is None:
                 raise ConsoleError("unknown_object")
-            route = reviewer_route_for(
-                target,
-                review_path=review_path,
-                reviewer_id=actor_id,
-                bindings=bindings,
-            )
-            if not (
-                route
-                and route.get("actionable")
-                and route.get("canonical_task") == "structure"
-            ):
+            if review_path == "boom":
+                route = reviewer_route_for(
+                    target,
+                    review_path=review_path,
+                    reviewer_id=actor_id,
+                    bindings=bindings,
+                )
+                acceptable = bool(
+                    route
+                    and route.get("actionable")
+                    and route.get("canonical_task") == "structure"
+                )
+            else:
+                from src.knowledge_path_v1 import is_structural_projection
+                acceptable = (
+                    review_lane(target, review_path=review_path) == "fast"
+                    and is_structural_projection(target)
+                )
+            if not acceptable:
                 raise ConsoleError("fast_lane_heading_required")
         updated: list[dict[str, Any]] = []
         pin = expected_revision
@@ -3717,6 +3777,7 @@ class OperationsConsole:
         object_id: str,
         patch: dict[str, Any],
         additional_source_fragments: list[dict[str, Any]] | None = None,
+        materialisation_decision: dict[str, Any] | None = None,
         rereview_scope: str = "document",
         expected_revision: str | None = None,
     ) -> dict[str, Any]:
@@ -3764,6 +3825,26 @@ class OperationsConsole:
         if review_path_for_klasse(envelope["class"]) != "boom":
             source_path, _ = self._verified_source_bytes(envelope)
             fragments = self._read_source_fragments(envelope, source_path)
+            if materialisation_decision is not None:
+                from src.knowledge_materialisation_v1 import materialise_knowledge_candidates, MaterialisationError
+                try:
+                    materialised = materialise_knowledge_candidates(
+                        [materialisation_decision], document_id=envelope["document_id"], fragments=fragments
+                    )[0]
+                except MaterialisationError as exc:
+                    raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
+                if revised["content"]["clean_text"] != materialised["clean_text"]:
+                    raise ConsoleError("materialisation_text_mismatch")
+                semantic = revised.setdefault("metadata", {}).setdefault("semantic_passage", {})
+                semantic["spans"] = materialised["semantic_passage"]["spans"]
+                semantic["source_mapping"] = materialised["semantic_passage"]["source_mapping"]
+                from src.semantic_transform_generic_v1 import _fragment_ref
+                raw_by_id = {row["fragment_id"]: row for row in fragments}
+                revised["provenance"]["source_fragments"] = [
+                    deepcopy(_fragment_ref(raw_by_id[fragment_id]))
+                    for fragment_id in materialised["source_fragment_ids"]
+                ]
+                stamp_canonical_hashes(revised)
             peers = [
                 revised if row.get("object_id") == object_id else row
                 for row in current
@@ -3890,6 +3971,27 @@ class OperationsConsole:
         if parts[0] not in target_source or parts[1] not in neighbor_source:
             raise ConsoleError("source_continuation_not_literal")
 
+        # Validate the expanded selection before writing review or revision evidence.
+        from src.knowledge_materialisation_v1 import materialise_knowledge_candidates, MaterialisationError
+        source_path, _ = self._verified_source_bytes(envelope)
+        fragments = self._read_source_fragments(envelope, source_path)
+        spans = deepcopy((target.get("metadata") or {}).get("semantic_passage", {}).get("spans") or [])
+        following = deepcopy((neighbor.get("metadata") or {}).get("semantic_passage", {}).get("spans") or [])
+        if not spans or len(following) != 1:
+            raise ConsoleError("materialisation_span_invalid")
+        following[0]["end"] -= len(neighbor_text) - len(parts[1])
+        if (spans[-1]["block_id"] == following[0]["block_id"]
+                and following[0]["start"] == spans[-1]["end"] + 1):
+            spans[-1]["end"] = following[0]["end"]
+        else:
+            spans.extend(following)
+        selection = {"decision_kind": "semantic_selection", "selection_origin": "proposal_selected",
+                     "spans": spans, "source_text": merged_text}
+        try:
+            materialise_knowledge_candidates([selection], document_id=envelope["document_id"], fragments=fragments)
+        except MaterialisationError as exc:
+            raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
+
         self.review_object(
             actor_id=actor_id,
             snapshot_id=snapshot_id,
@@ -3912,6 +4014,7 @@ class OperationsConsole:
                 ],
             },
             additional_source_fragments=list((neighbor.get("provenance") or {}).get("source_fragments") or []),
+            materialisation_decision=selection,
             rereview_scope="object",
         )
 
@@ -3958,11 +4061,14 @@ class OperationsConsole:
             for row in self.object_review_bindings(snapshot_id)
             if row.get("valid") and row.get("decision") == "approve"
         ]
+        from src.knowledge_path_v1 import is_structural_projection
+        review_path = review_path_for_klasse(envelope["class"])
         approved_ids = {str(row.get("object_id") or "") for row in bindings}
         publishable = [
             obj
             for obj in objects
             if obj.get("object_type") != "document"
+            and not is_structural_projection(obj)
             and str(obj.get("object_id") or "") in approved_ids
             and (obj.get("governance") or {}).get("validation_status") == "approved"
         ]
@@ -4015,6 +4121,13 @@ class OperationsConsole:
         four_eyes_needed = False
         four_eyes_ok = True
         contracts = []
+        fragments = None
+        if review_path != "boom" and publishable:
+            try:
+                source_path, _ = self._verified_source_bytes(envelope)
+                fragments = self._read_source_fragments(envelope, source_path)
+            except (ConsoleError, ValueError, OSError):
+                blockers.append("source_lineage_unavailable")
         for obj in publishable:
             if obj.get("object_type") == "document":
                 continue
@@ -4024,6 +4137,8 @@ class OperationsConsole:
                 uploader_id=envelope["uploader_account_id"],
                 immutable_locator=envelope.get("immutable_storage_locator"),
                 envelope_review_passes=envelope.get("review_passes"),
+                review_path=review_path,
+                fragments=fragments,
             )
             contracts.append(contract)
             blockers.extend(
@@ -4065,7 +4180,7 @@ class OperationsConsole:
         return {
             "snapshot_id": snapshot_id,
             "independence_satisfied": independence,
-            "tuple_authorization": bool(bindings),
+            "tuple_authorization": bool(contracts) and all(c["tuple_authorization"] for c in contracts),
             "four_eyes_required": four_eyes_needed,
             "four_eyes_satisfied": four_eyes_ok if four_eyes_needed else True,
             "envelope_review_passes_authorizes": False,
