@@ -890,26 +890,30 @@ class OperationsConsole:
     ) -> None:
         if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
             raise ConsoleError("unknown_snapshot")
-        with self._objects_write_lock(snapshot_id):
-            path = self._objects_path(snapshot_id)
-            pinned = (
-                expected_revision
-                if expected_revision is not None
-                else self._objects_expected_revs().get(snapshot_id)
-            )
-            current_rev = _file_revision(path)
-            if pinned is not None and current_rev != pinned:
-                raise ConsoleError(
-                    SNAPSHOT_OBJECT_WRITE_CONFLICT,
-                    current_revision=current_rev,
+        with self._store_write_lock():
+            self._reload_store_locked()
+            self._guard_prepared_working_revision_mutation(
+                envelopes=None, bindings=None, objects=(snapshot_id, rows), snapshot_id=snapshot_id)
+            with self._objects_write_lock(snapshot_id):
+                path = self._objects_path(snapshot_id)
+                pinned = (
+                    expected_revision
+                    if expected_revision is not None
+                    else self._objects_expected_revs().get(snapshot_id)
                 )
-            # Already holding the file flock: do not reacquire via _load_objects.
-            previous = ([json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
-                         if line.strip()] if path.exists() else [])
-            validate_revision_write(previous, rows, snapshot_id=snapshot_id)
-            payload = _objects_jsonl_bytes(rows)
-            _atomic_replace_bytes(path, payload)
-            self._objects_expected_revs()[snapshot_id] = hashlib.sha256(payload).hexdigest()
+                current_rev = _file_revision(path)
+                if pinned is not None and current_rev != pinned:
+                    raise ConsoleError(
+                        SNAPSHOT_OBJECT_WRITE_CONFLICT,
+                        current_revision=current_rev,
+                    )
+                # Already holding the file flock: do not reacquire via _load_objects.
+                previous = ([json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
+                             if line.strip()] if path.exists() else [])
+                validate_revision_write(previous, rows, snapshot_id=snapshot_id)
+                payload = _objects_jsonl_bytes(rows)
+                _atomic_replace_bytes(path, payload)
+                self._objects_expected_revs()[snapshot_id] = hashlib.sha256(payload).hexdigest()
 
     def _save_objects_pinned(
         self,
@@ -960,6 +964,65 @@ class OperationsConsole:
                 with self._ledger_path.open("r+b") as handle:
                     handle.truncate(ledger_size)
 
+    def _require_mutable_working_revision(self, snapshot_id: str) -> None:
+        """Published work is historical input, never current review work."""
+        if snapshot_id and self.snapshot_is_published(snapshot_id):
+            raise ConsoleError("published_working_revision_immutable")
+
+    @staticmethod
+    def _changed_snapshot_ids(
+        current: dict[str, Any], prepared: dict[str, Any]
+    ) -> set[str]:
+        keys = set(current) | set(prepared)
+        return {
+            str(key)
+            for key in keys
+            if current.get(key) != prepared.get(key)
+        }
+
+    def _guard_prepared_working_revision_mutation(
+        self,
+        *,
+        envelopes: dict[str, Any] | None,
+        bindings: dict[str, Any] | None,
+        objects: tuple[str, list[dict[str, Any]]] | None,
+        snapshot_id: str | None,
+    ) -> None:
+        """Seal every curation commit, not only named Review entry points.
+
+        File-backed and Azure-without-workflow-Postgres topologies otherwise let
+        direct helpers such as ``confirm_object_type`` and ``confirm_relations``
+        reach the generic commit boundary without passing through ``review_object``.
+        """
+        candidates: set[str] = set()
+        if snapshot_id:
+            candidates.add(str(snapshot_id))
+        if objects is not None:
+            candidates.add(str(objects[0]))
+        if envelopes is not None:
+            candidates.update(
+                self._changed_snapshot_ids(
+                    dict(getattr(self, "_envelopes", {})), envelopes
+                )
+            )
+        if bindings is not None:
+            candidates.update(
+                self._changed_snapshot_ids(
+                    dict(getattr(self, "_bindings", {})), bindings
+                )
+            )
+
+        for candidate in sorted(value for value in candidates if value):
+            try:
+                self._require_mutable_working_revision(candidate)
+            except ConsoleError as exc:
+                # A brand-new ingest is not a mutation of an existing
+                # WorkingRevision and may reach the commit boundary before the
+                # envelope exists in the current store.
+                if exc.code == "unknown_snapshot":
+                    continue
+                raise
+
     def _commit_prepared_store(
         self,
         *,
@@ -978,6 +1041,9 @@ class OperationsConsole:
         only files this transaction actually wrote.
         """
         with self._store_write_lock():
+            self._reload_store_locked()
+            self._guard_prepared_working_revision_mutation(
+                envelopes=envelopes, bindings=bindings, objects=objects, snapshot_id=snapshot_id)
             sid = snapshot_id or (objects[0] if objects is not None else None)
             if envelopes is not None and sid:
                 envelopes = self._rebase_snapshot_map(self._envelopes, envelopes, sid)
@@ -3040,6 +3106,7 @@ class OperationsConsole:
         """Rollback object/binding/envelope writes together with ledger evidence."""
         with self._store_write_lock():
             self._reload_store_locked()
+            self._require_mutable_working_revision(snapshot_id)
             path = self._objects_path(snapshot_id)
             prior_objects = path.read_bytes() if path.exists() else None
             prior_envelopes = deepcopy(self._envelopes)

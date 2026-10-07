@@ -361,3 +361,72 @@ def test_legacy_published_history_remains_readable_but_cannot_gain_successor(tmp
     with pytest.raises(ValueError, match="published_working_revision_immutable"):
         validate_revision_write([published], [published, successor], snapshot_id=sid)
     assert published == before
+
+
+def test_actual_file_legacy_publication_seals_type_relation_and_review_after_restart(tmp_path):
+    from tests.test_durable_publication_console_v1 import MemorySourceStore
+    from tests.semantic_fixture_support import bind_fixture_selections, install_fixture_history
+    from src.integrity_kernel import stamp_canonical_hashes
+    source = MemorySourceStore()
+    state = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources",
+                              runtime=tmp_path / "runtime", immutable_source_store=source)
+    author = state.create_account(username="anne", password="anne-secret", roles=("researcher",))
+    reviewer = state.create_account(username="bert", password="bert-secret", roles=("reviewer",))
+    publisher = state.create_account(username="publisher", password="publisher-secret", roles=("publisher",))
+    bind_fixture_selections(state, [("Oedeem is een ophoping van vocht.", "definition")])
+    sid = state.ingest(actor_id=author["account_id"], filename="source.html", content_type="text/html",
+        data=b"<html><body><h1>Begrippen</h1><p>Oedeem is een ophoping van vocht.</p></body></html>",
+        ingest_kind="new", title="Begrippen", version="1.0", date="2026-10-07", live_url="",
+        class_="richtlijn", family="test", named_reviewers=[reviewer["account_id"]])["snapshot_id"]
+    rows = state.snapshot_objects(sid)
+    obj = next(o for o in rows if o.get("proposed_object_type") == "definition")
+    obj["object_type"] = obj["confirmed_object_type"] = "definition"
+    stamp_canonical_hashes(obj)
+    install_fixture_history(state, sid, rows)
+    _approve(state, reviewer, sid, obj)
+    assert "revision_lineage" not in current(state, sid, obj["object_id"]).get("metadata", {})
+    assert state.publish(actor_id=publisher["account_id"], snapshot_id=sid)["status"] == "PASS"
+    before = deepcopy(state.snapshot_objects(sid, include_blocked=True))
+    bindings = deepcopy(state.object_review_bindings(sid))
+    projection = state._published_projection_path().read_bytes()
+    restarted = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources",
+                                  runtime=tmp_path / "runtime", immutable_source_store=source)
+    assert restarted.snapshot_objects(sid, include_blocked=True) == before
+    commands = [
+        lambda: restarted.confirm_object_type(actor_id=reviewer["account_id"], snapshot_id=sid,
+                    object_id=obj["object_id"], confirmed_object_type="explanation"),
+        lambda: restarted.confirm_object_type(actor_id=reviewer["account_id"], snapshot_id=sid,
+                    object_id=obj["object_id"], confirmed_object_type="definition"),
+        lambda: restarted.confirm_relations(actor_id=reviewer["account_id"], snapshot_id=sid,
+                    object_id=obj["object_id"], relations=[]),
+        lambda: restarted.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
+                    object_id=obj["object_id"], decision="later", suitability="mist_context"),
+    ]
+    for command in commands:
+        with pytest.raises(ConsoleError, match="published_working_revision_immutable"):
+            command()
+        assert restarted.snapshot_objects(sid, include_blocked=True) == before
+        assert restarted.object_review_bindings(sid) == bindings
+        assert restarted._published_projection_path().read_bytes() == projection
+
+
+def test_source_context_rekeys_proposed_relations_before_readmission(tmp_path):
+    from tests.test_d4_3_human_relation_confirmation import _console as relation_console, _accounts, _ingest, _plant_proposals
+    from src.source_context_review_v1 import role_of
+    from src.knowledge_relations_v1 import validate_knowledge_relation_set
+    state = relation_console(tmp_path)
+    accounts = _accounts(state)
+    sid = _ingest(state, accounts)["snapshot_id"]
+    target, relations = _plant_proposals(state, sid)
+    source = next(o for o in state.snapshot_objects(sid) if role_of(o))
+    before = deepcopy(current(state, sid, target["object_id"]))
+    state.confirm_source_context(actor_id=accounts["reviewer"]["account_id"], snapshot_id=sid,
+        source_object_id=source["object_id"], role="context", target_object_ids=[target["object_id"]],
+        reason="Bevestig context opnieuw.", command_id="t11-relation-context",
+        expected_revision=state.objects_revision(sid))
+    after = current(state, sid, target["object_id"])
+    assert before in state.snapshot_objects(sid, include_blocked=True)
+    assert not validate_knowledge_relation_set(after["proposed_knowledge_relations"],
+        source_object_id=after["object_id"], source_object_version=after["object_version"])
+    assert "relation_proposal_invalid" not in after["metadata"]["admission"]["reason_codes"]
+    assert after["metadata"]["admission"]["gate_result"] == "allowed"

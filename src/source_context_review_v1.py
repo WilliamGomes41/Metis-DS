@@ -366,6 +366,13 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
                                      document_id=envelope["document_id"], source_id=envelope["source_id"])
         if not verify_literal_source(source, extracted, envelope["sha256"]):
             raise ConsoleError("source_context_evidence_invalid")
+        for oid, updated in changed.items():
+            disposition = deepcopy(updated.get("governance") or {}) if oid == source_object_id else None
+            updated = console._prepare_knowledge_revision(snapshot_id, by_id[oid], updated,
+                reason="source-context change: " + reason.strip(), actor=reviewer["username"])
+            if disposition is not None:
+                updated["governance"] = disposition
+            changed[oid] = updated
         proposed = [changed.get(row["object_id"], row) for row in current]
         gated = apply_admission_gate(proposed, klasse=envelope["class"], fragments=extracted,
                                      document_version=envelope["version"], source_hash=envelope["sha256"])
@@ -377,12 +384,6 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
         history = console._load_objects(snapshot_id, remember=False)
         bindings = deepcopy(console._bindings)
         for oid, updated in changed.items():
-            disposition = deepcopy(updated.get("governance") or {}) if oid == source_object_id else None
-            updated = console._prepare_knowledge_revision(snapshot_id, by_id[oid], updated,
-                reason="source-context change: " + reason.strip(), actor=reviewer["username"])
-            if disposition is not None:
-                updated["governance"] = disposition
-            changed[oid] = updated
             stamp_canonical_hashes(updated)
             errors = schema_errors(updated, console.schema_path)
             if errors:

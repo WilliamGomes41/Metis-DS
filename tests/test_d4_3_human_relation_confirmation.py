@@ -341,8 +341,9 @@ def test_target_version_change_rejects_entire_confirmation_without_partial_write
 
     rows = console._load_objects(snapshot_id)
     condition_id = proposals[0]["target_object_id"]
+    condition_version = proposals[0]["target_object_version"]
     for row in rows:
-        if row["object_id"] == condition_id:
+        if row["object_id"] == condition_id and row["object_version"] == condition_version:
             row["object_version"] = "1.1"
             stamp_canonical_hashes(row)
     from tests.semantic_fixture_support import install_fixture_history
