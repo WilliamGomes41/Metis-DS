@@ -3161,7 +3161,7 @@ class OperationsConsole:
                     review_domain = "source_disposition"
                     if decision == "approve" or apply_type:
                         raise ConsoleError("source_context_not_knowledge")
-                elif not content_reviewable(target) or decision == "revise":
+                elif not content_reviewable(target):
                     review_domain = "technical_repair"
                 if decision == "approve" and review_domain != "structure":
                     if is_admission_blocked(target, review_path=review_path):

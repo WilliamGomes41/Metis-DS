@@ -96,3 +96,9 @@ Automatic review on 6e23c625 found one blocking metrics regression and an outdat
 Extraction gold has no live WorkingRevision/source/binding input. Its offline workload diagnostic now reuses existing slow type, lane and risk facts without calling the live ordinary review queue. This diagnostic neither creates ReviewDuty nor grants approval; regression guards keep the live queue empty without authoritative fragments and prove input objects unchanged. Content duty/command authority remains source-valid and fail-closed. The README now supplies required raw-extract and bindings inputs and explains the read-only export.
 
 This bounded repair changes no Admission, materialisation, review store, schema or lifecycle semantics. The existing GitHub CI matrix runs both metrics suites before T9 and the full suite. Merge remains gated on the new head's complete checks and review.
+
+
+## Revise command authority closure
+Automatic review on 1f9028c6 found that decision=revise classified even an admitted content candidate as technical_repair, bypassing the current duty and actionable reviewer route. Tests-only head 68e2415a (run 37661173205, job 112928854328) proved two genuine RED cases: a completed candidate could be reopened and its first approver could revise during second review. Both failed because ConsoleError was not raised; 52 cases passed, including authorized independent second-review revise.
+
+The domain classification now depends on the current candidate, not the requested decision. Admitted content revise uses the existing ReviewDuty and reviewer_route_for gate under the existing snapshot transaction. Invalid/blocked technical repair and structure/source/boom paths retain their own contracts. Revise remains non-approval; this adds no repair architecture, lifecycle, store or policy.
