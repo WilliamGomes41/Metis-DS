@@ -86,6 +86,17 @@ def _split_existing_object(console: OperationsConsole, snapshot_id: str) -> str:
     )
     original = rows[index]
     refs = list((original.get("provenance") or {}).get("source_fragments") or [])
+    envelope = console._envelope(snapshot_id)
+    source_path, _ = console._verified_source_bytes(envelope)
+    fragments = console._read_source_fragments(envelope, source_path)
+    from src.knowledge_materialisation_v1 import resolve_source_selection
+    selected_span = original["metadata"]["semantic_passage"]["spans"][0]
+    def bind_literal(row, start, end):
+        spans = [{**selected_span, "start": start, "end": end}]
+        resolved = resolve_source_selection(spans, fragments=fragments)
+        row["metadata"]["semantic_passage"]["spans"] = spans
+        row["metadata"]["semantic_passage"]["source_mapping"] = resolved["source_mapping"]
+
     assert len(refs) >= 2
 
     first = deepcopy(original)
@@ -94,6 +105,7 @@ def _split_existing_object(console: OperationsConsole, snapshot_id: str) -> str:
     first["proposed_object_type"] = "recommendation"
     first["provenance"]["source_fragments"] = [refs[0]]
     first["governance"]["validation_status"] = "needs_review"
+    bind_literal(first, 0, len(FIRST))
     stamp_canonical_hashes(first)
 
     continuation = deepcopy(original)
@@ -105,6 +117,7 @@ def _split_existing_object(console: OperationsConsole, snapshot_id: str) -> str:
     continuation.pop("proposed_object_type", None)
     continuation.pop("confirmed_object_type", None)
     continuation["governance"]["validation_status"] = "needs_review"
+    bind_literal(continuation, len(FIRST) + 1, len(MERGED))
     stamp_canonical_hashes(continuation)
 
     rows[index : index + 1] = [first, continuation]
@@ -112,6 +125,7 @@ def _split_existing_object(console: OperationsConsole, snapshot_id: str) -> str:
     rows = apply_admission_gate(
         rows,
         klasse=envelope["class"],
+        fragments=fragments,
         document_version=envelope["version"],
         source_hash=envelope["sha256"],
     )
@@ -257,6 +271,7 @@ def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: P
     assert revised["governance"]["validation_status"] == "needs_review"
     assert revised["governance"]["publication_status"] == "unpublished"
     assert len(revised["provenance"]["source_fragments"]) == 2
+    assert admission_of(revised)["gate_result"] == GATE_ALLOWED
     assert revised["provenance"]["previous_object_version"] == target["object_version"]
 
 

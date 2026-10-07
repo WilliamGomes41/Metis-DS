@@ -44,7 +44,7 @@ def resolve_source_selection(
     from src.source_reconstruction_v1 import source_fragment_ids_for_text
     from src.source_layout_v1 import mapped_raw_spans
 
-    if not spans_are_exact(spans):
+    if not spans_are_exact(spans) or any(not isinstance(span["block_id"], str) for span in spans):
         raise MaterialisationError("materialisation_span_invalid")
     fragments = list(fragments)
     raw_by_id = {row.get("fragment_id"): row for row in fragments}
@@ -71,6 +71,16 @@ def resolve_source_selection(
             raise MaterialisationError("materialisation_span_order_invalid")
         previous_rank = rank
         first = first or public
+        cursor = start
+        for raw_span in source.get("_raw_source_mapping", []):
+            lo, hi = max(start, raw_span["start"]), min(end, raw_span["end"])
+            if lo >= hi:
+                continue
+            if lo != cursor:
+                raise MaterialisationError("materialisation_source_mapping_invalid")
+            cursor = hi
+        if cursor != end:
+            raise MaterialisationError("materialisation_source_mapping_invalid")
         parts.append(public["text"][start:end])
         for fragment_id in source_fragment_ids_for_text(source, start=start, end=end):
             if fragment_id not in seen:

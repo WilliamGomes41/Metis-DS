@@ -178,24 +178,9 @@ def source_lineage_resolves(obj: dict[str, Any], *, fragments) -> bool:
     """
     if fragments is None or not has_exact_source_spans(obj):
         return False
-    from src.knowledge_materialisation_v1 import resolve_source_selection
+    from src.knowledge_materialisation_v1 import validate_materialised_candidate
     try:
-        resolved = resolve_source_selection(_spans(obj), fragments=fragments)
+        validate_materialised_candidate(obj, fragments=fragments)
     except (ValueError, KeyError, TypeError):
         return False
-    from src.object_taxonomy_v1 import normalize_visible_prose
-    content = obj.get("content") or {}
-    text = content.get("clean_text") if isinstance(content, dict) else None
-    if text is None:
-        text = obj.get("clean_text", obj.get("text", ""))
-    if normalize_visible_prose(str(text)) != resolved["source_text"]:
-        return False
-    semantic = _semantic(obj)
-    if "source_mapping" in semantic:
-        expected = resolved["source_mapping"]
-        from src.semantic_passage_v1 import LEGACY_SEMANTIC_PASSAGE_VERSION
-        if semantic.get("version") == LEGACY_SEMANTIC_PASSAGE_VERSION:
-            expected = [row for row in expected if row.get("kind") != "join_separator"]
-        if semantic["source_mapping"] != expected:
-            return False
     return True

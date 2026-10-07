@@ -3777,6 +3777,7 @@ class OperationsConsole:
         object_id: str,
         patch: dict[str, Any],
         additional_source_fragments: list[dict[str, Any]] | None = None,
+        materialisation_decision: dict[str, Any] | None = None,
         rereview_scope: str = "document",
         expected_revision: str | None = None,
     ) -> dict[str, Any]:
@@ -3824,6 +3825,20 @@ class OperationsConsole:
         if review_path_for_klasse(envelope["class"]) != "boom":
             source_path, _ = self._verified_source_bytes(envelope)
             fragments = self._read_source_fragments(envelope, source_path)
+            if materialisation_decision is not None:
+                from src.knowledge_materialisation_v1 import materialise_knowledge_candidates, MaterialisationError
+                try:
+                    materialised = materialise_knowledge_candidates(
+                        [materialisation_decision], document_id=envelope["document_id"], fragments=fragments
+                    )[0]
+                except MaterialisationError as exc:
+                    raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
+                if revised["content"]["clean_text"] != materialised["clean_text"]:
+                    raise ConsoleError("materialisation_text_mismatch")
+                semantic = revised.setdefault("metadata", {}).setdefault("semantic_passage", {})
+                semantic["spans"] = materialised["semantic_passage"]["spans"]
+                semantic["source_mapping"] = materialised["semantic_passage"]["source_mapping"]
+                stamp_canonical_hashes(revised)
             peers = [
                 revised if row.get("object_id") == object_id else row
                 for row in current
@@ -3950,6 +3965,27 @@ class OperationsConsole:
         if parts[0] not in target_source or parts[1] not in neighbor_source:
             raise ConsoleError("source_continuation_not_literal")
 
+        # Validate the expanded selection before writing review or revision evidence.
+        from src.knowledge_materialisation_v1 import materialise_knowledge_candidates, MaterialisationError
+        source_path, _ = self._verified_source_bytes(envelope)
+        fragments = self._read_source_fragments(envelope, source_path)
+        spans = deepcopy((target.get("metadata") or {}).get("semantic_passage", {}).get("spans") or [])
+        following = deepcopy((neighbor.get("metadata") or {}).get("semantic_passage", {}).get("spans") or [])
+        if not spans or len(following) != 1:
+            raise ConsoleError("materialisation_span_invalid")
+        following[0]["end"] -= len(neighbor_text) - len(parts[1])
+        if (spans[-1]["block_id"] == following[0]["block_id"]
+                and following[0]["start"] == spans[-1]["end"] + 1):
+            spans[-1]["end"] = following[0]["end"]
+        else:
+            spans.extend(following)
+        selection = {"decision_kind": "semantic_selection", "selection_origin": "proposal_selected",
+                     "spans": spans, "source_text": merged_text}
+        try:
+            materialise_knowledge_candidates([selection], document_id=envelope["document_id"], fragments=fragments)
+        except MaterialisationError as exc:
+            raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
+
         self.review_object(
             actor_id=actor_id,
             snapshot_id=snapshot_id,
@@ -3972,6 +4008,7 @@ class OperationsConsole:
                 ],
             },
             additional_source_fragments=list((neighbor.get("provenance") or {}).get("source_fragments") or []),
+            materialisation_decision=selection,
             rereview_scope="object",
         )
 
