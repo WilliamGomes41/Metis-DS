@@ -66,9 +66,7 @@ def test_dedup_preserves_one_existing_materialised_candidate_whole(selected, rev
     spans = actual["semantic_passage"]["spans"]
     material = "|".join(f'{s["block_id"]}:{s["start"]}:{s["end"]}' for s in spans)
     assert actual["object_id"] == "doc-sem-" + hashlib.sha256(material.encode()).hexdigest()[:16]
-    assert source_lineage_resolves(
-        {"content": {"clean_text": actual["clean_text"]},
-         "metadata": {"semantic_passage": actual["semantic_passage"]}}, fragments=fragments)
+    assert source_lineage_resolves(actual, fragments=fragments)
 
 
 def test_source_only_duplicates_stay_source_records():
