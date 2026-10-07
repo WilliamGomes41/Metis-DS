@@ -200,10 +200,8 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             break
         if updated is None:
             raise ConsoleError("unknown_object")
-        self._commit_prepared_store(
-            objects=(snapshot_id, rows), expected_revision=revision
-        )
-        return deepcopy(updated)
+        return self._commit_knowledge_change(snapshot_id, live, updated,
+            reason="review repair context", actor="repair-command", retain_revise=True)
 
     def review_object(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
         if args:
@@ -399,10 +397,8 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             break
         if updated is None:
             raise ConsoleError("unknown_object")
-        self._commit_prepared_store(
-            objects=(snapshot_id, rows), expected_revision=revision
-        )
-        return deepcopy(updated)
+        return self._commit_knowledge_change(snapshot_id, live, updated,
+            reason="clear repair context", actor="repair-command")
 
     def repair_source(
         self,
@@ -520,11 +516,10 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             metadata.pop("review_passage", None)
             row["metadata"] = metadata
             stamp_canonical_hashes(row)
-            rows[index] = row
+            updated = row
             break
-        self._commit_prepared_store(
-            objects=(snapshot_id, rows), expected_revision=revision
-        )
+        self._commit_knowledge_change(snapshot_id, live, updated,
+            reason="support disposition context change", actor="support-command")
 
     def resolve_support_relation(
         self,

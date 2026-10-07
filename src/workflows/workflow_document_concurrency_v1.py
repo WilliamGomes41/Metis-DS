@@ -1,6 +1,8 @@
 """Multi-instance optimistic merge for PostgreSQL workflow document objects."""
 from __future__ import annotations
 
+from src.revision_workflow import validate_revision_write
+
 import base64
 import hashlib
 import json
@@ -361,6 +363,7 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                             submitted=objects,
                             expected_revision=None if existing is None and expected_revision == "" else expected_revision,
                         )
+                        validate_revision_write(current_objects, next_objects, snapshot_id=snapshot_id)
                         con.execute("DELETE FROM workflow.document_objects WHERE snapshot_id=%s", (snapshot_id,))
                         for position, obj in enumerate(next_objects):
                             con.execute(

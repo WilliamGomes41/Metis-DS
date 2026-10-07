@@ -107,7 +107,8 @@ from src.publish_authorization_v1 import record_authorization, invalidate_for_ob
 from src.review_ledger import append_event, read_events
 from src.review_interaction_v1 import validate_review_interaction_identity
 from src.review_workflow_v3 import _apply_review_state
-from src.revision_workflow import bump_patch, create_revision
+from src.revision_workflow import (bump_patch, create_revision, revise_object, current_revisions,
+                                   validate_revision_write, knowledge_revision, reprocessed_history)
 from src.retrieval.retrieval_projection_v2 import build_projection
 from src.published_projection_v1 import atomic_replace_projection
 from src.semantic_replay_v1 import SEMANTIC_REPLAY_SPEC_KEY
@@ -902,6 +903,8 @@ class OperationsConsole:
                     SNAPSHOT_OBJECT_WRITE_CONFLICT,
                     current_revision=current_rev,
                 )
+            previous = self._load_objects(snapshot_id, remember=False)
+            validate_revision_write(previous, rows, snapshot_id=snapshot_id)
             payload = _objects_jsonl_bytes(rows)
             _atomic_replace_bytes(path, payload)
             self._objects_expected_revs()[snapshot_id] = hashlib.sha256(payload).hexdigest()
@@ -1294,6 +1297,28 @@ class OperationsConsole:
             out.append(item)
         return out
 
+    def _prepare_knowledge_revision(self, snapshot_id, previous, proposed, *, reason, actor):
+        return revise_object(previous, proposed, snapshot_id=snapshot_id,
+                             reason=reason, actor=actor)
+
+    def _commit_knowledge_change(self, snapshot_id, previous, proposed, *, reason, actor, retain_revise=False):
+        """Existing store transaction for repair metadata/provenance mutations."""
+        revision = self.objects_revision(snapshot_id)
+        updated = self._prepare_knowledge_revision(snapshot_id, previous, proposed, reason=reason, actor=actor)
+        if retain_revise and proposed.get("governance", {}).get("validation_status") == "revise":
+            updated["governance"]["validation_status"] = "revise"
+        rows = self._load_objects(snapshot_id, remember=False)
+        if updated["object_version"] == previous["object_version"]:
+            rows = [updated if (row["object_id"], row["object_version"]) ==
+                    (previous["object_id"], previous["object_version"]) else row for row in rows]
+        else:
+            rows.append(updated)
+        bindings = deepcopy(self._bindings)
+        bindings[snapshot_id] = invalidate_for_object(bindings.get(snapshot_id, []), previous["object_id"])
+        self._commit_prepared_store(objects=(snapshot_id, rows), bindings=bindings,
+                                    expected_revision=revision, snapshot_id=snapshot_id)
+        return deepcopy(updated)
+
     def confirm_object_type(
         self,
         *,
@@ -1313,6 +1338,7 @@ class OperationsConsole:
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
+        previous = deepcopy(target)
         if target.get("object_type") == "document":
             raise ConsoleError("unknown_object_type")
         if is_admission_blocked(target, review_path=review_path):
@@ -1327,6 +1353,8 @@ class OperationsConsole:
         if confirmed_object_type != "recommendation":
             target.pop(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD, None)
         mark_four_eyes_on_object(target, confirmed_type=confirmed_object_type)
+        target = self._prepare_knowledge_revision(snapshot_id, previous, target,
+            reason="type confirmation", actor=reviewer["username"])
         stamp_canonical_hashes(target)
         history = [
             row
@@ -1389,6 +1417,7 @@ class OperationsConsole:
             if is_heading_object(child) and is_heading_object(parent):
                 if not parent_proposal_may_bind(child, parent, current):
                     raise ConsoleError("invalid_parent_structure")
+        original_target = deepcopy(target)
         previous_relations = binding_relations(target)
         previous_child_relations = [
             row
@@ -1412,6 +1441,8 @@ class OperationsConsole:
         if target.get("confirmed_relations") != confirmed or canonical_parent_changed:
             target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
         target["confirmed_relations"] = confirmed
+        target = self._prepare_knowledge_revision(snapshot_id, original_target, target,
+            reason="relation confirmation", actor="relation-command")
         stamp_canonical_hashes(target)
 
         previous_children = {
@@ -1444,6 +1475,8 @@ class OperationsConsole:
             updated_peer["object_version"] = bump_patch(
                 str(updated_peer.get("object_version") or "1.0")
             )
+            updated_peer = self._prepare_knowledge_revision(snapshot_id, peer, updated_peer,
+                reason="parent relation confirmation", actor="relation-command")
             stamp_canonical_hashes(updated_peer)
             peer_updates.append(updated_peer)
         history = [
@@ -2178,6 +2211,9 @@ class OperationsConsole:
         if _attempt_id is not None and attempt.get("kind") == "resume":
             from src.recoverable_formation_v1 import preserve_unchanged
             objects = preserve_unchanged(objects, self.snapshot_objects(snapshot_id))
+        if review_path_for_klasse(envelope["class"]) != "boom":
+            objects = reprocessed_history(self._load_objects(snapshot_id, remember=False), objects,
+                                          snapshot_id=snapshot_id, actor=account["username"])
         if "decision_graph" in envelope:
             from src.decision_graph_v1 import prepare_graph
             prepared_envelope.update(prepare_graph(freeze_path, freeze_bytes, envelope["content_kind"], fragments, objects, envelope["sha256"]))
@@ -2191,7 +2227,7 @@ class OperationsConsole:
             else "blocked_pending_immutable_storage"
         )
         prepared_envelope.pop("processing_blocker", None)
-        record_processing(prepared_envelope, objects, fragments=fragments, replay=replay_record,
+        record_processing(prepared_envelope, current_revisions(objects, snapshot_id=snapshot_id), fragments=fragments, replay=replay_record,
                           started_at=processing_started)
         if _attempt_id is not None:
             prepared_envelope["quality_processing_runs"][-1]["attempt_id"] = _attempt_id
@@ -2582,10 +2618,7 @@ class OperationsConsole:
         rows = self._load_objects(snapshot_id, remember=for_update)
         if include_blocked:
             return deepcopy(rows)
-        current: dict[str, dict[str, Any]] = {}
-        for row in rows:
-            current[row["object_id"]] = row
-        return deepcopy(list(current.values()))
+        return deepcopy(current_revisions(rows, snapshot_id=snapshot_id))
 
     def snapshot_containers(self, snapshot_id: str) -> dict[str, Any]:
         """Typed knowledge/source access over the current atomic revision."""
@@ -2623,10 +2656,7 @@ class OperationsConsole:
             )
         if include_blocked:
             return deepcopy(rows), revision
-        current: dict[str, dict[str, Any]] = {}
-        for row in rows:
-            current[row["object_id"]] = row
-        return deepcopy(list(current.values())), revision
+        return deepcopy(current_revisions(rows, snapshot_id=snapshot_id)), revision
 
     def resolve_family_label(self, value: str | None, *, required_code: str = "family_required") -> str:
         """Reuse the first stored spelling for an equivalent Onderwerp.
@@ -2719,7 +2749,7 @@ class OperationsConsole:
         }
 
     def _full_rereview_rows(self, rows: list[dict[str, Any]]) -> None:
-        for row in rows:
+        for row in current_revisions(rows):
             governance = row.setdefault("governance", {})
             governance["validation_status"] = "needs_review"
             governance["validated_by"] = None
@@ -2912,6 +2942,8 @@ class OperationsConsole:
         new_envelopes = deepcopy(self._envelopes)
         new_bindings = deepcopy(self._bindings)
         if is_cross_model_class_change(from_class, new_class):
+            if any(knowledge_revision(row) for row in original_rows):
+                raise ConsoleError("knowledge_class_change_requires_successor")
             if not reextract:
                 raise ConsoleError("cross_model_direct_change_blocked")
             prior = deepcopy(original_rows)
@@ -3305,6 +3337,8 @@ class OperationsConsole:
                     metadata = saved.setdefault("metadata", {})
                     metadata["review_passage"] = passage
                     saved = apply_register_from_review(saved, suitability=suitability or "")
+                saved = self._prepare_knowledge_revision(snapshot_id, target, saved,
+                    reason="review context change", actor=reviewer["username"])
                 history = [
                     row
                     for row in (relation_history if relation_history is not None else self._load_objects(snapshot_id))
@@ -3314,6 +3348,7 @@ class OperationsConsole:
                 self._commit_prepared_store(objects=(snapshot_id, history), bindings=relation_bindings,
                     expected_revision=current_revision, snapshot_id=snapshot_id)
                 return deepcopy(self.snapshot_objects(snapshot_id))
+            revision_predecessor = deepcopy(target)
             review_semantics_base_version = str(target.get("object_version") or "1.0")
             if apply_type and confirmed:
                 if not is_confirmable_type_for_path(confirmed, review_path):
@@ -3503,6 +3538,13 @@ class OperationsConsole:
                     )
                 stamp_canonical_hashes(target)
 
+            if passage:
+                target.setdefault("metadata", {})["review_passage"] = dict(passage)
+                target = apply_register_from_review(target, suitability=(
+                    "geen_kenniseenheid" if rejecting else suitability or ""))
+            target = self._prepare_knowledge_revision(snapshot_id, revision_predecessor, target,
+                reason="review semantic confirmation/change", actor=reviewer["username"])
+            current = [target if row["object_id"] == object_id else row for row in current]
             track = target["governance"]["review_track"]
             payload = {
                 "object_id": object_id,
@@ -3904,6 +3946,7 @@ class OperationsConsole:
             actor=account["username"],
             schema_path=self.schema_path,
             ledger=None,
+            snapshot_id=snapshot_id,
         )
         if additional_source_fragments:
             provenance = revised.setdefault("provenance", {})

@@ -345,10 +345,8 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             break
         if updated is None:
             raise ConsoleError("unknown_object")
-        self._commit_prepared_store(
-            objects=(snapshot_id, rows), expected_revision=revision
-        )
-        return deepcopy(updated)
+        return self._commit_knowledge_change(snapshot_id, live, updated,
+            reason="deterministic/source-bound repair", actor="repair-command")
 
     def _source_repair(
         self,
