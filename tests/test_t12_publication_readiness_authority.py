@@ -54,7 +54,7 @@ def _console(tmp_path):
     return console, receipt["snapshot_id"]
 
 
-def test_readiness_has_no_internal_publisher_capability() -> None:
+# RED: merged T11 still exposes the action-oriented readiness bypass.\ndef test_readiness_has_no_internal_publisher_capability() -> None:
     source = (ROOT / "src" / "publication_readiness_v1.py").read_text(encoding="utf-8")
 
     assert "_READINESS_EVALUATION_CAPABILITY" not in source
