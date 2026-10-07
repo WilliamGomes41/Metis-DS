@@ -299,7 +299,7 @@ def test_revision_rebinds_exact_relation_endpoints_and_preserves_predecessor(tmp
     _, _, sid, candidate = _console(tmp_path)
     original = deepcopy(candidate)
     relation = build_knowledge_relation(source_object_id=original["object_id"],
-        source_object_version=original["object_version"], relation_type="supports",
+        source_object_version=original["object_version"], relation_type="supported_by",
         target_object_id="target", target_object_version="1.0")
     original["confirmed_knowledge_relations"] = [relation]
     stamp_canonical_hashes(original)
@@ -330,3 +330,19 @@ def test_reprocessing_retirement_and_reappearance_preserve_strict_history(tmp_pa
     latest = current_revisions(restored, snapshot_id=sid)[0]
     assert latest["provenance"]["previous_object_version"] == retired[-1]["object_version"]
     assert latest["governance"]["validation_status"] == "needs_review"
+
+
+def test_reprocessing_retains_nonknowledge_ancestor_of_promoted_candidate(tmp_path):
+    from src.revision_workflow import revise_object, reprocessed_history, current_revisions, knowledge_revision
+    from src.integrity_kernel import stamp_canonical_hashes
+    _, _, sid, candidate = _console(tmp_path)
+    structural = deepcopy(candidate)
+    structural["object_type"] = "heading"
+    structural.pop("confirmed_object_type", None)
+    stamp_canonical_hashes(structural)
+    assert not knowledge_revision(structural)
+    promoted = revise_object(structural, candidate, snapshot_id=sid, actor="reviewer", reason="type confirmation")
+    history = [structural, promoted]
+    rebuilt = reprocessed_history(history, [candidate], snapshot_id=sid, actor="researcher")
+    assert rebuilt[:2] == history
+    assert current_revisions(rebuilt, snapshot_id=sid)

@@ -46,7 +46,7 @@ def create_revision(obj:dict[str,Any], patch:dict[str,Any], *, actor:str, schema
     errs=schema_errors(x,schema_path)
     if errs: raise ValueError('revision_schema_invalid:'+' | '.join(errs))
     if ledger: append_event(ledger,event_type='revision_created',object_id=x['object_id'],object_version=x['object_version'],actor=actor,
-                            details={'previous_object_version':previous,'revision_patch_hash':p['revision_patch_hash'],'reason':patch['reason']})
+                            details={'previous_object_version':previous,'revision_patch_hash':x['provenance']['revision_patch_hash'],'reason':patch['reason']})
     return x
 
 def main()->int:
@@ -211,15 +211,18 @@ def validate_revision_write(previous, submitted, *, snapshot_id):
     new_current = {row["object_id"]: row for row in current_revisions(submitted, snapshot_id=snapshot_id)}
     old = {(row["object_id"], row["object_version"]): row for row in previous}
     new = {(row["object_id"], row["object_version"]): row for row in submitted}
+    protected_ids = {row["object_id"] for row in previous + submitted if knowledge_revision(row)}
     retained_order = [(row["object_id"], row["object_version"]) for row in submitted
                       if (row["object_id"], row["object_version"]) in old
-                      and knowledge_revision(old[(row["object_id"], row["object_version"])])]
-    original_order = [identity for identity, row in old.items() if knowledge_revision(row)]
-    if retained_order != original_order:
-        raise ValueError("revision_history_reordered")
+                      and row["object_id"] in protected_ids]
+    original_order = [identity for identity, row in old.items() if identity[0] in protected_ids]
+    for oid in protected_ids:
+        if ([identity for identity in retained_order if identity[0] == oid]
+                != [identity for identity in original_order if identity[0] == oid]):
+            raise ValueError("revision_history_reordered")
     for identity, before in old.items():
         after = new.get(identity)
-        if not (knowledge_revision(before) or after is not None and knowledge_revision(after)):
+        if identity[0] not in protected_ids:
             continue
         if after is None:
             raise ValueError("revision_history_removed")
@@ -251,7 +254,8 @@ def reprocessed_history(previous, generated, *, snapshot_id, actor):
     """
     from src.integrity_kernel import compute_canonical_object_hash
     prior = {row["object_id"]: row for row in current_revisions(previous, snapshot_id=snapshot_id)}
-    retained = [deepcopy(row) for row in previous if knowledge_revision(row)]
+    retained_ids = {row["object_id"] for row in previous + generated if knowledge_revision(row)}
+    retained = [deepcopy(row) for row in previous if row["object_id"] in retained_ids]
     new_ids = {row["object_id"] for row in generated}
     for oid, row in prior.items():
         if knowledge_revision(row) and oid not in new_ids:
