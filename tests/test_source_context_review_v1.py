@@ -394,7 +394,9 @@ def test_context_closure_helper_and_nonknowledge_approve_guard(tmp_path):
         state.review_object(actor_id=reviewer['account_id'], snapshot_id=command['snapshot_id'], object_id=source['object_id'],
                             decision='approve', confirmed_object_type='explanation')
     _close_context_review(state, reviewer, command['snapshot_id'], target['object_id'])
-    assert source_passage_closure(state.snapshot_objects(command['snapshot_id']))['source_passage_review_complete']
+    assert source_passage_closure(state.snapshot_objects(command['snapshot_id']),
+        bindings=state.object_review_bindings(command['snapshot_id']),
+        fragments=state.review_source_fragments(command['snapshot_id']))['source_passage_review_complete']
 
 
 def test_named_reviewer_and_source_readback_are_required_before_context_write(tmp_path, monkeypatch):

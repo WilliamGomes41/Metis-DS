@@ -137,7 +137,7 @@ def processing_evidence_tables(
             policy_version=provider.get("task_policy"))
     from src.source_containers_v1 import partition, VERSION as CONTAINER_VERSION
     from src.beslisboom_path_v1 import review_path_for_klasse
-    for source in partition(objects, review_path=review_path_for_klasse(str(envelope.get("class") or "")),
+    for source in partition(objects, review_path=review_path_for_klasse(str(envelope["class"])) if envelope.get("class") else "richtlijn",
                             bindings=bindings, fragments=fragments)["source"]:
         obj = source["record"]
         add("source_usage", object_id=obj["object_id"], object_version=obj["object_version"], container="source",

@@ -40,4 +40,31 @@ Required black-box scenario: GIVEN current source and target evidence, WHEN cont
 Explicit non-goals: T8 materialisation/Admission redesign; T9 review changes; T11 revisions; T12 total publication readiness; boom redesign; migrations/schema/new stores; Azure/deployment/ZIP/merge.
 
 
-Baseline behavioral RED/GREEN results: pending GitHub CI. T10: NOT DONE. Merge T10 PR: NO-GO.
+## Baseline proof and staged implementation
+Baseline main and T9 merge: 548d9ff46bbc5b1da1e911e620b6874fc7b47299 (GitHub compare identical).
+Tests-only commit: e0831726fd3ecd3d1e333db0a87dc69eb722431b.
+GitHub run 37665767011, Python 3.13: 5 failed, 3102 passed, 14 skipped. All five behavioral failures are T10 regressions on existing APIs:
+- corrupted source binding, spans or text (three cases): repair queue omitted source;
+- governance-only approved target: context incorrectly accounted;
+- invalid human source role: repair queue omitted source.
+Two GREEN GUARD tests: pending valid context produces no duplicate source task; source records never create content ReviewDuty.
+The initial release-control metadata marker formatting also failed; corrected to individual marker lines. That process failure is not counted as behavioral RED.
+
+Authority: source_containers_v1.source_accountability, with source_closure summary. source_usage/partition and source_passage_closure/review_followup_queues remain compatibility readers. Workboard and inventory reuse the call-local projection. Detail UI, snapshot containers, readiness and evidence export receive current source/binding inputs.
+Schema: no SQL or persisted domain schema changes. Read-only export schema v12 adds source role/closure/human_action columns.
+
+## Legacy clarification
+V1 source metadata/navigation is never automatically reinterpreted. Existing explicit exclusions/support dispositions retain their meaning. A human-confirmed label/context link, in either version, follows its current target: pending approval waits; exact approval closes; retired target reopens; corrupt link requires repair. This is the requested current-context invariant, not a historical evidence rewrite.
+
+## Adversarial audit
+Independent read-only audit of c748e045 identified export input mismatch, insufficient machine-context validation and an admission-binding mismatch that hid repair work. Follow-up audit of 674cbc38 confirmed these fixes and identified detail UI incomplete inputs and repair precedence in inventory; both are corrected in the follow-up. Malformed source provenance is caught as repair. No source writer, transaction, admission or T9 authority code changed.
+
+## Proof scope
+Existing source command tests cover local and native PostgreSQL commit failure, stale second worker, idempotency, conflicting command IDs, published immutability and restart. T10 tests add projection, reader, export and UI parity, exact bindings, malformed context and metadata, legacy role links, reset/history and unchanged ReviewDuties over identical objects.
+The existing complete T9/T8/T5-T7, decision-tree, lifecycle and PostgreSQL suites remain required gates. Final CI result and audit closure are recorded in the draft PR after verification.
+
+## T11 and T12
+T11 durable KnowledgeUnit revisions/supersession are not implemented. T12 overall publication-readiness design is not implemented. Existing candidate review closure and technical publication gates remain separate from T10 source usage. No deployment or merge is authorized.
+
+T10: NOT DONE (final verification pending)
+Merge T10 PR: NO-GO

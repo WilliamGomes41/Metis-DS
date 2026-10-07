@@ -168,13 +168,6 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
                 finish("unresolved", "open", "source_disposition", disposition["outcome"])
             continue
 
-        if evidence["version"] != SOURCE_VERSION:
-            if disposition["final"]:
-                finish("explicitly_accounted", "accounted", "none", disposition["outcome"], "reviewed")
-            else:
-                finish("unresolved", "open", "source_disposition", "legacy_source_policy")
-            continue
-
         role = role_of(obj)
         if role.get("role") in {"label", "context"}:
             linked_targets = [target for target in objects
@@ -189,6 +182,13 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
                 finish("linked_context", "accounted" if all(s == "approved" for s in states) else "waiting_on_target",
                        "none", "confirmed_source_context")
             continue
+        if evidence["version"] != SOURCE_VERSION:
+            if disposition["final"]:
+                finish("explicitly_accounted", "accounted", "none", disposition["outcome"], "reviewed")
+            else:
+                finish("unresolved", "open", "source_disposition", "legacy_source_policy")
+            continue
+
         if disposition["final"]:
             finish("explicitly_accounted", "accounted", "none", disposition["outcome"], "reviewed")
             continue

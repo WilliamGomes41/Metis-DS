@@ -2732,7 +2732,8 @@ def _review_inventory(
                 route_task = str(route["canonical_task"]) if route["actionable"] else "waiting"
         object_id = str(obj.get("object_id") or "")
         disposition = definitive_review_disposition(obj)
-        category = route_task or followup_tasks.get(object_id) or "history"
+        category = ("repair" if followup_tasks.get(object_id) == "repair" else
+                    route_task or followup_tasks.get(object_id) or "history")
         if task != "inventory" and category != task:
             continue
         if is_source_record(obj) and (evidence_of(obj).get("version") == "source-accountability-v2" or projection[object_id]["human_action"] == "technical_repair"):
@@ -2858,14 +2859,16 @@ def _review_inventory(
 def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], snapshot_id: str,
                           snapshot_revision: str, *, context_target: str = "",
                           source_mode: bool = False, draft: dict[str, Any] | None = None,
-                          error: str = "") -> str:
+                          error: str = "", projection=None) -> str:
     """Present existing context decisions; navigation never confirms a relation."""
     if obj.get("object_type") in {"document", "heading", "path"}:
         return ""
     from src.source_accountability_v1 import is_source_record
     from src.source_containers_v1 import source_accountability
-    state = source_accountability(objects).get(str(obj.get("object_id") or ""), {})
-    if is_source_record(obj) and state.get("human_action") == "technical_repair":
+    if projection is None:
+        projection = source_accountability(objects)
+    state = projection.get(str(obj.get("object_id") or ""), {})
+    if state.get("human_action") == "technical_repair":
         return ('<section data-source-repair><h3>Bronbewijs herstellen</h3>'
                 '<p>De opgeslagen bronverwijzing of contextkoppeling is ongeldig. '
                 'Laat de verwerking of koppeling herstellen voordat je een bronbesluit neemt.</p>'
@@ -3397,6 +3400,8 @@ def _render_review_card(
 def _source_context_card(console: OperationsConsole, snapshot_id: str, obj: dict[str, Any],
                          panel: str, *, context_target: str, context_mode: str, task: str) -> str:
     """Keep fragment handling separate from approval of independent knowledge."""
+    if "data-source-repair" in panel:
+        return panel
     from src.source_accountability_v1 import is_source_record
     if not (is_source_record(obj) or role_of(obj) or (panel and (context_target or context_mode == "source" or
             (source_label_hint(obj) and context_mode != "review")))):
@@ -3526,13 +3531,17 @@ def _render_review_room(
                     audit_signals,
                 )
             else:
+                from src.source_containers_v1 import source_accountability
+                detail_projection = source_accountability(snapshot_objects, review_path=review_path,
+                    bindings=_review_bindings(console, chosen, objects=snapshot_objects),
+                    fragments=console.review_source_fragments(chosen))
                 context_html = ""
                 if ('reviewer' in (account.get('roles') or [])
                         and str(account.get('account_id') or '') in chosen_row.get('named_reviewers', [])
                         and not console.snapshot_is_published(chosen)):
                     context_html = _source_context_panel(obj, snapshot_objects, chosen, snapshot_revision,
                         context_target=context_target, source_mode=context_mode == "source",
-                        draft=context_draft, error=context_error)
+                        draft=context_draft, error=context_error, projection=detail_projection)
                 if context_saved:
                     objects_html += '<p class="banner ok" role="status">Het contextbesluit is opgeslagen. Beoordeel de betrokken passages opnieuw.</p>'
                 conflict_html = _review_conflict_html(conflict, current=obj, draft=draft)

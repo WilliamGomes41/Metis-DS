@@ -197,6 +197,7 @@ def test_confirm_reset_duplicate_conflict_restart_and_projection(tmp_path):
         return source_accountability(console.snapshot_objects(sid),
             bindings=console.object_review_bindings(sid), fragments=console.review_source_fragments(sid))
     initial = project(state)
+    assert initial[source["object_id"]]["closure"] == "waiting_on_target"
     assert state.confirm_source_context(**command)["idempotent"]
     with pytest.raises(ConsoleError, match="source_context_command_conflict"):
         state.confirm_source_context(**{**command, "reason": "different"})
@@ -281,3 +282,31 @@ def test_malformed_machine_context_target_requires_repair(raw):
     target["metadata"]["source_bound_context"] = raw
     state = source_accountability(rows, fragments=fragments)[target["object_id"]]
     assert state["human_action"] == "technical_repair"
+
+
+def test_machine_context_target_repair_has_inventory_priority_over_review_duty():
+    from src.source_containers_v1 import source_accountability
+    from src.operations_console_app import _render_review_index, _source_context_panel
+    rows, fragments = _context_inputs()
+    target = partition(rows)["knowledge"][0]
+    target["metadata"]["source_bound_context"]["entries"][0]["text"] = "corrupt"
+    state = source_accountability(rows, bindings=[], fragments=fragments)
+    assert state[target["object_id"]]["human_action"] == "technical_repair"
+    page = _render_review_index("snapshot", rows, "richtlijn", bindings=[], fragments=fragments, task="repair")
+    assert f'data-passage-id="{target["object_id"]}" data-passage-category="repair"' in page
+    panel = _source_context_panel(target, rows, "snapshot", "revision", projection=state)
+    assert "data-source-repair" in panel and '<form' not in panel
+
+
+@pytest.mark.parametrize("status", ["rejected", "superseded", "revise"])
+def test_legacy_explicit_context_follows_current_target(status, tmp_path):
+    from tests.test_source_context_review_v1 import _system
+    from src.source_containers_v1 import source_accountability
+    state, _, _, source, target, command = _system(tmp_path)
+    state.confirm_source_context(**command)
+    rows = state.snapshot_objects(command["snapshot_id"])
+    current = next(o for o in rows if o["object_id"] == target["object_id"])
+    current["governance"]["validation_status"] = status
+    projected = source_accountability(rows, bindings=[], fragments=state.review_source_fragments(command["snapshot_id"]))
+    assert projected[source["object_id"]]["closure"] == "open"
+    assert projected[source["object_id"]]["human_action"] == "source_disposition"

@@ -138,7 +138,7 @@ class PublicationReadinessMixin:
         envelope = self._envelope(snapshot_id) if hasattr(self, "_envelope") else {}
         bindings = self.object_review_bindings(snapshot_id) if hasattr(self, "object_review_bindings") else None
         fragments = self.review_source_fragments(snapshot_id) if hasattr(self, "review_source_fragments") else None
-        closure = source_passage_closure(objects, review_path=review_path_for_klasse(str(envelope.get("class") or "")),
+        closure = source_passage_closure(objects, review_path=review_path_for_klasse(str(envelope["class"])) if envelope.get("class") else "richtlijn",
                                          bindings=bindings, fragments=fragments)
         considered.update(readiness)
         considered.update(closure)
