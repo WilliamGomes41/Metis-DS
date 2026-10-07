@@ -553,9 +553,9 @@ def test_section_role_distribution_exposes_summary_bias_without_opening_quality_
     assert distribution["content_passages"] == sum(
         int(row["passages"]) for row in distribution["roles"].values()
     )
-    # Current extraction keeps this exact duplicate unresolved for admission;
-    # diagnostics must preserve that disposition rather than promote it.
-    assert distribution["roles"]["primary"]["counts"]["not_yet_assessed"] == 1
+    # The fixture explicitly selects this repeated recommendation through the
+    # creator; diagnostics retain one candidate at its principal source role.
+    assert distribution["roles"]["primary"]["counts"]["selected_as_candidate"] == 1
     assert distribution["roles"]["summary"]["counts"]["selected_as_candidate"] >= 1
     assert distribution["roles"]["context"]["counts"]["selected_as_candidate"] >= 1
 
