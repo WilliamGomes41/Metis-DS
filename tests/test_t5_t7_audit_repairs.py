@@ -167,6 +167,7 @@ def test_historical_heading_does_not_enter_publish_set_or_change_knowledge_gate(
     _stamp_hash(obj)
     _append(console, snapshot, obj)
     console._bindings[snapshot] = [_binding(obj, reviewer["account_id"])]
+    console._save_bindings()
     before = console.consider_publish(actor_id=publisher["account_id"], snapshot_id=snapshot)
     heading = _row("historical-heading", "heading", confirmed="heading", validation="approved",
                    text="Begrippen", origin="not_applicable", structural=True)
