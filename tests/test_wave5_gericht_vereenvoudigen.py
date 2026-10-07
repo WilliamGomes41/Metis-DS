@@ -276,8 +276,6 @@ def test_unpublished_delete_control_stays_tree_only(tmp_path: Path) -> None:
         roles=("reviewer",),
         display_name="Bert Reviewer",
     )
-    from tests.semantic_fixture_support import bind_fixture_selections
-    bind_fixture_selections(console, [(ADVISEERT, "recommendation"), (LONE_EXCEPTION, "exception")])
     receipt = console.ingest(
         actor_id=researcher["account_id"],
         filename="wave5.html",
@@ -332,6 +330,8 @@ def test_blocked_candidates_stay_out_of_ordinary_review_lane(tmp_path: Path) -> 
         display_name="Bert Reviewer",
     )
     fixture = ROOT / "data/fixtures/v230_phase1_admission_regression.html"
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console, [(ADVISEERT, "recommendation"), (LONE_EXCEPTION, "exception")])
     receipt = console.ingest(
         actor_id=researcher["account_id"],
         filename="phase1.html",

@@ -135,6 +135,9 @@ def _ingest(console: OperationsConsole, accounts: dict, fixture: Path = PHASE2_F
             ("Overleg bij een vastgesteld verhoogd fractuurrisico met de cliënt over verwijzing.", "recommendation"),
             ("De Dutch Job Group (dJG) is een meetinstrument voor werkbelasting.", "definition"),
         ])
+    else:
+        from tests.semantic_fixture_support import bind_fixture_selections
+        bind_fixture_selections(console)
     receipt = console.ingest(**kwargs)
     from tests.context_test_support import bind_detected_context
     bind_detected_context(console, receipt['snapshot_id'], accounts['reviewer']['account_id'])

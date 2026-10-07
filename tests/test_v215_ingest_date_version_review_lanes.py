@@ -760,7 +760,8 @@ def test_fast_lane_heading_accept_does_not_bypass_four_eyes(tmp_path: Path) -> N
     assert considered["publish_allowed"] is False
     assert considered["publishable_object_count"] == 0
     assert considered["four_eyes_required"] is False
-    assert "no_publishable_objects" in considered["blockers"]
+    assert considered["object_contracts"] == []
+    assert considered["tuple_authorization"] is False
 
 
 def test_reclassify_heading_onto_exception_still_needs_four_eyes(tmp_path: Path) -> None:

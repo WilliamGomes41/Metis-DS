@@ -98,8 +98,6 @@ def _ingest_html(console: OperationsConsole, accounts: dict, data: bytes | None 
     )
     defaults.update(kwargs)
     receipt = console.ingest(**defaults)
-    from tests.semantic_fixture_support import legacy_recommendation_fixture
-    legacy_recommendation_fixture(console, receipt["snapshot_id"])
     return receipt
 
 
@@ -381,6 +379,8 @@ def test_changed_confirmed_relations_invalidate_publish_authorization(tmp_path: 
         object_id=rec["object_id"],
         decision="approve",
         confirmed_object_type="recommendation",
+        recommendation_direction="for",
+        recommendation_strength_level="not_stated",
     )
     before = console.object_review_bindings(receipt["snapshot_id"])
     assert any(item.get("valid") and item["object_id"] == rec["object_id"] for item in before)
