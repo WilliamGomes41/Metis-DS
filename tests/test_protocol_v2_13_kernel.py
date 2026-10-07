@@ -79,8 +79,6 @@ def _accounts(console: OperationsConsole) -> dict[str, dict]:
 
 
 def _ingest_html(console: OperationsConsole, accounts: dict, data: bytes | None = None, **kwargs) -> dict:
-    from tests.semantic_fixture_support import bind_fixture_selections
-    bind_fixture_selections(console)
     defaults = dict(
         actor_id=accounts["researcher"]["account_id"],
         filename="continentie.html",
@@ -99,7 +97,10 @@ def _ingest_html(console: OperationsConsole, accounts: dict, data: bytes | None 
         ],
     )
     defaults.update(kwargs)
-    return console.ingest(**defaults)
+    receipt = console.ingest(**defaults)
+    from tests.semantic_fixture_support import legacy_recommendation_fixture
+    legacy_recommendation_fixture(console, receipt["snapshot_id"])
+    return receipt
 
 
 def _record(
@@ -343,6 +344,8 @@ def test_unconfirmed_relations_do_not_bind() -> None:
 def test_changed_confirmed_relations_invalidate_publish_authorization(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console, [("Verwijs naar de huisarts.", "recommendation")])
     html = """<!doctype html><html lang="nl"><body>
 <h1>Voorbeeldrichtlijn</h1>
 <p>Wanneer de cliënt 70 jaar of ouder is.</p>
@@ -456,34 +459,45 @@ def test_published_recommendation_served_with_applies_if_except_if(tmp_path: Pat
 def test_four_eyes_required_for_exception_and_risk_fields_uploader_insufficient(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     html = """<!doctype html><html lang="nl"><body>
 <h1>Voorbeeldrichtlijn</h1>
-<p>Tenzij samen met de cliënt hiervan wordt afgezien.</p>
+<p>Continentie is een klinisch onderwerp in de ouderenzorg.</p>
 </body></html>"""
     receipt = _ingest_html(console, accounts, data=html.encode("utf-8"), filename="exc.html")
     target = next(
         obj
         for obj in console.snapshot_objects(receipt["snapshot_id"])
-        if obj["object_type"] != "document"
+        if obj["object_type"] == "unclassified"
     )
+    from src.integrity_kernel import stamp_canonical_hashes
+    rows = console._load_objects(receipt["snapshot_id"])
+    for row in rows:
+        if row["object_id"] == target["object_id"]:
+            row.setdefault("risk", {})["risk_level"] = "high"
+            row["risk"]["risk_fields"] = ["exception"]
+            stamp_canonical_hashes(row)
+    console._save_objects(receipt["snapshot_id"], rows)
     console.confirm_object_type(
         actor_id=accounts["reviewer"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
         object_id=target["object_id"],
-        confirmed_object_type="exception",
+        confirmed_object_type="definition",
     )
     refreshed = next(
         obj
         for obj in console.snapshot_objects(receipt["snapshot_id"])
         if obj["object_id"] == target["object_id"]
     )
-    assert requires_four_eyes(refreshed, confirmed_type="exception") is True
+    assert requires_four_eyes({"confirmed_object_type": "exception"}) is True
+    assert requires_four_eyes(refreshed, confirmed_type="definition") is True
     console.review_object(
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
         object_id=target["object_id"],
         decision="approve",
-        confirmed_object_type="exception",
+        confirmed_object_type="definition",
     )
     considered = console.consider_publish(
         actor_id=accounts["publisher"]["account_id"],

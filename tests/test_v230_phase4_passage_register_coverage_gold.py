@@ -124,17 +124,20 @@ def _ingest(console: OperationsConsole, accounts: dict, fixture: Path = PHASE2_F
         "named_reviewers": [accounts["reviewer"]["account_id"]],
     }
     kwargs.update(overrides)
-    from tests.semantic_fixture_support import bind_fixture_selections
-    bind_fixture_selections(console, [
-        (ADVISEERT, "recommendation"),
-        ("De werkgroep adviseert calcium te geven.", "recommendation"),
-        ("De werkgroep adviseert calcium te geven tenzij er hypercalciëmie bestaat.", "recommendation"),
-        ("De werkgroep adviseert de verpleegkundige calciumsuppletie te starten bij iedere intake.", "recommendation"),
-        ("Tenzij er een recente fractuur is vastgesteld.", "exception"),
-        ("Overleg bij een vastgesteld verhoogd fractuurrisico met de cliënt over verwijzing.", "recommendation"),
-        ("De Dutch Job Group (dJG) is een meetinstrument voor werkbelasting.", "definition"),
-    ])
+    if "data" not in overrides:
+        from tests.semantic_fixture_support import bind_fixture_selections
+        bind_fixture_selections(console, [
+            (ADVISEERT, "recommendation"),
+            ("De werkgroep adviseert calcium te geven.", "recommendation"),
+            ("De werkgroep adviseert calcium te geven tenzij er hypercalciëmie bestaat.", "recommendation"),
+            ("De werkgroep adviseert de verpleegkundige calciumsuppletie te starten bij iedere intake.", "recommendation"),
+            ("Tenzij er een recente fractuur is vastgesteld.", "exception"),
+            ("Overleg bij een vastgesteld verhoogd fractuurrisico met de cliënt over verwijzing.", "recommendation"),
+            ("De Dutch Job Group (dJG) is een meetinstrument voor werkbelasting.", "definition"),
+        ])
     receipt = console.ingest(**kwargs)
+    from tests.semantic_fixture_support import legacy_recommendation_fixture
+    legacy_recommendation_fixture(console, receipt["snapshot_id"])
     from tests.context_test_support import bind_detected_context
     bind_detected_context(console, receipt['snapshot_id'], accounts['reviewer']['account_id'])
     return receipt
@@ -297,7 +300,7 @@ def test_allowed_candidate_is_selected_and_djg_remains_unassessed_coverage(tmp_p
     eligibility = (djg.get("metadata") or {}).get("candidate_eligibility") or {}
     assert eligibility.get("eligible") is False
     assert passage_register_of(djg).get("status") == "not_yet_assessed"
-    assert passage_register_of(djg).get("reason_codes") == []
+    assert passage_register_of(djg).get("reason_codes") == ["unformed_meaning"]
 
     ordinary = ordinary_review_queue(_passages(objects))
     assert adviseert["object_id"] in {obj["object_id"] for obj in ordinary}

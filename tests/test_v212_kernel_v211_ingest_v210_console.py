@@ -99,7 +99,10 @@ def _ingest_html(console: OperationsConsole, accounts: dict, **kwargs) -> dict:
         ],
     )
     defaults.update(kwargs)
-    return console.ingest(**defaults)
+    receipt = console.ingest(**defaults)
+    from tests.semantic_fixture_support import legacy_recommendation_fixture
+    legacy_recommendation_fixture(console, receipt["snapshot_id"])
+    return receipt
 
 
 def _tiny_pdf(tmp_path: Path, text: str = "Richtlijn test PDF") -> bytes:

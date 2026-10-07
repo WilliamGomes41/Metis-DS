@@ -142,7 +142,9 @@ def _queue_row(object_id: str, admitted: dict[str, Any], text: str) -> dict[str,
         "object_type": "unclassified",
         "proposed_object_type": admitted.get("proposed_type") or "recommendation",
         "content": {"clean_text": text},
-        "metadata": {"admission": admitted},
+        "metadata": {"admission": admitted, "semantic_passage": {
+            "selection_origin": "proposal_selected",
+            "spans": [{"block_id": f"block-{object_id}", "start": 0, "end": len(text)}]}},
     }
 
 
@@ -274,6 +276,8 @@ def test_unpublished_delete_control_stays_tree_only(tmp_path: Path) -> None:
         roles=("reviewer",),
         display_name="Bert Reviewer",
     )
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console, [(ADVISEERT, "recommendation"), (LONE_EXCEPTION, "exception")])
     receipt = console.ingest(
         actor_id=researcher["account_id"],
         filename="wave5.html",

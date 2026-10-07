@@ -67,3 +67,17 @@ D5.3 fixture rows now use a real source block instead of an invented block ID.
 The initial full suite exposed 139 failures and 8 fixture errors despite the
 focused regression pass. This repair is not complete until remaining failures
 are classified and fixed without restoring splitter-created knowledge authority.
+
+## Review compatibility and executable fixtures
+
+A selected, admitted, resolvable candidate can be reviewed again or reclassified
+on its current tuple. An empty task queue is not a loss of candidate identity.
+The separate second-review command remains mandatory when that duty is open.
+Explicit stale revisions fail before semantic/source validation and the existing
+commit boundary rechecks the pinned revision against concurrent writes.
+
+Legacy lifecycle fixtures now use explicit source selections through the real
+materialiser. Pure reader fixtures state their selected lineage; they do not
+exercise source authorization. Provider-failure/concurrency fixtures retain
+independent console bindings. Tests of the deterministic splitter remain on
+that route and do not acquire content-review authority.

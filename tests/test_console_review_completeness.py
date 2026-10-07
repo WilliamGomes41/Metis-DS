@@ -59,8 +59,6 @@ def _accounts(console: OperationsConsole) -> dict[str, dict]:
 
 
 def _ingest_html(console: OperationsConsole, accounts: dict, data: bytes | None = None, **kwargs) -> dict:
-    from tests.semantic_fixture_support import bind_fixture_selections
-    bind_fixture_selections(console)
     defaults = dict(
         actor_id=accounts["researcher"]["account_id"],
         filename="continentie.html",
@@ -401,6 +399,8 @@ def test_type_and_approve_disabled_when_open_source_passage_fails(tmp_path: Path
 def test_type_confirm_succeeds_after_open_original(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = _ingest_html(console, accounts)
     target = next(
         obj

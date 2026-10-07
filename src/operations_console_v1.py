@@ -3066,7 +3066,6 @@ class OperationsConsole:
                     raise ConsoleError("blocked_candidate_not_reviewable")
                 raise ConsoleError("content_duty_required")
         if decision == "approve" or apply_type:
-            from src.knowledge_path_v1 import content_reviewable
             if review_path != "boom" and content_reviewable(target):
                 self._require_resolved_candidate_source(envelope, target)
         if decision != "later":

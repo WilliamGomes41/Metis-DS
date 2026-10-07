@@ -111,7 +111,6 @@ def _ingest(
     )
     defaults.update(kwargs)
     from tests.semantic_fixture_support import bind_fixture_selections, legacy_recommendation_fixture
-    bind_fixture_selections(console)
     receipt = console.ingest(**defaults)
     legacy_recommendation_fixture(console, receipt["snapshot_id"])
     return receipt
@@ -475,6 +474,8 @@ def test_stamps_bind_to_recommendation_not_objects_or_koppen(tmp_path: Path) -> 
 def test_human_confirms_strength_on_recommendation_not_heading(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = _ingest(console, accounts, data=_stamp_html(), filename="stamps.html", title="Stempels")
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     rec = next(obj for obj in objects if _text_of(obj).startswith("Bespreek"))
@@ -578,6 +579,8 @@ def test_unpublished_continentie_new_extract_keeps_source_hash(tmp_path: Path) -
     expected = sha256_bytes(freeze)
     console = _console(tmp_path)
     accounts = _accounts(console)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     receipt = _ingest(console, accounts)
     assert receipt["sha256"] == expected
     assert receipt["state"] == "captured_not_published"
