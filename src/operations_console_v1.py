@@ -111,7 +111,7 @@ from src.retrieval.retrieval_projection_v2 import build_projection
 from src.published_projection_v1 import atomic_replace_projection
 from src.semantic_replay_v1 import SEMANTIC_REPLAY_SPEC_KEY
 from src.quality_evidence_v1 import record_processing, review_evidence, instant as quality_instant
-from src.semantic_transform_generic_v1 import transform as transform_generic
+from src.semantic_transform_generic_v1 import transform as _transform_generic
 from src.serving_relations_v1 import (
     binding_relations,
     confirm_relation_set,
@@ -205,6 +205,18 @@ class ConsoleError(ValueError):
         self.code = code
         self.current_revision = current_revision
         super().__init__(message or code)
+
+
+def transform_generic(spec, manifest, fragments):
+    """Keep materialisation failures in the existing command error channel."""
+    from src.knowledge_materialisation_v1 import MaterialisationError
+    try:
+        return _transform_generic(spec, manifest, fragments)
+    except MaterialisationError as exc:
+        error = ConsoleError("pre_review_llm_proposal_rejected", exc.code)
+        error.validation_finding = deepcopy(exc.finding)
+        error.pre_review_diagnostics = {"reason_code": exc.code}
+        raise error from exc
 
 
 UrlFetcher = Callable[[str], tuple[bytes, str, str]]

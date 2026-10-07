@@ -827,7 +827,12 @@ def _semantic_execution_before_review(
             # A wholly failed new run must not replace existing valid work
             # with source remainders. Partial success is retained separately.
             raise ConsoleError(errors[0])
-        content_units = _materialised_content(**validator_input, proposal=proposal)
+        try:
+            content_units = _materialised_content(**validator_input, proposal=proposal)
+        except SemanticPassageError as exc:
+            if checkpoint:
+                checkpoint("validation_rejected", {"finding": exc.finding})
+            raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
     if blocks and proposal is None:
         provider_evidence: dict[str, Any] = {}
         proposal = _provider_proposal(
@@ -992,7 +997,7 @@ def semantic_spec_from_fragments(
         )
     except ConsoleError as exc:
         reason = str(exc) if exc.code == "pre_review_llm_proposal_rejected" else ""
-        reason = reason if re.fullmatch(r"(?:semantic|recommendation|source_bound)_[a-z_]{1,100}", reason) else ""
+        reason = reason if re.fullmatch(r"(?:semantic|recommendation|source_bound|materialisation|materialiser|selection)_[a-z_]{1,100}", reason) else ""
         code = exc.code if re.fullmatch(r"[a-z_]{1,120}", exc.code) else "processing_failed"
         # Transient error metadata only: failed retries leave persisted state intact.
         exc.pre_review_diagnostics = {"reference": reference, "reason_code": reason}

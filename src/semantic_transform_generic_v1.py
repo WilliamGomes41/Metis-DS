@@ -215,6 +215,9 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
     evidence_blocks = None
     mapping_blocks = None
     for seq, item in enumerate(spec["objects"], 1):
+        if (item.get("semantic_passage") or {}).get("selection_origin") == SELECTION_ORIGIN_PROPOSAL:
+            from src.knowledge_materialisation_v1 import validate_materialised_candidate
+            validate_materialised_candidate(item, fragments=raw_rows)
         refs = []
         for rid in item.get("source_fragment_ids", []):
             if rid not in raw_by_id:

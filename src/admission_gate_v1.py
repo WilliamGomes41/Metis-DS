@@ -882,6 +882,12 @@ def apply_admission_gate(
     if review_path_for_klasse(klasse) == "boom":
         from src.decision_unit_construction_v1 import apply_gate
         return apply_gate(objects, source_hash=source_hash)
+    from src.knowledge_materialisation_v1 import validate_materialised_candidate, _selection_blocks
+    fragments = list(fragments or [])
+    try:
+        source_blocks = _selection_blocks(fragments)
+    except (ValueError, KeyError, TypeError):
+        source_blocks = {}
     fragments_by_id = {
         str(fragment.get("fragment_id") or ""): fragment
         for fragment in (fragments or [])
@@ -898,7 +904,18 @@ def apply_admission_gate(
         semantic = metadata.get("semantic_passage") if isinstance(metadata.get("semantic_passage"), dict) else {}
         semantic_candidate = str(semantic.get("selection_origin") or "") == "proposal_selected"
 
+        source_valid = False
         if eligibility.eligible and semantic_candidate:
+            try:
+                validate_materialised_candidate(row, fragments=fragments, source_blocks=source_blocks)
+                source = row.get("source") or {}
+                source_valid = (
+                    source.get("source_checksum") == source_hash
+                    and source.get("version") == document_version
+                )
+            except (ValueError, KeyError, TypeError):
+                source_valid = False
+        if eligibility.eligible and semantic_candidate and source_valid:
             candidate = candidate_from_object(
                 row,
                 objects=source_order,
