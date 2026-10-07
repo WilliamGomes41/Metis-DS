@@ -87,10 +87,10 @@ def _ingest(console: OperationsConsole, accounts: dict) -> dict:
         ],
     )
 
-    from tests.semantic_fixture_support import legacy_recommendation_fixture
-    legacy_recommendation_fixture(console, receipt["snapshot_id"])
     from tests.context_test_support import bind_detected_context
     bind_detected_context(console, receipt["snapshot_id"], accounts["reviewer"]["account_id"])
+    from tests.semantic_fixture_support import legacy_recommendation_fixture
+    legacy_recommendation_fixture(console, receipt["snapshot_id"])
     return receipt
 
 
