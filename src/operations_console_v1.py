@@ -108,7 +108,7 @@ from src.review_ledger import append_event, read_events
 from src.review_interaction_v1 import validate_review_interaction_identity
 from src.review_workflow_v3 import _apply_review_state
 from src.revision_workflow import (bump_patch, create_revision, revise_object, current_revisions,
-                                   validate_revision_write, knowledge_revision, reprocessed_history)
+                                   validate_revision_write, knowledge_revision, reprocessed_history, lineage_evidence)
 from src.retrieval.retrieval_projection_v2 import build_projection
 from src.published_projection_v1 import atomic_replace_projection
 from src.semantic_replay_v1 import SEMANTIC_REPLAY_SPEC_KEY
@@ -1954,7 +1954,9 @@ class OperationsConsole:
         return bool(incomplete(envelope) and VERSION in contract and TASK_VERSION in contract
             and not self.snapshot_is_published(snapshot_id)
             and not self.object_review_bindings(snapshot_id) and not envelope.get("review_passes")
-            and not any((row.get("governance") or {}).get("validation_status") not in {None, "needs_review"}
+            and not any(((row.get("governance") or {}).get("validation_status") not in {None, "needs_review"}
+                     and not ((row.get("governance") or {}).get("validation_status") == "superseded"
+                              and (lineage_evidence(row) or {}).get("reason") == "same-source candidate retirement"))
                 or ROLE_KEY in (row.get("metadata") or {}) or LINKS_KEY in (row.get("metadata") or {})
                     or ((row.get("metadata") or {}).get("passage_register") or {}).get("source") == "review"
                 for row in self.snapshot_objects(snapshot_id)))
@@ -2136,7 +2138,9 @@ class OperationsConsole:
                 raise ConsoleError("pre_review_retry_existing_work")
         from src.source_context_review_v1 import ROLE_KEY, LINKS_KEY
         if (self._bindings.get(snapshot_id) or envelope.get("review_passes") or
-                any((row.get("governance") or {}).get("validation_status") not in {None, "needs_review"}
+                any(((row.get("governance") or {}).get("validation_status") not in {None, "needs_review"}
+                     and not ((row.get("governance") or {}).get("validation_status") == "superseded"
+                              and (lineage_evidence(row) or {}).get("reason") == "same-source candidate retirement"))
                     or ROLE_KEY in (row.get("metadata") or {}) or LINKS_KEY in (row.get("metadata") or {})
                     or ((row.get("metadata") or {}).get("passage_register") or {}).get("source") == "review"
                     for row in self.snapshot_objects(snapshot_id))):
@@ -3546,6 +3550,8 @@ class OperationsConsole:
                     "geen_kenniseenheid" if rejecting else suitability or ""))
             target = self._prepare_knowledge_revision(snapshot_id, revision_predecessor, target,
                 reason="review semantic confirmation/change", actor=reviewer["username"])
+            if confirmed_relation_set is not None:
+                confirmed_relation_set = deepcopy(target.get(CONFIRMED_KNOWLEDGE_RELATIONS_FIELD) or [])
             current = [target if row["object_id"] == object_id else row for row in current]
             track = target["governance"]["review_track"]
             payload = {

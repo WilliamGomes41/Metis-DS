@@ -120,6 +120,7 @@ def revise_object(previous, proposed, *, snapshot_id, reason, actor, force=False
     old_version = str(previous["object_version"])
     desired = str(proposed["object_version"])
     result["object_version"] = desired if _version(desired) > _version(old_version) else bump_patch(old_version)
+    _rebind_relations(result, previous, desired)
     edge = {
         "contract": LINEAGE_CONTRACT,
         "snapshot_id": str(snapshot_id),
@@ -252,9 +253,14 @@ def reprocessed_history(previous, generated, *, snapshot_id, actor):
     prior = {row["object_id"]: row for row in current_revisions(previous, snapshot_id=snapshot_id)}
     retained = [deepcopy(row) for row in previous if knowledge_revision(row)]
     new_ids = {row["object_id"] for row in generated}
-    for row in retained:
-        if row == prior[row["object_id"]] and row["object_id"] not in new_ids:
-            row["governance"]["validation_status"] = "superseded"
+    for oid, row in prior.items():
+        if knowledge_revision(row) and oid not in new_ids:
+            if (row.get("governance") or {}).get("validation_status") == "superseded":
+                continue
+            retired = revise_object(row, row, snapshot_id=snapshot_id, actor=actor,
+                                    reason="same-source candidate retirement", force=True)
+            retired["governance"]["validation_status"] = "superseded"
+            retained.append(retired)
     for row in generated:
         old = prior.get(row["object_id"])
         if old is None or not (knowledge_revision(old) or knowledge_revision(row)):
@@ -263,8 +269,48 @@ def reprocessed_history(previous, generated, *, snapshot_id, actor):
         if compute_canonical_object_hash(old) == compute_canonical_object_hash(row):
             continue
         updated = revise_object(old, row, snapshot_id=snapshot_id,
-                                reason="same-source re-extraction/recovery", actor=actor)
+                                reason="same-source re-extraction/recovery", actor=actor,
+                                force=(old.get("governance") or {}).get("validation_status") == "superseded")
         if updated["object_version"] == old["object_version"]:
             continue
         retained.append(updated)
     return retained
+
+def _rebind_relations(result, previous, staged_version):
+    """Rebuild IDs for the new source endpoint, never infer a new target."""
+    from src.knowledge_relations_v1 import (build_knowledge_relation,
+        validate_knowledge_relation_set, relation_sort_key)
+    remap = {}
+    for field in ("proposed_knowledge_relations", "confirmed_knowledge_relations"):
+        if field not in result:
+            continue
+        relations = result[field]
+        # Accept the caller's freshly prepared set or the predecessor's exact set.
+        if (validate_knowledge_relation_set(relations, source_object_id=result["object_id"],
+                source_object_version=staged_version)
+                and validate_knowledge_relation_set(relations, source_object_id=result["object_id"],
+                source_object_version=previous["object_version"])):
+            raise ValueError("revision_relation_evidence_invalid")
+        rebuilt = []
+        for relation in relations:
+            new = build_knowledge_relation(source_object_id=result["object_id"],
+                source_object_version=result["object_version"], relation_type=relation["relation_type"],
+                target_object_id=relation["target_object_id"], target_object_version=relation["target_object_version"])
+            remap[relation["relation_id"]] = new["relation_id"]
+            rebuilt.append(new)
+        result[field] = sorted(rebuilt, key=relation_sort_key)
+    metadata = result.get("metadata") or {}
+    # Source spans/evidence are preserved; only the exact source-endpoint IDs change.
+    evidence = metadata.get("knowledge_relation_evidence")
+    if isinstance(evidence, dict):
+        for row in evidence.get("relations") or []:
+            if row.get("relation_id") in remap:
+                row["relation_id"] = remap[row["relation_id"]]
+    review = metadata.get("knowledge_relation_review")
+    if isinstance(review, dict):
+        if review == (previous.get("metadata") or {}).get("knowledge_relation_review"):
+            # Historical confirmation lives on the predecessor, not on a fresh review.
+            metadata.pop("knowledge_relation_review", None)
+        else:
+            review["source_object_version_after"] = result["object_version"]
+            review["confirmed_relation_ids"] = [r["relation_id"] for r in result.get("confirmed_knowledge_relations", [])]
