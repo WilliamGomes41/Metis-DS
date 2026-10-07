@@ -78,7 +78,7 @@ def _object(
     register_status: str = "selected_as_candidate",
     section: str = "Sectie A",
 ) -> dict[str, Any]:
-    return {
+    row = {
         "object_id": f"{snapshot_id}-object-{index:03d}",
         "object_version": "1.0",
         "object_type": object_type,
@@ -106,6 +106,8 @@ def _object(
         "uncertainty": {"has_uncertainty": False},
         "content": {"clean_text": f"Fixture {index}"},
     }
+    from tests.review_authority_fixture_support import materialised_row
+    return materialised_row(row)
 
 
 def _open_objects(snapshot_id: str) -> list[dict[str, Any]]:
@@ -197,6 +199,15 @@ class _ListReadSubject(_PostgresBadgeCountsMixin):
         self.workflow_document_store = store
         self.canonical_publication_store = None
         self.account_id = account_id
+        from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+        self.workflow_review_store = PostgresWorkflowReviewStore(store.config)
+
+    def review_source_fragments(self, snapshot_id, **kwargs):
+        from tests.review_authority_fixture_support import source_fragments
+        return source_fragments()
+
+    def snapshot_is_published(self, snapshot_id):
+        return False
 
     def _account(self, account_id: str) -> dict[str, Any]:
         assert account_id == self.account_id

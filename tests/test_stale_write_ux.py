@@ -164,7 +164,7 @@ def _install_concurrent_winner(
     real_save = OperationsConsole._save_objects
     fired = {"done": False}
 
-    def losing_save(self: OperationsConsole, target_snapshot: str, rows: list[dict]) -> None:
+    def losing_save(self: OperationsConsole, target_snapshot: str, rows: list[dict], **kwargs) -> None:
         if target_snapshot == snapshot_id and not fired["done"]:
             fired["done"] = True
             other = OperationsConsole(
@@ -177,7 +177,7 @@ def _install_concurrent_winner(
                 if row["object_id"] == other_object_id:
                     row["reliability_marker"] = marker
             other._save_objects(target_snapshot, other_rows)
-        return real_save(self, target_snapshot, rows)
+        return real_save(self, target_snapshot, rows, **kwargs)
 
     console._save_objects = losing_save.__get__(console, OperationsConsole)  # type: ignore[method-assign]
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 
+from test_t4_single_knowledge_path_invariants import _allowed_source
 from copy import deepcopy
 from pathlib import Path
 
@@ -32,7 +33,7 @@ def _obj(
     uncertain: bool = False,
     section: tuple[str, ...] = ("1 Achtergrond",),
 ) -> dict:
-    return {
+    row = {
         "object_id": object_id,
         "object_version": "1.0",
         "object_type": "unclassified",
@@ -75,6 +76,16 @@ def _obj(
         },
     }
 
+    from copy import deepcopy
+    from test_t4_single_knowledge_path_invariants import _allowed_candidate
+    from src.integrity_kernel import stamp_canonical_hashes
+    fixture = _allowed_candidate()
+    for key in ("content", "source", "provenance"):
+        row[key] = deepcopy(fixture[key])
+    row["metadata"]["semantic_passage"] = deepcopy(fixture["metadata"]["semantic_passage"])
+    stamp_canonical_hashes(row)
+    return row
+
 
 def test_admission_blocked_is_open_work_not_substantive_exclusion() -> None:
     row = apply_passage_register([_obj("blocked", "recommendation", gate="blocked")])[0]
@@ -109,8 +120,7 @@ def test_regular_review_queue_is_broader_than_priority_duty_but_still_fail_close
         row["object_id"]
         for row in regular_review_queue(
             [definition, explanation, recommendation, blocked, heading],
-            review_path="richtlijn",
-        )
+            review_path="richtlijn", fragments=_allowed_source())
     }
     assert ids == {"definition", "explanation", "recommendation"}
 
@@ -124,10 +134,10 @@ def test_normal_risk_batch_excludes_action_high_risk_second_review_blocked_and_u
     blocked = _obj("blocked", "definition", gate="blocked")
     uncertain = _obj("uncertain", "definition", uncertain=True)
     rows = [eligible, explanation, recommendation, high, second, blocked, uncertain]
-    assert normal_risk_batch_eligible(eligible, review_path="richtlijn") is True
-    assert normal_risk_batch_eligible(explanation, review_path="richtlijn") is True
-    assert normal_risk_batch_eligible(uncertain, review_path="richtlijn") is False
-    assert [row["object_id"] for row in normal_risk_batch_queue(rows, review_path="richtlijn")] == [
+    assert normal_risk_batch_eligible(eligible, review_path="richtlijn", fragments=_allowed_source()) is True
+    assert normal_risk_batch_eligible(explanation, review_path="richtlijn", fragments=_allowed_source()) is True
+    assert normal_risk_batch_eligible(uncertain, review_path="richtlijn", fragments=_allowed_source()) is False
+    assert [row["object_id"] for row in normal_risk_batch_queue(rows, review_path="richtlijn", fragments=_allowed_source())] == [
         "definition",
         "explanation",
     ]
@@ -152,6 +162,12 @@ class _BatchHarness(ProportionateReviewConsole):
     def snapshot_objects(self, snapshot_id: str, *args, **kwargs) -> list[dict]:
         assert snapshot_id == "snap-1"
         return [deepcopy(row) for row in self._objects.values()]
+
+    def review_source_fragments(self, snapshot_id, **kwargs):
+        return _allowed_source()
+
+    def object_review_bindings(self, snapshot_id):
+        return []
 
     def _require_open_original(self, snapshot_id: str, object_id: str) -> dict:
         self.opened.append(object_id)

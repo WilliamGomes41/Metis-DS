@@ -8,6 +8,7 @@ never served. Tests hit the real functions.
 PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 """
 from __future__ import annotations
+from tests.review_authority_fixture_support import materialised_row, source_fragments
 
 import re
 from html.parser import HTMLParser
@@ -218,6 +219,8 @@ def _knowledge_obj(
             "risk_level": risk_level or "standard",
             "risk_fields": list(risk_fields or []),
         }
+    if selected:
+        row = materialised_row(row)
     return row
 
 
@@ -362,7 +365,7 @@ def _eval(query: str, records: list[dict]) -> dict:
 def test_old_queue_would_require_2008_inhoud_cards_new_duty_does_not() -> None:
     objects = _koppen_78_inhoud_2008_style()
     koppen, old_inhoud = review_stacks(objects)
-    duty = slow_review_duty(objects)
+    duty = slow_review_duty(objects, fragments=source_fragments())
     leftover = remaining_unclassified(objects)
     assert len(koppen) == KOPPEN_78
     assert len(old_inhoud) == INHOUD_2008 + 4
@@ -389,7 +392,7 @@ def test_researchers_are_not_required_to_open_thousands_of_inhoud_cards(
     bind_detected_context(console, receipt['snapshot_id'], accounts['reviewer']['account_id'])
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     koppen, old_inhoud = review_stacks(objects)
-    duty = slow_review_duty(objects)
+    duty = slow_review_duty(objects, fragments=console.review_source_fragments(receipt["snapshot_id"]))
     leftover = remaining_unclassified(objects)
     assert koppen
     assert len(old_inhoud) >= leftover_n
@@ -530,7 +533,7 @@ def test_slow_duty_is_recommendation_condition_exception_and_high_risk() -> None
             proposed="explanation",
         )
     )
-    duty_ids = {obj["object_id"] for obj in slow_review_duty(objects)}
+    duty_ids = {obj["object_id"] for obj in slow_review_duty(objects, fragments=source_fragments())}
     assert duty_ids == {"r1", "c1", "e1", "hr1"}
     leftover_ids = {obj["object_id"] for obj in remaining_unclassified(objects)}
     assert "u1" in leftover_ids
@@ -550,7 +553,7 @@ def test_console_inhoud_lists_only_slow_duty_cards(tmp_path: Path) -> None:
         console, accounts, data=_duty_html(leftover=12), filename="plicht.html", title="Plicht"
     )
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    duty = slow_review_duty(objects)
+    duty = slow_review_duty(objects, fragments=console.review_source_fragments(receipt["snapshot_id"]))
     leftover = remaining_unclassified(objects)
     client = _client(console)
     html = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text

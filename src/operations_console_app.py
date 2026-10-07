@@ -1750,6 +1750,8 @@ def _review_section_groups(
     task: str = "contextual",
     context_objects: list[dict[str, Any]] | None = None,
     review_path: str = "richtlijn",
+    bindings=(),
+    fragments=None,
 ) -> str:
     """Presentation only: preserve exact source paths and existing object links."""
     priority_ids = priority_ids or set()
@@ -1767,7 +1769,7 @@ def _review_section_groups(
             task=task,
         )
         context = _review_context_block(
-            obj, context_objects, snapshot_id=snapshot_id, review_path=review_path, task=task, bindings=console.object_review_bindings(snapshot_id), fragments=console.review_source_fragments(snapshot_id)
+            obj, context_objects, snapshot_id=snapshot_id, review_path=review_path, task=task, bindings=bindings, fragments=fragments
         )
         if context:
             item = item.removesuffix("</li>") + (
@@ -2550,7 +2552,7 @@ def _render_second_review_card(
     reviewer_id: str,
     snapshot_revision: str,
 ) -> str:
-    bindings = console.object_review_bindings(snapshot_id)
+    bindings = console.object_review_bindings(snapshot_id, objects=snapshot_objects)
     route = reviewer_route_for(
         obj,
         review_path=review_path,
@@ -2613,7 +2615,7 @@ def _render_second_review_card(
             snapshot_objects,
             snapshot_id=snapshot_id,
             review_path=review_path,
-            task="second_review", bindings=console.object_review_bindings(snapshot_id), fragments=console.review_source_fragments(snapshot_id)
+            task="second_review", bindings=console.object_review_bindings(snapshot_id, objects=snapshot_objects), fragments=console.review_source_fragments(snapshot_id)
         )}
         {semantics_html}
         {relations_html}
@@ -2634,10 +2636,10 @@ def _render_second_review_card(
     """
 
 
-def _review_bindings(console: OperationsConsole, snapshot_id: str) -> list[dict[str, Any]] | None:
+def _review_bindings(console: OperationsConsole, snapshot_id: str, *, objects=None) -> list[dict[str, Any]] | None:
     """Actor routes when bindings exist; governance fallback for projection consoles."""
     try:
-        return console.object_review_bindings(snapshot_id)
+        return console.object_review_bindings(snapshot_id, objects=objects)
     except AttributeError:
         return None
     except ConsoleError as exc:
@@ -3095,6 +3097,7 @@ def _render_review_index(
                 task="contextual",
                 context_objects=snapshot_objects,
                 review_path=review_path,
+                bindings=bindings, fragments=fragments,
             ) if individual else '<p class="review-task-empty">Deze beoordelingslijst is leeg. Bekijk alle passages voor resterend werk.</p>'}
             <p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p>
           </section>
@@ -3133,6 +3136,7 @@ def _render_review_index(
                 task="second_review",
                 context_objects=snapshot_objects,
                 review_path=review_path,
+                bindings=bindings, fragments=fragments,
             ) if second_review else '<p class="review-task-empty">Deze taak is afgerond of wacht op een andere reviewer.</p>'}
           </section>
         '''
@@ -3287,7 +3291,7 @@ def _render_review_card(
                         snapshot_objects,
                         snapshot_id=snapshot_id,
                         review_path=review_path,
-                        task=task, bindings=console.object_review_bindings(snapshot_id), fragments=console.review_source_fragments(snapshot_id)
+                        task=task, bindings=console.object_review_bindings(snapshot_id, objects=snapshot_objects), fragments=console.review_source_fragments(snapshot_id)
                     )}
                     {context_html}
                     </div>
@@ -3347,7 +3351,7 @@ def _render_review_card(
                         obj,
                         snapshot_objects,
                         review_path=review_path,
-                        draft=draft, bindings=console.object_review_bindings(snapshot_id), fragments=console.review_source_fragments(snapshot_id)
+                        draft=draft, bindings=console.object_review_bindings(snapshot_id, objects=snapshot_objects), fragments=console.review_source_fragments(snapshot_id)
                     )}
                     <section class="review-step" data-review-step="f">
                       <h4>Wat is je besluit?</h4>
@@ -3480,7 +3484,7 @@ def _render_review_room(
                     include_individual=False,
                 )
             try:
-                bindings = _review_bindings(console, chosen)
+                bindings = _review_bindings(console, chosen, objects=snapshot_objects)
             except AttributeError:
                 bindings = None
             objects_html += _render_review_index(
@@ -3518,7 +3522,7 @@ def _render_review_room(
                     objects_html += '<p class="banner ok" role="status">Het contextbesluit is opgeslagen. Beoordeel de betrokken passages opnieuw.</p>'
                 conflict_html = _review_conflict_html(conflict, current=obj, draft=draft)
                 try:
-                    current_bindings = _review_bindings(console, chosen)
+                    current_bindings = _review_bindings(console, chosen, objects=snapshot_objects)
                 except AttributeError:
                     current_bindings = None
                 route = (

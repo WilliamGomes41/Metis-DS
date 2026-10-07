@@ -59,6 +59,10 @@ class NavigationProbe(_PostgresBadgeCountsMixin, ProportionateReviewConsole):
             project_policy(self.objects[sid], policy)
             self.bindings[sid] = []
 
+    def review_source_fragments(self, snapshot_id, **kwargs):
+        from test_t4_single_knowledge_path_invariants import _allowed_source
+        return _allowed_source()
+
     def _account(self, account_id):
         assert account_id == self.account["account_id"]
         return dict(self.account)

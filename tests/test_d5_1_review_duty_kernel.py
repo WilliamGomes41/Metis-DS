@@ -18,6 +18,7 @@ from src.review_duty_v1 import (
     review_duty_for,
 )
 from src.review_workboard_v1 import _work_item_from_counts, _work_summary
+from test_t4_single_knowledge_path_invariants import _allowed_source, _binding
 
 
 def _obj(
@@ -75,7 +76,7 @@ def _obj(
         },
         "risk": {
             "level": "normal",
-            "risk_level": "standard",
+            "risk_level": "high" if second_required else "standard",
             "risk_fields": [],
             "requires_second_review": second_required,
         },
@@ -97,6 +98,15 @@ def _obj(
                 "target_object_version": "1.0",
             }
         ]
+
+    from copy import deepcopy
+    from test_t4_single_knowledge_path_invariants import _allowed_candidate
+    from src.integrity_kernel import stamp_canonical_hashes
+    fixture = _allowed_candidate()
+    for key in ("content", "source", "provenance"):
+        row[key] = deepcopy(fixture[key])
+    row["metadata"]["semantic_passage"] = deepcopy(fixture["metadata"]["semantic_passage"])
+    stamp_canonical_hashes(row)
     return row
 
 
@@ -113,8 +123,8 @@ def test_review_duty_lifecycle_projects_first_second_and_closed_states() -> None
     revise = _obj("revise", "recommendation", status="revise")
     rejected = _obj("rejected", "recommendation", status="rejected")
 
-    first_duty = review_duty_for(first, review_path="richtlijn")
-    second_duty = review_duty_for(second, review_path="richtlijn")
+    first_duty = review_duty_for(first, review_path="richtlijn", fragments=_allowed_source())
+    second_duty = review_duty_for(second, bindings=[_binding(second)], review_path="richtlijn", fragments=_allowed_source())
 
     assert first_duty is not None
     assert first_duty["stage"] == FIRST_REVIEW
@@ -124,9 +134,9 @@ def test_review_duty_lifecycle_projects_first_second_and_closed_states() -> None
     assert second_duty["stage"] == SECOND_REVIEW
     assert second_duty["lane"] == LANE_CONTEXTUAL
 
-    assert review_duty_for(approved, review_path="richtlijn") is None
-    assert review_duty_for(revise, review_path="richtlijn") is None
-    assert review_duty_for(rejected, review_path="richtlijn") is None
+    assert review_duty_for(approved, bindings=[_binding(approved)], review_path="richtlijn", fragments=_allowed_source()) is None
+    assert review_duty_for(revise, review_path="richtlijn", fragments=_allowed_source()) is None
+    assert review_duty_for(rejected, review_path="richtlijn", fragments=_allowed_source()) is None
 
 
 def test_structure_batch_and_relation_bearing_context_are_distinct_lanes() -> None:
@@ -134,12 +144,11 @@ def test_structure_batch_and_relation_bearing_context_are_distinct_lanes() -> No
     definition = _obj("definition", "definition")
     related_explanation = _obj("related", "explanation", relation=True)
 
-    heading_duty = review_duty_for(heading, review_path="richtlijn")
-    definition_duty = review_duty_for(definition, review_path="richtlijn")
+    heading_duty = review_duty_for(heading, review_path="richtlijn", fragments=_allowed_source())
+    definition_duty = review_duty_for(definition, review_path="richtlijn", fragments=_allowed_source())
     relation_duty = review_duty_for(
         related_explanation,
-        review_path="richtlijn",
-    )
+        review_path="richtlijn", fragments=_allowed_source())
 
     assert heading_duty is None
     assert definition_duty is not None
@@ -166,8 +175,8 @@ def test_review_duty_counts_do_not_mix_repair_or_correction_waiting_work() -> No
         _obj("done", "definition", status="approved"),
     ]
 
-    duties = review_duties(rows, review_path="richtlijn")
-    counts = review_duty_counts(rows, review_path="richtlijn")
+    duties = review_duties(rows, bindings=[_binding(o) for o in rows if o["governance"]["validation_status"] == "approved"], review_path="richtlijn", fragments=_allowed_source())
+    counts = review_duty_counts(rows, bindings=[_binding(o) for o in rows if o["governance"]["validation_status"] == "approved"], review_path="richtlijn", fragments=_allowed_source())
 
     assert len(duties) == 4
     assert counts == {
@@ -189,7 +198,7 @@ def test_one_object_has_at_most_one_open_review_duty() -> None:
         second_required=True,
         second_status="pending",
     )
-    duties = review_duties([obj, obj], review_path="richtlijn")
+    duties = review_duties([obj, obj], bindings=[_binding(obj)], review_path="richtlijn", fragments=_allowed_source())
     assert len(duties) == 1
     assert duties[0]["stage"] == SECOND_REVIEW
 

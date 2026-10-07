@@ -1,3 +1,4 @@
+from tests.review_authority_fixture_support import materialised_row, source_fragments, approved_bindings
 """Task-oriented review navigation without new governance state."""
 # release-control-evidence: scope/belofte
 # release-control-evidence: toegang
@@ -7,7 +8,7 @@ from src.operations_console_app import _render_review_index, _render_review_room
 
 
 def _obj(object_id: str, proposed: str, *, status: str = "needs_review", section: str = "Inhoud") -> dict:
-    return {
+    row = {
         "object_id": object_id,
         "object_type": "unclassified",
         "proposed_object_type": proposed,
@@ -18,6 +19,7 @@ def _obj(object_id: str, proposed: str, *, status: str = "needs_review", section
         "governance": {"validation_status": status},
         "risk": {"level": "normal", "requires_second_review": False},
     }
+    return materialised_row(row)
 
 
 def test_default_review_page_is_a_clickable_task_dashboard():
@@ -28,7 +30,7 @@ def test_default_review_page_is_a_clickable_task_dashboard():
         _obj("d1", "definition"),
     ]
 
-    html = _render_review_index("snap-1", objects, "richtlijn")
+    html = _render_review_index("snap-1", objects, "richtlijn", fragments=source_fragments())
 
     assert "Volgende stap" in html
     assert "Documentindeling controleren" in html
@@ -52,8 +54,8 @@ def test_each_task_view_only_contains_its_own_work():
         _obj("d1", "definition"),
     ]
 
-    individual = _render_review_index("snap-1", objects, "richtlijn", task="individual")
-    headings = _render_review_index("snap-1", objects, "richtlijn", task="headings")
+    individual = _render_review_index("snap-1", objects, "richtlijn", task="individual", fragments=source_fragments())
+    headings = _render_review_index("snap-1", objects, "richtlijn", task="headings", fragments=source_fragments())
 
     assert "Passage r1." in individual
     assert "Passage d1." not in individual
@@ -66,8 +68,8 @@ def test_each_task_view_only_contains_its_own_work():
 def test_control_information_is_secondary_to_review_tasks():
     objects = [_obj("r1", "recommendation")]
 
-    dashboard = _render_review_index("snap-1", objects, "richtlijn")
-    control = _render_review_index("snap-1", objects, "richtlijn", task="inventory")
+    dashboard = _render_review_index("snap-1", objects, "richtlijn", fragments=source_fragments())
+    control = _render_review_index("snap-1", objects, "richtlijn", task="inventory", fragments=source_fragments())
 
     assert "Controle en uitzonderingen" not in dashboard
     assert "Passages herstellen" not in dashboard
@@ -84,7 +86,7 @@ def test_control_card_highlights_blocked_passages_as_work():
         "admission": {"gate_result": "blocked", "section_path": ["Inhoud"]}
     }
 
-    dashboard = _render_review_index("snap-1", [blocked], "richtlijn")
+    dashboard = _render_review_index("snap-1", [blocked], "richtlijn", fragments=source_fragments())
 
     assert "1 passage is nog niet beschikbaar voor goedkeuring." in dashboard
     assert "Passages corrigeren" in dashboard
@@ -152,7 +154,7 @@ def test_review_dashboard_projects_distinct_final_dispositions_and_revision_work
     )
     objects = [approved, rejected, context, support, excluded, revised, pending]
 
-    dashboard = _render_review_index("snap-1", objects, "richtlijn")
+    dashboard = _render_review_index("snap-1", objects, "richtlijn", fragments=source_fragments())
 
     assert "Reviewvoortgang" in dashboard
     assert "5 van 7 bronpassages afgehandeld" in dashboard
@@ -194,8 +196,7 @@ def test_review_dashboard_projects_distinct_final_dispositions_and_revision_work
                     "comment": "Gebruik de volledige bronzin.",
                 },
             },
-        ],
-    )
+        ], fragments=source_fragments())
 
     assert "Besluiten en historie" in decisions
     assert "Goedgekeurd" in decisions
@@ -334,9 +335,9 @@ def test_dashboard_accounts_for_every_passage_without_hiding_followup_work():
         rows.append(obj)
     rows += [_with_register(_obj(f'c{i}', 'explanation', status='approved'), 'used_as_context') for i in range(6)]
     before = deepcopy(rows)
-    dashboard = _render_review_index('snap-430', rows, 'richtlijn')
-    inventory = _render_review_index('snap-430', rows, 'richtlijn', task='inventory')
-    followup = _render_review_index('snap-430', rows, 'richtlijn', task='disposition')
+    dashboard = _render_review_index('snap-430', rows, 'richtlijn', fragments=source_fragments())
+    inventory = _render_review_index('snap-430', rows, 'richtlijn', task='inventory', fragments=source_fragments())
+    followup = _render_review_index('snap-430', rows, 'richtlijn', task='disposition', fragments=source_fragments())
     assert '6 van 436 bronpassages afgehandeld' in dashboard
     assert '<dt>Nog te beoordelen</dt><dd>430</dd>' in dashboard
     assert inventory.count('data-passage-id=') == 436
@@ -348,7 +349,7 @@ def test_dashboard_accounts_for_every_passage_without_hiding_followup_work():
 
 def test_dashboard_counts_passages_without_implying_semantic_or_selected_groups():
     rows = [_obj("d1", "definition"), _obj("d2", "definition")]
-    html = _render_review_index("snap-1", rows, "richtlijn", normal_review_enabled=True)
+    html = _render_review_index("snap-1", rows, "richtlijn", normal_review_enabled=True, fragments=source_fragments())
     assert "Passages selecteren en bevestigen" in html
     assert "2 passages" in html
     assert "1 selecties" not in html

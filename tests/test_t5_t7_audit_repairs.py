@@ -213,7 +213,7 @@ def test_corrupt_persisted_source_cannot_acquire_review_binding(tmp_path, comman
 
 
 
-def test_reviewed_selected_candidate_can_repeat_approval_and_change_type(tmp_path):
+def test_reviewed_selected_candidate_repeat_is_safe_but_cannot_reclassify(tmp_path):
     from src.operations_console_v1 import OperationsConsole, ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
     from tests.semantic_fixture_support import bind_fixture_selections
     console = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
@@ -234,9 +234,9 @@ def test_reviewed_selected_candidate_can_repeat_approval_and_change_type(tmp_pat
     first = approve("definition")
     repeated = approve("definition")
     assert repeated["object_version"] == first["object_version"]
-    changed = approve("explanation")
-    assert changed["confirmed_object_type"] == "explanation"
-    assert changed["object_version"] != first["object_version"]
+    with pytest.raises(ConsoleError, match="content_duty_required"):
+        approve("explanation")
+    assert approve("definition")["object_version"] == first["object_version"]
     before = console.snapshot_objects(sid)
     bindings = console.object_review_bindings(sid)
     with pytest.raises(ConsoleError) as caught:

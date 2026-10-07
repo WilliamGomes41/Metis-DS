@@ -6,6 +6,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.review_authority_fixture_support import materialised_row, source_fragments, approved_bindings
 
 from src.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, blocked_audit_lane
 from src.domain_dimensions_v1 import (
@@ -48,7 +49,7 @@ def _obj(
             "proposed_type": proposed_type,
             "section_path": section_path or ["Richtlijn", "Behandeling"],
         }
-    return {
+    row = {
         "object_id": object_id,
         "object_type": object_type,
         "proposed_object_type": proposed_type,
@@ -57,6 +58,7 @@ def _obj(
         "governance": {"validation_status": validation_status},
         "content": {"clean_text": f"Passage {object_id}."},
     }
+    return materialised_row(row)
 
 
 def test_blocked_candidate_is_candidate_and_processing_issue_not_rejection() -> None:
@@ -204,7 +206,7 @@ def test_same_section_batch_is_review_strategy_not_semantic_relation() -> None:
     second = _obj("definition-b", proposed_type="definition")
     objects = [first, second]
 
-    passages, batches = normal_risk_batch_counts(objects, review_path="richtlijn")
+    passages, batches = normal_risk_batch_counts(objects, review_path="richtlijn", fragments=source_fragments())
 
     assert (passages, batches) == (2, 1)
     assert knowledge_relations_dimension(first) == {"proposed": [], "confirmed": []}

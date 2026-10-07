@@ -272,7 +272,7 @@ def review_work_item(
         except AttributeError:
             bindings = None
 
-    fragments = console.review_source_fragments(snapshot_id)
+    fragments = console.review_source_fragments(snapshot_id, envelope=envelope)
 
     review_path = review_path_for_klasse(str(envelope.get("class") or ""))
     headings, _ = review_stacks(objects, review_path=review_path)
@@ -388,7 +388,7 @@ def review_workboard_items(
             envelope = {"snapshot_id": snapshot_id, **summary["envelope"]}
             if str(envelope.get("publication_eligibility") or "") == PRE_REVIEW_BLOCKED:
                 continue
-            if envelope.get("review_policy"):
+            if "work_item" in summary or envelope.get("review_policy"):
                 item = (summary["work_item"] if "work_item" in summary else
                         review_work_item(console, envelope=envelope, account=account))
                 if item is not None:

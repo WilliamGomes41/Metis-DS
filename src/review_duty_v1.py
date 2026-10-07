@@ -104,7 +104,10 @@ def review_stage(
     """
 
     from src.knowledge_path_v1 import content_reviewable, source_lineage_resolves
+    from src.admission_gate_v1 import is_boom_object
     from src.source_accountability_v1 import is_source_record
+    if review_path == "boom" and not is_boom_object(obj):
+        return None
     # Boom construction keeps its current duty until that creator is cut.
     # On every other path only a content-reviewable knowledge candidate opens a duty.
     if review_path != "boom" and (not content_reviewable(obj)

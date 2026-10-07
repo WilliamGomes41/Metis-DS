@@ -1,3 +1,4 @@
+from test_t4_single_knowledge_path_invariants import _allowed_source
 """#405: counts never hide open source work.
 
 # release-control-evidence: scope/belofte
@@ -36,13 +37,13 @@ def test_343_to_5_keeps_all_338_missing_admission_passages_reachable():
     assert 'task=disposition">338 bronpassages afhandelen' in card
     assert 'task=inventory' in card
 
-    contextual = _render_review_index("snap-test", objects, "tekst", task="contextual", bindings=[])
+    contextual = _render_review_index("snap-test", objects, "tekst", task="contextual", bindings=[], fragments=_allowed_source())
     assert "allowed-0" in contextual
     assert "missing-0" not in contextual
-    remaining = _render_review_index("snap-test", objects, "tekst", task="disposition", bindings=[])
+    remaining = _render_review_index("snap-test", objects, "tekst", task="disposition", bindings=[], fragments=_allowed_source())
     assert set(_inventory_ids(remaining)) == {f"missing-{i}" for i in range(338)}
     assert "Gebruik van bronpassage bepalen" in remaining
-    inventory = _render_review_index("snap-test", objects, "tekst", task="inventory", bindings=[])
+    inventory = _render_review_index("snap-test", objects, "tekst", task="inventory", bindings=[], fragments=_allowed_source())
     assert len(_inventory_ids(inventory)) == 343
     assert len(set(_inventory_ids(inventory))) == 343
     assert objects == before  # All projections are read-only.
@@ -55,17 +56,17 @@ def test_followup_counts_lists_and_final_blocked_history_are_disjoint():
     unknown = _obj("unknown", "recommendation", gate_result=None)
     unknown["metadata"]["passage_register"] = {}
     objects = [blocked, final, unknown]
-    queues = review_followup_queues(objects, review_path="tekst", bindings=[])
+    queues = review_followup_queues(objects, review_path="tekst", bindings=[], fragments=_allowed_source())
     assert [r["object_id"] for r in queues["repair"]] == ["blocked"]
     assert [r["object_id"] for r in queues["disposition"]] == ["unknown"]
     for task in ("repair", "disposition"):
-        html = _render_review_index("snap", objects, "tekst", task=task, bindings=[])
+        html = _render_review_index("snap", objects, "tekst", task=task, bindings=[], fragments=_allowed_source())
         assert set(_inventory_ids(html)) == {r["object_id"] for r in queues[task]}
-    dashboard = _render_review_index("snap", objects, "tekst", bindings=[])
+    dashboard = _render_review_index("snap", objects, "tekst", bindings=[], fragments=_allowed_source())
     assert "Alle reviewtaken zijn afgerond" not in dashboard
     assert 'task=disposition' in dashboard
     assert '/review?document=snap&amp;task=repair' in dashboard
-    inventory = _render_review_index("snap", objects, "tekst", task="inventory", bindings=[])
+    inventory = _render_review_index("snap", objects, "tekst", task="inventory", bindings=[], fragments=_allowed_source())
     assert set(_inventory_ids(inventory)) == {"blocked", "excluded", "unknown"}
     assert 'object=excluded&amp;task=history' in inventory
 
@@ -75,12 +76,12 @@ def test_open_second_review_is_not_reclassified_as_missing_disposition():
     obj.update(object_version="1.0", confirmed_object_type="exception", provenance={"canonical_object_hash": "hash"})
     binding = dict(valid=True, decision="approve", object_id="second", object_version="1.0",
                    canonical_object_hash="hash", confirmed_object_type="exception", reviewer_id="reviewer-a")
-    queues = review_followup_queues([obj], review_path="tekst", bindings=[binding])
+    queues = review_followup_queues([obj], review_path="tekst", bindings=[binding], fragments=_allowed_source())
     assert queues == {"repair": [], "disposition": []}
-    waiting = _render_review_index("snap", [obj], "tekst", task="waiting", bindings=[binding], reviewer_id="reviewer-a")
+    waiting = _render_review_index("snap", [obj], "tekst", task="waiting", bindings=[binding], reviewer_id="reviewer-a", fragments=_allowed_source())
     assert _inventory_ids(waiting) == ["second"]
     assert 'data-passage-category="waiting"' in waiting
-    assert reviewer_route_counts([obj], review_path="tekst", bindings=[binding], reviewer_id="reviewer-b")["actionable_second_review_duties"] == 1
+    assert reviewer_route_counts([obj], review_path="tekst", bindings=[binding], reviewer_id="reviewer-b", fragments=_allowed_source())["actionable_second_review_duties"] == 1
 
 
 @pytest.mark.parametrize("gate,task", [(None, "disposition"), ("blocked", "repair")])

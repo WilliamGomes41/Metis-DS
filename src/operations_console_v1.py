@@ -103,7 +103,7 @@ from src.recommendation_semantics_v1 import (
     proposed_recommendation_semantics_of,
 )
 from src.open_original_v1 import OpenOriginalError, open_source_passage, researcher_visible_prose
-from src.publish_authorization_v1 import invalidate_for_object, still_matches, tuple_record
+from src.publish_authorization_v1 import record_authorization, invalidate_for_object, still_matches, tuple_record
 from src.review_ledger import append_event, read_events
 from src.review_interaction_v1 import validate_review_interaction_identity
 from src.review_workflow_v3 import _apply_review_state
@@ -1283,9 +1283,9 @@ class OperationsConsole:
             "accounts": 0,
         }
 
-    def object_review_bindings(self, snapshot_id: str) -> list[dict[str, Any]]:
+    def object_review_bindings(self, snapshot_id: str, *, objects=None) -> list[dict[str, Any]]:
         self._envelope(snapshot_id)
-        current = {row["object_id"]: row for row in self.snapshot_objects(snapshot_id)}
+        current = {row["object_id"]: row for row in (self.snapshot_objects(snapshot_id) if objects is None else objects)}
         out = []
         for row in self._bindings.get(snapshot_id, []):
             item = dict(row)
@@ -2475,15 +2475,15 @@ class OperationsConsole:
             raise ConsoleError("source_lineage_incomplete")
         return fragments
 
-    def review_source_fragments(self, snapshot_id):
+    def review_source_fragments(self, snapshot_id, *, envelope=None):
         """Call-local authoritative extraction for content-duty readers."""
-        envelope = self._envelope(snapshot_id)
+        envelope = envelope if envelope is not None else self._envelope(snapshot_id)
         if review_path_for_klasse(envelope["class"]) == "boom":
             return None
         try:
             source_path, _ = self._verified_source_bytes(envelope)
             return self._read_source_fragments(envelope, source_path)
-        except (ConsoleError, ValueError, OSError):
+        except (ConsoleError, ValueError, OSError, KeyError):
             # A reader may show repair/disposition, never content authority.
             return None
 
@@ -3115,10 +3115,30 @@ class OperationsConsole:
             source_fragments = None
             if review_path != "boom" and content_reviewable(target):
                 source_fragments = self._require_resolved_candidate_source(envelope, target)
+            from src.integrity_kernel import stable_hash
+            command_hash = stable_hash({
+                "decision": decision, "confirmed_object_type": confirmed_object_type,
+                "recommendation_strength": recommendation_strength,
+                "recommendation_direction": recommendation_direction,
+                "recommendation_strength_level": recommendation_strength_level,
+                "relation_choices": sorted(relation_choices or ()), "relation_review_ack": relation_review_ack,
+                "suitability": suitability, "eindoordeel": eindoordeel,
+                "documentpositie_action": documentpositie_action, "found_under": found_under,
+                "parent_choice": parent_choice, "type_action": type_action,
+                "comment": comment, "proposed_correction": proposed_correction,
+            })
             current_duty = review_duty_for(target, review_path=review_path,
                                           bindings=binding_authority, fragments=source_fragments)
             route = reviewer_route_for(target, review_path=review_path, reviewer_id=actor_id,
                                        bindings=binding_authority, fragments=source_fragments)
+            if review_path != "boom" and decision == "approve" and not current_duty:
+                if any(
+                    row.get("reviewer_id") == actor_id and row.get("decision") == "approve"
+                    and row.get("review_command_hash") == command_hash and still_matches(row, target)
+                    for row in binding_authority
+                ):
+                    # An exact semantic duplicate has no transition, audit or additional authority.
+                    return deepcopy(current)
             review_domain = "content"
             if review_path != "boom":
                 if is_structural_projection(target):
@@ -3585,13 +3605,13 @@ class OperationsConsole:
                 )
                 binding["review_domain"] = review_domain if review_path != "boom" else "decision_tree"
                 binding["reviewed_at"] = utc_now()
+                binding["review_command_hash"] = command_hash
                 if passage_meta:
                     binding["suitability"] = passage_meta.get("suitability")
                     binding["eindoordeel"] = passage_meta.get("eindoordeel")
                     binding["documentpositie"] = passage_meta.get("documentpositie")
                 # Retain historical exact tuples. Current authority matches only this tuple.
-                rows = list(new_bindings.get(snapshot_id, []))
-                rows.append(binding)
+                rows = record_authorization(new_bindings.get(snapshot_id, []), binding)
                 new_bindings[snapshot_id] = rows
             else:
                 new_bindings[snapshot_id] = invalidate_for_object(
@@ -3722,8 +3742,7 @@ class OperationsConsole:
             binding["review_domain"] = "content" if review_path != "boom" else "decision_tree"
             binding["reviewed_at"] = utc_now()
             new_bindings = deepcopy(self._bindings)
-            rows = list(new_bindings.get(snapshot_id, []))
-            rows.append(binding)
+            rows = record_authorization(new_bindings.get(snapshot_id, []), binding)
             new_bindings[snapshot_id] = rows
 
             history = self._load_objects(snapshot_id)

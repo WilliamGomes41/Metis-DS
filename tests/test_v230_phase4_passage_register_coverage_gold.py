@@ -305,7 +305,7 @@ def test_allowed_candidate_is_selected_and_djg_remains_unassessed_coverage(tmp_p
     assert passage_register_of(djg).get("status") == "not_yet_assessed"
     assert passage_register_of(djg).get("reason_codes") == ["unformed_meaning"]
 
-    ordinary = ordinary_review_queue(_passages(objects))
+    ordinary = ordinary_review_queue(_passages(objects), fragments=console.review_source_fragments(receipt["snapshot_id"]), bindings=console.object_review_bindings(receipt["snapshot_id"]))
     assert adviseert["object_id"] in {obj["object_id"] for obj in ordinary}
     assert djg["object_id"] not in {obj["object_id"] for obj in ordinary}
     assert djg not in blocked_audit_lane(objects)
@@ -669,7 +669,7 @@ def test_phase3_cockpit_and_sterkte_still_present(tmp_path: Path) -> None:
     assert "Andere kop kiezen" in card
     assert "Open volledige richtlijn" in card or "broncontext" in card.lower()
     assert "Geen zelfstandig stukje kennis" in card
-    assert is_slow_review_duty(adviseert) is True
+    assert is_slow_review_duty(adviseert, fragments=console.review_source_fragments(receipt["snapshot_id"]), bindings=console.object_review_bindings(receipt["snapshot_id"])) is True
 
 
 def test_phase4_does_not_invent_serving_types() -> None:
@@ -743,5 +743,5 @@ def test_djg_source_passage_does_not_enter_ordinary_queue_as_aanbeveling(tmp_pat
     djg = _find_by_text(objects, DJG)
     assert _admission(djg) == {}
     assert ((djg.get("metadata") or {}).get("candidate_eligibility") or {}).get("eligible") is False
-    assert is_slow_review_duty(djg) is False
-    assert djg not in ordinary_review_queue(objects)
+    assert is_slow_review_duty(djg, fragments=console.review_source_fragments(receipt["snapshot_id"]), bindings=console.object_review_bindings(receipt["snapshot_id"])) is False
+    assert djg not in ordinary_review_queue(objects, fragments=console.review_source_fragments(receipt["snapshot_id"]), bindings=console.object_review_bindings(receipt["snapshot_id"]))

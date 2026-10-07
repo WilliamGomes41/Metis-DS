@@ -214,8 +214,7 @@ def test_exact_object_decisions_close_document_review_only_after_last_passage(
         str(obj["object_id"])
         for obj in normal_risk_batch_queue(
             console.snapshot_objects(snapshot_id),
-            review_path="richtlijn",
-        )
+            review_path="richtlijn", fragments=console.review_source_fragments(snapshot_id), bindings=console.object_review_bindings(snapshot_id))
     ]
     closure_before = source_passage_closure(console.snapshot_objects(snapshot_id))
     assert len(ids) == 2

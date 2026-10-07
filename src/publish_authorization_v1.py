@@ -68,3 +68,24 @@ def invalidate_for_object(bindings: list[dict[str, Any]], object_id: str) -> lis
             item["valid"] = False
         out.append(item)
     return out
+
+
+def record_authorization(bindings: list[dict[str, Any]], binding: dict[str, Any]) -> list[dict[str, Any]]:
+    """One current authorization per exact approval tuple; events retain history.
+
+    Only an authorized, successful review command calls this operation. A fresh
+    command may renew the validity of an identical withdrawn authorization.
+    Merely reassigning a reviewer never calls it. Distinct reviewed tuples stay
+    in the existing store, and the command records every decision in the ledger.
+    """
+    fields = ("object_id", "object_version", "canonical_object_hash", "reviewer_id", "decision")
+    key = tuple(binding.get(field) for field in fields)
+    rows = [dict(row) for row in bindings]
+    for row in rows:
+        if tuple(row.get(field) for field in fields) == key:
+            if row.get("confirmed_object_type") != binding.get("confirmed_object_type"):
+                raise ValueError("review_binding_tuple_conflict")
+            row["valid"] = bool(binding.get("valid"))
+            return rows
+    rows.append(dict(binding))
+    return rows

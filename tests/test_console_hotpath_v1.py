@@ -265,10 +265,16 @@ class _HotPathRouteConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole):
             },
         }
 
+    def _navigation_review_count(self, account):
+        # This HTTP fixture supplies the already computed navigation projection.
+        # Kernel and native-store parity are exercised by NavigationProbe tests.
+        return 1
+
     def review_workboard_summaries(
         self,
         account_id: str,
         snapshot_id: str | None = None,
+        *, navigation_only: bool = False,
     ) -> dict[str, dict[str, Any]]:
         self.workboard_summary_calls += 1
         assert account_id == "acc-hotpath"

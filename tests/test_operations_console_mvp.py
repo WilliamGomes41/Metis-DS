@@ -395,13 +395,8 @@ def test_uploader_cannot_be_the_sole_required_reviewer(tmp_path: Path) -> None:
     objects = console.snapshot_objects(receipt["snapshot_id"])
     target = next(obj for obj in objects if obj["object_type"] != "document")
     closed = "heading" if target["object_type"] == "heading" else "explanation"
-    console.review_object(
-        actor_id=uploader,
-        snapshot_id=receipt["snapshot_id"],
-        object_id=target["object_id"],
-        decision="approve",
-        confirmed_object_type=closed,
-    )
+    console.batch_confirm_headings(actor_id=uploader, snapshot_id=receipt["snapshot_id"],
+        object_ids=[target["object_id"]], expected_revision=console.objects_revision(receipt["snapshot_id"]))
     consider = console.consider_publish(
         actor_id=accounts["publisher"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
@@ -412,13 +407,8 @@ def test_uploader_cannot_be_the_sole_required_reviewer(tmp_path: Path) -> None:
     other = accounts["reviewer"]["account_id"]
     refreshed = console.snapshot_objects(receipt["snapshot_id"])
     target = next(obj for obj in refreshed if obj["object_id"] == target["object_id"])
-    console.review_object(
-        actor_id=other,
-        snapshot_id=receipt["snapshot_id"],
-        object_id=target["object_id"],
-        decision="approve",
-        confirmed_object_type=closed,
-    )
+    console.batch_confirm_headings(actor_id=other, snapshot_id=receipt["snapshot_id"],
+        object_ids=[target["object_id"]], expected_revision=console.objects_revision(receipt["snapshot_id"]))
     consider_after = console.consider_publish(
         actor_id=accounts["publisher"]["account_id"],
         snapshot_id=receipt["snapshot_id"],

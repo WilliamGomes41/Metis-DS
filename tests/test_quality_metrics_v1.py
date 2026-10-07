@@ -1,3 +1,4 @@
+from test_t4_single_knowledge_path_invariants import _allowed_source
 """Passive measurement contract and lifecycle regression evidence.
 # release-control-evidence: scope/belofte
 # release-control-evidence: opslag concurrent stale

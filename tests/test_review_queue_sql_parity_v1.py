@@ -52,7 +52,25 @@ def summary_database():
         yield SimpleNamespace(execute=execute)
 
     subject = _PostgresBadgeCountsMixin()
-    subject.workflow_document_store = SimpleNamespace(_connect=connect)
+    def objects_batch(ids):
+        return {sid: [r["payload"] for r in con.execute(
+            f"SELECT DISTINCT ON (object_id) payload FROM {schema}.document_objects WHERE snapshot_id=%s ORDER BY object_id,position DESC",
+            (sid,)).fetchall()] for sid in ids}
+
+    def bindings_batch(ids):
+        return {sid: [{**dict(r), "reviewer_id": r["reviewer_account_id"], "reviewer": r["reviewer_account_id"]}
+                      for r in con.execute(f"SELECT * FROM {schema}.publish_authorizations WHERE snapshot_id=%s", (sid,)).fetchall()]
+                for sid in ids}
+
+    from test_t4_single_knowledge_path_invariants import _allowed_source
+    from src.document_status_v1 import derive_lifecycle_status
+    subject.workflow_document_store = SimpleNamespace(_connect=connect, list_current_objects_batch=objects_batch)
+    subject.workflow_review_store = SimpleNamespace(read_bindings=bindings_batch)
+    subject.canonical_publication_store = None
+    subject._account = lambda actor: {"account_id": actor, "roles": ["reviewer"]}
+    subject.review_source_fragments = lambda sid, **kwargs: _allowed_source()
+    subject.list_document_lifecycle_statuses = lambda ids: {sid: derive_lifecycle_status(readiness={}, release_status="none", serving_status="inactive") for sid in ids}
+    subject.snapshot_is_published = lambda sid: False
     try:
         yield con, schema, subject, captured
     finally:
@@ -63,6 +81,7 @@ def summary_database():
 @pytest.mark.parametrize("kind", ["richtlijn", "beslisboom"])
 def test_sql_sets_match_domain_queues_including_missing_admission(summary_database, kind):
     from psycopg.types.json import Jsonb
+    from test_t4_single_knowledge_path_invariants import _allowed_source
     con, schema, subject, captured = summary_database
     path = "boom" if kind == "beslisboom" else "tekst"
     objects = [_obj(f"allowed-{i}", "recommendation") for i in range(5)]
@@ -103,7 +122,7 @@ def test_sql_sets_match_domain_queues_including_missing_admission(summary_databa
         malformed["metadata"]["semantic_passage"]["spans"] = spans
         objects.append(malformed)
     for obj in objects:
-        obj.update(object_version="1.0", provenance={"canonical_object_hash": obj["object_id"]})
+        obj["object_version"] = "1.0"
     by_id = {o["object_id"]: o for o in objects}
     for object_id in ("confirmed", "second", "second-missing"):
         by_id[object_id]["confirmed_object_type"] = by_id[object_id]["object_type"]
@@ -115,11 +134,14 @@ def test_sql_sets_match_domain_queues_including_missing_admission(summary_databa
     for object_id in ("invalid-register", "superseded-invalid-register"):
         by_id[object_id]["metadata"]["passage_register"] = {}
     by_id["excluded"]["metadata"]["passage_register"].update(status="excluded_with_reason", source="review")
+    from src.integrity_kernel import stamp_canonical_hashes
+    for obj in objects:
+        stamp_canonical_hashes(obj)
     bindings = []
     for object_id in ("second", "second-missing", "risk-flag-only", "risk-unknown-field", "risk-logic", "risk-metadata"):
-        bindings.append(dict(object_id=object_id, object_version="1.0", canonical_object_hash=object_id,
+        bindings.append(dict(object_id=object_id, object_version="1.0", canonical_object_hash=by_id[object_id]["provenance"]["canonical_object_hash"],
                              confirmed_object_type=by_id[object_id].get("confirmed_object_type", ""), reviewer_id="a", valid=True, decision="approve"))
-    envelope = dict(snapshot_id="snap", title="Parity", version="1.0", **{"class": kind})
+    envelope = dict(snapshot_id="snap", title="Parity", version="1.0", named_reviewers=["a", "b"], **{"class": kind})
     con.execute(f"INSERT INTO {schema}.documents VALUES (%s,%s,%s,%s)", ("snap", kind, Jsonb(envelope), "blocked_pending_review"))
     for actor in ("a", "b"):
         con.execute(f"INSERT INTO {schema}.accounts VALUES (%s,%s,%s)", (actor, actor, actor))
@@ -134,30 +156,13 @@ def test_sql_sets_match_domain_queues_including_missing_admission(summary_databa
                     ("snap", binding["object_id"], "a", True, "approve", "1.0", binding["canonical_object_hash"], binding["confirmed_object_type"]))
     for actor in ("a", "b"):
         summary = subject.review_workboard_summaries(actor, "snap")["snap"]
-        expected = reviewer_route_counts(objects, review_path=path, reviewer_id=actor, bindings=bindings)
+        expected = reviewer_route_counts(objects, review_path=path, reviewer_id=actor, bindings=bindings, fragments=_allowed_source())
         for key, value in expected.items():
             assert summary[key] == value, (kind, actor, key)
-        # Query the actual production CTE rows rather than infer sets from totals.
-        ctes = captured["sql"].rsplit("SELECT a.snapshot_id,", 1)[0]
-        rows = con.execute(ctes + "SELECT * FROM duty_rows", captured["params"]).fetchall()
-        for task, predicate in {
-            "structure": lambda r: r["structure_review_duty"] and r["first_review_open"],
-            "contextual": lambda r: r["contextual_review_duty"] and r["first_review_open"],
-            "batch": lambda r: r["batch_review_duty"],
-            "second_review": lambda r: r["second_review_open"] and not r["reviewer_has_approved"],
-        }.items():
-            sql_ids = {r["object_id"] for r in rows if predicate(r)}
-            python_ids = {o["object_id"] for o in objects
-                          if (route := reviewer_route_for(o, review_path=path, reviewer_id=actor, bindings=bindings))
-                          and route["actionable"] and route["canonical_task"] == task}
-            assert sql_ids == python_ids, (kind, actor, task, sql_ids ^ python_ids)
-        followups = review_followup_queues(objects, review_path=path, bindings=bindings)
+        # The SQL projection selects documents. It cannot own a second duty predicate.
+        assert "duty_rows" not in captured["sql"]
+        assert "authorization_counts" not in captured["sql"]
+        assert "needs_review" not in captured["sql"]
+        followups = review_followup_queues(objects, review_path=path, bindings=bindings, fragments=_allowed_source())
         assert summary["blocked_count"] == len(followups["repair"])
         assert summary["closure_gap_count"] == len(followups["disposition"])
-        for task in ("repair", "disposition"):
-            sql_ids = {
-                r["object_id"] for r in rows
-                if r["unresolved_closure"] and not r["review_duty_open"]
-                and ((not r["boom"] and r["gate_result"] == "blocked") == (task == "repair"))
-            }
-            assert sql_ids == {obj["object_id"] for obj in followups[task]}
