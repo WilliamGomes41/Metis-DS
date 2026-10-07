@@ -1,7 +1,7 @@
 """Multi-instance optimistic merge for PostgreSQL workflow document objects."""
 from __future__ import annotations
 
-from src.revision_workflow import validate_revision_write
+from src.revision_workflow import current_revisions, validate_revision_write
 
 import base64
 import hashlib
@@ -358,6 +358,7 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                     self._write_envelope_locked(con, envelope)
                     next_objects = current_objects
                     if objects is not None:
+                        current_revisions(objects, snapshot_id=snapshot_id)
                         next_objects = self._merge_objects(
                             current=current_objects,
                             submitted=objects,

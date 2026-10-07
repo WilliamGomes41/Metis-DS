@@ -290,3 +290,43 @@ def test_locked_storage_rejects_adversarial_history(attack, backend, recovery_po
             state.workflow_document_store.write_bundle(envelope=state._envelope(sid),
                 objects=changed, expected_revision=token)
     assert state.snapshot_objects(sid, include_blocked=True) == original
+
+
+def test_revision_rebinds_exact_relation_endpoints_and_preserves_predecessor(tmp_path):
+    from src.revision_workflow import revise_object
+    from src.knowledge_relations_v1 import build_knowledge_relation, validate_knowledge_relation_set
+    from src.integrity_kernel import stamp_canonical_hashes
+    _, _, sid, candidate = _console(tmp_path)
+    original = deepcopy(candidate)
+    relation = build_knowledge_relation(source_object_id=original["object_id"],
+        source_object_version=original["object_version"], relation_type="supports",
+        target_object_id="target", target_object_version="1.0")
+    original["confirmed_knowledge_relations"] = [relation]
+    stamp_canonical_hashes(original)
+    before = deepcopy(original)
+    proposed = deepcopy(original)
+    proposed["content"]["clean_text"] += " Changed."
+    revised = revise_object(original, proposed, snapshot_id=sid, actor="reviewer", reason="correction")
+    assert original == before
+    assert not validate_knowledge_relation_set(revised["confirmed_knowledge_relations"],
+        source_object_id=revised["object_id"], source_object_version=revised["object_version"])
+    after = revised["confirmed_knowledge_relations"][0]
+    assert after["target_object_id"] == relation["target_object_id"]
+    assert after["target_object_version"] == relation["target_object_version"]
+    assert after["relation_id"] != relation["relation_id"]
+
+
+def test_reprocessing_retirement_and_reappearance_preserve_strict_history(tmp_path):
+    from src.revision_workflow import reprocessed_history, current_revisions
+    _, _, sid, candidate = _console(tmp_path)
+    retired = reprocessed_history([candidate], [], snapshot_id=sid, actor="researcher")
+    assert retired[0] == candidate
+    assert len(retired) == 2
+    assert retired[-1]["governance"]["validation_status"] == "superseded"
+    assert reprocessed_history(retired, [], snapshot_id=sid, actor="researcher") == retired
+    restored = reprocessed_history(retired, [candidate], snapshot_id=sid, actor="researcher")
+    assert restored[:2] == retired
+    assert len(restored) == 3
+    latest = current_revisions(restored, snapshot_id=sid)[0]
+    assert latest["provenance"]["previous_object_version"] == retired[-1]["object_version"]
+    assert latest["governance"]["validation_status"] == "needs_review"
