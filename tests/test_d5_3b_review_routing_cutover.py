@@ -71,7 +71,7 @@ def _console(tmp_path: Path) -> tuple[OperationsConsole, dict[str, dict], str, s
     target = next(
         row
         for row in rows
-        if row.get("object_type") != "document"
+        if row.get("object_type") not in {"document", "heading"}
         and str((row.get("content") or {}).get("clean_text") or "").strip()
     )
     target["object_type"] = "recommendation"
@@ -88,9 +88,14 @@ def _console(tmp_path: Path) -> tuple[OperationsConsole, dict[str, dict], str, s
     admission = metadata.setdefault("admission", {})
     admission["gate_result"] = "allowed"
     text = str((target.get("content") or {}).get("clean_text") or "")
+    from src.semantic_passage_v1 import semantic_source_blocks
+    envelope = console._envelope(snapshot_id)
+    source_path, _ = console._verified_source_bytes(envelope)
+    fragments = console._read_source_fragments(envelope, source_path)
+    block = next(b for b in semantic_source_blocks(fragments) if b["text"] == text)
     metadata["semantic_passage"] = {
         "selection_origin": "proposal_selected",
-        "spans": [{"block_id": "block-d53b", "start": 0, "end": len(text) or 1}],
+        "spans": [{"block_id": block["block_id"], "start": 0, "end": len(text)}],
     }
     target["risk"] = {
         "level": "high",

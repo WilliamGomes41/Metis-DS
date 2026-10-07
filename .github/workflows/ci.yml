@@ -84,7 +84,7 @@ jobs:
       - name: Verify architecture invariants
         run: pytest -q tests/test_architecture_invariants.py
       - name: Verify T5-T7 audit regressions
-        run: pytest -q tests/test_t4_single_knowledge_path_invariants.py tests/test_t5_t7_audit_repairs.py tests/test_t7_creator_cut.py
+        run: pytest -q tests/test_t4_single_knowledge_path_invariants.py tests/test_t5_t7_audit_repairs.py tests/test_t7_creator_cut.py tests/test_d5_3a_binding_aware_review_duty.py tests/test_d5_3b_review_routing_cutover.py tests/test_review_queue_sql_parity_v1.py
       - run: pytest -q
       - name: Install isolated browser test tooling
         if: matrix.python-version == '3.12'

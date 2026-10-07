@@ -54,3 +54,16 @@ compatibility proof; automatic history rewriting is not a rollback strategy.
 The regression suite is tests/test_t5_t7_audit_repairs.py alongside T4/T7.
 CI status and limitations are recorded in the PR; an uncompleted or failed full
 check is not a merge recommendation. No production verification is claimed.
+
+## PostgreSQL routing parity
+
+Full CI exposed the legacy summary SQL still opening duties from Admission or
+confirmed type alone. Its read-only content_candidate projection now mirrors
+the selection/shape/admission predicate; it is never publication authority.
+The parity test compares exact object sets and includes forged deterministic
+and malformed-span rows. Source resolution remains in authoritative commands.
+D5.3 fixture rows now use a real source block instead of an invented block ID.
+
+The initial full suite exposed 139 failures and 8 fixture errors despite the
+focused regression pass. This repair is not complete until remaining failures
+are classified and fixed without restoring splitter-created knowledge authority.

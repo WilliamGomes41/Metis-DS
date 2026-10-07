@@ -33,6 +33,10 @@ def _obj(
         "confirmed_object_type": "recommendation",
         "content": {"clean_text": "Doe dit."},
         "metadata": {
+            "semantic_passage": {
+                "selection_origin": "proposal_selected",
+                "spans": [{"block_id": "binding-fixture", "start": 0, "end": len("Doe dit.")}],
+            },
             "admission": {
                 "gate_result": "allowed",
                 "section_path": ["Advies"],
