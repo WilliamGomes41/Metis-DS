@@ -13,7 +13,7 @@ import json
 
 import pytest
 
-from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
+from src.knowledge_materialisation_v1 import materialise_knowledge_candidates, validate_materialised_candidate
 from src.knowledge_path_v1 import content_reviewable, source_lineage_resolves
 from src.semantic_passage_v1 import (
     semantic_source_blocks, semantic_units_from_proposal, source_coverage_records,
@@ -66,7 +66,7 @@ def test_dedup_preserves_one_existing_materialised_candidate_whole(selected, rev
     spans = actual["semantic_passage"]["spans"]
     material = "|".join(f'{s["block_id"]}:{s["start"]}:{s["end"]}' for s in spans)
     assert actual["object_id"] == "doc-sem-" + hashlib.sha256(material.encode()).hexdigest()[:16]
-    assert source_lineage_resolves(actual, fragments=fragments)
+    assert validate_materialised_candidate(actual, fragments=fragments)["source_fragment_ids"] == actual["source_fragment_ids"]
 
 
 def test_source_only_duplicates_stay_source_records():
