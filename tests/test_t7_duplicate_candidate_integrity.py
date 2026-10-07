@@ -147,7 +147,7 @@ def test_real_ingest_review_and_restart_keep_selected_identity_and_source(tmp_pa
     assert candidate["metadata"]["semantic_passage"]["spans"] == [span]
     digest = hashlib.sha256(f'{span["block_id"]}:0:{span["end"]}'.encode()).hexdigest()[:16]
     assert candidate["object_id"] == envelope["document_id"] + "-sem-" + digest
-    assert [r["fragment_id"] for r in candidate["provenance"]["source_fragments"]] == chosen["source_fragment_ids"]
+    assert [r["raw_object_id"] for r in candidate["provenance"]["source_fragments"]] == chosen["source_fragment_ids"]
     assert source_lineage_resolves(candidate, fragments=fragments)
     state.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
         object_id=candidate["object_id"], decision="approve", confirmed_object_type="definition")
