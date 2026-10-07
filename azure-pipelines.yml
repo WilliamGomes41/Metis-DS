@@ -1,29 +1,74 @@
-# Docker
-# Build a Docker image
-# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
-
 trigger:
-- main
+  batch: true
+  branches:
+    include:
+      - main
+
+pr: none
+
+schedules:
+- cron: "0 * * * *"
+  displayName: Elk uur synchroniseren
+  branches:
+    include:
+      - main
+  always: true
+
+pool:
+  vmImage: ubuntu-latest
 
 resources:
-- repo: self
+  repositories:
+  - repository: devops
+    type: git
+    name: Metis/Metis
+    ref: refs/heads/main
 
-variables:
-  tag: '$(Build.BuildId)'
+steps:
+- checkout: devops
+  fetchDepth: 1
+  path: s/devops
 
-stages:
-- stage: Build
-  displayName: Build image
-  jobs:
-  - job: Build
-    displayName: Build
-    pool:
-      vmImage: ubuntu-latest
-    steps:
-    - task: Docker@2
-      displayName: Build an image
-      inputs:
-        command: build
-        dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
-        tags: |
-          $(tag)
+- bash: |
+    set -euo pipefail
+    export LC_ALL=C
+
+    git clone --bare \
+      https://github.com/WilliamGomes41/Metis-DS.git \
+      "$AGENT_TEMPDIRECTORY/metis-source.git"
+
+    cd "$AGENT_TEMPDIRECTORY/metis-source.git"
+
+    # Authenticatie geldt alleen voor de Azure DevOps-repository.
+    export GIT_CONFIG_COUNT=1
+    export GIT_CONFIG_KEY_0="http.${TARGET_URL}.extraheader"
+    export GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${AZURE_TOKEN}"
+
+    # GitHub is de bron; alleen branches en tags worden gespiegeld.
+    # Dit neemt ook herschreven geschiedenis en verwijderingen over.
+    git push --prune "$TARGET_URL" \
+      '+refs/heads/*:refs/heads/*' \
+      '+refs/tags/*:refs/tags/*'
+
+    git for-each-ref \
+      --format='%(objectname) %(refname)' \
+      refs/heads refs/tags | sort > source-refs.txt
+
+    git ls-remote --refs "$TARGET_URL" \
+      'refs/heads/*' 'refs/tags/*' |
+      awk '{print $1 " " $2}' |
+      sort > target-refs.txt
+
+    if ! cmp -s source-refs.txt target-refs.txt; then
+      echo "Controle mislukt: bron- en doelbranches of tags verschillen."
+      diff -u source-refs.txt target-refs.txt || true
+      exit 1
+    fi
+
+    echo "Controle geslaagd: bron- en doelbranches en tags zijn gelijk."
+  displayName: GitHub naar Azure Repos kopiëren
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  env:
+    AZURE_TOKEN: $(System.AccessToken)
+    TARGET_URL: https://dev.azure.com/vvnmetis/Metis/_git/Metis
+    GIT_TERMINAL_PROMPT: "0"
