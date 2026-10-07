@@ -245,3 +245,48 @@ def test_legacy_history_reorder_cannot_restore_old_current_approval(tmp_path):
     stamp_canonical_hashes(second)
     with pytest.raises(ValueError, match="revision_history_reordered"):
         validate_revision_write([first, second], [second, first], snapshot_id=sid)
+
+
+@pytest.mark.parametrize("attack", ["reorder", "promote_in_place", "alter_predecessor"])
+@pytest.mark.parametrize("backend", ["file", "postgres"])
+def test_locked_storage_rejects_adversarial_history(attack, backend, recovery_postgres, tmp_path):
+    from src.integrity_kernel import stamp_canonical_hashes
+    from src.revision_workflow import revise_object
+    from tests.test_lifecycle_withdrawal_recovery_v1 import _console as native_console
+    from tests.test_publication_chain_recovery_v1 import FakeBlobStore
+    from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+    if backend == "postgres":
+        state = native_console(tmp_path, recovery_postgres, FakeBlobStore())
+        state, _, _, _, obj, command = _system(tmp_path, state)
+        sid = command["snapshot_id"]
+    else:
+        state, _, sid, obj = _console(tmp_path)
+    original = deepcopy(state.snapshot_objects(sid, include_blocked=True))
+    token = state.objects_revision(sid)
+    if attack == "promote_in_place":
+        changed = deepcopy(original)
+        heading = next(o for o in changed if o["object_type"] == "heading")
+        heading["object_type"] = heading["confirmed_object_type"] = "definition"
+        heading["metadata"]["semantic_passage"] = deepcopy(obj["metadata"]["semantic_passage"])
+        stamp_canonical_hashes(heading)
+    else:
+        desired = deepcopy(obj)
+        desired["content"]["clean_text"] += " Corrected."
+        strict = revise_object(obj, desired, snapshot_id=sid, actor="reviewer", reason="correction")
+        changed = deepcopy(original) + [strict]
+        if attack == "reorder":
+            # Retained legacy revisions also cannot be reordered. Seed legacy
+            # history in an isolated validation call; real storage rejects a
+            # successor that appears before its actual predecessor.
+            changed.remove(strict)
+            changed.insert(0, strict)
+        else:
+            predecessor = next(o for o in changed if o["object_id"] == obj["object_id"])
+            predecessor["governance"]["validated_by"] = "forged historical reviewer"
+    with pytest.raises((ValueError, WorkflowDocumentStoreError, ConsoleError)):
+        if backend == "file":
+            state._save_objects(sid, changed, expected_revision=token)
+        else:
+            state.workflow_document_store.write_bundle(envelope=state._envelope(sid),
+                objects=changed, expected_revision=token)
+    assert state.snapshot_objects(sid, include_blocked=True) == original

@@ -903,7 +903,9 @@ class OperationsConsole:
                     SNAPSHOT_OBJECT_WRITE_CONFLICT,
                     current_revision=current_rev,
                 )
-            previous = self._load_objects(snapshot_id, remember=False)
+            # Already holding the file flock: do not reacquire via _load_objects.
+            previous = ([json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
+                         if line.strip()] if path.exists() else [])
             validate_revision_write(previous, rows, snapshot_id=snapshot_id)
             payload = _objects_jsonl_bytes(rows)
             _atomic_replace_bytes(path, payload)

@@ -207,7 +207,7 @@ def validate_revision_write(previous, submitted, *, snapshot_id):
     """Called under the existing file lock / PostgreSQL row lock and CAS."""
     from src.integrity_kernel import compute_canonical_object_hash
     old_current = {row["object_id"]: row for row in current_revisions(previous, snapshot_id=snapshot_id)}
-    current_revisions(submitted, snapshot_id=snapshot_id)
+    new_current = {row["object_id"]: row for row in current_revisions(submitted, snapshot_id=snapshot_id)}
     old = {(row["object_id"], row["object_version"]): row for row in previous}
     new = {(row["object_id"], row["object_version"]): row for row in submitted}
     retained_order = [(row["object_id"], row["object_version"]) for row in submitted
@@ -218,13 +218,14 @@ def validate_revision_write(previous, submitted, *, snapshot_id):
         raise ValueError("revision_history_reordered")
     for identity, before in old.items():
         after = new.get(identity)
-        if not knowledge_revision(before):
+        if not (knowledge_revision(before) or after is not None and knowledge_revision(after)):
             continue
         if after is None:
             raise ValueError("revision_history_removed")
         if compute_canonical_object_hash(before) != compute_canonical_object_hash(after):
             raise ValueError("revision_content_changed_in_place")
-        if old_current[identity[0]] != before and after != before:
+        if (new_current[identity[0]]["object_version"] != identity[1]
+                or old_current[identity[0]] != before) and after != before:
             raise ValueError("revision_history_changed")
     for identity, after in new.items():
         if identity in old:
