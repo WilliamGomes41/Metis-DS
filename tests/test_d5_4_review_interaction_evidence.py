@@ -104,7 +104,8 @@ def _system(tmp_path: Path) -> tuple[OperationsConsole, dict[str, dict], str, st
         "snapshot_hash": None,
     }
     stamp_canonical_hashes(target)
-    console._save_objects(snapshot_id, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, snapshot_id, rows)
     return (
         console,
         {
@@ -316,7 +317,8 @@ def test_second_review_uses_same_evidence_store_without_changing_object_tuple(
         "snapshot_hash": None,
     }
     stamp_canonical_hashes(target)
-    console._save_objects(snapshot_id, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, snapshot_id, rows)
     live = next(row for row in console.snapshot_objects(snapshot_id) if row["object_id"] == object_id)
     first = tuple_record(
         object_id=object_id,

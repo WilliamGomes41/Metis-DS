@@ -996,7 +996,8 @@ def test_block_b_machine_proposed_strength_stays_hidden_until_type_confirm(
             row["confirmed_object_type"] = None
             if row.get("object_type") == "recommendation":
                 row["object_type"] = "unclassified"
-    console._save_objects(receipt["snapshot_id"], rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, receipt["snapshot_id"], rows)
     planted = next(
         obj
         for obj in console.snapshot_objects(receipt["snapshot_id"])

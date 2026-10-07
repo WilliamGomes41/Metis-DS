@@ -7,6 +7,8 @@ outside the supported topology.
 """
 from __future__ import annotations
 
+from src.revision_workflow import current_revisions, validate_revision_write
+
 import hashlib
 import json
 from contextlib import contextmanager, suppress
@@ -168,13 +170,13 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                     "WHERE snapshot_id=ANY(%s) ORDER BY snapshot_id,position",
                     (snapshot_ids,),
                 ).fetchall()
-            current: dict[str, dict[str, dict[str, Any]]] = {sid: {} for sid in snapshot_ids}
+            histories = {sid: [] for sid in snapshot_ids}
             for row in rows:
                 if row["position"] is None:
                     raise WorkflowDocumentStoreError("workflow_document_cutover_not_prepared")
                 obj = dict(row["payload"]) if isinstance(row["payload"], dict) else json.loads(row["payload"])
-                current[str(row["snapshot_id"])][obj["object_id"]] = obj
-            return {sid: list(objects.values()) for sid, objects in current.items()}
+                histories[str(row["snapshot_id"])].append(obj)
+            return {sid: current_revisions(objects, snapshot_id=sid) for sid, objects in histories.items()}
         except WorkflowDocumentStoreError:
             raise
         except Exception as exc:
@@ -277,6 +279,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                     if any(not a or not b for a, b in identities) or len(set(identities)) != len(identities):
                         raise WorkflowDocumentStoreError("workflow_object_identity_invalid")
                     if objects is not None:
+                        validate_revision_write(current_objects, next_objects, snapshot_id=snapshot_id)
                         con.execute("DELETE FROM workflow.document_objects WHERE snapshot_id=%s", (snapshot_id,))
                         for position, obj in enumerate(next_objects):
                             con.execute(
@@ -422,10 +425,7 @@ class _PostgresWorkflowDocumentsMixin:
             raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
         if include_blocked:
             return deepcopy(rows), revision
-        current: dict[str, dict[str, Any]] = {}
-        for row in rows:
-            current[row["object_id"]] = row
-        return deepcopy(list(current.values())), revision
+        return deepcopy(current_revisions(rows, snapshot_id=snapshot_id)), revision
 
     def objects_revision(self, snapshot_id: str) -> str:
         try:
@@ -618,6 +618,8 @@ class _PostgresWorkflowDocumentsMixin:
             target_bindings = deepcopy(self._bindings)
             if bindings is not None:
                 target_bindings = self._rebase_snapshot_map(self._bindings, bindings, sid)
+            self._guard_prepared_working_revision_mutation(
+                envelopes=target_envelopes, bindings=target_bindings, objects=objects, snapshot_id=sid)
             prior_bindings = deepcopy(self._bindings)
             prior_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
             try:

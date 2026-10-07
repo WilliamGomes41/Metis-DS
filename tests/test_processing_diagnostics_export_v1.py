@@ -114,7 +114,8 @@ def _system(tmp_path):
             "section_path": ["Richtlijn"],
         }
         stamp_canonical_hashes(row)
-    console._save_objects(snapshot_id, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, snapshot_id, rows)
     return console, reviewer, other, publisher, snapshot_id
 
 
@@ -320,7 +321,8 @@ def test_source_label_guidance_http_and_export_preserve_review_state(tmp_path):
     target['metadata']['admission']['candidate_text'] = 'DOEN'
     target['metadata']['admission']['source_text_exact'] = 'DOEN'
     stamp_canonical_hashes(target)
-    console._save_objects(sid, objects)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, sid, objects)
     client = _client(console)
     _login(client, 'reviewer.d2a1')
     before = deepcopy(console.snapshot_objects(sid, include_blocked=True))
@@ -390,7 +392,8 @@ def test_processing_evidence_download_preserves_recorded_and_missing_evidence(tm
     target["metadata"]["admission"]["type_evidence_spans"] = []
     target["content"]["clean_text"] = '=HYPERLINK("bad")\nEen, "zin".'
     stamp_canonical_hashes(target)
-    console._save_objects(snapshot_id, objects)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, snapshot_id, objects)
     envelope["private_configuration"] = "must-not-be-exported"
     before = deepcopy((console.snapshot_objects(snapshot_id), envelope, console.object_review_bindings(snapshot_id)))
     monkeypatch.setattr(console, "_extract", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not reextract")))

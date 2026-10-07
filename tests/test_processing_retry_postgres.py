@@ -182,6 +182,7 @@ def test_changes_during_provider_work_block_stale_activation(workflow_postgres, 
     second = _console(tmp_path, workflow_postgres)
     original = console._fragments_and_spec
     retained = []
+    sealed = []
     def changed(*args, **kwargs):
         result = original(*args, **kwargs)
         envelope = deepcopy(second._envelope(sid))
@@ -197,13 +198,23 @@ def test_changes_during_provider_work_block_stale_activation(workflow_postgres, 
             else:
                 retained.append({"object_id": "concurrent-work", "object_version": "1", "content": {"raw_text": "Retained"}})
             second.workflow_document_store.write_bundle(envelope=envelope, objects=retained or None)
+            if change == "published":
+                sealed.append(deepcopy(second.workflow_document_store.get_envelope(sid)))
         return result
     monkeypatch.setattr(console, "_fragments_and_spec", changed)
-    with pytest.raises(ConsoleError):
+    with pytest.raises(ConsoleError) as rejected:
         console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id="stale")
     restarted = _console(tmp_path, workflow_postgres)
     assert restarted.snapshot_objects(sid) == retained
-    assert restarted._envelope(sid)[KEY][-1]["state"] == "failed"
+    if change == "published":
+        assert rejected.value.code == "published_working_revision_immutable"
+        # The recorded running value is frozen history, not recoverable work.
+        assert restarted.processing_status(sid)["retry_allowed"] is False
+        # No failure checkpoint may rewrite a now-immutable WorkingRevision.
+        assert restarted._envelope(sid) == sealed[0]
+        assert restarted._envelope(sid)[KEY][-1]["state"] == "running"
+    else:
+        assert restarted._envelope(sid)[KEY][-1]["state"] == "failed"
     assert not any(a["state"] == "succeeded" for a in restarted._envelope(sid)[KEY])
 
 

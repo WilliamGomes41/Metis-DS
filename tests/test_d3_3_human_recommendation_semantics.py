@@ -151,7 +151,8 @@ def _plant_new_format_proposal(
             path.append(label)
         structure["section_path"] = path
         stamp_canonical_hashes(row)
-    console._save_objects(snapshot_id, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, snapshot_id, rows)
     return _target(console, snapshot_id)
 
 
@@ -573,7 +574,8 @@ def test_strength_error_does_not_hide_a_stale_review(tmp_path: Path) -> None:
         if row['object_id'] == target['object_id']:
             row['content']['clean_text'] += ' Controleer de gewijzigde passage.'
             stamp_canonical_hashes(row)
-    console._save_objects(sid, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, sid, rows)
     before = deepcopy(console.snapshot_objects(sid))
     latest_revision = console.objects_revision(sid)
     assert latest_revision != old_revision

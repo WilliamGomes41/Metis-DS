@@ -224,15 +224,19 @@ def _step(card: str, letter: str) -> str:
 
 
 def _strip_locator(console: OperationsConsole, snapshot_id: str, object_id: str) -> None:
+    from src.integrity_kernel import stamp_canonical_hashes
+    from tests.semantic_fixture_support import install_fixture_history
+    current = next(row for row in console.snapshot_objects(snapshot_id) if row["object_id"] == object_id)
     rows = console._load_objects(snapshot_id)
     for row in rows:
-        if row["object_id"] != object_id:
+        if row["object_id"] != object_id or row["object_version"] != current["object_version"]:
             continue
         provenance = row.setdefault("provenance", {})
         for frag in provenance.get("source_fragments") or []:
             frag.pop("source_locator", None)
         row.pop("source_locator", None)
-    console._save_objects(snapshot_id, rows)
+        stamp_canonical_hashes(row)
+    install_fixture_history(console, snapshot_id, rows)
 
 
 def _heading_id(objects: list[dict], current_id: str) -> str:

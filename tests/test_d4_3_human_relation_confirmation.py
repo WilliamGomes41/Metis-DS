@@ -119,7 +119,10 @@ def _plant_proposals(
 
     rows = console._load_objects(snapshot_id)
     proposal_rows: list[dict] = []
+    current_keys = {(row["object_id"], row["object_version"]) for row in current.values()}
     for row in rows:
+        if (row["object_id"], row["object_version"]) not in current_keys:
+            continue
         if row["object_id"] == cond["object_id"]:
             row["proposed_object_type"] = "condition"
             stamp_canonical_hashes(row)
@@ -166,7 +169,8 @@ def _plant_proposals(
                 for item in proposal_rows
             ]
             stamp_canonical_hashes(row)
-    console._save_objects(snapshot_id, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, snapshot_id, rows)
     live = _rows(console, snapshot_id)[REC]
     return live, proposal_rows
 
@@ -337,11 +341,13 @@ def test_target_version_change_rejects_entire_confirmation_without_partial_write
 
     rows = console._load_objects(snapshot_id)
     condition_id = proposals[0]["target_object_id"]
+    condition_version = proposals[0]["target_object_version"]
     for row in rows:
-        if row["object_id"] == condition_id:
+        if row["object_id"] == condition_id and row["object_version"] == condition_version:
             row["object_version"] = "1.1"
             stamp_canonical_hashes(row)
-    console._save_objects(snapshot_id, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, snapshot_id, rows)
 
     with pytest.raises(ConsoleError, match="knowledge_relation_target_stale"):
         _approve(
@@ -450,7 +456,8 @@ def test_semantic_retry_preserves_relation_decisions(tmp_path: Path, choice_coun
         if row["object_id"] == rec["object_id"]:
             row[SEMANTICS_FIELD] = semantics
             stamp_canonical_hashes(row)
-    console._save_objects(sid, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, sid, rows)
     before = deepcopy(console.snapshot_objects(sid))
     selected = [relation_choice_value(row) for row in proposals[:choice_count]]
     client = TestClient(create_console_app(console))

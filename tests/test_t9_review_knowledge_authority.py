@@ -288,7 +288,8 @@ def test_direct_post_cannot_force_blocked_content_review(tmp_path):
         if row["object_id"] == obj["object_id"]:
             row["metadata"]["admission"]["gate_result"] = "blocked"
             stamp_canonical_hashes(row)
-    console._save_objects(sid, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, sid, rows)
     before = _state(console, sid)
     response = _post_review(_http(console), sid, obj, console.objects_revision(sid))
     assert response.status_code == 400
@@ -354,7 +355,8 @@ def test_historical_binding_survives_changed_context_without_approval_carry(tmp_
         if row["object_id"] == obj["object_id"] and row["object_version"] == old[0]["object_version"]:
             row.setdefault("metadata", {})["review_context"] = {"t9_changed": True}
             stamp_canonical_hashes(row)
-    console._save_objects(sid, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, sid, rows)
     current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
     assert console._bindings[sid] == old
     assert exact_current_approver_ids(current, console.object_review_bindings(sid)) == ()
@@ -429,7 +431,8 @@ def test_direct_console_approve_cannot_create_authority_for_nonreview_work(tmp_p
         else:
             target["content"]["clean_text"] += " Onjuiste nieuwe tekst."
         stamp_canonical_hashes(target)
-        console._save_objects(sid, rows)
+        from tests.semantic_fixture_support import install_fixture_history
+        install_fixture_history(console, sid, rows)
     before = _state(console, sid)
     with pytest.raises(ConsoleError):
         console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
@@ -449,7 +452,8 @@ def test_actual_four_eyes_commands_require_an_independent_second_human(tmp_path)
     target = next(o for o in rows if o["object_id"] == obj["object_id"])
     target["risk"]["risk_level"] = "high"
     stamp_canonical_hashes(target)
-    console._save_objects(sid, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, sid, rows)
     _approve(console, reviewer, sid, target, expected_revision=console.objects_revision(sid))
     current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
     args = {"review_path": "richtlijn", "bindings": console.object_review_bindings(sid),
@@ -514,7 +518,8 @@ def test_second_review_post_requires_the_reviewed_revision(tmp_path, pin):
     target = next(o for o in rows if o["object_id"] == obj["object_id"])
     target["risk"]["risk_level"] = "high"
     stamp_canonical_hashes(target)
-    console._save_objects(sid, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, sid, rows)
     _approve(console, reviewer, sid, target, expected_revision=console.objects_revision(sid))
     client = _http(console)
     client.post("/login", data={"username": "carla", "password": "carla-secret"})
@@ -557,7 +562,8 @@ def test_second_stage_revise_requires_an_actionable_independent_reviewer(tmp_pat
     target = next(o for o in rows if o["object_id"] == obj["object_id"])
     target["risk"]["risk_level"] = "high"
     stamp_canonical_hashes(target)
-    console._save_objects(sid, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, sid, rows)
     _approve(console, reviewer, sid, target, expected_revision=console.objects_revision(sid))
     current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
     assert review_stage(current, review_path="richtlijn", bindings=console.object_review_bindings(sid),

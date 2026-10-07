@@ -50,8 +50,11 @@ def legacy_recommendation_fixture(console, snapshot_id):
     """Represent a persisted pre-D3 candidate without rewriting review evidence."""
     from src.integrity_kernel import stamp_canonical_hashes
     rows = console._load_objects(snapshot_id)
+    current = {(row["object_id"], row["object_version"]) for row in console.snapshot_objects(snapshot_id)}
     changed = False
     for row in rows:
+        if (row["object_id"], row["object_version"]) not in current:
+            continue
         if (row.get("metadata") or {}).get("semantic_passage", {}).get("selection_origin") != "proposal_selected":
             continue
         if "proposed_recommendation_semantics" not in row:
@@ -61,7 +64,7 @@ def legacy_recommendation_fixture(console, snapshot_id):
         row.get("metadata", {}).pop("recommendation_semantics_evidence", None)
         stamp_canonical_hashes(row)
     if changed:
-        console._save_objects(snapshot_id, rows)
+        install_fixture_history(console, snapshot_id, rows)
 
 
 def materialised_fixture(text, *, proposed_type="recommendation", document_id="doc-fixture"):
@@ -89,3 +92,26 @@ def materialised_fixture(text, *, proposed_type="recommendation", document_id="d
                 "source_url": "https://example.test/fixture", "source_level": 1, "canonicality": "canonical",
                 "integrity_status": "verified", "source_checksum": digest, "version": "1.0"}}
     return transform(spec, manifest, fragments), fragments
+
+
+def install_fixture_history(console, snapshot_id, rows):
+    """Seed synthetic isolated history, never invoke a production mutation.
+
+    Legacy/corruption fixtures deliberately model already persisted states.
+    T11 storage commands must reject such in-place rewrites, so test setup writes
+    the isolated fixture file directly and then refreshes its concurrency token.
+    """
+    store = getattr(console, "workflow_document_store", None)
+    if store is not None:
+        with store._connect() as connection:
+            connection.execute("DELETE FROM workflow.document_objects WHERE snapshot_id=%s", (snapshot_id,))
+            for position, row in enumerate(rows):
+                connection.execute(
+                    "INSERT INTO workflow.document_objects(snapshot_id,object_id,object_version,payload,position) "
+                    "VALUES(%s,%s,%s,%s::jsonb,%s)",
+                    (snapshot_id, row["object_id"], row["object_version"], json.dumps(row), position))
+        console.refresh_workflow_documents()
+        return
+    path = console._objects_path(snapshot_id)
+    path.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
+    console.refresh_objects_expected_revision(snapshot_id)
