@@ -260,7 +260,6 @@ def review_work_item(
         return None
 
     objects = inputs.objects if inputs is not None else console.snapshot_objects(snapshot_id)
-    closure = source_passage_closure(objects)
     bindings: list[dict[str, Any]] | None
     if inputs is not None:
         bindings = inputs.bindings
@@ -295,7 +294,10 @@ def review_work_item(
             review_path=review_path, fragments=fragments, bindings=bindings
         )
 
-    followups = review_followup_queues(objects, review_path=review_path, bindings=bindings, fragments=fragments)
+    from src.source_containers_v1 import source_accountability
+    projection = source_accountability(objects, review_path=review_path, bindings=bindings, fragments=fragments)
+    closure = source_passage_closure(objects, projection=projection)
+    followups = review_followup_queues(objects, review_path=review_path, projection=projection)
     blocked_count = len(followups["repair"])
     closure_gap_ids = [str(obj["object_id"]) for obj in followups["disposition"]]
 

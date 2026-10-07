@@ -17,11 +17,11 @@ from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v11"
-PROJECTOR_VERSION = "processing-evidence-export-v11"
+VERSION = "processing-evidence-export-v12"
+PROJECTOR_VERSION = "processing-evidence-export-v12"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
-    "source_usage": ("object_id", "object_version", "container", "kind", "reason", "target_ids", "accounted", "policy_version"),
+    "source_usage": ("object_id", "object_version", "container", "kind", "reason", "target_ids", "accounted", "policy_version", "role", "closure", "human_action"),
     "formation_tasks": ("task_id", "section_path", "target_spans", "phase", "status", "policy_version"),
     "formation_progress": ("formation_state", "planned_task_count", "terminal_task_count", "pending_task_count",
                            "failed_task_count", "partial_task_count", "not_started_task_count",
@@ -90,9 +90,21 @@ def _field_producer_status(bound: dict, obj: dict) -> str:
 
 def processing_evidence_tables(
     *, snapshot_id: str, revision: str, envelope: dict[str, Any],
-    objects: list[dict[str, Any]],
+    objects: list[dict[str, Any]], bindings=None, fragments=None,
 ) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
     """Project stored values; absent data is not reconstructed from current code."""
+    # Exports never reread/reextract native sources. Only accepted retained
+    # evidence may complete validation; absent historical inputs stay partial.
+    source_inputs = "provided" if fragments is not None else "not_recorded"
+    if fragments is None:
+        from src.docling_contract_v1 import stored_fragments, DoclingError
+        try:
+            fragments = stored_fragments(envelope)
+            if fragments is not None:
+                source_inputs = "recorded"
+        except DoclingError:
+            fragments = []  # Retained evidence is present but unusable: fail closed.
+            source_inputs = "invalid"
     tables: dict[str, list[dict[str, Any]]] = {name: [] for name in SCHEMAS}
     common = {"snapshot_id": snapshot_id, "objects_revision": revision}
 
@@ -136,7 +148,9 @@ def processing_evidence_tables(
                if key not in {"formation_state", "policy_version"}},
             policy_version=provider.get("task_policy"))
     from src.source_containers_v1 import partition, VERSION as CONTAINER_VERSION
-    for source in partition(objects)["source"]:
+    from src.beslisboom_path_v1 import review_path_for_klasse
+    for source in partition(objects, review_path=review_path_for_klasse(str(envelope["class"])) if envelope.get("class") else "richtlijn",
+                            bindings=bindings, fragments=fragments)["source"]:
         obj = source["record"]
         add("source_usage", object_id=obj["object_id"], object_version=obj["object_version"], container="source",
             **source["usage"], policy_version=CONTAINER_VERSION)
@@ -257,7 +271,13 @@ def processing_evidence_tables(
         add("forensic_trace", **row)
 
     statuses = {
-        "source_usage": ("derived", "Current source usage under the recorded policy; not a new approval or clinical completeness proof."),
+        "source_usage": (
+            "invalid" if source_inputs == "invalid" else "partial" if source_inputs == "not_recorded" else "derived",
+            "Shared source accountability projection; not a new approval or clinical completeness proof. "
+            + ("Authoritative retained source fragments are absent; literal validation and target closure are incomplete. No extraction was rerun."
+               if source_inputs == "not_recorded" else
+               "Retained source evidence is invalid; source usage fails closed to repair."
+               if source_inputs == "invalid" else "Current supplied or validated retained fragments were used.")),
         "formation_tasks": ("recorded" if tables["formation_tasks"] else "not_recorded", "Bounded task observations; historical statuses are retained and pending findings determine current recovery."),
         "formation_progress": ("recorded" if tables["formation_progress"] else "not_recorded",
             "Current bounded-formation progress projected against the original task plan; recovery subtasks may have different task ids."),

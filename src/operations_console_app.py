@@ -2688,7 +2688,9 @@ def _review_inventory(
     fragments=None,
 ) -> str:
     """Every current passage remains reachable; no admission or finality writes."""
-    followups = review_followup_queues(objects, review_path=review_path, bindings=bindings, fragments=fragments)
+    from src.source_containers_v1 import source_accountability, partition
+    projection = source_accountability(objects, review_path=review_path, bindings=bindings, fragments=fragments)
+    followups = review_followup_queues(objects, review_path=review_path, projection=projection)
     followup_tasks = {
         str(obj["object_id"]): name
         for name, rows in followups.items() for obj in rows
@@ -2712,8 +2714,7 @@ def _review_inventory(
     source_items = []
     metadata_items = []
     source_groups = {}
-    from src.source_containers_v1 import partition
-    containers = partition(objects)
+    containers = partition(objects, projection=projection)
     source_usage = {row["record"]["object_id"]: row["usage"] for row in containers["source"]}
     from src.source_accountability_v1 import is_source_record, evidence_of
     for obj in objects:
@@ -2731,18 +2732,21 @@ def _review_inventory(
                 route_task = str(route["canonical_task"]) if route["actionable"] else "waiting"
         object_id = str(obj.get("object_id") or "")
         disposition = definitive_review_disposition(obj)
-        category = route_task or followup_tasks.get(object_id) or "history"
+        category = ("repair" if followup_tasks.get(object_id) == "repair" else
+                    route_task or followup_tasks.get(object_id) or "history")
         if task != "inventory" and category != task:
             continue
-        if is_source_record(obj) and evidence_of(obj).get("version") == "source-accountability-v2":
+        if is_source_record(obj) and (evidence_of(obj).get("version") == "source-accountability-v2" or projection[object_id]["human_action"] == "technical_repair"):
             usage = source_usage[object_id]
-            kind = "reviewed" if disposition["final"] else usage["kind"]
+            kind = usage["kind"]
             label = {"reviewed": "Handmatig afgehandeld", "document_information": "Documentinformatie",
-                     "linked_context": "Gekoppelde context", "unresolved": "Brongebruik nog te bepalen"}[kind]
+                     "linked_context": "Gekoppelde context", "unresolved": "Brongebruik nog te bepalen",
+                     "invalid_evidence": "Bronbewijs herstellen"}[kind]
             section = " / ".join((obj.get("structure") or {}).get("section_path") or
                                   (obj.get("metadata") or {}).get("section_path") or []) or "Document"
             group = source_groups.setdefault((label, section), [])
-            status = ("Handmatig afgehandeld" if disposition["final"] else
+            status = ("Technisch herstel nodig" if usage["human_action"] == "technical_repair" else
+                      "Handmatig afgehandeld" if kind == "reviewed" else
                       "Automatisch als documentinformatie aangemerkt" if kind == "document_information" else
                       "Context bij goedgekeurde kennis" if usage["accounted"] else
                       "Wacht op kennisbeoordeling" if kind == "linked_context" else "Open")
@@ -2751,9 +2755,11 @@ def _review_inventory(
                             "unformed_meaning": "Niet geselecteerde broninhoud"}.get(usage["reason"], "Bronbesluit controleren")
             targets = "".join(f'<a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(oid)}">Kennisvoorstel</a> '
                               for oid in usage["target_ids"])
+            source_task = "repair" if usage["human_action"] == "technical_repair" else "disposition"
+            source_link = "Bronbewijs herstellen" if source_task == "repair" else "Bronbesluit bekijken of wijzigen"
             group.append(f'<li data-source-record="{_esc(object_id)}"><p>{_esc((obj.get("content") or {}).get("clean_text"))}</p>'
                 f'<p>{_esc(status)} · {_esc(usage_reason)}</p>{targets}'
-                f'<a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task=disposition">Bronbesluit bekijken of wijzigen</a></li>')
+                f'<a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={source_task}">{source_link}</a></li>')
             continue
         if is_source_record(obj):
             evidence = evidence_of(obj)
@@ -2853,11 +2859,20 @@ def _review_inventory(
 def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], snapshot_id: str,
                           snapshot_revision: str, *, context_target: str = "",
                           source_mode: bool = False, draft: dict[str, Any] | None = None,
-                          error: str = "") -> str:
+                          error: str = "", projection=None) -> str:
     """Present existing context decisions; navigation never confirms a relation."""
     if obj.get("object_type") in {"document", "heading", "path"}:
         return ""
     from src.source_accountability_v1 import is_source_record
+    from src.source_containers_v1 import source_accountability
+    if projection is None:
+        projection = source_accountability(objects)
+    state = projection.get(str(obj.get("object_id") or ""), {})
+    if state.get("role") == "invalid_evidence":
+        return ('<section data-source-repair><h3>Bronbewijs herstellen</h3>'
+                '<p>De opgeslagen bronverwijzing of contextkoppeling is ongeldig. '
+                'Laat de verwerking of koppeling herstellen voordat je een bronbesluit neemt.</p>'
+                f'<a href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(obj["object_id"])}">Bekijk oorspronkelijke bron</a></section>')
     evidence = source_context_projections(objects)
     oid = str(obj["object_id"])
     current = evidence[oid]
@@ -3385,6 +3400,8 @@ def _render_review_card(
 def _source_context_card(console: OperationsConsole, snapshot_id: str, obj: dict[str, Any],
                          panel: str, *, context_target: str, context_mode: str, task: str) -> str:
     """Keep fragment handling separate from approval of independent knowledge."""
+    if "data-source-repair" in panel:
+        return panel
     from src.source_accountability_v1 import is_source_record
     if not (is_source_record(obj) or role_of(obj) or (panel and (context_target or context_mode == "source" or
             (source_label_hint(obj) and context_mode != "review")))):
@@ -3514,13 +3531,17 @@ def _render_review_room(
                     audit_signals,
                 )
             else:
+                from src.source_containers_v1 import source_accountability
+                detail_projection = source_accountability(snapshot_objects, review_path=review_path,
+                    bindings=_review_bindings(console, chosen, objects=snapshot_objects),
+                    fragments=console.review_source_fragments(chosen))
                 context_html = ""
                 if ('reviewer' in (account.get('roles') or [])
                         and str(account.get('account_id') or '') in chosen_row.get('named_reviewers', [])
                         and not console.snapshot_is_published(chosen)):
                     context_html = _source_context_panel(obj, snapshot_objects, chosen, snapshot_revision,
                         context_target=context_target, source_mode=context_mode == "source",
-                        draft=context_draft, error=context_error)
+                        draft=context_draft, error=context_error, projection=detail_projection)
                 if context_saved:
                     objects_html += '<p class="banner ok" role="status">Het contextbesluit is opgeslagen. Beoordeel de betrokken passages opnieuw.</p>'
                 conflict_html = _review_conflict_html(conflict, current=obj, draft=draft)
@@ -3541,7 +3562,13 @@ def _render_review_room(
                 source_card = _source_context_card(console, chosen, obj, context_html,
                     context_target=context_target, context_mode=context_mode, task=chosen_task)
                 if source_card:
-                    objects_html += source_card
+                    objects_html += conflict_html + source_card
+                    if conflict:
+                        for field, label in (("comment", "Niet opgeslagen toelichting"),
+                                             ("proposed_correction", "Niet opgeslagen correctie")):
+                            if draft.get(field):
+                                objects_html += (f'<aside data-unsaved-review-draft><h3>{label}</h3>'
+                                                 f'<p>{_esc(draft[field])}</p></aside>')
                 elif route and route.get("canonical_task") == "second_review":
                     if route.get("actionable"):
                         objects_html += _render_second_review_card(
@@ -5238,7 +5265,8 @@ def create_console_app(
             raise ConsoleError("reviewer_not_named_on_snapshot")
         objects, revision = state.snapshot_objects_and_revision(snapshot_id)
         payload = processing_evidence_zip(snapshot_id=snapshot_id, revision=revision,
-                                          envelope=envelope, objects=objects)
+                                          envelope=envelope, objects=objects,
+                                          bindings=state.object_review_bindings(snapshot_id, objects=objects))
         filename = re.sub(r"[^A-Za-z0-9_-]", "_", snapshot_id)
         return Response(payload, media_type="application/zip", headers={
             "Content-Disposition": f'attachment; filename="{filename}-processing-evidence.zip"',

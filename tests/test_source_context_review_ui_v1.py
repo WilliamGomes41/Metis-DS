@@ -157,6 +157,18 @@ def test_context_ui_keeps_full_text_and_explicit_choices(tmp_path):
     target = next(row for row in rows if row['object_id'] == target['object_id'])
     target['content']['clean_text'] = 'Volledige passage. ' * 25 + 'Noodzakelijke uitzondering aan het einde.'
     source['content']['clean_text'] = 'Letterlijke context. ' * 25 + 'Laatste bronvoorwaarde.'
+    # This is a presentation fixture: retain internally valid source evidence.
+    # Corrupt evidence is exercised separately and must never offer a disposition.
+    from src.source_accountability_v1 import KEY, record
+    evidence = source["metadata"][KEY]
+    spans = [{"block_id": evidence["spans"][0]["block_id"], "start": 0,
+              "end": len(source["content"]["clean_text"])}]
+    source["metadata"]["semantic_passage"]["spans"] = spans
+    source["metadata"][KEY] = record(
+        text=source["content"]["clean_text"], spans=spans,
+        assessment={"role": evidence["proposed_role"], "reason": evidence["reason"]},
+        version=evidence["version"],
+    )
     panel = _source_context_panel(source, rows, command['snapshot_id'], command['expected_revision'],
                                   context_target=target['object_id'], source_mode=True)
     assert target['content']['clean_text'] in panel

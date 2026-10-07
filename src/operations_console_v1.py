@@ -2590,7 +2590,11 @@ class OperationsConsole:
     def snapshot_containers(self, snapshot_id: str) -> dict[str, Any]:
         """Typed knowledge/source access over the current atomic revision."""
         from src.source_containers_v1 import partition
-        return partition(self.snapshot_objects(snapshot_id))
+        from src.beslisboom_path_v1 import review_path_for_klasse
+        return partition(self.snapshot_objects(snapshot_id),
+                         review_path=review_path_for_klasse(self._envelope(snapshot_id)["class"]),
+                         bindings=self.object_review_bindings(snapshot_id),
+                         fragments=self.review_source_fragments(snapshot_id))
 
     def snapshot_objects_and_revision(
         self,
