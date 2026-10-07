@@ -17,6 +17,7 @@ import pytest
 
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.operations_console_v1 import PRE_REVIEW_BLOCKED
+from src.proportionate_review_v1 import ProportionateReviewConsole
 from src.workflows.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin
 from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
 from src.workflows.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
@@ -194,7 +195,7 @@ def _closed_objects(snapshot_id: str) -> list[dict[str, Any]]:
     return rows
 
 
-class _ListReadSubject(_PostgresBadgeCountsMixin):
+class _ListReadSubject(_PostgresBadgeCountsMixin, ProportionateReviewConsole):
     def __init__(self, store: PostgresWorkflowDocumentRuntimeStore, account_id: str) -> None:
         self.workflow_document_store = store
         self.canonical_publication_store = None
