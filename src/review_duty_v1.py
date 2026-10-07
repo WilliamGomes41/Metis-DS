@@ -106,6 +106,12 @@ def review_stage(
     if review_path != "boom" and (not content_reviewable(obj)
                                   or not source_lineage_resolves(obj, fragments=fragments)):
         return None
+    if review_path != "boom":
+        source = obj.get("source") or {}
+        admission = admission_of(obj)
+        if (admission.get("source_hash") and admission["source_hash"] != source.get("source_checksum")
+                or admission.get("document_version") and admission["document_version"] != source.get("version")):
+            return None
     if is_source_record(obj):
         return None
     if str(obj.get("object_type") or "") == "document":

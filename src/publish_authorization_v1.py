@@ -49,7 +49,8 @@ def tuple_record(
 def still_matches(binding: dict[str, Any], obj: dict[str, Any]) -> bool:
     if not binding.get("valid"):
         return False
-    hash_now = (obj.get("provenance") or {}).get("canonical_object_hash")
+    from src.integrity_kernel import exact_review_snapshot_hash
+    hash_now = exact_review_snapshot_hash(obj)
     return (
         binding.get("object_id") == obj.get("object_id")
         and binding.get("object_version") == obj.get("object_version")

@@ -448,7 +448,7 @@ SLOW_REVIEW_DUTY_TYPES = frozenset({"recommendation", "condition", "exception"})
 SLOW_BOOM_DUTY_TYPES = frozenset({"node", "outcome"})
 
 
-def is_slow_review_duty(obj: dict[str, Any], review_path: str | None = None) -> bool:
+def is_slow_review_duty(obj: dict[str, Any], review_path: str | None = None, *, bindings=None, fragments=None) -> bool:
     """True for the researcher-required slow hand work (Protocol v2.19).
 
     Proposed or stored ``recommendation``, ``condition``, ``exception``, or
@@ -460,10 +460,10 @@ def is_slow_review_duty(obj: dict[str, Any], review_path: str | None = None) -> 
     if obj.get("object_type") == "document":
         return False
     path = review_path or inferred_review_path(obj)
-    if path != "boom":
-        from src.knowledge_path_v1 import content_reviewable
-        if not content_reviewable(obj):
-            return False
+    if path != "boom" and not review_duty_for(
+        obj, review_path=path, bindings=bindings, fragments=fragments
+    ):
+        return False
     if is_admission_blocked(obj, review_path=path):
         return False
     if review_lane(obj, review_path=path) == "fast":
@@ -478,9 +478,6 @@ def is_slow_review_duty(obj: dict[str, Any], review_path: str | None = None) -> 
         return True
     if stored in duty_types:
         return True
-    eligibility = candidate_eligibility_of(obj)
-    if path != "boom" and eligibility.get("eligible") is False:
-        return False
     if proposed in duty_types:
         return True
     return False
@@ -489,9 +486,12 @@ def is_slow_review_duty(obj: dict[str, Any], review_path: str | None = None) -> 
 def slow_review_duty(
     objects: Iterable[dict[str, Any]],
     review_path: str | None = None,
+    *, bindings=None, fragments=None,
 ) -> list[dict[str, Any]]:
     """Presented Inhoud cards: recommendation + condition/exception/high-risk."""
-    rows = [obj for obj in objects if is_slow_review_duty(obj, review_path=review_path)]
+    bindings = tuple(bindings or ())
+    fragments = tuple(fragments) if fragments is not None else None
+    rows = [obj for obj in objects if is_slow_review_duty(obj, review_path=review_path, bindings=bindings, fragments=fragments)]
     return rows if review_path == "boom" else sorted(rows, key=review_priority_rank)
 
 
@@ -1248,17 +1248,29 @@ class OperationsConsole:
             ):
                 publish += 1
         if "reviewer" in roles:
-            review = len(
-                [
-                    envelope
-                    for envelope in envelopes
-                    if account_id in (envelope.get("named_reviewers") or [])
-                    and any(
-                        (row.get("governance") or {}).get("validation_status") == "needs_review"
-                        for row in self._load_objects(envelope["snapshot_id"], remember=False)
-                    )
-                ]
-            )
+            from src.review_duty_v1 import reviewer_route_counts
+            from src.knowledge_path_v1 import is_structural_projection
+            from src.publication_readiness_v1 import review_followup_queues
+            review = 0
+            for envelope in envelopes:
+                sid = envelope["snapshot_id"]
+                if account_id not in (envelope.get("named_reviewers") or []):
+                    continue
+                if envelope.get("publication_eligibility") == PRE_REVIEW_BLOCKED:
+                    continue
+                rows = self.snapshot_objects(sid)
+                path = review_path_for_klasse(envelope["class"])
+                bindings = self.object_review_bindings(sid)
+                fragments = self.review_source_fragments(sid)
+                routes = reviewer_route_counts(rows, review_path=path, reviewer_id=account_id,
+                                               bindings=bindings, fragments=fragments)
+                structure = path != "boom" and any(is_structural_projection(row)
+                    and (row.get("governance") or {}).get("validation_status") != "approved"
+                    for row in rows)
+                followups = review_followup_queues(rows, review_path=path, bindings=bindings,
+                                                  fragments=fragments)
+                if routes["actionable_review_duties"] or structure or any(followups.values()):
+                    review += 1
         if "publisher" not in roles:
             publish = 0
         if "researcher" not in roles:
@@ -2455,6 +2467,10 @@ class OperationsConsole:
             fragments = self._read_source_fragments(envelope, source_path)
         except (ConsoleError, ValueError, OSError) as exc:
             raise ConsoleError("source_lineage_unavailable") from exc
+        source = target.get("source") or {}
+        if (source.get("source_checksum") != envelope["sha256"]
+                or source.get("version") != envelope["version"]):
+            raise ConsoleError("source_lineage_incomplete")
         if not source_lineage_resolves(target, fragments=fragments):
             raise ConsoleError("source_lineage_incomplete")
         return fragments
@@ -2973,6 +2989,30 @@ class OperationsConsole:
             review_path=review_path,
         )
 
+    @contextmanager
+    def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
+        """Rollback object/binding/envelope writes together with ledger evidence."""
+        with self._store_write_lock():
+            path = self._objects_path(snapshot_id)
+            prior_objects = path.read_bytes() if path.exists() else None
+            prior_envelopes = deepcopy(self._envelopes)
+            prior_bindings = deepcopy(self._bindings)
+            prior_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
+            try:
+                yield
+            except Exception:
+                self._rollback_store_files(
+                    objects_snapshot=(snapshot_id, prior_objects),
+                    envelopes=prior_envelopes,
+                    bindings=prior_bindings,
+                    ledger_size=prior_ledger,
+                )
+                self._envelopes = prior_envelopes
+                self._bindings = prior_bindings
+                self.refresh_objects_expected_revision(snapshot_id)
+                raise
+
+
     def review_object(
         self,
         *,
@@ -2997,595 +3037,597 @@ class OperationsConsole:
         expected_revision: str | None = None,
         interaction_evidence: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
-        reviewer = self._require_role(actor_id, "reviewer")
-        if _is_forbidden_identity(reviewer["username"]) or _is_forbidden_identity(reviewer["display_name"]):
-            raise ConsoleError("forbidden_reviewer_identity")
-        envelope = self._envelope(snapshot_id)
-        if actor_id not in envelope["named_reviewers"]:
-            raise ConsoleError("reviewer_not_named_on_snapshot")
-        if interaction_evidence is not None:
-            try:
-                validate_review_interaction_identity(
-                    interaction_evidence,
-                    read_events(self._ledger_path),
-                )
-            except ValueError as exc:
-                raise ConsoleError(str(exc)) from exc
-        mapped = map_eindoordeel(eindoordeel or "", decision)
-        if mapped:
-            decision = mapped
-        if decision in {"revise", "reject"} and not str(comment or "").strip():
-            raise ConsoleError("review_comment_required")
-        rejecting = decision == "reject"
-        if rejecting:
-            confirmed_object_type = None
-            recommendation_strength = None
-            recommendation_direction = None
-            recommendation_strength_level = None
-            relation_choices = None
-        current = self.snapshot_objects(snapshot_id, for_update=True)
-        target = next((row for row in current if row["object_id"] == object_id), None)
-        if target is None:
-            raise ConsoleError("unknown_object")
-        current_revision = self.objects_revision(snapshot_id)
-        if expected_revision is not None:
-            if current_revision != expected_revision:
-                raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=current_revision)
-        from src.review_policy_v1 import object_policy
-        policy = object_policy(target)
-        if policy != envelope.get("review_policy"):
-            raise ConsoleError("review_policy_projection_mismatch")
-        if policy is not None and decision == "approve" and actor_id != policy["primary"]:
-            raise ConsoleError("primary_review_required")
-        quality_before = deepcopy(target)
-        from src.source_context_review_v1 import role_of
-        if decision == "approve" and role_of(target):
-            raise ConsoleError("source_context_not_knowledge")
-        if not rejecting and type_action == "dit_klopt" and not confirmed_object_type:
-            confirmed_object_type = confirmable_proposed_type(target) or None
-        parent_id = ""
-        if not rejecting:
-            parent_id = (parent_choice or "").strip()
-            if not parent_id and documentpositie_action == "dit_klopt":
-                parent_id = resolve_found_under_parent(target, current)
-        store_passage = review_passage_requested(
-            suitability=suitability or "",
-            eindoordeel=eindoordeel or "",
-            type_action=type_action or "",
-            documentpositie_action=documentpositie_action or "",
-            found_under=found_under or "",
-            parent_choice=parent_choice or "",
-        )
-        path_text = (found_under or "").strip()
-        if store_passage and not path_text:
-            path_text = found_under_path(target)
-        if (eindoordeel or "").strip() and (suitability or "").strip() not in SUITABILITY_VALUES:
-            raise ConsoleError("suitability_required")
-        if decision not in {"approve", "revise", "reject", "later"}:
-            raise ConsoleError("invalid_review_decision")
-        confirmed = confirmed_object_type
-        if not confirmed and target.get("confirmed_object_type"):
-            confirmed = target["confirmed_object_type"]
-        apply_type = bool(confirmed_object_type)
-        review_path = review_path_for_klasse(envelope["class"])
-        binding_authority = self.object_review_bindings(snapshot_id)
-        from src.knowledge_path_v1 import content_reviewable, is_structural_projection
-        from src.source_accountability_v1 import is_source_record
-        source_fragments = None
-        if review_path != "boom" and content_reviewable(target):
-            source_fragments = self._require_resolved_candidate_source(envelope, target)
-        current_duty = review_duty_for(target, review_path=review_path,
-                                      bindings=binding_authority, fragments=source_fragments)
-        route = reviewer_route_for(target, review_path=review_path, reviewer_id=actor_id,
-                                   bindings=binding_authority, fragments=source_fragments)
-        review_domain = "content"
-        if review_path != "boom":
-            if is_structural_projection(target):
-                review_domain = "structure"
-                if decision == "approve" and not (
-                    _STRUCTURE_CONFIRMATION.get() and str(confirmed_object_type or "") == "heading"
-                ):
-                    raise ConsoleError("structure_confirmation_command_required")
-            elif is_source_record(target):
-                review_domain = "source_disposition"
-                if decision == "approve" or apply_type:
-                    raise ConsoleError("source_context_not_knowledge")
-            elif not content_reviewable(target) or decision == "revise":
-                review_domain = "technical_repair"
-            if decision == "approve" and review_domain != "structure":
-                if is_admission_blocked(target, review_path=review_path):
-                    raise ConsoleError("blocked_candidate_not_reviewable")
-                if not current_duty:
-                    raise ConsoleError("content_duty_required")
-            if review_domain == "content" and (
-                not current_duty or not route or not route.get("actionable")
-            ):
-                raise ConsoleError("content_duty_required")
-        if (current_duty and current_duty.get("stage") == SECOND_REVIEW
-                and decision != "revise"):
-            raise ConsoleError("second_review_command_required")
-        if decision == "approve" or apply_type:
-            if review_path != "boom" and content_reviewable(target):
-                self._require_resolved_candidate_source(envelope, target)
-        if decision != "later":
-            from src.source_accountability_v1 import is_source_record
-            if is_source_record(target) and (decision == "approve" or apply_type):
+        with self._atomic_snapshot_mutation(snapshot_id):
+            reviewer = self._require_role(actor_id, "reviewer")
+            if _is_forbidden_identity(reviewer["username"]) or _is_forbidden_identity(reviewer["display_name"]):
+                raise ConsoleError("forbidden_reviewer_identity")
+            envelope = self._envelope(snapshot_id)
+            if actor_id not in envelope["named_reviewers"]:
+                raise ConsoleError("reviewer_not_named_on_snapshot")
+            if interaction_evidence is not None:
+                try:
+                    validate_review_interaction_identity(
+                        interaction_evidence,
+                        read_events(self._ledger_path),
+                    )
+                except ValueError as exc:
+                    raise ConsoleError(str(exc)) from exc
+            mapped = map_eindoordeel(eindoordeel or "", decision)
+            if mapped:
+                decision = mapped
+            if decision in {"revise", "reject"} and not str(comment or "").strip():
+                raise ConsoleError("review_comment_required")
+            rejecting = decision == "reject"
+            if rejecting:
+                confirmed_object_type = None
+                recommendation_strength = None
+                recommendation_direction = None
+                recommendation_strength_level = None
+                relation_choices = None
+            current = self.snapshot_objects(snapshot_id, for_update=True)
+            target = next((row for row in current if row["object_id"] == object_id), None)
+            if target is None:
+                raise ConsoleError("unknown_object")
+            current_revision = self.objects_revision(snapshot_id)
+            if expected_revision is not None:
+                if current_revision != expected_revision:
+                    raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=current_revision)
+            from src.review_policy_v1 import object_policy
+            policy = object_policy(target)
+            if policy != envelope.get("review_policy"):
+                raise ConsoleError("review_policy_projection_mismatch")
+            if policy is not None and decision == "approve" and actor_id != policy["primary"]:
+                raise ConsoleError("primary_review_required")
+            quality_before = deepcopy(target)
+            from src.source_context_review_v1 import role_of
+            if decision == "approve" and role_of(target):
                 raise ConsoleError("source_context_not_knowledge")
-            if is_admission_blocked(target, review_path=review_path) and (
-                decision == "approve" or apply_type
-            ):
-                raise ConsoleError("blocked_candidate_not_reviewable")
+            if not rejecting and type_action == "dit_klopt" and not confirmed_object_type:
+                confirmed_object_type = confirmable_proposed_type(target) or None
+            parent_id = ""
+            if not rejecting:
+                parent_id = (parent_choice or "").strip()
+                if not parent_id and documentpositie_action == "dit_klopt":
+                    parent_id = resolve_found_under_parent(target, current)
+            store_passage = review_passage_requested(
+                suitability=suitability or "",
+                eindoordeel=eindoordeel or "",
+                type_action=type_action or "",
+                documentpositie_action=documentpositie_action or "",
+                found_under=found_under or "",
+                parent_choice=parent_choice or "",
+            )
+            path_text = (found_under or "").strip()
+            if store_passage and not path_text:
+                path_text = found_under_path(target)
+            if (eindoordeel or "").strip() and (suitability or "").strip() not in SUITABILITY_VALUES:
+                raise ConsoleError("suitability_required")
+            if decision not in {"approve", "revise", "reject", "later"}:
+                raise ConsoleError("invalid_review_decision")
+            confirmed = confirmed_object_type
+            if not confirmed and target.get("confirmed_object_type"):
+                confirmed = target["confirmed_object_type"]
+            apply_type = bool(confirmed_object_type)
+            review_path = review_path_for_klasse(envelope["class"])
+            binding_authority = self.object_review_bindings(snapshot_id)
+            from src.knowledge_path_v1 import content_reviewable, is_structural_projection
+            from src.source_accountability_v1 import is_source_record
+            source_fragments = None
+            if review_path != "boom" and content_reviewable(target):
+                source_fragments = self._require_resolved_candidate_source(envelope, target)
+            current_duty = review_duty_for(target, review_path=review_path,
+                                          bindings=binding_authority, fragments=source_fragments)
+            route = reviewer_route_for(target, review_path=review_path, reviewer_id=actor_id,
+                                       bindings=binding_authority, fragments=source_fragments)
+            review_domain = "content"
+            if review_path != "boom":
+                if is_structural_projection(target):
+                    review_domain = "structure"
+                    if decision == "approve" and not (
+                        _STRUCTURE_CONFIRMATION.get() and str(confirmed_object_type or "") == "heading"
+                    ):
+                        raise ConsoleError("structure_confirmation_command_required")
+                elif is_source_record(target):
+                    review_domain = "source_disposition"
+                    if decision == "approve" or apply_type:
+                        raise ConsoleError("source_context_not_knowledge")
+                elif not content_reviewable(target) or decision == "revise":
+                    review_domain = "technical_repair"
+                if decision == "approve" and review_domain != "structure":
+                    if is_admission_blocked(target, review_path=review_path):
+                        raise ConsoleError("blocked_candidate_not_reviewable")
+                    if not current_duty:
+                        raise ConsoleError("content_duty_required")
+                if review_domain == "content" and (
+                    not current_duty or not route or not route.get("actionable")
+                ):
+                    raise ConsoleError("content_duty_required")
+            if (current_duty and current_duty.get("stage") == SECOND_REVIEW
+                    and decision != "revise"):
+                raise ConsoleError("second_review_command_required")
             if decision == "approve" or apply_type:
-                self._require_open_original(snapshot_id, object_id)
-            if decision == "approve":
+                if review_path != "boom" and content_reviewable(target):
+                    self._require_resolved_candidate_source(envelope, target)
+            if decision != "later":
+                from src.source_accountability_v1 import is_source_record
+                if is_source_record(target) and (decision == "approve" or apply_type):
+                    raise ConsoleError("source_context_not_knowledge")
+                if is_admission_blocked(target, review_path=review_path) and (
+                    decision == "approve" or apply_type
+                ):
+                    raise ConsoleError("blocked_candidate_not_reviewable")
+                if decision == "approve" or apply_type:
+                    self._require_open_original(snapshot_id, object_id)
+                if decision == "approve":
+                    if not is_confirmable_type_for_path(confirmed, review_path):
+                        raise ConsoleError("unknown_object_type")
+                    apply_type = True
+                if apply_type and confirmed and not is_confirmable_type_for_path(confirmed, review_path):
+                    raise ConsoleError("unknown_object_type")
+                if decision == "approve" and confirmed == "outcome":
+                    errors = outcome_review_errors(target, peers=current)
+                    if errors:
+                        raise ConsoleError("outcome_review_failed", ",".join(errors))
+                stamp_type = confirmed or target.get("confirmed_object_type") or target.get("object_type")
+                strength_preview = (recommendation_strength or "").strip() or None
+                direction_preview = (recommendation_direction or "").strip() or None
+                strength_level_preview = (recommendation_strength_level or "").strip() or None
+                has_new_recommendation_semantics = bool(
+                    proposed_recommendation_semantics_of(target)
+                    or confirmed_recommendation_semantics_of(target)
+                    or direction_preview
+                    or strength_level_preview
+                )
+                new_recommendation_semantics_mode = (
+                    review_path != "boom"
+                    and stamp_type == "recommendation"
+                    and has_new_recommendation_semantics
+                )
+                if decision == "approve" and new_recommendation_semantics_mode:
+                    existing_semantics = confirmed_recommendation_semantics_of(target)
+                    effective_direction = direction_preview or str(existing_semantics.get("direction") or "")
+                    if strength_level_preview:
+                        effective_strength_level = strength_level_preview
+                    elif existing_semantics.get("strength_status") == "not_stated":
+                        effective_strength_level = "not_stated"
+                    else:
+                        effective_strength_level = str(existing_semantics.get("strength") or "")
+                    try:
+                        confirmed_recommendation_semantics_from_review(
+                            target,
+                            direction=effective_direction,
+                            strength_choice=effective_strength_level,
+                        )
+                    except ValueError as exc:
+                        raise ConsoleError(str(exc)) from exc
+                    if strength_preview:
+                        raise ConsoleError("legacy_recommendation_strength_not_allowed")
+                if decision == "approve" and stamp_type == "outcome":
+                    effective = strength_preview or target.get("confirmed_recommendation_strength")
+                    if not effective and not is_geen_actie_outcome(
+                        str((target.get("content") or {}).get("clean_text") or "")
+                    ):
+                        raise ConsoleError("outcome_strength_required")
+                if strength_preview:
+                    legacy_strength_allowed = (
+                        stamp_type == "outcome"
+                        or (stamp_type == "recommendation" and not new_recommendation_semantics_mode)
+                    )
+                    if legacy_strength_allowed:
+                        if not is_closed_recommendation_strength(strength_preview):
+                            raise ConsoleError("unknown_recommendation_strength")
+                    else:
+                        will_clear = apply_type and confirmed and target.get(
+                            "confirmed_recommendation_strength"
+                        )
+                        if not will_clear:
+                            raise ConsoleError("recommendation_strength_requires_recommendation")
+            d4_relation_review = (
+                decision == "approve"
+                and review_path != "boom"
+                and has_semantic_relation_review(target)
+            )
+            relation_plan: dict[str, Any] | None = None
+            if d4_relation_review:
+                if not relation_review_ack:
+                    raise ConsoleError("knowledge_relation_review_required")
+                try:
+                    relation_plan = plan_semantic_relation_review(
+                        target,
+                        objects=current,
+                        selected_choices=list(relation_choices or []),
+                        source_type=str(
+                            confirmed
+                            or target.get("confirmed_object_type")
+                            or target.get("proposed_object_type")
+                            or target.get("object_type")
+                            or ""
+                        ),
+                    )
+                except ValueError as exc:
+                    raise ConsoleError(str(exc)) from exc
+            if parent_id and parent_id != object_id and not d4_relation_review:
+                self.confirm_relations(
+                    actor_id=actor_id,
+                    snapshot_id=snapshot_id,
+                    object_id=object_id,
+                    relations=merge_heading_parent_relations(
+                        target.get("confirmed_relations"),
+                        parent_id,
+                    ),
+                    expected_revision=expected_revision,
+                )
+                if expected_revision is not None:
+                    expected_revision = self.objects_revision(snapshot_id)
+                current_revision = self.objects_revision(snapshot_id)
+                current = self.snapshot_objects(snapshot_id)
+                target = next((row for row in current if row["object_id"] == object_id), None)
+                if target is None:
+                    raise ConsoleError("unknown_object")
+            passage = (
+                review_passage_record(
+                    suitability=suitability or "",
+                    eindoordeel=eindoordeel or "",
+                    type_action=type_action or "",
+                    documentpositie_action=documentpositie_action or "",
+                    found_under=path_text,
+                    parent_object_id=parent_id,
+                )
+                if store_passage
+                else None
+            )
+            if decision == "later":
+                saved = deepcopy(target)
+                if passage:
+                    metadata = saved.setdefault("metadata", {})
+                    metadata["review_passage"] = passage
+                    saved = apply_register_from_review(saved, suitability=suitability or "")
+                history = [
+                    row
+                    for row in self._load_objects(snapshot_id)
+                    if not (row["object_id"] == object_id and row["object_version"] == saved["object_version"])
+                ]
+                history.append(saved)
+                self._save_objects_pinned(snapshot_id, history, expected_revision)
+                return deepcopy(self.snapshot_objects(snapshot_id))
+            review_semantics_base_version = str(target.get("object_version") or "1.0")
+            if apply_type and confirmed:
                 if not is_confirmable_type_for_path(confirmed, review_path):
                     raise ConsoleError("unknown_object_type")
-                apply_type = True
-            if apply_type and confirmed and not is_confirmable_type_for_path(confirmed, review_path):
-                raise ConsoleError("unknown_object_type")
+                if target.get("object_type") != "document":
+                    if target.get("confirmed_object_type") != confirmed:
+                        target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
+                    target["confirmed_object_type"] = confirmed
+                    target["object_type"] = confirmed
+                    if confirmed != "recommendation":
+                        target.pop(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD, None)
+                    mark_four_eyes_on_object(target, confirmed_type=confirmed)
+                    stamp_canonical_hashes(target)
             if decision == "approve" and confirmed == "outcome":
                 errors = outcome_review_errors(target, peers=current)
                 if errors:
                     raise ConsoleError("outcome_review_failed", ",".join(errors))
+            strength = (recommendation_strength or "").strip() or None
             stamp_type = confirmed or target.get("confirmed_object_type") or target.get("object_type")
-            strength_preview = (recommendation_strength or "").strip() or None
-            direction_preview = (recommendation_direction or "").strip() or None
-            strength_level_preview = (recommendation_strength_level or "").strip() or None
+            direction_choice = (recommendation_direction or "").strip()
+            strength_level_choice = (recommendation_strength_level or "").strip()
             has_new_recommendation_semantics = bool(
                 proposed_recommendation_semantics_of(target)
                 or confirmed_recommendation_semantics_of(target)
-                or direction_preview
-                or strength_level_preview
+                or direction_choice
+                or strength_level_choice
             )
             new_recommendation_semantics_mode = (
                 review_path != "boom"
                 and stamp_type == "recommendation"
                 and has_new_recommendation_semantics
             )
+            confirmed_semantics: dict[str, Any] | None = None
             if decision == "approve" and new_recommendation_semantics_mode:
                 existing_semantics = confirmed_recommendation_semantics_of(target)
-                effective_direction = direction_preview or str(existing_semantics.get("direction") or "")
-                if strength_level_preview:
-                    effective_strength_level = strength_level_preview
+                effective_direction = direction_choice or str(existing_semantics.get("direction") or "")
+                if strength_level_choice:
+                    effective_strength_level = strength_level_choice
                 elif existing_semantics.get("strength_status") == "not_stated":
                     effective_strength_level = "not_stated"
                 else:
                     effective_strength_level = str(existing_semantics.get("strength") or "")
                 try:
-                    confirmed_recommendation_semantics_from_review(
+                    confirmed_semantics = confirmed_recommendation_semantics_from_review(
                         target,
                         direction=effective_direction,
                         strength_choice=effective_strength_level,
                     )
                 except ValueError as exc:
                     raise ConsoleError(str(exc)) from exc
-                if strength_preview:
-                    raise ConsoleError("legacy_recommendation_strength_not_allowed")
-            if decision == "approve" and stamp_type == "outcome":
-                effective = strength_preview or target.get("confirmed_recommendation_strength")
-                if not effective and not is_geen_actie_outcome(
-                    str((target.get("content") or {}).get("clean_text") or "")
-                ):
-                    raise ConsoleError("outcome_strength_required")
-            if strength_preview:
-                legacy_strength_allowed = (
-                    stamp_type == "outcome"
-                    or (stamp_type == "recommendation" and not new_recommendation_semantics_mode)
-                )
-                if legacy_strength_allowed:
-                    if not is_closed_recommendation_strength(strength_preview):
-                        raise ConsoleError("unknown_recommendation_strength")
-                else:
-                    will_clear = apply_type and confirmed and target.get(
-                        "confirmed_recommendation_strength"
-                    )
-                    if not will_clear:
-                        raise ConsoleError("recommendation_strength_requires_recommendation")
-        d4_relation_review = (
-            decision == "approve"
-            and review_path != "boom"
-            and has_semantic_relation_review(target)
-        )
-        relation_plan: dict[str, Any] | None = None
-        if d4_relation_review:
-            if not relation_review_ack:
-                raise ConsoleError("knowledge_relation_review_required")
-            try:
-                relation_plan = plan_semantic_relation_review(
-                    target,
-                    objects=current,
-                    selected_choices=list(relation_choices or []),
-                    source_type=str(
-                        confirmed
-                        or target.get("confirmed_object_type")
-                        or target.get("proposed_object_type")
-                        or target.get("object_type")
-                        or ""
-                    ),
-                )
-            except ValueError as exc:
-                raise ConsoleError(str(exc)) from exc
-        if parent_id and parent_id != object_id and not d4_relation_review:
-            self.confirm_relations(
-                actor_id=actor_id,
-                snapshot_id=snapshot_id,
-                object_id=object_id,
-                relations=merge_heading_parent_relations(
-                    target.get("confirmed_relations"),
-                    parent_id,
-                ),
-                expected_revision=expected_revision,
-            )
-            if expected_revision is not None:
-                expected_revision = self.objects_revision(snapshot_id)
-            current = self.snapshot_objects(snapshot_id)
-            target = next((row for row in current if row["object_id"] == object_id), None)
-            if target is None:
-                raise ConsoleError("unknown_object")
-        passage = (
-            review_passage_record(
-                suitability=suitability or "",
-                eindoordeel=eindoordeel or "",
-                type_action=type_action or "",
-                documentpositie_action=documentpositie_action or "",
-                found_under=path_text,
-                parent_object_id=parent_id,
-            )
-            if store_passage
-            else None
-        )
-        if decision == "later":
-            saved = deepcopy(target)
-            if passage:
-                metadata = saved.setdefault("metadata", {})
-                metadata["review_passage"] = passage
-                saved = apply_register_from_review(saved, suitability=suitability or "")
-            history = [
-                row
-                for row in self._load_objects(snapshot_id)
-                if not (row["object_id"] == object_id and row["object_version"] == saved["object_version"])
-            ]
-            history.append(saved)
-            self._save_objects_pinned(snapshot_id, history, expected_revision)
-            return deepcopy(self.snapshot_objects(snapshot_id))
-        review_semantics_base_version = str(target.get("object_version") or "1.0")
-        if apply_type and confirmed:
-            if not is_confirmable_type_for_path(confirmed, review_path):
-                raise ConsoleError("unknown_object_type")
-            if target.get("object_type") != "document":
-                if target.get("confirmed_object_type") != confirmed:
-                    target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
-                target["confirmed_object_type"] = confirmed
-                target["object_type"] = confirmed
-                if confirmed != "recommendation":
+                if target.get(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD) != confirmed_semantics:
+                    if str(target.get("object_version") or "1.0") == review_semantics_base_version:
+                        target["object_version"] = bump_patch(review_semantics_base_version)
+                    target[CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD] = confirmed_semantics
+                target.pop(LEGACY_CONFIRMED_RECOMMENDATION_STRENGTH_FIELD, None)
+                strength = None
+                stamp_canonical_hashes(target)
+            elif apply_type and confirmed != "recommendation":
+                if target.get(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD):
+                    if str(target.get("object_version") or "1.0") == review_semantics_base_version:
+                        target["object_version"] = bump_patch(review_semantics_base_version)
                     target.pop(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD, None)
-                mark_four_eyes_on_object(target, confirmed_type=confirmed)
-                stamp_canonical_hashes(target)
-        if decision == "approve" and confirmed == "outcome":
-            errors = outcome_review_errors(target, peers=current)
-            if errors:
-                raise ConsoleError("outcome_review_failed", ",".join(errors))
-        strength = (recommendation_strength or "").strip() or None
-        stamp_type = confirmed or target.get("confirmed_object_type") or target.get("object_type")
-        direction_choice = (recommendation_direction or "").strip()
-        strength_level_choice = (recommendation_strength_level or "").strip()
-        has_new_recommendation_semantics = bool(
-            proposed_recommendation_semantics_of(target)
-            or confirmed_recommendation_semantics_of(target)
-            or direction_choice
-            or strength_level_choice
-        )
-        new_recommendation_semantics_mode = (
-            review_path != "boom"
-            and stamp_type == "recommendation"
-            and has_new_recommendation_semantics
-        )
-        confirmed_semantics: dict[str, Any] | None = None
-        if decision == "approve" and new_recommendation_semantics_mode:
-            existing_semantics = confirmed_recommendation_semantics_of(target)
-            effective_direction = direction_choice or str(existing_semantics.get("direction") or "")
-            if strength_level_choice:
-                effective_strength_level = strength_level_choice
-            elif existing_semantics.get("strength_status") == "not_stated":
-                effective_strength_level = "not_stated"
-            else:
-                effective_strength_level = str(existing_semantics.get("strength") or "")
-            try:
-                confirmed_semantics = confirmed_recommendation_semantics_from_review(
-                    target,
-                    direction=effective_direction,
-                    strength_choice=effective_strength_level,
-                )
-            except ValueError as exc:
-                raise ConsoleError(str(exc)) from exc
-            if target.get(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD) != confirmed_semantics:
-                if str(target.get("object_version") or "1.0") == review_semantics_base_version:
-                    target["object_version"] = bump_patch(review_semantics_base_version)
-                target[CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD] = confirmed_semantics
-            target.pop(LEGACY_CONFIRMED_RECOMMENDATION_STRENGTH_FIELD, None)
-            strength = None
-            stamp_canonical_hashes(target)
-        elif apply_type and confirmed != "recommendation":
-            if target.get(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD):
-                if str(target.get("object_version") or "1.0") == review_semantics_base_version:
-                    target["object_version"] = bump_patch(review_semantics_base_version)
-                target.pop(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD, None)
-                stamp_canonical_hashes(target)
+                    stamp_canonical_hashes(target)
 
-        strength_allowed = (
-            stamp_type == "outcome"
-            or (stamp_type == "recommendation" and not new_recommendation_semantics_mode)
-        )
-        previous_strength = target.get("confirmed_recommendation_strength")
-        if apply_type and confirmed and not strength_allowed and previous_strength:
-            target.pop("confirmed_recommendation_strength", None)
-            strength = None
-            stamp_canonical_hashes(target)
-        if not strength and decision == "approve" and stamp_type == "outcome":
-            text = str((target.get("content") or {}).get("clean_text") or "")
-            if is_geen_actie_outcome(text):
-                mapped = map_geen_actie(text)
-                strength = mapped["strength"]
-                target["no_action"] = True
-                metadata = target.setdefault("metadata", {})
-                metadata["no_action"] = True
-        if decision == "approve" and stamp_type == "outcome":
-            effective = strength or target.get("confirmed_recommendation_strength")
-            if not effective:
-                raise ConsoleError("outcome_strength_required")
-        if strength:
-            if stamp_type not in {"recommendation", "outcome"}:
-                raise ConsoleError("recommendation_strength_requires_recommendation")
-            if not is_closed_recommendation_strength(strength):
-                raise ConsoleError("unknown_recommendation_strength")
-            if target.get("confirmed_recommendation_strength") != strength:
-                if not apply_type:
-                    target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
-                target["confirmed_recommendation_strength"] = strength
+            strength_allowed = (
+                stamp_type == "outcome"
+                or (stamp_type == "recommendation" and not new_recommendation_semantics_mode)
+            )
+            previous_strength = target.get("confirmed_recommendation_strength")
+            if apply_type and confirmed and not strength_allowed and previous_strength:
+                target.pop("confirmed_recommendation_strength", None)
+                strength = None
                 stamp_canonical_hashes(target)
-        confirmed_relation_set: list[dict[str, Any]] | None = None
-        if d4_relation_review and relation_plan is not None:
-            structural: list[dict[str, Any]] = []
-            if parent_id and parent_id != object_id:
-                parent = next(
-                    (row for row in current if row.get("object_id") == parent_id),
-                    None,
-                )
-                if parent is None:
-                    raise ConsoleError("knowledge_relation_target_missing")
-                structural.append(
-                    {
-                        "relation_type": "child",
-                        "target_object_id": parent_id,
-                        "target_object_version": str(parent.get("object_version") or ""),
-                    }
-                )
-            else:
-                for row in confirmed_knowledge_relations_of(target):
-                    if str(row.get("relation_type") or "") in STRUCTURAL_RELATION_TYPES:
-                        peer = next(
-                            (
-                                item
-                                for item in current
-                                if item.get("object_id") == row.get("target_object_id")
-                            ),
-                            None,
-                        )
-                        if peer is None or str(peer.get("object_version") or "") != str(
-                            row.get("target_object_version") or ""
-                        ):
-                            raise ConsoleError("knowledge_relation_target_stale")
-                        structural.append(row)
-                if not structural and target.get("parent_object_id"):
-                    existing_parent_id = str(target.get("parent_object_id") or "")
-                    peer = next(
-                        (
-                            item
-                            for item in current
-                            if item.get("object_id") == existing_parent_id
-                        ),
+            if not strength and decision == "approve" and stamp_type == "outcome":
+                text = str((target.get("content") or {}).get("clean_text") or "")
+                if is_geen_actie_outcome(text):
+                    mapped = map_geen_actie(text)
+                    strength = mapped["strength"]
+                    target["no_action"] = True
+                    metadata = target.setdefault("metadata", {})
+                    metadata["no_action"] = True
+            if decision == "approve" and stamp_type == "outcome":
+                effective = strength or target.get("confirmed_recommendation_strength")
+                if not effective:
+                    raise ConsoleError("outcome_strength_required")
+            if strength:
+                if stamp_type not in {"recommendation", "outcome"}:
+                    raise ConsoleError("recommendation_strength_requires_recommendation")
+                if not is_closed_recommendation_strength(strength):
+                    raise ConsoleError("unknown_recommendation_strength")
+                if target.get("confirmed_recommendation_strength") != strength:
+                    if not apply_type:
+                        target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
+                    target["confirmed_recommendation_strength"] = strength
+                    stamp_canonical_hashes(target)
+            confirmed_relation_set: list[dict[str, Any]] | None = None
+            if d4_relation_review and relation_plan is not None:
+                structural: list[dict[str, Any]] = []
+                if parent_id and parent_id != object_id:
+                    parent = next(
+                        (row for row in current if row.get("object_id") == parent_id),
                         None,
                     )
-                    if peer is None:
+                    if parent is None:
                         raise ConsoleError("knowledge_relation_target_missing")
                     structural.append(
                         {
                             "relation_type": "child",
-                            "target_object_id": existing_parent_id,
-                            "target_object_version": str(peer.get("object_version") or ""),
+                            "target_object_id": parent_id,
+                            "target_object_version": str(parent.get("object_version") or ""),
                         }
                     )
+                else:
+                    for row in confirmed_knowledge_relations_of(target):
+                        if str(row.get("relation_type") or "") in STRUCTURAL_RELATION_TYPES:
+                            peer = next(
+                                (
+                                    item
+                                    for item in current
+                                    if item.get("object_id") == row.get("target_object_id")
+                                ),
+                                None,
+                            )
+                            if peer is None or str(peer.get("object_version") or "") != str(
+                                row.get("target_object_version") or ""
+                            ):
+                                raise ConsoleError("knowledge_relation_target_stale")
+                            structural.append(row)
+                    if not structural and target.get("parent_object_id"):
+                        existing_parent_id = str(target.get("parent_object_id") or "")
+                        peer = next(
+                            (
+                                item
+                                for item in current
+                                if item.get("object_id") == existing_parent_id
+                            ),
+                            None,
+                        )
+                        if peer is None:
+                            raise ConsoleError("knowledge_relation_target_missing")
+                        structural.append(
+                            {
+                                "relation_type": "child",
+                                "target_object_id": existing_parent_id,
+                                "target_object_version": str(peer.get("object_version") or ""),
+                            }
+                        )
 
-            relation_state_change = bool(relation_plan.get("state_change_required"))
-            desired_parent = (
-                parent_id
-                if parent_id
-                else str(target.get("parent_object_id") or "") or None
-            )
-            parent_state_change = target.get("parent_object_id") != desired_parent
-            relation_mutation = relation_state_change or parent_state_change
-            if (
-                relation_mutation
-                and str(target.get("object_version") or "1.0")
-                == review_semantics_base_version
-            ):
-                target["object_version"] = bump_patch(review_semantics_base_version)
-            final_source_version = str(target.get("object_version") or "1.0")
-            try:
-                confirmed_relation_set = build_confirmed_relation_set(
-                    relation_plan,
-                    final_source_version=final_source_version,
-                    structural_relations=structural,
+                relation_state_change = bool(relation_plan.get("state_change_required"))
+                desired_parent = (
+                    parent_id
+                    if parent_id
+                    else str(target.get("parent_object_id") or "") or None
                 )
-            except ValueError as exc:
-                raise ConsoleError(str(exc)) from exc
-            target[CONFIRMED_KNOWLEDGE_RELATIONS_FIELD] = confirmed_relation_set
-            target["confirmed_relations"] = legacy_confirmed_mirror(
-                confirmed_relation_set
-            )
-            target["parent_object_id"] = desired_parent
-            target.pop(PROPOSED_KNOWLEDGE_RELATIONS_FIELD, None)
-            if relation_mutation:
-                metadata = target.setdefault("metadata", {})
-                metadata["knowledge_relation_review"] = relation_review_evidence(
-                    relation_plan,
-                    confirmed_relations=confirmed_relation_set,
-                    reviewer_id=actor_id,
-                    reviewer_username=reviewer["username"],
-                    reviewed_at=utc_now(),
-                    source_version_after=final_source_version,
+                parent_state_change = target.get("parent_object_id") != desired_parent
+                relation_mutation = relation_state_change or parent_state_change
+                if (
+                    relation_mutation
+                    and str(target.get("object_version") or "1.0")
+                    == review_semantics_base_version
+                ):
+                    target["object_version"] = bump_patch(review_semantics_base_version)
+                final_source_version = str(target.get("object_version") or "1.0")
+                try:
+                    confirmed_relation_set = build_confirmed_relation_set(
+                        relation_plan,
+                        final_source_version=final_source_version,
+                        structural_relations=structural,
+                    )
+                except ValueError as exc:
+                    raise ConsoleError(str(exc)) from exc
+                target[CONFIRMED_KNOWLEDGE_RELATIONS_FIELD] = confirmed_relation_set
+                target["confirmed_relations"] = legacy_confirmed_mirror(
+                    confirmed_relation_set
                 )
-            stamp_canonical_hashes(target)
+                target["parent_object_id"] = desired_parent
+                target.pop(PROPOSED_KNOWLEDGE_RELATIONS_FIELD, None)
+                if relation_mutation:
+                    metadata = target.setdefault("metadata", {})
+                    metadata["knowledge_relation_review"] = relation_review_evidence(
+                        relation_plan,
+                        confirmed_relations=confirmed_relation_set,
+                        reviewer_id=actor_id,
+                        reviewer_username=reviewer["username"],
+                        reviewed_at=utc_now(),
+                        source_version_after=final_source_version,
+                    )
+                stamp_canonical_hashes(target)
 
-        track = target["governance"]["review_track"]
-        payload = {
-            "object_id": object_id,
-            "decision": decision,
-            "reviewer": reviewer["username"],
-            "review_date": date.today().isoformat(),
-            "reviewed_canonical_object_hash": compute_canonical_object_hash(target),
-            "comment": comment or "",
-            "proposed_correction": proposed_correction or "",
-        }
-        if interaction_evidence is not None and decision != "later":
-            payload["review_interaction"] = deepcopy(interaction_evidence)
-        interaction_atomic = interaction_evidence is not None and decision != "later"
-        updated, report = _apply_review_state(
-            current,
-            [payload],
-            track=track,
-            schema_path=self.schema_path,
-            ledger_path=None,
-        )
-        if report["errors"]:
-            raise ConsoleError("review_failed", json.dumps(report["errors"], ensure_ascii=False))
-        history = [
-            row
-            for row in self._load_objects(snapshot_id)
-            if not (row["object_id"] == object_id and row["object_version"] == target["object_version"])
-        ]
-        updated_target = next(row for row in updated if row["object_id"] == object_id)
-        passage_meta = dict(passage) if passage else {}
-        if passage_meta:
-            metadata = updated_target.setdefault("metadata", {})
-            metadata["review_passage"] = passage_meta
-            updated_target = apply_register_from_review(
-                updated_target,
-                suitability=(
-                    "geen_kenniseenheid"
-                    if rejecting
-                    else suitability or ""
-                ),
-            )
-        if confirmed and updated_target.get("object_type") != "document":
-            updated_target["confirmed_object_type"] = confirmed
-            updated_target["object_type"] = confirmed
-            mark_four_eyes_on_object(updated_target, confirmed_type=confirmed)
-            stamp_canonical_hashes(updated_target)
-        if target.get("confirmed_relations"):
-            updated_target["confirmed_relations"] = target["confirmed_relations"]
-        elif d4_relation_review:
-            updated_target["confirmed_relations"] = []
-        if confirmed_relation_set is not None:
-            updated_target[CONFIRMED_KNOWLEDGE_RELATIONS_FIELD] = deepcopy(
-                confirmed_relation_set
-            )
-            updated_target.pop(PROPOSED_KNOWLEDGE_RELATIONS_FIELD, None)
-            updated_target["parent_object_id"] = target.get("parent_object_id")
-            relation_review = (target.get("metadata") or {}).get(
-                "knowledge_relation_review"
-            )
-            if isinstance(relation_review, dict):
-                metadata = updated_target.setdefault("metadata", {})
-                metadata["knowledge_relation_review"] = deepcopy(relation_review)
-            stamp_canonical_hashes(updated_target)
-        if confirmed_semantics is not None:
-            updated_target[CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD] = confirmed_semantics
-            updated_target.pop(LEGACY_CONFIRMED_RECOMMENDATION_STRENGTH_FIELD, None)
-            stamp_canonical_hashes(updated_target)
-        elif apply_type and confirmed and confirmed != "recommendation":
-            updated_target.pop(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD, None)
-            stamp_canonical_hashes(updated_target)
-        if strength:
-            updated_target["confirmed_recommendation_strength"] = strength
-            stamp_canonical_hashes(updated_target)
-        elif apply_type and confirmed and confirmed not in {"recommendation", "outcome"}:
-            updated_target.pop("confirmed_recommendation_strength", None)
-            stamp_canonical_hashes(updated_target)
-        if target.get("no_action"):
-            updated_target["no_action"] = True
-            metadata = updated_target.setdefault("metadata", {})
-            metadata["no_action"] = True
-            stamp_canonical_hashes(updated_target)
-        history.append(updated_target)
-        new_envelopes = None
-        new_bindings = deepcopy(self._bindings)
-        if decision == "approve":
-            new_envelopes = deepcopy(self._envelopes)
-            new_envelopes[snapshot_id] = deepcopy(envelope)
-            new_envelopes[snapshot_id]["review_passes"] = dict(
-                new_envelopes[snapshot_id].get("review_passes") or {}
-            )
-            new_envelopes[snapshot_id]["review_passes"][actor_id] = {
-                "passed": True,
-                "at": utc_now(),
+            track = target["governance"]["review_track"]
+            payload = {
                 "object_id": object_id,
+                "decision": decision,
+                "reviewer": reviewer["username"],
+                "review_date": date.today().isoformat(),
+                "reviewed_canonical_object_hash": compute_canonical_object_hash(target),
+                "comment": comment or "",
+                "proposed_correction": proposed_correction or "",
             }
-            binding = tuple_record(
-                object_id=object_id,
-                object_version=updated_target["object_version"],
-                canonical_object_hash=compute_canonical_object_hash(updated_target),
-                confirmed_object_type=updated_target.get("confirmed_object_type"),
-                reviewer=reviewer["username"],
-                reviewer_id=actor_id,
-                decision=decision,
+            if interaction_evidence is not None and decision != "later":
+                payload["review_interaction"] = deepcopy(interaction_evidence)
+            interaction_atomic = interaction_evidence is not None and decision != "later"
+            updated, report = _apply_review_state(
+                current,
+                [payload],
+                track=track,
+                schema_path=self.schema_path,
+                ledger_path=None,
             )
+            if report["errors"]:
+                raise ConsoleError("review_failed", json.dumps(report["errors"], ensure_ascii=False))
+            history = [
+                row
+                for row in self._load_objects(snapshot_id)
+                if not (row["object_id"] == object_id and row["object_version"] == target["object_version"])
+            ]
+            updated_target = next(row for row in updated if row["object_id"] == object_id)
+            passage_meta = dict(passage) if passage else {}
             if passage_meta:
-                binding["suitability"] = passage_meta.get("suitability")
-                binding["eindoordeel"] = passage_meta.get("eindoordeel")
-                binding["documentpositie"] = passage_meta.get("documentpositie")
-            # Retain historical exact tuples. Current authority matches only this tuple.
-            rows = list(new_bindings.get(snapshot_id, []))
-            rows.append(binding)
-            new_bindings[snapshot_id] = rows
-        else:
-            new_bindings[snapshot_id] = invalidate_for_object(
-                new_bindings.get(snapshot_id, []),
-                object_id,
+                metadata = updated_target.setdefault("metadata", {})
+                metadata["review_passage"] = passage_meta
+                updated_target = apply_register_from_review(
+                    updated_target,
+                    suitability=(
+                        "geen_kenniseenheid"
+                        if rejecting
+                        else suitability or ""
+                    ),
+                )
+            if confirmed and updated_target.get("object_type") != "document":
+                updated_target["confirmed_object_type"] = confirmed
+                updated_target["object_type"] = confirmed
+                mark_four_eyes_on_object(updated_target, confirmed_type=confirmed)
+                stamp_canonical_hashes(updated_target)
+            if target.get("confirmed_relations"):
+                updated_target["confirmed_relations"] = target["confirmed_relations"]
+            elif d4_relation_review:
+                updated_target["confirmed_relations"] = []
+            if confirmed_relation_set is not None:
+                updated_target[CONFIRMED_KNOWLEDGE_RELATIONS_FIELD] = deepcopy(
+                    confirmed_relation_set
+                )
+                updated_target.pop(PROPOSED_KNOWLEDGE_RELATIONS_FIELD, None)
+                updated_target["parent_object_id"] = target.get("parent_object_id")
+                relation_review = (target.get("metadata") or {}).get(
+                    "knowledge_relation_review"
+                )
+                if isinstance(relation_review, dict):
+                    metadata = updated_target.setdefault("metadata", {})
+                    metadata["knowledge_relation_review"] = deepcopy(relation_review)
+                stamp_canonical_hashes(updated_target)
+            if confirmed_semantics is not None:
+                updated_target[CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD] = confirmed_semantics
+                updated_target.pop(LEGACY_CONFIRMED_RECOMMENDATION_STRENGTH_FIELD, None)
+                stamp_canonical_hashes(updated_target)
+            elif apply_type and confirmed and confirmed != "recommendation":
+                updated_target.pop(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD, None)
+                stamp_canonical_hashes(updated_target)
+            if strength:
+                updated_target["confirmed_recommendation_strength"] = strength
+                stamp_canonical_hashes(updated_target)
+            elif apply_type and confirmed and confirmed not in {"recommendation", "outcome"}:
+                updated_target.pop("confirmed_recommendation_strength", None)
+                stamp_canonical_hashes(updated_target)
+            if target.get("no_action"):
+                updated_target["no_action"] = True
+                metadata = updated_target.setdefault("metadata", {})
+                metadata["no_action"] = True
+                stamp_canonical_hashes(updated_target)
+            history.append(updated_target)
+            new_envelopes = None
+            new_bindings = deepcopy(self._bindings)
+            if decision == "approve":
+                new_envelopes = deepcopy(self._envelopes)
+                new_envelopes[snapshot_id] = deepcopy(envelope)
+                new_envelopes[snapshot_id]["review_passes"] = dict(
+                    new_envelopes[snapshot_id].get("review_passes") or {}
+                )
+                new_envelopes[snapshot_id]["review_passes"][actor_id] = {
+                    "passed": True,
+                    "at": utc_now(),
+                    "object_id": object_id,
+                }
+                binding = tuple_record(
+                    object_id=object_id,
+                    object_version=updated_target["object_version"],
+                    canonical_object_hash=compute_canonical_object_hash(updated_target),
+                    confirmed_object_type=updated_target.get("confirmed_object_type"),
+                    reviewer=reviewer["username"],
+                    reviewer_id=actor_id,
+                    decision=decision,
+                )
+                if passage_meta:
+                    binding["suitability"] = passage_meta.get("suitability")
+                    binding["eindoordeel"] = passage_meta.get("eindoordeel")
+                    binding["documentpositie"] = passage_meta.get("documentpositie")
+                # Retain historical exact tuples. Current authority matches only this tuple.
+                rows = list(new_bindings.get(snapshot_id, []))
+                rows.append(binding)
+                new_bindings[snapshot_id] = rows
+            else:
+                new_bindings[snapshot_id] = invalidate_for_object(
+                    new_bindings.get(snapshot_id, []),
+                    object_id,
+                )
+            ledger_fn = None
+            if decision != "later":
+                ledger_details = {
+                    "review_snapshot_hash": str(
+                        payload.get("reviewed_canonical_object_hash") or ""
+                    ),
+                    "comment": str(comment or ""),
+                    "proposed_correction": str(proposed_correction or ""),
+                    "snapshot_id": snapshot_id,
+                    "review_interaction": deepcopy(interaction_evidence),
+                    "reviewer_id": actor_id,
+                    "confirmed_object_type": updated_target.get("confirmed_object_type"),
+                    "review_domain": review_domain,
+                    "quality_evidence": review_evidence(envelope, quality_before, updated_target),
+                }
+                ledger_fn = lambda: append_event(
+                    self._ledger_path,
+                    event_type=(f"{track}_review_{decision}" if review_domain == "content"
+                                else f"{review_domain}_{decision}"),
+                    object_id=object_id,
+                    object_version=str(updated_target.get("object_version") or ""),
+                    actor=reviewer["username"],
+                    details=ledger_details,
+                )
+            self._commit_prepared_store(
+                objects=(snapshot_id, history),
+                envelopes=new_envelopes,
+                bindings=new_bindings,
+                expected_revision=current_revision,
+                snapshot_id=snapshot_id,
+                ledger_fn=ledger_fn,
             )
-        ledger_fn = None
-        if decision != "later":
-            ledger_details = {
-                "review_snapshot_hash": str(
-                    payload.get("reviewed_canonical_object_hash") or ""
-                ),
-                "comment": str(comment or ""),
-                "proposed_correction": str(proposed_correction or ""),
-                "snapshot_id": snapshot_id,
-                "review_interaction": deepcopy(interaction_evidence),
-                "reviewer_id": actor_id,
-                "confirmed_object_type": updated_target.get("confirmed_object_type"),
-                "review_domain": review_domain,
-                "quality_evidence": review_evidence(envelope, quality_before, updated_target),
-            }
-            ledger_fn = lambda: append_event(
-                self._ledger_path,
-                event_type=(f"{track}_review_{decision}" if review_domain == "content"
-                            else f"{review_domain}_{decision}"),
-                object_id=object_id,
-                object_version=str(updated_target.get("object_version") or ""),
-                actor=reviewer["username"],
-                details=ledger_details,
-            )
-        self._commit_prepared_store(
-            objects=(snapshot_id, history),
-            envelopes=new_envelopes,
-            bindings=new_bindings,
-            expected_revision=current_revision,
-            snapshot_id=snapshot_id,
-            ledger_fn=ledger_fn,
-        )
-        return deepcopy(updated)
+            return deepcopy(updated)
 
     def approve_second_review(
         self,
@@ -3604,129 +3646,129 @@ class OperationsConsole:
         audit evidence in the same store transaction.
         """
 
-        reviewer = self._require_role(actor_id, "reviewer")
-        if _is_forbidden_identity(reviewer["username"]) or _is_forbidden_identity(reviewer["display_name"]):
-            raise ConsoleError("forbidden_reviewer_identity")
-        envelope = self._envelope(snapshot_id)
-        if actor_id not in set(envelope.get("named_reviewers") or []):
-            raise ConsoleError("reviewer_not_named_on_snapshot")
-        if interaction_evidence is not None:
-            try:
-                validate_review_interaction_identity(
-                    interaction_evidence,
-                    read_events(self._ledger_path),
+        with self._atomic_snapshot_mutation(snapshot_id):
+            reviewer = self._require_role(actor_id, "reviewer")
+            if _is_forbidden_identity(reviewer["username"]) or _is_forbidden_identity(reviewer["display_name"]):
+                raise ConsoleError("forbidden_reviewer_identity")
+            envelope = self._envelope(snapshot_id)
+            if actor_id not in set(envelope.get("named_reviewers") or []):
+                raise ConsoleError("reviewer_not_named_on_snapshot")
+            if interaction_evidence is not None:
+                try:
+                    validate_review_interaction_identity(
+                        interaction_evidence,
+                        read_events(self._ledger_path),
+                    )
+                except ValueError as exc:
+                    raise ConsoleError(str(exc)) from exc
+
+            objects, revision = self.snapshot_objects_and_revision(snapshot_id)
+            if expected_revision is not None and revision != expected_revision:
+                raise ConsoleError(
+                    SNAPSHOT_OBJECT_WRITE_CONFLICT,
+                    current_revision=revision,
                 )
-            except ValueError as exc:
-                raise ConsoleError(str(exc)) from exc
+            target = next((row for row in objects if row.get("object_id") == object_id), None)
+            if target is None:
+                raise ConsoleError("unknown_object")
+            review_path = review_path_for_klasse(envelope["class"])
+            source_fragments = None
+            if review_path != "boom":
+                from src.knowledge_path_v1 import content_reviewable
+                if not content_reviewable(target):
+                    raise ConsoleError("content_duty_required")
+                source_fragments = self._require_resolved_candidate_source(envelope, target)
+            from src.review_policy_v1 import object_policy, required_reviewers
+            policy = object_policy(target)
+            if policy != envelope.get("review_policy"):
+                raise ConsoleError("review_policy_projection_mismatch")
+            if policy is None and not requires_four_eyes(
+                target,
+                confirmed_type=str(target.get("confirmed_object_type") or "") or None,
+            ):
+                raise ConsoleError("second_review_not_required")
 
-        objects, revision = self.snapshot_objects_and_revision(snapshot_id)
-        if expected_revision is not None and revision != expected_revision:
-            raise ConsoleError(
-                SNAPSHOT_OBJECT_WRITE_CONFLICT,
-                current_revision=revision,
-            )
-        target = next((row for row in objects if row.get("object_id") == object_id), None)
-        if target is None:
-            raise ConsoleError("unknown_object")
-        review_path = review_path_for_klasse(envelope["class"])
-        source_fragments = None
-        if review_path != "boom":
-            from src.knowledge_path_v1 import content_reviewable
-            if not content_reviewable(target):
-                raise ConsoleError("content_duty_required")
-            source_fragments = self._require_resolved_candidate_source(envelope, target)
-        from src.review_policy_v1 import object_policy, required_reviewers
-        policy = object_policy(target)
-        if policy != envelope.get("review_policy"):
-            raise ConsoleError("review_policy_projection_mismatch")
-        if policy is None and not requires_four_eyes(
-            target,
-            confirmed_type=str(target.get("confirmed_object_type") or "") or None,
-        ):
-            raise ConsoleError("second_review_not_required")
-
-        bindings = self.object_review_bindings(snapshot_id)
-        approvers = exact_current_approver_ids(target, bindings)
-        if policy is not None:
-            if policy["primary"] not in approvers:
-                raise ConsoleError("first_review_required")
-            if actor_id in approvers:
+            bindings = self.object_review_bindings(snapshot_id)
+            approvers = exact_current_approver_ids(target, bindings)
+            if policy is not None:
+                if policy["primary"] not in approvers:
+                    raise ConsoleError("first_review_required")
+                if actor_id in approvers:
+                    return deepcopy(target)
+            elif len(approvers) >= 2:
                 return deepcopy(target)
-        elif len(approvers) >= 2:
-            return deepcopy(target)
-        if not approvers:
-            raise ConsoleError("first_review_required")
-        if actor_id in set(approvers):
-            raise ConsoleError("independent_second_reviewer_required")
-        if review_path != "boom":
-            route = reviewer_route_for(target, review_path=review_path, reviewer_id=actor_id,
-                                       bindings=bindings, fragments=source_fragments)
-            if not route or route["stage"] != SECOND_REVIEW or not route["actionable"]:
-                raise ConsoleError("second_review_not_available")
-        self._require_open_original(snapshot_id, object_id)
+            if not approvers:
+                raise ConsoleError("first_review_required")
+            if actor_id in set(approvers):
+                raise ConsoleError("independent_second_reviewer_required")
+            if review_path != "boom":
+                route = reviewer_route_for(target, review_path=review_path, reviewer_id=actor_id,
+                                           bindings=bindings, fragments=source_fragments)
+                if not route or route["stage"] != SECOND_REVIEW or not route["actionable"]:
+                    raise ConsoleError("second_review_not_available")
+            self._require_open_original(snapshot_id, object_id)
 
-        canonical_hash = compute_canonical_object_hash(target)
-        binding = tuple_record(
-            object_id=object_id,
-            object_version=str(target.get("object_version") or ""),
-            canonical_object_hash=canonical_hash,
-            confirmed_object_type=target.get("confirmed_object_type"),
-            reviewer=reviewer["username"],
-            reviewer_id=actor_id,
-            decision="approve",
-        )
-        new_bindings = deepcopy(self._bindings)
-        rows = list(new_bindings.get(snapshot_id, []))
-        rows.append(binding)
-        new_bindings[snapshot_id] = rows
-
-        history = self._load_objects(snapshot_id)
-        current_target = next(
-            row for row in history
-            if row.get("object_id") == object_id
-            and row.get("object_version") == target.get("object_version")
-        )
-        governance = current_target.setdefault("governance", {})
-        second = governance.setdefault("second_review", {})
-        second.update(
-            {
-                "required": True,
-                "status": "approved",
-                "reviewer": reviewer["username"],
-                "review_date": date.today().isoformat(),
-                "snapshot_hash": canonical_hash,
-            }
-        )
-
-        self._commit_prepared_store(
-            objects=(snapshot_id, history),
-            bindings=new_bindings,
-            expected_revision=revision,
-            snapshot_id=snapshot_id,
-            ledger_fn=lambda: append_event(
-                self._ledger_path,
-                event_type="second_review_approve",
+            canonical_hash = compute_canonical_object_hash(target)
+            binding = tuple_record(
                 object_id=object_id,
                 object_version=str(target.get("object_version") or ""),
-                actor=reviewer["username"],
-                details={
-                    "snapshot_id": snapshot_id,
-                    "canonical_object_hash": canonical_hash,
-                    "confirmed_object_type": target.get("confirmed_object_type"),
-                    "first_approver_ids": list(approvers),
-                    "second_reviewer_id": actor_id,
-                    **(
-                        {
-                            "review_interaction": deepcopy(interaction_evidence),
-                        }
-                        if interaction_evidence is not None
-                        else {}
-                    ),
-                },
-            ),
-        )
-        return deepcopy(current_target)
+                canonical_object_hash=canonical_hash,
+                confirmed_object_type=target.get("confirmed_object_type"),
+                reviewer=reviewer["username"],
+                reviewer_id=actor_id,
+                decision="approve",
+            )
+            new_bindings = deepcopy(self._bindings)
+            rows = list(new_bindings.get(snapshot_id, []))
+            rows.append(binding)
+            new_bindings[snapshot_id] = rows
 
+            history = self._load_objects(snapshot_id)
+            current_target = next(
+                row for row in history
+                if row.get("object_id") == object_id
+                and row.get("object_version") == target.get("object_version")
+            )
+            governance = current_target.setdefault("governance", {})
+            second = governance.setdefault("second_review", {})
+            second.update(
+                {
+                    "required": True,
+                    "status": "approved",
+                    "reviewer": reviewer["username"],
+                    "review_date": date.today().isoformat(),
+                    "snapshot_hash": canonical_hash,
+                }
+            )
+
+            self._commit_prepared_store(
+                objects=(snapshot_id, history),
+                bindings=new_bindings,
+                expected_revision=revision,
+                snapshot_id=snapshot_id,
+                ledger_fn=lambda: append_event(
+                    self._ledger_path,
+                    event_type="second_review_approve",
+                    object_id=object_id,
+                    object_version=str(target.get("object_version") or ""),
+                    actor=reviewer["username"],
+                    details={
+                        "snapshot_id": snapshot_id,
+                        "canonical_object_hash": canonical_hash,
+                        "confirmed_object_type": target.get("confirmed_object_type"),
+                        "first_approver_ids": list(approvers),
+                        "second_reviewer_id": actor_id,
+                        **(
+                            {
+                                "review_interaction": deepcopy(interaction_evidence),
+                            }
+                            if interaction_evidence is not None
+                            else {}
+                        ),
+                    },
+                ),
+            )
+            return deepcopy(current_target)
 
     def confirm_source_context(self, **command: Any) -> dict[str, Any]:
         from src.source_context_review_v1 import confirm_source_context

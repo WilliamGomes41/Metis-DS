@@ -22,7 +22,7 @@ def write_jsonl(path:Path, rows:list[dict])->None:
 
 
 def cmd_review_queue(a:argparse.Namespace)->dict:
-    rows=read_jsonl(a.input); queue=build_review_queue(rows,a.track); write_jsonl(a.out,queue)
+    rows=read_jsonl(a.input); queue=build_review_queue(rows,a.track, review_path=a.review_path, bindings=read_jsonl(a.bindings), fragments=read_jsonl(a.raw_extract)); write_jsonl(a.out,queue)
     return {'status':'PASS','track':a.track,'queue_count':len(queue),'out':str(a.out)}
 
 
@@ -137,7 +137,7 @@ def cmd_processing_retry(a: argparse.Namespace) -> dict:
 def main()->int:
     ap=argparse.ArgumentParser(prog='vvn-data-service'); sub=ap.add_subparsers(dest='cmd',required=True)
     p=sub.add_parser('audit-current'); p.add_argument('--input',type=Path,default=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v21.jsonl'); p.add_argument('--schema',type=Path,default=ROOT/'schemas/knowledge_object.schema.v1.1.json'); p.add_argument('--source-registry',type=Path,default=ROOT/'data/source_registry.json'); p.add_argument('--raw-extract',type=Path,default=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_raw.jsonl'); p.add_argument('--report',type=Path)
-    p=sub.add_parser('review-queue'); p.add_argument('--input',type=Path,required=True); p.add_argument('--track',choices=['clinical','technical'],required=True); p.add_argument('--out',type=Path,required=True); p.add_argument('--report',type=Path)
+    p=sub.add_parser('review-queue'); p.add_argument('--input',type=Path,required=True); p.add_argument('--track',choices=['clinical','technical'],required=True); p.add_argument('--out',type=Path,required=True); p.add_argument('--report',type=Path); p.add_argument('--raw-extract',type=Path,required=True); p.add_argument('--bindings',type=Path,required=True); p.add_argument('--review-path',choices=['richtlijn','boom'],default='richtlijn')
     p=sub.add_parser('source-register'); p.add_argument('--source-id',required=True); p.add_argument('--binary',type=Path,required=True); p.add_argument('--source-url',required=True); p.add_argument('--version'); p.add_argument('--out',type=Path,required=True); p.add_argument('--report',type=Path)
     p=sub.add_parser('source-bind'); p.add_argument('--manifest',type=Path,required=True); p.add_argument('--source-registry',type=Path,required=True); p.add_argument('--out',type=Path,required=True); p.add_argument('--report',type=Path)
     p=sub.add_parser('prepublish'); p.add_argument('--input',type=Path,required=True); p.add_argument('--schema',type=Path,required=True); p.add_argument('--source-registry',type=Path,required=True); p.add_argument('--raw-extract',type=Path,required=True); p.add_argument('--report',type=Path)

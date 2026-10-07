@@ -1023,12 +1023,14 @@ def _review_context_block(
     *,
     snapshot_id: str,
     review_path: str,
+    bindings=(),
+    fragments=None,
     task: str = "",
 ) -> str:
     context = review_context(
         obj,
         objects=objects,
-        review_path=review_path,
+        review_path=review_path, bindings=bindings, fragments=fragments
     )
     links = context.get("links") or []
     if not links:
@@ -1118,6 +1120,8 @@ def _knowledge_relation_review_block(
     objects: list[dict[str, Any]],
     *,
     review_path: str,
+    bindings=(),
+    fragments=None,
     draft: dict[str, Any] | None = None,
 ) -> str:
     if not has_semantic_relation_review(obj):
@@ -1127,7 +1131,7 @@ def _knowledge_relation_review_block(
         obj,
         objects=objects,
         review_path=review_path,
-        stage="first_review",
+        stage="first_review", bindings=bindings, fragments=fragments
     )
     outgoing_by_key = {}
     for link in context.get("links") or []:
@@ -1763,7 +1767,7 @@ def _review_section_groups(
             task=task,
         )
         context = _review_context_block(
-            obj, context_objects, snapshot_id=snapshot_id, review_path=review_path, task=task,
+            obj, context_objects, snapshot_id=snapshot_id, review_path=review_path, task=task, bindings=console.object_review_bindings(snapshot_id), fragments=console.review_source_fragments(snapshot_id)
         )
         if context:
             item = item.removesuffix("</li>") + (
@@ -2446,6 +2450,7 @@ def _review_route_objects(
     bindings: list[dict[str, Any]] | None,
     reviewer_id: str,
     canonical_task: str,
+    fragments=None,
 ) -> list[dict[str, Any]]:
     if canonical_task == "structure" and review_path != "boom":
         from src.knowledge_path_v1 import is_structural_projection
@@ -2463,7 +2468,7 @@ def _review_route_objects(
             duty = review_duty_for(
                 obj,
                 review_path=review_path,
-                bindings=None,
+                bindings=None, fragments=fragments
             )
             if not duty:
                 continue
@@ -2480,7 +2485,7 @@ def _review_route_objects(
             obj,
             review_path=review_path,
             reviewer_id=reviewer_id,
-            bindings=bindings,
+            bindings=bindings, fragments=fragments
         )
         if not route or not route.get("actionable"):
             continue
@@ -2550,7 +2555,7 @@ def _render_second_review_card(
         obj,
         review_path=review_path,
         reviewer_id=reviewer_id,
-        bindings=bindings,
+        bindings=bindings, fragments=console.review_source_fragments(snapshot_id)
     )
     if not route or route.get("canonical_task") != "second_review":
         raise ConsoleError("second_review_not_available")
@@ -2608,7 +2613,7 @@ def _render_second_review_card(
             snapshot_objects,
             snapshot_id=snapshot_id,
             review_path=review_path,
-            task="second_review",
+            task="second_review", bindings=console.object_review_bindings(snapshot_id), fragments=console.review_source_fragments(snapshot_id)
         )}
         {semantics_html}
         {relations_html}
@@ -2678,9 +2683,10 @@ def _review_inventory(
     reviewer_id: str,
     task: str,
     snapshot_revision: str = "",
+    fragments=None,
 ) -> str:
     """Every current passage remains reachable; no admission or finality writes."""
-    followups = review_followup_queues(objects, review_path=review_path, bindings=bindings)
+    followups = review_followup_queues(objects, review_path=review_path, bindings=bindings, fragments=fragments)
     followup_tasks = {
         str(obj["object_id"]): name
         for name, rows in followups.items() for obj in rows
@@ -2712,12 +2718,12 @@ def _review_inventory(
         if obj.get("object_type") == "document":
             continue
         if bindings is None:
-            duty = review_duty_for(obj, review_path=review_path, bindings=None)
+            duty = review_duty_for(obj, review_path=review_path, bindings=None, fragments=fragments)
             route_task = ""
             if duty:
                 route_task = "second_review" if duty["stage"] == "second_review" else str(duty["lane"])
         else:
-            route = reviewer_route_for(obj, review_path=review_path, bindings=bindings, reviewer_id=reviewer_id)
+            route = reviewer_route_for(obj, review_path=review_path, bindings=bindings, reviewer_id=reviewer_id, fragments=fragments)
             route_task = ""
             if route:
                 route_task = str(route["canonical_task"]) if route["actionable"] else "waiting"
@@ -3022,34 +3028,35 @@ def _render_review_index(
     audit_signals: list[dict[str, Any]] | None = None,
     bindings: list[dict[str, Any]] | None = None,
     reviewer_id: str = "",
+    fragments=None,
 ) -> str:
     task = normalize_review_task(task)
     bindings = list(bindings) if bindings is not None else None
     if task in {"inventory", "disposition", "waiting"}:
         return _review_inventory(snapshot_id, snapshot_objects, review_path=review_path,
                                  bindings=bindings, reviewer_id=reviewer_id, task=task,
-                                 snapshot_revision=snapshot_revision)
-    followups = review_followup_queues(snapshot_objects, review_path=review_path, bindings=bindings)
+                                 snapshot_revision=snapshot_revision, fragments=fragments)
+    followups = review_followup_queues(snapshot_objects, review_path=review_path, bindings=bindings, fragments=fragments)
     koppen = _review_route_objects(
         snapshot_objects,
         review_path=review_path,
         bindings=bindings,
         reviewer_id=reviewer_id,
-        canonical_task="structure",
+        canonical_task="structure", fragments=fragments
     )
     individual = _review_route_objects(
         snapshot_objects,
         review_path=review_path,
         bindings=bindings,
         reviewer_id=reviewer_id,
-        canonical_task="contextual",
+        canonical_task="contextual", fragments=fragments
     )
     second_review = _review_route_objects(
         snapshot_objects,
         review_path=review_path,
         bindings=bindings,
         reviewer_id=reviewer_id,
-        canonical_task="second_review",
+        canonical_task="second_review", fragments=fragments
     )
     blocked = followups["repair"]
     normal_passages, normal_batches = (0, 0)
@@ -3057,7 +3064,7 @@ def _render_review_index(
         normal_passages, normal_batches = normal_risk_batch_counts(
             snapshot_objects,
             review_path=review_path,
-            bindings=bindings,
+            bindings=bindings, fragments=fragments
         )
     copy = _review_lane_copy(review_path, koppen)
     progress = _review_progress_summary(snapshot_objects)
@@ -3132,7 +3139,7 @@ def _render_review_index(
     if task == "repair":
         return f'''
           {_review_task_header(snapshot_id, "Geblokkeerde passages herstellen", "Controleer de bron en handel verwerkingsproblemen af voordat je inhoudelijk beoordeelt")}
-          {_review_inventory(snapshot_id, snapshot_objects, review_path=review_path, bindings=bindings, reviewer_id=reviewer_id, task="repair")}
+          {_review_inventory(snapshot_id, snapshot_objects, review_path=review_path, bindings=bindings, reviewer_id=reviewer_id, task="repair", fragments=fragments)}
 
         '''
     return _review_task_dashboard(
@@ -3162,7 +3169,7 @@ def _render_review_index(
         waiting_pending=sum(
             bool(route and route.get("waiting_for_other_reviewer"))
             for obj in snapshot_objects
-            for route in [reviewer_route_for(obj, review_path=review_path, reviewer_id=reviewer_id, bindings=bindings)]
+            for route in [reviewer_route_for(obj, review_path=review_path, reviewer_id=reviewer_id, bindings=bindings, fragments=fragments)]
         ) if bindings is not None else 0,
     )
 
@@ -3280,7 +3287,7 @@ def _render_review_card(
                         snapshot_objects,
                         snapshot_id=snapshot_id,
                         review_path=review_path,
-                        task=task,
+                        task=task, bindings=console.object_review_bindings(snapshot_id), fragments=console.review_source_fragments(snapshot_id)
                     )}
                     {context_html}
                     </div>
@@ -3340,7 +3347,7 @@ def _render_review_card(
                         obj,
                         snapshot_objects,
                         review_path=review_path,
-                        draft=draft,
+                        draft=draft, bindings=console.object_review_bindings(snapshot_id), fragments=console.review_source_fragments(snapshot_id)
                     )}
                     <section class="review-step" data-review-step="f">
                       <h4>Wat is je besluit?</h4>
@@ -3486,7 +3493,7 @@ def _render_review_room(
                 normal_review_enabled=isinstance(console, ProportionateReviewConsole),
                 audit_signals=audit_signals,
                 bindings=bindings,
-                reviewer_id=str(account.get("account_id") or ""),
+                reviewer_id=str(account.get("account_id") or ""), fragments=console.review_source_fragments(snapshot_id)
             )
         else:
             obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
@@ -3519,7 +3526,7 @@ def _render_review_room(
                         obj,
                         review_path=review_path,
                         reviewer_id=str(account.get("account_id") or ""),
-                        bindings=current_bindings,
+                        bindings=current_bindings, fragments=console.review_source_fragments(snapshot_id)
                     )
                     if current_bindings is not None
                     else None
@@ -5449,7 +5456,7 @@ def create_console_app(
         duty = review_duty_for(
             focal,
             review_path=review_path,
-            bindings=bindings,
+            bindings=bindings, fragments=state.review_source_fragments(snapshot_id)
         )
         evidence = (
             build_review_interaction_evidence(
@@ -5568,7 +5575,7 @@ def create_console_app(
                             row,
                             review_path=path,
                             reviewer_id=str(account.get("account_id") or ""),
-                            bindings=bindings,
+                            bindings=bindings, fragments=state.review_source_fragments(snapshot_id)
                         )
                     )
                     and route.get("actionable")
@@ -5827,7 +5834,7 @@ def create_console_app(
                         row,
                         review_path=review_path,
                         reviewer_id=str(account.get("account_id") or ""),
-                        bindings=bindings,
+                        bindings=bindings, fragments=state.review_source_fragments(snapshot_id)
                     )
                 )
                 and route.get("actionable")

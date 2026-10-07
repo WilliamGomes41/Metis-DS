@@ -3,7 +3,7 @@
 RED/GREEN classification is recorded in the change contract after baseline CI.
 # release-control-evidence: scope/belofte
 # release-control-evidence: kwaliteit
-# release-control-evidence: opslag durable recovery
+# release-control-evidence: opslag durable recovery concurrent stale
 # release-control-evidence: toegang
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
@@ -119,7 +119,8 @@ def test_general_queue_does_not_reopen_completed_candidate(tmp_path):
     console, reviewer, sid, obj = _console(tmp_path)
     _approve(console, reviewer, sid, obj)
     current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
-    assert regular_review_queue([current], review_path="richtlijn") == []
+    assert regular_review_queue([current], review_path="richtlijn",
+        bindings=console.object_review_bindings(sid), fragments=console.review_source_fragments(sid)) == []
 
 
 def test_failed_review_store_commit_leaves_no_approval_ledger(tmp_path, monkeypatch):
@@ -165,3 +166,61 @@ def test_valid_candidate_approval_is_exact_and_reject_never_changes_admission(tm
     rejected = next(o for o in other.snapshot_objects(sid2) if o["object_id"] == obj2["object_id"])
     assert rejected["metadata"]["admission"] == gate
     assert exact_current_approver_ids(rejected, other.object_review_bindings(sid2)) == ()
+
+@pytest.mark.parametrize("mutation", ["text", "bounds", "mapping", "provenance"])
+def test_corrupt_persisted_candidate_has_no_duty_even_with_allowed_gate(tmp_path, mutation):
+    from src.review_duty_v1 import review_duty_for
+    console, reviewer, sid, obj = _console(tmp_path)
+    bad = deepcopy(obj)
+    if mutation == "text":
+        bad["content"]["clean_text"] += " Veranderd."
+    elif mutation == "bounds":
+        bad["metadata"]["semantic_passage"]["spans"][0]["end"] = 999999
+    elif mutation == "mapping":
+        bad["metadata"]["semantic_passage"]["source_mapping"] = []
+    else:
+        bad["provenance"]["source_fragments"][0]["raw_content_hash"] = "forged"
+    stamp_canonical_hashes(bad)
+    assert review_duty_for(bad, review_path="richtlijn", bindings=[],
+                           fragments=console.review_source_fragments(sid)) is None
+
+
+def test_content_queue_parity_uses_real_source_and_exact_bindings(tmp_path):
+    from src.review_duty_v1 import review_duty_for
+    from src.proportionate_review_v1 import normal_risk_batch_queue, regular_individual_review_queue
+    from src.build_review_queue_v3 import build
+    console, reviewer, sid, obj = _console(tmp_path)
+    objects = console.snapshot_objects(sid)
+    fragments = console.review_source_fragments(sid)
+    bindings = console.object_review_bindings(sid)
+    args = {"review_path": "richtlijn", "bindings": bindings, "fragments": fragments}
+    expected = {o["object_id"] for o in objects if review_duty_for(o, **args)}
+    assert expected == {obj["object_id"]}
+    assert {o["object_id"] for o in regular_review_queue(objects, **args)} == expected
+    assert {o["object_id"] for o in normal_risk_batch_queue(objects, **args)} == expected
+    assert regular_individual_review_queue(objects, **args) == []
+    assert {o["object_id"] for o in build(objects, obj["governance"]["review_track"], **args)} == expected
+    _approve(console, reviewer, sid, obj)
+    current = console.snapshot_objects(sid)
+    args["bindings"] = console.object_review_bindings(sid)
+    assert regular_review_queue(current, **args) == []
+    assert normal_risk_batch_queue(current, **args) == []
+    assert build(current, obj["governance"]["review_track"], **args) == []
+
+
+def test_structure_confirmation_is_qa_and_general_content_approve_is_denied(tmp_path):
+    from src.knowledge_path_v1 import is_structural_projection
+    from src.review_duty_v1 import review_duty_for
+    console, reviewer, sid, obj = _console(tmp_path)
+    heading = next(o for o in console.snapshot_objects(sid) if is_structural_projection(o))
+    with pytest.raises(ConsoleError, match="structure_confirmation_command_required"):
+        console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
+            object_id=heading["object_id"], decision="approve", confirmed_object_type="heading")
+    rows = console.batch_confirm_headings(actor_id=reviewer["account_id"], snapshot_id=sid,
+        object_ids=[heading["object_id"]], expected_revision=console.objects_revision(sid))
+    confirmed = rows[0]
+    assert not content_reviewable(confirmed)
+    assert review_duty_for(confirmed, review_path="richtlijn",
+        bindings=console.object_review_bindings(sid), fragments=console.review_source_fragments(sid)) is None
+    assert any(event["event_type"] == "structure_approve" for event in
+        map(json.loads, console._ledger_path.read_text().splitlines()))

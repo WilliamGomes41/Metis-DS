@@ -77,53 +77,15 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
     def waiting_task_counts(self, account_id: str) -> dict[str, int]:
         counts = super().waiting_task_counts(account_id)
         account = self._account(account_id)
-        roles = set(account.get("roles") or [])
-        ingest = 0
-        review = 0
-        for envelope in self._envelopes.values():
-            current = self.snapshot_objects(envelope["snapshot_id"])
-            statuses = {
-                (row.get("governance") or {}).get("validation_status")
-                for row in current
-            }
-            if (
-                "researcher" in roles
-                and envelope.get("uploader_account_id") == account_id
-                and "revise" in statuses
-            ):
-                ingest += 1
-            if (
-                "reviewer" in roles
-                and account_id in (envelope.get("named_reviewers") or [])
-                and ("needs_review" in statuses or "revise" in statuses)
-            ):
-                review += 1
-        counts["ingest"] = ingest if "researcher" in roles else 0
-        counts["review"] = review if "reviewer" in roles else 0
+        if "researcher" in set(account.get("roles") or []):
+            counts["ingest"] = sum(
+                envelope.get("uploader_account_id") == account_id
+                and any((row.get("governance") or {}).get("validation_status") == "revise"
+                        for row in self.snapshot_objects(envelope["snapshot_id"]))
+                for envelope in self._envelopes.values()
+            )
         return counts
 
-    @contextmanager
-    def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
-        """Rollback object/binding/envelope writes together with ledger evidence."""
-        with self._store_write_lock():
-            path = self._objects_path(snapshot_id)
-            prior_objects = path.read_bytes() if path.exists() else None
-            prior_envelopes = deepcopy(self._envelopes)
-            prior_bindings = deepcopy(self._bindings)
-            prior_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
-            try:
-                yield
-            except Exception:
-                self._rollback_store_files(
-                    objects_snapshot=(snapshot_id, prior_objects),
-                    envelopes=prior_envelopes,
-                    bindings=prior_bindings,
-                    ledger_size=prior_ledger,
-                )
-                self._envelopes = prior_envelopes
-                self._bindings = prior_bindings
-                self.refresh_objects_expected_revision(snapshot_id)
-                raise
 
     def batch_review_normal_risk(self, **kwargs: Any) -> list[dict[str, Any]]:
         """Commit the selected decisions and their evidence as one command."""

@@ -995,8 +995,9 @@ class _PostgresBadgeCountsMixin:
         from src.document_status_ui_v1 import current_document_lifecycle_status
         from src.review_workboard_v1 import ReviewWorkInputs, review_work_item
 
-        ids = [sid for sid, summary in summaries.items()
-               if summary["envelope"].get("review_policy")]
+        # SQL aggregates remain presentation inputs. Content-duty authority is
+        # recomputed from the same domain projection for every assigned document.
+        ids = list(summaries)
         if not ids:
             return
         try:
@@ -1063,8 +1064,7 @@ class _PostgresBadgeCountsMixin:
             # still contain duties. Do not materialize those closed payloads.
             summaries = {sid: summary for sid, summary in summaries.items()
                          if lifecycle[sid]["workflow_status"] != "closed"}
-            explicit_ids = [sid for sid, summary in summaries.items()
-                            if summary["envelope"].get("review_policy")]
+            explicit_ids = list(summaries)
             objects = self.workflow_document_store.list_current_objects_batch(explicit_ids)
             bindings = self.workflow_review_store.read_bindings(explicit_ids) if explicit_ids else {}
             for sid in explicit_ids:
@@ -1186,7 +1186,7 @@ class _PostgresBadgeCountsMixin:
             publish = len(candidates - published)
 
         review_count = int(row.get("review") or 0)
-        if row.get("explicit_review_documents") and "reviewer" in roles:
+        if "reviewer" in roles:
             review_count = self._navigation_review_count(account)
         return {
             "ingest": int(row.get("ingest") or 0) if "researcher" in roles else 0,

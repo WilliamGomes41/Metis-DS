@@ -112,7 +112,7 @@ def regular_individual_review_queue(objects: Iterable[dict[str, Any]], *, review
     source = tuple(fragments) if fragments is not None else None
     return sorted([obj for obj in objects if (
         duty := review_duty_for(obj, review_path=review_path, bindings=bound, fragments=source)
-    ) and duty["lane"] != LANE_BATCH and not is_slow_review_duty(obj, review_path=review_path)],
+    ) and duty["lane"] != LANE_BATCH and not is_slow_review_duty(obj, review_path=review_path, bindings=bound, fragments=source)],
     key=review_priority_rank)
 
 
@@ -225,7 +225,7 @@ class ProportionateReviewConsole(OperationsConsole):
         path = review_path_for_klasse(envelope["class"])
         ids = [
             str(obj.get("object_id") or "")
-            for obj in regular_review_queue(self.snapshot_objects(snapshot_id), review_path=path)
+            for obj in regular_review_queue(self.snapshot_objects(snapshot_id), review_path=path, bindings=self.object_review_bindings(snapshot_id), fragments=self.review_source_fragments(snapshot_id))
             if obj.get("object_id")
         ]
         if object_id in ids:
@@ -274,6 +274,7 @@ class ProportionateReviewConsole(OperationsConsole):
                 target,
                 review_path=review_path,
                 bindings=_review_bindings_or_legacy(self, snapshot_id),
+                fragments=self.review_source_fragments(snapshot_id),
             )
             if not (
                 duty

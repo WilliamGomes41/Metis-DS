@@ -95,6 +95,7 @@ def review_followup_queues(
     *,
     review_path: str,
     bindings: list[dict[str, Any]] | None = None,
+    fragments=None,
 ) -> dict[str, list[dict[str, Any]]]:
     """Open source work not represented by an existing ReviewDuty.
 
@@ -113,7 +114,7 @@ def review_followup_queues(
             # The target's knowledge review covers the proposed context. Its
             # source closure remains open until that target is approved.
             continue
-        if review_duty_for(obj, review_path=review_path, bindings=bindings):
+        if review_duty_for(obj, review_path=review_path, bindings=bindings, fragments=fragments):
             continue
         task = (
             "repair"
