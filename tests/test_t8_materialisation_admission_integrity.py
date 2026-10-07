@@ -213,7 +213,8 @@ def test_incomplete_raw_mapping_cannot_materialise(monkeypatch):
 
 def test_empty_selected_text_has_its_original_materialisation_reason():
     fragments, decisions = _inputs()
-    decisions[0]["spans"][0].update(start=7, end=8)
+    start = decisions[0]["source_text"].index(" ")
+    decisions[0]["spans"][0].update(start=start, end=start + 1)
     with pytest.raises(SemanticPassageError) as caught:
         materialise_knowledge_candidates(decisions, document_id="doc-t8", fragments=fragments)
     assert caught.value.code == "materialisation_text_empty"
