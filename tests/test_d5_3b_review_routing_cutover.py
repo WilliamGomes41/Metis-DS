@@ -105,7 +105,8 @@ def _console(tmp_path: Path) -> tuple[OperationsConsole, dict[str, dict], str, s
         "risk_fields": ["contraindication"],
     }
     stamp_canonical_hashes(target)
-    console._save_objects(snapshot_id, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, snapshot_id, rows)
 
     first_binding = tuple_record(
         object_id=target["object_id"],

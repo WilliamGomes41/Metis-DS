@@ -346,3 +346,18 @@ def test_reprocessing_retains_nonknowledge_ancestor_of_promoted_candidate(tmp_pa
     rebuilt = reprocessed_history(history, [candidate], snapshot_id=sid, actor="researcher")
     assert rebuilt[:2] == history
     assert current_revisions(rebuilt, snapshot_id=sid)
+
+
+def test_legacy_published_history_remains_readable_but_cannot_gain_successor(tmp_path):
+    from src.revision_workflow import revise_object, validate_revision_write, current_revisions
+    _, _, sid, candidate = _console(tmp_path)
+    published = deepcopy(candidate)
+    published["governance"]["publication_status"] = "published"
+    before = deepcopy(published)
+    assert current_revisions([published], snapshot_id=sid) == [published]
+    proposed = deepcopy(published)
+    proposed["content"]["clean_text"] += " Correction."
+    successor = revise_object(published, proposed, snapshot_id=sid, actor="reviewer", reason="correction")
+    with pytest.raises(ValueError, match="published_working_revision_immutable"):
+        validate_revision_write([published], [published, successor], snapshot_id=sid)
+    assert published == before

@@ -95,13 +95,23 @@ def materialised_fixture(text, *, proposed_type="recommendation", document_id="d
 
 
 def install_fixture_history(console, snapshot_id, rows):
-    """Seed synthetic file-backed history, never invoke a production mutation.
+    """Seed synthetic isolated history, never invoke a production mutation.
 
     Legacy/corruption fixtures deliberately model already persisted states.
     T11 storage commands must reject such in-place rewrites, so test setup writes
     the isolated fixture file directly and then refreshes its concurrency token.
     """
-    assert getattr(console, "workflow_document_store", None) is None
+    store = getattr(console, "workflow_document_store", None)
+    if store is not None:
+        with store._connect() as connection:
+            connection.execute("DELETE FROM workflow.document_objects WHERE snapshot_id=%s", (snapshot_id,))
+            for position, row in enumerate(rows):
+                connection.execute(
+                    "INSERT INTO workflow.document_objects(snapshot_id,object_id,object_version,payload,position) "
+                    "VALUES(%s,%s,%s,%s::jsonb,%s)",
+                    (snapshot_id, row["object_id"], row["object_version"], json.dumps(row), position))
+        console.refresh_workflow_documents()
+        return
     path = console._objects_path(snapshot_id)
     path.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
     console.refresh_objects_expected_revision(snapshot_id)

@@ -690,7 +690,8 @@ def test_four_eyes_still_required_for_exception_and_high_risk(tmp_path: Path) ->
             row.setdefault("risk", {})["risk_level"] = "high"
             row["risk"]["risk_fields"] = ["exception"]
             stamp_canonical_hashes(row)
-    console._save_objects(receipt["snapshot_id"], rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, receipt["snapshot_id"], rows)
     console.confirm_object_type(
         actor_id=accounts["reviewer"]["account_id"],
         snapshot_id=receipt["snapshot_id"],

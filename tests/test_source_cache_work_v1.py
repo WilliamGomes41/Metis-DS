@@ -117,7 +117,8 @@ def test_http_zero_object_blocked_work_can_reprocess_from_blob(recovery_postgres
     console._envelopes[sid]["publication_eligibility"] = PRE_REVIEW_BLOCKED
     console._envelopes[sid]["processing_blocker"] = {"code": "empty_test_extract"}
     console._save_envelopes()
-    console._save_objects(sid, [])
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, sid, [])
     Path(receipt["binary_path"]).unlink()
     client = TestClient(create_console_app(console))
     assert client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"}, follow_redirects=False).status_code == 303

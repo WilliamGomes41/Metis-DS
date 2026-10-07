@@ -133,7 +133,8 @@ def _reviewed_source_objects(
             text=text,
         )
         stamp_canonical_hashes(row)
-    console._save_objects(snapshot_id, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, snapshot_id, rows)
 
     console.review_object(
         actor_id=reviewer["account_id"],

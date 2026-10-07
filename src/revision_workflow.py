@@ -170,7 +170,7 @@ def current_revisions(rows, *, snapshot_id=None):
     for row in rows:
         oid, version = row["object_id"], row["object_version"]
         identity = (oid, version)
-        if identity in seen:
+        if identity in seen and (knowledge_revision(row) or knowledge_revision(current.get(oid, {}))):
             raise ValueError("revision_identity_duplicate")
         seen.add(identity)
         edge = lineage_evidence(row)
@@ -231,11 +231,14 @@ def validate_revision_write(previous, submitted, *, snapshot_id):
         if (new_current[identity[0]]["object_version"] != identity[1]
                 or old_current[identity[0]] != before) and after != before:
             raise ValueError("revision_history_changed")
+    sealed = any((row.get("governance") or {}).get("publication_status") == "published" for row in previous)
     for identity, after in new.items():
         if identity in old:
             continue
         before = old_current.get(identity[0])
         if before is not None and (knowledge_revision(before) or knowledge_revision(after)):
+            if sealed:
+                raise ValueError("published_working_revision_immutable")
             if not lineage_evidence(after):
                 raise ValueError("revision_predecessor_required")
     # No stale command can add an alternative successor to the now-current row.
@@ -278,7 +281,10 @@ def reprocessed_history(previous, generated, *, snapshot_id, actor):
         if updated["object_version"] == old["object_version"]:
             continue
         retained.append(updated)
-    return retained
+    order = {}
+    for row in previous + generated:
+        order.setdefault(row["object_id"], len(order))
+    return sorted(retained, key=lambda row: order[row["object_id"]])
 
 def _rebind_relations(result, previous, staged_version):
     """Rebuild IDs for the new source endpoint, never infer a new target."""

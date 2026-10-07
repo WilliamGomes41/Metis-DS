@@ -1387,12 +1387,12 @@ class OperationsConsole:
             raise ConsoleError("reviewer_not_named_on_snapshot")
         current = self.snapshot_objects(snapshot_id, for_update=True)
         target, history, new_bindings = self._prepare_relation_confirmation(
-            snapshot_id=snapshot_id, object_id=object_id, relations=relations, current=current)
+            snapshot_id=snapshot_id, object_id=object_id, relations=relations, current=current, actor=reviewer["username"])
         self._commit_prepared_store(objects=(snapshot_id, history), bindings=new_bindings,
                                     expected_revision=expected_revision)
         return deepcopy(target)
 
-    def _prepare_relation_confirmation(self, *, snapshot_id, object_id, relations, current):
+    def _prepare_relation_confirmation(self, *, snapshot_id, object_id, relations, current, actor):
         """Existing relation validation prepares rows; the caller owns the commit."""
         target = next((deepcopy(row) for row in current if row["object_id"] == object_id), None)
         if target is None:
@@ -1444,7 +1444,7 @@ class OperationsConsole:
             target["object_version"] = bump_patch(str(target.get("object_version") or "1.0"))
         target["confirmed_relations"] = confirmed
         target = self._prepare_knowledge_revision(snapshot_id, original_target, target,
-            reason="relation confirmation", actor="relation-command")
+            reason="relation confirmation", actor=actor)
         stamp_canonical_hashes(target)
 
         previous_children = {
@@ -1478,7 +1478,7 @@ class OperationsConsole:
                 str(updated_peer.get("object_version") or "1.0")
             )
             updated_peer = self._prepare_knowledge_revision(snapshot_id, peer, updated_peer,
-                reason="parent relation confirmation", actor="relation-command")
+                reason="parent relation confirmation", actor=actor)
             stamp_canonical_hashes(updated_peer)
             peer_updates.append(updated_peer)
         history = [
@@ -3322,7 +3322,7 @@ class OperationsConsole:
             relation_bindings = None
             if parent_id and parent_id != object_id and not d4_relation_review:
                 target, relation_history, relation_bindings = self._prepare_relation_confirmation(
-                    snapshot_id=snapshot_id, object_id=object_id, current=current,
+                    snapshot_id=snapshot_id, object_id=object_id, current=current, actor=reviewer["username"],
                     relations=merge_heading_parent_relations(target.get("confirmed_relations"), parent_id))
                 current = list({row["object_id"]: row for row in relation_history}.values())
             passage = (

@@ -173,7 +173,9 @@ def test_http_withdrawal_complete_recovery_and_open_work_resume(recovery_postgre
     pending = deepcopy(console._envelope(v3["snapshot_id"]))
     pending["publication_eligibility"] = PRE_REVIEW_BLOCKED
     pending["processing_blocker"] = {"code": "empty_test_extract"}
-    console.workflow_document_store.write_bundle(envelope=pending, objects=[])
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, v3["snapshot_id"], [])
+    console.workflow_document_store.write_bundle(envelope=pending)
     console.refresh_workflow_documents()
     stale = dict(snapshot_id=v1["snapshot_id"], expected_release_id=r1["release_id"], reason="Source withdrawn", withdraw_confirmed="yes")
     assert client.post("/publish/withdraw", data=stale).status_code == 409
