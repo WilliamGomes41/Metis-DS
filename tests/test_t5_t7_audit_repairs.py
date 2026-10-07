@@ -151,9 +151,17 @@ def test_historical_heading_does_not_enter_publish_set_or_change_knowledge_gate(
     path, _ = console._verified_source_bytes(envelope)
     fragments = console._read_source_fragments(envelope, path)
     block = semantic_source_blocks(f for f in fragments if f.get("object_type") != "heading")[-1]
-    obj = _row("selected", "definition", confirmed="definition", validation="approved",
-               text=block["text"], gate="allowed", origin="proposal_selected",
-               spans=[{"block_id": block["block_id"], "start": 0, "end": len(block["text"])}])
+    obj = deepcopy(next(
+        o for o in console.snapshot_objects(snapshot)
+        if (o.get("content") or {}).get("clean_text") == block["text"]
+    ))
+    obj.update(object_id="selected", object_type="definition", confirmed_object_type="definition")
+    obj["governance"]["validation_status"] = "approved"
+    obj.setdefault("metadata", {})["admission"] = {"gate_result": "allowed"}
+    obj["metadata"]["semantic_passage"] = {
+        "selection_origin": "proposal_selected",
+        "spans": [{"block_id": block["block_id"], "start": 0, "end": len(block["text"])}],
+    }
     _project_policy(console, snapshot, obj)
     _stamp_hash(obj)
     _append(console, snapshot, obj)
@@ -166,6 +174,38 @@ def test_historical_heading_does_not_enter_publish_set_or_change_knowledge_gate(
     _append(console, snapshot, heading)
     console._bindings[snapshot].append(_binding(heading, reviewer["account_id"]))
     after = console.consider_publish(actor_id=publisher["account_id"], snapshot_id=snapshot)
+    assert before["tuple_authorization"] is True
+    assert "source_lineage_incomplete" not in before["blockers"]
+    assert "not_knowledge_candidate" not in before["blockers"]
     assert after["blockers"] == before["blockers"]
     assert after["publishable_object_ids"] == before["publishable_object_ids"] == ["selected"]
     assert "structural_projection_not_knowledge" not in after["blockers"]
+
+
+@pytest.mark.parametrize("command", ["first", "second"])
+def test_corrupt_persisted_source_cannot_acquire_review_binding(tmp_path, command):
+    from src.operations_console_v1 import ConsoleError
+    console, reviewer, snapshot = _console(tmp_path)
+    obj = _allowed_candidate()
+    obj["object_id"] = "corrupt-selected"
+    obj["metadata"]["semantic_passage"]["spans"][0]["block_id"] = "missing-block"
+    obj["risk"] = {"risk_level": "high"}
+    _project_policy(console, snapshot, obj)
+    _stamp_hash(obj)
+    _append(console, snapshot, obj)
+    before_rows = console.snapshot_objects(snapshot)
+    before_bindings = console.object_review_bindings(snapshot)
+    with pytest.raises(ConsoleError, match="source_lineage_incomplete"):
+        if command == "first":
+            console.review_object(
+                actor_id=reviewer["account_id"], snapshot_id=snapshot,
+                object_id=obj["object_id"], decision="approve",
+                confirmed_object_type="definition",
+            )
+        else:
+            console.approve_second_review(
+                actor_id=reviewer["account_id"], snapshot_id=snapshot,
+                object_id=obj["object_id"],
+            )
+    assert console.snapshot_objects(snapshot) == before_rows
+    assert console.object_review_bindings(snapshot) == before_bindings

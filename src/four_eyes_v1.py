@@ -206,7 +206,7 @@ def publish_authorization_contract(
     blockers: list[str] = []
     object_id = obj.get("object_id") or ""
     eligible = eligible_tuple_reviewers(bindings, object_id=object_id, uploader_id=uploader_id)
-    from src.knowledge_path_v1 import content_reviewable, knowledge_publication_blockers
+    from src.knowledge_path_v1 import knowledge_publication_blockers
     from src.admission_gate_v1 import is_boom_object
     if review_path == "boom":
         knowledge_blockers = [] if is_boom_object(obj) else ["invalid_boom_object"]

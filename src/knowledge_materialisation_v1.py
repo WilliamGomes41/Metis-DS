@@ -20,23 +20,27 @@ _DECISION_KIND = "semantic_selection"
 
 
 
-def resolve_source_selection(
-    spans: Any, *, fragments: Iterable[dict[str, Any]]
-) -> dict[str, Any]:
-    """Rebuild text and provenance from authoritative extracted source only."""
-    from src.knowledge_path_v1 import spans_are_exact
+def _selection_blocks(fragments):
     from src.object_taxonomy_v1 import extract_object_type
-    from src.source_reconstruction_v1 import source_fragment_ids_for_text
-    from src.source_layout_v1 import mapped_raw_spans
-
-    if not spans_are_exact(spans):
-        raise ValueError("materialisation_span_invalid")
-    blocks = {
+    return {
         public["block_id"]: (public, source)
         for public, source in _reconstructed_blocks(
             row for row in fragments if extract_object_type(row)[0] != "heading"
         )
     }
+
+
+def resolve_source_selection(
+    spans: Any, *, fragments: Iterable[dict[str, Any]], source_blocks=None
+) -> dict[str, Any]:
+    """Rebuild text and provenance from authoritative extracted source only."""
+    from src.knowledge_path_v1 import spans_are_exact
+    from src.source_reconstruction_v1 import source_fragment_ids_for_text
+    from src.source_layout_v1 import mapped_raw_spans
+
+    if not spans_are_exact(spans):
+        raise ValueError("materialisation_span_invalid")
+    blocks = source_blocks if source_blocks is not None else _selection_blocks(fragments)
     parts, fragment_ids, mapping = [], [], []
     first = None
     previous_rank = None
@@ -96,6 +100,7 @@ def materialise_knowledge_candidates(
     """Create KnowledgeCandidates from selection decisions and exact source spans."""
 
     fragments = list(fragments)
+    source_blocks = _selection_blocks(fragments)
     candidates: list[dict[str, Any]] = []
     for decision in decisions:
         if not isinstance(decision, dict) or decision.get("decision_kind") != _DECISION_KIND:
@@ -104,7 +109,7 @@ def materialise_knowledge_candidates(
             raise ValueError("selection_decision_is_not_a_candidate")
         if decision.get("selection_origin") != SELECTION_ORIGIN_PROPOSAL:
             raise ValueError("materialiser_requires_proposal_selection")
-        resolved = resolve_source_selection(decision.get("spans"), fragments=fragments)
+        resolved = resolve_source_selection(decision.get("spans"), fragments=fragments, source_blocks=source_blocks)
         source_text = resolved["source_text"]
         if source_text != decision.get("source_text"):
             raise ValueError("materialisation_text_mismatch")
