@@ -618,6 +618,8 @@ class _PostgresWorkflowDocumentsMixin:
             target_bindings = deepcopy(self._bindings)
             if bindings is not None:
                 target_bindings = self._rebase_snapshot_map(self._bindings, bindings, sid)
+            self._guard_prepared_working_revision_mutation(
+                envelopes=target_envelopes, bindings=target_bindings, objects=objects, snapshot_id=sid)
             prior_bindings = deepcopy(self._bindings)
             prior_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
             try:

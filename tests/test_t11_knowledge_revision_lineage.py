@@ -430,3 +430,25 @@ def test_source_context_rekeys_proposed_relations_before_readmission(tmp_path):
         source_object_id=after["object_id"], source_object_version=after["object_version"])
     assert "relation_proposal_invalid" not in after["metadata"]["admission"]["reason_codes"]
     assert after["metadata"]["admission"]["gate_result"] == "allowed"
+
+
+@pytest.mark.parametrize("profile", ["base", "closure"])
+def test_scoped_commit_discards_stale_unrelated_published_maps(tmp_path, profile):
+    state, reviewer, sid, _ = _console(tmp_path)
+    if profile == "closure":
+        from src.review_closure_v1 import ReviewClosureConsole
+        state = ReviewClosureConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    # Only envelope/binding state is relevant to this cross-snapshot race.
+    unrelated = "snap-unrelated-history"
+    state._envelopes[unrelated] = {**deepcopy(state._envelope(sid)), "snapshot_id": unrelated}
+    state._save_envelopes()
+    stale_envelopes = deepcopy(state._envelopes)
+    stale_bindings = deepcopy(state._bindings)
+    stale_envelopes[sid]["title"] = "Updated open work"
+    competing = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    competing._envelopes[unrelated].update(state="published", published=True)
+    competing._save_envelopes()
+    published = deepcopy(competing._envelope(unrelated))
+    state._commit_prepared_store(envelopes=stale_envelopes, bindings=stale_bindings, snapshot_id=sid)
+    assert state._envelope(unrelated) == published
+    assert state._envelope(sid)["title"] == "Updated open work"

@@ -1042,13 +1042,13 @@ class OperationsConsole:
         """
         with self._store_write_lock():
             self._reload_store_locked()
-            self._guard_prepared_working_revision_mutation(
-                envelopes=envelopes, bindings=bindings, objects=objects, snapshot_id=snapshot_id)
             sid = snapshot_id or (objects[0] if objects is not None else None)
             if envelopes is not None and sid:
                 envelopes = self._rebase_snapshot_map(self._envelopes, envelopes, sid)
             if bindings is not None and sid:
                 bindings = self._rebase_snapshot_map(self._bindings, bindings, sid)
+            self._guard_prepared_working_revision_mutation(
+                envelopes=envelopes, bindings=bindings, objects=objects, snapshot_id=snapshot_id)
             prior_envelopes = deepcopy(self._envelopes)
             prior_bindings = deepcopy(self._bindings)
             prior_objects: tuple[str, bytes | None] | None = None

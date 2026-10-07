@@ -61,31 +61,6 @@ class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewC
         """The old free-text canonical repair path is permanently disabled."""
         raise ConsoleError("legacy_free_text_repair_disabled")
 
-    def _commit_prepared_store(
-        self,
-        *,
-        envelopes: dict[str, Any] | None = None,
-        bindings: dict[str, Any] | None = None,
-        objects: tuple[str, list[dict[str, Any]]] | None = None,
-        expected_revision: str | None = None,
-        ledger_fn: Any | None = None,
-        snapshot_id: str | None = None,
-    ) -> None:
-        self._guard_prepared_working_revision_mutation(
-            envelopes=envelopes,
-            bindings=bindings,
-            objects=objects,
-            snapshot_id=snapshot_id,
-        )
-        return super()._commit_prepared_store(
-            envelopes=envelopes,
-            bindings=bindings,
-            objects=objects,
-            expected_revision=expected_revision,
-            ledger_fn=ledger_fn,
-            snapshot_id=snapshot_id,
-        )
-
     @contextmanager
     def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
         self._require_mutable_working_revision(snapshot_id)
