@@ -144,7 +144,14 @@ class PublicationReadinessMixin:
 
     def _publication_readiness_inputs(self, snapshot_id: str) -> dict[str, Any]:
         envelope = self._envelope(snapshot_id) if hasattr(self, "_envelope") else {}
-        objects = self.snapshot_objects(snapshot_id)  # type: ignore[attr-defined]
+        try:
+            objects = self.snapshot_objects(  # type: ignore[attr-defined]
+                snapshot_id, envelope=envelope
+            )
+        except TypeError as exc:
+            if "unexpected keyword argument" not in str(exc):
+                raise
+            objects = self.snapshot_objects(snapshot_id)  # type: ignore[attr-defined]
         if hasattr(self, "object_review_bindings"):
             try:
                 bindings = self.object_review_bindings(snapshot_id, objects=objects)
