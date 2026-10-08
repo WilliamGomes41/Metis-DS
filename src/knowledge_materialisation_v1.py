@@ -28,9 +28,10 @@ _source_reconstruction: ContextVar[dict | None] = ContextVar("source_reconstruct
 def source_reconstruction_scope():
     """Reuse one identical source only during a synchronous read calculation.
 
-    This stores derived blocks, never validation results. Each candidate still
-    passes all source checks. A snapshot comparison detects even in-place input
-    changes; nested calls and exceptions restore the caller's scope.
+    This stores derived blocks, never validation results. One input snapshot
+    owns at most two views: candidate-only and full source including headings.
+    Every check still runs. Input changes invalidate both views; nested calls
+    and exceptions restore the caller's scope.
     """
     token = _source_reconstruction.set({})
     try:
@@ -39,14 +40,21 @@ def source_reconstruction_scope():
         _source_reconstruction.reset(token)
 
 
-def _read_source_blocks(fragments):
+def _read_source_blocks(fragments, *, include_headings=False):
+    def reconstruct():
+        if include_headings:
+            return {public["block_id"]: (public, source)
+                    for public, source in _reconstructed_blocks(fragments)}
+        return _selection_blocks(fragments)
+
     scope = _source_reconstruction.get()
     if scope is None:
-        return _selection_blocks(fragments)
+        return reconstruct()
     if "fragments" not in scope or fragments != scope["fragments"]:
-        blocks = _selection_blocks(fragments)
-        scope.update(fragments=deepcopy(fragments), blocks=blocks)
-    return scope["blocks"]
+        scope.update(fragments=deepcopy(fragments), blocks={})
+    if include_headings not in scope["blocks"]:
+        scope["blocks"][include_headings] = reconstruct()
+    return scope["blocks"][include_headings]
 
 
 class MaterialisationError(SemanticPassageError):

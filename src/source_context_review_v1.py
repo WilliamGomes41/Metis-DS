@@ -410,7 +410,7 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
 def verify_literal_source(obj: dict[str, Any], fragments: list[dict[str, Any]], source_hash: str) -> bool:
     """Reconstruct from source, never from a model's source_bound/status claim."""
     from src.object_taxonomy_v1 import normalize_visible_prose
-    from src.semantic_passage_v1 import _reconstructed_blocks
+    from src.knowledge_materialisation_v1 import _read_source_blocks
     from src.source_layout_v1 import mapped_raw_spans
     refs = (obj.get("provenance") or {}).get("source_fragments") or []
     by_id = {f.get("fragment_id"): f for f in fragments}
@@ -430,7 +430,7 @@ def verify_literal_source(obj: dict[str, Any], fragments: list[dict[str, Any]], 
             by_id[r["raw_object_id"]].get("raw_text") or "") for r in refs))
         return normalize_visible_prose(text) == literal
     try:
-        blocks = {p["block_id"]: (p, f) for p, f in _reconstructed_blocks(fragments)}
+        blocks = _read_source_blocks(fragments, include_headings=True)
         parts, mapping = [], []
         for span in semantic["spans"]:
             public, fragment = blocks[span["block_id"]]
