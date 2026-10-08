@@ -43,8 +43,9 @@ class _TechnicalGate:
             raise ConsoleError("publisher_role_required")
         return {"account_id": "publisher-1", "username": "publisher", "roles": ["publisher"]}
 
-    def consider_publish(self, *, actor_id: Any, snapshot_id: str) -> dict[str, Any]:
-        self._require_role(actor_id, "publisher")
+    def technical_publication_readiness(
+        self, *, snapshot_id: str, **_context: Any
+    ) -> dict[str, Any]:
         self.technical_evaluations += 1
         return {
             "snapshot_id": snapshot_id,
@@ -86,8 +87,9 @@ def test_read_only_readiness_reuses_gate_logic_without_action_authorization() ->
 
     assert console.role_checks == []
     assert console.technical_evaluations == 1
-    assert read_only["technical_blockers"] == ["object_tuple_required"]
-    assert read_only["curation_ready"] is True
+    assert read_only["technical_blockers"] == []
+    assert read_only["curation_blockers"] == ["object_tuple_required"]
+    assert read_only["curation_ready"] is False
     assert read_only["publication_ready"] is False
 
     publisher_view = console.consider_publish(
@@ -118,5 +120,5 @@ def test_readiness_and_document_status_are_derived_without_workflow_mutation() -
     status = console.document_status("snap-test")
 
     assert readiness["publication_ready"] is False
-    assert status == "blocked"
+    assert status == "in_review"
     assert console._envelopes == before

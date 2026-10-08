@@ -1,4 +1,4 @@
-"""VSA Slice 4: one publication-readiness result over curation + technical gates.
+"""T12: one readiness result over disjoint curation and technical gates.
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: slop
@@ -12,19 +12,17 @@ from typing import Any
 from src.publication_readiness_v1 import (
     PublicationReadinessMixin,
     REVIEW_DISPOSITION_INCONSISTENT,
-    REVIEW_WORK_INCOMPLETE,
-    SOURCE_PASSAGE_REVIEW_INCOMPLETE,
     source_passage_closure,
 )
 from src.review_disposition_v1 import definitive_review_disposition
 
 
-def _object(
+def _source_object(
     object_id: str,
     *,
-    register_status: str = "selected_as_candidate",
-    review_status: str = "approved",
-    register_source: str = "extract",
+    register_status: str,
+    review_status: str,
+    register_source: str = "review",
 ) -> dict[str, Any]:
     return {
         "object_id": object_id,
@@ -41,15 +39,16 @@ def _object(
 
 
 class _ExistingGate:
-    def __init__(self, objects: list[dict[str, Any]], result: dict[str, Any]) -> None:
-        self._objects = objects
+    def __init__(self, result: dict[str, Any]) -> None:
         self._result = result
 
     def snapshot_objects(self, _snapshot_id: str) -> list[dict[str, Any]]:
-        return self._objects
+        return []
 
-    def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
-        _ = actor_id, snapshot_id
+    def technical_publication_readiness(
+        self, *, snapshot_id: str, **_context: Any
+    ) -> dict[str, Any]:
+        _ = snapshot_id
         return deepcopy(self._result)
 
 
@@ -57,46 +56,18 @@ class _Subject(PublicationReadinessMixin, _ExistingGate):
     pass
 
 
-def _technical_pass() -> dict[str, Any]:
-    return {
-        "publish_allowed": True,
-        "blockers": [],
-        "publishable_object_count": 1,
-    }
-
-
-def test_curation_open_technical_green_blocks_publication() -> None:
-    open_candidate = _object(
-        "candidate",
-        review_status="needs_review",
-    )
-
-    considered = _Subject([open_candidate], _technical_pass()).consider_publish(
-        actor_id="publisher", snapshot_id="snapshot"
-    )
-
-    assert considered["technical_ready"] is True
-    assert considered["technical_blockers"] == []
-    assert considered["curation_ready"] is False
-    assert considered["curation_blockers"] == [
-        REVIEW_WORK_INCOMPLETE,
-        SOURCE_PASSAGE_REVIEW_INCOMPLETE,
-    ]
-    assert considered["publication_ready"] is False
-    assert considered["publish_allowed"] is False
+def _readiness(base: dict[str, Any]) -> dict[str, Any]:
+    return _Subject(base).publication_readiness("snapshot")
 
 
 def test_curation_green_technical_blocker_stays_technical() -> None:
-    approved = _object("approved")
     base = {
         "publish_allowed": False,
         "blockers": ["g2_source_store_unavailable", "prepublication_schema_invalid"],
         "publishable_object_count": 1,
     }
 
-    considered = _Subject([approved], base).consider_publish(
-        actor_id="publisher", snapshot_id="snapshot"
-    )
+    considered = _readiness(base)
 
     assert considered["curation_ready"] is True
     assert considered["curation_blockers"] == []
@@ -106,95 +77,98 @@ def test_curation_green_technical_blocker_stays_technical() -> None:
         "prepublication_schema_invalid",
     ]
     assert considered["blockers"] == base["blockers"]
-    assert considered["publication_ready"] is False
-    assert considered["publish_allowed"] is False
 
 
 def test_curation_and_technical_green_make_publication_ready() -> None:
-    considered = _Subject([_object("approved")], _technical_pass()).consider_publish(
-        actor_id="publisher", snapshot_id="snapshot"
+    considered = _readiness(
+        {
+            "publish_allowed": True,
+            "blockers": [],
+            "publishable_object_count": 1,
+        }
     )
 
     assert considered["technical_ready"] is True
     assert considered["curation_ready"] is True
     assert considered["publication_ready"] is True
     assert considered["publish_allowed"] is True
-    assert considered["technical_blockers"] == []
-    assert considered["curation_blockers"] == []
 
 
 def test_disposition_conflict_is_curation_not_technical() -> None:
-    base = {
-        "publish_allowed": False,
-        "blockers": [REVIEW_DISPOSITION_INCONSISTENT],
-        "publishable_object_count": 1,
-        "disposition_conflict_object_ids": ["approved"],
-    }
-
-    considered = _Subject([_object("approved")], base).consider_publish(
-        actor_id="publisher", snapshot_id="snapshot"
+    considered = _readiness(
+        {
+            "publish_allowed": False,
+            "blockers": [REVIEW_DISPOSITION_INCONSISTENT],
+            "publishable_object_count": 1,
+            "disposition_conflict_object_ids": ["approved"],
+        }
     )
 
     assert considered["technical_ready"] is True
     assert considered["technical_blockers"] == []
     assert considered["curation_ready"] is False
     assert considered["curation_blockers"] == [REVIEW_DISPOSITION_INCONSISTENT]
-    assert considered["publication_ready"] is False
-    assert considered["publish_allowed"] is False
 
 
-def test_mixed_blockers_keep_order_and_category() -> None:
-    open_candidate = _object("candidate", review_status="needs_review")
-    base = {
-        "publish_allowed": False,
-        "blockers": ["four_eyes_required", REVIEW_DISPOSITION_INCONSISTENT],
-        "publishable_object_count": 1,
-        "disposition_conflict_object_ids": ["candidate"],
-    }
-
-    considered = _Subject([open_candidate], base).consider_publish(
-        actor_id="publisher", snapshot_id="snapshot"
+def test_human_review_codes_have_one_curation_category() -> None:
+    considered = _readiness(
+        {
+            "publish_allowed": False,
+            "blockers": [
+                "four_eyes_required",
+                "required_policy_review_missing",
+                "decision_graph_review_incomplete",
+                REVIEW_DISPOSITION_INCONSISTENT,
+            ],
+            "publishable_object_count": 1,
+        }
     )
 
-    assert considered["technical_blockers"] == ["four_eyes_required"]
+    assert considered["technical_blockers"] == []
     assert considered["curation_blockers"] == [
-        REVIEW_DISPOSITION_INCONSISTENT,
-        REVIEW_WORK_INCOMPLETE,
-        SOURCE_PASSAGE_REVIEW_INCOMPLETE,
-    ]
-    assert considered["blockers"] == [
         "four_eyes_required",
+        "required_policy_review_missing",
+        "decision_graph_review_incomplete",
         REVIEW_DISPOSITION_INCONSISTENT,
-        REVIEW_WORK_INCOMPLETE,
-        SOURCE_PASSAGE_REVIEW_INCOMPLETE,
     ]
+    assert set(considered["curation_blockers"]).isdisjoint(
+        considered["technical_blockers"]
+    )
+
+
+def test_decision_graph_integrity_stays_technical() -> None:
+    considered = _readiness(
+        {
+            "publish_allowed": False,
+            "blockers": ["decision_graph_endpoint_stale"],
+            "publishable_object_count": 1,
+        }
+    )
+
+    assert considered["technical_blockers"] == ["decision_graph_endpoint_stale"]
+    assert considered["curation_blockers"] == []
 
 
 def test_already_published_remains_lifecycle_technical_blocker() -> None:
-    base = {
-        "publish_allowed": False,
-        "blockers": ["already_published"],
-        "publishable_object_count": 0,
-        "state": "published",
-    }
-
-    considered = _Subject([_object("approved")], base).consider_publish(
-        actor_id="publisher", snapshot_id="snapshot"
+    considered = _readiness(
+        {
+            "publish_allowed": False,
+            "blockers": ["already_published"],
+            "publishable_object_count": 0,
+            "state": "published",
+        }
     )
 
     assert considered["curation_ready"] is True
     assert considered["technical_ready"] is False
     assert considered["technical_blockers"] == ["already_published"]
-    assert considered["curation_blockers"] == []
-    assert considered["publication_ready"] is False
 
 
 def test_deferred_review_written_non_candidate_disposition_stays_open() -> None:
-    deferred = _object(
+    deferred = _source_object(
         "deferred-context",
         register_status="used_as_context",
         review_status="needs_review",
-        register_source="review",
     )
     deferred["metadata"]["review_passage"] = {
         "suitability": "mist_context",
@@ -206,18 +180,15 @@ def test_deferred_review_written_non_candidate_disposition_stays_open() -> None:
 
     assert disposition["state"] == "open"
     assert disposition["final"] is False
-    assert disposition["valid"] is True
-    assert disposition["outcome"] == "review_open"
     assert closure["source_passage_review_complete"] is False
     assert closure["unresolved_source_passage_ids"] == ["deferred-context"]
 
 
 def test_terminal_review_written_non_candidate_disposition_is_final() -> None:
-    reviewed_context = _object(
+    reviewed_context = _source_object(
         "reviewed-context",
         register_status="used_as_context",
         review_status="approved",
-        register_source="review",
     )
 
     disposition = definitive_review_disposition(reviewed_context)

@@ -2684,8 +2684,12 @@ class OperationsConsole:
         include_blocked: bool = False,
         *,
         for_update: bool = False,
+        envelope: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
-        self._envelope(snapshot_id)
+        if envelope is None:
+            envelope = self._envelope(snapshot_id)
+        elif str(envelope.get("snapshot_id") or "") != snapshot_id:
+            raise ConsoleError("unknown_snapshot")
         rows = self._load_objects(snapshot_id, remember=for_update)
         if include_blocked:
             return deepcopy(rows)
@@ -4234,9 +4238,18 @@ class OperationsConsole:
         self._envelope(snapshot_id)
         raise ConsoleError("cannot_silently_mutate")
 
-    def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
-        self._require_role(actor_id, "publisher")
-        envelope = self._envelope(snapshot_id)
+    def technical_publication_readiness(
+        self,
+        *,
+        snapshot_id: str,
+        envelope: dict[str, Any] | None = None,
+        objects: list[dict[str, Any]] | None = None,
+        bindings: list[dict[str, Any]] | None = None,
+        fragments: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Read the existing technical gates without action authorization."""
+        context_supplied = objects is not None
+        envelope = envelope if envelope is not None else self._envelope(snapshot_id)
         if self.snapshot_is_published(snapshot_id):
             return {
                 "snapshot_id": snapshot_id,
@@ -4267,10 +4280,15 @@ class OperationsConsole:
                 "publishable_object_ids": [],
                 "publishable_object_count": 0,
             }
-        objects = self.snapshot_objects(snapshot_id)
+        objects = self.snapshot_objects(snapshot_id) if objects is None else list(objects)
+        all_bindings = (
+            self.object_review_bindings(snapshot_id, objects=objects)
+            if bindings is None
+            else list(bindings)
+        )
         bindings = [
             row
-            for row in self.object_review_bindings(snapshot_id)
+            for row in all_bindings
             if row.get("valid") and row.get("decision") == "approve"
         ]
         from src.knowledge_path_v1 import is_structural_projection
@@ -4320,11 +4338,11 @@ class OperationsConsole:
             blockers.append("decision_graph_missing")
         try:
             from src.decision_graph_v1 import verify_source_evidence
-            verify_source_evidence(self, envelope)
+            verify_source_evidence(self, envelope, fragments=fragments)
         except (ValueError, OSError):
             blockers.append("decision_graph_source_evidence_mismatch")
         from src.source_context_review_v1 import context_issues
-        if context_issues(self.snapshot_objects(snapshot_id)):
+        if context_issues(objects):
             blockers.append("source_context_review_incomplete")
         if not independence:
             blockers.append("second_named_reviewer_required")
@@ -4333,13 +4351,15 @@ class OperationsConsole:
         four_eyes_needed = False
         four_eyes_ok = True
         contracts = []
-        fragments = None
-        if review_path != "boom" and publishable:
-            try:
-                source_path, _ = self._verified_source_bytes(envelope)
-                fragments = self._read_source_fragments(envelope, source_path)
-            except (ConsoleError, ValueError, OSError):
+        if review_path != "boom" and publishable and fragments is None:
+            if context_supplied:
                 blockers.append("source_lineage_unavailable")
+            else:
+                try:
+                    source_path, _ = self._verified_source_bytes(envelope)
+                    fragments = self._read_source_fragments(envelope, source_path)
+                except (ConsoleError, ValueError, OSError):
+                    blockers.append("source_lineage_unavailable")
         for obj in publishable:
             if obj.get("object_type") == "document":
                 continue
@@ -4404,6 +4424,13 @@ class OperationsConsole:
             "publishable_object_ids": [obj["object_id"] for obj in publishable],
             "publishable_object_count": len(publishable),
         }
+
+
+    def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
+        """Authorize the publisher action boundary, then run total readiness."""
+        self._require_role(actor_id, "publisher")
+        from src.publication_readiness_v1 import derive_publication_readiness
+        return derive_publication_readiness(self, snapshot_id)
 
     def publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         with self._store_write_lock():

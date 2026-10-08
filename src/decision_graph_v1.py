@@ -263,16 +263,22 @@ def review_target(graph: dict[str, Any], objects: list[dict[str, Any]], policy: 
                                           for o in objects if o.get("object_type") != "document")})
 
 
-def verify_source_evidence(console: Any, envelope: dict[str, Any]) -> None:
-    """Reconstruct evidence from source bytes, not from an editable client claim."""
+def verify_source_evidence(
+    console: Any,
+    envelope: dict[str, Any],
+    *,
+    fragments: list[dict[str, Any]] | None = None,
+) -> None:
+    """Reconstruct evidence from source bytes, reusing an authoritative fragment read."""
     if "decision_graph" not in envelope:
         return
     from src.beslisboom_path_v1 import extract_boom_fragments
     path, data = console._verified_source_bytes(envelope)
     args = {"document_id": envelope["document_id"], "source_id": envelope["source_id"]}
-    fragments = console._read_source_fragments(envelope, path)
+    if fragments is None:
+        fragments = console._read_source_fragments(envelope, path)
     from src.decision_bundles_v1 import split_bundles
-    fragments = split_bundles(fragments)
+    fragments = split_bundles(list(fragments))
     inventory = prepare_graph(path, data, envelope["content_kind"], fragments, [], envelope["sha256"])["decision_graph_evidence"]
     if inventory != envelope["decision_graph_evidence"]:
         raise ValueError("decision_graph_source_evidence_mismatch")

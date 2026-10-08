@@ -22,7 +22,9 @@ from fastapi.testclient import TestClient
 import src.operations_console_v1 as console_module
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
 from src.operations_console_app import create_console_app
-from src.operations_console_v1 import OperationsConsole
+from src.operations_console_v1 import OperationsConsole, review_lane
+from src.passage_register_v1 import passage_register_of
+from src.review_disposition_v1 import definitive_review_disposition
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,7 +56,11 @@ class MemoryImmutableStore:
             raise G2SourceStoreError("canonical_source_missing") from exc
 
 
-def _ready_console(tmp_path: Path) -> tuple[OperationsConsole, dict[str, dict], dict, MemoryImmutableStore]:
+def _ready_console(
+    tmp_path: Path,
+    *,
+    leave_second_candidate_open: bool = False,
+) -> tuple[OperationsConsole, dict[str, dict], dict, MemoryImmutableStore]:
     store = MemoryImmutableStore()
     console = OperationsConsole(
         root=tmp_path,
@@ -97,13 +103,57 @@ def _ready_console(tmp_path: Path) -> tuple[OperationsConsole, dict[str, dict], 
         for obj in console.snapshot_objects(receipt["snapshot_id"])
         if obj.get("object_type") == "unclassified"
     )
+    snapshot_id = receipt["snapshot_id"]
     console.review_object(
         actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
+        snapshot_id=snapshot_id,
         object_id=target["object_id"],
         decision="approve",
         confirmed_object_type="explanation",
     )
+    deferred_id = ""
+    if leave_second_candidate_open:
+        deferred_id = str(
+            next(
+                obj["object_id"]
+                for obj in console.snapshot_objects(snapshot_id)
+                if obj.get("object_type") == "unclassified"
+                and "dagboek" in (obj.get("content") or {}).get("clean_text", "")
+            )
+        )
+    for obj in console.snapshot_objects(snapshot_id):
+        if obj.get("object_id") in {target["object_id"], deferred_id}:
+            continue
+        if passage_register_of(obj).get("status") != "selected_as_candidate":
+            continue
+        if (obj.get("governance") or {}).get("validation_status") in {
+            "approved",
+            "rejected",
+        }:
+            continue
+        console.review_object(
+            actor_id=accounts["reviewer"]["account_id"],
+            snapshot_id=snapshot_id,
+            object_id=obj["object_id"],
+            decision="reject",
+            comment="Testfixture: kandidaat definitief afgehandeld.",
+        )
+    for obj in console.snapshot_objects(snapshot_id):
+        if obj.get("object_id") == deferred_id:
+            continue
+        if obj.get("object_type") == "document" or review_lane(obj) == "fast":
+            continue
+        if definitive_review_disposition(obj)["final"]:
+            continue
+        console.review_object(
+            actor_id=accounts["reviewer"]["account_id"],
+            snapshot_id=snapshot_id,
+            object_id=obj["object_id"],
+            decision="reject",
+            suitability="ja",
+            eindoordeel="afwijzen",
+            comment="Testfixture: bronpassage definitief afgehandeld.",
+        )
     return console, accounts, receipt, store
 
 
@@ -165,7 +215,9 @@ def test_changed_or_unavailable_blob_keeps_g2_closed(tmp_path: Path) -> None:
 
 
 def test_independence_is_checked_for_each_published_object(tmp_path: Path) -> None:
-    console, accounts, receipt, _store = _ready_console(tmp_path)
+    console, accounts, receipt, _store = _ready_console(
+        tmp_path, leave_second_candidate_open=True
+    )
     second = next(
         obj
         for obj in console.snapshot_objects(receipt["snapshot_id"])

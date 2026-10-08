@@ -294,6 +294,53 @@ def _ready_console(
     return console, accounts, receipt
 
 
+class _CountingConnection:
+    def __init__(self, connection: Any, counter: dict[str, int]) -> None:
+        self.connection = connection
+        self.counter = counter
+        self.entered: Any = connection
+
+    def __enter__(self) -> "_CountingConnection":
+        self.entered = self.connection.__enter__()
+        return self
+
+    def __exit__(self, *args: Any) -> Any:
+        return self.connection.__exit__(*args)
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        self.counter["queries"] += 1
+        return self.entered.execute(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.entered, name)
+
+
+def test_publication_readiness_has_bounded_postgres_query_count(
+    tmp_path: Path,
+    workflow_postgres: PostgresCanonicalConfig,
+) -> None:
+    durable = MemoryCanonicalStore()
+    source = MemorySourceStore()
+    console, _accounts, receipt = _ready_console(
+        tmp_path, workflow_postgres, durable, source
+    )
+    store = console.workflow_document_store
+    original_connect = store._connect
+    counter = {"queries": 0}
+
+    def counted_connect() -> _CountingConnection:
+        return _CountingConnection(original_connect(), counter)
+
+    store._connect = counted_connect  # type: ignore[method-assign]
+    try:
+        readiness = console.publication_readiness(receipt["snapshot_id"])
+    finally:
+        store._connect = original_connect  # type: ignore[method-assign]
+
+    assert readiness["publication_ready"] is True
+    assert counter == {"queries": 5}
+
+
 def test_publish_persists_published_envelope_in_postgres_document_authority_and_ui(
     tmp_path: Path,
     workflow_postgres: PostgresCanonicalConfig,
