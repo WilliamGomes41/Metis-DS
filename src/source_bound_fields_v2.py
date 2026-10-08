@@ -157,11 +157,11 @@ def context_evidence_schema(span: dict) -> dict:
 
 def bind_context(raw: object, *, fragments: list[dict]) -> list[dict]:
     """Rebuild literal context; source geometry/proximity does not resolve semantics."""
-    from src.semantic_passage_v1 import _reconstructed_blocks
+    from src.knowledge_materialisation_v1 import _read_source_blocks
     from src.source_layout_v1 import mapped_raw_spans
     if not isinstance(raw, list) or len(raw) > MAX_CONTEXT_REFERENCES:
         raise ValueError('source_bound_context_invalid')
-    blocks = {public['block_id']: (public, source) for public, source in _reconstructed_blocks(fragments)}
+    blocks = _read_source_blocks(fragments, include_headings=True)
     result = []
     for context_index, entry in enumerate(raw):
         if not isinstance(entry, dict) or set(entry) != {'role', 'span', 'unresolved_reason'}:

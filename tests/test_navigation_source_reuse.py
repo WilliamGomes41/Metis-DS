@@ -149,3 +149,79 @@ def test_parallel_work_items_have_independent_source_scopes(source_navigation, m
         for future in futures:
             future.result(timeout=10)
     assert len(calls) == len(set(calls)) == 2
+
+
+def test_context_and_source_projection_share_views_without_caching_validation(monkeypatch):
+    import src.knowledge_materialisation_v1 as materialisation
+    import src.semantic_passage_v1 as semantic
+    from src.source_containers_v1 import source_accountability
+    from src.source_accountability_v1 import is_source_record
+    from src.source_context_review_v1 import verify_literal_source
+    from tests.test_source_containers_v1 import context_story
+    from tests.test_t10_source_accountability_authority import _context_inputs
+
+    objects = context_story()
+    _, fragments = _context_inputs()
+    original = semantic._reconstructed_blocks
+    calls = []
+
+    def counted(rows):
+        calls.append(1)
+        return original(rows)
+
+    monkeypatch.setattr(semantic, "_reconstructed_blocks", counted)
+    monkeypatch.setattr(materialisation, "_reconstructed_blocks", counted)
+    with materialisation.source_reconstruction_scope():
+        projection = source_accountability(objects, fragments=fragments)
+        assert any(row["kind"] == "linked_context" for row in projection.values())
+        assert len(calls) <= 2
+        prior_calls = len(calls)
+        candidate = next(obj for obj in objects if obj.get("metadata", {}).get("source_bound_context"))
+        candidate["content"]["clean_text"] += " niet in de bron"
+        invalid = source_accountability(objects, fragments=fragments)
+        assert invalid[candidate["object_id"]]["kind"] == "invalid_evidence"
+        assert len(calls) == prior_calls
+        source = next(obj for obj in objects if is_source_record(obj))
+        assert verify_literal_source(source, fragments, source["source"]["source_checksum"])
+        source["metadata"]["semantic_passage"]["source_mapping"] = []
+        assert not verify_literal_source(source, fragments, source["source"]["source_checksum"])
+
+
+def test_full_source_keeps_headings_and_input_changes_invalidate_both_views(source_navigation, monkeypatch):
+    import src.knowledge_materialisation_v1 as materialisation
+    from src.knowledge_path_v1 import source_lineage_resolves
+    from src.source_bound_fields_v2 import bind_context
+    from src.semantic_passage_v1 import semantic_source_blocks
+
+    probe, fragments = source_navigation
+    candidate = next(obj for obj in probe.objects["synthetic-0"]
+                     if obj.get("metadata", {}).get("semantic_passage", {}).get("spans"))
+    heading = {"fragment_id": "heading", "fragment_hash": "heading-hash",
+               "raw_text": "Toepassingsgebied", "clean_text": "Toepassingsgebied",
+               "object_type": "heading", "section_path": ["Toepassingsgebied"]}
+    fragments = [heading, *deepcopy(fragments)]
+    block = semantic_source_blocks(fragments)[0]
+    context = [{"role": "scope", "span": {"block_id": block["block_id"], "start": 0,
+                "end": len(block["text"])}, "unresolved_reason": None}]
+    original = materialisation._reconstructed_blocks
+    calls = []
+
+    def counted(rows):
+        calls.append(1)
+        return original(rows)
+
+    monkeypatch.setattr(materialisation, "_reconstructed_blocks", counted)
+    with materialisation.source_reconstruction_scope():
+        for _ in range(2):
+            assert source_lineage_resolves(candidate, fragments=fragments)
+            assert bind_context(context, fragments=fragments)[0]["text"] == heading["clean_text"]
+        assert len(calls) == 2
+        heading["raw_text"] = heading["clean_text"] = "Gewijzigd toepassingsgebied"
+        assert source_lineage_resolves(candidate, fragments=fragments)
+        with pytest.raises(ValueError, match="source_bound_context_unknown_block"):
+            bind_context(context, fragments=fragments)
+        assert len(calls) == 4
+    # Direct independent operations do not inherit the read's reusable views.
+    assert source_lineage_resolves(candidate, fragments=fragments)
+    assert source_lineage_resolves(candidate, fragments=fragments)
+    assert len(calls) == 6
