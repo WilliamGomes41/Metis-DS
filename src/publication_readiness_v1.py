@@ -16,6 +16,7 @@ from src.review_duty_v1 import (
     review_duties,
 )
 from src.source_containers_v1 import source_accountability, source_closure
+from src.revision_workflow import knowledge_revision
 
 REVIEW_WORK_INCOMPLETE = "review_work_incomplete"
 REVIEW_REPAIR_INCOMPLETE = "review_repair_incomplete"
@@ -216,17 +217,22 @@ class PublicationReadinessMixin:
             fragments=inputs["fragments"],
             projection=source_projection,
         )
-        revise_ids = [
-            str(obj.get("object_id") or "")
-            for obj in inputs["objects"]
-            if (obj.get("governance") or {}).get("validation_status") == "revise"
-        ]
+        repair_ids = []
+        for obj in inputs["objects"]:
+            status = str((obj.get("governance") or {}).get("validation_status") or "")
+            admission_blocked = admission_of(obj).get("gate_result") == GATE_BLOCKED
+            if knowledge_revision(obj) and (
+                status == "revise"
+                or (status == "needs_review" and admission_blocked)
+            ):
+                object_id = str(obj.get("object_id") or "")
+                if object_id and object_id not in repair_ids:
+                    repair_ids.append(object_id)
         repair_count = repair_duty_count(
             inputs["objects"],
             review_path=inputs["review_path"],
         )
-        repair_ids = list(dict.fromkeys(oid for oid in revise_ids if oid))
-        repair_open = bool(repair_ids or repair_count)
+        repair_open = bool(repair_ids)
 
         considered = dict(technical_projection)
         considered.update(review)
