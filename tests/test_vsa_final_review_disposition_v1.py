@@ -84,13 +84,14 @@ def test_document_is_not_a_curator_disposition() -> None:
     assert disposition["valid"] is True
 
 
-def test_slice_one_reuses_final_disposition_for_candidate_readiness() -> None:
-    objects = [
-        _object("selected_as_candidate", "approved"),
-        _object("selected_as_candidate", "needs_review"),
-        _object("excluded_with_reason", "needs_review"),
+def test_publication_readiness_formats_only_t9_review_duties() -> None:
+    duties = [
+        {"object_id": "candidate-first", "stage": "first_review"},
+        {"object_id": "candidate-second", "stage": "second_review"},
     ]
-    readiness = publication_review_readiness(objects)
+    readiness = publication_review_readiness(duties)
     assert readiness["review_required_object_count"] == 2
-    assert readiness["unresolved_review_object_count"] == 1
+    assert readiness["unresolved_review_object_count"] == 2
+    assert readiness["first_review_duty_count"] == 1
+    assert readiness["second_review_duty_count"] == 1
     assert readiness["review_complete"] is False
