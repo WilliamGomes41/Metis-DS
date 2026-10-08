@@ -6,6 +6,9 @@ returns decisions. It does not assign object identity or canonical text.
 from __future__ import annotations
 
 import hashlib
+from contextlib import contextmanager
+from contextvars import ContextVar
+from copy import deepcopy
 from typing import Any, Iterable
 
 from src.object_taxonomy_v1 import DEFAULT_OBJECT_TYPE, normalize_visible_prose
@@ -18,6 +21,32 @@ from src.semantic_passage_v1 import (
 )
 
 _DECISION_KIND = "semantic_selection"
+_source_reconstruction: ContextVar[dict | None] = ContextVar("source_reconstruction", default=None)
+
+
+@contextmanager
+def source_reconstruction_scope():
+    """Reuse one identical source only during a synchronous read calculation.
+
+    This stores derived blocks, never validation results. Each candidate still
+    passes all source checks. A snapshot comparison detects even in-place input
+    changes; nested calls and exceptions restore the caller's scope.
+    """
+    token = _source_reconstruction.set({})
+    try:
+        yield
+    finally:
+        _source_reconstruction.reset(token)
+
+
+def _read_source_blocks(fragments):
+    scope = _source_reconstruction.get()
+    if scope is None:
+        return _selection_blocks(fragments)
+    if "fragments" not in scope or fragments != scope["fragments"]:
+        blocks = _selection_blocks(fragments)
+        scope.update(fragments=deepcopy(fragments), blocks=blocks)
+    return scope["blocks"]
 
 
 class MaterialisationError(SemanticPassageError):
@@ -47,7 +76,7 @@ def resolve_source_selection(
     fragments = list(fragments)
     raw_by_id = {row.get("fragment_id"): row for row in fragments}
     try:
-        blocks = source_blocks if source_blocks is not None else _selection_blocks(fragments)
+        blocks = source_blocks if source_blocks is not None else _read_source_blocks(fragments)
     except (ValueError, KeyError, TypeError) as exc:
         raise MaterialisationError("materialisation_source_mapping_invalid") from exc
     parts, fragment_ids, mapping = [], [], []

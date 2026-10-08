@@ -38,6 +38,7 @@ from src.publication_readiness_v1 import source_passage_closure, review_followup
 from src.review_duty_v1 import review_duty_counts, reviewer_route_counts
 from src.review_interaction_v1 import _is_decision_event
 from src.review_ledger import read_events
+from src.knowledge_materialisation_v1 import source_reconstruction_scope
 
 
 _TASK_COPY = {
@@ -241,6 +242,7 @@ class ReviewWorkInputs:
     published: bool
 
 
+@source_reconstruction_scope()
 def review_work_item(
     console: OperationsConsole,
     *,
