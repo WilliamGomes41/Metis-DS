@@ -668,7 +668,8 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
 
     def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         self._require_role(actor_id, "publisher")
-        return self.technical_publication_readiness(snapshot_id=snapshot_id)
+        from src.publication_readiness_v1 import derive_publication_readiness
+        return derive_publication_readiness(self, snapshot_id)
 
     def select_for_question(self, *, family: str, asked_class: str) -> list[dict[str, Any]]:
         """Do not expose pending, revise or rejected objects to question selection."""
