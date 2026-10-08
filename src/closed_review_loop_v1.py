@@ -600,11 +600,15 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             self.snapshot_objects(snapshot_id) if objects is None else list(objects)
         )
         current = {row["object_id"]: row for row in current_rows}
-        binding_rows = (
-            self.object_review_bindings(snapshot_id, objects=current_rows)
-            if bindings is None
-            else list(bindings)
-        )
+        if bindings is None:
+            try:
+                binding_rows = self.object_review_bindings(
+                    snapshot_id, objects=current_rows
+                )
+            except TypeError:
+                binding_rows = self.object_review_bindings(snapshot_id)
+        else:
+            binding_rows = list(bindings)
         conflicts: list[str] = []
         for binding in binding_rows:
             if not binding.get("valid") or binding.get("decision") != "approve":
