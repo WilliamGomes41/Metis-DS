@@ -646,11 +646,16 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             bindings=bindings,
             fragments=fragments,
         )
-        conflicts = self._disposition_conflicts(
-            snapshot_id,
-            objects=objects,
-            bindings=bindings,
-        )
+        try:
+            conflicts = self._disposition_conflicts(
+                snapshot_id,
+                objects=objects,
+                bindings=bindings,
+            )
+        except TypeError as exc:
+            if "unexpected keyword argument" not in str(exc):
+                raise
+            conflicts = self._disposition_conflicts(snapshot_id)
         considered["disposition_consistent"] = not conflicts
         if conflicts:
             blockers = list(considered.get("blockers") or [])
