@@ -2684,8 +2684,12 @@ class OperationsConsole:
         include_blocked: bool = False,
         *,
         for_update: bool = False,
+        envelope: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
-        self._envelope(snapshot_id)
+        if envelope is None:
+            envelope = self._envelope(snapshot_id)
+        elif str(envelope.get("snapshot_id") or "") != snapshot_id:
+            raise ConsoleError("unknown_snapshot")
         rows = self._load_objects(snapshot_id, remember=for_update)
         if include_blocked:
             return deepcopy(rows)
