@@ -49,6 +49,7 @@ from src.knowledge_relations_v1 import (
     confirmed_knowledge_relations_of,
     proposed_knowledge_relations_of,
 )
+from src.knowledge_materialisation_v1 import source_reconstruction_scope
 from src.knowledge_relation_review_v1 import (
     has_semantic_relation_review,
     relation_choice_value,
@@ -3427,6 +3428,7 @@ def _source_context_card(console: OperationsConsole, snapshot_id: str, obj: dict
     return ''.join(parts) + panel + '</section>'
 
 
+@source_reconstruction_scope()
 def _render_review_room(
     console: OperationsConsole,
     account: dict[str, Any],
