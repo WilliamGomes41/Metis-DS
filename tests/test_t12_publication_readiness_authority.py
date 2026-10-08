@@ -16,6 +16,7 @@ from src import publication_readiness_v1 as readiness_module
 from src.operations_console_v1 import OperationsConsole
 from src.publication_readiness_v1 import (
     READINESS_AUTHORITY_UNAVAILABLE,
+    REVIEW_REPAIR_INCOMPLETE,
     REVIEW_WORK_INCOMPLETE,
 )
 from src.review_closure_v1 import ReviewClosureConsole
@@ -166,4 +167,49 @@ def test_authority_read_failure_is_unknown_curation_and_fails_closed(
     assert readiness["publication_ready"] is False
     assert readiness["curation_blockers"] == []
     assert readiness["technical_blockers"] == [READINESS_AUTHORITY_UNAVAILABLE]
+
+def test_open_t9_repair_followup_is_curation_incomplete(tmp_path) -> None:
+    console, snapshot_id = _console(tmp_path)
+    rows = console.snapshot_objects(snapshot_id)
+    candidate = next(row for row in rows if content_reviewable(row))
+    candidate["governance"]["validation_status"] = "revise"
+    stamp_canonical_hashes(candidate)
+    install_fixture_history(console, snapshot_id, rows)
+
+    readiness = console.publication_readiness(snapshot_id)
+
+    assert readiness["curation_ready"] is False
+    assert REVIEW_REPAIR_INCOMPLETE in readiness["curation_blockers"]
+    assert readiness["review_repair_object_ids"] == [candidate["object_id"]]
+    assert readiness["review_repair_duty_count"] == 1
+
+
+def test_decision_tree_readiness_reuses_one_fragment_read(
+    monkeypatch, tmp_path
+) -> None:
+    from tests.test_decision_graph_chain import ingest
+    from tests.test_v225_beslisboom_path import (
+        _accounts as boom_accounts,
+        _console as boom_console,
+    )
+
+    console = boom_console(tmp_path)
+    accounts = boom_accounts(console)
+    snapshot_id = ingest(console, accounts)["snapshot_id"]
+    reads = 0
+    original = console._read_source_fragments
+
+    def fragments(*args, **kwargs):
+        nonlocal reads
+        reads += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(console, "_read_source_fragments", fragments)
+
+    console.consider_publish(
+        actor_id=accounts["publisher"]["account_id"],
+        snapshot_id=snapshot_id,
+    )
+
+    assert reads == 1
 
