@@ -589,17 +589,31 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                 proposed_correction="",
             )
 
-    def _disposition_conflicts(self, snapshot_id: str) -> list[str]:
-        objects = {row["object_id"]: row for row in self.snapshot_objects(snapshot_id)}
+    def _disposition_conflicts(
+        self,
+        snapshot_id: str,
+        *,
+        objects: list[dict[str, Any]] | None = None,
+        bindings: list[dict[str, Any]] | None = None,
+    ) -> list[str]:
+        current_rows = (
+            self.snapshot_objects(snapshot_id) if objects is None else list(objects)
+        )
+        current = {row["object_id"]: row for row in current_rows}
+        binding_rows = (
+            self.object_review_bindings(snapshot_id, objects=current_rows)
+            if bindings is None
+            else list(bindings)
+        )
         conflicts: list[str] = []
-        for binding in self.object_review_bindings(snapshot_id):
+        for binding in binding_rows:
             if not binding.get("valid") or binding.get("decision") != "approve":
                 continue
             suitability = str(binding.get("suitability") or "").strip()
             if not suitability:
                 continue
             object_id = str(binding.get("object_id") or "")
-            obj = objects.get(object_id)
+            obj = current.get(object_id)
             if obj is None:
                 conflicts.append(object_id)
                 continue
@@ -612,9 +626,27 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                 conflicts.append(object_id)
         return list(dict.fromkeys(conflicts))
 
-    def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
-        considered = super().consider_publish(actor_id=actor_id, snapshot_id=snapshot_id)
-        conflicts = self._disposition_conflicts(snapshot_id)
+    def technical_publication_readiness(
+        self,
+        *,
+        snapshot_id: str,
+        envelope: dict[str, Any] | None = None,
+        objects: list[dict[str, Any]] | None = None,
+        bindings: list[dict[str, Any]] | None = None,
+        fragments: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        considered = super().technical_publication_readiness(
+            snapshot_id=snapshot_id,
+            envelope=envelope,
+            objects=objects,
+            bindings=bindings,
+            fragments=fragments,
+        )
+        conflicts = self._disposition_conflicts(
+            snapshot_id,
+            objects=objects,
+            bindings=bindings,
+        )
         considered["disposition_consistent"] = not conflicts
         if conflicts:
             blockers = list(considered.get("blockers") or [])
@@ -624,6 +656,10 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             considered["publish_allowed"] = False
             considered["disposition_conflict_object_ids"] = conflicts
         return considered
+
+    def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
+        self._require_role(actor_id, "publisher")
+        return self.technical_publication_readiness(snapshot_id=snapshot_id)
 
     def select_for_question(self, *, family: str, asked_class: str) -> list[dict[str, Any]]:
         """Do not expose pending, revise or rejected objects to question selection."""
