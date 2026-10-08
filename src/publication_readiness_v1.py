@@ -126,7 +126,8 @@ def _failed_readiness(snapshot_id: str, error: Exception) -> dict[str, Any]:
         "snapshot_id": snapshot_id,
         "publish_allowed": False,
         "publication_ready": False,
-        "curation_ready": False,
+        "curation_ready": True,
+        "curation_complete_known": False,
         "technical_ready": False,
         "blockers": [READINESS_AUTHORITY_UNAVAILABLE],
         "curation_blockers": [],
@@ -256,6 +257,7 @@ class PublicationReadinessMixin:
         curation_ready = not curation_blockers
         if (
             curation_ready
+            and not technical_blockers
             and not considered.get("publishable_object_count")
             and PUBLISHABLE_OBJECT_REQUIRED not in technical_blockers
         ):
