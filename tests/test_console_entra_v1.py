@@ -87,6 +87,25 @@ def login(client, store, *, code='test-code'):
     return client.get('/auth/microsoft/callback', params={'state': state, 'code': code}, follow_redirects=False)
 
 
+def test_callback_lands_on_home_without_review_or_inventory_reads(recovery_postgres, tmp_path, monkeypatch):
+    state = console(tmp_path, recovery_postgres)
+    client, _ = app_client(monkeypatch, state)
+    response = login(client, state.workflow_identity_store)
+    assert response.status_code == 303
+    assert response.headers['location'] == '/'
+
+    def forbidden(*args, **kwargs):
+        pytest.fail('authenticated landing requested document/review work')
+
+    monkeypatch.setattr(state, 'waiting_task_counts', forbidden)
+    monkeypatch.setattr(state, 'list_envelopes', forbidden)
+    home = client.get(response.headers['location'])
+    assert home.status_code == 200
+    assert 'Mijn werk' in home.text
+    assert 'Review openen' in home.text
+    assert client.get('/session/status').status_code == 200
+
+
 @pytest.mark.parametrize('patch', [
     {'tid': USER}, {'aud': USER}, {'iss': 'https://evil.example'}, {'oid': 'not-an-id'},
     {'roles': []}, {'roles': ['publisher']}, {'roles': 'Metis.Publisher'},

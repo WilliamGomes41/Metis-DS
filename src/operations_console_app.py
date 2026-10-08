@@ -496,18 +496,9 @@ try {{
 {body}
 </div>
 </div>
-<div data-session-warning hidden role="dialog" aria-live="assertive" aria-labelledby="session-warning-title"
-     style="position:fixed;inset:auto 1rem 1rem auto;z-index:1000;max-width:28rem;">
-  <div class="banner warn" style="box-shadow:0 8px 30px rgba(0,0,0,.18);">
-    <strong id="session-warning-title">Je sessie verloopt bijna</strong>
-    <p data-session-warning-text style="margin:.5rem 0;"></p>
-    <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
-      <button class="btn-primary" type="button" data-session-renew>Blijf ingelogd</button>
-    </div>
-  </div>
-</div>
 <script>
 const sessionWarning = document.querySelector('[data-session-warning]');
+const sessionWarningTitle = document.querySelector('#session-warning-title');
 const sessionWarningText = document.querySelector('[data-session-warning-text]');
 const sessionRenew = document.querySelector('[data-session-renew]');
 let sessionRemaining = null;
@@ -529,6 +520,13 @@ const renderSessionWarning = () => {{
     return;
   }}
   sessionWarning.hidden = false;
+  if (sessionRemaining <= 0) {{
+    if (sessionWarningTitle) sessionWarningTitle.textContent = 'Je sessie is verlopen';
+    sessionWarningText.textContent = 'Je sessie is verlopen. Meld opnieuw aan om verder te gaan.';
+    if (sessionRenew) sessionRenew.textContent = 'Opnieuw aanmelden';
+    return;
+  }}
+  if (sessionWarningTitle) sessionWarningTitle.textContent = 'Je sessie verloopt bijna';
   if (sessionReason === 'absolute') {{
     sessionWarningText.textContent =
       'Je maximale sessieduur is bijna bereikt. Meld opnieuw aan binnen ' +
@@ -560,10 +558,7 @@ const pollSessionStatus = async () => {{
     if (response.status === 401) {{
       sessionRemaining = 0;
       sessionReason = 'idle';
-      if (sessionWarningText) sessionWarningText.textContent =
-        'Je sessie is verlopen. Meld opnieuw aan om verder te gaan.';
-      if (sessionRenew) sessionRenew.textContent = 'Opnieuw aanmelden';
-      if (sessionWarning) sessionWarning.hidden = false;
+      renderSessionWarning();
       return;
     }}
     if (!response.ok) return;
@@ -767,27 +762,39 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
 """
 
 
-def _nav(account: dict[str, Any] | None, current: str = "", counts: dict[str, int] | None = None) -> str:
+def _session_warning() -> str:
+    """Only authenticated page navigation renders session controls."""
+    return '''<div data-session-warning hidden role="dialog" aria-live="assertive" aria-labelledby="session-warning-title"
+     style="position:fixed;inset:auto 1rem 1rem auto;z-index:1000;max-width:28rem;">
+  <div class="banner warn" style="box-shadow:0 8px 30px rgba(0,0,0,.18);">
+    <strong id="session-warning-title">Je sessie verloopt bijna</strong>
+    <p data-session-warning-text style="margin:.5rem 0;"></p>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+      <button class="btn-primary" type="button" data-session-renew>Blijf ingelogd</button>
+    </div>
+  </div>
+</div>'''
+
+
+def _nav(account: dict[str, Any] | None, current: str = "") -> str:
     who = (
         f'{_esc(account.get("display_name"))} · rollen: {", ".join(_esc(r) for r in account.get("roles") or [])}'
         if account
         else "niet aangemeld"
     )
-    counts = counts or {}
     rooms = [
-        ("home", "/", "Mijn werk", 0),
-        ("ingest", "/ingest", "Inleveren", counts.get("ingest", 0)),
-        ("review", "/review", "Review", counts.get("review", 0)),
-        ("publish", "/publish", "Publiceren", counts.get("publish", 0)),
-        ("tree", "/tree", "Documenten", counts.get("tree", 0)),
-        ("settings", "/settings", "Instellingen", 0),
+        ("home", "/", "Mijn werk"),
+        ("ingest", "/ingest", "Inleveren"),
+        ("review", "/review", "Review"),
+        ("publish", "/publish", "Publiceren"),
+        ("tree", "/tree", "Documenten"),
+        ("settings", "/settings", "Instellingen"),
     ]
     links = []
-    for key, href, label, count in rooms:
+    for key, href, label in rooms:
         current_key = "settings" if current in {"settings", "accounts", "llm-settings", "about", "audit"} else current
         current_attr = ' aria-current="page"' if current_key == key else ""
-        badge = f'<span class="badge">{count}</span>' if count else ""
-        links.append(f'<a href="{href}"{current_attr}>{label}{badge}</a>')
+        links.append(f'<a href="{href}"{current_attr}>{label}</a>')
     links.append('<form method="post" action="/logout"><button class="quiet" type="submit">Uitloggen</button></form>')
     return f"""
     <header class="topbar">
@@ -802,6 +809,7 @@ def _nav(account: dict[str, Any] | None, current: str = "", counts: dict[str, in
       <button class="theme-toggle" type="button" data-theme-toggle aria-label="Wissel tussen lichte en donkere modus">Donkere modus</button>
       <div class="who">{who}</div>
     </header>
+    {_session_warning() if account else ""}
     """
 
 
@@ -3431,7 +3439,6 @@ def _render_review_room(
     context_draft: dict[str, Any] | None = None,
     context_error: str = "",
     context_saved: bool = False,
-    counts: dict[str, int] | None = None,
     draft: dict[str, Any] | None = None,
     conflict: bool = False,
     batch_selection: list[str] | None = None,
@@ -3612,7 +3619,7 @@ def _render_review_room(
     empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
     return _page(
         f"""
-            {_nav(account, "review", counts)}
+            {_nav(account, "review")}
             <section class="room review-room">
               <h1>Review</h1>
               {_task_links("review")}
@@ -3688,7 +3695,9 @@ def create_console_app(
         token = request.cookies.get(COOKIE)
         try:
             return state.session_account(token)
-        except ConsoleError:
+        except ConsoleError as exc:
+            if exc.code == "workflow_identity_unavailable":
+                raise
             return None
 
     def _require(request: Request) -> dict[str, Any]:
@@ -3697,19 +3706,20 @@ def create_console_app(
             raise ConsoleError("not_authenticated")
         return account
 
-    def _counts(account: dict[str, Any] | None) -> dict[str, int]:
-        if not account:
-            return {}
-        return state.waiting_task_counts(account["account_id"])
-
     from src.metis_mcp_v1 import install_mcp
     install_mcp(app, state, entra, expected_origin, require_account=_require, render_page=_page, nav=_nav)
 
     @app.exception_handler(ConsoleError)
     async def console_errors(_request: Request, exc: ConsoleError) -> HTMLResponse:
+        from src.console_entra_routes_v1 import identity_unavailable_response
+        if exc.code == "workflow_identity_unavailable":
+            return identity_unavailable_response(_page)
+        try:
+            account = _current(_request)
+        except ConsoleError:
+            return identity_unavailable_response(_page)
         status = 401 if exc.code in {"not_authenticated", "invalid_credentials"} else 403 if "role_required" in exc.code or exc.code in {"entra_access_denied", "entra_local_auth_disabled"} else 400
         message = ERROR_COPY.get(exc.code, "Metis kon deze actie niet afronden. Controleer de huidige status voordat je opnieuw probeert. Blijft dit gebeuren? Meld het bij de beheerder.")
-        account = _current(_request)
         filename_error = exc.code == "invalid_store_path" and _request.url.path == "/ingest"
         hint = f'<p class="field-help">{_esc(FILENAME_HINT)}</p>' if filename_error else ""
         processing_details = ""
@@ -3766,9 +3776,6 @@ def create_console_app(
                 </section>
                 """
             )
-        counts = _counts(account)
-        review_waiting = counts.get("review", 0)
-        documents = state.list_envelopes()
         tiles = "".join(
             (
                 _home_tile(
@@ -3776,35 +3783,34 @@ def create_console_app(
                     icon="⇧",
                     title="Inleveren",
                     description="Nieuwe bron toevoegen",
-                    badge=(f"{counts['ingest']} terug voor revisie" if counts["ingest"] else "Nieuwe bron"),
+                    badge="Bron inleveren",
                 ),
                 _home_tile(
                     href="/review",
                     icon="✓",
                     title="Review",
                     description="Beoordeel aangeleverde bronnen",
-                    badge=(f"{review_waiting} wachten op jou" if review_waiting else "Geen open taken"),
-                    priority=bool(review_waiting),
+                    badge="Review openen",
                 ),
                 _home_tile(
                     href="/publish",
                     icon="⇧",
                     title="Publiceren",
                     description="Goedgekeurde stukken publiceren",
-                    badge=(f"{counts['publish']} gereed" if counts["publish"] else "Geen open taken"),
+                    badge="Publicatieoverzicht openen",
                 ),
                 _home_tile(
                     href="/tree",
                     icon="▰",
                     title="Documenten",
                     description="Zoeken, openen of beheren",
-                    badge=f"{len(documents)} documenten",
+                    badge="Documenten openen",
                 ),
             )
         )
         return _page(
             f"""
-            {_nav(account, "home", counts)}
+            {_nav(account, "home")}
             <section class="room home-room">
               <h1>Mijn werk</h1>
               <p class="lead">Kies de volgende stap in het proces.</p>
@@ -3864,7 +3870,7 @@ def create_console_app(
         if topic not in topics:
             raise ConsoleError("unknown_document")
         title, back, content = topics[topic]
-        return _page(f'{_nav(account, "settings", _counts(account))}<section class="room">'
+        return _page(f'{_nav(account, "settings")}<section class="room">'
                      f'<h1>Uitleg: {_esc(title)}</h1>{content}'
                      f'<p><a href="{back}">Terug naar {_esc(title)}</a></p></section>',
                      title=f'Uitleg: {_esc(title)} — Metis')
@@ -3911,7 +3917,7 @@ def create_console_app(
         detail = _esc(json.dumps(diagnostic, ensure_ascii=False, indent=2))
         reviewer_links = (f'<p><a href="/settings/technical?document={_esc(document)}">Passagediagnostiek en exports</a></p>'
                           if "reviewer" in roles and account["account_id"] in envelope.get("named_reviewers", []) else "")
-        return _page(f'''{_nav(account, "settings", _counts(account))}<section class="room">
+        return _page(f'''{_nav(account, "settings")}<section class="room">
           <p><a href="/settings/technical">Terug naar technisch beheer</a></p>
           <h1>Verwerkingsbeheer: {_esc(envelope.get("title"))}</h1>
           <p>{_esc(ERROR_COPY.get(code, "Controleer de actuele verwerking."))}</p>
@@ -3945,7 +3951,7 @@ def create_console_app(
         """
         return _page(
             f"""
-            {_nav(account, "settings", _counts(account))}
+            {_nav(account, "settings")}
             <section class="room">
               <p class="eyebrow">Beheer</p>
               <h1>Instellingen</h1>
@@ -3983,7 +3989,7 @@ def create_console_app(
               </details>
             '''
         if document:
-            return _page(f'{_nav(account, "settings", _counts(account))}<section class="room">'
+            return _page(f'{_nav(account, "settings")}<section class="room">'
                          '<p><a href="/settings/technical">Terug naar technisch beheer</a></p>'
                          + document_panel + '</section>', title="Documentdiagnostiek — Metis")
         assigned = [row for row in state.list_envelopes()
@@ -3996,7 +4002,7 @@ def create_console_app(
             for row in assigned
         )
         return _page(f'''
-          {_nav(account, "settings", _counts(account))}
+          {_nav(account, "settings")}
           <section class="room">
             <p><a href="/settings">← Instellingen</a></p>
             <h1>Technisch beheer</h1>
@@ -4050,7 +4056,7 @@ def create_console_app(
                 <li><a href="/review/processing-evidence-export?document={snapshot}">Download verwerkingsbewijs als CSV-pakket</a></li>
               </ul>
             </details>''')
-        return _page(f'''{_nav(account, "settings", _counts(account))}
+        return _page(f'''{_nav(account, "settings")}
           <section class="room"><p><a href="/settings/technical">← Technisch beheer</a></p>
           <h1>Exports</h1>{controls}<div class="doc-list">
           {"".join(cards) or "<p>Geen documenten gevonden.</p>"}</div></section>''', title="Exports — Metis")
@@ -4062,7 +4068,7 @@ def create_console_app(
             reason = access_store_error or "API Access is nog niet geactiveerd voor deze omgeving."
             return _page(
                 f"""
-                {_nav(account, "settings", _counts(account))}
+                {_nav(account, "settings")}
                 <section class="room">
                   <p><a href="/settings/technical">← Terug naar Technisch beheer</a></p>
                   <p class="eyebrow">Instellingen · API Access</p>
@@ -4079,7 +4085,7 @@ def create_console_app(
             return HTMLResponse(
                 _page(
                     f"""
-                    {_nav(account, "settings", _counts(account))}
+                    {_nav(account, "settings")}
                     <section class="room">
                       <p><a href="/settings/technical">← Terug naar Technisch beheer</a></p>
                       <h1>API Access</h1>
@@ -4272,7 +4278,7 @@ def create_console_app(
 
         return _page(
             f"""
-            {_nav(account, "settings", _counts(account))}
+            {_nav(account, "settings")}
             <section class="room">
               <p><a href="/settings/technical">← Terug naar Technisch beheer</a></p>
               <p class="eyebrow">Instellingen · API Access</p>
@@ -4309,7 +4315,7 @@ def create_console_app(
             return HTMLResponse(
                 _page(
                     f"""
-                    {_nav(account, "settings", _counts(account))}
+                    {_nav(account, "settings")}
                     <section class="room">
                       <h1>API Access</h1>
                       <div class="banner err">API Access is in deze omgeving niet beschikbaar. Er is niets gewijzigd.</div>
@@ -4341,7 +4347,7 @@ def create_console_app(
             return HTMLResponse(
                 _page(
                     f"""
-                    {_nav(account, "settings", _counts(account))}
+                    {_nav(account, "settings")}
                     <section class="room">
                       <h1>API Access</h1>
                       <div class="banner err">De toegang kon niet worden aangemaakt. Controleer de ingevulde grenzen en probeer opnieuw.</div>
@@ -4355,7 +4361,7 @@ def create_console_app(
             return HTMLResponse(
                 _page(
                     f"""
-                    {_nav(account, "settings", _counts(account))}
+                    {_nav(account, "settings")}
                     <section class="room">
                       <h1>API Access</h1>
                       <div class="banner err">De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.</div>
@@ -4368,7 +4374,7 @@ def create_console_app(
         return HTMLResponse(
             _page(
                 f"""
-                {_nav(account, "settings", _counts(account))}
+                {_nav(account, "settings")}
                 <section class="room">
                   <p><a href="/settings/api-access">← Terug naar API Access</a></p>
                   <p class="eyebrow">Credential uitgegeven</p>
@@ -4411,7 +4417,7 @@ def create_console_app(
         return HTMLResponse(
             _page(
                 f"""
-                {_nav(account, "settings", _counts(account))}
+                {_nav(account, "settings")}
                 <section class="room">
                   <p><a href="/settings/api-access">← Terug naar API Access</a></p>
                   <h1>API Access</h1>
@@ -4595,7 +4601,7 @@ def create_console_app(
         return HTMLResponse(
             _page(
                 f"""
-                {_nav(account, "settings", _counts(account))}
+                {_nav(account, "settings")}
                 <section class="room">
                   <p><a href="/settings/api-access">← Terug naar API Access</a></p>
                   <p class="eyebrow">Credential uitgegeven</p>
@@ -4646,7 +4652,7 @@ def create_console_app(
         model = provider.model or "Niet geconfigureerd"
         return _page(
             f"""
-            {_nav(account, "llm-settings", _counts(account))}
+            {_nav(account, "llm-settings")}
             <section class="room">
               <p><a href="/settings/technical">← Terug naar Technisch beheer</a></p>
               <p class="eyebrow">Instellingen · LLM</p>
@@ -4674,7 +4680,7 @@ def create_console_app(
         account = _require(request)
         return _page(
             f"""
-            {_nav(account, "about", _counts(account))}
+            {_nav(account, "about")}
             {render_metis_dictionary(_esc)}
             """,
             title="Metis uitgelegd — V&amp;VN Data Services",
@@ -4759,7 +4765,7 @@ def create_console_app(
         )
         return _page(
             f"""
-            {_nav(account, "ingest", _counts(account))}
+            {_nav(account, "ingest")}
             <section class="room">
               <h1>Document inleveren</h1>
               <p class="lead">Voeg een document toe voor beoordeling.</p>
@@ -4961,7 +4967,7 @@ def create_console_app(
         processing_notice = _task_links("ingest")
         return _page(
             f"""
-            {_nav(account, "ingest", _counts(account))}
+            {_nav(account, "ingest")}
             <section class="room">
               <h1>Document ingeleverd</h1>
               <p class="lead">{_esc(lead)}</p>
@@ -5062,7 +5068,7 @@ def create_console_app(
         empty = '<p class="muted">Nog geen documenten. Lever eerst een document in.</p>'
         return _page(
             f"""
-            {_nav(account, "tree", _counts(account))}
+            {_nav(account, "tree")}
             <section class="room">
               <h1>Documenten</h1>
               {_task_links("documents")}
@@ -5220,7 +5226,6 @@ def create_console_app(
             html.escape(object, quote=True),
             task=html.escape(task, quote=True),
             context_target=context_target, context_mode=context_mode, context_saved=context_saved == "yes",
-            counts=_counts(account),
         )
 
     @app.get("/review/passages-export")
@@ -5384,7 +5389,7 @@ def create_console_app(
             )
         return _page(
             f"""
-            {_nav(account, "review", _counts(account))}
+            {_nav(account, "review")}
             <section class="room">
               <h1>Volledige richtlijn</h1>
               <p class="lead">Het vastgelegde origineel dat bij deze bronpassage hoort.</p>
@@ -5562,7 +5567,6 @@ def create_console_app(
                     snapshot_id,
                     object_id,
                     task=return_task,
-                    counts=_counts(account),
                     draft={
                         "suitability": suitability,
                         "documentpositie_action": documentpositie_action,
@@ -5686,7 +5690,7 @@ def create_console_app(
                 context_target=pair_target, context_mode="source",
                 context_draft={"role": role, "reason": reason, "target_object_ids": target_object_ids},
                 context_error=ERROR_COPY.get(exc.code, "Het document is gewijzigd. Controleer je keuzes opnieuw."),
-                counts=_counts(account)), status_code=409 if exc.code == SNAPSHOT_OBJECT_WRITE_CONFLICT else 400)
+                ), status_code=409 if exc.code == SNAPSHOT_OBJECT_WRITE_CONFLICT else 400)
         location = _review_location(state, snapshot_id, return_id)
         return RedirectResponse(location + "&context_saved=yes#passage-context", status_code=303)
 
@@ -5761,7 +5765,6 @@ def create_console_app(
                     account,
                     html.escape(snapshot_id, quote=True),
                     task="structure",
-                    counts=_counts(account),
                     conflict=True,
                 ),
                 status_code=409,
@@ -5933,7 +5936,7 @@ def create_console_app(
             success = '<div class="banner ok">Publicatie voltooid en zichtbaar gemaakt in de publicatieprojectie.</div>'
         return _page(
             f"""
-            {_nav(account, "publish", _counts(account))}
+            {_nav(account, "publish")}
             <section class="room">
               <h1>Publiceren</h1>
               <p class="lead">Neem hier het afzonderlijke publicatiebesluit. Alleen gereviewde kennisobjecten met een geverifieerde bron worden gepubliceerd; anders blijft publicatie geblokkeerd.</p>
@@ -6033,7 +6036,7 @@ def create_console_app(
         )
         return _page(
             f"""
-            {_nav(account, "accounts", _counts(account))}
+            {_nav(account, "accounts")}
             <section class="room">
               <h1>Accounts</h1>
               <p class="lead">{account_lead}</p>
