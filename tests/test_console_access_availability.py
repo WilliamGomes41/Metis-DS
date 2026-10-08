@@ -7,9 +7,9 @@
 # release-control-evidence: releasebewijs
 """
 import json
-import re
 import shutil
 import subprocess
+from html.parser import HTMLParser
 from types import SimpleNamespace
 
 import pytest
@@ -123,12 +123,41 @@ def test_invalid_session_still_denies_protected_page(tmp_path):
     assert 'class="doc-card"' not in response.text
 
 
+class _SessionPageParser(HTMLParser):
+    """Read scripts and real element selectors without treating JS as markup."""
+
+    def __init__(self):
+        super().__init__()
+        self.scripts = []
+        self.selectors = set()
+        self.in_script = False
+
+    def handle_starttag(self, tag, attrs):
+        for name, value in attrs:
+            self.selectors.add(f"[{name}]")
+            if name == "id":
+                self.selectors.add(f"#{value}")
+        if tag == "script":
+            self.in_script = True
+            self.scripts.append("")
+
+    def handle_data(self, data):
+        if self.in_script:
+            self.scripts[-1] += data
+
+    def handle_endtag(self, tag):
+        if tag == "script":
+            self.in_script = False
+
+
 def run_session_script(html, *, status=401, remaining=0, reason="idle", ticks=0, click=False, path="/"):
     """Execute the rendered browser code, with only DOM/network/clock replaced."""
     node = shutil.which("node")
     assert node, "Node.js is required to verify session browser behavior"
-    script = next(s for s in re.findall(r"<script>(.*?)</script>", html, re.S)
-                  if "const sessionWarning =" in s)
+    page = _SessionPageParser()
+    page.feed(html)
+    page.close()
+    script = next(s for s in page.scripts if "const sessionWarning =" in s)
     result = subprocess.run([node, "-e", r"""
 const fs = require('node:fs');
 const vm = require('node:vm');
@@ -145,10 +174,7 @@ const elements = {
 const requests = [];
 const sandbox = {
   document: {
-    querySelector: (selector) => {
-      const attr = selector.slice(1, -1);
-      return (selector[0] === '#' || input.html.includes(attr)) ? elements[selector] || null : null;
-    },
+    querySelector: (selector) => input.selectors.includes(selector) ? elements[selector] || null : null,
     querySelectorAll: () => []
   },
   location: {pathname: input.path, search: '', href: ''},
@@ -159,8 +185,6 @@ const sandbox = {
       json: async () => ({remaining_seconds: input.remaining, warning_reason: input.reason})};
   }
 };
-// Use actual attributes in the rendered HTML, not JS selector strings.
-input.html = input.html.replace(/<script>[\s\S]*?<\/script>/g, '');
 vm.runInNewContext(input.script, sandbox);
 setImmediate(async () => {
   for (let i = 0; i < input.ticks; i++) if (callbacks[1000]) callbacks[1000]();
@@ -169,16 +193,19 @@ setImmediate(async () => {
     text: text.textContent, title: title.textContent, button: button.textContent,
     href: sandbox.location.href}));
 });
-"""], input=json.dumps(dict(html=html, script=script, status=status, remaining=remaining,
+"""], input=json.dumps(dict(selectors=sorted(page.selectors), script=script, status=status, remaining=remaining,
                             reason=reason, ticks=ticks, click=click, path=path)),
                             text=True, capture_output=True, check=True, timeout=10)
     return json.loads(result.stdout)
 
 
 @pytest.mark.parametrize("path", ["/", "/login"])
-def test_anonymous_page_never_checks_or_warns_about_session(tmp_path, path):
+@pytest.mark.parametrize("script_tag", ["script", 'SCRIPT data-test="session"'])
+def test_anonymous_page_never_checks_or_warns_about_session(tmp_path, path, script_tag):
     client = TestClient(create_console_app(_console(tmp_path)))
-    result = run_session_script(client.get(path).text, path=path)
+    html = client.get(path).text.replace("<script>", f"<{script_tag}>")
+    html = html.replace("</script>", f"</{script_tag.split()[0]}>")
+    result = run_session_script(html, path=path)
     assert result["requests"] == []
     assert result["hidden"] is True
 
