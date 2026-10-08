@@ -104,7 +104,12 @@ def test_inactive_unknown_or_legacy_release_never_offers_withdrawal(tmp_path, mo
     else:
         authority.state = state
     response = client.get("/publish")
-    assert response.status_code == (400 if state == "unavailable" else 200)
+    # The task page already handles an unavailable authority explicitly. A
+    # navigation badge read must not replace that result with a generic error.
+    assert response.status_code == 200
+    if state == "unavailable":
+        assert 'data-publication-state="authority_unavailable"' in response.text
+        assert "Publicatiestatus onbekend" in response.text
     assert "data-withdraw-form" not in response.text
     assert "data-publish-form" not in response.text
     assert authority.writes == 0
