@@ -8,15 +8,13 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from src.admission_gate_v1 import GATE_BLOCKED, admission_of
 from src.review_duty_v1 import (
     FIRST_REVIEW,
     SECOND_REVIEW,
-    repair_duty_count,
+    review_repair_duties,
     review_duties,
 )
 from src.source_containers_v1 import source_accountability, source_closure
-from src.revision_workflow import knowledge_revision
 
 REVIEW_WORK_INCOMPLETE = "review_work_incomplete"
 REVIEW_REPAIR_INCOMPLETE = "review_repair_incomplete"
@@ -127,7 +125,7 @@ def _failed_readiness(snapshot_id: str, error: Exception) -> dict[str, Any]:
         "snapshot_id": snapshot_id,
         "publish_allowed": False,
         "publication_ready": False,
-        "curation_ready": True,
+        "curation_ready": False,
         "curation_complete_known": False,
         "technical_ready": False,
         "blockers": [READINESS_AUTHORITY_UNAVAILABLE],
@@ -150,14 +148,18 @@ class PublicationReadinessMixin:
         if hasattr(self, "object_review_bindings"):
             try:
                 bindings = self.object_review_bindings(snapshot_id, objects=objects)
-            except TypeError:
+            except TypeError as exc:
+                if "unexpected keyword argument" not in str(exc):
+                    raise
                 bindings = self.object_review_bindings(snapshot_id)
         else:
             bindings = []
         if hasattr(self, "review_source_fragments"):
             try:
                 fragments = self.review_source_fragments(snapshot_id, envelope=envelope)
-            except TypeError:
+            except TypeError as exc:
+                if "unexpected keyword argument" not in str(exc):
+                    raise
                 fragments = self.review_source_fragments(snapshot_id)
         else:
             fragments = None
@@ -178,8 +180,10 @@ class PublicationReadinessMixin:
     def publication_readiness(self, snapshot_id: str) -> dict[str, Any]:
         """Derive readiness without actor identity, writes, or cached authority."""
         try:
-            inputs = self._publication_readiness_inputs(snapshot_id)
-            technical_projection = super().technical_publication_readiness(  # type: ignore[misc]
+            inputs = PublicationReadinessMixin._publication_readiness_inputs(
+                self, snapshot_id
+            )
+            technical_projection = self.technical_publication_readiness(  # type: ignore[attr-defined]
                 snapshot_id=snapshot_id,
                 envelope=inputs["envelope"],
                 objects=inputs["objects"],
@@ -217,22 +221,13 @@ class PublicationReadinessMixin:
             fragments=inputs["fragments"],
             projection=source_projection,
         )
-        repair_ids = []
-        for obj in inputs["objects"]:
-            status = str((obj.get("governance") or {}).get("validation_status") or "")
-            admission_blocked = admission_of(obj).get("gate_result") == GATE_BLOCKED
-            if knowledge_revision(obj) and (
-                status == "revise"
-                or (status == "needs_review" and admission_blocked)
-            ):
-                object_id = str(obj.get("object_id") or "")
-                if object_id and object_id not in repair_ids:
-                    repair_ids.append(object_id)
-        repair_count = repair_duty_count(
+        repair_duties = review_repair_duties(
             inputs["objects"],
             review_path=inputs["review_path"],
         )
-        repair_open = bool(repair_ids)
+        repair_ids = [str(row["object_id"]) for row in repair_duties]
+        repair_count = len(repair_duties)
+        repair_open = bool(repair_duties)
 
         considered = dict(technical_projection)
         considered.update(review)
@@ -285,3 +280,8 @@ class PublicationReadinessMixin:
         """Authorize the action boundary, then reuse the same current projection."""
         self._require_role(actor_id, "publisher")
         return self.publication_readiness(snapshot_id)
+
+
+def derive_publication_readiness(authority: Any, snapshot_id: str) -> dict[str, Any]:
+    """Run the one total authority for lower-level compatibility callers."""
+    return PublicationReadinessMixin.publication_readiness(authority, snapshot_id)
