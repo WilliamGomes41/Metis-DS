@@ -4334,7 +4334,7 @@ class OperationsConsole:
             blockers.append("decision_graph_missing")
         try:
             from src.decision_graph_v1 import verify_source_evidence
-            verify_source_evidence(self, envelope)
+            verify_source_evidence(self, envelope, fragments=fragments)
         except (ValueError, OSError):
             blockers.append("decision_graph_source_evidence_mismatch")
         from src.source_context_review_v1 import context_issues
@@ -4423,9 +4423,10 @@ class OperationsConsole:
 
 
     def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
-        """Authorize the publisher action boundary, then run the read projection."""
+        """Authorize the publisher action boundary, then run total readiness."""
         self._require_role(actor_id, "publisher")
-        return self.technical_publication_readiness(snapshot_id=snapshot_id)
+        from src.publication_readiness_v1 import derive_publication_readiness
+        return derive_publication_readiness(self, snapshot_id)
 
     def publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         with self._store_write_lock():
