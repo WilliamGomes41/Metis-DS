@@ -143,6 +143,23 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
             finish("invalid_evidence", "repair_required", "technical_repair",
                    (conflicts.get(oid) or ["source_accountability_invalid"])[0])
             continue
+        # An explicit role applies regardless of candidate origin. A final
+        # source-role decision does not approve its current targets.
+        role = role_of(obj)
+        if role.get("role") in {"label", "context"}:
+            linked_targets = [target for target in objects
+                              if any(link.get("source_object_id") == oid for link in links_of(target))]
+            row["target_ids"] = sorted(target["object_id"] for target in linked_targets)
+            states = [target_state(target) for target in linked_targets]
+            if not states or "invalid" in states:
+                finish("invalid_evidence", "repair_required", "technical_repair", "source_context_stale")
+            elif "retired" in states:
+                finish("unresolved", "open", "source_disposition", "source_context_target_retired")
+            else:
+                finish("linked_context", "accounted" if all(s == "approved" for s in states) else "waiting_on_target",
+                       "none", "confirmed_source_context")
+            continue
+
         if not source_record:
             # Preserve the existing boom/legacy passage closure contract. T10
             # does not reinterpret decision-tree construction or review duties.
@@ -168,20 +185,6 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
                 finish("unresolved", "open", "source_disposition", disposition["outcome"])
             continue
 
-        role = role_of(obj)
-        if role.get("role") in {"label", "context"}:
-            linked_targets = [target for target in objects
-                              if any(link.get("source_object_id") == oid for link in links_of(target))]
-            row["target_ids"] = sorted(target["object_id"] for target in linked_targets)
-            states = [target_state(target) for target in linked_targets]
-            if not states or "invalid" in states:
-                finish("invalid_evidence", "repair_required", "technical_repair", "source_context_stale")
-            elif "retired" in states:
-                finish("unresolved", "open", "source_disposition", "source_context_target_retired")
-            else:
-                finish("linked_context", "accounted" if all(s == "approved" for s in states) else "waiting_on_target",
-                       "none", "confirmed_source_context")
-            continue
         if evidence["version"] != SOURCE_VERSION:
             if disposition["final"]:
                 finish("explicitly_accounted", "accounted", "none", disposition["outcome"], "reviewed")
