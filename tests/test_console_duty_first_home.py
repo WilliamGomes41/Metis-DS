@@ -3,7 +3,7 @@
 Logged-in `/` MUST use the horizontal Metis workboard: nav Mijn werk
 first and current on `/`, then Inleveren, Review, Publiceren and
 Documenten; four large clickable tiles in that same order. Review is
-visually prioritised only when work is waiting. Post-auth still lands
+a neutral destination; live counts are loaded only in task rooms (#546). Post-auth still lands
 on `/`, not `/ingest`. `/tree` Documenten stays unchanged (v2.32).
 
 PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here. publish()
@@ -278,26 +278,21 @@ def test_home_has_four_horizontal_process_tiles_with_links(tmp_path: Path) -> No
     assert 'enctype="multipart/form-data"' not in html
 
 
-def test_home_review_tile_shows_waiting_count_and_priority(tmp_path: Path) -> None:
+def test_home_tiles_stay_neutral_when_review_work_exists(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
-    empty_home = _client(console).get("/").text
-    assert "Geen open taken" in empty_home
-    assert "home-tile-priority" not in empty_home
     _ingest(console, accounts, title="Wachtende richtlijn")
     waiting = console.waiting_task_counts(accounts["researcher"]["account_id"])["review"]
     assert waiting >= 1
     home = _client(console).get("/").text
-    assert re.search(rf"{waiting}\s*wachten op jou", home)
-    review_tile = re.search(
-        r'<a class="home-tile home-tile-priority" href="/review">(.*?)</a>',
-        home,
-        flags=re.S,
-    )
-    assert review_tile
-    assert "Nu doen" in review_tile.group(1)
-    assert "wacht" in review_tile.group(1).lower()
-    assert str(waiting) in review_tile.group(1)
+    visible = _visible_text(home)
+    assert "Review openen" in visible
+    assert "Publicatieoverzicht openen" in visible
+    assert "Documenten openen" in visible
+    assert "Geen open taken" not in visible
+    assert "wachten op jou" not in visible
+    assert "home-tile-priority" not in home
+    assert console.waiting_task_counts(accounts["researcher"]["account_id"])["review"] == waiting
 
 
 def test_post_auth_redirect_lands_on_home_not_ingest(tmp_path: Path) -> None:

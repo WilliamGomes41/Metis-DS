@@ -627,7 +627,6 @@ def _workboard_page(
     by_id = {item["snapshot_id"]: item for item in items}
     if snapshot_id and snapshot_id not in by_id:
         raise ConsoleError("reviewer_not_named_on_snapshot")
-    counts = console.waiting_task_counts(str(account["account_id"]))
     visible, controls = console_ui._document_list_page(
         [item["envelope"] for item in items], q=q, page=page, path="/review",
     )
@@ -657,7 +656,7 @@ def _workboard_page(
                          f'<a href="/review?document={quote(chosen, safe="")}&amp;task=history">Besluiten en historie</a>')
         else:
             dashboard = _projected_document_dashboard(
-                console, account=account, snapshot_id=chosen, counts=counts,
+                console, account=account, snapshot_id=chosen,
                 summary=item.get("summary"), content_only=True,
             ) if item.get("summary") else None
             if dashboard is None:
@@ -685,7 +684,7 @@ def _workboard_page(
             <span class="review-status">Review: {_esc(status)}</span>
             <span class="document-work-summary">{_esc(_work_summary(item))}</span>
           </summary>{dashboard}</details>''')
-    return _page(_nav(account, "review", counts) + '<section class="room review-room"><h1>Review</h1>'
+    return _page(_nav(account, "review") + '<section class="room review-room"><h1>Review</h1>'
                  + console_ui._task_links("review") + controls + '<div class="doc-list">' + ''.join(cards)
                  + (('<p>Geen documenten gevonden.</p>' if q else '<p>Geen aan jou toegewezen reviewdocumenten.</p>') if not cards else '')
                  + '</div></section>', title="Review — Metis")
@@ -696,7 +695,6 @@ def _projected_document_dashboard(
     *,
     account: dict[str, Any],
     snapshot_id: str,
-    counts: dict[str, int],
     summary: dict[str, Any] | None = None,
     content_only: bool = False,
 ) -> str | None:
@@ -774,7 +772,7 @@ def _projected_document_dashboard(
     )
     return _page(
         f"""
-        {_nav(account, "review", counts)}
+        {_nav(account, "review")}
         <section class="room review-room">
           <h1>Review</h1>
           {console_ui._task_links("review")}
@@ -844,14 +842,12 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         chosen_task = normalize_review_task(task)
         if not chosen or (not object.strip() and not chosen_task):
             return _workboard_page(console, account=account, snapshot_id=chosen, q=q, page=page, theme=theme)
-        counts = console.waiting_task_counts(str(account["account_id"]))
         rendered = _render_review_room(
             console,
             account,
             html.escape(document, quote=True),
             html.escape(object, quote=True),
             task=html.escape(chosen_task, quote=True),
-            counts=counts,
         )
 
         back = "/review?" + urlencode({"document": chosen, "q": q, "page": page})

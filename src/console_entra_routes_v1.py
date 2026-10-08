@@ -11,11 +11,22 @@ from src.operations_console_v1 import ConsoleError
 SESSION_COOKIE = "console_session"
 
 
+def identity_unavailable_response(render_page):
+    """Deny access during an identity outage without discarding the session."""
+    return HTMLResponse(render_page(
+        '<section class="room login-card"><h1>Metis is tijdelijk niet beschikbaar</h1>'
+        '<p>Je toegang kan nu niet worden gecontroleerd. Probeer het over enkele ogenblikken opnieuw.</p>'
+        '<p><a href="/">Opnieuw proberen</a></p></section>'
+    ), status_code=503, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+
+
 def install_entra_routes(app, console, identity, *, render_page):
     provider = MicrosoftLogin(identity.config)
     app.state.microsoft_login = provider
 
     def failure(status=403):
+        if status == 503:
+            return identity_unavailable_response(render_page)
         response = HTMLResponse(render_page(
             '<section class="room login-card"><h1>Aanmelden niet gelukt</h1>'
             '<p>Controleer of je werkaccount toegang heeft tot Metis. Neem anders contact op met je Metis-beheerder.</p>'

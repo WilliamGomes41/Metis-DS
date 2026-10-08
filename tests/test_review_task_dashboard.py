@@ -304,7 +304,6 @@ def test_object_history_reuses_one_document_read_and_shows_stored_version_diff()
         "snap-1",
         "revised",
         task="decisions",
-        counts={},
     )
 
     assert console.object_reads == [("snap-1", True)]

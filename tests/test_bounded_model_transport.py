@@ -74,7 +74,12 @@ def test_parent_process_death_terminates_transport_worker(monkeypatch,tmp_path):
             process.kill();process.wait(5)
             for _ in range(100):
                 child=Path(f"/proc/{children[0]}/stat")
-                if not child.exists() or child.read_text().split()[2]=="Z":break
+                try:
+                    state=child.read_text().rsplit(") ",1)[1].split()[0]
+                except (FileNotFoundError,ProcessLookupError):
+                    # Exit can remove procfs metadata before or during read.
+                    break
+                if state=="Z":break
                 time.sleep(.02)
             else:pytest.fail('orphan transport process remains alive')
         finally:

@@ -334,10 +334,9 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
             success = (
                 '<div class="banner ok">Publicatie voltooid.</div>'
             )
-        counts = console.waiting_task_counts(account["account_id"])
         return _page(
             f'''
-            {_nav(account, "publish", counts)}
+            {_nav(account, "publish")}
             <section class="room">
               <h1>Publiceren</h1>
               {_task_links("publish")}

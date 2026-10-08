@@ -3,6 +3,7 @@
 # release-control-evidence: scope/belofte
 # release-control-evidence: opslag concurrent stale
 # release-control-evidence: toegang
+# release-control-evidence: kwaliteit
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
@@ -37,6 +38,7 @@ pytestmark = [
     pytest.mark.release_control_scope_belofte,
     pytest.mark.release_control_opslag,
     pytest.mark.release_control_toegang,
+    pytest.mark.release_control_kwaliteit,
     pytest.mark.release_control_slop,
     pytest.mark.release_control_releasebewijs,
 ]
@@ -383,8 +385,8 @@ def test_authenticated_tree_and_review_gets_use_production_list_installers(
     assert "Published fixture" in tree.text
     assert "Unpublished fixture" in tree.text
     assert console.list_status_calls == 1
-    assert workflow.connect_calls == 1
-    assert workflow.execute_calls == 1
+    assert workflow.connect_calls == 0
+    assert workflow.execute_calls == 0
     assert canonical.connect_calls == 1
     assert canonical.execute_calls == 1
 
@@ -402,8 +404,8 @@ def test_authenticated_tree_and_review_gets_use_production_list_installers(
     assert console.list_status_calls == 2
     assert console.workboard_summary_calls == 1
     assert console.snapshot_object_reads == 0
-    assert workflow.connect_calls == 1
-    assert workflow.execute_calls == 1
+    assert workflow.connect_calls == 0
+    assert workflow.execute_calls == 0
     assert canonical.connect_calls == 0
     assert canonical.execute_calls == 0
 
