@@ -456,6 +456,54 @@ def reviewer_route_counts(
     }
 
 
+def review_repair_duties(
+    objects: Iterable[dict[str, Any]],
+    *,
+    review_path: str,
+) -> list[dict[str, Any]]:
+    """Project open human content-repair work from current T9/T11 state."""
+    from src.revision_workflow import knowledge_revision
+
+    duties: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for obj in objects:
+        if str(obj.get("object_type") or "") == "document":
+            continue
+        if not knowledge_revision(obj):
+            continue
+        governance = obj.get("governance")
+        status = (
+            str(governance.get("validation_status") or "")
+            if isinstance(governance, dict)
+            else ""
+        )
+        admission_blocked = admission_of(obj).get("gate_result") == GATE_BLOCKED
+        if status != "revise" and not (
+            status == "needs_review" and admission_blocked
+        ):
+            continue
+        object_id = str(obj.get("object_id") or "")
+        if not object_id or object_id in seen:
+            continue
+        seen.add(object_id)
+        provenance = obj.get("provenance")
+        duties.append(
+            {
+                "object_id": object_id,
+                "object_version": str(obj.get("object_version") or ""),
+                "canonical_object_hash": (
+                    str(provenance.get("canonical_object_hash") or "")
+                    if isinstance(provenance, dict)
+                    else ""
+                ),
+                "stage": "repair",
+                "lane": LANE_CONTEXTUAL,
+                "review_path": review_path,
+            }
+        )
+    return duties
+
+
 def repair_duty_count(
     objects: Iterable[dict[str, Any]],
     *,
