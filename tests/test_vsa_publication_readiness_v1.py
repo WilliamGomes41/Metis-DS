@@ -1,4 +1,4 @@
-"""VSA Slice 1: publication requires completed candidate review.
+"""T12: publication readiness consumes T9 ReviewDuty output.
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: slop
@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from src.publication_readiness_v1 import (
@@ -14,113 +15,80 @@ from src.publication_readiness_v1 import (
     publication_review_readiness,
 )
 from src.review_closure_v1 import ReviewClosureConsole
+from src.review_duty_v1 import FIRST_REVIEW, SECOND_REVIEW
 
 
-def _object(
-    object_id: str,
-    validation_status: str,
-    *,
-    register_status: str = "selected_as_candidate",
-) -> dict[str, Any]:
+def _duty(object_id: str, stage: str = FIRST_REVIEW) -> dict[str, str]:
     return {
         "object_id": object_id,
+        "object_version": "1.0",
+        "canonical_object_hash": f"hash-{object_id}",
+        "stage": stage,
+        "lane": "batch",
         "object_type": "explanation",
-        "governance": {"validation_status": validation_status},
-        "metadata": {"passage_register": {"status": register_status}},
     }
 
 
 class _ExistingPublicationGate:
-    def __init__(self, objects: list[dict[str, Any]], blockers: list[str] | None = None) -> None:
-        self._objects = objects
-        self._blockers = list(blockers or [])
+    def __init__(self, result: dict[str, Any]) -> None:
+        self._result = result
 
     def snapshot_objects(self, _snapshot_id: str) -> list[dict[str, Any]]:
-        return self._objects
+        return []
 
-    def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
-        _ = actor_id, snapshot_id
-        return {
-            "publish_allowed": not self._blockers,
-            "blockers": list(self._blockers),
-        }
+    def technical_publication_readiness(
+        self, *, snapshot_id: str, **_context: Any
+    ) -> dict[str, Any]:
+        _ = snapshot_id
+        return deepcopy(self._result)
 
 
 class _PublicationReadinessSubject(PublicationReadinessMixin, _ExistingPublicationGate):
     pass
 
 
-def test_one_approved_candidate_does_not_close_ninety_nine_open_candidates() -> None:
-    objects = [_object("ko-001", "approved")] + [
-        _object(f"ko-{index:03d}", "needs_review")
-        for index in range(2, 101)
-    ]
+def test_one_t9_projection_does_not_close_ninety_nine_open_duties() -> None:
+    duties = [_duty(f"ko-{index:03d}") for index in range(2, 101)]
 
-    readiness = publication_review_readiness(objects)
-    considered = _PublicationReadinessSubject(objects).consider_publish(
-        actor_id="publisher", snapshot_id="snapshot"
-    )
+    readiness = publication_review_readiness(duties)
 
-    assert readiness["review_required_object_count"] == 100
+    assert readiness["review_required_object_count"] == 99
     assert readiness["unresolved_review_object_count"] == 99
     assert readiness["review_complete"] is False
-    assert considered["publish_allowed"] is False
-    assert REVIEW_WORK_INCOMPLETE in considered["blockers"]
-    assert len(considered["unresolved_review_object_ids"]) == 99
+    assert readiness["first_review_duty_count"] == 99
 
 
-def test_deferred_candidate_remains_unresolved() -> None:
-    objects = [
-        _object("approved", "approved"),
-        _object("later", "needs_review"),
-    ]
-
-    considered = _PublicationReadinessSubject(objects).consider_publish(
-        actor_id="publisher", snapshot_id="snapshot"
+def test_t9_first_and_second_review_stages_are_preserved() -> None:
+    readiness = publication_review_readiness(
+        [_duty("first"), _duty("second", SECOND_REVIEW)]
     )
 
-    assert considered["publish_allowed"] is False
-    assert considered["unresolved_review_object_ids"] == ["later"]
-    assert considered["unresolved_review_object_count"] == 1
+    assert readiness["unresolved_review_object_ids"] == ["first", "second"]
+    assert readiness["first_review_duty_count"] == 1
+    assert readiness["second_review_duty_count"] == 1
+    assert REVIEW_WORK_INCOMPLETE == "review_work_incomplete"
 
 
-def test_approved_and_rejected_candidates_are_final_for_readiness() -> None:
-    objects = [
-        _object("publish-me", "approved"),
-        _object("do-not-publish", "rejected"),
-    ]
+def test_empty_t9_projection_is_review_complete() -> None:
+    readiness = publication_review_readiness([])
 
-    considered = _PublicationReadinessSubject(objects).consider_publish(
-        actor_id="publisher", snapshot_id="snapshot"
-    )
-
-    assert considered["review_complete"] is True
-    assert considered["unresolved_review_object_count"] == 0
-    assert considered["publish_allowed"] is True
-    assert REVIEW_WORK_INCOMPLETE not in considered["blockers"]
-
-
-def test_non_candidate_passage_is_outside_slice_one_boundary() -> None:
-    objects = [
-        _object("candidate", "approved"),
-        _object("context", "needs_review", register_status="used_as_context"),
-        _object("unassessed", "needs_review", register_status="not_yet_assessed"),
-    ]
-
-    readiness = publication_review_readiness(objects)
-
-    assert readiness["review_required_object_ids"] == ["candidate"]
     assert readiness["review_complete"] is True
+    assert readiness["unresolved_review_object_count"] == 0
 
 
 def test_existing_technical_blockers_are_preserved() -> None:
-    objects = [_object("candidate", "approved")]
-    subject = _PublicationReadinessSubject(objects, blockers=["g2_source_store_unavailable"])
+    subject = _PublicationReadinessSubject(
+        {
+            "publish_allowed": False,
+            "blockers": ["g2_source_store_unavailable"],
+            "publishable_object_count": 1,
+        }
+    )
 
-    considered = subject.consider_publish(actor_id="publisher", snapshot_id="snapshot")
+    considered = subject.publication_readiness("snapshot")
 
     assert considered["publish_allowed"] is False
-    assert considered["blockers"] == ["g2_source_store_unavailable"]
+    assert considered["technical_blockers"] == ["g2_source_store_unavailable"]
     assert considered["review_complete"] is True
 
 
