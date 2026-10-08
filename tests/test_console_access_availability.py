@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from src.console_entra_routes_v1 import install_entra_routes
 from src.operations_console_app import _page, create_console_app
 from src.operations_console_v1 import ConsoleError
-from tests.test_console_duty_first_home import _accounts, _client, _console, _visible_text
+from tests.test_console_duty_first_home import TEST_PASSWORD, _accounts, _client, _console, _visible_text
 
 
 def unavailable(*args, **kwargs):
@@ -54,6 +54,27 @@ def test_authenticated_home_does_not_load_document_inventory(tmp_path, monkeypat
     assert "Mijn werk" in response.text
     assert "Geen open taken" not in response.text
     assert "0 documenten" not in response.text
+
+
+def test_production_composition_navigation_never_requests_badges(tmp_path, monkeypatch):
+    from src.console_asgi import build_app
+    monkeypatch.setenv("CONSOLE_DATA_ROOT", str(tmp_path))
+    app = build_app()
+    console = app.state.operations_kernel
+    console.create_account(username="researcher.anne", password=TEST_PASSWORD,
+                           roles=("researcher", "reviewer", "publisher"))
+    client = TestClient(app, base_url="https://testserver")
+    assert client.post("/login", data={"username": "researcher.anne", "password": TEST_PASSWORD}).status_code == 200
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("installed route requested navigation review counts")
+
+    monkeypatch.setattr(console, "waiting_task_counts", forbidden)
+    for path in ("/", "/ingest", "/tree", "/review", "/publish", "/settings", "/over-console",
+                 "/audit", "/audit/review-signals", "/review/repair"):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert '<nav class="rooms">' in response.text
 
 
 @pytest.mark.parametrize("path", ["/", "/settings"])

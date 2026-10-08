@@ -287,7 +287,7 @@ def harden_legacy_repair_routes(app: FastAPI, console: ReviewClosureConsole) -> 
         from src.operations_console_app import _nav, _page
 
         body = (
-            f"{_nav(account, 'review', console.waiting_task_counts(account['account_id']))}"
+            f"{_nav(account, 'review')}"
             "<section class='room'><h1>Review — herstelstatus</h1>"
             "<p class='lead'>Alleen read-only herstelzicht. Canonieke correcties lopen uitsluitend via Review → correctie specificeren.</p>"
             + ("".join(cards) or "<p class='muted'>Geen achtergebleven herstelwerk.</p>")

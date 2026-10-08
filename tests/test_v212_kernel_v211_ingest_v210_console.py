@@ -764,7 +764,7 @@ def test_c_nav_heading_is_documentenhierarchie_not_familieboom(tmp_path: Path) -
     assert "Familieboom" not in nav
 
 
-def test_c_badges_match_kernel_queues_and_hide_at_zero(tmp_path: Path) -> None:
+def test_c_kernel_counts_remain_available_without_automatic_navigation_badges(tmp_path: Path) -> None:
     console = _console(tmp_path)
     accounts = _accounts(console)
     empty = console.waiting_task_counts(accounts["reviewer"]["account_id"])
@@ -788,11 +788,12 @@ def test_c_badges_match_kernel_queues_and_hide_at_zero(tmp_path: Path) -> None:
 
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     review_html = client.get("/review").text
-    assert 'class="badge"' in review_html
-    assert str(review_counts["review"]) in review_html
+    nav = review_html.split('<nav class="rooms">', 1)[1].split("</nav>", 1)[0]
+    assert 'class="badge"' not in nav
+    assert 'href="/review"' in nav
     client.post("/login", data={"username": "publisher.carla", "password": "carla-secret"})
     publish_html = client.get("/publish").text
-    assert str(publish_counts["publish"]) in publish_html
+    assert "Publiceren" in publish_html
     assert "g2" not in publish_html.lower() or "geen g2" in publish_html.lower() or "niet" in publish_html.lower()
     accounts_html = client.get("/accounts").text
     assert "Accounts" in accounts_html

@@ -50,7 +50,7 @@ class Projection:
 def render(projection):
     html = _projected_document_dashboard(
         projection, account={'account_id': 'reviewer-1', 'roles': ['reviewer']},
-        snapshot_id='snapshot-1', counts={},
+        snapshot_id='snapshot-1',
     )
     return simplify_console_html('/review', html)
 

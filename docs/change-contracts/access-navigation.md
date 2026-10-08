@@ -12,7 +12,9 @@ Touches lifecycle invariants: no
 `home -> list_envelopes` blocked the authenticated landing page before HTML was
 returned. Other HTML routes also invoked `_counts` only to render navigation.
 The home now renders four neutral destinations after the existing session check.
-Navigation no longer accepts counts. Review/publication task pages retain their
+Navigation no longer accepts counts. This includes the route installers in
+`review_workboard_v1`, `publish_readiness_ui_v1`, `audit_room_v1`,
+`closed_review_loop_v1`, `deterministic_review_repair_v1` and `review_closure_v1`. Review/publication task pages retain their
 own authoritative calculations. No deferred calculation, cache or second source
 of task truth is introduced.
 
@@ -36,7 +38,10 @@ there is no data rollback. Upload/object-formation separation is a later change.
 Before the patch, synthetic HTTP tests failed at the actual home/navigation
 boundary when review counts or the home inventory read were unavailable. Browser
 script tests reproduced the anonymous-home warning and incorrect expiry title.
-After the patch these checks pass. A native PostgreSQL integration test follows
+After the patch these checks pass. The regression also constructs the app
+through `console_asgi.build_app`, exercising the installed production route
+composition, and the existing hot-path checks verify that navigation badge SQL
+reads disappear while document projections remain intact. A native PostgreSQL integration test follows
 the Microsoft callback to home with both heavy reads forbidden; only the external
 Microsoft exchange is replaced in that test.
 

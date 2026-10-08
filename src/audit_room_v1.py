@@ -295,10 +295,9 @@ def _esc(value: Any) -> str:
 def _chrome(console: OperationsConsole, account: dict[str, Any], body: str) -> str:
     from src.operations_console_app import _nav, _page
 
-    counts = console.waiting_task_counts(account["account_id"])
     return _page(
         f"""
-        {_nav(account, "settings", counts)}
+        {_nav(account, "settings")}
         <section class="room">
           {body}
         </section>

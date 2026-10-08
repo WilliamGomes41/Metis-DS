@@ -789,7 +789,7 @@ def install_deterministic_review_repair_routes(
 
         account = account_for(request)
         return _page(
-            f"{_nav(account, 'review', console.waiting_task_counts(account['account_id']))}"
+            f"{_nav(account, 'review')}"
             f"<section class='room'>{body}</section>",
             title="Review — reparatie specificeren — V&amp;VN Data Services",
         )
