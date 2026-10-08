@@ -12,6 +12,7 @@ from pathlib import Path
 
 from src.integrity_kernel import stamp_canonical_hashes
 from src.knowledge_path_v1 import content_reviewable
+from src import publication_readiness_v1 as readiness_module
 from src.publication_readiness_v1 import REVIEW_WORK_INCOMPLETE
 from src.review_closure_v1 import ReviewClosureConsole
 from tests.semantic_fixture_support import bind_fixture_selections, install_fixture_history
@@ -82,3 +83,37 @@ def test_governance_approved_without_exact_t9_binding_stays_in_review(tmp_path) 
     assert console.snapshot_objects(snapshot_id, include_blocked=True) == before_objects
     assert console.object_review_bindings(snapshot_id) == before_bindings
     assert console._envelope(snapshot_id) == before_envelope
+
+
+def test_one_readiness_request_reads_each_current_input_once(monkeypatch, tmp_path) -> None:
+    console, snapshot_id = _console(tmp_path)
+    counts = {"objects": 0, "bindings": 0, "fragments": 0, "source": 0}
+    original_objects = console.snapshot_objects
+    original_bindings = console.object_review_bindings
+    original_fragments = console.review_source_fragments
+    original_source = readiness_module.source_accountability
+
+    def objects(*args, **kwargs):
+        counts["objects"] += 1
+        return original_objects(*args, **kwargs)
+
+    def bindings(*args, **kwargs):
+        counts["bindings"] += 1
+        return original_bindings(*args, **kwargs)
+
+    def fragments(*args, **kwargs):
+        counts["fragments"] += 1
+        return original_fragments(*args, **kwargs)
+
+    def source(*args, **kwargs):
+        counts["source"] += 1
+        return original_source(*args, **kwargs)
+
+    monkeypatch.setattr(console, "snapshot_objects", objects)
+    monkeypatch.setattr(console, "object_review_bindings", bindings)
+    monkeypatch.setattr(console, "review_source_fragments", fragments)
+    monkeypatch.setattr(readiness_module, "source_accountability", source)
+
+    console.publication_readiness(snapshot_id)
+
+    assert counts == {"objects": 1, "bindings": 1, "fragments": 1, "source": 1}
