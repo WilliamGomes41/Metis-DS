@@ -41,11 +41,14 @@ class _ExistingPublicationGate:
     def snapshot_objects(self, _snapshot_id: str) -> list[dict[str, Any]]:
         return self._objects
 
-    def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
-        _ = actor_id, snapshot_id
+    def technical_publication_readiness(
+        self, *, snapshot_id: str, **_context: Any
+    ) -> dict[str, Any]:
+        _ = snapshot_id
         return {
             "publish_allowed": not self._blockers,
             "blockers": list(self._blockers),
+            "publishable_object_count": 1,
         }
 
 
@@ -63,7 +66,7 @@ def test_candidate_review_complete_but_unassessed_substantive_passage_blocks() -
         _object("open-source-passage"),
     ]
 
-    considered = _Subject(objects).consider_publish(actor_id="publisher", snapshot_id="snapshot")
+    considered = _Subject(objects).publication_readiness("snapshot")
 
     assert considered["review_complete"] is True
     assert considered["source_passage_review_complete"] is False
@@ -118,7 +121,7 @@ def test_explicit_exclusion_closes_passage_without_making_it_candidate_work() ->
     excluded = _object("excluded", register_status="excluded_with_reason")
 
     closure = source_passage_closure([excluded])
-    considered = _Subject([excluded]).consider_publish(actor_id="publisher", snapshot_id="snapshot")
+    considered = _Subject([excluded]).publication_readiness("snapshot")
 
     assert closure["source_passage_review_complete"] is True
     assert considered["review_required_object_count"] == 0
@@ -148,13 +151,13 @@ def test_slice_one_candidate_blocker_remains_independent() -> None:
         review_status="needs_review",
     )
 
-    considered = _Subject([unresolved_candidate]).consider_publish(
-        actor_id="publisher", snapshot_id="snapshot"
-    )
+    considered = _Subject([unresolved_candidate]).publication_readiness("snapshot")
 
-    assert considered["review_complete"] is False
+    # Without resolvable T9 source input this row opens no content ReviewDuty;
+    # T10 still keeps the source work fail-closed.
+    assert considered["review_complete"] is True
     assert considered["source_passage_review_complete"] is False
-    assert REVIEW_WORK_INCOMPLETE in considered["blockers"]
+    assert REVIEW_WORK_INCOMPLETE not in considered["blockers"]
     assert SOURCE_PASSAGE_REVIEW_INCOMPLETE in considered["blockers"]
     assert considered["publish_allowed"] is False
 
@@ -167,7 +170,7 @@ def test_existing_technical_blocker_is_preserved_after_full_closure() -> None:
     )
     subject = _Subject([approved], blockers=["g2_source_store_unavailable"])
 
-    considered = subject.consider_publish(actor_id="publisher", snapshot_id="snapshot")
+    considered = subject.publication_readiness("snapshot")
 
     assert considered["review_complete"] is True
     assert considered["source_passage_review_complete"] is True
