@@ -293,6 +293,7 @@ def test_a02_installed_reads_bounded_equal_and_next_request_sees_changes(backend
     if path=='/review/bronpassage':query['object']=source_obj['object_id']
     original=semantic._reconstructed_blocks;calls=[];representations=[]
     def counted(rows):
+        rows=list(rows)
         calls.append(1);representations.append(deepcopy(rows));return original(rows)
     monkeypatch.setattr(semantic,'_reconstructed_blocks',counted)
     monkeypatch.setattr(materialisation,'_reconstructed_blocks',counted)

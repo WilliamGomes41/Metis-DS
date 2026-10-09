@@ -58,14 +58,24 @@ def reserve(console, author, sid, command="start"):
                                             expected_revision=console.objects_revision(sid))
 
 
-def test_restart_recovers_pending_sql_command_without_files_or_http(workflow_postgres, tmp_path):
+def test_restart_recovers_pending_sql_command_after_http_wake_failure_without_files(workflow_postgres, tmp_path, monkeypatch):
     calls = []
     first = _console(tmp_path / "first", workflow_postgres)
     blob = ImmutableBlobFixture()
     first.immutable_source_store = blob
     author, _, sid = received(first)
-    attempt, fresh = reserve(first, author, sid)
-    assert fresh and attempt["dispatch"]["state"] == "pending"
+    from src.source_processing_dispatch_v1 import SourceProcessingDispatcher
+    app = installed_app(first)
+    with monkeypatch.context() as patch, TestClient(app, base_url="https://testserver", raise_server_exceptions=False) as client:
+        login(client)
+        def lost_wake(*args):
+            raise RuntimeError("request_lost_after_durable_reservation")
+        patch.setattr(SourceProcessingDispatcher, "notify", lost_wake)
+        response = client.post("/source-selection/start", data={"document": sid, "command_id": "start",
+            "expected_revision": first.objects_revision(sid)}, follow_redirects=False)
+        assert response.status_code == 500
+    attempt = first._envelope(sid)["processing_attempts"][-1]
+    assert attempt["dispatch"]["state"] == "pending"
     assert first.snapshot_objects(sid) == []
     shutil.rmtree(tmp_path / "first")  # every cache/mirror is disposable
     second = _console(tmp_path / "second", workflow_postgres)
