@@ -359,7 +359,8 @@ def test_runtime_policy_is_instance_bound_and_keeps_explicit_rollback_mode(tmp_p
 def test_missing_provider_persists_blocked_capture_and_recovers_same_snapshot(
     tmp_path: Path,
 ) -> None:
-    fragments = [_fragment("p1", "Bespreek samen de behandeling.")]
+    from tests.test_source_bound_fields_v2 import fragment
+    fragments = [fragment()]
     env = {PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE}
 
     def fake_post(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
@@ -446,10 +447,11 @@ def test_missing_provider_persists_blocked_capture_and_recovers_same_snapshot(
 
     env[LLM_API_KEY_ENV] = "product-key"
     env[LLM_MODEL_ENV] = "test-model"
-    from tests.test_source_bound_fields_v2 import fragment, proposal
     from src.source_bound_fields_v2 import MODE
     env[PASSAGE_FORMATION_MODE_ENV] = MODE
-    restarted._extract = lambda *_args, **_kwargs: [fragment()]
+    def unexpected_extraction(*_args, **_kwargs):
+        pytest.fail("Recovery must reuse extraction of the same immutable source")
+    restarted._extract = unexpected_extraction
     recovered = restarted.reextract_unpublished(actor_id=researcher["account_id"], snapshot_id=snapshot_id)
     assert recovered["processing_attempts"][-1]["state"] == "succeeded"
     assert restarted._envelope(snapshot_id)["sha256"] == durable["sha256"]
