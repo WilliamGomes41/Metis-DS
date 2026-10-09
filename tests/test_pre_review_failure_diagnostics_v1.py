@@ -63,93 +63,105 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
     other = console.create_account(username="other", password="other-secret", roles=("reviewer",))
     app = create_console_app(console)
     install_document_status_ui(app, console)
-    client = TestClient(app, base_url="https://testserver")
-    client.post("/login", data={"username": "researcher", "password": "researcher-secret"})
-    response = client.post("/ingest", data={
-        "ingest_kind": "new", "title": "Synthetic blocked document", "version": "1",
-        "date": "2026-10-01", "class_": "richtlijn", "family": "Smetten",
-        "review_mode": "single", "primary_reviewer": actor["account_id"],
-    }, files={"file": ("synthetic.html", b"<p>synthetic</p>", "text/html")})
-    assert response.status_code == 200, response.text
-    envelope = console.list_envelopes()[0]
-    sid = envelope["snapshot_id"]
-    assert "De verwerking is niet afgerond; beoordelen is nog niet beschikbaar" in response.text
-    assert code not in response.text
-    assert envelope["publication_eligibility"] == PRE_REVIEW_BLOCKED
-    assert envelope["processing_blocker"] == code
-    assert console.snapshot_objects(sid) == []
-    assert console.waiting_task_counts(actor["account_id"])["review"] == 0
-    assert console.document_status(sid) == "blocked"
-    before = deepcopy(envelope)
-    before_revision = console.objects_revision(sid)
-    before_bindings = deepcopy(console.object_review_bindings(sid))
+    with TestClient(app, base_url="https://testserver") as client:
+        client.post("/login", data={"username": "researcher", "password": "researcher-secret"})
+        response = client.post("/ingest", data={
+            "ingest_kind": "new", "title": "Synthetic blocked document", "version": "1",
+            "date": "2026-10-01", "class_": "richtlijn", "family": "Smetten",
+            "review_mode": "single", "primary_reviewer": actor["account_id"], "command_id": "receipt-diagnostics",
+        }, files={"file": ("synthetic.html", b"<p>synthetic</p>", "text/html")})
+        assert response.status_code == 200, response.text
+        envelope = console.list_envelopes()[0]
+        sid = envelope["snapshot_id"]
+        assert "Document veilig ontvangen" in response.text
+        assert "Status: nog niet gestart" in response.text
+        assert not console._envelope(sid).get("processing_attempts")
+        started = client.post("/source-selection/start", data={"document": sid,
+            "command_id": "selection-diagnostics", "expected_revision": console.objects_revision(sid)}, follow_redirects=False)
+        assert started.status_code == 303
+        import asyncio
+        async def wait():
+            await asyncio.gather(*tuple(app.state.source_selection_workers))
+        client.portal.call(wait)
+        response = client.get("/source-selection", params={"document": sid})
+        assert "Status: mislukt" in response.text
+        envelope = console._envelope(sid)
+        assert code not in response.text
+        assert envelope["publication_eligibility"] == PRE_REVIEW_BLOCKED
+        assert envelope["processing_blocker"] == code
+        assert console.snapshot_objects(sid) == []
+        assert console.waiting_task_counts(actor["account_id"])["review"] == 0
+        assert console.document_status(sid) == "blocked"
+        before = deepcopy(envelope)
+        before_revision = console.objects_revision(sid)
+        before_bindings = deepcopy(console.object_review_bindings(sid))
 
-    from tests.test_pre_review_blocked_list_status_v1 import _ListStatusReader
-    reader = _ListStatusReader({sid: {**envelope, "has_open_review": False}})
-    console.list_document_lifecycle_statuses = reader.list_document_lifecycle_statuses
-    tree = client.get("/tree")
-    assert "status <b>geblokkeerd</b>" in tree.text
-    assert "Technische diagnose bekijken" not in tree.text
-    management = client.get(f"/settings/technical/processing?document={sid}")
-    assert management.status_code == 200
-    assert code in management.text
-    payload = client.get(f"/review/processing-diagnostics?document={sid}").json()
-    assert payload["diagnostics"]["blocked_candidate_count"] == 0
-    assert payload["pre_review"]["blocked"] is True
-    assert payload["pre_review"]["reason_code"] == code
-    assert payload["pre_review"]["object_count"] == 0
-    assert "Nul kandidaten betekent niet" in payload["pre_review"]["note"]
+        from tests.test_pre_review_blocked_list_status_v1 import _ListStatusReader
+        reader = _ListStatusReader({sid: {**envelope, "has_open_review": False}})
+        console.list_document_lifecycle_statuses = reader.list_document_lifecycle_statuses
+        tree = client.get("/tree")
+        assert "status <b>geblokkeerd</b>" in tree.text
+        assert "Technische diagnose bekijken" not in tree.text
+        management = client.get(f"/settings/technical/processing?document={sid}")
+        assert management.status_code == 200
+        assert code in management.text
+        payload = client.get(f"/review/processing-diagnostics?document={sid}").json()
+        assert payload["diagnostics"]["blocked_candidate_count"] == 0
+        assert payload["pre_review"]["blocked"] is True
+        assert payload["pre_review"]["reason_code"] == code
+        assert payload["pre_review"]["object_count"] == 0
+        assert "Nul kandidaten betekent niet" in payload["pre_review"]["note"]
 
-    response = client.post("/tree/reprocess", data={"snapshot_id": sid})
-    assert response.status_code == 400
-    assert code in response.text
-    reference = console._envelope(sid)["processing_attempts"][-1]["processing_reference"]
-    assert re.fullmatch(r"[a-f0-9]{32}", reference)
-    assert "Verwerkingsreferentie:" not in response.text
-    assert "Validatiereden:" not in response.text
-    management = client.get(f"/settings/technical/processing?document={sid}")
-    assert management.status_code == 200
-    if reason:
-        assert reason in management.text
-    assert any(f"reference={reference} snapshot_id={sid} code={code} reason={reason or '-'}" in row.message
-               for row in caplog.records)
-    attempts = [row.message for row in caplog.records if "METIS_PRE_REVIEW blocked" in row.message]
-    assert len(attempts) == 2
-    assert len(set(re.findall(r"reference=([a-f0-9]{32})", "\n".join(attempts)))) == 2
-    assert "private-" not in caplog.text and "private-" not in response.text
-    assert _PROCESSING_REFERENCE.get() == "-"
+        response = client.post("/tree/reprocess", data={"snapshot_id": sid})
+        assert response.status_code == 400
+        assert code in response.text
+        reference = console._envelope(sid)["processing_attempts"][-1]["processing_reference"]
+        assert re.fullmatch(r"[a-f0-9]{32}", reference)
+        assert "Verwerkingsreferentie:" not in response.text
+        assert "Validatiereden:" not in response.text
+        management = client.get(f"/settings/technical/processing?document={sid}")
+        assert management.status_code == 200
+        if reason:
+            assert reason in management.text
+        assert any(f"reference={reference} snapshot_id={sid} code={code} reason={reason or '-'}" in row.message
+                   for row in caplog.records)
+        attempts = [row.message for row in caplog.records if "METIS_PRE_REVIEW blocked" in row.message]
+        assert len(attempts) == 2
+        assert len(set(re.findall(r"reference=([a-f0-9]{32})", "\n".join(attempts)))) == 2
+        assert "private-" not in caplog.text and "private-" not in response.text
+        assert _PROCESSING_REFERENCE.get() == "-"
 
-    after_failure = deepcopy(console._envelope(sid))
-    attempts = after_failure.pop("processing_attempts")
-    assert attempts[-1]["state"] == "failed"
-    old = deepcopy(before)
-    assert attempts[:-1] == old.pop("processing_attempts")
-    assert after_failure == old
-    assert console.objects_revision(sid) == before_revision
-    assert console.object_review_bindings(sid) == before_bindings
+        after_failure = deepcopy(console._envelope(sid))
+        attempts = after_failure.pop("processing_attempts")
+        assert attempts[-1]["state"] == "failed"
+        old = deepcopy(before)
+        assert attempts[:-1] == old.pop("processing_attempts")
+        assert after_failure == old
+        assert console.objects_revision(sid) == before_revision
+        assert console.object_review_bindings(sid) == before_bindings
 
-    client.post("/login", data={"username": "other", "password": "other-secret"})
-    assert "Technische diagnose bekijken" not in client.get("/tree").text
-    assert client.get(f"/review/processing-diagnostics?document={sid}").status_code == 400
-    client.post("/logout")
-    assert client.get(f"/review/processing-diagnostics?document={sid}").status_code == 401
+        client.post("/login", data={"username": "other", "password": "other-secret"})
+        assert "Technische diagnose bekijken" not in client.get("/tree").text
+        assert client.get(f"/review/processing-diagnostics?document={sid}").status_code == 400
+        client.post("/logout")
+        assert client.get(f"/review/processing-diagnostics?document={sid}").status_code == 401
 
-    restarted = fixture_console(tmp_path, failure, workflow_postgres)
-    assert restarted._envelope(sid)["processing_attempts"][-1]["processing_reference"] == reference
-    failure["kind"] = "valid"
-    recovered = restarted.reextract_unpublished(actor_id=actor["account_id"], snapshot_id=sid)
-    assert recovered["snapshot_id"] == sid and recovered["sha256"] == before["sha256"]
-    assert "processing_blocker" not in recovered
-    assert recovered["publication_eligibility"] != PRE_REVIEW_BLOCKED
-    assert len(recovered["quality_processing_runs"]) == 2  # failed retry remains separate from candidate provenance
-    assert [attempt["state"] for attempt in recovered["processing_attempts"]] == ["failed", "failed", "succeeded"]
-    assert restarted.waiting_task_counts(actor["account_id"])["review"] == 1
-    assert _PROCESSING_REFERENCE.get() == "-"
-    with TestClient(create_console_app(restarted), base_url="https://testserver") as recovered_client:
-        recovered_client.post("/login", data={"username": "researcher", "password": "researcher-secret"})
-        diagnostic = recovered_client.get(f"/review/processing-diagnostics?document={sid}").json()["pre_review"]
-        assert diagnostic["blocked"] is False and diagnostic["reason_code"] is None
-        assert diagnostic["object_count"] > 0
+        restarted = fixture_console(tmp_path, failure, workflow_postgres)
+        assert restarted._envelope(sid)["processing_attempts"][-1]["processing_reference"] == reference
+        failure["kind"] = "valid"
+        recovered = restarted.reextract_unpublished(actor_id=actor["account_id"], snapshot_id=sid)
+        assert recovered["snapshot_id"] == sid and recovered["sha256"] == before["sha256"]
+        assert "processing_blocker" not in recovered
+        assert recovered["publication_eligibility"] != PRE_REVIEW_BLOCKED
+        assert len(recovered["quality_processing_runs"]) == 2  # failed retry remains separate from candidate provenance
+        assert [attempt["state"] for attempt in recovered["processing_attempts"]] == ["failed", "failed", "succeeded"]
+        assert restarted.waiting_task_counts(actor["account_id"])["review"] == 1
+        assert _PROCESSING_REFERENCE.get() == "-"
+        with TestClient(create_console_app(restarted), base_url="https://testserver") as recovered_client:
+            recovered_client.post("/login", data={"username": "researcher", "password": "researcher-secret"})
+            diagnostic = recovered_client.get(f"/review/processing-diagnostics?document={sid}").json()["pre_review"]
+            assert diagnostic["blocked"] is False and diagnostic["reason_code"] is None
+            assert diagnostic["object_count"] > 0
 
 
 def test_concurrent_failures_keep_distinct_safe_references_and_reset_context(caplog):

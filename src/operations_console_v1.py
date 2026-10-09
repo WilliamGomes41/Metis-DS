@@ -2199,7 +2199,8 @@ class OperationsConsole:
             active = next(a for a in current[KEY] if a["attempt_id"] == attempt_id)
             if active["state"] == "running":
                 finish(current, attempt_id, state="failed", error=error)
-                if active.get("kind") == "ingest" and current.get("processing_blocker") == "pre_review_llm_processing_in_progress" and not self.snapshot_objects(snapshot_id):
+                if active.get("kind") == "ingest" and (current.get("processing_blocker") == "pre_review_llm_processing_in_progress"
+                        or current.get("received_source")) and not self.snapshot_objects(snapshot_id):
                     current["processing_blocker"] = active["error_code"]
                     record_processing(current, [], fragments=[], replay=None, started_at=active["started_at"],
                                       outcome="blocked", reason=active["error_code"])
