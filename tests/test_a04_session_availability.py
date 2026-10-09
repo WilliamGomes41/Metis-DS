@@ -1,7 +1,12 @@
 """A04 HTTP proof on one ASGI loop: actual extraction, sessions and another actor.
 
-# release-control-evidence: scope/belofte opslag concurrent stale interrupt retry
-# release-control-evidence: toegang beschikbaarheid kwaliteit slop releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: opslag concurrent stale interrupt retry
+# release-control-evidence: toegang
+# release-control-evidence: beschikbaarheid
+# release-control-evidence: kwaliteit
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 import asyncio
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
