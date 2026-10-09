@@ -265,7 +265,7 @@ def installed_app(console):
     ('/publish',{}),('/review',{'work':'all'}),('/review',{}),
     ('/review',{'task':'disposition'}),('/review',{'task':'individual'}),
     ('/review',{'task':'detail'}),('/review/bronpassage',{})])
-def test_a02_installed_reads_bounded_equal_and_next_request_sees_changes(tmp_path,monkeypatch,path,params):
+def test_a02_installed_reads_bounded_equal_and_next_request_sees_changes(backend_state,tmp_path,monkeypatch,path,params):
     import re
     import src.knowledge_materialisation_v1 as materialisation
     import src.semantic_passage_v1 as semantic
@@ -291,9 +291,9 @@ def test_a02_installed_reads_bounded_equal_and_next_request_sees_changes(tmp_pat
     if params.get('task')=='detail':
         query.pop('task');query['object']=candidate['object_id']
     if path=='/review/bronpassage':query['object']=source_obj['object_id']
-    original=semantic._reconstructed_blocks;calls=[]
+    original=semantic._reconstructed_blocks;calls=[];representations=[]
     def counted(rows):
-        calls.append(1);return original(rows)
+        calls.append(1);representations.append(deepcopy(rows));return original(rows)
     monkeypatch.setattr(semantic,'_reconstructed_blocks',counted)
     monkeypatch.setattr(materialisation,'_reconstructed_blocks',counted)
     app=installed_app(console)
@@ -322,11 +322,15 @@ def test_a02_installed_reads_bounded_equal_and_next_request_sees_changes(tmp_pat
         fragments=console.review_source_fragments(sid)
         fragments=deepcopy(fragments);fragments[-1]['raw_text']=fragments[-1]['clean_text']='Gewijzigde bron.'
         monkeypatch.setattr(console,'review_source_fragments',lambda *args,**kwargs:deepcopy(fragments))
-        calls.clear()
+        calls.clear();representations.clear()
         changed=client.get(path,params=query)
         assert changed.status_code==200
         assert len(calls)<=2
-        if observed:assert calls
+        if observed:
+            assert calls
+            assert any('Gewijzigde bron.' in json.dumps(rows,ensure_ascii=False) for rows in representations)
+        print('SOURCE_REUSE_EVIDENCE='+json.dumps({'backend':'postgres' if getattr(console,'workflow_document_store',None) else 'fixture',
+            'route':path,'query':query,'source_passages':30,'first_reconstructions':observed,'changed_reconstructions':len(calls)}))
         # Permission is checked anew even when preceding read succeeded.
         login(client,'reviewer')
         if path=='/publish':assert client.get(path,params=query).status_code==403
