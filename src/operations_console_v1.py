@@ -1642,6 +1642,9 @@ class OperationsConsole:
         source_status: str = "unknown",
         command_id: str | None = None,
         revision_reason: str = "",
+        _receive_only: bool = False,
+        _registration_boundary: Any = None,
+        _registration_guard: Any = None,
     ) -> dict[str, Any]:
         self._require_role(actor_id, "researcher")
         if source_status not in {"unknown", "established", "draft"}:
@@ -1729,7 +1732,7 @@ class OperationsConsole:
             if prior is not None:
                 if prior.get("ingest_command") != ingest_command:
                     raise ConsoleError("ingest_command_conflict")
-                return self._receipt(prior)
+                return self._durable_receipt(prior) if _receive_only else self._receipt(prior)
         immutable_locator = None
         if self.immutable_source_store is not None:
             try:
@@ -1794,6 +1797,33 @@ class OperationsConsole:
             envelope["ingest_command"] = ingest_command
         if review_policy is not None:
             envelope["review_policy"] = deepcopy(review_policy)
+        if _receive_only:
+            # Durable receipt is a separate command. No extractor/provider has
+            # run, and no attempt is implicitly authorized by receiving bytes.
+            envelope["received_source"] = {"filename": filename, "bytes": len(data)}
+            envelope["publication_eligibility"] = PRE_REVIEW_BLOCKED
+            envelope["processing_blocker"] = "source_selection_not_started"
+            boundary = _registration_boundary or self._store_write_lock
+            with boundary():
+                self._reload_store_locked()
+                prior = self._envelopes.get(snapshot_id)
+                if prior is not None:
+                    if ingest_command and prior.get("ingest_command") == ingest_command:
+                        return self._durable_receipt(prior) if _receive_only else self._receipt(prior)
+                    raise ConsoleError("ingest_command_conflict")
+                self._require_role(actor_id, "researcher")
+                if _registration_guard is not None:
+                    _registration_guard(envelope)
+                try:
+                    self._commit_prepared_store(envelopes={snapshot_id: envelope}, objects=(snapshot_id, []),
+                                                expected_revision="", snapshot_id=snapshot_id)
+                except ConsoleError:
+                    self._reload_store_locked()
+                    prior = self._envelopes.get(snapshot_id)
+                    if ingest_command and prior and prior.get("ingest_command") == ingest_command:
+                        return self._durable_receipt(prior) if _receive_only else self._receipt(prior)
+                    raise
+            return self._durable_receipt(self._envelope(snapshot_id))
         attempt_id = None
         attempt_deadline = None
         initial_eligibility = envelope["publication_eligibility"]
@@ -1807,7 +1837,7 @@ class OperationsConsole:
                 prior = self._envelopes.get(snapshot_id)
                 if prior is not None:
                     if ingest_command and prior.get("ingest_command") == ingest_command:
-                        return self._receipt(prior)
+                        return self._durable_receipt(prior) if _receive_only else self._receipt(prior)
                     raise ConsoleError("ingest_command_conflict")
                 expected_revision = (self.workflow_document_store.revision_for_rows([])
                                      if getattr(self, "workflow_document_store", None) is not None else "")
@@ -1825,7 +1855,7 @@ class OperationsConsole:
                     self._reload_store_locked()
                     prior = self._envelopes.get(snapshot_id)
                     if ingest_command and prior and prior.get("ingest_command") == ingest_command:
-                        return self._receipt(prior)
+                        return self._durable_receipt(prior) if _receive_only else self._receipt(prior)
                     raise
                 expected_revision = self.objects_revision(snapshot_id)
             expected_envelope = deepcopy(self._envelope(snapshot_id))
@@ -1948,13 +1978,54 @@ class OperationsConsole:
                 self.list_envelopes()
                 prior = self._envelopes.get(snapshot_id)
                 if prior and prior.get("ingest_command") == ingest_command:
-                    return self._receipt(prior)
+                    return self._durable_receipt(prior) if _receive_only else self._receipt(prior)
                 raise
             return self._receipt(envelope)
 
     def create_review_successor(self, **command: Any) -> dict[str, Any]:
         from src.decision_successor_v1 import execute
         return execute(self, **command)
+
+    def _durable_receipt(self, envelope):
+        """Confirm receipt bytes and local registration before acknowledging.
+
+        PostgreSQL's transaction is the registration authority in production;
+        local compatibility explicitly syncs the atomic files and directories.
+        If syncing fails after registration, an identical retry reconfirms it.
+        This does not alter shared review-write or rollback semantics.
+        """
+        source, _ = self._verified_source_bytes(envelope)
+        with self._store_write_lock():
+            paths = [source]
+            if getattr(self, "workflow_document_store", None) is None:
+                paths.extend([self._objects_path(envelope["snapshot_id"]), self._envelopes_path])
+            for path in paths:
+                with path.open("rb") as stored:
+                    os.fsync(stored.fileno())
+            for directory in {p.parent for p in paths} | {self.source_store, self.runtime}:
+                descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(descriptor)
+                finally:
+                    os.close(descriptor)
+        return self._receipt(envelope)
+
+    def receive_source(self, **command: Any) -> dict[str, Any]:
+        """Receive immutable bytes and registration without source selection."""
+        return self.ingest(**command, _receive_only=True)
+
+    def reserve_source_selection(self, *, actor_id, snapshot_id, command_id, expected_revision):
+        """Short durable reservation, shared by HTTP and synchronous workers."""
+        from src.source_selection_v1 import reserve_selection
+        return reserve_selection(self, actor_id=actor_id, snapshot_id=snapshot_id,
+                                 command_id=command_id, expected_revision=expected_revision)
+
+    def execute_source_selection(self, *, actor_id, snapshot_id, attempt):
+        from datetime import datetime
+        from src.processing_retry_v1 import now
+        remaining = (datetime.fromisoformat(attempt["expires_at"]) - now()).total_seconds()
+        return self._execute_source_attempt(actor_id=actor_id, snapshot_id=snapshot_id,
+                                           attempt=attempt, deadline=time.monotonic() + remaining)
 
     def _processing_limits(self):
         from src.bounded_model_call_v1 import ModelCallLimits
@@ -2175,6 +2246,8 @@ class OperationsConsole:
         if "researcher" not in account["roles"] and "reviewer" not in account["roles"]:
             raise ConsoleError("researcher_role_required")
         envelope = self._envelope(snapshot_id)
+        from src.source_selection_v1 import authorize
+        authorize(self, actor_id, envelope)
         if _attempt_id is None and envelope.get("publication_eligibility") == PRE_REVIEW_BLOCKED:
             return self.retry_pre_review(actor_id=actor_id, snapshot_id=snapshot_id, command_id=uuid.uuid4().hex)
         _, expected_revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
@@ -2227,7 +2300,7 @@ class OperationsConsole:
                 "source_sha256": envelope["sha256"],
                 "semantic_replay": deepcopy(envelope.get("semantic_replay")),
                 "resume_formation": bool(_attempt_id and attempt.get("kind") == "resume"),
-                "explicit_decision_graph": "decision_graph" in envelope,
+                "explicit_decision_graph": "decision_graph" in envelope or bool(envelope.get("review_policy") and envelope["class"] == "beslisboom"),
                 "model_call_limits": {key:attempt["limits"][key] for key in ("connect", "idle", "total", "attempt", "max_attempts")} if _attempt_id and attempt.get("limits") else None,
                 "attempt_deadline": _attempt_deadline,
                 "diagnostic_checkpoint": self._diagnostic_writer(snapshot_id, _attempt_id),
@@ -2273,7 +2346,7 @@ class OperationsConsole:
         if review_path_for_klasse(envelope["class"]) != "boom":
             objects = reprocessed_history(self._load_objects(snapshot_id, remember=False), objects,
                                           snapshot_id=snapshot_id, actor=account["username"])
-        if "decision_graph" in envelope:
+        if "decision_graph" in envelope or (envelope.get("review_policy") and envelope["class"] == "beslisboom"):
             from src.decision_graph_v1 import prepare_graph
             prepared_envelope.update(prepare_graph(freeze_path, freeze_bytes, envelope["content_kind"], fragments, objects, envelope["sha256"]))
         if isinstance(replay_record, dict):
@@ -2313,10 +2386,14 @@ class OperationsConsole:
                 if _attempt_deadline is not None and time.monotonic() >= _attempt_deadline:
                     raise ConsoleError("processing_attempt_expired")
             self._assert_source_work_unchanged(envelope, expected_revision, "published_objects_must_not_be_rewritten")
+            if envelope.get("successor_guard"):
+                from src.decision_successor_v1 import assert_parent_current
+                assert_parent_current(self, envelope)
             self._verified_source_bytes(envelope)
             account = self._account(actor_id)
             if not {"researcher", "reviewer"}.intersection(account["roles"]):
                 raise ConsoleError("researcher_role_required")
+            authorize(self, actor_id, self._envelope(snapshot_id))
             if _attempt_id is not None:
                 from src.processing_retry_v1 import finish, attach_transport
                 assert_active(self._envelope(snapshot_id), _attempt_id, now())

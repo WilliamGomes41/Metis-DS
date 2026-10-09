@@ -1,0 +1,6 @@
+{"ordinary_ingest": {"extract_on_event_loop": false, "store_lock_held": false, "health_responded_during_processing": true, "operation_http": 200, "health_http": 200}, "successor": {"extract_on_event_loop": true, "store_lock_held": true, "health_responded_during_processing": false, "operation_http": 303, "health_http": 200}}
+Traceback (most recent call last):
+  File "/workspace/scratch/3bac53626d42/metis/evidence/availability/probe_successor_availability.py", line 50, in <module>
+    assert actual['health_responded_during_processing'],'SUCCESSOR_BLOCKS_HEALTH_EVENT_LOOP'
+           ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: SUCCESSOR_BLOCKS_HEALTH_EVENT_LOOP

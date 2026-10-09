@@ -429,13 +429,18 @@ def test_review_post_progresses_while_ingest_extract_is_heavy(tmp_path: Path) ->
             async with httpx.AsyncClient(transport=transport, base_url="https://test") as reviewer:
                 await _login(researcher, "researcher.dirk", "dirk-secret")
                 await _login(reviewer, "reviewer.bert", "bert-secret")
-                ingest_task = asyncio.create_task(
-                    researcher.post(
-                        "/ingest",
-                        data=_ingest_form(accounts),
-                        files={"file": ("continentie.html", HTML_FIXTURE.read_bytes(), "text/html")},
-                    )
-                )
+                async def receive_and_select():
+                    received = await researcher.post("/ingest", data=_ingest_form(accounts),
+                        files={"file": ("continentie.html", HTML_FIXTURE.read_bytes(), "text/html")})
+                    assert received.status_code == 303
+                    from urllib.parse import parse_qs, urlparse
+                    sid = parse_qs(urlparse(received.headers["location"]).query)["document"][0]
+                    started = await researcher.post("/source-selection/start", data={"document": sid,
+                        "command_id": "independent-selection", "expected_revision": console.objects_revision(sid)})
+                    assert started.status_code == 303
+                    await asyncio.gather(*tuple(app.state.source_selection_workers))
+                    return received
+                ingest_task = asyncio.create_task(receive_and_select())
                 for _ in range(80):
                     if extract_started.is_set():
                         break
@@ -460,8 +465,8 @@ def test_review_post_progresses_while_ingest_extract_is_heavy(tmp_path: Path) ->
 
         assert posted.status_code in {303, 200}
         assert elapsed < 0.6, f"review POST waited {elapsed:.3f}s during ingest extract"
-        assert ingest_response.status_code == 200
-        assert "document ingeleverd" in ingest_response.text.lower()
+        assert ingest_response.status_code == 303
+        assert ingest_response.headers["location"].startswith("/source-selection?document=")
 
     asyncio.run(_run())
     live = next(

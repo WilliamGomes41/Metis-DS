@@ -1,0 +1,1 @@
+{"lock_entries": 44, "max_hold_seconds": 0.059033, "sum_hold_seconds_including_nested": 0.194083, "extract_without_lock": [true], "independent_health_and_write_seconds": 0.013313, "successor_attempt": "succeeded"}

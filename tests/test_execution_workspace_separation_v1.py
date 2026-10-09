@@ -162,13 +162,13 @@ def test_mijn_werk_keeps_shared_layout_with_neutral_navigation(tmp_path, usernam
     login(client, username)
     response = client.get('/')
     assert response.status_code == 200
-    # #546 intentionally removes live badges; the four destinations/layout remain.
+    # #546 intentionally removes live badges; the five workflow destinations remain.
     html = response.text
     assert 'Review openen' in html
     assert 'Geen open taken' not in html
-    assert sum(tag == 'a' and 'home-tile' in attrs.get('class', '').split() for tag, attrs in Surface(html).tags) == 4
+    assert sum(tag == 'a' and 'home-tile' in attrs.get('class', '').split() for tag, attrs in Surface(html).tags) == 5
     css = (Path(__file__).parents[1] / 'assets/brand/console.css').read_text()
     original = css.split('\n/* Task-only execution/evidence layout;')[0]
-    assert hashlib.sha256(original.encode()).hexdigest() == '1d1c9a4ea0881394f3e22ffaf7cff8958482a401d23e98fe65a947586db98b77'
+    assert hashlib.sha256(original.replace("repeat(5, minmax(0, 1fr))", "repeat(4, minmax(0, 1fr))").encode()).hexdigest() == '1d1c9a4ea0881394f3e22ffaf7cff8958482a401d23e98fe65a947586db98b77'
     # Added selectors must not touch the shared home layout.
     assert '.home-tiles' not in css[len(original):]

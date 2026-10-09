@@ -1060,6 +1060,7 @@ def bind_pre_review_semantic_processing(
     # Runtime-only projection for UI/status surfaces. This is not document state
     # and is deliberately the same reader used by the processing router below.
     console._passage_formation_mode_reader = active_passage_formation_mode
+    console._processing_configuration_reader = lambda: {"mode": active_passage_formation_mode(), "model": env.get("METIS_LLM_MODEL")}
     original_fragments_and_spec = console._fragments_and_spec
     semantic_suppressed: ContextVar[bool] = ContextVar(
         f"metis_pre_review_semantic_suppressed_{id(console)}",

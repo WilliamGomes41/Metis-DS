@@ -1,0 +1,227 @@
+{
+  "status": "PASS",
+  "categories": {
+    "scope/belofte": {
+      "status": "required",
+      "reason": "scope/belofte: required \u2014 iedere wijziging heeft een belofte; noem die in tests/PR-rapport",
+      "paths": [
+        "assets/brand/console.css",
+        "docs/change-contracts/availability-repair.md",
+        "src/console_navigation_simplify_v1.py",
+        "src/decision_review_ui_v1.py",
+        "src/decision_successor_v1.py",
+        "src/document_status_ui_v1.py",
+        "src/knowledge_materialisation_v1.py",
+        "src/operations_console_app.py",
+        "src/operations_console_v1.py",
+        "src/pre_review_semantic_v1.py",
+        "src/publication_readiness_v1.py",
+        "src/review_workboard_v1.py",
+        "src/source_selection_ui_v1.py",
+        "src/source_selection_v1.py",
+        "tests/test_audit_room_v1.py",
+        "tests/test_availability_repair.py",
+        "tests/test_console_duty_first_home.py",
+        "tests/test_console_feedback_v1.py",
+        "tests/test_console_ingest_names_review_labels.py",
+        "tests/test_execution_workspace_separation_v1.py",
+        "tests/test_ingest_beschikbaarheid.py",
+        "tests/test_operations_console_mvp.py",
+        "tests/test_pilot_review_write_serialization.py"
+      ],
+      "required_evidence": [],
+      "evidence": [
+        "tests/test_audit_room_v1.py",
+        "tests/test_availability_repair.py",
+        "tests/test_console_duty_first_home.py",
+        "tests/test_console_feedback_v1.py",
+        "tests/test_console_ingest_names_review_labels.py",
+        "tests/test_execution_workspace_separation_v1.py",
+        "tests/test_ingest_beschikbaarheid.py",
+        "tests/test_operations_console_mvp.py",
+        "tests/test_pilot_review_write_serialization.py"
+      ]
+    },
+    "opslag": {
+      "status": "required",
+      "reason": "opslag: required \u2014 review-/objectpersistitie geraakt; concurrent/stale-controles MUST bestaan (src/operations_console_v1.py)",
+      "paths": [
+        "src/operations_console_v1.py"
+      ],
+      "required_evidence": [
+        "concurrent",
+        "stale"
+      ],
+      "evidence": [
+        "tests/test_audit_room_v1.py",
+        "tests/test_console_ingest_names_review_labels.py",
+        "tests/test_operations_console_mvp.py",
+        "tests/test_pilot_review_write_serialization.py"
+      ]
+    },
+    "beschikbaarheid": {
+      "status": "n.v.t.",
+      "reason": "beschikbaarheid: n.v.t. \u2014 geen ingest-/zware-verwerkingspaden in de wijziging",
+      "paths": [],
+      "required_evidence": [],
+      "evidence": [
+        "tests/test_audit_room_v1.py",
+        "tests/test_ingest_beschikbaarheid.py",
+        "tests/test_pilot_review_write_serialization.py"
+      ]
+    },
+    "toegang": {
+      "status": "required",
+      "reason": "toegang: required \u2014 routes/auth/URL-ingest geraakt (src/operations_console_app.py)",
+      "paths": [
+        "src/operations_console_app.py"
+      ],
+      "required_evidence": [],
+      "evidence": [
+        "tests/test_audit_room_v1.py",
+        "tests/test_availability_repair.py",
+        "tests/test_console_duty_first_home.py",
+        "tests/test_console_feedback_v1.py",
+        "tests/test_console_ingest_names_review_labels.py",
+        "tests/test_execution_workspace_separation_v1.py",
+        "tests/test_ingest_beschikbaarheid.py",
+        "tests/test_operations_console_mvp.py",
+        "tests/test_pilot_review_write_serialization.py"
+      ]
+    },
+    "kwaliteit": {
+      "status": "n.v.t.",
+      "reason": "kwaliteit: n.v.t. \u2014 geen kwaliteits-/gatepaden in de wijziging",
+      "paths": [],
+      "required_evidence": [],
+      "evidence": [
+        "tests/test_console_feedback_v1.py"
+      ]
+    },
+    "metrics": {
+      "status": "n.v.t.",
+      "reason": "metrics: n.v.t. \u2014 geen metrics-modules in de wijziging",
+      "paths": [],
+      "required_evidence": [
+        "teller",
+        "noemer",
+        "score-must-drop"
+      ],
+      "evidence": []
+    },
+    "slop": {
+      "status": "required",
+      "reason": "slop: required \u2014 iedere wijziging MUST slop (PROTOCOL-paste, HANDOFF, extra stuurlaag) vermijden",
+      "paths": [
+        "assets/brand/console.css",
+        "docs/change-contracts/availability-repair.md",
+        "src/console_navigation_simplify_v1.py",
+        "src/decision_review_ui_v1.py",
+        "src/decision_successor_v1.py",
+        "src/document_status_ui_v1.py",
+        "src/knowledge_materialisation_v1.py",
+        "src/operations_console_app.py",
+        "src/operations_console_v1.py",
+        "src/pre_review_semantic_v1.py",
+        "src/publication_readiness_v1.py",
+        "src/review_workboard_v1.py",
+        "src/source_selection_ui_v1.py",
+        "src/source_selection_v1.py",
+        "tests/test_audit_room_v1.py",
+        "tests/test_availability_repair.py",
+        "tests/test_console_duty_first_home.py",
+        "tests/test_console_feedback_v1.py",
+        "tests/test_console_ingest_names_review_labels.py",
+        "tests/test_execution_workspace_separation_v1.py",
+        "tests/test_ingest_beschikbaarheid.py",
+        "tests/test_operations_console_mvp.py",
+        "tests/test_pilot_review_write_serialization.py"
+      ],
+      "required_evidence": [],
+      "evidence": [
+        "tests/test_audit_room_v1.py",
+        "tests/test_console_duty_first_home.py",
+        "tests/test_console_feedback_v1.py",
+        "tests/test_console_ingest_names_review_labels.py",
+        "tests/test_execution_workspace_separation_v1.py",
+        "tests/test_ingest_beschikbaarheid.py",
+        "tests/test_operations_console_mvp.py",
+        "tests/test_pilot_review_write_serialization.py"
+      ]
+    },
+    "releasebewijs": {
+      "status": "required",
+      "reason": "releasebewijs: required \u2014 iedere wijziging MUST releasebewijs (testmarker/evidence path) dragen",
+      "paths": [
+        "assets/brand/console.css",
+        "docs/change-contracts/availability-repair.md",
+        "src/console_navigation_simplify_v1.py",
+        "src/decision_review_ui_v1.py",
+        "src/decision_successor_v1.py",
+        "src/document_status_ui_v1.py",
+        "src/knowledge_materialisation_v1.py",
+        "src/operations_console_app.py",
+        "src/operations_console_v1.py",
+        "src/pre_review_semantic_v1.py",
+        "src/publication_readiness_v1.py",
+        "src/review_workboard_v1.py",
+        "src/source_selection_ui_v1.py",
+        "src/source_selection_v1.py",
+        "tests/test_audit_room_v1.py",
+        "tests/test_availability_repair.py",
+        "tests/test_console_duty_first_home.py",
+        "tests/test_console_feedback_v1.py",
+        "tests/test_console_ingest_names_review_labels.py",
+        "tests/test_execution_workspace_separation_v1.py",
+        "tests/test_ingest_beschikbaarheid.py",
+        "tests/test_operations_console_mvp.py",
+        "tests/test_pilot_review_write_serialization.py"
+      ],
+      "required_evidence": [],
+      "evidence": [
+        "tests/test_audit_room_v1.py",
+        "tests/test_console_duty_first_home.py",
+        "tests/test_console_feedback_v1.py",
+        "tests/test_console_ingest_names_review_labels.py",
+        "tests/test_execution_workspace_separation_v1.py",
+        "tests/test_ingest_beschikbaarheid.py",
+        "tests/test_operations_console_mvp.py",
+        "tests/test_pilot_review_write_serialization.py"
+      ]
+    }
+  },
+  "report": {
+    "belofte": "Automate Metis ontwikkel- en releasecontrole: changed paths mark skill categories required|n.v.t.; CI fails when required lacks evidence.",
+    "wijziging": "paths=assets/brand/console.css, docs/change-contracts/availability-repair.md, src/console_navigation_simplify_v1.py, src/decision_review_ui_v1.py, src/decision_successor_v1.py, src/document_status_ui_v1.py, src/knowledge_materialisation_v1.py, src/operations_console_app.py, src/operations_console_v1.py, src/pre_review_semantic_v1.py, src/publication_readiness_v1.py, src/review_workboard_v1.py, src/source_selection_ui_v1.py, src/source_selection_v1.py, tests/test_audit_room_v1.py, tests/test_availability_repair.py, tests/test_console_duty_first_home.py, tests/test_console_feedback_v1.py, tests/test_console_ingest_names_review_labels.py, tests/test_execution_workspace_separation_v1.py, tests/test_ingest_beschikbaarheid.py, tests/test_operations_console_mvp.py, tests/test_pilot_review_write_serialization.py; required=scope/belofte, opslag, toegang, slop, releasebewijs; n.v.t.=beschikbaarheid, kwaliteit, metrics",
+    "bewijs": "PASS: every required category has a test marker/evidence path",
+    "onzekerheid": "Path mapping is src/-prefix tooling, not a semantic diff of _save_objects. Product categories 2\u20136 stay n.v.t. until a product PR hits those paths. Evidence counts only when the marked test file is in the evaluated diff. Markers/comments are metadata pointing to concrete checks; they are not live-release evidence. Auditor verdict is not in this job.",
+    "advies": "Keep repository_preflight.py and this mapping in .github/workflows/ci.yml. A product PR that touches opslag/toegang/ingest/metrics MUST add the matching test marker plus concurrent/stale or teller/noemer/score-must-drop evidence."
+  },
+  "errors": [],
+  "checked_paths": [
+    "assets/brand/console.css",
+    "docs/change-contracts/availability-repair.md",
+    "src/console_navigation_simplify_v1.py",
+    "src/decision_review_ui_v1.py",
+    "src/decision_successor_v1.py",
+    "src/document_status_ui_v1.py",
+    "src/knowledge_materialisation_v1.py",
+    "src/operations_console_app.py",
+    "src/operations_console_v1.py",
+    "src/pre_review_semantic_v1.py",
+    "src/publication_readiness_v1.py",
+    "src/review_workboard_v1.py",
+    "src/source_selection_ui_v1.py",
+    "src/source_selection_v1.py",
+    "tests/test_audit_room_v1.py",
+    "tests/test_availability_repair.py",
+    "tests/test_console_duty_first_home.py",
+    "tests/test_console_feedback_v1.py",
+    "tests/test_console_ingest_names_review_labels.py",
+    "tests/test_execution_workspace_separation_v1.py",
+    "tests/test_ingest_beschikbaarheid.py",
+    "tests/test_operations_console_mvp.py",
+    "tests/test_pilot_review_write_serialization.py"
+  ],
+  "live_release_evidence": false
+}

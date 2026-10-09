@@ -1,6 +1,7 @@
 """Thin forms over the kernel's source-bound route commands."""
 from __future__ import annotations
 
+import asyncio
 import html
 import uuid
 from typing import Any
@@ -79,8 +80,10 @@ def install_decision_review_routes(app, console, require, page):
             command_id=str(form.get("command_id") or ""), expected_revision=str(form.get("expected_revision") or ""),
             reason=str(form.get("reason") or ""))
         if request.url.path == "/review/successor":
-            receipt = console.create_review_successor(**command, class_=str(form.get("new_class") or ""))
+            receipt = await asyncio.to_thread(console.create_review_successor, **command,
+                class_=str(form.get("new_class") or ""), receive_only=True)
             sid = receipt["snapshot_id"]
+            return RedirectResponse(f"/source-selection?document={sid}", status_code=303)
         else:
             console.change_review_policy(**command)
         return RedirectResponse(f"/review/policy?document={sid}", status_code=303)
