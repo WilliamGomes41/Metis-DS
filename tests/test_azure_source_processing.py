@@ -295,3 +295,79 @@ def test_native_receipt_requires_blob_readback_even_with_valid_cache(workflow_po
     with pytest.raises(ConsoleError, match="immutable_source_recovery_failed"):
         console._durable_receipt(stored)
     assert console._envelope(sid)["sha256"] == stored["sha256"]
+
+
+def test_native_simultaneous_receipts_and_distinct_successor_commands(workflow_postgres, tmp_path):
+    from threading import Barrier
+    first = _console(tmp_path / "first", workflow_postgres)
+    author, reviewer = accounts(first)
+    blob = ImmutableBlobFixture()
+    first.immutable_source_store = blob
+    second = _console(tmp_path / "second", workflow_postgres)
+    second.immutable_source_store = blob
+    command = dict(actor_id=author, filename="fixture.html",
+        data=b"<html><body><p>Gebruik geen zalf.</p></body></html>", content_type="text/html",
+        ingest_kind="new", title="Fixture", version="1", date="2026-10-09", live_url="",
+        class_="richtlijn", family="fixture", named_reviewers=[author, reviewer])
+    def together(operation, commands):
+        barrier = Barrier(2)
+        def invoke(console, command):
+            barrier.wait(timeout=5)
+            try:
+                return ("ok", getattr(console, operation)(**command))
+            except ConsoleError as error:
+                return ("error", error.code)
+        with ThreadPoolExecutor(2) as pool:
+            futures = [pool.submit(invoke, console, command)
+                       for console, command in zip((first, second), commands)]
+            return [future.result(timeout=10) for future in futures]
+    identical = together("receive_source", [{**command, "command_id": "double-click"}]*2)
+    assert [row[0] for row in identical] == ["ok", "ok"]
+    assert identical[0][1]["snapshot_id"] == identical[1][1]["snapshot_id"]
+    assert len(first.list_envelopes()) == 1
+    conflicting = together("receive_source", [
+        {**command, "command_id": "conflicting-receipt", "title": title} for title in ("First", "Second")])
+    assert sorted(row[0] for row in conflicting) == ["error", "ok"]
+    assert next(row[1] for row in conflicting if row[0] == "error") == "ingest_command_conflict"
+    assert len(first.list_envelopes()) == 2
+    policy = {"contract": "explicit-review-v1", "revision": 1, "primary": author, "assignments": []}
+    parent = first.receive_source(**{**command, "command_id": "parent", "named_reviewers": [],
+                                    "review_policy": policy})["snapshot_id"]
+    before = deepcopy(first._envelope(parent))
+    successor = dict(actor_id=author, snapshot_id=parent, expected_revision=first.objects_revision(parent),
+                     reason="Nieuwe controle", receive_only=True)
+    results = together("create_review_successor", [
+        {**successor, "command_id": key} for key in ("successor-a", "successor-b")])
+    assert sorted(row[0] for row in results) == ["error", "ok"]
+    assert next(row[1] for row in results if row[0] == "error") == "review_successor_already_exists"
+    children = [first._envelope(row["snapshot_id"]) for row in first.list_envelopes()
+                if first._envelope(row["snapshot_id"]).get("replaces_snapshot_id") == parent]
+    assert len(children) == 1 and children[0].get("processing_attempts", []) == []
+    assert first._envelope(parent) == before
+    assert first.snapshot_objects(parent) == [] and first.snapshot_objects(children[0]["snapshot_id"]) == []
+
+
+def test_native_blob_orphan_registration_failure_retry_has_one_identity(workflow_postgres, tmp_path, monkeypatch):
+    first = _console(tmp_path / "first", workflow_postgres)
+    author, reviewer = accounts(first)
+    blob = ImmutableBlobFixture()
+    first.immutable_source_store = blob
+    command = dict(actor_id=author, filename="fixture.html",
+        data=b"<html><body><p>Gebruik geen zalf.</p></body></html>", content_type="text/html",
+        ingest_kind="new", title="Fixture", version="1", date="2026-10-09", live_url="",
+        class_="richtlijn", family="fixture", named_reviewers=[author, reviewer], command_id="receipt-orphan")
+    with monkeypatch.context() as patch:
+        def fail(**kwargs):
+            raise ConsoleError("workflow_document_write_failed")
+        patch.setattr(first, "_commit_prepared_store", fail)
+        with pytest.raises(ConsoleError, match="workflow_document_write_failed"):
+            first.receive_source(**command)
+    assert len(blob.blobs) == 1
+    assert first.list_envelopes() == []
+    restarted = _console(tmp_path / "second", workflow_postgres)
+    restarted.immutable_source_store = blob
+    receipt = restarted.receive_source(**command)
+    assert restarted.receive_source(**command)["snapshot_id"] == receipt["snapshot_id"]
+    assert len(restarted.list_envelopes()) == 1 and len(blob.blobs) == 1
+    assert restarted._envelope(receipt["snapshot_id"]).get("processing_attempts", []) == []
+    assert restarted._verified_source_bytes(restarted._envelope(receipt["snapshot_id"]))[1] == command["data"]
