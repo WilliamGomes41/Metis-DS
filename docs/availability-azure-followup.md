@@ -80,3 +80,55 @@ De volledige lifecycleproef gebruikt de bestaande volledige PostgreSQL-backend, 
 De brede CI voert daarnaast repository_preflight.py, release_control_preflight.py, product_api_contract.py (generatie en compatibiliteit), compileall, architectuur-/T5–T12-/lifecycle-regressies en pytest -q uit. De PDF-job gebruikt python -m pytest -q tests/test_docling_real_pdf.py op de host en dezelfde tests in Dockerfile.docling acceptance met 2 GiB en twee CPU’s.
 
 Artefacthash native/browser: sha256:ed305d85fdd1332c9449fd4b41d6d19f8307c24c1209b7dc99b0b8b9c8004255. Rode-basisartefacthash: sha256:52492026c5cfe8b838b85723fc41558fa19d1124756589ce49b6c6565f0273a7.
+
+## Acceptatietoets na onafhankelijke review — 9 oktober 2026
+
+Deze sectie is de actuele ontwikkelstatus van de afronding. Eerdere runs en meetwaarden hierboven blijven historische bewijzen, geen bewijs voor de laatste wijzigingen.
+
+- Basis main: `0204045d1adc5e7a89e551844e3bf9751715e096`.
+- Beoordeelde eerdere PR-head: `3c000805712d0d2412e8b08d3b890f20af2b98de`; oorspronkelijke reparatie `6fd74d78fd594e604835f3e3c38d6393ba8ab01f` blijft voorouder.
+- Voorafgaand aanvullend domein-/herstelcontract: `3d53b987632f5effec54388ba3447020199f5ada`.
+- Productiecode van de aanvullende reparatie: `15584725ab77481ee82f4e915408478f3c2d2ee2`.
+- Laatste code-/testrevisie: `ce4b10d225171a660b0043211bb4b2c25efa6afd`.
+
+### Sluiting van de twee reviewpunten
+
+1. `source_selection_v1.assert_resume_configuration` weigert een incompatibele V3-checkpoint vóór nieuwe reservering of extractie. Zowel `reserve_selection` als de synchrone `OperationsConsole.resume_formation` gebruikt deze guard. De gemeenschappelijke expliciete strategie hercontroleert hem aan de voorbereidingsgrens. Nieuwe synchrone resume-pogingen leggen ook de gekozen configuratie duurzaam vast. Bestaande execution/activation-guards blijven een runtimewijziging na acceptatie weigeren. Geen nieuwe workflowautoriteit, schema of UI-toestand.
+2. De native transactieproef stopt de timer buiten de daadwerkelijke context. Een afzonderlijke PostgreSQL-verbinding leest `pg_stat_activity.xact_start`, `pg_locks` en `pg_blocking_pids`. Een tweede verbinding wacht aantoonbaar op dezelfde bronrij zolang de korte claimtransactie bestaat. Na commit zijn de locks verdwenen. Tijdens de langlopende voorbereiding voltooit een echte schrijver op dezelfde rij. Het gemeten acquisition-to-post-commit-interval omvat afsluitoverhead en begrenst de lockhoudtijd; de databasesamples bewijzen de daadwerkelijke blokkade en vrijgave. Geen productie-SLA.
+
+### Rood/groen
+
+De [rode vervolg-run](https://github.com/WilliamGomes41/Metis-DS/actions/runs/37938152044) op `c4f494df63c2f0c858217d381c43ac38bf3edb21` heeft 16 bedoelde incompatibiliteitsfouten op filefixtures en native PostgreSQL, naast 71 geslaagde controles. De browser slaagde ook. De baselinejob reproduceert daarnaast vier incompatibele HTTP-resumes op exact `3c000805712d0d2412e8b08d3b890f20af2b98de`, zonder productiegegevens of betaalde calls. Het rode change-contract-probleem was ontbrekende PR-metadata; de metadata is aangevuld, de gate niet verzwakt.
+
+De extra concurrentieproef op `ed32f2ddba2c24acd578547eef02008cc97a51af` leverde één te specifieke foutcodeassertie op: de payload werd veilig geweigerd door de database-CAS. De definitieve proef vereist weigering via een bestaande command- of revisieconflictcode, precies één duurzame identiteit, ongewijzigde geaccepteerde inhoud én opnieuw weigeren van de afwijkende payload bij een volgende retry. Geen productiecode aangepast om deze test groen te maken.
+
+De [verplichte rood/groen/native/browser-run](https://github.com/WilliamGomes41/Metis-DS/actions/runs/37939536186) op de laatste code-/testrevisie is geslaagd: **89 passed**, browser **1 passed**, nul skips in beide acceptatiesets. Bewijs omvat de 16 nieuwe incompatibiliteitscontroles, compatibele open-range hervatting en fencing na reservering op beide backends, plus simultane native ontvangst/opvolgercommands en Blob-opslag gevolgd door registratiefout en identieke herstelretry.
+
+Tien echte PostgreSQL-transactiegrenzen: maximaal **99.828 ms** van begin van de grens tot na commit/connection exit; maximaal **88.587 ms** van verkregen rijlock tot na commit/exit. De gecontroleerde databasewaarneming zag een transactieleeftijd van **33.589 ms**, twee table-locks en een daadwerkelijk geblokkeerde wachtende verbinding. Alle tien post-commit-waarnemingen hebben nul document-locks en geen actieve transactie. Tijdens gepauzeerde voorbereiding voltooit dezelfde-rij-SQL-schrijfwerk; twee kernels geven samen één provideruitvoering. Dit is synthetisch native bewijs met meetoverhead, geen schatting van productieprestaties.
+
+[Native/browserbewijs en vijf screenshots](https://github.com/WilliamGomes41/Metis-DS/actions/runs/37939536186/artifacts/11621491343), digest `sha256:606e6eb95c495b9d080dbb6204b4d5890758bb4fb25e1f360bace8f9e5d6c9d9`. [Rode basis- en strategiebewijzen](https://github.com/WilliamGomes41/Metis-DS/actions/runs/37939536186/artifacts/11621156092), digest `sha256:db79f36955ade1aa8cc663a4a08fa80edafc9aa7c70acf6be5625af49f884f58`.
+
+[Brede CI op de code-/testrevisie](https://github.com/WilliamGomes41/Metis-DS/actions/runs/37939536144) en [PDF/container-acceptatie](https://github.com/WilliamGomes41/Metis-DS/actions/runs/37939536550) lopen nog op het tijdstip van deze verslagcommit. Hun definitieve uitslag en de checks op de documentatie-head worden in PR #578 vastgelegd. Volledige afronding wordt pas bevestigd na die verplichte checks. Deze verslagcommit wijzigt uitsluitend documentatie; productiecode en tests blijven bytegelijk aan `ce4b10d225171a660b0043211bb4b2c25efa6afd`.
+
+### Auditstatus met gescheiden velden
+
+| Onderdeel | Implementatie | Verificatie | Merge | Productievalidatie |
+| --- | --- | --- | --- | --- |
+| A26 ontvangst, expliciete selectie, dispatch/herstel | Geïmplementeerd | Native HTTP/restart/idempotentie en browser bewezen in verplichte proof-run | Niet uitgevoerd | Niet uitgevoerd |
+| A04/A05 korte registratie, voorbereiding, guarded activatie | Geïmplementeerd | Native concurrency, stale parent/lease/revisie en SQL-lockbewijs in proof-run | Niet uitgevoerd | Niet uitgevoerd |
+| A02 berekeningsgebonden bronhergebruik | Geïmplementeerd | Zeven geïnstalleerde routes, gelijke uitkomsten en actuele bron/review/bevoegdheid bewezen | Niet uitgevoerd | Niet uitgevoerd |
+| Expliciete strategie en compatibel Hervatten | Geïmplementeerd | V1/V2/deterministisch/model geweigerd op HTTP en kernel; compatibele open-range resume en execution-fencing bewezen | Niet uitgevoerd | Niet uitgevoerd |
+| Azure als enige duurzame domeinautoriteit | Geïmplementeerd | Fail-closed compositie en herstel zonder consolecaches bewezen; Azure Blob gebruikt synthetische adapter | Niet uitgevoerd | Niet uitgevoerd |
+
+### Aanvullende writer-/reader- en herstelkaart
+
+| Verantwoordelijkheid | Owner en aanroeppad |
+| --- | --- |
+| Compatibele resume-reservering | HTTP Bronselectie -> reserve_selection -> assert_resume_configuration -> bestaande PostgreSQL-poging; synchrone resume_formation gebruikt dezelfde guard |
+| Uitvoering en activatie | Duurzame pending/claim -> execute_source_selection -> _execute_source_attempt -> expliciete strategie -> bestaande lease/revisie/actor/parent/configuration-guards -> bestaande transactionele objectcommit |
+| Bronreaders | Bestaande stored_fragments/historische readers en source_fragment_catalog; zij krijgen geen nieuwe writer of modelautoriteit |
+| Audit/evidence | Bestaande source digest/locator, replay-identiteit, processing_attempts/configuration en menselijke reviewhistorie in Azure; GitHub bewaart alleen code en synthetisch ontwikkelbewijs |
+
+Compatibiliteit/migratie: uitsluitend additieve configuratievelden en guard; geen SQL-migratie, backfill, reviewreset of herverwerking. Oude V3-checkpoints zonder nieuw configuratieveld blijven onder dezelfde V3/modelidentiteit bruikbaar; exacte replay controleert vervolgens de overige contractonderdelen. Een nieuwe deployment mag een compatibele checkpoint hervatten; een reeds geaccepteerde poging blijft aan haar volledige opgeslagen configuratie gebonden. Incompatibiliteit vereist herstel van een compatibele configuratie of een expliciete opvolger.
+
+Rollback/herstel: bewaar alle bron-, checkpoint-, kandidaat- en reviewregistraties; gebruik een compatibele binary/configuratie en bestaande lease-expiry/Hervatten. Geen terugrol naar een onveilige automatische strategiewissel. Geen live deployment, productiegegevensmigratie, paid provider, merge of automatische herstart van historische opdrachten uitgevoerd. De eerder beschreven één-instance-topologie en menselijke review-/publication-registryautoriteit blijven gelden.
