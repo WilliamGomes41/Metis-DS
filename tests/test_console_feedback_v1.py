@@ -72,7 +72,7 @@ handlers.submit(event);
 assert.equal(prevented, 0);
 assert.equal(button.disabled, true);
 assert.equal(status.hidden, false);
-assert.match(status.textContent, /enkele minuten/);
+assert.match(status.textContent, /veilig opgeslagen/);
 assert.equal(form['aria-busy'], 'true');
 handlers.submit(event);
 assert.equal(prevented, 1);

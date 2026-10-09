@@ -69,20 +69,79 @@ def _client(console, username="publisher.carla"):
 def _ingest(console, accounts, title, version, prior=None):
     from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
-    receipt = console.ingest(
-        actor_id=accounts["researcher"]["account_id"], title=title, version=version,
-        ingest_kind="new_version" if prior else "new", replaces_snapshot_id=prior,
-        filename=f"source-{title}-{version}.html", content_type="text/html",
-        data=HTML_FIXTURE.read_bytes() + f"<!-- {title} {version} -->".encode(),
-        date="2026-09-01", live_url=f"https://example.test/{title}",
-        class_="richtlijn", family="continentie",
-        named_reviewers=[accounts["researcher"]["account_id"], accounts["reviewer"]["account_id"]],
-    )
+    import uuid
+    import asyncio
+    with TestClient(create_console_app(console, trusted_origin="https://testserver"),
+                    base_url="https://testserver", headers={"Origin": "https://testserver"}) as client:
+        response = client.post("/login", data={"username": accounts["researcher"]["username"], "password": TEST_PASSWORD},
+                               follow_redirects=False)
+        assert response.status_code == 303
+        response = client.post("/ingest", data={
+            "ingest_kind": "new_version" if prior else "new", "replaces_document": prior or "",
+            "title": title, "version": version, "date": "2026-09-01",
+            "live_url": f"https://example.test/{title}", "class_": "richtlijn", "family": "continentie",
+            "named_reviewers": [accounts["researcher"]["account_id"], accounts["reviewer"]["account_id"]],
+            "command_id": "receipt-" + uuid.uuid4().hex,
+        }, files={"file": (f"source-{title}-{version}.html",
+            HTML_FIXTURE.read_bytes() + f"<!-- {title} {version} -->".encode(), "text/html")}, follow_redirects=False)
+        assert response.status_code == 303, response.text
+        from urllib.parse import urlparse, parse_qs
+        sid = parse_qs(urlparse(response.headers["location"]).query)["document"][0]
+        assert console.snapshot_objects(sid) == []
+        assert not console._envelope(sid).get("processing_attempts")
+        response = client.post("/source-selection/start", data={"document": sid,
+            "command_id": "start-" + uuid.uuid4().hex, "expected_revision": console.objects_revision(sid)},
+            follow_redirects=False)
+        assert response.status_code == 303, response.text
+        async def wait():
+            await asyncio.gather(*tuple(client.app.state.source_selection_workers))
+        client.portal.call(wait)
+        assert console._envelope(sid)["processing_attempts"][-1]["state"] == "succeeded"
+    receipt = {"snapshot_id": sid}
     return console._envelope(receipt["snapshot_id"])
 
 
+
+def _complete_review_http(console, accounts, receipt):
+    """Human actions traverse rendered forms and installed HTTP command routes."""
+    import re
+    from src.passage_register_v1 import passage_register_of
+    from src.review_disposition_v1 import definitive_review_disposition
+    from src.operations_console_v1 import review_lane
+    sid = receipt["snapshot_id"]
+    reviewer = _client(console, accounts["reviewer"]["username"])
+    target = next(obj for obj in console.snapshot_objects(sid) if obj.get("object_type") == "unclassified")
+    requests = []
+    def decide(obj, decision, **fields):
+        detail = reviewer.get("/review", params={"document": sid, "object": obj["object_id"]})
+        assert detail.status_code == 200, detail.text
+        revision = re.search(r'name="snapshot_revision" value="([^"]+)"', detail.text)
+        assert revision, "rendered review form must own the posted revision"
+        interaction = re.search(r'name="interaction_id" value="([^"]+)"', detail.text)
+        response = reviewer.post("/review", data={
+            "snapshot_id": sid, "object_id": obj["object_id"], "decision": decision,
+            "suitability": "ja", "snapshot_revision": revision.group(1),
+            "interaction_id": interaction.group(1) if interaction else "",
+            **fields,
+        }, follow_redirects=False)
+        assert response.status_code == 303, response.text
+        requests.append((obj["object_id"], decision))
+    decide(target, "approve", confirmed_object_type="explanation")
+    for obj in console.snapshot_objects(sid):
+        if obj["object_id"] == target["object_id"] or passage_register_of(obj).get("status") != "selected_as_candidate":
+            continue
+        if (obj.get("governance") or {}).get("validation_status") in {"approved", "rejected", "superseded"}:
+            continue
+        decide(obj, "reject", comment="Testfixture: kandidaat definitief afgehandeld.")
+    for obj in console.snapshot_objects(sid):
+        if obj.get("object_type") == "document" or review_lane(obj) == "fast" or definitive_review_disposition(obj)["final"]:
+            continue
+        decide(obj, "reject", eindoordeel="afwijzen", comment="Testfixture: bronpassage definitief afgehandeld.")
+    assert requests
+    print("HUMAN_REVIEW_HTTP_EVIDENCE=" + str({"snapshot_id": sid, "commands": len(requests)}))
+
 def _publish_http(console, client, accounts, receipt):
-    _complete_review(console, accounts, receipt)
+    _complete_review_http(console, accounts, receipt)
     response = client.post("/publish", data={"snapshot_id": receipt["snapshot_id"], "publish_confirmed": "yes"}, follow_redirects=False)
     assert response.status_code == 303, response.text
     return console.canonical_publication_store.release_for_snapshot(receipt["snapshot_id"])
@@ -264,6 +323,14 @@ def test_http_withdrawal_complete_recovery_and_open_work_resume(recovery_postgre
     researcher_client = _client(fresh, "researcher.anne")
     resumed = researcher_client.post("/tree/reprocess", data={"snapshot_id": v3["snapshot_id"]}, follow_redirects=False)
     assert resumed.status_code == 303, resumed.text
+    assert resumed.headers["location"] == f'/source-selection?document={v3["snapshot_id"]}'
+    assert not fresh.snapshot_objects(v3["snapshot_id"])
+    with researcher_client:
+        from tests.test_availability_repair import drain
+        assert researcher_client.post("/source-selection/start", data={"document": v3["snapshot_id"],
+            "command_id": "recover-v3", "expected_revision": fresh.objects_revision(v3["snapshot_id"])},
+            follow_redirects=False).status_code == 303
+        drain(researcher_client, researcher_client.app)
     assert fresh.snapshot_objects(v3["snapshot_id"])
     _assert_review_projection(fresh, researcher_client, v3["snapshot_id"])
     resumed_envelope = fresh._envelope(v3["snapshot_id"])

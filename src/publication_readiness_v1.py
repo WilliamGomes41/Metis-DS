@@ -15,6 +15,7 @@ from src.review_duty_v1 import (
     review_duties,
 )
 from src.source_containers_v1 import source_accountability, source_closure
+from src.knowledge_materialisation_v1 import source_reconstruction_scope
 
 REVIEW_WORK_INCOMPLETE = "review_work_incomplete"
 REVIEW_REPAIR_INCOMPLETE = "review_repair_incomplete"
@@ -184,6 +185,7 @@ class PublicationReadinessMixin:
             "review_path": review_path,
         }
 
+    @source_reconstruction_scope(reuse_existing=True)
     def publication_readiness(self, snapshot_id: str) -> dict[str, Any]:
         """Derive readiness without actor identity, writes, or cached authority."""
         try:

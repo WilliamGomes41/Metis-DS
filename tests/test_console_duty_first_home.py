@@ -219,7 +219,7 @@ def test_nav_home_is_first_room_and_current_on_home(tmp_path: Path) -> None:
     html = _client(console).get("/").text
     hrefs = _nav_hrefs(html)
     assert hrefs, "logged-in pages must render room nav"
-    assert hrefs[:5] == ["/", "/ingest", "/review", "/publish", "/tree"]
+    assert hrefs[:6] == ["/", "/ingest", "/source-selection", "/review", "/publish", "/tree"]
     home_label, home_current = _nav_entry(html, "/")
     assert home_label == "Mijn werk"
     assert home_current == "page"
@@ -258,7 +258,7 @@ def test_home_heading_and_lead(tmp_path: Path) -> None:
     assert "Kies de volgende stap in het proces." in visible
 
 
-def test_home_has_four_horizontal_process_tiles_with_links(tmp_path: Path) -> None:
+def test_home_has_five_horizontal_process_tiles_with_links(tmp_path: Path) -> None:
     console = _console(tmp_path)
     _accounts(console)
     html = _client(console).get("/").text
@@ -267,13 +267,13 @@ def test_home_has_four_horizontal_process_tiles_with_links(tmp_path: Path) -> No
     assert "Nieuwe bron toevoegen" in visible
     assert "Review" in visible
     assert "Beoordeel aangeleverde bronnen" in visible
-    assert "Publiceren" in visible
+    assert "Publicatie" in visible
     assert "Goedgekeurde stukken publiceren" in visible
     assert "Documenten" in visible
     assert "Zoeken, openen of beheren" in visible
-    assert len(re.findall(r'<a class="home-tile(?: |")', html)) == 4
+    assert len(re.findall(r'<a class="home-tile(?: |")', html)) == 5
     assert [match.group(1) for match in re.finditer(r'<a class="home-tile[^>]* href="([^"]+)"', html)] == [
-        "/ingest", "/review", "/publish", "/tree"
+        "/ingest", "/source-selection", "/review", "/publish", "/tree"
     ]
     assert 'enctype="multipart/form-data"' not in html
 
@@ -339,12 +339,12 @@ def test_mobile_nav_does_not_clip_publiceren_to_pub(tmp_path: Path) -> None:
     html = _client(console).get("/").text
     nav = _nav_html(html)
     publish_label, _current = _nav_entry(html, "/publish")
-    assert "Publiceren" in publish_label
+    assert "Publicatie" in publish_label
     assert publish_label.strip() != "Pub"
     assert re.search(r">\s*Pub\s*<", nav) is None
     css = CSS_SOURCE.read_text(encoding="utf-8")
     source = APP_SOURCE.read_text(encoding="utf-8")
-    assert '"Publiceren"' in source or ">Publiceren<" in source
+    assert '"Publicatie"' in source or ">Publicatie<" in source
     assert re.search(r'["\']Pub["\']', source) is None
     mobile = _media_560(css)
     rooms = _rule(mobile, ".rooms")
@@ -367,13 +367,13 @@ def test_home_uses_tiles_instead_of_the_previous_small_duty_cards(tmp_path: Path
         assert marker not in html
     assert "duty-card" not in html
     assert "duty-grid" not in html
-    assert len(re.findall(r'<a class="home-tile(?: |")', html)) == 4
+    assert len(re.findall(r'<a class="home-tile(?: |")', html)) == 5
     assert "home-secondary" not in html
     assert "home-chooser" not in html
     visible = _visible_text(html)
     assert "Inleveren" in visible
     assert "Review" in visible
-    assert "Publiceren" in visible
+    assert "Publicatie" in visible
     assert "Documenten" in visible
     quiet_secondaries = re.findall(
         r'<a[^>]*class="[^"]*quiet[^"]*"[^>]*href="/(tree|review|publish|accounts)"',

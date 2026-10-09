@@ -73,7 +73,15 @@ def test_failure_deduplication_success_http_and_restart(workflow_postgres, tmp_p
     client = _client(restarted)
     response = client.post("/tree/reprocess", data={"snapshot_id": sid, "command_id": "success"}, follow_redirects=False)
     assert response.status_code == 303, response.text
-    assert client.post("/tree/reprocess", data={"snapshot_id": sid, "command_id": "success"}, follow_redirects=False).status_code == 303
+    assert response.headers["location"] == f"/source-selection?document={sid}"
+    assert restarted._envelope(sid)[KEY][-1]["state"] == "failed"
+    with client:
+        from tests.test_availability_repair import drain
+        command = {"document": sid, "command_id": "success", "expected_revision": restarted.objects_revision(sid)}
+        assert client.post("/source-selection/start", data=command, follow_redirects=False).status_code == 303
+        drain(client, client.app)
+        assert client.post("/source-selection/start", data=command, follow_redirects=False).status_code == 303
+        drain(client, client.app)
     final = _console(tmp_path, workflow_postgres)
     assert final._envelope(sid)[KEY][-1]["state"] == "succeeded"
     assert final._envelope(sid)["quality_processing_runs"][-1]["attempt_id"] == final._envelope(sid)[KEY][-1]["attempt_id"]

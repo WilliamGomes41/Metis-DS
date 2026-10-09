@@ -97,7 +97,7 @@ def test_browser_filename_ingest_preserves_bytes_and_stays_under_store(upload, n
     assert normalize_upload_filename(name) == expected
     response = client.post("/ingest", data=form, files={"file": (name, payload, "application/pdf")})
     assert response.status_code == 200
-    assert "Document ingeleverd" in response.text
+    assert "Document veilig ontvangen" in response.text
     envelope, = console.list_envelopes()
     stored = Path(envelope["binary_path"])
     assert stored.name == expected
@@ -152,6 +152,14 @@ def test_pdf_review_index_uses_human_labels_and_working_object_links(upload):
     console, client, payload, form, _ = upload
     assert client.post("/ingest", data=form, files={"file": ("Eenzaamheid bij ouderen.pdf", payload, "application/pdf")}).status_code == 200
     envelope, = console.list_envelopes()
+    sid = envelope["snapshot_id"]
+    selected = client.post("/source-selection/start", data={"document": sid, "command_id": "filename-selection",
+                          "expected_revision": console.objects_revision(sid)}, follow_redirects=False)
+    assert selected.status_code == 303
+    async def wait():
+        import asyncio
+        await asyncio.gather(*tuple(client.app.state.source_selection_workers))
+    client.portal.call(wait)
     response = client.get("/review", params={"document": envelope["snapshot_id"], "task": "individual"})
     assert response.status_code == 200
     visible = VisibleRows()

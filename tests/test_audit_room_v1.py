@@ -124,7 +124,7 @@ def test_audit_moves_out_of_primary_navigation_and_under_settings(tmp_path):
     home = client.get("/")
     assert home.status_code == 200
     assert '<a href="/audit">Audit</a>' not in home.text
-    assert home.text.count('<a class="home-tile') == 4
+    assert home.text.count('<a class="home-tile') == 5
     assert "Onderzoeken &amp; controleren" not in home.text
     assert 'class="review-control-card" href="/audit"' not in home.text
 

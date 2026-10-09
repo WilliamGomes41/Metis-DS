@@ -956,7 +956,7 @@ def test_html_ingest_submits_document_and_publish_stays_blocked(tmp_path: Path) 
         files={"file": ("continentie.html", HTML_FIXTURE.read_bytes(), "text/html")},
     )
     assert response.status_code == 200
-    assert "document ingeleverd" in response.text.lower()
+    assert "document veilig ontvangen" in response.text.lower()
     assert "envelope" not in response.text.lower()
     envelopes = console.list_envelopes()
     assert len(envelopes) == 1

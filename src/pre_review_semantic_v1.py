@@ -11,6 +11,8 @@ rollback mode. Semantic-mode failures never fall back silently.
 """
 from __future__ import annotations
 
+from contextvars import ContextVar
+
 import hashlib
 import json
 import logging
@@ -21,7 +23,6 @@ import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
-from contextvars import ContextVar
 from typing import Any, Callable, Mapping
 from src.bounded_model_call_v1 import ModelCallLimits, load_limits, post_json as bounded_post_json
 
@@ -1042,10 +1043,9 @@ def bind_pre_review_semantic_processing(
 ) -> None:
     """Bind passage formation to one console instance, never process-global state.
 
-    Normal HTML/PDF processing uses the configured semantic route. Decision-tree
-    processing remains on its dedicated deterministic path. Read-only source
-    re-extraction used by deterministic Review repair is explicitly suppressed,
-    so opening a repair catalog cannot trigger or depend on an LLM call.
+    Normal mutations use an explicitly installed kernel strategy. Decision-tree
+    processing retains its dedicated deterministic path. Source catalogs use
+    their deterministic read boundary and never this formation strategy.
     """
 
     if getattr(console, "_pre_review_semantic_bound", False):
@@ -1060,11 +1060,8 @@ def bind_pre_review_semantic_processing(
     # Runtime-only projection for UI/status surfaces. This is not document state
     # and is deliberately the same reader used by the processing router below.
     console._passage_formation_mode_reader = active_passage_formation_mode
-    original_fragments_and_spec = console._fragments_and_spec
-    semantic_suppressed: ContextVar[bool] = ContextVar(
-        f"metis_pre_review_semantic_suppressed_{id(console)}",
-        default=False,
-    )
+    console._processing_configuration_reader = lambda: {"mode": active_passage_formation_mode(), "model": env.get("METIS_LLM_MODEL")}
+    original_fragments_and_spec = console._deterministic_fragments_and_spec
 
     def configured_fragments_and_spec(
         kind: str,
@@ -1078,7 +1075,11 @@ def bind_pre_review_semantic_processing(
         class_: str,
         formation_context: Mapping[str, Any] | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        if semantic_suppressed.get() or (kind == "pdf" and class_ == "beslisboom"):
+        if (formation_context or {}).get("resume_formation"):
+            from src.source_selection_v1 import assert_resume_configuration
+            assert_resume_configuration(console, console._envelope(formation_context["snapshot_id"]))
+
+        if kind == "pdf" and class_ == "beslisboom":
             return original_fragments_and_spec(
                 kind,
                 path,
@@ -1128,6 +1129,8 @@ def bind_pre_review_semantic_processing(
             source_id=source_id,
             **extraction_kwargs,
         )
+        from src.docling_pdf_v1 import release_conversion_capacity
+        release_conversion_capacity()
         if checkpoint:
             checkpoint("extraction_finished", {"fragment_count": len(fragments), "extractor_versions": sorted({str(f.get("parser_version") or "not_recorded") for f in fragments})})
         provider = load_llm_provider_config(env)
@@ -1159,17 +1162,10 @@ def bind_pre_review_semantic_processing(
         )
         return fragments, _stamp_passage_formation(spec, decision)
 
-    console._fragments_and_spec = configured_fragments_and_spec
-
-    original_source_fragment_catalog = getattr(console, "source_fragment_catalog", None)
-    if callable(original_source_fragment_catalog):
-        def deterministic_source_fragment_catalog(*args: Any, **kwargs: Any) -> Any:
-            token = semantic_suppressed.set(True)
-            try:
-                return original_source_fragment_catalog(*args, **kwargs)
-            finally:
-                semantic_suppressed.reset(token)
-
-        console.source_fragment_catalog = deterministic_source_fragment_catalog
+    from src.source_processing_strategy_v1 import SourceProcessingStrategy
+    console.configure_source_processing(SourceProcessingStrategy(
+        prepare=configured_fragments_and_spec,
+        configuration=console._processing_configuration_reader,
+    ))
 
     console._pre_review_semantic_bound = True

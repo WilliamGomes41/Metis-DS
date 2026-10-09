@@ -15,6 +15,7 @@ from fastapi import FastAPI, Request
 
 from src.document_status_v1 import DOCUMENT_STATUS_LABELS
 from src.operations_console_v1 import ConsoleError
+from src.knowledge_materialisation_v1 import source_reconstruction_scope
 
 
 _LIFECYCLE_BY_SNAPSHOT: ContextVar[dict[str, dict[str, str]]] = ContextVar(
@@ -131,6 +132,10 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
 
     @app.middleware("http")
     async def document_status_context(request: Request, call_next: Callable[..., Any]):
+        with source_reconstruction_scope(reuse_existing=True):
+            return await document_status_calculation(request, call_next)
+
+    async def document_status_calculation(request: Request, call_next):
         if request.url.path not in _STATUS_PATHS:
             return await call_next(request)
 

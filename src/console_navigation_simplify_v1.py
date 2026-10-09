@@ -13,7 +13,7 @@ from fastapi import FastAPI, Request, Response
 
 
 _HOME_WORKFLOW_NAV = re.compile(
-    r'<a href="/(?:ingest|review|publish|tree)"[^>]*>.*?</a>', re.S
+    r'<a href="/(?:ingest|source-selection|review|publish|tree)"[^>]*>.*?</a>', re.S
 )
 _HOME_NAV = re.compile(r'<a href="/"[^>]*>Mijn werk</a>', re.S)
 _BATCH_SOURCE_LINK = re.compile(
@@ -56,7 +56,7 @@ def simplify_console_html(path: str, body: str) -> str:
         html = _PARENT_CHOOSER.sub(_plain_parent_labels, html)
 
     if path == "/ingest":
-        # After successful ingest, Review is the workflow continuation. Document
+        # After receipt, Bronselectie is the workflow continuation. Document
         # management remains reachable through normal navigation.
         html = _POST_INGEST_DOCUMENTS_LINK.sub("", html)
 

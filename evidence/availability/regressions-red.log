@@ -1,0 +1,552 @@
+FsFsF......                                                              [100%]
+=================================== FAILURES ===================================
+_ test_a26_receipt_without_provider_restart_duplicate_and_later_failure[local] _
+
+backend_state = None
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-10/test_a26_receipt_without_provi0')
+
+    def test_a26_receipt_without_provider_restart_duplicate_and_later_failure(backend_state,tmp_path):
+        console=state(tmp_path); author, reviewer=accounts(console); calls=[]
+        def failure(*args):
+            calls.append(1)
+            raise ConsoleError('processing_dependency_failed')
+        bind(console,failure)
+        app=create_console_app(console)
+        with TestClient(app,base_url='https://testserver') as client:
+            login(client)
+            receipt=upload(client,reviewer)
+>           assert receipt.status_code==303,receipt.text
+E           AssertionError: <!doctype html>
+E             <html lang="nl">
+E             <head>
+E             <meta charset="utf-8">
+E             <meta name="viewport" content="width=device-width,initial-scale=1">
+E             <title>V&amp;VN Data Services — Interne operations console</title>
+E             <script>
+E             try {
+E               const saved = location.pathname === '/login' ? 'light' : localStorage.getItem('metis-theme');
+E               document.documentElement.dataset.theme = saved === 'light' || saved === 'dark'
+E                 ? saved : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+E             } catch (_) { document.documentElement.dataset.theme = 'light'; }
+E             </script>
+E             <link rel="stylesheet" href="/brand/console.css?v=2d08e63560f2b723">
+E             </head>
+E             <body>
+E             <div class="shell">
+E             <div class="canvas">
+E
+E
+E                 <header class="topbar">
+E                   <a class="brand metis-brand" href="/" aria-label="Metis — V&amp;VN Data Services">
+E                     <span class="metis-mark-frame"><img class="metis-mark" src="/brand/metis-mark.jpg" width="96" height="72" alt=""></span>
+E                     <span class="brand-copy">
+E                       <strong>Metis</strong>
+E                       <span>V&amp;VN Data Services</span>
+E                     </span>
+E                   </a>
+E                   <nav class="rooms"><a href="/">Mijn werk</a><a href="/ingest">Inleveren</a><a href="/review">Review</a><a href="/publish">Publiceren</a><a href="/tree">Documenten</a><a href="/settings">Instellingen</a><form method="post" action="/logout"><button class="quiet" type="submit">Uitloggen</button></form></nav>
+E                   <button class="theme-toggle" type="button" data-theme-toggle aria-label="Wissel tussen lichte en donkere modus">Donkere modus</button>
+E                   <div class="who">author · rollen: publisher, researcher, reviewer</div>
+E                 </header>
+E                 <div data-session-warning hidden role="dialog" aria-live="assertive" aria-labelledby="session-warning-title"
+E                  style="position:fixed;inset:auto 1rem 1rem auto;z-index:1000;max-width:28rem;">
+E               <div class="banner warn" style="box-shadow:0 8px 30px rgba(0,0,0,.18);">
+E                 <strong id="session-warning-title">Je sessie verloopt bijna</strong>
+E                 <p data-session-warning-text style="margin:.5rem 0;"></p>
+E                 <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+E                   <button class="btn-primary" type="button" data-session-renew>Blijf ingelogd</button>
+E                 </div>
+E               </div>
+E             </div>
+E
+E                         <section class="room">
+E                           <h1>Actie niet uitgevoerd</h1>
+E                           <div class="banner err" data-error-code="processing_dependency_failed">De verwerking is niet beschikbaar. Deze taak kan nu niet worden uitgevoerd.</div>
+E
+E
+E                           <p><a href="/ingest">Terug naar Inleveren</a></p>
+E                         </section>
+E
+E             </div>
+E             </div>
+E             <script>
+E             const sessionWarning = document.querySelector('[data-session-warning]');
+E             const sessionWarningTitle = document.querySelector('#session-warning-title');
+E             const sessionWarningText = document.querySelector('[data-session-warning-text]');
+E             const sessionRenew = document.querySelector('[data-session-renew]');
+E             let sessionRemaining = null;
+E             let sessionReason = '';
+E             let sessionTimer = null;
+E             const sessionPath = location.pathname + location.search;
+E
+E             const formatSessionRemaining = (seconds) => {
+E               const value = Math.max(0, Number(seconds) || 0);
+E               const minutes = Math.floor(value / 60);
+E               const secs = Math.floor(value % 60);
+E               return minutes ? `${minutes} min ${secs} sec` : `${secs} sec`;
+E             };
+E
+E             const renderSessionWarning = () => {
+E               if (!sessionWarning || sessionRemaining === null) return;
+E               if (sessionRemaining > 120) {
+E                 sessionWarning.hidden = true;
+E                 return;
+E               }
+E               sessionWarning.hidden = false;
+E               if (sessionRemaining <= 0) {
+E                 if (sessionWarningTitle) sessionWarningTitle.textContent = 'Je sessie is verlopen';
+E                 sessionWarningText.textContent = 'Je sessie is verlopen. Meld opnieuw aan om verder te gaan.';
+E                 if (sessionRenew) sessionRenew.textContent = 'Opnieuw aanmelden';
+E                 return;
+E               }
+E               if (sessionWarningTitle) sessionWarningTitle.textContent = 'Je sessie verloopt bijna';
+E               if (sessionReason === 'absolute') {
+E                 sessionWarningText.textContent =
+E                   'Je maximale sessieduur is bijna bereikt. Meld opnieuw aan binnen ' +
+E                   formatSessionRemaining(sessionRemaining) + '.';
+E                 if (sessionRenew) sessionRenew.textContent = 'Opnieuw aanmelden';
+E               } else {
+E                 sessionWarningText.textContent =
+E                   'Je wordt wegens inactiviteit automatisch uitgelogd over ' +
+E                   formatSessionRemaining(sessionRemaining) + '.';
+E                 if (sessionRenew) sessionRenew.textContent = 'Blijf ingelogd';
+E               }
+E             };
+E
+E             const applySessionStatus = (status) => {
+E               sessionRemaining = Number(status.remaining_seconds);
+E               sessionReason = String(status.warning_reason || '');
+E               renderSessionWarning();
+E             };
+E
+E             const pollSessionStatus = async () => {
+E               if (location.pathname === '/login' || location.pathname.startsWith('/auth/')) return;
+E               try {
+E                 const response = await fetch('/session/status', {
+E                   credentials: 'same-origin',
+E                   cache: 'no-store',
+E                   headers: {'Accept': 'application/json'}
+E                 });
+E                 if (response.status === 404) return;
+E                 if (response.status === 401) {
+E                   sessionRemaining = 0;
+E                   sessionReason = 'idle';
+E                   renderSessionWarning();
+E                   return;
+E                 }
+E                 if (!response.ok) return;
+E                 applySessionStatus(await response.json());
+E               } catch (_) {}
+E             };
+E
+E             if (sessionRenew) sessionRenew.addEventListener('click', async () => {
+E               if (sessionReason === 'absolute' || sessionRemaining === 0) {
+E                 location.href = '/auth/microsoft?next=' + encodeURIComponent(sessionPath);
+E                 return;
+E               }
+E               try {
+E                 const response = await fetch('/session/renew', {
+E                   method: 'POST',
+E                   credentials: 'same-origin',
+E                   cache: 'no-store',
+E                   headers: {'Accept': 'application/json'}
+E                 });
+E                 if (response.status === 401) {
+E                   location.href = '/auth/microsoft?next=' + encodeURIComponent(sessionPath);
+E                   return;
+E                 }
+E                 if (!response.ok) return;
+E                 applySessionStatus(await response.json());
+E               } catch (_) {}
+E             });
+E             if (sessionWarning) {
+E               pollSessionStatus();
+E               window.setInterval(pollSessionStatus, 30000);
+E               sessionTimer = window.setInterval(() => {
+E                 if (sessionRemaining === null || sessionRemaining <= 0) return;
+E                 sessionRemaining -= 1;
+E                 if (sessionRemaining <= 120) renderSessionWarning();
+E               }, 1000);
+E             }
+E
+E             document.querySelectorAll('[data-theme-toggle]').forEach((button) => {
+E               const sync = () => {
+E                 const dark = document.documentElement.dataset.theme === 'dark';
+E                 button.textContent = dark ? 'Lichte modus' : 'Donkere modus';
+E                 button.setAttribute('aria-pressed', String(dark));
+E               };
+E               button.addEventListener('click', () => {
+E                 const dark = document.documentElement.dataset.theme === 'dark';
+E                 document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+E                 try { localStorage.setItem('metis-theme', document.documentElement.dataset.theme); } catch (_) {}
+E                 sync();
+E               });
+E               sync();
+E             });
+E             document.querySelectorAll('[data-select-review-batch]').forEach((button) => {
+E               button.addEventListener('click', () => {
+E                 button.closest('form').querySelectorAll('[name="object_ids"]').forEach((input) => {
+E                   input.checked = true;
+E                 });
+E               });
+E             });
+E             document.querySelectorAll('[data-clear-review-batch]').forEach((button) => {
+E               button.addEventListener('click', () => {
+E                 button.closest('form').querySelectorAll('[name="object_ids"]').forEach((input) => {
+E                   input.checked = false;
+E                 });
+E               });
+E             });
+E             document.querySelectorAll('[data-review-form]').forEach((form) => {
+E               const decision = form.querySelector('[name="decision"]');
+E               const eindoordeel = form.querySelectorAll('[name="eindoordeel"]');
+E               const type = form.querySelector('[name="confirmed_object_type"]');
+E               const typeAction = form.querySelectorAll('[name="type_action"]');
+E               const typeChooser = form.querySelector('[data-type-chooser]');
+E               const proposed = form.querySelector('[name="proposed_object_type"]');
+E               const comment = form.querySelector('[name="comment"]');
+E               const commentField = form.querySelector('[data-comment-field]');
+E               const correctionField = form.querySelector('[data-correction-field]');
+E               const hint = form.querySelector('[data-decision-hint]');
+E               const submit = form.querySelector('[data-submit-review]');
+E               const stamp = form.querySelector('[data-stamp-block]');
+E               const strength = stamp ? stamp.querySelector('[name="recommendation_strength"]') : null;
+E               const semantics = form.querySelector('[data-recommendation-semantics-block]');
+E               const direction = form.querySelectorAll('[name="recommendation_direction"]');
+E               const strengthLevel = form.querySelectorAll('[name="recommendation_strength_level"]');
+E               const chooser = form.querySelector('[data-heading-chooser]');
+E               const search = form.querySelector('[data-heading-search]');
+E               const posAction = form.querySelectorAll('[name="documentpositie_action"]');
+E               const suitability = form.querySelectorAll('[name="suitability"]');
+E               const relationAck = form.querySelector('[name="relation_review_ack"]');
+E               const strengthTypes = new Set(['recommendation', 'outcome']);
+E               const selected = (nodes) => {
+E                 const hit = Array.from(nodes || []).find((node) => node.checked);
+E                 return hit ? hit.value : '';
+E               };
+E               const liveType = () => {
+E                 const action = selected(typeAction);
+E                 if (action === 'dit_klopt' && proposed && proposed.value) return proposed.value;
+E                 return type ? type.value : '';
+E               };
+E               const updateStamp = () => {
+E                 const card = form.closest('[data-confirmed-type]');
+E                 const confirmedType = card ? (card.getAttribute('data-confirmed-type') || '') : '';
+E                 const changingType = selected(typeAction) === 'type_wijzigen';
+E                 const confirmingProposal = selected(typeAction) === 'dit_klopt';
+E                 const live = liveType();
+E                 const showLegacy = Boolean(stamp) && live === 'outcome' && (
+E                   confirmedType === 'outcome' || changingType || confirmingProposal
+E                 );
+E                 const showSemantics = Boolean(semantics) && live === 'recommendation' && (
+E                   confirmedType === 'recommendation' || changingType || confirmingProposal
+E                 );
+E                 if (stamp) stamp.hidden = !showLegacy;
+E                 if (strength) {
+E                   strength.disabled = !showLegacy;
+E                   if (!showLegacy) strength.value = '';
+E                 }
+E                 if (semantics) semantics.hidden = !showSemantics;
+E                 direction.forEach((node) => {
+E                   node.disabled = !showSemantics;
+E                   if (!showSemantics) node.checked = false;
+E                 });
+E                 strengthLevel.forEach((node) => {
+E                   node.disabled = !showSemantics;
+E                   if (!showSemantics) node.checked = false;
+E                 });
+E               };
+E               const updateChooser = () => {
+E                 if (chooser) chooser.hidden = selected(posAction) !== 'andere_kop';
+E                 if (typeChooser) typeChooser.hidden = selected(typeAction) !== 'type_wijzigen';
+E                 if (type) {
+E                   if (selected(typeAction) === 'dit_klopt' && proposed && proposed.value) {
+E                     type.value = proposed.value;
+E                   }
+E                   type.hidden = selected(typeAction) !== 'type_wijzigen';
+E                 }
+E               };
+E               const update = () => {
+E                 const value = selected(eindoordeel) || (decision ? decision.value : '');
+E                 if (decision && selected(eindoordeel)) {
+E                   if (value === 'goedkeuren') decision.value = 'approve';
+E                   else if (value === 'goedkeuren_na_correctie') decision.value = 'revise';
+E                   else if (value === 'afwijzen') decision.value = 'reject';
+E                   else if (value === 'later_beoordelen') decision.value = 'later';
+E                 }
+E                 const mapped = decision ? decision.value : value;
+E                 const needsComment = mapped === 'reject' || mapped === 'revise' || value === 'afwijzen' || value === 'goedkeuren_na_correctie';
+E                 const needsCorrection = mapped === 'revise' || value === 'goedkeuren_na_correctie';
+E                 const needsType = mapped === 'approve' || value === 'goedkeuren';
+E                 if (commentField) commentField.hidden = !needsComment;
+E                 if (correctionField) correctionField.hidden = !needsCorrection;
+E                 if (comment) comment.required = needsComment;
+E                 if (type) type.required = needsType && selected(typeAction) === 'type_wijzigen';
+E                 const hasType = !needsType || liveType();
+E                 const hasComment = !needsComment || (comment && comment.value.trim());
+E                 const hasSuitability = Boolean(selected(suitability));
+E                 const needsRecommendationSemantics = needsType && liveType() === 'recommendation' && Boolean(semantics);
+E                 const hasRecommendationSemantics = (
+E                   !needsRecommendationSemantics
+E                   || (Boolean(selected(direction)) && Boolean(selected(strengthLevel)))
+E                 );
+E                 const needsRelationReview = needsType && Boolean(relationAck);
+E                 const hasRelationReview = !needsRelationReview || Boolean(relationAck && relationAck.checked);
+E                 if (submit) {
+E                   submit.disabled = !value || !hasType || !hasComment || !hasSuitability || !hasRecommendationSemantics || !hasRelationReview;
+E                   submit.textContent = mapped === 'revise' ? 'Correctie specificeren' : 'Review opslaan en volgende';
+E                 }
+E                 if (hint) {
+E                   if (!value) hint.textContent = 'Kies een eindoordeel.';
+E                   else if (!hasSuitability) hint.textContent = 'Kies of de passage geschikt is.';
+E                   else if (needsType && !liveType()) hint.textContent = 'Bevestig eerst het type.';
+E                   else if (needsRecommendationSemantics && !hasRecommendationSemantics) hint.textContent = 'Bevestig richting en sterkte van de aanbeveling.';
+E                   else if (needsRelationReview && !hasRelationReview) hint.textContent = 'Controleer en bevestig de voorgestelde relaties.';
+E                   else hint.textContent = '';
+E                 }
+E                 updateChooser();
+E                 updateStamp();
+E               };
+E               eindoordeel.forEach((node) => node.addEventListener('change', update));
+E               typeAction.forEach((node) => node.addEventListener('change', update));
+E               posAction.forEach((node) => node.addEventListener('change', update));
+E               suitability.forEach((node) => node.addEventListener('change', update));
+E               if (relationAck) relationAck.addEventListener('change', update);
+E               if (type) type.addEventListener('change', update);
+E               direction.forEach((node) => node.addEventListener('change', update));
+E               strengthLevel.forEach((node) => node.addEventListener('change', update));
+E               if (comment) comment.addEventListener('input', update);
+E               if (decision) decision.addEventListener('change', update);
+E               if (search && chooser) {
+E                 search.addEventListener('input', () => {
+E                   const query = search.value.trim().toLowerCase();
+E                   chooser.querySelectorAll('[data-parent-choice-list] li').forEach((item) => {
+E                     item.hidden = Boolean(query) && !item.textContent.toLowerCase().includes(query);
+E                   });
+E                 });
+E               }
+E               updateChooser();
+E               updateStamp();
+E               update();
+E             });
+E             </script>
+E             </body>
+E             </html>
+E
+E           assert 400 == 303
+E            +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_availability_repair.py:88: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    metis.provider:pre_review_semantic_v1.py:1004 METIS_PRE_REVIEW blocked reference=f382e728b57946d489b837a6e7dbc14f snapshot_id=snap-a0d816e4daa1bb3f-00382cdd code=processing_dependency_failed reason=- elapsed=0.01
+_ test_a04_a05_successor_register_then_prepare_without_lock_and_stale_parent[local] _
+
+backend_state = None
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-10/test_a04_a05_successor_registe0')
+
+    def test_a04_a05_successor_register_then_prepare_without_lock_and_stale_parent(backend_state,tmp_path):
+        console=state(tmp_path);author,_=accounts(console);bind_fixture_selections(console)
+        policy={'contract':'explicit-review-v1','revision':1,'primary':author,'assignments':[]}
+        receipt=console.ingest(actor_id=author,filename='fixture.html',data=b'<html><body><p>Een observatie is een systematische waarneming.</p></body></html>',
+            content_type='text/html',ingest_kind='new',title='Fixture',version='1',date='2026-10-08',live_url='',
+            class_='richtlijn',family='fixture',named_reviewers=[],review_policy=policy)
+        sid=receipt['snapshot_id'];before=deepcopy(console.snapshot_objects(sid));original=console._fragments_and_spec
+        entered=Event();release=Event();observations=[]
+        def paused(*args,**kwargs):
+            try: asyncio.get_running_loop();on_loop=True
+            except RuntimeError:on_loop=False
+            from src.workflows.workflow_transaction_v1 import workflow_transaction_active
+            observations.append((on_loop,console._store_lock_depth,workflow_transaction_active()))
+            entered.set();assert release.wait(5);return original(*args,**kwargs)
+        console._fragments_and_spec=paused;app=create_console_app(console)
+        with TestClient(app,base_url='https://testserver') as client,ThreadPoolExecutor(3) as pool:
+            login(client)
+            command={'document':sid,'expected_revision':console.objects_revision(sid),'command_id':'successor',
+                     'reason':'Nieuwe controle','primary':author,'policy_revision':'2','new_class':'richtlijn'}
+>           received=client.post('/review/successor',data=command,follow_redirects=False)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_availability_repair.py:165:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/testclient.py:546: in post
+    return super().post(
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/testclient.py:445: in request
+    return super().request(
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/testclient.py:348: in handle_request
+    raise exc
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/testclient.py:345: in handle_request
+    portal.call(self.app, scope, receive, send)
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/fastapi/applications.py:1138: in __call__
+    await super().__call__(scope, receive, send)
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/applications.py:107: in __call__
+    await self.middleware_stack(scope, receive, send)
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/middleware/base.py:191: in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:158: in __exit__
+    self.gen.throw(value)
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/_utils.py:85: in collapse_excgroups
+    raise exc
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/middleware/base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/operations_console_app.py:3687: in require_same_origin
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/middleware/base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/middleware/base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/routing.py:716: in __call__
+    await self.middleware_stack(scope, receive, send)
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/routing.py:736: in app
+    await route.handle(scope, receive, send)
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/routing.py:290: in handle
+    await self.app(scope, receive, send)
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/fastapi/routing.py:115: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/fastapi/routing.py:101: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/fastapi/routing.py:355: in app
+    raw_response = await run_endpoint_function(
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/fastapi/routing.py:243: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/decision_review_ui_v1.py:82: in policy_post
+    receipt = console.create_review_successor(**command, class_=str(form.get("new_class") or ""))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/operations_console_v1.py:1957: in create_review_successor
+    return execute(self, **command)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+src/decision_successor_v1.py:45: in execute
+    return console.ingest(actor_id=actor_id, ingest_kind="new_version", title=env["title"],
+src/operations_console_v1.py:1835: in ingest
+    fragments, spec = self._fragments_and_spec(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+args = ('html', PosixPath('/tmp/pytest-of-root/pytest-10/test_a04_a05_successor_registe0/sources/b9b4694b85a8487009676cf5d185d2b69922e0f3c6977ebfa4bf5e16176a968b/fixture.html'))
+kwargs = {'class_': 'richtlijn', 'data': b'<html><body><p>Een observatie is een systematische waarneming.</p></body></html>', 'document_id': 'console-fixture-fixture-1-b9b4694b-revision-c1b8bf654f307046-4a77dfbc', 'family': 'fixture', ...}
+on_loop = True
+workflow_transaction_active = <function workflow_transaction_active at 0x7ff4112c1620>
+@py_assert1 = <bound method Event.wait of <threading.Event at 0x7ff40fdc66f0: unset>>
+@py_assert3 = 5, @py_assert5 = False
+@py_format7 = 'assert False\n{False = wait\n{wait = <threading.Event at 0x7ff40fdc66f0: unset>.wait\n}(5)\n}'
+
+    def paused(*args,**kwargs):
+        try: asyncio.get_running_loop();on_loop=True
+        except RuntimeError:on_loop=False
+        from src.workflows.workflow_transaction_v1 import workflow_transaction_active
+        observations.append((on_loop,console._store_lock_depth,workflow_transaction_active()))
+>       entered.set();assert release.wait(5);return original(*args,**kwargs)
+                      ^^^^^^^^^^^^^^^^^^^^^^
+E       assert False
+E        +  where False = wait(5)
+E        +    where wait = <threading.Event at 0x7ff40fdc66f0: unset>.wait
+
+tests/test_availability_repair.py:159: AssertionError
+_ test_a02_installed_reads_bounded_equal_and_next_request_sees_changes[/publish-params0] _
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-10/test_a02_installed_reads_bound0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff40ed22c60>
+path = '/publish', params = {}
+
+    @pytest.mark.parametrize('path,params',[
+        ('/publish',{}),('/review',{'work':'all'}),('/review',{}),
+        ('/review',{'task':'disposition'}),('/review',{'task':'individual'}),
+        ('/review',{'task':'detail'}),('/review/bronpassage',{})])
+    def test_a02_installed_reads_bounded_equal_and_next_request_sees_changes(tmp_path,monkeypatch,path,params):
+        import re
+        import src.knowledge_materialisation_v1 as materialisation
+        import src.semantic_passage_v1 as semantic
+        from src.source_accountability_v1 import is_source_record
+        console=state(tmp_path);author,reviewer=accounts(console)
+        texts=['Gebruik geen zalf.',*[f'Bronpassage {i} bevat aanvullende informatie voor menselijke beoordeling.' for i in range(30)]]
+        def select(_url,_headers,payload,_timeout):
+            data=json.loads(payload['input'][1]['content'])
+            if not data.get('selection_targets') and any('Gebruik geen zalf.' in b['text'] for b in data['source_blocks']):
+                return provider(_url,_headers,payload,_timeout)
+            return {'status':'completed','output':[{'type':'message','content':[{'type':'output_text','text':json.dumps({'objects':[],'relations':[],'abstain_reason':'uncertain'})}]}]}
+        bind(console,select)
+        sid=console.ingest(actor_id=author,filename='fixture.html',data=('<html><body>'+''.join(f'<p>{t}</p>' for t in texts)+'</body></html>').encode(),
+            content_type='text/html',ingest_kind='new',title='Fixture',version='1',date='2026-10-08',live_url='',
+            class_='richtlijn',family='fixture',named_reviewers=[author,reviewer])['snapshot_id']
+        rows=console.snapshot_objects(sid)
+        assert sum(is_source_record(o) for o in rows)==30
+        source_obj=next(o for o in rows if is_source_record(o))
+        candidate=next(o for o in rows if o.get('proposed_object_type')=='recommendation')
+        query={**params}
+        if path!='/publish' and (params.get('task') or path=='/review/bronpassage'):
+            query['document']=sid
+        if params.get('task')=='detail':
+            query.pop('task');query['object']=candidate['object_id']
+        if path=='/review/bronpassage':query['object']=source_obj['object_id']
+        original=semantic._reconstructed_blocks;calls=[]
+        def counted(rows):
+            calls.append(1);return original(rows)
+        monkeypatch.setattr(semantic,'_reconstructed_blocks',counted)
+        monkeypatch.setattr(materialisation,'_reconstructed_blocks',counted)
+        app=installed_app(console)
+        with TestClient(app,base_url='https://testserver') as client:
+            login(client)
+            response=client.get(path,params=query)
+            assert response.status_code==200,response.text
+>           assert len(calls)<=2,(path,query,len(calls))
+E           AssertionError: ('/publish', {}, 33)
+E           assert 33 <= 2
+E            +  where 33 = len([1, 1, 1, 1, 1, 1, ...])
+
+tests/test_availability_repair.py:303: AssertionError
+=============================== warnings summary ===============================
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/testclient.py:45
+  /workspace/scratch/fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/testclient.py:45: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_availability_repair.py::test_a26_receipt_without_provider_restart_duplicate_and_later_failure[local]
+FAILED tests/test_availability_repair.py::test_a04_a05_successor_register_then_prepare_without_lock_and_stale_parent[local]
+FAILED tests/test_availability_repair.py::test_a02_installed_reads_bounded_equal_and_next_request_sees_changes[/publish-params0]
+3 failed, 6 passed, 2 skipped, 10 deselected, 1 warning in 11.35s

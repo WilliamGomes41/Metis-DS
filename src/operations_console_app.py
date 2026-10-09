@@ -786,8 +786,9 @@ def _nav(account: dict[str, Any] | None, current: str = "") -> str:
     rooms = [
         ("home", "/", "Mijn werk"),
         ("ingest", "/ingest", "Inleveren"),
+        ("selection", "/source-selection", "Bronselectie"),
         ("review", "/review", "Review"),
-        ("publish", "/publish", "Publiceren"),
+        ("publish", "/publish", "Publicatie"),
         ("tree", "/tree", "Documenten"),
         ("settings", "/settings", "Instellingen"),
     ]
@@ -3428,7 +3429,7 @@ def _source_context_card(console: OperationsConsole, snapshot_id: str, obj: dict
     return ''.join(parts) + panel + '</section>'
 
 
-@source_reconstruction_scope()
+@source_reconstruction_scope(reuse_existing=True)
 def _render_review_room(
     console: OperationsConsole,
     account: dict[str, Any],
@@ -3708,6 +3709,16 @@ def create_console_app(
             raise ConsoleError("not_authenticated")
         return account
 
+    @app.middleware("http")
+    async def source_read_calculation(request: Request, call_next):
+        if request.method == "GET":
+            with source_reconstruction_scope(reuse_existing=True):
+                return await call_next(request)
+        return await call_next(request)
+
+    from src.source_selection_ui_v1 import install as install_source_selection
+    install_source_selection(app, state, _require, _page, _nav, _esc)
+
     from src.metis_mcp_v1 import install_mcp
     install_mcp(app, state, entra, expected_origin, require_account=_require, render_page=_page, nav=_nav)
 
@@ -3788,6 +3799,13 @@ def create_console_app(
                     badge="Bron inleveren",
                 ),
                 _home_tile(
+                    href="/source-selection",
+                    icon="▤",
+                    title="Bronselectie",
+                    description="Start of hervat verwerking per document",
+                    badge="Bronselectie openen",
+                ),
+                _home_tile(
                     href="/review",
                     icon="✓",
                     title="Review",
@@ -3797,7 +3815,7 @@ def create_console_app(
                 _home_tile(
                     href="/publish",
                     icon="⇧",
-                    title="Publiceren",
+                    title="Publicatie",
                     description="Goedgekeurde stukken publiceren",
                     badge="Publicatieoverzicht openen",
                 ),
@@ -3885,17 +3903,8 @@ def create_console_app(
         # Same authorization as processing_status/retry: researchers or assigned reviewers.
         processing = state.processing_status(document, actor_id=account["account_id"])
         controls = []
-        if processing.get("resume_allowed"):
-            controls.append(f'''<form method="post" action="/tree/resume-formation">
-              <input type="hidden" name="snapshot_id" value="{_esc(document)}">
-              <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
-              <input type="hidden" name="expected_revision" value="{_esc(state.objects_revision(document))}">
-              <button class="btn-primary" type="submit">Onopgeloste vorming herstellen</button></form>''')
-        if processing["retry_allowed"]:
-            controls.append(f'''<form method="post" action="/tree/reprocess">
-              <input type="hidden" name="snapshot_id" value="{_esc(document)}">
-              <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
-              <button class="btn-primary" type="submit">Verwerking opnieuw proberen</button></form>''')
+        if processing.get("resume_allowed") or processing["retry_allowed"]:
+            controls.append(f'<a class="btn-primary" href="/source-selection?{_esc(urlencode({"document": document}))}">Naar Bronselectie voor Starten of Hervatten</a>')
         if ("publisher" in roles
                 and (account["account_id"] in envelope.get("named_reviewers", [])
                      or account["account_id"] == envelope.get("uploader_account_id"))
@@ -4861,7 +4870,7 @@ def create_console_app(
                 button.disabled = true;
                 button.textContent = "Bezig met inleveren…";
                 status.hidden = false;
-                status.textContent = "Je document wordt verzonden en verwerkt. Dit kan enkele minuten duren. Houd deze pagina open en lever het document niet opnieuw in. Deze pagina toont het resultaat zodra deze aanvraag is afgerond.";
+                status.textContent = "Je document wordt veilig opgeslagen. Daarna opent Bronselectie met je document geselecteerd. Bronselectie start pas wanneer je op Starten klikt.";
               }});
               window.addEventListener("pageshow", function () {{
                 submitting = false;
@@ -4936,7 +4945,7 @@ def create_console_app(
             policy = {"contract": CONTRACT, "revision": 1, "primary": primary,
                       "assignments": [{"reviewer_id": i, "participation": review_mode} for i in extras]}
         receipt = await asyncio.to_thread(
-            state.ingest,
+            state.receive_source,
             actor_id=account["account_id"],
             filename=filename,
             data=data or None,
@@ -4955,31 +4964,7 @@ def create_console_app(
             command_id=command_id or None,
             replaces_snapshot_id=replaces_document.strip() or None,
         )
-        graph_link = (f'<p><a href="/review/decision-graph?document={_esc(receipt["snapshot_id"])}">Controleer beslisroutes</a></p>'
-                      if "decision_graph" in receipt else "")
-        pre_review_blocked = receipt.get("publication_eligibility") == PRE_REVIEW_BLOCKED
-        lead = (
-            "Document opgeslagen. De verwerking is niet afgerond; beoordelen is nog niet beschikbaar."
-            if pre_review_blocked else "Vastgelegd. Controleer de kennisobjecten en open bronafhandeling."
-        )
-        next_actions = (
-            '<p><a class="btn-primary" href="/tree">Document bekijken</a></p>'
-            if pre_review_blocked else '<p><a class="btn-primary" href="/review">Naar review</a></p>'
-        )
-        processing_notice = _task_links("ingest")
-        return _page(
-            f"""
-            {_nav(account, "ingest")}
-            <section class="room">
-              <h1>Document ingeleverd</h1>
-              <p class="lead">{_esc(lead)}</p>
-              <div class="doc-card">
-                {_document_card_heading({**receipt, "status": receipt["state"]})}
-              </div>
-              {processing_notice}{next_actions}{graph_link}
-            </section>
-            """
-        )
+        return RedirectResponse("/source-selection?" + urlencode({"document": receipt["snapshot_id"], "received": "yes"}), status_code=303)
 
     @app.get("/tree", response_class=HTMLResponse)
     def tree(request: Request, q: str = "", page: int = 1) -> str:
@@ -5103,29 +5088,15 @@ def create_console_app(
         return JSONResponse(replay_diagnostic(attempt), headers={"Cache-Control": "no-store"})
 
     @app.post("/tree/reprocess")
-    def tree_reprocess(
-        request: Request,
-        snapshot_id: str = Form(...),
-        command_id: str = Form(""),
-    ) -> RedirectResponse:
-        account = _require(request)
-        state.retry_pre_review(
-            actor_id=account["account_id"],
-            snapshot_id=snapshot_id,
-            command_id=command_id or uuid.uuid4().hex,
-        )
-        return RedirectResponse(
-            "/settings/technical/processing?" + urlencode({"document": snapshot_id}),
-            status_code=303,
-        )
-
     @app.post("/tree/resume-formation")
-    def tree_resume_formation(request: Request, snapshot_id: str = Form(...),
-                              command_id: str = Form(...), expected_revision: str = Form(...)):
+    def tree_source_selection(request: Request, snapshot_id: str = Form(...)) -> RedirectResponse:
         account = _require(request)
-        state.resume_formation(actor_id=account["account_id"], snapshot_id=snapshot_id,
-                               command_id=command_id, expected_revision=expected_revision)
-        return RedirectResponse("/settings/technical/processing?" + urlencode({"document": snapshot_id}), status_code=303)
+        if state.snapshot_is_published(snapshot_id):
+            raise ConsoleError("published_objects_must_not_be_rewritten")
+        state.processing_status(snapshot_id, actor_id=account["account_id"])
+        # Compatibility URLs navigate only. The current revision and operation
+        # are authorized by the existing explicit Starten/Hervatten command.
+        return RedirectResponse("/source-selection?" + urlencode({"document": snapshot_id}), status_code=303)
 
     @app.post("/tree/move")
     def tree_move(

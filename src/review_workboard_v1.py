@@ -242,7 +242,7 @@ class ReviewWorkInputs:
     published: bool
 
 
-@source_reconstruction_scope()
+@source_reconstruction_scope(reuse_existing=True)
 def review_work_item(
     console: OperationsConsole,
     *,

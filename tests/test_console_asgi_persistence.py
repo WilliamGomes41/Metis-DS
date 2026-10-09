@@ -15,6 +15,7 @@ def test_azure_build_defaults_to_persistent_data_outside_wwwroot(
     # prove that real Azure runtime fails closed without PostgreSQL and Blob.
     monkeypatch.setattr(console_asgi, "_canonical_store", lambda *, credential=None: None)
     monkeypatch.setattr(console_asgi, "_immutable_source_store", lambda: None)
+    monkeypatch.setattr(console_asgi, "_require_azure_workflow_authorities", lambda *stores: None)
     monkeypatch.setenv("WEBSITE_SITE_NAME", "vvn-metis-console")
     monkeypatch.setenv("CONSOLE_PUBLIC_ORIGIN", "https://console.example.test")
     monkeypatch.delenv("CONSOLE_DATA_ROOT", raising=False)

@@ -11,11 +11,51 @@ import signal
 import subprocess
 import sys
 import time
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
+from threading import local
 
 from src.docling_contract_v1 import DoclingError, translate
 
 ROOT = Path(__file__).resolve().parents[1]
+_RESERVED_GATE = local()
+
+
+def _acquire_conversion_gate():
+    gate_path = Path(os.environ.get("METIS_DOCLING_LOCK_PATH", "/tmp/metis-docling-conversion.lock"))
+    gate = gate_path.open("a")
+    try:
+        fcntl.flock(gate, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        gate.close()
+        return None
+    except BaseException:
+        gate.close()
+        raise
+    return gate
+
+
+@contextmanager
+def reserve_conversion_capacity():
+    """Handoff the existing shared lock to extract in this executing thread."""
+    gate = _acquire_conversion_gate()
+    if gate is None:
+        yield False
+        return
+    previous = getattr(_RESERVED_GATE, "gate", None)
+    _RESERVED_GATE.gate = gate
+    try:
+        yield True
+    finally:
+        gate.close()
+        _RESERVED_GATE.gate = previous
+
+
+def release_conversion_capacity():
+    """Release a reserved slot also when preparation reused retained fragments."""
+    gate = getattr(_RESERVED_GATE, "gate", None)
+    if gate is not None:
+        gate.close()
+
 
 
 def enabled() -> bool:
@@ -122,13 +162,13 @@ def extract(pdf: Path, *, document_id: str, source_id: str, pages=None,
               "max_output_bytes": 64 * 1024 * 1024, "artifacts_path": str(Path(artifacts).resolve())}
     # Default leaves room for console on existing B1; NOT a claim Docling fits.
     rss = int(_positive("METIS_DOCLING_MAX_RSS_MIB", 768, 16384) * 1024 * 1024)
-    gate_path = Path(os.environ.get("METIS_DOCLING_LOCK_PATH", "/tmp/metis-docling-conversion.lock"))
     with ExitStack() as stack:
-        gate = stack.enter_context(gate_path.open("a"))
-        try:
-            fcntl.flock(gate, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as error:
-            raise DoclingError("docling_capacity_busy") from error
+        gate = getattr(_RESERVED_GATE, "gate", None)
+        if gate is None or gate.closed:
+            gate = _acquire_conversion_gate()
+        if gate is None:
+            raise DoclingError("docling_capacity_busy")
+        stack.enter_context(gate)
         # Anonymous descriptors disappear after crash; no source temp files.
         handles = []
         for name in ("config", "input", "result"):

@@ -1,0 +1,118 @@
+name: source-processing-proof
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-dev.lock
+      - name: Reproduce actual audit failures on the pinned baseline
+        shell: bash
+        run: |
+          mkdir -p proof
+          git worktree add "$RUNNER_TEMP/metis-base" 0204045d1adc5e7a89e551844e3bf9751715e096
+          export METIS_PROBE_REPO="$RUNNER_TEMP/metis-base"
+          for probe in upload_response_lifetime successor_availability publish_reconstructions; do
+            set +e
+            python "evidence/availability/probe_${probe}.py" > "proof/${probe}-red.log" 2>&1
+            result=$?
+            set -e
+            cat "proof/${probe}-red.log"
+            test "$result" = 1
+          done
+          grep -F UPLOAD_RECEIPT_WAITS_FOR_FULL_FORMATION proof/upload_response_lifetime-red.log
+          grep -F SUCCESSOR_BLOCKS_HEALTH_EVENT_LOOP proof/successor_availability-red.log
+          grep -F RECONSTRUCTION_GROWS_WITH_SOURCE_RECORDS proof/publish_reconstructions-red.log
+      - name: Reproduce incompatible resume on the pinned pre-fix code
+        shell: bash
+        run: |
+          git worktree add "$RUNNER_TEMP/metis-resume-base" 3c000805712d0d2412e8b08d3b890f20af2b98de
+          cp tests/test_source_resume_acceptance.py "$RUNNER_TEMP/metis-resume-base/tests/"
+          set +e
+          (cd "$RUNNER_TEMP/metis-resume-base" && pytest -q tests/test_source_resume_acceptance.py -k "incompatible and http and file") > proof/resume-strategy-red.log 2>&1
+          result=$?
+          set -e
+          cat proof/resume-strategy-red.log
+          test "$result" = 1
+          grep -F INCOMPATIBLE_RESUME_ACCEPTED proof/resume-strategy-red.log
+          grep -F "4 failed" proof/resume-strategy-red.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: availability-baseline-red
+          path: proof
+          if-no-files-found: error
+  native-and-browser:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: metis_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d metis_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      METIS_TEST_POSTGRES_DSN: postgresql://postgres:postgres@127.0.0.1:5432/metis_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-dev.lock
+      - name: Require native PostgreSQL and browser tooling
+        run: |
+          npm install --prefix "$RUNNER_TEMP/metis-browser" playwright@1.58.2
+          "$RUNNER_TEMP/metis-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Verify native receipt, kernel recovery, concurrency and full lifecycle
+        run: |
+          mkdir -p proof
+          set +e
+          pytest -q -s tests/test_availability_repair.py tests/test_azure_source_processing.py tests/test_source_dispatch_hardening.py tests/test_source_resume_acceptance.py tests/test_lifecycle_withdrawal_recovery_v1.py tests/test_pre_review_semantic_v1.py tests/test_pre_review_failure_diagnostics_v1.py --junitxml=proof/native.xml > proof/native.log 2>&1
+          result=$?
+          set -e
+          cat proof/native.log
+          exit "$result"
+      - name: Verify actual desktop and mobile source-selection route
+        if: ${{ !cancelled() }}
+        run: |
+          export METIS_PLAYWRIGHT_MODULE="$RUNNER_TEMP/metis-browser/node_modules/playwright"
+          export METIS_BROWSER_EXECUTABLE="$(node -e 'process.stdout.write(require(process.env.METIS_PLAYWRIGHT_MODULE).chromium.executablePath())')"
+          set +e
+          pytest -q tests/test_browser_source_selection.py --basetemp="$RUNNER_TEMP/source-browser-proof" --junitxml=proof/browser.xml > proof/browser.log 2>&1
+          result=$?
+          set -e
+          cat proof/browser.log
+          exit "$result"
+      - name: Reject missing native/browser evidence
+        if: ${{ !cancelled() }}
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          for path in ("proof/native.xml", "proof/browser.xml"):
+              root = ET.parse(path).getroot()
+              tests = root.findall(".//testcase")
+              assert tests, path
+              assert not root.findall(".//skipped"), (path, "required acceptance checks skipped")
+              assert not root.findall(".//failure") and not root.findall(".//error"), path
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: azure-source-processing-native-browser
+          path: |
+            proof
+            ${{ runner.temp }}/source-browser-proof
+          if-no-files-found: error

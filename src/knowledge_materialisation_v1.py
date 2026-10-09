@@ -25,14 +25,17 @@ _source_reconstruction: ContextVar[dict | None] = ContextVar("source_reconstruct
 
 
 @contextmanager
-def source_reconstruction_scope():
-    """Reuse one identical source only during a synchronous read calculation.
+def source_reconstruction_scope(*, reuse_existing=False):
+    """Reuse identical source representations only during one read calculation.
 
     This stores derived blocks, never validation results. One input snapshot
     owns at most two views: candidate-only and full source including headings.
-    Every check still runs. Input changes invalidate both views; nested calls
-    and exceptions restore the caller's scope.
+    Every check still runs. Changed input selects a new entry. Independent
+    scopes restore their caller on exit; explicit reuse shares its calculation.
     """
+    if reuse_existing and _source_reconstruction.get() is not None:
+        yield
+        return
     token = _source_reconstruction.set({})
     try:
         yield
@@ -50,11 +53,15 @@ def _read_source_blocks(fragments, *, include_headings=False):
     scope = _source_reconstruction.get()
     if scope is None:
         return reconstruct()
-    if "fragments" not in scope or fragments != scope["fragments"]:
-        scope.update(fragments=deepcopy(fragments), blocks={})
-    if include_headings not in scope["blocks"]:
-        scope["blocks"][include_headings] = reconstruct()
-    return scope["blocks"][include_headings]
+    from src.integrity_kernel import stable_hash
+    key = stable_hash(fragments)
+    entry = scope.get(key)
+    if entry is None or fragments != entry["fragments"]:
+        entry = {"fragments": deepcopy(fragments), "blocks": {}}
+        scope[key] = entry
+    if include_headings not in entry["blocks"]:
+        entry["blocks"][include_headings] = reconstruct()
+    return entry["blocks"][include_headings]
 
 
 class MaterialisationError(SemanticPassageError):
