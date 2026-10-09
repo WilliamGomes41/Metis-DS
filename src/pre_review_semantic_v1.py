@@ -1075,6 +1075,10 @@ def bind_pre_review_semantic_processing(
         class_: str,
         formation_context: Mapping[str, Any] | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        if (formation_context or {}).get("resume_formation"):
+            from src.source_selection_v1 import assert_resume_configuration
+            assert_resume_configuration(console, console._envelope(formation_context["snapshot_id"]))
+
         if kind == "pdf" and class_ == "beslisboom":
             return original_fragments_and_spec(
                 kind,

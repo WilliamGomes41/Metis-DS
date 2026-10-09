@@ -16,6 +16,28 @@ def authorize(console, actor_id, envelope):
     return account
 
 
+def assert_resume_configuration(console, envelope):
+    """A resume continues a persisted V3 checkpoint, never a new strategy.
+
+    Legacy checkpoints predate attempt configuration; their persisted replay
+    model/contract remains the compatibility authority. Exact replay validates
+    the remaining source/extractor/prompt/schema identity before model work.
+    A new deployment may resume a compatible checkpoint; an already accepted
+    attempt remains fenced by its full stored configuration.
+    """
+    from src.source_bound_fields_v3 import MODE
+    current = configuration(console)
+    components = ((envelope.get("semantic_replay") or {}).get("identity") or {}).get("components") or {}
+    if (current.get("mode") != MODE
+            or str(current.get("model") or "").strip() != components.get("model_id")
+            or "source-bound-fields-v3" not in components.get("semantic_contract_version", "")):
+        raise ConsoleError("processing_resume_configuration_incompatible")
+    previous = envelope.get("processing_configuration")
+    if previous and any(previous.get(key) != current.get(key) for key in ("mode", "model", "docling")):
+        raise ConsoleError("processing_resume_configuration_incompatible")
+    return current
+
+
 def reserve_selection(console, *, actor_id, snapshot_id, command_id, expected_revision):
     with console._reprocessing_transaction(snapshot_id):
         envelope = deepcopy(console._envelope(snapshot_id))
@@ -46,7 +68,8 @@ def reserve_selection(console, *, actor_id, snapshot_id, command_id, expected_re
         if envelope.get("successor_guard"):
             from src.decision_successor_v1 import assert_parent_current
             assert_parent_current(console, envelope)
-        envelope["processing_configuration"] = configuration(console)
+        envelope["processing_configuration"] = (assert_resume_configuration(console, envelope)
+                                                    if kind == "resume" else configuration(console))
         attempt, fresh = reserve(envelope, command_id=command_id, actor_id=actor_id,
                                  revision=revision, clock=now(), limits=console._processing_limits(), kind=kind)
         if fresh:

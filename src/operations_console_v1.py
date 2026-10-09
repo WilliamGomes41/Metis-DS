@@ -2118,8 +2118,12 @@ class OperationsConsole:
                     raise ConsoleError("pre_review_retry_existing_work")
                 if self.objects_revision(snapshot_id) != expected_revision:
                     raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=self.objects_revision(snapshot_id))
+                from src.source_selection_v1 import assert_resume_configuration
+                envelope["processing_configuration"] = assert_resume_configuration(self, envelope)
             attempt, fresh = reserve(envelope, command_id=command_id, actor_id=actor_id,
                 revision=expected_revision, clock=now(), limits=limits, kind="resume")
+            if fresh:
+                attempt["processing_configuration"] = deepcopy(envelope["processing_configuration"])
             self._commit_prepared_store(envelopes={snapshot_id: envelope}, snapshot_id=snapshot_id)
         if not fresh:
             if attempt["kind"] != "resume" or attempt["expected_revision"] != expected_revision:

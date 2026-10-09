@@ -100,10 +100,14 @@ def test_restart_recovers_pending_sql_command_after_http_wake_failure_without_fi
 
 def test_native_two_kernels_claim_one_attempt_and_writer_remains_available(workflow_postgres, tmp_path):
     from contextlib import contextmanager
-    from time import perf_counter
+    from time import perf_counter, sleep
     import json
+    import psycopg
+    from psycopg.rows import dict_row
+    from src.workflows.workflow_transaction_v1 import _ACTIVE_CONNECTION
     entered, release = Event(), Event()
-    durations = []
+    claim_held, release_claim, waiter_started = Event(), Event(), Event()
+    records, holder, waiter = [], {}, {}
     first = _console(tmp_path / "first", workflow_postgres)
     blob = ImmutableBlobFixture()
     first.immutable_source_store = blob
@@ -112,19 +116,49 @@ def test_native_two_kernels_claim_one_attempt_and_writer_remains_available(workf
     second = _console(tmp_path / "second", workflow_postgres)
     second.immutable_source_store = blob
     calls = []
+    def observe(pid):
+        with psycopg.connect(workflow_postgres.dsn, autocommit=True, row_factory=dict_row) as observer:
+            activity = observer.execute(
+                "SELECT EXTRACT(EPOCH FROM clock_timestamp()-xact_start)::float AS transaction_age_seconds, "
+                "pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE pid=%s", (pid,)).fetchone()
+            locks = observer.execute(
+                "SELECT count(*) AS count FROM pg_locks WHERE pid=%s AND granted "
+                "AND relation='workflow.documents'::regclass", (pid,)).fetchone()["count"]
+            return {"transaction_age_seconds": activity["transaction_age_seconds"] if activity else None,
+                    "blockers": activity["blockers"] if activity else [], "document_locks": locks}
     for console in (first, second):
         boundary = console._reprocessing_transaction
         @contextmanager
-        def measured(sid, _boundary=boundary):
+        def measured(sid, _boundary=boundary, _console=console):
             start = perf_counter()
-            with _boundary(sid):
-                try:
+            acquired = None
+            pid = None
+            try:
+                with _boundary(sid):
+                    acquired = perf_counter()
+                    pid = _ACTIVE_CONNECTION.get().info.backend_pid
+                    sample = observe(pid)
+                    assert sample["transaction_age_seconds"] is not None
+                    assert sample["document_locks"] > 0
+                    if _console is first and not holder:
+                        holder.update(pid=pid, acquired=acquired, sample=sample)
+                        claim_held.set()
+                        assert release_claim.wait(10)
                     yield
-                finally:
-                    durations.append(perf_counter() - start)
+            finally:
+                # Outside the context: outer transaction has committed/rolled
+                # back and the real PostgreSQL connection has released locks.
+                finished = perf_counter()
+                if pid is not None:
+                    after = observe(pid)
+                    assert after["document_locks"] == 0
+                    assert after["transaction_age_seconds"] is None
+                    records.append({"backend_pid": pid,
+                        "boundary_through_commit_seconds": finished-start,
+                        "acquired_to_post_commit_seconds": finished-acquired,
+                        "database_sample": sample, "post_commit_sample": after})
         console._reprocessing_transaction = measured
-        strategy = console._source_processing_strategy if hasattr(console, "_source_processing_strategy") else None
-        if strategy is None:
+        if not hasattr(console, "_source_processing_strategy"):
             bind(console, provider)
         original = console._fragments_and_spec
         def paused(*args, _original=original, **kwargs):
@@ -134,22 +168,63 @@ def test_native_two_kernels_claim_one_attempt_and_writer_remains_available(workf
             entered.set()
             assert release.wait(10)
             return _original(*args, **kwargs)
-        console._fragments_and_spec = paused  # barrier at mutation boundary only
+        console._fragments_and_spec = paused
+    def contend_same_row():
+        with psycopg.connect(workflow_postgres.dsn) as connection:
+            connection.execute("SET lock_timeout='5s'")
+            waiter["pid"] = connection.info.backend_pid
+            waiter_started.set()
+            connection.execute("SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE", (sid,))
+        return True
+    def write_same_row():
+        with psycopg.connect(workflow_postgres.dsn) as connection:
+            connection.execute("SET lock_timeout='1s'")
+            # Actual committed SQL writer on the same aggregate while provider
+            # is paused, without changing any domain identity/content/review.
+            connection.execute("UPDATE workflow.documents SET title=title WHERE snapshot_id=%s", (sid,))
+        return True
     with ThreadPoolExecutor(3) as pool:
         work = pool.submit(first.execute_source_selection, actor_id=author, snapshot_id=sid, attempt=attempt)
         try:
+            assert claim_held.wait(5)
+            contender = pool.submit(contend_same_row)
+            assert waiter_started.wait(2)
+            deadline = perf_counter()+3
+            blocking = observe(waiter["pid"])
+            while holder["pid"] not in blocking["blockers"] and perf_counter() < deadline:
+                sleep(.01)
+                blocking = observe(waiter["pid"])
+            assert holder["pid"] in blocking["blockers"]
+            locked_sample = observe(holder["pid"])
+            assert locked_sample["document_locks"] > 0
+            assert locked_sample["transaction_age_seconds"] > 0
+            assert not contender.done()
+            release_claim.set()
+            assert contender.result(timeout=3)
             assert entered.wait(5)
+            # Independent observer sees the claim connection already released;
+            # long preparation holds no workflow.documents lock.
+            assert observe(holder["pid"])["document_locks"] == 0
+            assert pool.submit(write_same_row).result(timeout=2)
             duplicate = pool.submit(second.execute_source_selection, actor_id=author, snapshot_id=sid, attempt=attempt)
             duplicate.result(timeout=2)
             pool.submit(second.create_account, username="independent", password="fixture", roles=("researcher",)).result(timeout=2)
             assert calls == [1]
         finally:
+            release_claim.set()
             release.set()
             work.result(timeout=10)
     assert second._envelope(sid)["processing_attempts"][-1]["state"] == "succeeded"
     assert len(second._envelope(sid)["processing_attempts"]) == 1
-    assert max(durations) < 2
-    print("NATIVE_LOCK_EVIDENCE=" + json.dumps({"transactions": len(durations), "max_seconds": max(durations), "provider_calls": len(calls)}))
+    assert records and max(r["boundary_through_commit_seconds"] for r in records) < 5
+    print("NATIVE_LOCK_EVIDENCE=" + json.dumps({
+        "measurement_version": "postgres-lock-through-commit-v2",
+        "transactions": len(records),
+        "max_boundary_through_commit_seconds": max(r["boundary_through_commit_seconds"] for r in records),
+        "max_acquired_to_post_commit_seconds": max(r["acquired_to_post_commit_seconds"] for r in records),
+        "held_database_sample": locked_sample, "blocked_waiter_sample": blocking,
+        "same_row_writer_committed_during_preparation": True,
+        "provider_calls": len(calls), "records": records}))
 
 
 def test_changed_strategy_fails_before_provider_and_preserves_receipt(tmp_path):
