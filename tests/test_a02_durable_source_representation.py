@@ -153,6 +153,9 @@ def test_a02_historical_migration_is_explicit_fenced_and_preserves_reviews(
                    expected_revision=revision, reason="explicit historical migration")
     with pytest.raises(ConsoleError):
         console.migrate_source_representation(**{**command, "actor_id": reviewer})
+    foreign = console.create_account(username="other-researcher", password="fixture-only", roles=("researcher",))
+    with pytest.raises(ConsoleError, match="reviewer_not_named_on_snapshot"):
+        console.migrate_source_representation(**{**command, "actor_id": foreign["account_id"]})
     with pytest.raises(ConsoleError):
         console.migrate_source_representation(**{**command, "expected_revision": "stale"})
     result = console.migrate_source_representation(**command)
@@ -264,6 +267,14 @@ def test_a02_rejection_changes_next_query_without_rebuilding_source(
         login(client)
         before = client.get("/review", params={"document": sid}).text
         console.review_object(actor_id=reviewer, snapshot_id=sid, object_id=obj["object_id"],
+            decision="revise", comment="Controleer deze kandidaat.")
+        corrected = console.correct_object(actor_id=author, snapshot_id=sid, object_id=obj["object_id"],
+            patch={"reason": "Expliciete menselijke correctie", "operations": [
+                {"op": "set", "path": "uncertainty.has_uncertainty", "value": True}]},
+            expected_revision=console.objects_revision(sid))
+        assert corrected["object_version"] != obj["object_version"]
+        assert client.get("/review", params={"document": sid}).status_code == 200
+        console.review_object(actor_id=reviewer, snapshot_id=sid, object_id=obj["object_id"],
             decision="reject", comment="Niet geschikt voor dit kennisobject.",
             expected_revision=console.objects_revision(sid))
         after = client.get("/review", params={"document": sid}).text
@@ -321,3 +332,43 @@ def test_a02_corruption_and_changed_source_identity_never_reconstruct(
         login(client)
         assert client.get("/review", params={"document": sid}).status_code == 400
         assert client.get("/publish").status_code == 200
+
+def test_a02_published_migration_preserves_sealed_work_and_serving(
+        workflow_postgres, tmp_path, monkeypatch):
+    from tests.test_vsa_publish_document_v1 import _ready_console, MemoryCanonicalStore, MemorySourceStore
+    from src.operations_console_v1 import ConsoleError
+    from src.source_representation_v1 import load, MISSING, SourceRepresentationError
+    durable, source = MemoryCanonicalStore(), MemorySourceStore()
+    console, accounts, receipt = _ready_console(tmp_path, workflow_postgres, durable, source)
+    sid = receipt["snapshot_id"]
+    assert console.publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=sid)["status"] == "PASS"
+    envelope = deepcopy(console._envelope(sid))
+    objects = deepcopy(console.snapshot_objects(sid))
+    bindings = deepcopy(console.object_review_bindings(sid))
+    releases = deepcopy(durable.releases)
+    accepted = load(console, envelope)
+    raw = json.loads(json.dumps(accepted))
+    remove_binding(console, sid)
+    def forbidden(*args, **kwargs):
+        pytest.fail("PUBLISHED_MIGRATION_REEXTRACTED_SOURCE")
+    monkeypatch.setattr(console, "_extract_historical_source_for_migration", forbidden)
+    command = dict(actor_id=accounts["researcher"]["account_id"], snapshot_id=sid,
+        command_id="published-migration", expected_revision=console.objects_revision(sid),
+        reason="Explicit immutable artifact migration", dry_run=False)
+    # Genuine published native work with no complete recorded extraction cannot
+    # guess a historical parser contract.
+    with pytest.raises(ConsoleError, match="source_representation_successor_required"):
+        console.migrate_source_representation(**command)
+    with pytest.raises(SourceRepresentationError, match=MISSING):
+        load(console, envelope)
+    # Isolate the retained-extraction reader boundary. Its Docling persistence
+    # contract and the genuine converter are tested in their own acceptance suite.
+    import src.docling_contract_v1 as extraction
+    monkeypatch.setattr(extraction, "stored_fragments", lambda envelope: raw)
+    result = console.migrate_source_representation(**command)
+    assert result["representation_id"] == accepted.representation["representation_id"]
+    assert console._envelope(sid) == envelope
+    assert console.snapshot_objects(sid) == objects
+    assert console.object_review_bindings(sid) == bindings
+    assert durable.releases == releases
+    assert console.migrate_source_representation(**command)["idempotent"]

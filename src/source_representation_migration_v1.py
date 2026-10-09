@@ -17,6 +17,8 @@ def migrate(console, *, actor_id, snapshot_id, command_id, expected_revision,
     console._require_role(actor_id, "researcher")
     envelope = deepcopy(console._envelope(snapshot_id))
     authorize(console, actor_id, envelope)
+    if actor_id != envelope.get("uploader_account_id") and actor_id not in envelope.get("named_reviewers", []):
+        raise ConsoleError("reviewer_not_named_on_snapshot")
     revision = console.objects_revision(snapshot_id)
     if not expected_revision or revision != expected_revision:
         raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=revision)
@@ -56,6 +58,8 @@ def migrate(console, *, actor_id, snapshot_id, command_id, expected_revision,
         current = console._envelope(snapshot_id)
         console._require_role(actor_id, "researcher")
         authorize(console, actor_id, current)
+        if actor_id != current.get("uploader_account_id") and actor_id not in current.get("named_reviewers", []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
         if console.objects_revision(snapshot_id) != revision:
             raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=console.objects_revision(snapshot_id))
         if any(current[k] != envelope[k] for k in ("sha256", "document_id", "source_id")):
