@@ -29,7 +29,7 @@ class _FrozenDict(dict):
         raise SourceRepresentationError("source_representation_carrier_immutable")
     __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = __ior__ = _immutable
     def __deepcopy__(self, memo):
-        return self
+        return {k: deepcopy(v, memo) for k, v in self.items()}
 
 
 class _FrozenList(list):
@@ -37,7 +37,7 @@ class _FrozenList(list):
         raise SourceRepresentationError("source_representation_carrier_immutable")
     __setitem__ = __delitem__ = append = extend = insert = pop = remove = clear = sort = reverse = __iadd__ = __imul__ = _immutable
     def __deepcopy__(self, memo):
-        return self
+        return [deepcopy(v, memo) for v in self]
 
 
 def _freeze(value):
@@ -56,6 +56,9 @@ class SourceFragments(_FrozenList):
         list.__init__(self, self._record["fragments"])
         self._views = {name: {public["block_id"]: (public, source) for public, source in rows}
                        for name, rows in self._record["views"].items()}
+
+    def __deepcopy__(self, memo):
+        return self
 
     @property
     def representation(self):

@@ -58,3 +58,48 @@ Migration apply rechecks source/revision/authorization under existing transactio
 ## Acceptance
 Zero extractor/full reconstruct/model calls after representation exists on /publish, /review workboard/overview/tasks/details/source passage and repair catalog, including restart and disabled transient cache. Equivalent HTML and block/mapping outputs. Next request sees current review and permissions. Missing legacy binding returns migration-required with zero work. Native CAS/transactions, failure at accept/commit, expired worker, content conflicts and explicit published migration require proof.
 Normal repository preflight, release preflight, compile, architecture checker, invariants and full suite; separate adversarial review. No completion claim with relevant UNKNOWN/NOT TESTED. Implementation, developer proof, merge and production validation reported separately.
+
+## Explicit historical migration
+Apply additive schema migration 017 using the existing workflow migration planner
+and its exact migration digest before running the new binary. The kernel verifies
+the new table/column contract on native startup. Missing historical bindings do
+not trigger extraction during startup or GET.
+
+Use the existing initialized OperationsConsole kernel and its authorized command:
+
+```python
+reviewed_revision = kernel.objects_revision(snapshot_id)
+preview = kernel.migrate_source_representation(
+    actor_id=researcher_account_id,
+    snapshot_id=snapshot_id,
+    command_id=migration_command_id,
+    expected_revision=reviewed_revision,
+    reason="Approved historical source representation migration",
+    dry_run=True,
+)
+# Inspect the exact representation_id/payload_hash and equivalence outcome.
+result = kernel.migrate_source_representation(
+    actor_id=researcher_account_id,
+    snapshot_id=snapshot_id,
+    command_id=migration_command_id,
+    expected_revision=reviewed_revision,
+    reason="Approved historical source representation migration",
+    dry_run=False,
+)
+```
+
+Pin reviewed_revision before inspecting the preview; never replace a rejected
+stale revision with a newly fetched token merely to make the command pass.
+Dry-run builds only a disposable candidate. Apply rechecks source identity,
+verified bytes, current role, named-source authorization and object revision
+under the existing transaction. Repeating an accepted binding is idempotent.
+A different correction revision requires the existing successor lifecycle.
+Published historical snapshots without reusable recorded extraction evidence
+are blocked with source_representation_successor_required; their extractor
+configuration is not guessed and their review history is not rewritten.
+
+Recovery version 7 includes payloads and bindings in the same workflow export,
+validation and PostgreSQL restore transaction. Version 5/6 archives explicitly
+restore with no representations; they require the migration above. A version 7
+archive missing either table is invalid. Compatible rollback retains these
+tables, bindings and fail-closed query behavior.

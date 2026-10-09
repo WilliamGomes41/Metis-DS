@@ -84,11 +84,17 @@ def test_a02_zero_reconstruction_installed_routes_and_restart(representation_bac
     monkeypatch.setattr(semantic, '_reconstructed_blocks', counted)
     monkeypatch.setattr(materialisation, '_reconstructed_blocks', counted)
     for current in (console, console_at(tmp_path, representation_backend)):
-        def forbidden(*args, **kwargs):
-            pytest.fail('A02_QUERY_EXECUTED_SOURCE_PROCESSING')
-        monkeypatch.setattr(current, '_extract', forbidden)
-        monkeypatch.setattr(current, '_fragments_and_spec', forbidden)
-        bind(current, forbidden)
+        work = []
+        for name in ("_extract", "_fragments_and_spec"):
+            original_reader = getattr(current, name)
+            def observed(*args, _original=original_reader, _name=name, **kwargs):
+                work.append(_name)
+                return _original(*args, **kwargs)
+            monkeypatch.setattr(current, name, observed)
+        def observed_model(*args, **kwargs):
+            work.append("model")
+            return provider(*args, **kwargs)  # Local fixture, never a real model.
+        bind(current, observed_model)
         # Zero reconstruction must not depend on a ContextVar wrapper.
         monkeypatch.setattr(materialisation, '_source_reconstruction',
             type('DisabledScope', (), {'get': lambda self: None, 'set': lambda self, value: None,
@@ -97,12 +103,16 @@ def test_a02_zero_reconstruction_installed_routes_and_restart(representation_bac
         with TestClient(installed_app(current)) as client:
             login(client)
             response = client.get(path, params=query)
-            assert response.status_code == 200, response.text
-            assert normalize(response.text) == normalize(expected.text)
-            assert not calls, ('A02_DURABLE_READ_RECONSTRUCTED', path, len(calls))
+            status, html = response.status_code, response.text
             login(client, 'reviewer')
             if path == '/publish':
                 assert client.get(path, params=query).status_code == 403
+        # Assert outside lifespan shutdown so baseline application cleanup cannot
+        # obscure the behavioral failure with a TestClient portal exception.
+        assert status == 200, html
+        assert normalize(html) == normalize(expected.text)
+        assert not work, ("A02_QUERY_EXECUTED_SOURCE_PROCESSING", path, work)
+        assert not calls, ("A02_DURABLE_READ_RECONSTRUCTED", path, len(calls))
         print('A02_DURABLE_READ='+json.dumps({'backend': 'postgres' if representation_backend else 'local',
               'route': path, 'reconstructions': len(calls), 'restart': current is not console}))
 
@@ -275,3 +285,39 @@ def test_a02_native_schema_missing_fails_closed(representation_backend, tmp_path
         con.execute("DROP TABLE workflow.source_representation_bindings")
     with pytest.raises(WorkflowDocumentStoreError, match="workflow_document_cutover_schema_missing"):
         console.workflow_document_store.verify_cutover_schema()
+
+def test_a02_corruption_and_changed_source_identity_never_reconstruct(
+        representation_backend, tmp_path, monkeypatch):
+    from src.source_representation_v1 import load, INVALID, SourceRepresentationError, _local_connection
+    import src.semantic_passage_v1 as semantic
+    import src.knowledge_materialisation_v1 as materialisation
+    console = console_at(tmp_path, representation_backend)
+    sid, author, reviewer = ingest(console)
+    envelope = deepcopy(console._envelope(sid))
+    record = json.loads(json.dumps(load(console, envelope).representation))
+    def forbidden(*args, **kwargs):
+        pytest.fail("CORRUPT_REPRESENTATION_TRIGGERED_SOURCE_PROCESSING")
+    monkeypatch.setattr(semantic, "_reconstructed_blocks", forbidden)
+    monkeypatch.setattr(materialisation, "_reconstructed_blocks", forbidden)
+    monkeypatch.setattr(console, "_extract", forbidden)
+    bind(console, forbidden)
+    with pytest.raises(SourceRepresentationError, match=INVALID):
+        load(console, {**envelope, "sha256": "0" * 64})
+    corrupted = deepcopy(record)
+    corrupted["fragments"][0]["raw_text"] += "invented"
+    store = getattr(console, "workflow_document_store", None)
+    # Deliberate storage corruption injection, never a supported writer.
+    if store is None:
+        with _local_connection(console, write=True) as con:
+            con.execute("UPDATE representations SET payload=? WHERE representation_id=?",
+                (json.dumps(corrupted), record["representation_id"]))
+    else:
+        with store._connect() as con:
+            con.execute("UPDATE workflow.source_representations SET payload=%s::jsonb WHERE representation_id=%s",
+                (json.dumps(corrupted), record["representation_id"]))
+    with pytest.raises(SourceRepresentationError, match=INVALID):
+        load(console_at(tmp_path, representation_backend), envelope)
+    with TestClient(installed_app(console)) as client:
+        login(client)
+        assert client.get("/review", params={"document": sid}).status_code == 400
+        assert client.get("/publish").status_code == 200
