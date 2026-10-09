@@ -31,6 +31,19 @@ jobs:
           grep -F UPLOAD_RECEIPT_WAITS_FOR_FULL_FORMATION proof/upload_response_lifetime-red.log
           grep -F SUCCESSOR_BLOCKS_HEALTH_EVENT_LOOP proof/successor_availability-red.log
           grep -F RECONSTRUCTION_GROWS_WITH_SOURCE_RECORDS proof/publish_reconstructions-red.log
+      - name: Reproduce incompatible resume on the pinned pre-fix code
+        shell: bash
+        run: |
+          git worktree add "$RUNNER_TEMP/metis-resume-base" 3c000805712d0d2412e8b08d3b890f20af2b98de
+          cp tests/test_source_resume_acceptance.py "$RUNNER_TEMP/metis-resume-base/tests/"
+          set +e
+          (cd "$RUNNER_TEMP/metis-resume-base" && pytest -q tests/test_source_resume_acceptance.py -k "incompatible and http and file") > proof/resume-strategy-red.log 2>&1
+          result=$?
+          set -e
+          cat proof/resume-strategy-red.log
+          test "$result" = 1
+          grep -F INCOMPATIBLE_RESUME_ACCEPTED proof/resume-strategy-red.log
+          grep -F "4 failed" proof/resume-strategy-red.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -67,7 +80,7 @@ jobs:
         run: |
           mkdir -p proof
           set +e
-          pytest -q -s tests/test_availability_repair.py tests/test_azure_source_processing.py tests/test_lifecycle_withdrawal_recovery_v1.py tests/test_pre_review_semantic_v1.py tests/test_pre_review_failure_diagnostics_v1.py --junitxml=proof/native.xml > proof/native.log 2>&1
+          pytest -q -s tests/test_availability_repair.py tests/test_azure_source_processing.py tests/test_source_resume_acceptance.py tests/test_lifecycle_withdrawal_recovery_v1.py tests/test_pre_review_semantic_v1.py tests/test_pre_review_failure_diagnostics_v1.py --junitxml=proof/native.xml > proof/native.log 2>&1
           result=$?
           set -e
           cat proof/native.log
