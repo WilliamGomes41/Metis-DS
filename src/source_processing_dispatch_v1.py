@@ -29,12 +29,16 @@ def claim(console, *, snapshot_id, attempt_id, stop_event=None):
     return result
 
 
-def pending(console, *, limit=None):
+def pending(console, *, limit=None, after_snapshot=None):
     """Discover authorized unclaimed work; never turn receipt into a command."""
     found = []
     if limit is not None and limit <= 0:
         return found
-    for row in console.list_envelopes():
+    rows = console.list_envelopes()
+    if after_snapshot is not None:
+        index = next((i for i, row in enumerate(rows) if row["snapshot_id"] == after_snapshot), -1)
+        rows = rows[index + 1:] + rows[:index + 1]
+    for row in rows:
         sid = row["snapshot_id"]
         envelope = console._envelope(sid)
         attempts = envelope.get("processing_attempts") or []
@@ -64,6 +68,7 @@ class SourceProcessingDispatcher:
         self.max_workers = 2
         self.shutdown_grace = shutdown_grace
         self.stopping = Event()
+        self.scan_after = None  # disposable fairness cursor, never command state
 
     def notify(self, sid, attempt):
         key = (sid, attempt["attempt_id"])
@@ -103,7 +108,8 @@ class SourceProcessingDispatcher:
         room = self.max_workers - len(self.workers)
         if self.stopping.is_set() or room <= 0:
             return
-        for sid, attempt in await asyncio.to_thread(pending, self.console, limit=room):
+        for sid, attempt in await asyncio.to_thread(pending, self.console, limit=room, after_snapshot=self.scan_after):
+            self.scan_after = sid
             self.notify(sid, attempt)
 
     async def _poll(self):

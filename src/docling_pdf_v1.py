@@ -12,12 +12,12 @@ import subprocess
 import sys
 import time
 from contextlib import ExitStack, contextmanager
-from contextvars import ContextVar
+from threading import local
 
 from src.docling_contract_v1 import DoclingError, translate
 
 ROOT = Path(__file__).resolve().parents[1]
-_RESERVED_GATE = ContextVar("docling_reserved_conversion_gate", default=None)
+_RESERVED_GATE = local()
 
 
 def _acquire_conversion_gate():
@@ -41,17 +41,18 @@ def reserve_conversion_capacity():
     if gate is None:
         yield False
         return
-    token = _RESERVED_GATE.set(gate)
+    previous = getattr(_RESERVED_GATE, "gate", None)
+    _RESERVED_GATE.gate = gate
     try:
         yield True
     finally:
         gate.close()
-        _RESERVED_GATE.reset(token)
+        _RESERVED_GATE.gate = previous
 
 
 def release_conversion_capacity():
     """Release a reserved slot also when preparation reused retained fragments."""
-    gate = _RESERVED_GATE.get()
+    gate = getattr(_RESERVED_GATE, "gate", None)
     if gate is not None:
         gate.close()
 
@@ -162,7 +163,7 @@ def extract(pdf: Path, *, document_id: str, source_id: str, pages=None,
     # Default leaves room for console on existing B1; NOT a claim Docling fits.
     rss = int(_positive("METIS_DOCLING_MAX_RSS_MIB", 768, 16384) * 1024 * 1024)
     with ExitStack() as stack:
-        gate = _RESERVED_GATE.get()
+        gate = getattr(_RESERVED_GATE, "gate", None)
         if gate is None or gate.closed:
             gate = _acquire_conversion_gate()
         if gate is None:

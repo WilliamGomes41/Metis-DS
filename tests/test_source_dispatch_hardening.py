@@ -265,3 +265,30 @@ def test_waiting_keeps_original_expiry_and_retry_budget(console, monkeypatch):
     assert stored["state"] == "interrupted" and stored["dispatch"]["state"] == "pending"
     result = console.processing_status(sid, actor_id=actor)
     assert result["retry_attempts_used"] == 1
+
+
+def test_busy_pdf_prefix_does_not_starve_unrelated_html(console, tmp_path, monkeypatch):
+    monkeypatch.setenv("METIS_PDF_EXTRACTOR", "docling")
+    monkeypatch.setenv("METIS_DOCLING_LOCK_PATH", str(tmp_path / "fairness.lock"))
+    actor, reviewer = accounts(console)
+    calls = []
+    bind(console, lambda *args: calls.append(1) or provider(*args))
+    pdfs = [receive(console, actor, reviewer, "busy" + str(i), pdf=True) for i in range(2)]
+    html = receive(console, actor, reviewer, "unrelated")
+    for sid in [*pdfs, html]:
+        reserve(console, actor, sid)
+    async def scenario():
+        dispatcher = SourceProcessingDispatcher(console)
+        # Match durable enumeration rather than relying on random snapshot ids.
+        rows = {row["snapshot_id"]: row for row in console.list_envelopes()}
+        monkeypatch.setattr(console, "list_envelopes", lambda: [rows[sid] for sid in [*pdfs, html]])
+        with reserve_conversion_capacity() as available:
+            assert available
+            for _ in range(2):
+                await dispatcher.scan()
+                await asyncio.gather(*tuple(dispatcher.workers))
+            assert console._envelope(html)["processing_attempts"][-1]["state"] == "succeeded"
+            assert all(console._envelope(sid)["processing_attempts"][-1]["dispatch"]["state"] == "pending" for sid in pdfs)
+        await dispatcher.stop()
+    asyncio.run(scenario())
+    assert calls == [1]
