@@ -101,8 +101,47 @@ def _ingest(console, accounts, title, version, prior=None):
     return console._envelope(receipt["snapshot_id"])
 
 
+
+def _complete_review_http(console, accounts, receipt):
+    """Human actions traverse rendered forms and installed HTTP command routes."""
+    import re
+    from src.passage_register_v1 import passage_register_of
+    from src.review_disposition_v1 import definitive_review_disposition
+    from src.operations_console_v1 import review_lane
+    sid = receipt["snapshot_id"]
+    reviewer = _client(console, accounts["reviewer"]["username"])
+    target = next(obj for obj in console.snapshot_objects(sid) if obj.get("object_type") == "unclassified")
+    requests = []
+    def decide(obj, decision, **fields):
+        detail = reviewer.get("/review", params={"document": sid, "object": obj["object_id"]})
+        assert detail.status_code == 200, detail.text
+        revision = re.search(r'name="snapshot_revision" value="([^"]+)"', detail.text)
+        assert revision, "rendered review form must own the posted revision"
+        interaction = re.search(r'name="interaction_id" value="([^"]+)"', detail.text)
+        response = reviewer.post("/review", data={
+            "snapshot_id": sid, "object_id": obj["object_id"], "decision": decision,
+            "suitability": "ja", "snapshot_revision": revision.group(1),
+            "interaction_id": interaction.group(1) if interaction else "",
+            **fields,
+        }, follow_redirects=False)
+        assert response.status_code == 303, response.text
+        requests.append((obj["object_id"], decision))
+    decide(target, "approve", confirmed_object_type="explanation")
+    for obj in console.snapshot_objects(sid):
+        if obj["object_id"] == target["object_id"] or passage_register_of(obj).get("status") != "selected_as_candidate":
+            continue
+        if (obj.get("governance") or {}).get("validation_status") in {"approved", "rejected", "superseded"}:
+            continue
+        decide(obj, "reject", comment="Testfixture: kandidaat definitief afgehandeld.")
+    for obj in console.snapshot_objects(sid):
+        if obj.get("object_type") == "document" or review_lane(obj) == "fast" or definitive_review_disposition(obj)["final"]:
+            continue
+        decide(obj, "reject", eindoordeel="afwijzen", comment="Testfixture: bronpassage definitief afgehandeld.")
+    assert requests
+    print("HUMAN_REVIEW_HTTP_EVIDENCE=" + str({"snapshot_id": sid, "commands": len(requests)}))
+
 def _publish_http(console, client, accounts, receipt):
-    _complete_review(console, accounts, receipt)
+    _complete_review_http(console, accounts, receipt)
     response = client.post("/publish", data={"snapshot_id": receipt["snapshot_id"], "publish_confirmed": "yes"}, follow_redirects=False)
     assert response.status_code == 303, response.text
     return console.canonical_publication_store.release_for_snapshot(receipt["snapshot_id"])
