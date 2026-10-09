@@ -287,6 +287,8 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                 call_limits = replace(limits, total=min(remaining, MAX_CALL_SECONDS),
                     connect=min(limits.connect, remaining, MAX_CALL_SECONDS), idle=min(limits.idle, remaining, MAX_CALL_SECONDS))
                 task_validator = {**validator_input, "allowed_candidate_block_ids": [b["block_id"] for b in task["source_blocks"]]}
+                if checkpoint:
+                    checkpoint("model_request", {"current_task": {**task_record, "status": "running"}})
                 try:
                     result = provider(blocks=task["source_blocks"], evidence_blocks=task["evidence_blocks"],
                         selection_targets=[{"block_id": s["block_id"], "literal": next(b["text"] for b in blocks if b["block_id"] == s["block_id"])[s["start"]:s["end"]],
