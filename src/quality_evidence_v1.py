@@ -74,7 +74,7 @@ def record_processing(envelope: dict[str, Any], objects: list[dict[str, Any]], *
     """Append to a prepared envelope; its existing commit owns durability."""
     if outcome == "succeeded" and fragments and envelope.get("snapshot_id") and envelope.get("document_id"):
         from src.source_representation_v1 import prepare, PREPARED
-        envelope[PREPARED] = prepare(envelope, fragments, correction_revision=envelope.get("source_correction_revision", 0))
+        envelope[PREPARED] = prepare(envelope, fragments, correction_revision=envelope.get("source_correction_revision"))
     run = {"version": VERSION, "run_id": "qp_" + uuid4().hex,
            "source_hash": envelope.get("sha256"), "started_at": started_at,
            "finished_at": instant(), "outcome": outcome, "reason": reason,
