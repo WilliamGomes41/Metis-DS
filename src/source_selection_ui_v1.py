@@ -64,7 +64,10 @@ def install(app, console, require, page, nav, esc):
                          'extraction_started': 'Brontekst uitlezen', 'extraction_finished': 'Brontekst beschikbaar',
                          'model_request': 'Bronpassages selecteren', 'model_response': 'Selectie controleren',
                          'proposal_received': 'Kandidaten controleren', 'activated': 'Resultaat opgeslagen',
-                         'stopped': 'Verwerking gestopt'}.get(result['phase'], 'Bronselectie en controle')
+                         'validation_started': 'Brongetrouwheid voorbereiden',
+                         'source_reconstructed': 'Bronpassages reconstrueren', 'response_received': 'Modelantwoord ontvangen',
+                         'proposal_parsed': 'Voorstel controleren', 'evidence_resolved': 'Bronvelden en relaties controleren',
+                         'formation_accounted': 'Brondekking controleren', 'stopped': 'Verwerking gestopt'}.get(result['phase'], 'Bronselectie en controle')
                 progress = (f'<p>Fase: {esc(phase)} · Verstreken: {esc(_minutes(elapsed)) if elapsed is not None else "onbekend"}'
                             f' · Geschat resterend: {esc(_range(result["remaining_seconds"]))}</p>')
             summary = ''

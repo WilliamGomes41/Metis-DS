@@ -136,7 +136,7 @@ def projection(console, *, actor_id, snapshot_id, documents):
             "filename": (envelope.get("received_source") or {}).get("filename") or Path(envelope["binary_path"]).name,
             "version": envelope["version"], "bytes": (envelope.get("received_source") or {}).get("bytes"),
             "state": state, "attempt_succeeded": succeeded, "formation_complete": complete,
-            "phase": attempt.get("phase") or "Nog niet gestart", "elapsed_seconds": elapsed,
+            "phase": (attempt.get("diagnostic") or {}).get("phase") or attempt.get("phase") or "Nog niet gestart", "elapsed_seconds": elapsed,
             "estimate": timing, "remaining_seconds": remaining, "candidates": len(candidates),
             "source_passages": sum(is_source_record(o) for o in objects), "blocked": blocked,
             "formation_blockers": formation_blockers,
