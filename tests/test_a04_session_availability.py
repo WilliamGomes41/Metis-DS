@@ -11,7 +11,7 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from copy import deepcopy
-from threading import Event
+from threading import Event, Thread
 
 import pytest
 from fastapi.testclient import TestClient
@@ -79,6 +79,41 @@ def _session_row(console, token):
             (_token_hash(token),)).fetchone()
 
 
+def _preparation_context(console):
+    from src.workflows.workflow_transaction_v1 import workflow_transaction_active
+    try:
+        asyncio.get_running_loop()
+        on_loop = True
+    except RuntimeError:
+        on_loop = False
+    # The shared depth can belong to a concurrent request or dispatcher scan.
+    # RLock ownership answers whether THIS preparation thread holds the lock.
+    return on_loop, console._store_thread_lock._is_owned(), workflow_transaction_active()
+
+
+def test_preparation_context_distinguishes_concurrent_lock_owner(tmp_path):
+    console = state(tmp_path)
+    entered, release = Event(), Event()
+
+    def concurrent_write():
+        with console._store_write_lock():
+            entered.set()
+            assert release.wait(5)
+
+    writer = Thread(target=concurrent_write)
+    writer.start()
+    try:
+        assert entered.wait(2)
+        assert console._store_lock_depth == 1
+        assert _preparation_context(console) == (False, False, False)
+    finally:
+        release.set()
+        writer.join(timeout=2)
+    assert not writer.is_alive()
+    with console._store_write_lock():
+        assert _preparation_context(console) == (False, True, False)
+
+
 def _scenario(runtime, monkeypatch, boundary, *, block_eventloop=False):
     console, app, author, other, parent, native, microsoft, inference_boundary = runtime
     parent_envelope = deepcopy(console._envelope(parent))
@@ -88,13 +123,7 @@ def _scenario(runtime, monkeypatch, boundary, *, block_eventloop=False):
     observations, provider_calls, extraction_calls = [], [], []
 
     def pause():
-        from src.workflows.workflow_transaction_v1 import workflow_transaction_active
-        try:
-            asyncio.get_running_loop()
-            on_loop = True
-        except RuntimeError:
-            on_loop = False
-        observations.append((on_loop, console._store_lock_depth, workflow_transaction_active()))
+        observations.append(_preparation_context(console))
         entered.set()
         assert release.wait(15), "A04_PAUSE_NOT_RELEASED"
 
@@ -219,7 +248,7 @@ def _scenario(runtime, monkeypatch, boundary, *, block_eventloop=False):
                 assert available(second, "get", "/ingest", follow_redirects=False).status_code == 303
                 assert _session_row(console, token_b) == revoked
                 assert len(console._envelope(child)["processing_attempts"]) == 1
-            assert observations == [(False, 0, False)]
+            assert observations == [(False, False, False)]
         finally:
             # Runs on the test thread even when the ASGI eventloop is blocked.
             release.set()

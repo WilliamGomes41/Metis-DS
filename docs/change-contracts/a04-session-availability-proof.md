@@ -34,6 +34,8 @@ Compare persisted created_at/expires_at/revoked_at before and after session-stat
 
 Registration/reservation/claim/activation reuse existing boundaries without modification. Provider/extraction latency is external preparation, not a transaction. The independent receipt demonstrates an actual HTTP mutation while the predecessor operation waits. Failure of a probe releases barriers and drains delivery handles; no destructive recovery or production data is used.
 
+The preparation probe checks the current thread's existing RLock ownership, not the console-wide lock depth. A concurrent short write or dispatcher scan may legitimately make shared depth nonzero. A deterministic regression holds the lock in a different thread and requires the preparation observation to remain unlocked; its positive control requires ownership to be detected when the observing thread itself holds the lock. HTTP deadlines and negative eventloop controls remain unchanged.
+
 Existing tests reused for stale parent activation, cross-kernel SQL claim/writer concurrency, expiry/restart/resume, unchanged predecessor/release, and full review/publication/serving recovery: test_availability_repair, test_azure_source_processing, test_source_dispatch_hardening, test_source_resume_acceptance and test_lifecycle_withdrawal_recovery_v1. They remain in the mandatory native proof run.
 
 ## Evidence scope
