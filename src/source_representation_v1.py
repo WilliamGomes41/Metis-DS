@@ -83,11 +83,16 @@ def stored_blocks(fragments, *, include_headings=False):
     return fragments._views["full" if include_headings else "selection"]
 
 
-def prepare(envelope, fragments, *, correction_revision=0):
+def prepare(envelope, fragments, *, correction_revision=None):
     """Build both existing views outside the write transaction, without models."""
     from src.semantic_passage_v1 import _reconstructed_blocks, SEMANTIC_PASSAGE_VERSION
     from src.source_reconstruction_v1 import RECONSTRUCTION_VERSION
     from src.object_taxonomy_v1 import extract_object_type
+    if correction_revision is None:
+        # A consumer carries the exact accepted source version, including its
+        # explicit correction revision; it must not silently reset it to zero.
+        correction_revision = (fragments.representation["key"]["correction_revision"]
+                               if isinstance(fragments, SourceFragments) else 0)
     if type(correction_revision) is not int or correction_revision < 0:
         raise SourceRepresentationError(INVALID)
     if isinstance(fragments, SourceFragments):

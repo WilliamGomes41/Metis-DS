@@ -375,3 +375,26 @@ def test_a02_published_migration_preserves_sealed_work_and_serving(
     assert console.object_review_bindings(sid) == bindings
     assert durable.releases == releases
     assert console.migrate_source_representation(**command)["idempotent"]
+
+def test_a02_producer_preserves_explicit_correction_revision_without_rebuilding(
+        representation_backend, tmp_path, monkeypatch):
+    from src.source_representation_v1 import load, prepare, SourceFragments, PREPARED
+    from src.quality_evidence_v1 import record_processing
+    import src.semantic_passage_v1 as semantic
+    import src.knowledge_materialisation_v1 as materialisation
+    console = console_at(tmp_path, representation_backend)
+    sid, author, reviewer = ingest(console)
+    envelope = deepcopy(console._envelope(sid))
+    original = load(console, envelope)
+    # A prepared successor-version carrier is not an accepted snapshot binding.
+    # Adoption belongs to the existing guarded command, not to this pure builder.
+    record = prepare(envelope, json.loads(json.dumps(original)), correction_revision=1)
+    carrier = SourceFragments(record)
+    def forbidden(*args, **kwargs):
+        pytest.fail("VERSIONED_SOURCE_CARRIER_REBUILT")
+    monkeypatch.setattr(semantic, "_reconstructed_blocks", forbidden)
+    monkeypatch.setattr(materialisation, "_reconstructed_blocks", forbidden)
+    assert prepare(envelope, carrier) == record
+    record_processing(envelope, [], fragments=carrier, replay=None, started_at="test")
+    assert envelope[PREPARED] == record
+    assert load(console, console._envelope(sid)).representation == original.representation
