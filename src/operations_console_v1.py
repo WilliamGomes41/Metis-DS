@@ -2398,8 +2398,7 @@ class OperationsConsole:
                 self.snapshot_objects(replaces_snapshot_id),
                 objects,
             )
-        transaction = self._reprocessing_transaction(snapshot_id) if _attempt_id is not None else self._store_write_lock()
-        with transaction:
+        with self._reprocessing_transaction(snapshot_id):
             self._reload_store_locked()
             if _attempt_id is not None:
                 from src.processing_retry_v1 import assert_active, now

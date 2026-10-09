@@ -264,13 +264,18 @@ def test_actual_resume_preserves_completed_work_and_denies_outsider(console, mon
     assert next(row for row in first.snapshot_objects(sid) if row["object_id"] == retained["object_id"]) == retained
 
 
-def test_native_revocation_is_ordered_with_short_admission(workflow_postgres, tmp_path, monkeypatch):
+@pytest.mark.parametrize("boundary", ["admission", "standalone_activation"])
+def test_native_revocation_is_ordered_with_short_admission(workflow_postgres, tmp_path, monkeypatch, boundary):
     import psycopg
     from time import monotonic, sleep
     first = _console(tmp_path, workflow_postgres)
     author, reviewer = accounts(first)
     bind(first, provider)
     sid = receive(first, author, reviewer, "native-order")
+    if boundary == "standalone_activation":
+        first.retry_pre_review(actor_id=reviewer, snapshot_id=sid, command_id="initial")
+        # The explicit deterministic reextract path has no reserved attempt.
+        first._pre_review_semantic_bound = False
     other = restart(first)
     admitted, release, update_started = Event(), Event(), Event()
     commit = first._commit_prepared_store
@@ -284,8 +289,10 @@ def test_native_revocation_is_ordered_with_short_admission(workflow_postgres, tm
         update_started.set()
         other.assign_roles(actor_id=author, account_id=reviewer, roles=("publisher",))
     with ThreadPoolExecutor(2) as pool:
-        work = pool.submit(first.reserve_source_selection, actor_id=reviewer, snapshot_id=sid,
+        work = (pool.submit(first.reserve_source_selection, actor_id=reviewer, snapshot_id=sid,
             command_id="ordered", expected_revision=first.objects_revision(sid))
+            if boundary == "admission" else pool.submit(first.reextract_unpublished,
+                actor_id=reviewer, snapshot_id=sid))
         try:
             assert admitted.wait(5)
             update = pool.submit(change_roles)
@@ -301,10 +308,18 @@ def test_native_revocation_is_ordered_with_short_admission(workflow_postgres, tm
             assert blocked and not update.done(), "A01_IDENTITY_NOT_FENCED_THROUGH_ADMISSION_COMMIT"
         finally:
             release.set()
-        attempt, fresh = work.result(timeout=5)
+        result = work.result(timeout=5)
         update.result(timeout=5)
-    assert fresh
+    if boundary == "standalone_activation":
+        assert result["snapshot_id"] == sid
+        assert len(first._envelope(sid)["processing_attempts"]) == 1
+    else:
+        attempt, fresh = result
+        assert fresh
     before = snapshot(restart(first), sid)
     with pytest.raises(ConsoleError, match="researcher_role_required"):
-        first.execute_source_selection(actor_id=reviewer, snapshot_id=sid, attempt=attempt)
+        if boundary == "admission":
+            first.execute_source_selection(actor_id=reviewer, snapshot_id=sid, attempt=attempt)
+        else:
+            first.reextract_unpublished(actor_id=reviewer, snapshot_id=sid)
     assert snapshot(restart(first), sid) == before
