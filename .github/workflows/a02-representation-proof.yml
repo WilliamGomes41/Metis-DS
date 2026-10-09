@@ -38,7 +38,7 @@ jobs:
           set -e
           cat proof/baseline.log
           test "$result" = 1
-          grep -E "A02_QUERY_EXECUTED_SOURCE_PROCESSING|A02_DURABLE_READ_RECONSTRUCTED" proof/baseline.log
+          grep -E "E +AssertionError:.*A02_(QUERY_EXECUTED_SOURCE_PROCESSING|DURABLE_READ_RECONSTRUCTED)" proof/baseline.log
       - name: Native representation lifecycle and query proof
         run: |
           pytest -q -s tests/test_a02_durable_source_representation.py tests/test_workflow_chain_recovery_v1.py tests/test_lifecycle_withdrawal_recovery_v1.py --junitxml=proof/a02.xml > proof/a02.log 2>&1 || { cat proof/a02.log; exit 1; }
@@ -53,7 +53,7 @@ jobs:
       - name: Existing source and publication regressions
         if: ${{ !cancelled() }}
         run: |
-          pytest -q tests/test_navigation_source_reuse.py tests/test_review_render_source_reuse.py tests/test_docling_contract_v1.py tests/test_vsa_publish_document_v1.py tests/test_workflow_postgres_migration_v1.py tests/test_t7_duplicate_candidate_integrity.py tests/test_d2b2b_admission_completeness.py tests/test_d2b2c_candidate_eligibility.py tests/test_source2_html_pipeline.py tests/test_source_bound_context.py tests/test_source_bound_fields_v2.py tests/test_source_layout_v1.py tests/test_source_mapping_regressions.py tests/test_v230_phase1_admission_gate.py tests/test_v230_phase2_deep_context_scan.py tests/test_v233_review_audit_regressions.py tests/test_t4_single_knowledge_path_invariants.py tests/test_t5_t7_audit_repairs.py tests/test_t7_creator_cut.py tests/test_d5_3a_binding_aware_review_duty.py tests/test_d5_3b_review_routing_cutover.py tests/test_review_queue_sql_parity_v1.py > proof/regressions.log 2>&1 || { cat proof/regressions.log; exit 1; }
+          pytest -q tests/test_navigation_source_reuse.py tests/test_review_render_source_reuse.py tests/test_docling_contract_v1.py tests/test_vsa_publish_document_v1.py tests/test_workflow_postgres_migration_v1.py tests/test_t7_duplicate_candidate_integrity.py tests/test_d2b2b_admission_completeness.py tests/test_d2b2c_candidate_eligibility.py tests/test_source2_html_pipeline.py tests/test_source_bound_context.py tests/test_source_bound_fields_v2.py tests/test_source_layout_v1.py tests/test_source_mapping_regressions.py tests/test_v230_phase1_admission_gate.py tests/test_v230_phase2_deep_context_scan.py tests/test_v233_review_audit_regressions.py tests/test_t4_single_knowledge_path_invariants.py tests/test_t5_t7_audit_repairs.py tests/test_t7_creator_cut.py tests/test_d5_3a_binding_aware_review_duty.py tests/test_d5_3b_review_routing_cutover.py tests/test_review_queue_sql_parity_v1.py tests/test_workflow_topic_identity_v1.py tests/test_source_bound_continuation_repair.py > proof/regressions.log 2>&1 || { cat proof/regressions.log; exit 1; }
           cat proof/regressions.log
       - uses: actions/upload-artifact@v4
         if: always()
