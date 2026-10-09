@@ -2652,7 +2652,7 @@ class OperationsConsole:
         except DoclingError as exc:
             raise ConsoleError(exc.code) from exc
 
-    def _read_source_fragments(self, envelope, path):
+    def _read_source_fragments(self, envelope, path=None):
         from src.source_representation_v1 import load, SourceRepresentationError
         try:
             return load(self, envelope)

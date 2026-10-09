@@ -47,7 +47,9 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                     "SELECT table_name,column_name FROM information_schema.columns "
                     "WHERE table_schema='workflow' AND "
                     "((table_name='documents' AND column_name='envelope_payload') OR "
-                    "(table_name='document_objects' AND column_name='position'))"
+                    "(table_name='document_objects' AND column_name='position') OR "
+                    "(table_name='source_representations' AND column_name IN ('representation_id','payload_hash','payload','created_at')) OR "
+                    "(table_name='source_representation_bindings' AND column_name IN ('snapshot_id','representation_id','evidence','accepted_at')))"
                 ).fetchall()
         except WorkflowDocumentStoreError:
             raise
@@ -55,6 +57,8 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             raise WorkflowDocumentStoreError("workflow_document_cutover_schema_check_failed") from exc
         present = {(str(row["table_name"]), str(row["column_name"])) for row in rows}
         required = {("documents", "envelope_payload"), ("document_objects", "position")}
+        required.update(("source_representations", column) for column in ("representation_id", "payload_hash", "payload", "created_at"))
+        required.update(("source_representation_bindings", column) for column in ("snapshot_id", "representation_id", "evidence", "accepted_at"))
         if present != required:
             raise WorkflowDocumentStoreError("workflow_document_cutover_schema_missing")
         try:

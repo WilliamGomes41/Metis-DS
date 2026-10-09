@@ -87,6 +87,11 @@ def prepare(envelope, fragments, *, correction_revision=0):
     from src.object_taxonomy_v1 import extract_object_type
     if type(correction_revision) is not int or correction_revision < 0:
         raise SourceRepresentationError(INVALID)
+    if isinstance(fragments, SourceFragments):
+        validate_record(fragments.representation, envelope)
+        if fragments.representation["key"]["correction_revision"] != correction_revision:
+            raise SourceRepresentationError("source_representation_successor_required")
+        return json.loads(json.dumps(fragments.representation, ensure_ascii=False))
     raw = deepcopy(list(fragments))
     extraction = deepcopy(getattr(fragments, "extraction_record", None))
     if extraction is not None:
@@ -241,7 +246,7 @@ def load(console, envelope):
         try:
             with documents._connect() as con:
                 row = con.execute(
-                    "SELECT r.payload FROM workflow.source_representation_bindings b "
+                    "SELECT r.payload,r.payload_hash,r.representation_id FROM workflow.source_representation_bindings b "
                     "JOIN workflow.source_representations r USING(representation_id) WHERE b.snapshot_id=%s",
                     (envelope["snapshot_id"],)).fetchone()
         except Exception as exc:
@@ -251,10 +256,14 @@ def load(console, envelope):
             record = json.loads(record)
     else:
         with _local_connection(console) as con:
-            row = con.execute("SELECT r.payload FROM bindings b JOIN representations r "
+            row = con.execute("SELECT r.payload,r.payload_hash,r.representation_id FROM bindings b JOIN representations r "
                               "USING(representation_id) WHERE b.snapshot_id=?", (envelope["snapshot_id"],)).fetchone()
         record = json.loads(row[0]) if row else None
     if record is None:
         raise SourceRepresentationError(MISSING)
     validate_record(record, envelope)
+    expected_hash = row["payload_hash"] if documents is not None else row[1]
+    expected_id = row["representation_id"] if documents is not None else row[2]
+    if record["payload_hash"] != expected_hash or record["representation_id"] != expected_id:
+        raise SourceRepresentationError(INVALID)
     return SourceFragments(record)

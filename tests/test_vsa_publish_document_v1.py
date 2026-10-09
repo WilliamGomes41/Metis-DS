@@ -339,7 +339,7 @@ def test_publication_readiness_has_bounded_postgres_query_count(
         store._connect = original_connect  # type: ignore[method-assign]
 
     assert readiness["publication_ready"] is True
-    assert counter == {"queries": 5}
+    assert counter == {"queries": 6}  # One immutable source-artifact lookup, independent of passage count.
 
 
 def test_publish_persists_published_envelope_in_postgres_document_authority_and_ui(

@@ -265,13 +265,13 @@ def test_later_extraction_free_runs_keep_accepted_fragments_for_source_readers(m
     record_processing(envelope, [], fragments=[], replay=None, started_at="class-change")
     record_processing(envelope, [], fragments=[], replay=None, started_at="failed",
                       outcome="blocked", reason="docling_timeout")
-    # Stored history is the input; source reading must not depend on runtime or reconversion.
+    # Explicit historic migration reuses stored extraction evidence without reconversion.
     restored = json.loads(json.dumps(envelope))
     def forbidden(*args, **kwargs):
         raise AssertionError("Native parser must not replace retained Docling IDs")
     monkeypatch.setattr(kernel, "extract_pdf", forbidden)
     console = object.__new__(OperationsConsole)
-    assert console._read_source_fragments(restored, Path("unused.pdf")) == fragments
+    assert console._extract_historical_source_for_migration(restored, Path("unused.pdf")) == fragments
     assert restored == envelope
 
 

@@ -6,6 +6,7 @@
 # release-control-evidence: releasebewijs
 """
 from copy import deepcopy
+import json
 
 import pytest
 
@@ -30,7 +31,9 @@ def source_navigation(tmp_path):
     )["snapshot_id"]
     probe = NavigationProbe(count=0, documents=1)
     probe.objects["synthetic-0"] = console.snapshot_objects(sid)
-    fragments = console.review_source_fragments(sid)
+    # These tests exercise pure compatibility helpers on unbound fragments.
+    # Accepted snapshot carriers are immutable and covered by A02 route proof.
+    fragments = json.loads(json.dumps(console.review_source_fragments(sid)))
     probe.review_source_fragments = lambda *args, **kwargs: deepcopy(fragments)
     return probe, fragments
 

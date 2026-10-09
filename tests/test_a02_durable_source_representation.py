@@ -160,6 +160,17 @@ def test_a02_historical_migration_is_explicit_fenced_and_preserves_reviews(
         console.migrate_source_representation(**command, correction_revision=1)
 
 
+
+def native_accept_worker(args):
+    import psycopg
+    from psycopg.rows import dict_row
+    from src.source_representation_v1 import accept_postgres, provenance
+    dsn, envelope, record = args
+    with psycopg.connect(dsn, row_factory=dict_row) as con:
+        with con.transaction():
+            return accept_postgres(con, envelope, record, provenance(envelope))
+
+
 def test_a02_concurrent_acceptance_conflict_rollback_and_immutable_carrier(
         representation_backend, tmp_path):
     from concurrent.futures import ThreadPoolExecutor
@@ -180,8 +191,17 @@ def test_a02_concurrent_acceptance_conflict_rollback_and_immutable_carrier(
         with store._connect() as con:
             with con.transaction():
                 return accept_postgres(con, envelope, record, provenance(envelope))
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        assert set(pool.map(accept, range(4))) == {record["representation_id"]}
+    store = getattr(console, "workflow_document_store", None)
+    if store is None:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            assert set(pool.map(accept, range(4))) == {record["representation_id"]}
+    else:
+        import multiprocessing
+        from concurrent.futures import ProcessPoolExecutor
+        # Distinct processes/connections prove SQL ownership, not a Python lock.
+        with ProcessPoolExecutor(max_workers=4, mp_context=multiprocessing.get_context("spawn")) as pool:
+            args = (representation_backend.dsn, envelope, record)
+            assert set(pool.map(native_accept_worker, [args] * 4)) == {record["representation_id"]}
     conflicting = deepcopy(record)
     conflicting["unexpected_conflicting_payload"] = True
     conflicting["payload_hash"] = stable_hash({k: v for k, v in conflicting.items() if k != "payload_hash"})
@@ -202,3 +222,56 @@ def test_a02_concurrent_acceptance_conflict_rollback_and_immutable_carrier(
     first = stored_blocks(fresh)
     first.clear()
     assert stored_blocks(fresh)
+    if store is not None:
+        remove_binding(console, sid)
+        with pytest.raises(RuntimeError, match="injected_outer_failure"):
+            with store._connect() as con:
+                with con.transaction():
+                    accept_postgres(con, envelope, record, provenance(envelope))
+                    raise RuntimeError("injected_outer_failure")
+        from src.source_representation_v1 import MISSING
+        with pytest.raises(SourceRepresentationError, match=MISSING):
+            load(console, envelope)
+        accept(0)
+        assert load(console, envelope).representation == record
+
+def test_a02_rejection_changes_next_query_without_rebuilding_source(
+        representation_backend, tmp_path, monkeypatch):
+    from src.source_representation_v1 import load
+    import src.semantic_passage_v1 as semantic
+    import src.knowledge_materialisation_v1 as materialisation
+    console = console_at(tmp_path, representation_backend)
+    sid, author, reviewer = ingest(console)
+    before_representation = load(console, console._envelope(sid)).representation
+    obj = next(o for o in console.snapshot_objects(sid) if o.get("proposed_object_type") == "recommendation")
+    def forbidden(*args, **kwargs):
+        pytest.fail("OBJECT_REJECTION_REBUILT_WHOLE_SOURCE")
+    monkeypatch.setattr(semantic, "_reconstructed_blocks", forbidden)
+    monkeypatch.setattr(materialisation, "_reconstructed_blocks", forbidden)
+    monkeypatch.setattr(console, "_extract", forbidden)
+    bind(console, forbidden)
+    with TestClient(installed_app(console)) as client:
+        login(client)
+        before = client.get("/review", params={"document": sid}).text
+        console.review_object(actor_id=reviewer, snapshot_id=sid, object_id=obj["object_id"],
+            decision="reject", comment="Niet geschikt voor dit kennisobject.",
+            expected_revision=console.objects_revision(sid))
+        after = client.get("/review", params={"document": sid}).text
+        assert normalize(before) != normalize(after)
+        assert client.get("/publish").status_code == 200
+    assert load(console, console._envelope(sid)).representation == before_representation
+
+
+def test_a02_native_schema_missing_fails_closed(representation_backend, tmp_path):
+    if representation_backend is None:
+        console = console_at(tmp_path)
+        from src.source_representation_v1 import load, SourceRepresentationError, MISSING
+        with pytest.raises(SourceRepresentationError, match=MISSING):
+            load(console, {"snapshot_id": "unregistered"})
+        return
+    from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+    console = console_at(tmp_path, representation_backend)
+    with console.workflow_document_store._connect() as con:
+        con.execute("DROP TABLE workflow.source_representation_bindings")
+    with pytest.raises(WorkflowDocumentStoreError, match="workflow_document_cutover_schema_missing"):
+        console.workflow_document_store.verify_cutover_schema()
