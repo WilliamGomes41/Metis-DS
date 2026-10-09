@@ -49,6 +49,9 @@ def reserve_selection(console, *, actor_id, snapshot_id, command_id, expected_re
         envelope["processing_configuration"] = configuration(console)
         attempt, fresh = reserve(envelope, command_id=command_id, actor_id=actor_id,
                                  revision=revision, clock=now(), limits=console._processing_limits(), kind=kind)
+        if fresh:
+            attempt["processing_configuration"] = deepcopy(envelope["processing_configuration"])
+            attempt["dispatch"] = {"version": "source-dispatch-v1", "state": "pending"}
         console._commit_prepared_store(envelopes={snapshot_id: envelope}, snapshot_id=snapshot_id)
         return deepcopy(attempt), fresh
 

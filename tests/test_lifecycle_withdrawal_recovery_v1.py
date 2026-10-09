@@ -69,15 +69,35 @@ def _client(console, username="publisher.carla"):
 def _ingest(console, accounts, title, version, prior=None):
     from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
-    receipt = console.ingest(
-        actor_id=accounts["researcher"]["account_id"], title=title, version=version,
-        ingest_kind="new_version" if prior else "new", replaces_snapshot_id=prior,
-        filename=f"source-{title}-{version}.html", content_type="text/html",
-        data=HTML_FIXTURE.read_bytes() + f"<!-- {title} {version} -->".encode(),
-        date="2026-09-01", live_url=f"https://example.test/{title}",
-        class_="richtlijn", family="continentie",
-        named_reviewers=[accounts["researcher"]["account_id"], accounts["reviewer"]["account_id"]],
-    )
+    import uuid
+    import asyncio
+    with TestClient(create_console_app(console, trusted_origin="https://testserver"),
+                    base_url="https://testserver", headers={"Origin": "https://testserver"}) as client:
+        response = client.post("/login", data={"username": accounts["researcher"]["username"], "password": TEST_PASSWORD},
+                               follow_redirects=False)
+        assert response.status_code == 303
+        response = client.post("/ingest", data={
+            "ingest_kind": "new_version" if prior else "new", "replaces_document": prior or "",
+            "title": title, "version": version, "date": "2026-09-01",
+            "live_url": f"https://example.test/{title}", "class_": "richtlijn", "family": "continentie",
+            "named_reviewers": [accounts["researcher"]["account_id"], accounts["reviewer"]["account_id"]],
+            "command_id": "receipt-" + uuid.uuid4().hex,
+        }, files={"file": (f"source-{title}-{version}.html",
+            HTML_FIXTURE.read_bytes() + f"<!-- {title} {version} -->".encode(), "text/html")}, follow_redirects=False)
+        assert response.status_code == 303, response.text
+        from urllib.parse import urlparse, parse_qs
+        sid = parse_qs(urlparse(response.headers["location"]).query)["document"][0]
+        assert console.snapshot_objects(sid) == []
+        assert not console._envelope(sid).get("processing_attempts")
+        response = client.post("/source-selection/start", data={"document": sid,
+            "command_id": "start-" + uuid.uuid4().hex, "expected_revision": console.objects_revision(sid)},
+            follow_redirects=False)
+        assert response.status_code == 303, response.text
+        async def wait():
+            await asyncio.gather(*tuple(client.app.state.source_selection_workers))
+        client.portal.call(wait)
+        assert console._envelope(sid)["processing_attempts"][-1]["state"] == "succeeded"
+    receipt = {"snapshot_id": sid}
     return console._envelope(receipt["snapshot_id"])
 
 

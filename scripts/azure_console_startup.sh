@@ -30,4 +30,11 @@ if [ "${CONSOLE_IMMUTABLE_SOURCE_STORE:-}" != "azure" ]; then
   exit 1
 fi
 
+for STORE_NAME in METIS_WORKFLOW_STORE METIS_WORKFLOW_DOCUMENT_STORE METIS_WORKFLOW_REVIEW_STORE METIS_WORKFLOW_REMAINING_STORE; do
+  if [ "${!STORE_NAME:-}" != "postgres" ]; then
+    echo "azure_workflow_authorities_required: ${STORE_NAME} must be postgres" >&2
+    exit 1
+  fi
+done
+
 exec python -m gunicorn -w "${WORKERS}" -k uvicorn.workers.UvicornWorker src.console_asgi:app --bind "0.0.0.0:${PORT:-8000}"

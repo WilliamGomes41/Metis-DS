@@ -517,7 +517,7 @@ def test_read_only_repair_catalog_does_not_call_llm(tmp_path: Path) -> None:
 
     class RepairCatalogConsole(OperationsConsole):
         def source_fragment_catalog(self) -> list[dict]:
-            self._fragments_and_spec(
+            self._deterministic_fragments_and_spec(
                 "html",
                 tmp_path / "source.html",
                 data=b"source",
@@ -550,6 +550,8 @@ def test_read_only_repair_catalog_does_not_call_llm(tmp_path: Path) -> None:
         post_json=fake_post,
     )
 
+    assert '_fragments_and_spec' not in console.__dict__
+    assert 'source_fragment_catalog' not in console.__dict__
     assert console.source_fragment_catalog() == []
     assert calls == 0
 

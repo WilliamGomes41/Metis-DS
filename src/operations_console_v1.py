@@ -1995,6 +1995,16 @@ class OperationsConsole:
         This does not alter shared review-write or rollback semantics.
         """
         source, _ = self._verified_source_bytes(envelope)
+        if (self.immutable_source_store is not None
+                and getattr(self, "workflow_document_store", None) is not None):
+            # Read back authority, even when a matching filesystem cache exists.
+            try:
+                durable = self.immutable_source_store.load_verified(envelope["immutable_storage_locator"])
+            except (G2SourceStoreError, ValueError) as exc:
+                raise ConsoleError("immutable_source_recovery_failed") from exc
+            if sha256_bytes(durable) != envelope["sha256"]:
+                raise ConsoleError("immutable_source_recovery_failed")
+            return self._receipt(envelope)
         with self._store_write_lock():
             paths = [source]
             if getattr(self, "workflow_document_store", None) is None:
@@ -2023,6 +2033,11 @@ class OperationsConsole:
     def execute_source_selection(self, *, actor_id, snapshot_id, attempt):
         from datetime import datetime
         from src.processing_retry_v1 import now
+        if attempt.get("dispatch"):
+            from src.source_processing_dispatch_v1 import claim
+            attempt = claim(self, snapshot_id=snapshot_id, attempt_id=attempt["attempt_id"])
+            if attempt is None:
+                return self._receipt(self._envelope(snapshot_id))
         remaining = (datetime.fromisoformat(attempt["expires_at"]) - now()).total_seconds()
         return self._execute_source_attempt(actor_id=actor_id, snapshot_id=snapshot_id,
                                            attempt=attempt, deadline=time.monotonic() + remaining)
@@ -2201,6 +2216,10 @@ class OperationsConsole:
 
     def _execute_source_attempt(self, *, actor_id, snapshot_id, attempt, deadline):
         with self._source_attempt_failure(snapshot_id, attempt["attempt_id"]):
+            if attempt.get("processing_configuration"):
+                from src.source_selection_v1 import configuration
+                if attempt["processing_configuration"] != configuration(self):
+                    raise ConsoleError("processing_configuration_changed")
             return self.reextract_unpublished(actor_id=actor_id, snapshot_id=snapshot_id,
                  _attempt_id=attempt["attempt_id"], _attempt_deadline=deadline)
 
@@ -2395,6 +2414,9 @@ class OperationsConsole:
                 raise ConsoleError("researcher_role_required")
             authorize(self, actor_id, self._envelope(snapshot_id))
             if _attempt_id is not None:
+                from src.source_selection_v1 import configuration
+                if attempt.get("processing_configuration") and attempt["processing_configuration"] != configuration(self):
+                    raise ConsoleError("processing_configuration_changed")
                 from src.processing_retry_v1 import finish, attach_transport
                 assert_active(self._envelope(snapshot_id), _attempt_id, now())
                 if _attempt_deadline is not None and time.monotonic() >= _attempt_deadline:
@@ -2661,7 +2683,18 @@ class OperationsConsole:
             # A reader may show repair/disposition, never content authority.
             return None
 
-    def _fragments_and_spec(
+    def configure_source_processing(self, strategy) -> None:
+        """Composition installs an explicit strategy; readers never invoke it."""
+        self._source_processing_strategy = strategy
+
+    def _fragments_and_spec(self, kind, path, **command):
+        """Explicit mutation-only formation boundary, preserving legacy callers."""
+        strategy = getattr(self, "_source_processing_strategy", None)
+        if strategy is None:
+            return self._deterministic_fragments_and_spec(kind, path, **command)
+        return strategy.prepare(kind, path, **command)
+
+    def _deterministic_fragments_and_spec(
         self,
         kind: str,
         path: Path,

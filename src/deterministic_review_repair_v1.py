@@ -162,7 +162,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             raise ConsoleError("freeze_bytes_missing")
         fragments = self._read_source_fragments(envelope, freeze_path) if envelope["content_kind"] == "pdf" else None
         if fragments is None:
-            fragments, _spec = self._fragments_and_spec(
+            fragments, _spec = self._deterministic_fragments_and_spec(
                 str(envelope["content_kind"]),
                 freeze_path,
                 data=freeze_bytes,

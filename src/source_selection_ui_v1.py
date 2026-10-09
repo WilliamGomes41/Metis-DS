@@ -24,8 +24,8 @@ def _range(values):
 
 
 def install(app, console, require, page, nav, esc):
-    workers = set()  # Disposable execution handles, never attempt authority.
-    app.state.source_selection_workers = workers
+    from src.source_processing_dispatch_v1 import install_dispatcher
+    dispatcher = install_dispatcher(app, console)
 
     @app.get('/source-selection', response_class=HTMLResponse)
     def selection_get(request: Request, document: str = ''):
@@ -105,16 +105,8 @@ def install(app, console, require, page, nav, esc):
             if exc.code != 'processing_attempt_in_progress':
                 raise
             return RedirectResponse('/source-selection?' + urlencode({'document': sid}), status_code=303)
-        if fresh:
-            async def execute():
-                try:
-                    await asyncio.to_thread(console.execute_source_selection,
-                        actor_id=actor['account_id'], snapshot_id=sid, attempt=attempt)
-                except Exception:
-                    # The kernel records failure. If recording itself fails,
-                    # its bounded lease still fences output and permits recovery.
-                    pass
-            task = asyncio.create_task(execute())
-            workers.add(task)
-            task.add_done_callback(workers.discard)
+        # A wake is only a hint. The kernel recovers durable pending attempts
+        # at startup and on its bounded poll, even if this request disappears.
+        if attempt["state"] == "running":
+            dispatcher.notify(sid, attempt)
         return RedirectResponse('/source-selection?' + urlencode({'document': sid}), status_code=303)

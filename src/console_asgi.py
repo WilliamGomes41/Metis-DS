@@ -7,7 +7,7 @@ Supported console topology is one worker by default or two workers on one
 instance with serialized writes. Multi-instance remains fail-closed. Azure runtime
 requires both the durable PostgreSQL canonical publication store and Azure Blob
 as the authoritative immutable source store; local development may continue
-without either. Shared PostgreSQL workflow layers are opt-in until Azure cut-over.
+without either. Azure requires the full PostgreSQL workflow authority; filesystem mirrors are reconstructable.
 """
 from __future__ import annotations
 
@@ -234,6 +234,12 @@ def bootstrap_accounts(console: OperationsConsole) -> None:
                 raise
 
 
+def _require_azure_workflow_authorities(*stores) -> None:
+    """Azure may never promote reconstructable mirrors to workflow authority."""
+    if _running_in_azure() and any(store is None for store in stores):
+        raise RuntimeError("azure_workflow_authorities_required")
+
+
 def build_app() -> object:
     topology = assert_supported_topology()
     data_root = _env_path("CONSOLE_DATA_ROOT", _default_data_root())
@@ -245,6 +251,8 @@ def build_app() -> object:
     workflow_document_store = _workflow_document_store(credential=postgres_credential)
     workflow_review_store = _workflow_review_store(credential=postgres_credential)
     workflow_remaining_store = _workflow_remaining_store(credential=postgres_credential)
+    _require_azure_workflow_authorities(workflow_identity_store, workflow_document_store,
+                                       workflow_review_store, workflow_remaining_store)
     running_in_azure = _running_in_azure()
 
     common = dict(
