@@ -38,7 +38,8 @@ def test_browser_workflow_order_receipt_selection_review_mobile(workflow_postgre
             subprocess.run(["node", str(root/"tests/browser_source_selection_check.cjs")], env=env, cwd=root, check=True, timeout=90)
             result = json.loads((tmp_path/"browser-result.json").read_text())
             assert result["receiptDidNotStart"] and result["reviewOpened"] and result["pageErrors"] == []
-            assert len(list(tmp_path.glob("*.png"))) == 4
+            assert result["namedReviewerEnteredReview"] and result["unassignedUploaderDirectedToTrajectory"]
+            assert len(list(tmp_path.glob("*.png"))) == 5
         finally:
             server.terminate()
             server.wait(timeout=15)
