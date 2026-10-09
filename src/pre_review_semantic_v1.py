@@ -1129,6 +1129,8 @@ def bind_pre_review_semantic_processing(
             source_id=source_id,
             **extraction_kwargs,
         )
+        from src.docling_pdf_v1 import release_conversion_capacity
+        release_conversion_capacity()
         if checkpoint:
             checkpoint("extraction_finished", {"fragment_count": len(fragments), "extractor_versions": sorted({str(f.get("parser_version") or "not_recorded") for f in fragments})})
         provider = load_llm_provider_config(env)

@@ -118,7 +118,7 @@ def test_review_exposes_source_and_explicit_choices_without_embedded_manual(tmp_
     assert '<summary>Broncontext' not in page.text
 
 
-def test_blocked_processing_keeps_existing_retry_command_in_management(tmp_path, monkeypatch):
+def test_blocked_processing_opens_explicit_source_selection_from_management(tmp_path, monkeypatch):
     console, accounts, receipt, _ = _console_with_document(tmp_path)
     sid = receipt['snapshot_id']
     client = client_for(console)
@@ -128,14 +128,15 @@ def test_blocked_processing_keeps_existing_retry_command_in_management(tmp_path,
         'reason_code': 'pre_review_llm_provider_unavailable', 'retry_not_before': None})
     page = client.get('/settings/technical/processing', params={'document': sid})
     assert page.status_code == 200
-    assert 'action="/tree/reprocess"' in page.text and 'name="command_id"' in page.text
+    assert f'href="/source-selection?document={sid}"' in page.text
+    assert 'action="/tree/reprocess"' not in page.text
     assert 'pre_review_llm_provider_unavailable' in page.text
     commands = []
     monkeypatch.setattr(console, 'retry_pre_review', lambda **kw: commands.append(kw))
     response = client.post('/tree/reprocess', data={'snapshot_id': sid, 'command_id': 'reviewable-retry'}, follow_redirects=False)
     assert response.status_code == 303
-    assert response.headers['location'] == f'/settings/technical/processing?document={sid}'
-    assert commands == [{'actor_id': accounts['researcher']['account_id'], 'snapshot_id': sid, 'command_id': 'reviewable-retry'}]
+    assert response.headers['location'] == f'/source-selection?document={sid}'
+    assert commands == []
 
 
 def test_publish_keeps_review_recovery_and_hides_technical_diagnosis(tmp_path, monkeypatch):

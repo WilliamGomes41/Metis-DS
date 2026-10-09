@@ -112,9 +112,16 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
         assert payload["pre_review"]["object_count"] == 0
         assert "Nul kandidaten betekent niet" in payload["pre_review"]["note"]
 
-        response = client.post("/tree/reprocess", data={"snapshot_id": sid})
-        assert response.status_code == 400
-        assert code in response.text
+        response = client.post("/tree/reprocess", data={"snapshot_id": sid}, follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers["location"] == f"/source-selection?document={sid}"
+        assert console._envelope(sid) == before
+        started = client.post("/source-selection/start", data={"document": sid,
+            "command_id": "retry-diagnostics", "expected_revision": console.objects_revision(sid)}, follow_redirects=False)
+        assert started.status_code == 303
+        client.portal.call(wait)
+        response = client.get("/source-selection", params={"document": sid})
+        assert response.status_code == 200 and "Status: mislukt" in response.text
         reference = console._envelope(sid)["processing_attempts"][-1]["processing_reference"]
         assert re.fullmatch(r"[a-f0-9]{32}", reference)
         assert "Verwerkingsreferentie:" not in response.text
@@ -136,6 +143,10 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
         assert attempts[-1]["state"] == "failed"
         old = deepcopy(before)
         assert attempts[:-1] == old.pop("processing_attempts")
+        previous_runs = old.pop("quality_processing_runs")
+        current_runs = after_failure.pop("quality_processing_runs")
+        assert current_runs[:len(previous_runs)] == previous_runs
+        assert len(current_runs) == len(previous_runs) + 1
         assert after_failure == old
         assert console.objects_revision(sid) == before_revision
         assert console.object_review_bindings(sid) == before_bindings
@@ -153,7 +164,7 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
         assert recovered["snapshot_id"] == sid and recovered["sha256"] == before["sha256"]
         assert "processing_blocker" not in recovered
         assert recovered["publication_eligibility"] != PRE_REVIEW_BLOCKED
-        assert len(recovered["quality_processing_runs"]) == 2  # failed retry remains separate from candidate provenance
+        assert len(recovered["quality_processing_runs"]) == 3  # both failed explicit selections retain evidence
         assert [attempt["state"] for attempt in recovered["processing_attempts"]] == ["failed", "failed", "succeeded"]
         assert restarted.waiting_task_counts(actor["account_id"])["review"] == 1
         assert _PROCESSING_REFERENCE.get() == "-"

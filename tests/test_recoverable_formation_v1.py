@@ -145,10 +145,17 @@ def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path):
     assert len(calls) == 2
     client.cookies.set(COOKIE, state.authenticate('author', 'strong-test-password')['token'])
     page = client.get('/settings/technical/processing', params={'document': sid})
-    assert 'Onopgeloste vorming herstellen' in page.text and 'publicatie is geblokkeerd' in page.text
+    assert 'Naar Bronselectie voor Starten of Hervatten' in page.text and 'publicatie is geblokkeerd' in page.text
     assert 'Vormingstaken:' in page.text and 'nog open' in page.text
     mode['broken'] = False
-    assert client.post('/tree/resume-formation', data=command, follow_redirects=False).status_code == 303
+    response = client.post('/tree/resume-formation', data=command, follow_redirects=False)
+    assert response.status_code == 303 and response.headers['location'] == f'/source-selection?document={sid}'
+    assert len(calls) == 2
+    with client:
+        from tests.test_availability_repair import drain
+        assert client.post('/source-selection/start', data={'document': sid, 'command_id': command['command_id'],
+            'expected_revision': command['expected_revision']}, follow_redirects=False).status_code == 303
+        drain(client, client.app)
     assert len(calls) == 3
 
 

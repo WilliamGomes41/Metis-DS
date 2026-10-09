@@ -43,7 +43,7 @@ def install(app, console, require, page, nav, esc):
             sid = envelope['snapshot_id']
             result = projection(console, actor_id=actor['account_id'], snapshot_id=sid, documents=documents)
             action = ''
-            if result['state'] == 'bezig':
+            if result['state'] in {'bezig', 'wacht op uitvoering'}:
                 action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Voortgang bekijken</a>'
                 running_selected = running_selected or sid == selected
             elif result['state'] == 'voltooid':
@@ -70,6 +70,14 @@ def install(app, console, require, page, nav, esc):
                          'formation_accounted': 'Brondekking controleren', 'stopped': 'Verwerking gestopt'}.get(result['phase'], 'Bronselectie en controle')
                 progress = (f'<p>Fase: {esc(phase)} · Verstreken: {esc(_minutes(elapsed)) if elapsed is not None else "onbekend"}'
                             f' · Geschat resterend: {esc(_range(result["remaining_seconds"]))}</p>')
+            if result['state'] == 'wacht op uitvoering':
+                elapsed = result['elapsed_seconds']
+                deadline = result['deadline_seconds']
+                progress = (f'<p>Wacht op een uitvoeringsplek of conversiecapaciteit. '
+                            f'Verstreken sinds aanvraag: {esc(_minutes(elapsed)) if elapsed is not None else "onbekend"}. '
+                            f'Resterende totale tijdslimiet: {esc(_minutes(deadline)) if deadline is not None else "onbekend"}.</p>'
+                            '<p>De tijdslimiet loopt vanaf de aanvraag. Verloopt deze tijdens wachten, '
+                            'dan telt deze poging mee voor de herstelgrens. De geschatte verwerkingstijd bevat ook wachttijd.</p>')
             summary = ''
             if result['state'] in {'voltooid', 'onderbroken', 'mislukt'}:
                 summary = (f'<p>{result["candidates"]} gevormde kandidaten · {result["source_passages"]} overige bronpassages · {result["blocked"]} geblokkeerde kandidaten · {result["formation_blockers"]} verwerkingsblokkades.</p>'

@@ -2030,12 +2030,12 @@ class OperationsConsole:
         return reserve_selection(self, actor_id=actor_id, snapshot_id=snapshot_id,
                                  command_id=command_id, expected_revision=expected_revision)
 
-    def execute_source_selection(self, *, actor_id, snapshot_id, attempt):
+    def execute_source_selection(self, *, actor_id, snapshot_id, attempt, _dispatch_stop=None):
         from datetime import datetime
         from src.processing_retry_v1 import now
         if attempt.get("dispatch"):
             from src.source_processing_dispatch_v1 import claim
-            attempt = claim(self, snapshot_id=snapshot_id, attempt_id=attempt["attempt_id"])
+            attempt = claim(self, snapshot_id=snapshot_id, attempt_id=attempt["attempt_id"], stop_event=_dispatch_stop)
             if attempt is None:
                 return self._receipt(self._envelope(snapshot_id))
         remaining = (datetime.fromisoformat(attempt["expires_at"]) - now()).total_seconds()

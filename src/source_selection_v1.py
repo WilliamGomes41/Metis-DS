@@ -138,7 +138,8 @@ def projection(console, *, actor_id, snapshot_id, documents):
     succeeded = bool(attempt.get("state") == "succeeded" or (not attempt and envelope.get("quality_processing_runs")))
     complete = succeeded and not processing["formation_incomplete"]
     current = processing["state"]
-    state = ("bezig" if current == "running" else "onderbroken" if current in {"expired", "interrupted"}
+    waiting = current == "running" and (attempt.get("dispatch") or {}).get("state") == "pending"
+    state = ("wacht op uitvoering" if waiting else "bezig" if current == "running" else "onderbroken" if current in {"expired", "interrupted"}
              or (succeeded and not complete) else "mislukt" if current == "failed"
              else "voltooid" if complete else "nog niet gestart")
     elapsed = _duration(attempt.get("started_at"), attempt.get("finished_at") or now().isoformat())
@@ -160,6 +161,7 @@ def projection(console, *, actor_id, snapshot_id, documents):
             "version": envelope["version"], "bytes": (envelope.get("received_source") or {}).get("bytes"),
             "state": state, "attempt_succeeded": succeeded, "formation_complete": complete,
             "phase": (attempt.get("diagnostic") or {}).get("phase") or attempt.get("phase") or "Nog niet gestart", "elapsed_seconds": elapsed,
+            "deadline_seconds": _duration(now().isoformat(), attempt.get("expires_at")),
             "estimate": timing, "remaining_seconds": remaining, "candidates": len(candidates),
             "source_passages": sum(is_source_record(o) for o in objects), "blocked": blocked,
             "formation_blockers": formation_blockers,

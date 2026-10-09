@@ -323,6 +323,14 @@ def test_http_withdrawal_complete_recovery_and_open_work_resume(recovery_postgre
     researcher_client = _client(fresh, "researcher.anne")
     resumed = researcher_client.post("/tree/reprocess", data={"snapshot_id": v3["snapshot_id"]}, follow_redirects=False)
     assert resumed.status_code == 303, resumed.text
+    assert resumed.headers["location"] == f'/source-selection?document={v3["snapshot_id"]}'
+    assert not fresh.snapshot_objects(v3["snapshot_id"])
+    with researcher_client:
+        from tests.test_availability_repair import drain
+        assert researcher_client.post("/source-selection/start", data={"document": v3["snapshot_id"],
+            "command_id": "recover-v3", "expected_revision": fresh.objects_revision(v3["snapshot_id"])},
+            follow_redirects=False).status_code == 303
+        drain(researcher_client, researcher_client.app)
     assert fresh.snapshot_objects(v3["snapshot_id"])
     _assert_review_projection(fresh, researcher_client, v3["snapshot_id"])
     resumed_envelope = fresh._envelope(v3["snapshot_id"])

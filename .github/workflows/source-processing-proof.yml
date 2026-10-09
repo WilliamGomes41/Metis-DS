@@ -80,7 +80,7 @@ jobs:
         run: |
           mkdir -p proof
           set +e
-          pytest -q -s tests/test_availability_repair.py tests/test_azure_source_processing.py tests/test_source_resume_acceptance.py tests/test_lifecycle_withdrawal_recovery_v1.py tests/test_pre_review_semantic_v1.py tests/test_pre_review_failure_diagnostics_v1.py --junitxml=proof/native.xml > proof/native.log 2>&1
+          pytest -q -s tests/test_availability_repair.py tests/test_azure_source_processing.py tests/test_source_dispatch_hardening.py tests/test_source_resume_acceptance.py tests/test_lifecycle_withdrawal_recovery_v1.py tests/test_pre_review_semantic_v1.py tests/test_pre_review_failure_diagnostics_v1.py --junitxml=proof/native.xml > proof/native.log 2>&1
           result=$?
           set -e
           cat proof/native.log

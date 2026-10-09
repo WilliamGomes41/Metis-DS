@@ -3903,17 +3903,8 @@ def create_console_app(
         # Same authorization as processing_status/retry: researchers or assigned reviewers.
         processing = state.processing_status(document, actor_id=account["account_id"])
         controls = []
-        if processing.get("resume_allowed"):
-            controls.append(f'''<form method="post" action="/tree/resume-formation">
-              <input type="hidden" name="snapshot_id" value="{_esc(document)}">
-              <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
-              <input type="hidden" name="expected_revision" value="{_esc(state.objects_revision(document))}">
-              <button class="btn-primary" type="submit">Onopgeloste vorming herstellen</button></form>''')
-        if processing["retry_allowed"]:
-            controls.append(f'''<form method="post" action="/tree/reprocess">
-              <input type="hidden" name="snapshot_id" value="{_esc(document)}">
-              <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
-              <button class="btn-primary" type="submit">Verwerking opnieuw proberen</button></form>''')
+        if processing.get("resume_allowed") or processing["retry_allowed"]:
+            controls.append(f'<a class="btn-primary" href="/source-selection?{_esc(urlencode({"document": document}))}">Naar Bronselectie voor Starten of Hervatten</a>')
         if ("publisher" in roles
                 and (account["account_id"] in envelope.get("named_reviewers", [])
                      or account["account_id"] == envelope.get("uploader_account_id"))
@@ -5097,29 +5088,15 @@ def create_console_app(
         return JSONResponse(replay_diagnostic(attempt), headers={"Cache-Control": "no-store"})
 
     @app.post("/tree/reprocess")
-    def tree_reprocess(
-        request: Request,
-        snapshot_id: str = Form(...),
-        command_id: str = Form(""),
-    ) -> RedirectResponse:
-        account = _require(request)
-        state.retry_pre_review(
-            actor_id=account["account_id"],
-            snapshot_id=snapshot_id,
-            command_id=command_id or uuid.uuid4().hex,
-        )
-        return RedirectResponse(
-            "/settings/technical/processing?" + urlencode({"document": snapshot_id}),
-            status_code=303,
-        )
-
     @app.post("/tree/resume-formation")
-    def tree_resume_formation(request: Request, snapshot_id: str = Form(...),
-                              command_id: str = Form(...), expected_revision: str = Form(...)):
+    def tree_source_selection(request: Request, snapshot_id: str = Form(...)) -> RedirectResponse:
         account = _require(request)
-        state.resume_formation(actor_id=account["account_id"], snapshot_id=snapshot_id,
-                               command_id=command_id, expected_revision=expected_revision)
-        return RedirectResponse("/settings/technical/processing?" + urlencode({"document": snapshot_id}), status_code=303)
+        if state.snapshot_is_published(snapshot_id):
+            raise ConsoleError("published_objects_must_not_be_rewritten")
+        state.processing_status(snapshot_id, actor_id=account["account_id"])
+        # Compatibility URLs navigate only. The current revision and operation
+        # are authorized by the existing explicit Starten/Hervatten command.
+        return RedirectResponse("/source-selection?" + urlencode({"document": snapshot_id}), status_code=303)
 
     @app.post("/tree/move")
     def tree_move(
