@@ -76,3 +76,25 @@ Adversarial proof matrix: crash after reservation before wake; competing kernels
 Required black-box scenario: synthetic received source -> close client -> kernel restart discovers unclaimed authorized attempt -> concurrent duplicate worker cannot prepare -> candidates -> human review -> publication/restart; published predecessor remains active during successor formation.
 Authorization: direct user instruction to execute the full prompt, restricted to GitHub/GitHub Actions. No deployment, merge, paid providers, production data or destructive migration.
 Verification state: native/browser/complete HTTP lifecycle PROVEN on cf549a945d03eb74b18d336d413253b167091cb1 in GitHub Actions run 37919109973: 67 targeted checks and one real browser check executed without skips. Source phases, PostgreSQL recovery/claim/fencing and human-review HTTP commands are included. Broad CI/PDF gates are independently recorded in PR #578 and docs/availability-azure-followup.md. Existing local evidence is historical. No merge, deployment or production verification.
+
+
+## Acceptance closure — resume strategy and native lock evidence
+
+Change class: A
+Rewrite risk: high
+State owner: existing Azure PostgreSQL WorkingRevision/attempt authority and immutable Azure source store. The console remains presentation only.
+Assigned scope: direct user instruction to finish PR #578, preserving head 3c000805712d0d2412e8b08d3b890f20af2b98de and all prior work.
+
+GIVEN an incomplete V3 WorkingRevision with validated candidates and checkpoint evidence,
+WHEN a newly authorized resume is requested,
+THEN the current strategy must be compatible with the persisted checkpoint before reservation or extraction, or the command fails explicitly without changing candidates, evidence, review, history or serving.
+An accepted attempt remains bound to its stored configuration. A runtime configuration change before execution or activation fails closed. A change to V2, V1, deterministic processing or another model cannot convert resume into a fresh whole-source run.
+
+Compatibility: existing incomplete V3 checkpoints without the newer attempt configuration remain resumable under V3 and the persisted model; exact replay identity continues to validate source, extractor, prompt, schema and semantic contract. Old readers and synchronous kernel resume remain supported with the same guard. No backfill, schema migration or new authority.
+Transaction: compatibility check inside short authorized reservation, repeated at the common resume preparation boundary; long processing remains outside writes. Existing lease/revision guards still protect activation.
+Failure/recovery: incompatible resume is rejected, not retried automatically. Restore a compatible runtime configuration or create an explicitly authorized successor. Never discard checkpoint/review work to recover.
+Rollback: additive guard only, no stored-data conversion; keep a compatible binary/configuration. No production cutover.
+Proof: new adversarial tests reproduce V3 -> V2/deterministic bypass on the pinned pre-fix commit in Actions, then prove HTTP and synchronous rejection, unchanged candidate/checkpoint/history, compatible open-range resume and execution fencing on file fixtures and native PostgreSQL.
+
+Native measurement contract: transaction duration ends after the actual context exit/commit/rollback, never inside the yielded body. An independent PostgreSQL observer samples backend xact_start, pg_locks and pg_blocking_pids during a controlled row-lock barrier. A competing transaction on the same source row must wait until release and commit; during paused long preparation it must acquire that row immediately. Record acquisition-to-post-commit row-lock lifetime separately from full boundary duration, plus database transaction age and blocking evidence. Synthetic timing is evidence for the tested boundary, not a production SLA.
+Required completion: pinned red/green Actions evidence, native PostgreSQL concurrency/lock proof, actual browser and full lifecycle jobs without skipped acceptance checks, broad CI and PDF/container checks on the final code, audit fields for implementation/verification/merge/production kept separate.
