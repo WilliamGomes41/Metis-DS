@@ -68,6 +68,8 @@ jobs:
       METIS_TEST_POSTGRES_DSN: postgresql://postgres:postgres@127.0.0.1:5432/metis_test
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -76,11 +78,25 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/metis-browser" playwright@1.58.2
           "$RUNNER_TEMP/metis-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Reproduce A01 denied mutation on the pinned pre-fix code
+        shell: bash
+        run: |
+          mkdir -p proof
+          git worktree add "$RUNNER_TEMP/metis-a01-base" a29ed784484af4b4548c796fcbbc6d2c7e289389
+          cp tests/test_processing_authorization.py "$RUNNER_TEMP/metis-a01-base/tests/"
+          set +e
+          (cd "$RUNNER_TEMP/metis-a01-base" && pytest -q tests/test_processing_authorization.py -k denied_retry) > proof/a01-red.log 2>&1
+          result=$?
+          set -e
+          cat proof/a01-red.log
+          test "$result" = 1
+          grep -F A01_DENIED_RETRY_MUTATED_WORKFLOW proof/a01-red.log
+          grep -F "2 failed" proof/a01-red.log
       - name: Verify native receipt, kernel recovery, concurrency and full lifecycle
         run: |
           mkdir -p proof
           set +e
-          pytest -q -s tests/test_availability_repair.py tests/test_a04_session_availability.py tests/test_azure_source_processing.py tests/test_source_dispatch_hardening.py tests/test_source_resume_acceptance.py tests/test_context_preservation.py tests/test_lifecycle_withdrawal_recovery_v1.py tests/test_pre_review_semantic_v1.py tests/test_pre_review_failure_diagnostics_v1.py --junitxml=proof/native.xml > proof/native.log 2>&1
+          pytest -q -s tests/test_processing_authorization.py tests/test_availability_repair.py tests/test_a04_session_availability.py tests/test_azure_source_processing.py tests/test_source_dispatch_hardening.py tests/test_source_resume_acceptance.py tests/test_context_preservation.py tests/test_lifecycle_withdrawal_recovery_v1.py tests/test_pre_review_semantic_v1.py tests/test_pre_review_failure_diagnostics_v1.py --junitxml=proof/native.xml > proof/native.log 2>&1
           result=$?
           set -e
           cat proof/native.log

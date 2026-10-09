@@ -142,12 +142,12 @@ class PostgresWorkflowIdentityStore:
         except Exception as exc:
             raise WorkflowIdentityStoreError("workflow_accounts_read_failed") from exc
 
-    def account_by_id(self, account_id: str) -> dict[str, Any] | None:
+    def account_by_id(self, account_id: str, *, for_share: bool = False) -> dict[str, Any] | None:
         try:
             with self._connect() as con:
                 row = con.execute(
                     "SELECT account_id,username,display_name,roles,password_salt,password_hash,created_at,to_jsonb(accounts)->'retirement' AS retirement "
-                    "FROM workflow.accounts WHERE account_id=%s",
+                    "FROM workflow.accounts WHERE account_id=%s" + (" FOR SHARE" if for_share else ""),
                     (account_id,),
                 ).fetchone()
             return self._account(row) if row else None
@@ -317,9 +317,10 @@ class _PostgresIdentityMixin:
             **({"retirement": record["retirement"]} if record.get("retirement") else {}),
         }
 
-    def _account(self, account_id: str) -> dict[str, Any]:
+    def _account(self, account_id: str, *, current: bool = False) -> dict[str, Any]:
         try:
-            account = self.workflow_identity_store.account_by_id(account_id)
+            account = (self.workflow_identity_store.account_by_id(account_id, for_share=True)
+                       if current else self.workflow_identity_store.account_by_id(account_id))
         except WorkflowIdentityStoreError as exc:
             raise ConsoleError("workflow_identity_unavailable", str(exc)) from exc
         if account is None:

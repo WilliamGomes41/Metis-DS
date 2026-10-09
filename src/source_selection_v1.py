@@ -8,7 +8,9 @@ from src.processing_retry_v1 import reserve, now, status
 
 
 def authorize(console, actor_id, envelope):
-    account = console._account(actor_id)
+    account = console._account(actor_id, current=True)
+    if account.get("retirement"):
+        raise ConsoleError("not_authenticated")
     if not {"researcher", "reviewer"}.intersection(account["roles"]):
         raise ConsoleError("researcher_role_required")
     if "researcher" not in account["roles"] and actor_id not in envelope.get("named_reviewers", []):

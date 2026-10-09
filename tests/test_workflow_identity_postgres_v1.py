@@ -48,7 +48,7 @@ class SharedIdentityStore:
     def list_accounts(self) -> list[dict]:
         return [deepcopy(row) for row in self.accounts.values()]
 
-    def account_by_id(self, account_id: str) -> dict | None:
+    def account_by_id(self, account_id: str, *, for_share: bool = False) -> dict | None:
         row = self.accounts.get(account_id)
         return deepcopy(row) if row else None
 
