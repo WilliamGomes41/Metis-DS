@@ -25,11 +25,12 @@ jobs:
             python "evidence/availability/probe_${probe}.py" > "proof/${probe}-red.log" 2>&1
             result=$?
             set -e
+            cat "proof/${probe}-red.log"
             test "$result" = 1
           done
-          rg UPLOAD_RECEIPT_WAITS_FOR_FULL_FORMATION proof/upload_response_lifetime-red.log
-          rg SUCCESSOR_BLOCKS_HEALTH_EVENT_LOOP proof/successor_availability-red.log
-          rg RECONSTRUCTION_GROWS_WITH_SOURCE_RECORDS proof/publish_reconstructions-red.log
+          grep -F UPLOAD_RECEIPT_WAITS_FOR_FULL_FORMATION proof/upload_response_lifetime-red.log
+          grep -F SUCCESSOR_BLOCKS_HEALTH_EVENT_LOOP proof/successor_availability-red.log
+          grep -F RECONSTRUCTION_GROWS_WITH_SOURCE_RECORDS proof/publish_reconstructions-red.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -65,13 +66,23 @@ jobs:
       - name: Verify native receipt, kernel recovery, concurrency and full lifecycle
         run: |
           mkdir -p proof
+          set +e
           pytest -q -s tests/test_availability_repair.py tests/test_azure_source_processing.py tests/test_lifecycle_withdrawal_recovery_v1.py tests/test_pre_review_semantic_v1.py --junitxml=proof/native.xml > proof/native.log 2>&1
+          result=$?
+          set -e
+          cat proof/native.log
+          exit "$result"
       - name: Verify actual desktop and mobile source-selection route
         if: ${{ !cancelled() }}
         run: |
           export METIS_PLAYWRIGHT_MODULE="$RUNNER_TEMP/metis-browser/node_modules/playwright"
           export METIS_BROWSER_EXECUTABLE="$(node -e 'process.stdout.write(require(process.env.METIS_PLAYWRIGHT_MODULE).chromium.executablePath())')"
+          set +e
           pytest -q tests/test_browser_source_selection.py --basetemp="$RUNNER_TEMP/source-browser-proof" --junitxml=proof/browser.xml > proof/browser.log 2>&1
+          result=$?
+          set -e
+          cat proof/browser.log
+          exit "$result"
       - name: Reject missing native/browser evidence
         if: ${{ !cancelled() }}
         run: |
