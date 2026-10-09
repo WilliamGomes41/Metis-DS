@@ -328,7 +328,17 @@ def test_native_simultaneous_receipts_and_distinct_successor_commands(workflow_p
     conflicting = together("receive_source", [
         {**command, "command_id": "conflicting-receipt", "title": title} for title in ("First", "Second")])
     assert sorted(row[0] for row in conflicting) == ["error", "ok"]
-    assert next(row[1] for row in conflicting if row[0] == "error") == "ingest_command_conflict"
+    # Both the command guard and a losing database CAS refuse the conflicting
+    # payload. The invariant is refusal with one durable identity, not which
+    # concurrency boundary detects it first.
+    assert next(row[1] for row in conflicting if row[0] == "error") in {
+        "ingest_command_conflict", "snapshot_object_write_conflict"}
+    winner = next(row[1] for row in conflicting if row[0] == "ok")
+    accepted_title = first._envelope(winner["snapshot_id"])["title"]
+    rejected_title = "Second" if accepted_title == "First" else "First"
+    with pytest.raises(ConsoleError, match="ingest_command_conflict"):
+        second.receive_source(**{**command, "command_id": "conflicting-receipt", "title": rejected_title})
+    assert first._envelope(winner["snapshot_id"])["title"] == accepted_title
     assert len(first.list_envelopes()) == 2
     policy = {"contract": "explicit-review-v1", "revision": 1, "primary": author, "assignments": []}
     parent = first.receive_source(**{**command, "command_id": "parent", "named_reviewers": [],
