@@ -233,8 +233,11 @@ def test_a02_concurrent_acceptance_conflict_rollback_and_immutable_carrier(
     with pytest.raises(SourceRepresentationError, match="carrier_immutable"):
         fresh.representation["views"]["full"].clear()
     first = stored_blocks(fresh)
-    first.clear()
-    assert stored_blocks(fresh)
+    with pytest.raises(SourceRepresentationError, match="carrier_immutable"):
+        first.clear()
+    disposable = dict(first)
+    disposable.clear()
+    assert stored_blocks(fresh) is first
     if store is not None:
         remove_binding(console, sid)
         with pytest.raises(RuntimeError, match="injected_outer_failure"):

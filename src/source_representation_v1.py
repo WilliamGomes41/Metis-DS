@@ -54,8 +54,8 @@ class SourceFragments(_FrozenList):
         validate_record(record)
         self._record = _freeze(deepcopy(record))
         list.__init__(self, self._record["fragments"])
-        self._views = {name: {public["block_id"]: (public, source) for public, source in rows}
-                       for name, rows in self._record["views"].items()}
+        self._views = _FrozenDict({name: _FrozenDict({public["block_id"]: (public, source) for public, source in rows})
+                                  for name, rows in self._record["views"].items()})
 
     def __deepcopy__(self, memo):
         return self
@@ -78,9 +78,9 @@ def preserve_fragments(fragments):
 def stored_blocks(fragments, *, include_headings=False):
     if not isinstance(fragments, SourceFragments):
         return None
-    # Frozen carriers cannot be edited into stale source evidence. Returning a
-    # fresh index protects caller-local keys without copying the whole document.
-    return dict(fragments._views["full" if include_headings else "selection"])
+    # The immutable index is shared by every resolution of this carrier; no
+    # document-sized copy or repeated validation is needed per source passage.
+    return fragments._views["full" if include_headings else "selection"]
 
 
 def prepare(envelope, fragments, *, correction_revision=0):
