@@ -1,3 +1,5 @@
+> Historisch verslag van de eerste reparatie. Voor de actuele GitHub/native/browser-verificatie en Azure-architectuur zie [het vervolgverslag](availability-azure-followup.md) en [concept-PR #578](https://github.com/WilliamGomes41/Metis-DS/pull/578).
+
 # Beschikbaarheidsreparatie A26, A04/A05 en A02
 
 De gevraagde implementatie staat op de lokale branch `fix/availability-a26-a04-a05-a02`. Er is geen merge, deployment, productieverwerking of betaalde modelaanroep uitgevoerd. Het lokale herstel is via geïnstalleerde HTTP-routes en deterministische providerstubs bewezen. Volledig herstel op de productieopslagtopologie en visuele browserwerking zijn nog niet bewezen; dit rapport is daarom geen vrijgaveadvies.
