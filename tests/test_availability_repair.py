@@ -200,6 +200,7 @@ def test_restart_expired_reservation_resumes_without_losing_source(backend_state
     future=datetime.fromisoformat(attempt['expires_at'])+timedelta(seconds=1)
     monkeypatch.setattr('src.processing_retry_v1.now',lambda:future)
     monkeypatch.setattr('src.source_selection_v1.now',lambda:future)
+    monkeypatch.setattr('src.source_processing_dispatch_v1.now',lambda:future)
     app=create_console_app(restarted)
     with TestClient(app,base_url='https://testserver') as client:
         login(client)

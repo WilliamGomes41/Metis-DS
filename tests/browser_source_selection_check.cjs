@@ -41,7 +41,10 @@ const fs = require('fs');
   if (await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth)) throw Error('mobile overflow');
   await page.screenshot({path:output+'/mobile.png',fullPage:true});
   await page.getByRole('link',{name:'Naar Review',exact:true}).click();
-  await page.waitForURL('**/review?**');
+  await page.waitForURL(url => url.pathname === '/review' || url.pathname === '/review/trajectory');
+  const reviewURL = new URL(page.url());
+  if (reviewURL.searchParams.get('document')!==sid) throw Error('review lost selected source '+page.url());
+  console.log('BROWSER_REVIEW_URL='+page.url());
   if (errors.length) throw Error('script errors '+JSON.stringify(errors));
   fs.writeFileSync(output+'/browser-result.json',JSON.stringify({layout:titles,selected:sid,
     receiptDidNotStart:true,explicitStart:true,reviewOpened:true,mobileOverflow:false,pageErrors:errors},null,2));
