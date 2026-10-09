@@ -309,6 +309,9 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         objects: list[dict[str, Any]] | None = None,
         expected_revision: str | None = None,
     ) -> str:
+        from src.source_representation_v1 import PREPARED
+        envelope = dict(envelope)
+        representation = envelope.pop(PREPARED, None)
         snapshot_id = str(envelope.get("snapshot_id") or "")
         if not snapshot_id:
             raise WorkflowDocumentStoreError("workflow_document_metadata_incomplete")
@@ -356,6 +359,9 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                         raise WorkflowDocumentStoreError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
 
                     self._write_envelope_locked(con, envelope)
+                    if representation is not None:
+                        from src.source_representation_v1 import accept_postgres, provenance
+                        accept_postgres(con, envelope, representation, provenance(envelope))
                     next_objects = current_objects
                     if objects is not None:
                         current_revisions(objects, snapshot_id=snapshot_id)

@@ -5,6 +5,8 @@ returns decisions. It does not assign object identity or canonical text.
 """
 from __future__ import annotations
 
+from src.source_representation_v1 import preserve_fragments
+
 import hashlib
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -44,6 +46,10 @@ def source_reconstruction_scope(*, reuse_existing=False):
 
 
 def _read_source_blocks(fragments, *, include_headings=False):
+    from src.source_representation_v1 import stored_blocks
+    accepted = stored_blocks(fragments, include_headings=include_headings)
+    if accepted is not None:
+        return accepted
     def reconstruct():
         if include_headings:
             return {public["block_id"]: (public, source)
@@ -69,6 +75,10 @@ class MaterialisationError(SemanticPassageError):
 
 
 def _selection_blocks(fragments):
+    from src.source_representation_v1 import stored_blocks
+    accepted = stored_blocks(fragments)
+    if accepted is not None:
+        return accepted
     from src.object_taxonomy_v1 import extract_object_type
     return {
         public["block_id"]: (public, source)
@@ -88,7 +98,7 @@ def resolve_source_selection(
 
     if not spans_are_exact(spans) or any(not isinstance(span["block_id"], str) for span in spans):
         raise MaterialisationError("materialisation_span_invalid")
-    fragments = list(fragments)
+    fragments = preserve_fragments(fragments)
     raw_by_id = {row.get("fragment_id"): row for row in fragments}
     try:
         blocks = source_blocks if source_blocks is not None else _read_source_blocks(fragments)
@@ -176,7 +186,7 @@ def materialise_knowledge_candidates(
 ) -> list[dict[str, Any]]:
     """Create KnowledgeCandidates from selection decisions and exact source spans."""
 
-    fragments = list(fragments)
+    fragments = preserve_fragments(fragments)
     try:
         source_blocks = _selection_blocks(fragments)
     except (ValueError, KeyError, TypeError) as exc:
@@ -246,7 +256,7 @@ def validate_materialised_candidate(
 
     Origin, admission, type and identity are not accepted as source proof.
     """
-    fragments = list(fragments)
+    fragments = preserve_fragments(fragments)
     metadata = obj.get("metadata") or {}
     semantic = obj.get("semantic_passage") or metadata.get("semantic_passage") or {}
     resolved = resolve_source_selection(

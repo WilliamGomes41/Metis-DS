@@ -160,18 +160,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
         freeze_bytes = freeze_path.read_bytes()
         if sha256_bytes(freeze_bytes) != str(envelope.get("sha256") or ""):
             raise ConsoleError("freeze_bytes_missing")
-        fragments = self._read_source_fragments(envelope, freeze_path) if envelope["content_kind"] == "pdf" else None
-        if fragments is None:
-            fragments, _spec = self._deterministic_fragments_and_spec(
-                str(envelope["content_kind"]),
-                freeze_path,
-                data=freeze_bytes,
-                document_id=str(envelope["document_id"]),
-                source_id=str(envelope["source_id"]),
-                title=str(envelope["title"]),
-                family=str(envelope["family"]),
-                class_=str(envelope["class"]),
-            )
+        fragments = self._read_source_fragments(envelope, freeze_path)
         catalog: list[dict[str, Any]] = []
         for index, fragment in enumerate(fragments):
             fragment_id = str(fragment.get("fragment_id") or "")

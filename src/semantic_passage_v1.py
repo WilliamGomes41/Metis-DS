@@ -136,7 +136,10 @@ def _reconstructed_blocks(
 def semantic_source_blocks(fragments: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     """Expose reconstructed source blocks that a semantic proposer may reference."""
 
-    return [public for public, _source in _reconstructed_blocks(fragments)]
+    from src.source_representation_v1 import stored_blocks
+    accepted = stored_blocks(fragments, include_headings=True)
+    return ([public for public, _source in accepted.values()] if accepted is not None
+            else [public for public, _source in _reconstructed_blocks(fragments)])
 
 
 def _coverage_remainders(

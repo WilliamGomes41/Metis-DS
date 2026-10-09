@@ -8,6 +8,8 @@ This module deliberately performs no writes and creates no task store.
 """
 from __future__ import annotations
 
+from src.source_representation_v1 import preserve_fragments
+
 from typing import Any, Iterable
 
 from src.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, admission_of
@@ -309,7 +311,7 @@ def review_duties(
     fragments: Iterable[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     bindings = tuple(bindings or ())
-    fragments = tuple(fragments) if fragments is not None else None
+    fragments = preserve_fragments(fragments) if fragments is not None else None
     out: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
     for obj in objects:
@@ -377,7 +379,7 @@ def reviewer_route_for(
     """Actor-specific actionability over one current ReviewDuty."""
 
     bindings = tuple(bindings)
-    fragments = tuple(fragments) if fragments is not None else None
+    fragments = preserve_fragments(fragments) if fragments is not None else None
     duty = review_duty_for(
         obj,
         review_path=review_path,
@@ -418,7 +420,7 @@ def reviewer_route_counts(
     fragments: Iterable[dict[str, Any]] | None = None,
 ) -> dict[str, int]:
     bindings = tuple(bindings)
-    fragments = tuple(fragments) if fragments is not None else None
+    fragments = preserve_fragments(fragments) if fragments is not None else None
     routes = [
         route
         for obj in objects

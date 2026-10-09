@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Build strict clinical/technical review queue bound to exact canonical object hashes."""
 from __future__ import annotations
+
+from src.source_representation_v1 import preserve_fragments
 import argparse, json
 from pathlib import Path
 from typing import Any
@@ -12,7 +14,7 @@ def read_jsonl(p:Path)->list[dict[str,Any]]:
 
 def build(rows:list[dict[str,Any]], track:str, *, review_path="richtlijn", bindings=(), fragments=None)->list[dict[str,Any]]:
     bindings=tuple(bindings)
-    fragments=tuple(fragments) if fragments is not None else None
+    fragments=preserve_fragments(fragments) if fragments is not None else None
     q=[]
     for o in rows:
         duty=review_duty_for(o, review_path=review_path, bindings=bindings, fragments=fragments)

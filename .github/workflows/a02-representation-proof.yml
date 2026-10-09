@@ -1,0 +1,57 @@
+name: a02-representation-proof
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  durable-source:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: metis_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d metis_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      METIS_TEST_POSTGRES_DSN: postgresql://postgres:postgres@127.0.0.1:5432/metis_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-dev.lock
+      - name: Reproduce reconstructing query baseline
+        run: |
+          mkdir -p proof
+          git worktree add "$RUNNER_TEMP/a02-baseline" b2f86dd079a31f6dc177432a8124e87699a878e6
+          set +e
+          (cd "$RUNNER_TEMP/a02-baseline" && pytest -q tests/test_a02_durable_source_representation.py -k "local and zero_reconstruction") > proof/baseline.log 2>&1
+          result=$?
+          set -e
+          cat proof/baseline.log
+          test "$result" = 1
+          grep -E "A02_QUERY_EXECUTED_SOURCE_PROCESSING|A02_DURABLE_READ_RECONSTRUCTED" proof/baseline.log
+      - name: Native representation lifecycle and query proof
+        run: |
+          pytest -q -s tests/test_a02_durable_source_representation.py --junitxml=proof/a02.xml > proof/a02.log 2>&1 || { cat proof/a02.log; exit 1; }
+          cat proof/a02.log
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("proof/a02.xml").getroot()
+          assert root.findall(".//testcase")
+          assert not root.findall(".//skipped")
+          assert not root.findall(".//failure") and not root.findall(".//error")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: a02-representation-proof
+          path: proof
+          if-no-files-found: error

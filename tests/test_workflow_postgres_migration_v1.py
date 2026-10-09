@@ -68,6 +68,7 @@ def test_plan_digest_binds_exact_ordered_migration_bytes() -> None:
         "014_route_comparisons.sql",
         "015_historical_accounts.sql",
         "016_workflow_topic_identity.sql",
+    "017_source_representations.sql",
     )
     digest = migration_digest(paths)
     assert len(digest) == 64

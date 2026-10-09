@@ -208,7 +208,9 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
 
     def _write_envelope_locked(self, con: Any, envelope: Mapping[str, Any]) -> None:
         topic = self._resolve_topic_locked(con, str(envelope.get("family") or ""))
+        from src.source_representation_v1 import PREPARED
         stored_envelope = deepcopy(dict(envelope))
+        representation = stored_envelope.pop(PREPARED, None)
         stored_envelope["topic_id"] = topic["topic_id"]
         stored_envelope["family"] = topic["display_name"]
         values = self._document_values(stored_envelope)
@@ -238,6 +240,9 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                 "envelope_payload=%s::jsonb,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE snapshot_id=%s",
                 (*topic_values[1:], _json_text(stored_envelope), snapshot_id),
             )
+        if representation is not None:
+            from src.source_representation_v1 import accept_postgres, provenance
+            accept_postgres(con, stored_envelope, representation, provenance(stored_envelope))
         con.execute("DELETE FROM workflow.document_reviewers WHERE snapshot_id=%s", (snapshot_id,))
         for reviewer in sorted(set(str(x) for x in stored_envelope.get("named_reviewers") or [])):
             con.execute(

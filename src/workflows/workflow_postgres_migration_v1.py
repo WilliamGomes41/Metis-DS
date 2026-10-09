@@ -24,6 +24,7 @@ MIGRATION_NAMES = (
     "014_route_comparisons.sql",
     "015_historical_accounts.sql",
     "016_workflow_topic_identity.sql",
+    "017_source_representations.sql",
 )
 REQUIRED_TABLES = frozenset(
     {
@@ -41,6 +42,8 @@ REQUIRED_TABLES = frozenset(
         "entra_sessions",
         "entra_flows",
         "route_comparisons",
+        "source_representations",
+        "source_representation_bindings",
     }
 )
 REQUIRED_COLUMNS = frozenset(

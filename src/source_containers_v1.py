@@ -1,3 +1,4 @@
+from src.source_representation_v1 import preserve_fragments
 """Typed revision containers and exact source usage, derived from one durable bundle.
 
 No approval or serving authority lives here. Legacy source records keep their
@@ -54,7 +55,7 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
 
     objects = list(objects)
     bindings = tuple(bindings or ())
-    fragments = list(fragments) if fragments is not None else None
+    fragments = preserve_fragments(fragments) if fragments is not None else None
     conflicts = context_issues(objects)
     targets = []
 

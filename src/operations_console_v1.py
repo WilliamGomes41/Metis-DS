@@ -7,6 +7,8 @@ local ``sources/private/`` remains the G0 stand-in for local development.
 """
 from __future__ import annotations
 
+from src.source_representation_v1 import preserve_fragments
+
 import fcntl
 import hashlib
 import json
@@ -492,7 +494,7 @@ def slow_review_duty(
 ) -> list[dict[str, Any]]:
     """Presented Inhoud cards: recommendation + condition/exception/high-risk."""
     bindings = tuple(bindings or ())
-    fragments = tuple(fragments) if fragments is not None else None
+    fragments = preserve_fragments(fragments) if fragments is not None else None
     rows = [obj for obj in objects if is_slow_review_duty(obj, review_path=review_path, bindings=bindings, fragments=fragments)]
     return rows if review_path == "boom" else sorted(rows, key=review_priority_rank)
 
@@ -1064,6 +1066,12 @@ class OperationsConsole:
             wrote_bindings = False
             wrote_ledger = False
             try:
+                if envelopes is not None:
+                    from src.source_representation_v1 import PREPARED, accept_local, provenance
+                    for prepared_envelope in envelopes.values():
+                        representation = prepared_envelope.pop(PREPARED, None)
+                        if representation is not None:
+                            accept_local(self, prepared_envelope, representation, provenance(prepared_envelope))
                 if objects is not None:
                     self._save_objects_pinned(
                         objects[0],
@@ -2645,6 +2653,13 @@ class OperationsConsole:
             raise ConsoleError(exc.code) from exc
 
     def _read_source_fragments(self, envelope, path):
+        from src.source_representation_v1 import load, SourceRepresentationError
+        try:
+            return load(self, envelope)
+        except SourceRepresentationError as exc:
+            raise ConsoleError(str(exc)) from exc
+
+    def _extract_historical_source_for_migration(self, envelope, path):
         from src.docling_contract_v1 import stored_fragments
         retained = stored_fragments(envelope)
         if retained is not None:
@@ -2659,6 +2674,10 @@ class OperationsConsole:
                                      construct_units=bool(envelope.get("decision_unit_contract")))
             return extract_pdf(path, **args)
         return self._extract(envelope["content_kind"], path, **args)
+
+    def migrate_source_representation(self, **command):
+        from src.source_representation_migration_v1 import migrate
+        return migrate(self, **command)
 
     def _require_resolved_candidate_source(self, envelope, target):
         """Validate against verified source without changing durable row bytes."""
@@ -2684,8 +2703,12 @@ class OperationsConsole:
         try:
             source_path, _ = self._verified_source_bytes(envelope)
             return self._read_source_fragments(envelope, source_path)
-        except (ConsoleError, ValueError, OSError, KeyError):
-            # A reader may show repair/disposition, never content authority.
+        except (ConsoleError, ValueError, OSError, KeyError) as exc:
+            if isinstance(exc, ConsoleError) and exc.code.startswith("source_representation_"):
+                # Missing legacy representation is visible, never hidden extraction.
+                if not self.snapshot_objects(snapshot_id):
+                    return None
+                raise
             return None
 
     def configure_source_processing(self, strategy) -> None:
