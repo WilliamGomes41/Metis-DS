@@ -11,6 +11,8 @@ rollback mode. Semantic-mode failures never fall back silently.
 """
 from __future__ import annotations
 
+from contextvars import ContextVar
+
 import hashlib
 import json
 import logging
