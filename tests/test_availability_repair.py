@@ -324,7 +324,7 @@ def test_a02_installed_reads_bounded_equal_and_next_request_sees_changes(backend
         # A changed representation is rebuilt on the next request, never held
         # in an application-wide validation/authority cache.
         fragments=console.review_source_fragments(sid)
-        fragments=deepcopy(fragments);fragments[-1]['raw_text']=fragments[-1]['clean_text']='Gewijzigde bron.'
+        fragments=json.loads(json.dumps(fragments));fragments[-1]['raw_text']=fragments[-1]['clean_text']='Gewijzigde bron.'
         monkeypatch.setattr(console,'review_source_fragments',lambda *args,**kwargs:deepcopy(fragments))
         calls.clear();representations.clear()
         changed=client.get(path,params=query)

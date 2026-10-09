@@ -24,13 +24,48 @@ class SourceRepresentationError(ValueError):
     pass
 
 
-class SourceFragments(list):
-    """Disposable carrier for one exact accepted representation, not an authority."""
+class _FrozenDict(dict):
+    def _immutable(self, *args, **kwargs):
+        raise SourceRepresentationError("source_representation_carrier_immutable")
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = __ior__ = _immutable
+    def __deepcopy__(self, memo):
+        return self
+
+
+class _FrozenList(list):
+    def _immutable(self, *args, **kwargs):
+        raise SourceRepresentationError("source_representation_carrier_immutable")
+    __setitem__ = __delitem__ = append = extend = insert = pop = remove = clear = sort = reverse = __iadd__ = __imul__ = _immutable
+    def __deepcopy__(self, memo):
+        return self
+
+
+def _freeze(value):
+    if isinstance(value, dict):
+        return _FrozenDict({k: _freeze(v) for k, v in value.items()})
+    if isinstance(value, list):
+        return _FrozenList(_freeze(v) for v in value)
+    return value
+
+
+class SourceFragments(_FrozenList):
+    """Immutable disposable carrier; durable database remains the authority."""
     def __init__(self, record):
         validate_record(record)
-        super().__init__(deepcopy(record["fragments"]))
-        self.representation = deepcopy(record)
-        self.extraction_record = deepcopy(record.get("extraction_record"))
+        self._record = _freeze(deepcopy(record))
+        list.__init__(self, self._record["fragments"])
+        self._views = {name: {public["block_id"]: (public, source) for public, source in rows}
+                       for name, rows in self._record["views"].items()}
+
+    @property
+    def representation(self):
+        return self._record
+
+    @property
+    def extraction_record(self):
+        # Command producers may stamp their own extraction evidence.
+        record = self._record.get("extraction_record")
+        return json.loads(json.dumps(record)) if record is not None else None
 
 
 def preserve_fragments(fragments):
@@ -40,13 +75,9 @@ def preserve_fragments(fragments):
 def stored_blocks(fragments, *, include_headings=False):
     if not isinstance(fragments, SourceFragments):
         return None
-    record = fragments.representation
-    if stable_hash(list(fragments)) != record["key"]["fragments_hash"]:
-        raise SourceRepresentationError(INVALID)
-    # The carrier may be mutated by a caller. It can never silently reconstruct.
-    validate_record(record)
-    view = record["views"]["full" if include_headings else "selection"]
-    return {public["block_id"]: (deepcopy(public), deepcopy(source)) for public, source in view}
+    # Frozen carriers cannot be edited into stale source evidence. Returning a
+    # fresh index protects caller-local keys without copying the whole document.
+    return dict(fragments._views["full" if include_headings else "selection"])
 
 
 def prepare(envelope, fragments, *, correction_revision=0):
@@ -175,15 +206,19 @@ def _local_connection(console, *, write=False):
         raise SourceRepresentationError(MISSING)
     if write:
         path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(str(path) if write else f"file:{path}?mode=ro", uri=not write, timeout=10) as connection:
-        if write:
-            connection.execute("CREATE TABLE IF NOT EXISTS representations "
-                               "(representation_id TEXT PRIMARY KEY,payload_hash TEXT NOT NULL,payload TEXT NOT NULL)")
-            connection.execute("CREATE TABLE IF NOT EXISTS bindings "
-                               "(snapshot_id TEXT PRIMARY KEY,representation_id TEXT NOT NULL,evidence TEXT NOT NULL)")
-            connection.commit()
-            connection.execute("BEGIN IMMEDIATE")
-        yield connection
+    connection = sqlite3.connect(str(path) if write else f"file:{path}?mode=ro", uri=not write, timeout=10)
+    try:
+        with connection:
+            if write:
+                connection.execute("CREATE TABLE IF NOT EXISTS representations "
+                                   "(representation_id TEXT PRIMARY KEY,payload_hash TEXT NOT NULL,payload TEXT NOT NULL)")
+                connection.execute("CREATE TABLE IF NOT EXISTS bindings "
+                                   "(snapshot_id TEXT PRIMARY KEY,representation_id TEXT NOT NULL,evidence TEXT NOT NULL)")
+                connection.commit()
+                connection.execute("BEGIN IMMEDIATE")
+            yield connection
+    finally:
+        connection.close()
 
 
 def accept_local(console, envelope, record, evidence):

@@ -283,6 +283,8 @@ def test_http_withdrawal_complete_recovery_and_open_work_resume(recovery_postgre
     review_client.close()
     adapter = PostgresWorkflowRecoveryAdapter(console.canonical_publication_store)
     before = adapter.export_state()
+    assert len(before["workflow_tables"]["source_representations"]) == 4
+    assert len(before["workflow_tables"]["source_representation_bindings"]) == 4
     path = tmp_path / "complete-lifecycle.zip"
     manifest = backup_workflow_chain(path, database=adapter, source_store=source, audit_archive_store=archive)
     assert len(manifest["blobs"]) == 4
@@ -301,6 +303,17 @@ def test_http_withdrawal_complete_recovery_and_open_work_resume(recovery_postgre
     fresh = _console(tmp_path / "restored", config, target_sources)
     from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(fresh)
+    def forbidden_source_work(*args, **kwargs):
+        raise AssertionError("RESTORED_QUERY_EXECUTED_SOURCE_PROCESSING")
+    import src.semantic_passage_v1 as semantic
+    import src.knowledge_materialisation_v1 as materialisation
+    # Restore the exact accepted views; projection queries cannot rebuild them.
+    with monkeypatch.context() as blocker:
+        blocker.setattr(semantic, "_reconstructed_blocks", forbidden_source_work)
+        blocker.setattr(materialisation, "_reconstructed_blocks", forbidden_source_work)
+        for receipt in (v1, v2, other):
+            fragments = fresh._read_source_fragments(fresh._envelope(receipt["snapshot_id"]))
+            assert materialisation._read_source_blocks(fragments)
     fresh.reconcile_durable_publications()
     restarted_client = _client(fresh)
     restored_review_client = _client(fresh, "reviewer.bert")

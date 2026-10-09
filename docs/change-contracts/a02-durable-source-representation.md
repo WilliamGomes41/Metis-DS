@@ -16,8 +16,10 @@ Mutable entities: existing processing attempts and additive representation recor
 Immutable entities: source bytes; accepted representations and snapshot bindings; historical objects/reviews/releases.
 Workflow state before: processing/in_review/blocked/ready/closed as current authority derives.
 Workflow state after: representation acceptance alone leaves workflow semantics unchanged; candidate activation remains existing owner; missing representation is a technical unavailable/migration-required condition, never hidden GET processing.
-Release state before/after: unchanged; no release writes.
-Serving state before/after: unchanged; publication registry remains sole authority.
+Release state before: existing immutable releases.
+Release state after: unchanged; no release writes.
+Serving state before: current publication-registry decision.
+Serving state after: unchanged; publication registry remains sole authority.
 Expected API result: existing readers consume exact bound stored fragment/block payload; absent legacy binding returns explicit source_representation_migration_required; corrupt evidence returns source_representation_invalid.
 Expected UI result: existing pages retain equivalent output when binding exists; missing binding gives actionable migration-required projection, no spinner/model work.
 Failure result: no false successful acceptance; failed candidate processing cannot erase accepted source data; no automatic reconstruction.

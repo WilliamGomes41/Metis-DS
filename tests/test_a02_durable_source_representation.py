@@ -105,3 +105,100 @@ def test_a02_zero_reconstruction_installed_routes_and_restart(representation_bac
                 assert client.get(path, params=query).status_code == 403
         print('A02_DURABLE_READ='+json.dumps({'backend': 'postgres' if representation_backend else 'local',
               'route': path, 'reconstructions': len(calls), 'restart': current is not console}))
+
+def remove_binding(console, sid):
+    from src.source_representation_v1 import _local_connection
+    store = getattr(console, "workflow_document_store", None)
+    if store is None:
+        with _local_connection(console, write=True) as con:
+            con.execute("DELETE FROM bindings WHERE snapshot_id=?", (sid,))
+    else:
+        with store._connect() as con:
+            con.execute("DELETE FROM workflow.source_representation_bindings WHERE snapshot_id=%s", (sid,))
+
+
+def test_a02_historical_migration_is_explicit_fenced_and_preserves_reviews(
+        representation_backend, tmp_path, monkeypatch):
+    from src.operations_console_v1 import ConsoleError
+    from src.source_representation_v1 import load, SourceRepresentationError, MISSING
+    console = console_at(tmp_path, representation_backend)
+    sid, author, reviewer = ingest(console)
+    envelope = deepcopy(console._envelope(sid))
+    objects = deepcopy(console.snapshot_objects(sid))
+    revision = console.objects_revision(sid)
+    accepted = load(console, envelope).representation["representation_id"]
+    remove_binding(console, sid)
+    with pytest.raises(SourceRepresentationError, match=MISSING):
+        load(console, envelope)
+    original = console._extract_historical_source_for_migration
+    def forbidden(*args, **kwargs):
+        pytest.fail("HISTORICAL_GET_EXECUTED_MIGRATION")
+    monkeypatch.setattr(console, "_extract_historical_source_for_migration", forbidden)
+    with TestClient(installed_app(console)) as client:
+        login(client)
+        response = client.get("/publish")
+        assert response.status_code == 200
+    monkeypatch.setattr(console, "_extract_historical_source_for_migration", original)
+    command = dict(actor_id=author, snapshot_id=sid, command_id="migration-a02",
+                   expected_revision=revision, reason="explicit historical migration")
+    with pytest.raises(ConsoleError):
+        console.migrate_source_representation(**{**command, "actor_id": reviewer})
+    with pytest.raises(ConsoleError):
+        console.migrate_source_representation(**{**command, "expected_revision": "stale"})
+    result = console.migrate_source_representation(**command)
+    assert result["dry_run"] and result["representation_id"] == accepted
+    with pytest.raises(SourceRepresentationError, match=MISSING):
+        load(console, envelope)
+    result = console.migrate_source_representation(**command, dry_run=False)
+    assert not result["dry_run"] and result["representation_id"] == accepted
+    assert console._envelope(sid) == envelope
+    assert console.snapshot_objects(sid) == objects
+    assert console.objects_revision(sid) == revision
+    monkeypatch.setattr(console, "_extract_historical_source_for_migration", forbidden)
+    assert console.migrate_source_representation(**command, dry_run=False)["idempotent"]
+    with pytest.raises(ConsoleError, match="source_representation_successor_required"):
+        console.migrate_source_representation(**command, correction_revision=1)
+
+
+def test_a02_concurrent_acceptance_conflict_rollback_and_immutable_carrier(
+        representation_backend, tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from src.source_representation_v1 import (
+        load, accept_local, accept_postgres, provenance, SourceRepresentationError,
+        stored_blocks, CONFLICT)
+    from src.integrity_kernel import stable_hash
+    console = console_at(tmp_path, representation_backend)
+    sid, author, reviewer = ingest(console)
+    envelope = console._envelope(sid)
+    carrier = load(console, envelope)
+    record = json.loads(json.dumps(carrier.representation))
+    remove_binding(console, sid)
+    def accept(_):
+        store = getattr(console, "workflow_document_store", None)
+        if store is None:
+            return accept_local(console, envelope, record, provenance(envelope))
+        with store._connect() as con:
+            with con.transaction():
+                return accept_postgres(con, envelope, record, provenance(envelope))
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        assert set(pool.map(accept, range(4))) == {record["representation_id"]}
+    conflicting = deepcopy(record)
+    conflicting["unexpected_conflicting_payload"] = True
+    conflicting["payload_hash"] = stable_hash({k: v for k, v in conflicting.items() if k != "payload_hash"})
+    store = getattr(console, "workflow_document_store", None)
+    with pytest.raises(SourceRepresentationError, match=CONFLICT):
+        if store is None:
+            accept_local(console, envelope, conflicting, provenance(envelope))
+        else:
+            with store._connect() as con:
+                with con.transaction():
+                    accept_postgres(con, envelope, conflicting, provenance(envelope))
+    assert load(console, envelope).representation == record
+    fresh = load(console_at(tmp_path, representation_backend), envelope)
+    with pytest.raises(SourceRepresentationError, match="carrier_immutable"):
+        fresh[0]["raw_text"] = "changed"
+    with pytest.raises(SourceRepresentationError, match="carrier_immutable"):
+        fresh.representation["views"]["full"].clear()
+    first = stored_blocks(fresh)
+    first.clear()
+    assert stored_blocks(fresh)

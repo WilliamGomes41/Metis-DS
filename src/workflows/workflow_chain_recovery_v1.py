@@ -43,7 +43,7 @@ from src.publication_chain_recovery_v1 import (
     check_chain_integrity,
 )
 
-WORKFLOW_RECOVERY_VERSION = 6
+WORKFLOW_RECOVERY_VERSION = 7
 API_ACCESS_TABLES = tuple(API_ACCESS_COLUMNS)
 _API_ACCESS_ORDER_BY = {
     table: ",".join(columns)
@@ -56,6 +56,8 @@ WORKFLOW_TABLES = (
     "sessions",
     "topics",
     "documents",
+    "source_representations",
+    "source_representation_bindings",
     "document_reviewers",
     "document_objects",
     "review_events",
@@ -65,6 +67,8 @@ WORKFLOW_TABLES = (
 )
 
 _WORKFLOW_COLUMNS: dict[str, tuple[str, ...]] = {
+    "source_representations": ("representation_id", "payload_hash", "payload", "created_at"),
+    "source_representation_bindings": ("snapshot_id", "representation_id", "evidence", "accepted_at"),
     "accounts": (
         "account_id", "username", "display_name", "roles", "password_salt",
         "password_hash", "created_at", "retirement",
@@ -106,6 +110,8 @@ _WORKFLOW_COLUMNS: dict[str, tuple[str, ...]] = {
 }
 
 _WORKFLOW_ORDER_BY: dict[str, str] = {
+    "source_representations": "representation_id",
+    "source_representation_bindings": "snapshot_id",
     "accounts": "account_id",
     "sessions": "token_hash",
     "topics": "identity_key",
@@ -119,6 +125,8 @@ _WORKFLOW_ORDER_BY: dict[str, str] = {
 }
 
 _WORKFLOW_JSON_COLUMNS = {
+    "source_representations": {"payload"},
+    "source_representation_bindings": {"evidence"},
     "documents": {"object_diff", "envelope_payload"},
     "document_objects": {"payload"},
     "review_events": {"details", "event_payload"},
@@ -137,6 +145,19 @@ def _upgrade_workflow_state(state: Mapping[str, Any]) -> dict[str, Any]:
     version = int(state.get("workflow_recovery_version") or 0)
     if version == WORKFLOW_RECOVERY_VERSION:
         return deepcopy(dict(state))
+    if version == 6:
+        upgraded = deepcopy(dict(state))
+        tables = upgraded.get("workflow_tables")
+        if not isinstance(tables, dict):
+            raise PublicationChainRecoveryError("workflow_backup_tables_missing")
+        # Old archives contain no accepted representations. Reading restored
+        # historical sources requires an explicit migration, never GET work.
+        if any(name in tables for name in ("source_representations", "source_representation_bindings")):
+            raise PublicationChainRecoveryError("workflow_backup_representation_version_conflict")
+        tables["source_representations"] = []
+        tables["source_representation_bindings"] = []
+        upgraded["workflow_recovery_version"] = WORKFLOW_RECOVERY_VERSION
+        return upgraded
     if version != LEGACY_WORKFLOW_RECOVERY_VERSION:
         _validate_workflow_shape(state)
         raise PublicationChainRecoveryError("workflow_backup_version_invalid")
@@ -176,8 +197,8 @@ def _upgrade_workflow_state(state: Mapping[str, Any]) -> dict[str, Any]:
         )
 
     tables["topics"] = [topics_by_key[key] for key in sorted(topics_by_key)]
-    upgraded["workflow_recovery_version"] = WORKFLOW_RECOVERY_VERSION
-    return upgraded
+    upgraded["workflow_recovery_version"] = 6
+    return _upgrade_workflow_state(upgraded)
 
 
 def _rows(state: Mapping[str, Any], table: str, *, group: str = "workflow") -> list[dict[str, Any]]:
@@ -210,6 +231,26 @@ def _validate_workflow_shape(state: Mapping[str, Any]) -> None:
     for table in WORKFLOW_TABLES:
         _rows(state, table)
     _audit_entries_from_state(state)
+    from src.source_representation_v1 import validate_record, SourceRepresentationError
+    documents = {row["snapshot_id"]: row for row in _rows(state, "documents")}
+    representations = {}
+    try:
+        for row in _rows(state, "source_representations"):
+            record = row["payload"]
+            validate_record(record)
+            rid = record["representation_id"]
+            if row["representation_id"] != rid or row["payload_hash"] != record["payload_hash"] or rid in representations:
+                raise ValueError("representation_identity_conflict")
+            representations[rid] = record
+        bound = set()
+        for row in _rows(state, "source_representation_bindings"):
+            sid = row["snapshot_id"]
+            if sid in bound or sid not in documents or row["representation_id"] not in representations:
+                raise ValueError("representation_binding_invalid")
+            validate_record(representations[row["representation_id"]], documents[sid]["envelope_payload"])
+            bound.add(sid)
+    except (SourceRepresentationError, KeyError, TypeError, ValueError) as exc:
+        raise PublicationChainRecoveryError("workflow_backup_representation_invalid") from exc
 
 
 def _validate_api_access(state: Mapping[str, Any]) -> None:
@@ -660,6 +701,7 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
                     )
 
                     for table in (
+                        "source_representations", "source_representation_bindings",
                         "document_reviewers", "document_objects", "review_events",
                         "publish_authorizations", "audit_records", "audit_secrets",
                     ):
@@ -742,6 +784,7 @@ def restore_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAd
     restored = database.export_state()
     with zipfile.ZipFile(archive) as zipf:
         expected = json.loads(zipf.read("database.json").decode("utf-8"))
+    expected = _upgrade_workflow_state(expected)
     for group in ("workflow_tables", "api_access_tables"):
         if stable_hash(restored[group]) != stable_hash(expected[group]):
             raise PublicationChainRecoveryError(f"{group}_restore_roundtrip_mismatch")
