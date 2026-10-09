@@ -192,12 +192,10 @@ def recommendation_codes(row, *, context):
 def validate_object_fields(obj, fragments):
     """Rebind stored field references from source, including after correction."""
     from src.semantic_passage_v1 import semantic_source_blocks
-    from src.object_taxonomy_v1 import extract_object_type
     from src.source_bound_fields_v2 import validated_context
     metadata = obj.get("metadata") or {}
     record = metadata.get("source_bound_fields")
-    blocks = {b["block_id"]: b for b in semantic_source_blocks(
-        f for f in fragments if extract_object_type(f)[0] != "heading")}
+    blocks = {b["block_id"]: b for b in semantic_source_blocks(fragments, include_headings=False)}
     selected = []
     for span in (metadata.get("semantic_passage") or {}).get("spans") or []:
         block = blocks.get(span["block_id"])
@@ -231,10 +229,8 @@ def additional_context_codes(row, realization, *, obj=None, fragments=None):
     if obj is not None and fragments is not None:
         from src.semantic_passage_v1 import semantic_source_blocks
         from src.recommendation_coverage_v1 import inventory
-        from src.object_taxonomy_v1 import extract_object_type
         spans = ((obj.get("metadata") or {}).get("semantic_passage") or {}).get("spans") or []
-        entries = [item for item in inventory(semantic_source_blocks(
-            f for f in fragments if extract_object_type(f)[0] != "heading"))
+        entries = [item for item in inventory(semantic_source_blocks(fragments, include_headings=False))
             if any(s["block_id"] == item["span"]["block_id"]
                 and max(s["start"], item["span"]["start"]) < min(s["end"], item["span"]["end"])
                 for s in spans)]

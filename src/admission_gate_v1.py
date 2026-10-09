@@ -883,7 +883,8 @@ def apply_admission_gate(
         from src.decision_unit_construction_v1 import apply_gate
         return apply_gate(objects, source_hash=source_hash)
     from src.knowledge_materialisation_v1 import validate_materialised_candidate, _selection_blocks
-    fragments = list(fragments or [])
+    from src.source_representation_v1 import preserve_fragments
+    fragments = preserve_fragments(fragments) if fragments is not None else []
     try:
         source_blocks = _selection_blocks(fragments)
     except (ValueError, KeyError, TypeError):

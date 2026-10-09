@@ -522,11 +522,12 @@ def source_bound_relation_context(obj: dict[str, Any], objects: list[dict[str, A
     """Use existing applies_if/except_if proposal evidence, never bare relations."""
     from src.knowledge_relation_proposal_v1 import relation_proposal_admission_codes, relation_evidence_map
     from src.knowledge_relations_v1 import proposed_knowledge_relations_of
-    from src.semantic_passage_v1 import _reconstructed_blocks, source_fragment_ids_for_text
+    from src.semantic_passage_v1 import source_fragment_ids_for_text
+    from src.knowledge_materialisation_v1 import _read_source_blocks
     if relation_proposal_admission_codes(obj, objects=objects):
         return []
     by_id = {r.get('object_id'): r for r in objects}
-    blocks = {p['block_id']: (p, f) for p, f in _reconstructed_blocks(fragments)}
+    blocks = _read_source_blocks(fragments, include_headings=True)
     evidence = relation_evidence_map(obj)
     result = []
     for relation in proposed_knowledge_relations_of(obj):

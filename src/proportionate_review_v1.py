@@ -6,6 +6,8 @@ still receives its own exact-hash review, ledger event and publish tuple.
 """
 from __future__ import annotations
 
+from src.source_representation_v1 import preserve_fragments
+
 from collections import defaultdict
 from html import escape
 from typing import Any, Iterable
@@ -72,7 +74,7 @@ def regular_review_queue(objects: Iterable[dict[str, Any]], *, review_path: str,
                          bindings=None, fragments=None) -> list[dict[str, Any]]:
     """Ordinary content work derives only from the kernel's current duty."""
     bound = tuple(bindings or ())
-    source = tuple(fragments) if fragments is not None else None
+    source = preserve_fragments(fragments) if fragments is not None else None
     return sorted([obj for obj in objects if review_duty_for(
         obj, review_path=review_path, bindings=bound, fragments=source)],
         key=review_priority_rank)
@@ -89,7 +91,7 @@ def normal_risk_batch_eligible(obj: dict[str, Any], *, review_path: str,
 def normal_risk_batch_queue(objects: Iterable[dict[str, Any]], *, review_path: str,
                             bindings=None, fragments=None) -> list[dict[str, Any]]:
     bound = tuple(bindings or ())
-    source = tuple(fragments) if fragments is not None else None
+    source = preserve_fragments(fragments) if fragments is not None else None
     return sorted([obj for obj in objects if normal_risk_batch_eligible(
         obj, review_path=review_path, bindings=bound, fragments=source)], key=review_priority_rank)
 
@@ -109,7 +111,7 @@ def regular_individual_review_queue(objects: Iterable[dict[str, Any]], *, review
     if review_path == "boom":
         return []
     bound = tuple(bindings or ())
-    source = tuple(fragments) if fragments is not None else None
+    source = preserve_fragments(fragments) if fragments is not None else None
     return sorted([obj for obj in objects if (
         duty := review_duty_for(obj, review_path=review_path, bindings=bound, fragments=source)
     ) and duty["lane"] != LANE_BATCH and not is_slow_review_duty(obj, review_path=review_path, bindings=bound, fragments=source)],

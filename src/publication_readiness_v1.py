@@ -133,6 +133,7 @@ def _failed_readiness(snapshot_id: str, error: Exception) -> dict[str, Any]:
         "curation_blockers": [],
         "technical_blockers": [READINESS_AUTHORITY_UNAVAILABLE],
         "authority_error": type(error).__name__,
+        "authority_reason": getattr(error, "code", None),
         "publishable_object_ids": [],
         "publishable_object_count": 0,
         "review_complete": False,
@@ -211,7 +212,10 @@ class PublicationReadinessMixin:
                 bindings=inputs["bindings"],
                 fragments=inputs["fragments"],
             )
-        except (KeyError, OSError, TypeError, ValueError) as exc:
+        except Exception as exc:
+            from src.operations_console_v1 import ConsoleError
+            if not isinstance(exc, (KeyError, OSError, TypeError, ValueError, ConsoleError)):
+                raise
             return _failed_readiness(snapshot_id, exc)
 
         existing = _existing_gate_readiness(technical_projection)

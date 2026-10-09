@@ -209,6 +209,8 @@ def test_legacy_v5_workflow_backup_is_deterministically_upgraded(
     legacy = deepcopy(current)
     legacy["workflow_recovery_version"] = 5
     legacy["workflow_tables"].pop("topics")
+    legacy["workflow_tables"].pop("source_representations")
+    legacy["workflow_tables"].pop("source_representation_bindings")
     for row in legacy["workflow_tables"]["documents"]:
         row.pop("topic_id", None)
 
@@ -397,3 +399,19 @@ def test_restore_rechecks_nonempty_destination_inside_lock(recovery_postgres: Po
     assert [row["account_id"] for row in after["workflow_tables"]["accounts"]] == ["other"]
     assert not after["workflow_tables"]["documents"]
     assert _identity_trigger_enabled(recovery_postgres)
+
+@pytest.mark.parametrize("version", [6, 7])
+def test_representation_backup_version_requires_explicit_historical_migration(recovery_postgres, version):
+    _seed_workflow(recovery_postgres)
+    adapter = PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(recovery_postgres))
+    state = adapter.export_state()
+    state["workflow_recovery_version"] = version
+    state["workflow_tables"].pop("source_representations")
+    state["workflow_tables"].pop("source_representation_bindings")
+    _install_schema(recovery_postgres.dsn)
+    if version == 7:
+        with pytest.raises(PublicationChainRecoveryError, match="workflow_backup_tables_missing"):
+            adapter.restore_state(state)
+    else:
+        adapter.restore_state(state)
+        assert adapter.export_state()["workflow_tables"]["source_representations"] == []

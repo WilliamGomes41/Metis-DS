@@ -133,10 +133,16 @@ def _reconstructed_blocks(
     return blocks
 
 
-def semantic_source_blocks(fragments: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+def semantic_source_blocks(fragments: Iterable[dict[str, Any]], *, include_headings=True) -> list[dict[str, Any]]:
     """Expose reconstructed source blocks that a semantic proposer may reference."""
 
-    return [public for public, _source in _reconstructed_blocks(fragments)]
+    from src.source_representation_v1 import stored_blocks
+    accepted = stored_blocks(fragments, include_headings=include_headings)
+    if accepted is None and not include_headings:
+        from src.object_taxonomy_v1 import extract_object_type
+        fragments = (row for row in fragments if extract_object_type(row)[0] != "heading")
+    return ([public for public, _source in accepted.values()] if accepted is not None
+            else [public for public, _source in _reconstructed_blocks(fragments)])
 
 
 def _coverage_remainders(

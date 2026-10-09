@@ -103,11 +103,11 @@ def test_http_review_render_reuses_source_and_matches_uncached_read(review_clien
         return original(rows)
 
     monkeypatch.setattr(materialisation, "_selection_blocks", counted)
-    for expected_calls in (1, 2):
+    for _ in (1, 2):
         response = client.get("/review", params=params)
         assert response.status_code == 200
         assert response.text == expected.text
-        assert len(calls) == expected_calls
+        assert calls == []  # The accepted selection view bypasses construction.
     assert console.snapshot_objects(sid) == before
 
 
@@ -123,6 +123,10 @@ def test_postgres_overview_reuses_full_source_for_retained_records(review_client
     before = deepcopy(console.snapshot_objects(sid))
     assert sum(is_source_record(obj) for obj in before) == 20
     envelope = deepcopy(console._envelope(sid))
+    accepted_fragments = console.review_source_fragments(sid)
+    # This summary-adapter unit test supplies the already validated carrier;
+    # A02 exercises the actual PostgreSQL artifact reader separately.
+    monkeypatch.setattr(console, "_read_source_fragments", lambda envelope, path=None: accepted_fragments)
     batch_reads = []
 
     @contextmanager
@@ -166,6 +170,6 @@ def test_postgres_overview_reuses_full_source_for_retained_records(review_client
         assert response.text == expected.text
         # Full source and filtered candidate source are distinct views; neither
         # may be rebuilt for every retained source record.
-        assert 1 <= len(calls) <= 2
+        assert calls == []
         assert len(batch_reads) == request_number
     assert console.snapshot_objects(sid) == before
