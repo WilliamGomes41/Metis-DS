@@ -203,7 +203,8 @@ def _scenario(runtime, monkeypatch, boundary, *, block_eventloop=False):
                 # Expire the accepting browser, then revoke the other browser.
                 # Neither turns passive polling into renewal, or adds a command.
                 with console.workflow_identity_store._connect() as connection:
-                    connection.execute("UPDATE workflow.sessions SET expires_at=CURRENT_TIMESTAMP - interval '1 second' "
+                    connection.execute("UPDATE workflow.sessions SET created_at=CURRENT_TIMESTAMP - interval '31 minutes', "
+                                       "expires_at=CURRENT_TIMESTAMP - interval '1 second' "
                                        "WHERE token_hash=%s", (_token_hash(token_a),))
                 expired = _session_row(console, token_a)
                 assert available(client, "get", "/session/status").status_code == 401
