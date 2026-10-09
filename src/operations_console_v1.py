@@ -63,6 +63,7 @@ from src.beslisboom_path_v1 import (
     stamp_boom_flags,
 )
 from src.context_aware_split_v1 import split_context_aware_units
+from src.source_preparation_context_v1 import build_formation_context
 from src.extract_html_v1 import extract as extract_html
 from src.extract_pdf_v2 import extract as extract_pdf
 from src.four_eyes_v1 import (
@@ -1871,16 +1872,10 @@ class OperationsConsole:
                     title=title.strip(),
                     family=family_hook,
                     class_=class_,
-                    formation_context={
-                        "snapshot_id": snapshot_id,
-                        "source_sha256": digest,
-                        "semantic_replay": None,
-                        "explicit_decision_graph": review_path == "boom" and review_policy is not None,
-                        "model_call_limits": {key:attempt["limits"][key] for key in ("connect", "idle", "total", "attempt", "max_attempts")} if attempt_id else None,
-                        "attempt_deadline": attempt_deadline,
-                        "diagnostic_checkpoint": self._diagnostic_writer(snapshot_id, attempt_id),
-                        "processing_reference": attempt.get("processing_reference") if attempt_id else None,
-                    },
+                    formation_context=build_formation_context(self, envelope=envelope,
+                        actor_id=actor_id, expected_revision=expected_revision,
+                        attempt=attempt if attempt_id else None, deadline=attempt_deadline,
+                        expected_envelope=expected_envelope if attempt_id else None),
                 )
             except ConsoleError as exc:
                 if not exc.code.startswith(("pre_review_llm_", "docling_")):
@@ -2319,17 +2314,9 @@ class OperationsConsole:
             title=envelope["title"],
             family=envelope["family"],
             class_=envelope["class"],
-            formation_context={
-                "snapshot_id": snapshot_id,
-                "source_sha256": envelope["sha256"],
-                "semantic_replay": deepcopy(envelope.get("semantic_replay")),
-                "resume_formation": bool(_attempt_id and attempt.get("kind") == "resume"),
-                "explicit_decision_graph": "decision_graph" in envelope or bool(envelope.get("review_policy") and envelope["class"] == "beslisboom"),
-                "model_call_limits": {key:attempt["limits"][key] for key in ("connect", "idle", "total", "attempt", "max_attempts")} if _attempt_id and attempt.get("limits") else None,
-                "attempt_deadline": _attempt_deadline,
-                "diagnostic_checkpoint": self._diagnostic_writer(snapshot_id, _attempt_id),
-                "processing_reference": attempt.get("processing_reference") if _attempt_id else None,
-            },
+            formation_context=build_formation_context(self, envelope=envelope,
+                actor_id=actor_id, expected_revision=expected_revision,
+                attempt=attempt if _attempt_id else None, deadline=_attempt_deadline),
         )
         replay_record = spec.pop(SEMANTIC_REPLAY_SPEC_KEY, None)
         manifest = {
@@ -2645,8 +2632,11 @@ class OperationsConsole:
             raise ConsoleError(exc.code) from exc
 
     def _read_source_fragments(self, envelope, path):
+        from src.source_preparation_context_v1 import stored_extraction
         from src.docling_contract_v1 import stored_fragments
-        retained = stored_fragments(envelope)
+        retained = stored_extraction(envelope)
+        if retained is None:
+            retained = stored_fragments(envelope)
         if retained is not None:
             return retained
         args = {"document_id": envelope["document_id"], "source_id": envelope["source_id"]}
@@ -2694,6 +2684,23 @@ class OperationsConsole:
 
     def _fragments_and_spec(self, kind, path, **command):
         """Explicit mutation-only formation boundary, preserving legacy callers."""
+        context = command.get("formation_context") or {}
+        checkpoint = context.get("extraction_checkpoint")
+        if checkpoint is not None:
+            context = dict(context)
+            fragments = context.get("retained_fragments")
+            if fragments is None:
+                diagnostic = context.get("diagnostic_checkpoint")
+                if diagnostic:
+                    diagnostic("extraction_started", {})
+                from src.docling_pdf_v1 import enabled, release_conversion_capacity
+                extraction_args = {"deadline": context.get("attempt_deadline")} if kind == "pdf" and enabled() else {}
+                fragments = self._extract(kind, path, document_id=command["document_id"],
+                    source_id=command["source_id"], **extraction_args)
+                release_conversion_capacity()
+            checkpoint(fragments)
+            context["retained_fragments"] = fragments
+            command["formation_context"] = context
         strategy = getattr(self, "_source_processing_strategy", None)
         if strategy is None:
             return self._deterministic_fragments_and_spec(kind, path, **command)
