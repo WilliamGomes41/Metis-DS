@@ -4115,6 +4115,7 @@ class OperationsConsole:
         patch: dict[str, Any],
         additional_source_fragments: list[dict[str, Any]] | None = None,
         materialisation_decision: dict[str, Any] | None = None,
+        source_repair_spec: dict[str, Any] | None = None,
         rereview_scope: str = "document",
         expected_revision: str | None = None,
     ) -> dict[str, Any]:
@@ -4133,13 +4134,18 @@ class OperationsConsole:
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
+        correction_input = deepcopy(target)
+        if source_repair_spec is not None or materialisation_decision is not None:
+            # Explicit source correction prepares a successor from the actual
+            # current object without activating a temporary revise state.
+            correction_input["governance"]["validation_status"] = "revise"
         revised = create_revision(
-            target,
+            correction_input,
             patch,
             actor=account["username"],
             schema_path=self.schema_path,
             ledger=None,
-            snapshot_id=snapshot_id,
+            snapshot_id=None,
         )
         if additional_source_fragments:
             provenance = revised.setdefault("provenance", {})
@@ -4155,6 +4161,11 @@ class OperationsConsole:
             errors = schema_errors(revised, self.schema_path)
             if errors:
                 raise ConsoleError("revision_schema_invalid", " | ".join(errors))
+        # Repair provenance and cleanup are preparation, never later activations.
+        if source_repair_spec is not None:
+            revised["provenance"]["source_fragments"] = self._verified_finalized_source_refs(
+                snapshot_id, revised, additional_source_fragments or [])
+        revised.setdefault("metadata", {}).pop("review_passage", None)
         if revised.get("object_type") not in {"document", "heading"}:
             revised["object_type"] = "unclassified"
         revised.pop("confirmed_object_type", None)
@@ -4173,9 +4184,9 @@ class OperationsConsole:
                     raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
                 if revised["content"]["clean_text"] != materialised["clean_text"]:
                     raise ConsoleError("materialisation_text_mismatch")
+                revised["content"]["raw_text"] = materialised["clean_text"]
                 semantic = revised.setdefault("metadata", {}).setdefault("semantic_passage", {})
-                semantic["spans"] = materialised["semantic_passage"]["spans"]
-                semantic["source_mapping"] = materialised["semantic_passage"]["source_mapping"]
+                semantic.update(materialised["semantic_passage"])
                 from src.semantic_transform_generic_v1 import _fragment_ref
                 raw_by_id = {row["fragment_id"]: row for row in fragments}
                 revised["provenance"]["source_fragments"] = [
@@ -4183,6 +4194,17 @@ class OperationsConsole:
                     for fragment_id in materialised["source_fragment_ids"]
                 ]
                 stamp_canonical_hashes(revised)
+            from src.knowledge_materialisation_v1 import validate_materialised_candidate
+            semantic = (revised.get("metadata") or {}).get("semantic_passage") or {}
+            if semantic.get("selection_origin") == "proposal_selected":
+                try:
+                    validate_materialised_candidate(revised, fragments=fragments)
+                    if revised["content"].get("raw_text") != revised["content"]["clean_text"]:
+                        raise ValueError("materialisation_raw_text_mismatch")
+                    from src.source_bound_fields_v2 import rebind_revision_evidence
+                    rebind_revision_evidence(target, revised, fragments=fragments)
+                except (ValueError, KeyError, TypeError) as exc:
+                    raise ConsoleError(str(exc)) from exc
             peers = [
                 revised if row.get("object_id") == object_id else row
                 for row in current
@@ -4195,6 +4217,8 @@ class OperationsConsole:
                 source_hash=envelope["sha256"],
             )
             revised = next(row for row in gated if row["object_id"] == object_id)
+            if semantic.get("selection_origin") == "proposal_selected" and not admission_of(revised):
+                raise ConsoleError("correction_admission_missing")
             revised = apply_passage_register([revised])[0]
         else:
             from src.decision_unit_construction_v1 import KEY, apply_gate, rebuild_for_revision
@@ -4211,6 +4235,14 @@ class OperationsConsole:
             apply_gate(peers, source_hash=envelope["sha256"], graph=envelope.get("decision_graph"),
                        inventory=envelope.get("decision_graph_evidence"))
             revised = apply_passage_register([revised])[0]
+        if source_repair_spec is not None:
+            revised["provenance"].update(self._source_repair_provenance_patch(source_repair_spec))
+        revised = revise_object(target, revised, snapshot_id=snapshot_id,
+                                reason=patch["reason"], actor=account["username"], force=True)
+        stamp_canonical_hashes(revised)
+        errors = schema_errors(revised, self.schema_path)
+        if errors:
+            raise ConsoleError("revision_schema_invalid", " | ".join(errors))
         history = self._load_objects(snapshot_id)
         history.append(revised)
         new_envelopes: dict[str, Any] | None = None
@@ -4240,6 +4272,13 @@ class OperationsConsole:
                 with transaction:
                     self._reload_store_locked()
                     self._assert_source_work_unchanged(envelope, revision, "published_working_revision_immutable")
+                    self._require_mutable_working_revision(snapshot_id)
+                    if review_path_for_klasse(envelope["class"]) != "boom":
+                        pinned_path, _ = self._verified_source_bytes(envelope)
+                        if self._read_source_fragments(envelope, pinned_path) != fragments:
+                            raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=self.objects_revision(snapshot_id))
+                    if getattr(self, "workflow_identity_store", None) is None:
+                        self._accounts = self._load_map(self._accounts_path)
                     current_actor = self._account(actor_id)
                     if not {"researcher", "reviewer"}.intersection(current_actor["roles"]):
                         raise ConsoleError("correction_role_required")
@@ -4330,16 +4369,6 @@ class OperationsConsole:
         except MaterialisationError as exc:
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
 
-        self.review_object(
-            actor_id=actor_id,
-            snapshot_id=snapshot_id,
-            object_id=object_id,
-            decision="revise",
-            comment="Afgebroken zin aangevuld met direct aansluitende brontekst.",
-            suitability="samenvoegen",
-            eindoordeel="goedkeuren_na_correctie",
-            expected_revision=expected_revision,
-        )
         return self.correct_object(
             actor_id=reviewer["account_id"],
             snapshot_id=snapshot_id,
@@ -4354,6 +4383,7 @@ class OperationsConsole:
             additional_source_fragments=list((neighbor.get("provenance") or {}).get("source_fragments") or []),
             materialisation_decision=selection,
             rereview_scope="object",
+            expected_revision=expected_revision,
         )
 
     def silently_edit_object(self, snapshot_id: str, object_id: str, _patch: dict[str, Any]) -> None:

@@ -819,20 +819,21 @@ def test_correct_object_reruns_admission_gate(tmp_path: Path) -> None:
         comment="Corrigeer de zin.",
         proposed_correction=ONE_WORD,
     )
-    revised = console.correct_object(
-        actor_id=accounts["researcher"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=adviseert["object_id"],
-        patch={
-            "reason": "reviewer correction",
-            "operations": [
-                {"op": "set", "path": "content.clean_text", "value": ONE_WORD},
-                {"op": "set", "path": "content.raw_text", "value": ONE_WORD},
-            ],
-        },
-    )
-    assert _admission(revised) == {}
-    assert is_slow_review_duty(revised) is False
+    before = console._load_objects(receipt["snapshot_id"], remember=False)
+    with pytest.raises(ConsoleError, match="materialisation_text_mismatch"):
+        revised = console.correct_object(
+            actor_id=accounts["researcher"]["account_id"],
+            snapshot_id=receipt["snapshot_id"],
+            object_id=adviseert["object_id"],
+            patch={
+                "reason": "reviewer correction",
+                "operations": [
+                    {"op": "set", "path": "content.clean_text", "value": ONE_WORD},
+                    {"op": "set", "path": "content.raw_text", "value": ONE_WORD},
+                ],
+            },
+        )
+    assert console._load_objects(receipt["snapshot_id"], remember=False) == before
 
 
 def test_correct_object_can_readmit_a_source_invalid_revision(tmp_path: Path) -> None:
@@ -853,20 +854,18 @@ def test_correct_object_can_readmit_a_source_invalid_revision(tmp_path: Path) ->
         comment="Maak deze kandidaat tijdelijk ongeldig.",
         proposed_correction=ONE_WORD,
     )
-    blocked = console.correct_object(
-        actor_id=accounts["researcher"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=adviseert["object_id"],
-        patch={
-            "reason": "temporary blocked revision",
-            "operations": [
-                {"op": "set", "path": "content.clean_text", "value": ONE_WORD},
-                {"op": "set", "path": "content.raw_text", "value": ONE_WORD},
-            ],
-        },
-    )
-    assert _admission(blocked) == {}
-    assert is_slow_review_duty(blocked) is False
+    # Explicit historical corruption fixture: the production command must no
+    # longer create this inconsistent predecessor.
+    from copy import deepcopy
+    from src.integrity_kernel import stamp_canonical_hashes
+    from tests.semantic_fixture_support import install_fixture_history
+    rows = console._load_objects(receipt["snapshot_id"])
+    blocked = next(row for row in rows if row["object_id"] == adviseert["object_id"])
+    original_selection = deepcopy(blocked["metadata"]["semantic_passage"]["spans"])
+    blocked["content"].update(clean_text=ONE_WORD, raw_text=ONE_WORD)
+    blocked["metadata"].pop("admission", None)
+    stamp_canonical_hashes(blocked)
+    install_fixture_history(console, receipt["snapshot_id"], rows)
 
     console.review_object(
         actor_id=accounts["reviewer"]["account_id"],
@@ -880,6 +879,8 @@ def test_correct_object_can_readmit_a_source_invalid_revision(tmp_path: Path) ->
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
         object_id=blocked["object_id"],
+        materialisation_decision={"decision_kind": "semantic_selection", "selection_origin": "proposal_selected",
+                                  "spans": original_selection, "source_text": ADVISEERT},
         patch={
             "reason": "restore source-bound recommendation",
             "operations": [
@@ -888,8 +889,11 @@ def test_correct_object_can_readmit_a_source_invalid_revision(tmp_path: Path) ->
             ],
         },
     )
-    assert _admission(revised)["gate_result"] == GATE_ALLOWED
-    assert is_slow_review_duty(revised, bindings=console.object_review_bindings(receipt["snapshot_id"]), fragments=console.review_source_fragments(receipt["snapshot_id"])) is True
+    assert _admission(revised)["gate_result"] == GATE_BLOCKED
+    assert "source_bound_fields_stale" not in _admission(revised)["reason_codes"]
+    from src.knowledge_materialisation_v1 import validate_materialised_candidate
+    validate_materialised_candidate(revised, fragments=console.review_source_fragments(receipt["snapshot_id"]))
+    assert is_slow_review_duty(revised, bindings=console.object_review_bindings(receipt["snapshot_id"]), fragments=console.review_source_fragments(receipt["snapshot_id"])) is False
 
 def test_admission_carries_section_role_from_existing_section_path(tmp_path: Path) -> None:
     html = (

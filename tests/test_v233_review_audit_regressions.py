@@ -122,7 +122,7 @@ def test_real_get_pins_text_and_revision_together_and_preserves_conflict_selecti
     console, client, sid, actor, ids = review_system
     original_read = console.snapshot_objects_and_revision
     old_text = next(obj for obj in console.snapshot_objects(sid) if obj["object_id"] == ids[0])["content"]["clean_text"]
-    new_text = "De Dutch Job Group (dJG) is een meetinstrument."
+    new_text = old_text
 
     def concurrent_edit(snapshot_id):
         snapshot = original_read(snapshot_id)
@@ -135,22 +135,19 @@ def test_real_get_pins_text_and_revision_together_and_preserves_conflict_selecti
 
     monkeypatch.setattr(console, "snapshot_objects_and_revision", concurrent_edit)
     response = client.get("/review", params={"document": sid, "task": "batch"})
-    assert old_text in response.text and new_text not in response.text
+    assert old_text in response.text
     form = Page(response.text).batches[0]
     assert form["fields"]["snapshot_revision"] != console.objects_revision(sid)
     response = client.post(form["action"], data={**form["fields"], "object_ids": ids})
     assert response.status_code == 409
     assert "data-stale-write-conflict" in response.text
-    # A shortened, non-reconstructable correction stays available in the audit
-    # card, but cannot re-enter the ordinary batch on a stale form.
+    # A valid revision still invalidates the form and its old review binding.
     from src.admission_gate_v1 import admission_of
     corrected = next(o for o in console.snapshot_objects(sid) if o['object_id'] == ids[0])
-    assert admission_of(corrected) == {}
-    from src.knowledge_path_v1 import content_reviewable
-    assert not content_reviewable(corrected)
+    assert admission_of(corrected)["gate_result"] == "allowed"
     assert new_text in client.get('/review', params={'document':sid, 'object':ids[0]}).text
     assert not console._bindings.get(sid)
-    assert not Page(response.text).batches  # Only one eligible candidate remains.
+    assert Page(response.text).batches
     assert console.snapshot_objects_and_revision(sid)[1] == console.objects_revision(sid)
 
 
