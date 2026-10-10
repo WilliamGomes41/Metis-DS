@@ -96,7 +96,7 @@ De brongebonden semantische route mag vóór Review kandidaatobjecten voorstelle
 
 ### 5.3 Context en herstel
 
-Noodzakelijke context telt pas als verwerkt wanneer zij aantoonbaar in de objectrevisie staat of geldig en versiegebonden eraan is gekoppeld. Een detectie- of mergevlag is geen bewijs. Betekenisonzekerheid blijft zichtbaar; bronbinding bewijst geen semantische of klinische volledigheid.
+Noodzakelijke context telt pas als verwerkt wanneer zij aantoonbaar in de objectrevisie staat of geldig en versiegebonden eraan is gekoppeld. Een detectie- of mergevlag is geen bewijs. Betekenisonzekerheid blijft zichtbaar.
 
 De expliciet geconfigureerde V3-route gebruikt versiegebonden isolatie van producentfouten (`recoverable-formation-v1`). Onafhankelijk gevalideerde voorstellen mogen als onvolledig werk worden vastgelegd. Ongeldige voorstellen en hun afhankelijkheden worden niet toegelaten; onopgeloste broninhoud en vormingsfouten blijven zichtbaar en blokkeren publicatie. Bron-, integriteits-, opslag- en versieconflicten verhinderen toepassing. Herstel verleent geen review- of publicatierechten en overschrijft geen beoordeeld werk. Dit is geen versoepeling van letterlijke bronbinding of stille terugval naar een andere vormingsroute.
 
