@@ -219,9 +219,19 @@ def is_continuation_fragment(text: str) -> bool:
         return False
     if is_strength_stamp(blob) or looks_like_structural_heading(blob):
         return False
+    if has_standalone_recommendation_start(blob):
+        return False
+    starter = _TRAILING_CLAUSE_STARTER_RE.match(blob)
+    if starter and has_standalone_recommendation_start(blob[starter.end():].lstrip(" ,:")):
+        return False
     if blob[0].islower() or is_lone_trailing_word(blob):
         return True
     return bool(_TRAILING_CLAUSE_STARTER_RE.match(blob))
+
+
+def has_standalone_recommendation_start(text: str) -> bool:
+    """Explicit advice starter, not proof of a complete/eligible claim."""
+    return bool(_RECOMMENDATION_EVIDENCE_RE.match(normalize_visible_prose(text)))
 
 
 def normalize_visible_prose(text: str) -> str:

@@ -23,7 +23,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from src.atomic_split_v1 import split_meaning_units
+from src.atomic_split_v1 import split_meaning_unit_spans
 from src.object_taxonomy_v1 import (
     extract_object_type,
     is_continuation_fragment,
@@ -275,18 +275,13 @@ def split_context_aware_units(
             and not is_official_heading_text(text)
         ):
             continue
-        units = split_meaning_units(text, is_heading=is_heading)
-        unit_search_start = 0
-        for index, unit in enumerate(units, 1):
-            unit_start = text.find(unit, unit_search_start)
-            if unit_start < 0:
-                unit_start = 0
-            unit_end = unit_start + len(unit)
-            unit_search_start = unit_end
+        units = split_meaning_unit_spans(text, is_heading=is_heading)
+        for index, span in enumerate(units, 1):
+            unit = span.text
             unit_source_fragment_ids = source_fragment_ids_for_text(
                 fragment,
-                start=unit_start,
-                end=unit_end,
+                start=span.start,
+                end=span.end,
             )
             previous = (pending_truncated or last_content or {}).get("text")
             decision = reject_candidate(
