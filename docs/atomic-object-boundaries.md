@@ -1,6 +1,10 @@
 # Bronpassages en objectvoorstellen (#595)
 
-Change class: B. Rewrite risk: none.
+Change class: B
+Promise: Nieuwe objectvorming behoudt exacte bronbereiken en maakt begrensde, herhaalbare relatievoorstellen zonder bestaande bronfragmenten of beoordelingen te herschrijven.
+Proof: Regressies voor quotes, afkortingen, bronbereiken, geïntegreerde beperkingen, zelfstandige adviesclausules, sectiegrenzen en dubbele uitvoering; bestaande ingest-, review- en architectuurtests.
+Touches lifecycle invariants: no
+Rewrite risk: none
 
 Een bronpassage is herleidbaar bronbewijs: tekst uit een specifieke bronversie,
 met vindplaats en structurele context. Een kennisobject is een afzonderlijk te
