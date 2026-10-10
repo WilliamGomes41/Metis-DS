@@ -12,11 +12,15 @@ from src.processing_retry_v1 import assert_active, expire_running, now
 LOG = logging.getLogger(__name__)
 
 
-def claim(console, *, snapshot_id, attempt_id, stop_event=None):
+def claim(console, *, snapshot_id, attempt_id, actor_id=None, stop_event=None):
     """One short SQL row transaction chooses the only executing worker."""
     with console._reprocessing_transaction(snapshot_id):
         envelope = deepcopy(console._envelope(snapshot_id))
         attempt = assert_active(envelope, attempt_id, now())
+        from src.source_selection_v1 import authorize
+        authorize(console, actor_id or attempt["actor_id"], envelope)
+        if actor_id is not None and attempt["actor_id"] != actor_id:
+            raise ConsoleError("processing_command_conflict")
         dispatch = attempt.get("dispatch") or {}
         if dispatch.get("version") != "source-dispatch-v1" or dispatch.get("state") != "pending":
             return None

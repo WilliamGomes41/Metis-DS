@@ -1097,8 +1097,9 @@ class OperationsConsole:
             if bindings is not None:
                 self._bindings = bindings
 
-    def _account(self, account_id: str) -> dict[str, Any]:
-        account = self._accounts.get(account_id)
+    def _account(self, account_id: str, *, current: bool = False) -> dict[str, Any]:
+        accounts = self._load_map(self._accounts_path) if current else self._accounts
+        account = accounts.get(account_id)
         if not account:
             raise ConsoleError("unknown_account")
         return account
@@ -1278,14 +1279,16 @@ class OperationsConsole:
         return self.create_account(username, password, roles, display_name=display_name)
 
     def assign_roles(self, *, actor_id: str, account_id: str, roles: Iterable[str]) -> dict[str, Any]:
-        self._require_role(actor_id, "publisher")
-        account = self._account(account_id)
-        role_set = sorted(set(roles))
-        if any(role not in ALLOWED_ROLES for role in role_set):
-            raise ConsoleError("unknown_role")
-        account["roles"] = role_set
-        self._save_accounts()
-        return self._public_account(account)
+        with self._store_write_lock():
+            self._accounts = self._load_map(self._accounts_path)
+            self._require_role(actor_id, "publisher")
+            account = self._account(account_id)
+            role_set = sorted(set(roles))
+            if any(role not in ALLOWED_ROLES for role in role_set):
+                raise ConsoleError("unknown_role")
+            account["roles"] = role_set
+            self._save_accounts()
+            return self._public_account(account)
 
     def waiting_task_counts(self, account_id: str) -> dict[str, int]:
         account = self._account(account_id)
@@ -2030,7 +2033,8 @@ class OperationsConsole:
         from src.processing_retry_v1 import now
         if attempt.get("dispatch"):
             from src.source_processing_dispatch_v1 import claim
-            attempt = claim(self, snapshot_id=snapshot_id, attempt_id=attempt["attempt_id"], stop_event=_dispatch_stop)
+            attempt = claim(self, snapshot_id=snapshot_id, attempt_id=attempt["attempt_id"],
+                            actor_id=actor_id, stop_event=_dispatch_stop)
             if attempt is None:
                 return self._receipt(self._envelope(snapshot_id))
         remaining = (datetime.fromisoformat(attempt["expires_at"]) - now()).total_seconds()
@@ -2053,11 +2057,8 @@ class OperationsConsole:
     def processing_status(self, snapshot_id: str, *, actor_id: str | None = None) -> dict[str, Any]:
         from src.processing_retry_v1 import status
         if actor_id is not None:
-            account = self._account(actor_id)
-            if not {"researcher", "reviewer"}.intersection(account["roles"]):
-                raise ConsoleError("researcher_role_required")
-            if "researcher" not in account["roles"] and actor_id not in self._envelope(snapshot_id).get("named_reviewers", []):
-                raise ConsoleError("reviewer_not_named_on_snapshot")
+            from src.source_selection_v1 import authorize
+            authorize(self, actor_id, self._envelope(snapshot_id))
         result = status(self._envelope(snapshot_id), policy=self._processing_limits())
         if (self.snapshot_is_published(snapshot_id) or self.snapshot_objects(snapshot_id)
                 or self._bindings.get(snapshot_id) or self._envelope(snapshot_id).get("review_passes")):
@@ -2101,12 +2102,9 @@ class OperationsConsole:
         limits = self._processing_limits()
         deadline = time.monotonic() + limits.attempt
         with self._reprocessing_transaction(snapshot_id):
-            account = self._account(actor_id)
             envelope = deepcopy(self._envelope(snapshot_id))
-            if not {"researcher", "reviewer"}.intersection(account["roles"]):
-                raise ConsoleError("researcher_role_required")
-            if "researcher" not in account["roles"] and actor_id not in envelope.get("named_reviewers", []):
-                raise ConsoleError("reviewer_not_named_on_snapshot")
+            from src.source_selection_v1 import authorize
+            authorize(self, actor_id, envelope)
             duplicate = next((a for a in envelope.get("processing_attempts", []) if a["command_id"] == command_id), None)
             if duplicate is None:
                 if not self._can_resume_formation(snapshot_id):
@@ -2144,9 +2142,11 @@ class OperationsConsole:
         def write(phase, values):
             from src.processing_retry_v1 import assert_active, now
             from src.attempt_diagnostics_v1 import checkpoint
+            from src.source_selection_v1 import authorize
             with self._reprocessing_transaction(snapshot_id):
                 current = deepcopy(self._envelope(snapshot_id))
                 active = assert_active(current, attempt_id, now())
+                authorize(self, active["actor_id"], current)
                 checkpoint(active, phase, values)
                 try:
                     self._commit_prepared_store(envelopes={snapshot_id: current}, snapshot_id=snapshot_id)
@@ -2160,7 +2160,9 @@ class OperationsConsole:
         if not isinstance(reason, str) or not reason.strip() or len(reason) > 1000:
             raise ConsoleError("processing_recovery_reason_required")
         with self._reprocessing_transaction(snapshot_id):
-            account = self._account(actor_id)
+            account = self._account(actor_id, current=True)
+            if account.get("retirement"):
+                raise ConsoleError("not_authenticated")
             if "publisher" not in account["roles"]:
                 raise ConsoleError("publisher_role_required")
             envelope = deepcopy(self._envelope(snapshot_id))
@@ -2215,6 +2217,20 @@ class OperationsConsole:
             raise
 
     def _execute_source_attempt(self, *, actor_id, snapshot_id, attempt, deadline):
+        from src.processing_retry_v1 import assert_active, now
+        from src.source_selection_v1 import authorize
+        # Denial precedes the failure recorder: a forged or revoked caller must
+        # not claim/fail another actor's accepted attempt.
+        with self._reprocessing_transaction(snapshot_id):
+            current = self._envelope(snapshot_id)
+            authorize(self, actor_id, current)
+            stored = assert_active(current, attempt["attempt_id"], now())
+            if stored["actor_id"] != actor_id or any(
+                attempt.get(key) != stored.get(key) for key in
+                ("actor_id", "source_hash", "source_version", "expected_revision",
+                 "command_id", "kind", "processing_configuration")
+            ):
+                raise ConsoleError("processing_command_conflict")
         with self._source_attempt_failure(snapshot_id, attempt["attempt_id"]):
             if attempt.get("processing_configuration"):
                 from src.source_selection_v1 import configuration
@@ -2229,10 +2245,9 @@ class OperationsConsole:
         limits = self._processing_limits()
         deadline = time.monotonic() + limits.attempt
         with self._reprocessing_transaction(snapshot_id):
-            account = self._account(actor_id)
-            if not {"researcher", "reviewer"}.intersection(account["roles"]):
-                raise ConsoleError("researcher_role_required")
             envelope = deepcopy(self._envelope(snapshot_id))
+            from src.source_selection_v1 import authorize
+            authorize(self, actor_id, envelope)
             if self.snapshot_is_published(snapshot_id):
                 raise ConsoleError("published_objects_must_not_be_rewritten")
             objects, revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
@@ -2261,12 +2276,10 @@ class OperationsConsole:
         Source hash stays. Published objects MUST NOT be rewritten. MUST NOT hide
         stored fragments in the UI without this extract.
         """
-        account = self._account(actor_id)
-        if "researcher" not in account["roles"] and "reviewer" not in account["roles"]:
-            raise ConsoleError("researcher_role_required")
-        envelope = self._envelope(snapshot_id)
         from src.source_selection_v1 import authorize
-        authorize(self, actor_id, envelope)
+        with self._reprocessing_transaction(snapshot_id):
+            envelope = deepcopy(self._envelope(snapshot_id))
+            account = authorize(self, actor_id, envelope)
         if _attempt_id is None and envelope.get("publication_eligibility") == PRE_REVIEW_BLOCKED:
             return self.retry_pre_review(actor_id=actor_id, snapshot_id=snapshot_id, command_id=uuid.uuid4().hex)
         _, expected_revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
@@ -2298,6 +2311,7 @@ class OperationsConsole:
             limits = self._processing_limits()
             deadline = time.monotonic() + limits.attempt
             with self._reprocessing_transaction(snapshot_id):
+                authorize(self, actor_id, self._envelope(snapshot_id))
                 self._assert_source_work_unchanged(envelope, expected_revision, "published_objects_must_not_be_rewritten")
                 reserved = deepcopy(envelope)
                 attempt, _ = reserve(reserved, command_id=uuid.uuid4().hex, actor_id=actor_id,
@@ -2386,8 +2400,7 @@ class OperationsConsole:
                 self.snapshot_objects(replaces_snapshot_id),
                 objects,
             )
-        transaction = self._reprocessing_transaction(snapshot_id) if _attempt_id is not None else self._store_write_lock()
-        with transaction:
+        with self._reprocessing_transaction(snapshot_id):
             self._reload_store_locked()
             if _attempt_id is not None:
                 from src.processing_retry_v1 import assert_active, now
@@ -2401,9 +2414,6 @@ class OperationsConsole:
                 from src.decision_successor_v1 import assert_parent_current
                 assert_parent_current(self, envelope)
             self._verified_source_bytes(envelope)
-            account = self._account(actor_id)
-            if not {"researcher", "reviewer"}.intersection(account["roles"]):
-                raise ConsoleError("researcher_role_required")
             authorize(self, actor_id, self._envelope(snapshot_id))
             if _attempt_id is not None:
                 from src.source_selection_v1 import configuration
