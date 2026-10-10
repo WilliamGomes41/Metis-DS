@@ -117,6 +117,41 @@ def test_all_denied_entry_points_preserve_source_attempts_and_budget(console, mo
     assert snapshot(restart(console), sid) == before
 
 
+@pytest.mark.parametrize("change", ["none", "roles", "retirement"])
+def test_separate_publisher_recovery_requires_current_authority(console, change):
+    from src.bounded_model_call_v1 import ModelCallLimits
+    from src.processing_retry_v1 import reserve, finish, now
+    author, reviewer = accounts(console)
+    publisher = console.create_account(username="recovery-publisher", password="fixture-only",
+        roles=("publisher", "reviewer"))["account_id"]
+    sid = receive(console, author, publisher, "recovery-authority")
+    console.assign_roles(actor_id=author, account_id=publisher, roles=("publisher",))
+    limits = ModelCallLimits(max_attempts=1)
+    console._model_call_limits_reader = lambda: limits
+    with console._reprocessing_transaction(sid):
+        envelope = deepcopy(console._envelope(sid))
+        attempt, _ = reserve(envelope, actor_id=author, command_id="exhausted",
+            revision=console.objects_revision(sid), clock=now(), limits=limits)
+        finish(envelope, attempt["attempt_id"], state="failed", error=ConsoleError("fixture_failure"))
+        console._commit_prepared_store(envelopes={sid: envelope}, snapshot_id=sid)
+    if change == "roles":
+        restart(console).assign_roles(actor_id=author, account_id=publisher, roles=("reviewer",))
+    elif change == "retirement":
+        revoke(console, publisher, sid, change)
+    before = snapshot(restart(console), sid)
+    if change == "none":
+        grant = console.authorize_processing_recovery(actor_id=publisher, snapshot_id=sid, reason="Synthetic repair")
+        assert grant["consumed_by"] is None
+        with pytest.raises(ConsoleError, match="researcher_role_required"):
+            console.retry_pre_review(actor_id=publisher, snapshot_id=sid, command_id="no-processing-right")
+        assert console._envelope(sid)["processing_recovery"] == grant
+        assert console._envelope(sid)["processing_attempts"] == before[0]["processing_attempts"]
+    else:
+        with pytest.raises(ConsoleError, match="publisher_role_required" if change == "roles" else "not_authenticated"):
+            console.authorize_processing_recovery(actor_id=publisher, snapshot_id=sid, reason="Synthetic repair")
+        assert snapshot(restart(console), sid) == before
+
+
 def test_installed_http_denials_have_no_effect(console, monkeypatch):
     author, reviewer = accounts(console)
     sid = receive(console, author, reviewer, "http-denial")
@@ -280,7 +315,8 @@ def test_native_revocation_is_ordered_with_short_admission(workflow_postgres, tm
     admitted, release, update_started = Event(), Event(), Event()
     commit = first._commit_prepared_store
     def paused_commit(**kwargs):
-        if kwargs.get("envelopes", {}).get(sid, {}).get("processing_attempts"):
+        if (kwargs.get("objects") if boundary == "standalone_activation" else
+                kwargs.get("envelopes", {}).get(sid, {}).get("processing_attempts")):
             admitted.set()
             assert release.wait(10)
         return commit(**kwargs)

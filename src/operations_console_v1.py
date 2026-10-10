@@ -2160,7 +2160,9 @@ class OperationsConsole:
         if not isinstance(reason, str) or not reason.strip() or len(reason) > 1000:
             raise ConsoleError("processing_recovery_reason_required")
         with self._reprocessing_transaction(snapshot_id):
-            account = self._account(actor_id)
+            account = self._account(actor_id, current=True)
+            if account.get("retirement"):
+                raise ConsoleError("not_authenticated")
             if "publisher" not in account["roles"]:
                 raise ConsoleError("publisher_role_required")
             envelope = deepcopy(self._envelope(snapshot_id))
