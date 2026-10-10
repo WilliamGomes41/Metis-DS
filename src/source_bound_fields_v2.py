@@ -229,3 +229,62 @@ def context_matches_target(obj: dict) -> bool:
     expected = context_record(record['entries'], obj=obj)
     expected['target_object_version_at_binding'] = record.get('target_object_version_at_binding')
     return bool(expected['target_object_version_at_binding']) and record == expected
+
+
+def rebind_revision_evidence(previous: dict, revised: dict, *, fragments: list[dict]) -> None:
+    """Prepare current evidence; a new selection does not inherit field meaning.
+
+    Literal binding proves bounds/source, not applicability to changed content.
+    Therefore only an unchanged selection/type may reuse validated semantics.
+    Changed selections get the existing closed missing-evidence contract.
+    """
+    from src.knowledge_materialisation_v1 import _read_source_blocks
+    from src.source_bound_fields_v3 import MODE as V3_MODE, FIELDS as V3_FIELDS, bind_fields as bind_v3
+    from src.source_context_review_v1 import LINKS_KEY, literal_identity
+    from src.recommendation_semantics_v1 import PROPOSED_FIELD
+
+    metadata = revised.setdefault('metadata', {})
+    old_metadata = previous.get('metadata') or {}
+    semantic = metadata.get('semantic_passage') or {}
+    mode = semantic.get('formation_mode')
+    unchanged = (semantic.get('spans') == (old_metadata.get('semantic_passage') or {}).get('spans')
+                 and revised.get('content') == previous.get('content')
+                 and revised.get('proposed_object_type') == previous.get('proposed_object_type'))
+    if not unchanged:
+        # Human context links and recommendation semantics are revision-bound too.
+        metadata.pop(LINKS_KEY, None)
+        revised.pop(PROPOSED_FIELD, None)
+        for field in ('confirmed_recommendation_semantics', 'confirmed_recommendation_strength',
+                      'proposed_recommendation_strength', 'confirmed_knowledge_relations', 'proposed_knowledge_relations'):
+            revised.pop(field, None)
+        revised['confirmed_relations'] = []
+        metadata.pop('recommendation_semantics_evidence', None)
+    elif metadata.get(LINKS_KEY) and literal_identity(previous) != literal_identity(revised):
+        metadata.pop(LINKS_KEY, None)
+    if mode not in {MODE, V3_MODE}:
+        return
+    blocks = _read_source_blocks(fragments)
+    selected = [{**span, 'text': blocks[span['block_id']][0]['text'][span['start']:span['end']]}
+                for span in semantic['spans']]
+    context = validated_context(previous, fragments, previous['source']['source_checksum'])
+    fields = V3_FIELDS if mode == V3_MODE else FIELDS
+    if unchanged:
+        record = old_metadata.get(KEY)
+        # Verify the old binding AND rebuild its exact source references before reuse.
+        bound_values(record, text=previous['content']['clean_text'],
+                     proposed_type=previous.get('proposed_object_type') or 'unclassified', context=context)
+        evidence = record['evidence']
+    else:
+        evidence = {field: {'span': None, 'missing_reason': 'uncertain'} for field in fields}
+        context = bind_context([{'role': role, 'span': None,
+                                 'unresolved_reason': 'relation_uncertain'} for role in dict.fromkeys(row['role'] for row in context)], fragments=fragments)
+    if CONTEXT_KEY in old_metadata:
+        metadata[CONTEXT_KEY] = context_record(context, obj=revised)
+    binding = bind_v3 if mode == V3_MODE else bind_fields
+    args = {'context': context} if mode == V3_MODE else {}
+    rebuilt = binding(evidence, selected=selected, candidate_text=revised['content']['clean_text'],
+                      proposed_type=revised.get('proposed_object_type') or 'unclassified', **args)
+    if unchanged and rebuilt != old_metadata[KEY]:
+        raise ValueError('source_bound_fields_invalid')
+    metadata[KEY] = rebuilt
+    validated_context(revised, fragments, revised['source']['source_checksum'])

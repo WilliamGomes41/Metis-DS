@@ -522,7 +522,7 @@ def test_a_hash_version_or_type_change_invalidates_authorization(tmp_path: Path)
         patch={
             "reason": "reviewer correction",
             "operations": [
-                {"op": "set", "path": "content.clean_text", "value": "Gecorrigeerde passage."}
+                {"op": "set", "path": "content.clean_text", "value": target["content"]["clean_text"]}
             ],
         },
     )

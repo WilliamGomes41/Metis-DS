@@ -83,7 +83,7 @@ def test_repair_finalization_preserves_hash_policy_restart_and_stale_replay(
 
 
 @pytest.mark.parametrize("console_type", [DeterministicRepairReviewConsole, ReviewClosureConsole])
-def test_failure_after_provenance_finalization_rolls_back_whole_repair(tmp_path, monkeypatch, console_type):
+def test_failure_after_prepared_correction_commit_rolls_back_whole_repair(tmp_path, monkeypatch, console_type):
     from tests.test_deterministic_review_repair_v1 import _system as repair_system
 
     console, _, _, reviewer, sid, objects = repair_system(tmp_path, console_type)
@@ -94,13 +94,14 @@ def test_failure_after_provenance_finalization_rolls_back_whole_repair(tmp_path,
     before = console.snapshot_objects(sid)
     events = read_events(console._ledger_path)
     revision = console.objects_revision(sid)
-    finalize = console._finalize_source_provenance
+    commit = console._commit_prepared_store
 
     def fail_after_commit(**kwargs):
-        finalize(**kwargs)
-        raise RuntimeError("injected_after_finalization")
+        commit(**kwargs)
+        if kwargs.get("ledger_fn") is not None:
+            raise RuntimeError("injected_after_finalization")
 
-    monkeypatch.setattr(console, "_finalize_source_provenance", fail_after_commit)
+    monkeypatch.setattr(console, "_commit_prepared_store", fail_after_commit)
     with pytest.raises(RuntimeError, match="injected_after_finalization"):
         console.submit_review_resolution(
             actor_id=reviewer["account_id"], snapshot_id=sid, object_id=obj["object_id"],

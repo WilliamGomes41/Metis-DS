@@ -13,7 +13,6 @@ import re
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
-from pathlib import Path
 from typing import Any, Iterator
 from urllib.parse import quote
 
@@ -21,7 +20,7 @@ from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from src.closed_review_loop_v1 import ClosedLoopReviewConsole
-from src.integrity_kernel import schema_errors, sha256_bytes, stable_hash, stamp_canonical_hashes
+from src.integrity_kernel import schema_errors, stable_hash, stamp_canonical_hashes
 from src.operations_console_v1 import ConsoleError, OperationsConsole, SNAPSHOT_OBJECT_WRITE_CONFLICT
 from src.admission_gate_v1 import is_admission_blocked
 from src.beslisboom_path_v1 import review_path_for_klasse
@@ -151,27 +150,11 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
     def source_fragment_catalog(
         self, *, snapshot_id: str, object_id: str
     ) -> list[dict[str, Any]]:
-        """Re-extract source fragments from the verified frozen source, read-only."""
+        """Read the accepted fragment representation from the verified source."""
         envelope = self._envelope(snapshot_id)
         self._require_open_original(snapshot_id, object_id)
-        freeze_path = Path(str(envelope.get("binary_path") or ""))
-        if not freeze_path.is_file():
-            raise ConsoleError("freeze_bytes_missing")
-        freeze_bytes = freeze_path.read_bytes()
-        if sha256_bytes(freeze_bytes) != str(envelope.get("sha256") or ""):
-            raise ConsoleError("freeze_bytes_missing")
-        fragments = self._read_source_fragments(envelope, freeze_path) if envelope["content_kind"] == "pdf" else None
-        if fragments is None:
-            fragments, _spec = self._deterministic_fragments_and_spec(
-                str(envelope["content_kind"]),
-                freeze_path,
-                data=freeze_bytes,
-                document_id=str(envelope["document_id"]),
-                source_id=str(envelope["source_id"]),
-                title=str(envelope["title"]),
-                family=str(envelope["family"]),
-                class_=str(envelope["class"]),
-            )
+        freeze_path, _ = self._verified_source_bytes(envelope)
+        fragments = self._read_source_fragments(envelope, freeze_path)
         catalog: list[dict[str, Any]] = []
         for index, fragment in enumerate(fragments):
             fragment_id = str(fragment.get("fragment_id") or "")
@@ -215,6 +198,33 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
         self, *, snapshot_id: str, object_id: str
     ) -> list[dict[str, Any]]:
         """Closed, deterministic selectable spans derived from frozen fragments."""
+        semantic = (self._current_object(snapshot_id, object_id).get("metadata") or {}).get("semantic_passage") or {}
+        if semantic.get("selection_origin") == "proposal_selected":
+            from src.knowledge_materialisation_v1 import _read_source_blocks
+            from src.semantic_transform_generic_v1 import _fragment_ref
+            fragments = self.review_source_fragments(snapshot_id)
+            # Verify the existing object's references before offering new ranges.
+            self.source_fragment_catalog(snapshot_id=snapshot_id, object_id=object_id)
+            raw = {row["fragment_id"]: row for row in fragments}
+            units = []
+            for public, source in _read_source_blocks(fragments).values():
+                text = public["text"]
+                boundaries = [0, *[match.end() for match in _SENTENCE_SPLIT_RE.finditer(text)], len(text)]
+                for index, (lo, hi) in enumerate(zip(boundaries, boundaries[1:])):
+                    end = hi
+                    while end > lo and text[end - 1].isspace():
+                        end -= 1
+                    if end <= lo:
+                        continue
+                    ref = _fragment_ref(raw[public["source_fragment_ids"][0]])
+                    units.append({"unit_id": f"{public['block_id']}::s{index + 1}",
+                        "block_id": public["block_id"], "start": lo, "end": end,
+                        "fragment_id": ref["raw_object_id"], "fragment_hash": ref["raw_content_hash"],
+                        "text": text[lo:end], "section_path": public["section_path"],
+                        "sequence": public["position"], "catalog_index": public["position"],
+                        "unit_index": index, "source_page": ref["page"], "bbox": ref["bbox"],
+                        "source_locator": ref["source_locator"]})
+            return units
         units: list[dict[str, Any]] = []
         for fragment in self.source_fragment_catalog(
             snapshot_id=snapshot_id, object_id=object_id
@@ -370,6 +380,18 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             "source_fragment_ids": [ref["raw_object_id"] for ref in source_refs],
             "text": text,
         }
+        decision = None
+        if units and "block_id" in units[0]:
+            chosen = {row["unit_id"]: row for row in units}
+            spans = []
+            for unit_id in normalized_ids:
+                row = chosen[unit_id]
+                if spans and spans[-1]["block_id"] == row["block_id"]:
+                    spans[-1]["end"] = row["end"]
+                else:
+                    spans.append({key: row[key] for key in ("block_id", "start", "end")})
+            decision = {"decision_kind": "semantic_selection", "selection_origin": "proposal_selected",
+                        "spans": spans, "source_text": text}
         revised = OperationsConsole.correct_object(
             self,
             actor_id=actor_id,
@@ -384,15 +406,8 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             },
             additional_source_fragments=source_refs,
             rereview_scope="object",
-        )
-        revised = self._finalize_source_provenance(
-            snapshot_id=snapshot_id,
-            object_id=object_id,
-            source_refs=source_refs,
-            repair_spec=repair_spec,
-        )
-        revised = self._clear_pending_review_metadata(
-            snapshot_id=snapshot_id, object_id=object_id
+            materialisation_decision=decision,
+            source_repair_spec=repair_spec,
         )
         self._append_audit_evidence(
             actor_id=actor_id,
@@ -518,6 +533,18 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
         selected.sort(
             key=lambda row: self._verified_object_source_position(row, catalog_by_id)
         )
+        if ((primary.get("metadata") or {}).get("semantic_passage") or {}).get("selection_origin") == "proposal_selected":
+            from src.knowledge_materialisation_v1 import validate_materialised_candidate, _read_source_blocks
+            fragments = self.review_source_fragments(snapshot_id)
+            blocks = _read_source_blocks(fragments)
+            for row in selected:
+                try:
+                    validate_materialised_candidate(row, fragments=fragments)
+                except ValueError as exc:
+                    raise ConsoleError(str(exc)) from exc
+            selected.sort(key=lambda row: (
+                blocks[row["metadata"]["semantic_passage"]["spans"][0]["block_id"]][0]["position"],
+                row["metadata"]["semantic_passage"]["spans"][0]["start"]))
         merged_text = _norm(
             " ".join(
                 str((row.get("content") or {}).get("clean_text") or "")
@@ -558,6 +585,13 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             operations.append(
                 {"op": "set", "path": "structure.sequence", "value": min(sequence_values)}
             )
+        decision = None
+        if ((primary.get("metadata") or {}).get("semantic_passage") or {}).get("selection_origin") == "proposal_selected":
+            spans = []
+            for row in selected:
+                spans.extend(deepcopy(row["metadata"]["semantic_passage"]["spans"]))
+            decision = {"decision_kind": "semantic_selection", "selection_origin": "proposal_selected",
+                        "spans": spans, "source_text": merged_text}
         repaired = OperationsConsole.correct_object(
             self,
             actor_id=actor_id,
@@ -566,19 +600,9 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             patch={"reason": comment, "operations": operations},
             additional_source_fragments=source_refs,
             rereview_scope="object",
-        )
-        repaired = self._finalize_source_provenance(
-            snapshot_id=snapshot_id,
-            object_id=object_id,
-            source_refs=source_refs,
-            repair_spec={
-                "repair_kind": REPAIR_MERGE_OBJECTS,
-                "merge_object_ids": target_ids,
-                "merged_text": merged_text,
-            },
-        )
-        repaired = self._clear_pending_review_metadata(
-            snapshot_id=snapshot_id, object_id=object_id
+            materialisation_decision=decision,
+            source_repair_spec={"repair_kind": REPAIR_MERGE_OBJECTS,
+                                "merge_object_ids": target_ids, "merged_text": merged_text},
         )
         self._supersede_merge_targets(
             snapshot_id=snapshot_id,
@@ -685,7 +709,11 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
                 snapshot_id=snapshot_id, object_id=object_id
             )
 
-        with self._atomic_snapshot_mutation(snapshot_id):
+        transaction = (self._reprocessing_transaction(snapshot_id)
+                       if getattr(self, "workflow_document_store", None) is not None
+                       else self._store_write_lock())
+        with transaction, self._atomic_snapshot_mutation(snapshot_id):
+            self._preflight_structured_repair(submission)
             if self.objects_revision(snapshot_id) != expected_revision:
                 raise ConsoleError(
                     SNAPSHOT_OBJECT_WRITE_CONFLICT,
@@ -693,29 +721,30 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
                 )
             # A repair request is not type confirmation. In particular a blocked
             # proposal must reach source repair without passing the approval gate.
-            blocked = is_admission_blocked(
-                self._current_object(snapshot_id, object_id),
-                review_path=review_path_for_klasse(self._envelope(snapshot_id)["class"]),
-            )
-            with _allow_revise_write():
-                super().review_object(
-                    actor_id=actor_id,
-                    snapshot_id=snapshot_id,
-                    object_id=object_id,
-                    decision="revise",
-                    comment=comment.strip(),
-                    proposed_correction=proposed_correction.strip(),
-                    confirmed_object_type=None if blocked else (confirmed_object_type.strip() or None),
-                    recommendation_strength=recommendation_strength.strip() or None,
-                    suitability=suitability.strip(),
-                    eindoordeel="goedkeuren_na_correctie",
-                    documentpositie_action=documentpositie_action.strip() or None,
-                    found_under=found_under.strip() or None,
-                    parent_choice=parent_choice.strip() or None,
-                    type_action=None if blocked else (type_action.strip() or None),
-                    expected_revision=expected_revision,
-                )
-
+            # Source/merge is one correction command, not a preliminary review
+            # decision plus successive partially prepared revisions.
+            if repair_kind not in {REPAIR_SOURCE_UNITS, REPAIR_MERGE_OBJECTS}:
+                blocked = is_admission_blocked(
+                    self._current_object(snapshot_id, object_id),
+                    review_path=review_path_for_klasse(self._envelope(snapshot_id)["class"]))
+                with _allow_revise_write():
+                    super().review_object(
+                        actor_id=actor_id,
+                        snapshot_id=snapshot_id,
+                        object_id=object_id,
+                        decision="revise",
+                        comment=comment.strip(),
+                        proposed_correction=proposed_correction.strip(),
+                        confirmed_object_type=None if blocked else (confirmed_object_type.strip() or None),
+                        recommendation_strength=recommendation_strength.strip() or None,
+                        suitability=suitability.strip(),
+                        eindoordeel="goedkeuren_na_correctie",
+                        documentpositie_action=documentpositie_action.strip() or None,
+                        found_under=found_under.strip() or None,
+                        parent_choice=parent_choice.strip() or None,
+                        type_action=None if blocked else (type_action.strip() or None),
+                        expected_revision=expected_revision,
+                    )
             if repair_kind == REPAIR_SOURCE_UNITS:
                 repaired = self._source_repair(
                     actor_id=actor_id,
