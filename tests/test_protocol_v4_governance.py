@@ -40,3 +40,31 @@ def test_v4_retains_safety_and_describes_actual_modes() -> None:
 def test_new_release_records_current_protocol() -> None:
     from src.operations_console_v1 import PUBLICATION_PROTOCOL_VERSION
     assert PUBLICATION_PROTOCOL_VERSION == "4.0.0"
+
+
+def test_documented_formation_roles_match_existing_policy() -> None:
+    from src.candidate_eligibility_v1 import assess_candidate_eligibility
+    from src.passage_formation_policy_v1 import resolve_passage_formation_strategy
+    from src.pre_review_semantic_v1 import _configured_passage_formation_mode
+
+    protocol = read("PROTOCOL.md")
+    mode = _configured_passage_formation_mode({})
+    assert mode == "semantic-source-bound-v2"
+    assert f"`{mode}` (source-bound-fields v2) de standaardroute" in protocol
+    for explicit_mode in (
+        "semantic-source-bound-v1", "semantic-source-bound-v3", "deterministic-v1",
+    ):
+        assert f"`{explicit_mode}`" in protocol
+    assert resolve_passage_formation_strategy(
+        content_kind="html", deployment_mode=mode,
+    ).strategy == "semantic"
+    assert resolve_passage_formation_strategy(
+        content_kind="boom", deployment_mode=mode,
+    ).strategy == "deterministic"
+    assert not assess_candidate_eligibility({
+        "proposed_object_type": "recommendation",
+        "text": "Bespreek de behandeling met de patiënt.",
+    }).eligible
+    assert "Een deterministisch typelabel vormt op zichzelf geen toegelaten kenniskandidaat" in protocol
+    assert "Een geslaagde controle bewijst geen semantische of klinische volledigheid" in protocol
+    assert "Inleveren → Bronselectie → Review → Publicatie → Documenten" in protocol
