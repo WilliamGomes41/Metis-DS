@@ -3,6 +3,7 @@
 **Status:** Actief  
 **Versie:** 4.0.0  
 **Datum:** 2026-09-27  
+**Redactioneel bijgewerkt:** 2026-10-10 (rolverdeling en consolevolgorde; normen ongewijzigd)
 **Functie:** één actuele norm voor Metis. Historische besluiten, implementatiegolven en supersessies zijn auditbewijs en geen aanvullende stuurlaag.
 
 ## 1. Normatieve hiërarchie
@@ -75,16 +76,27 @@ Objecttype en relaties komen uit de geldende gesloten taxonomie. Onzekerheid wor
 
 ## 5. Semantische interpretatie en harde invarianten
 
-Metis onderscheidt:
+### 5.1 Wie doet wat?
 
-1. **semantische interpretatie:** bepalen welke brontekst inhoudelijk bij elkaar hoort en welke context voor betekenis nodig is;
-2. **harde invarianten:** controleerbaar bewaken van bronbinding, verplichte velden, status, review, autorisatie, publicatie en andere veiligheidsvoorwaarden.
+| Rol | Verantwoordelijkheid | Grens |
+| --- | --- | --- |
+| Semantische verwerking | Brongebonden betekeniseenheden, objecttypen, veldinhoud en noodzakelijke context voorstellen. | Het voorstel blijft onzeker en vereist validatie en menselijke review. Het model krijgt geen review- of publicatierechten. |
+| Deterministische controles | Bronspans reconstrueren en bronbinding, schema, verplichte velden, versie, status en bevoegdheden controleren; toelatings- en publicatievoorwaarden bewaken. | Een geslaagde controle bewijst geen semantische of klinische volledigheid. Een deterministisch typelabel vormt op zichzelf geen toegelaten kenniskandidaat. |
+| Menselijke review | De inhoud, het type en de toepasselijke context van de exacte objectversie beoordelen. | Goedkeuring vervangt geen ontbrekend bronbewijs en publiceert niets. De bestaande review- en publicatievoorwaarden blijven gelden. |
 
-Een nieuw taalgeval leidt niet automatisch tot een nieuwe lexicale uitzonderingsregel. Eerst wordt bepaald of het probleem natuurlijke taal interpreteert of een algemeen geldende invariant afdwingt.
+Deterministisch betekent dat een controle volgens vaste regels verloopt; het maakt een inhoudelijk oordeel niet automatisch juist. Semantisch betekent dat betekenis en samenhang worden geïnterpreteerd; het verleent geen bevoegdheid om broninhoud aan te vullen.
 
-Deterministische controles blijven de autoriteit voor harde veiligheids- en publicatievoorwaarden.
+Een nieuw taalgeval leidt niet automatisch tot een nieuwe lexicale uitzonderingsregel. Eerst wordt bepaald of het probleem natuurlijke taal interpreteert of een algemeen geldende invariant afdwingt. Deterministische controles blijven de autoriteit voor harde veiligheids- en publicatievoorwaarden.
 
-Voor nieuwe prozaverwerking is source-bound-fields v2 de standaardroute. Expliciet geconfigureerde legacy- en deterministische routes blijven beschikbaar voor compatibiliteit en operationele rollback. Beslisbomen behouden hun bestaande structurele route. De brongebonden semantische route mag vóór Review kandidaatobjecten voorstellen. Bij ontbrekende providerconfiguratie, fout, weigering, timeout, ongeldig schema of ongeldige bronspan faalt die route gesloten; er is geen stille terugval. Metis reconstrueert kandidaattekst uit exacte bronspans. Noodzakelijke context telt pas als verwerkt wanneer zij aantoonbaar in de objectrevisie staat of geldig en versiegebonden eraan is gekoppeld. Een detectie- of mergevlag is geen bewijs. Betekenisonzekerheid blijft zichtbaar; bronbinding bewijst geen semantische of klinische volledigheid. Een model schrijft niet rechtstreeks canonieke kennis en krijgt geen review- of publicatierechten. Audit-resultaten activeren deze route niet. `PROCEED` is geen Metis-productievervangingsbesluit. Audit-eindstatus is `READY FOR IMPLEMENTATION`; ontwikkeling gebeurt buiten Metis. Er is geen APPLY-executor.
+### 5.2 Verwerkingsroutes
+
+Voor nieuwe prozaverwerking is `semantic-source-bound-v2` (source-bound-fields v2) de standaardroute. `semantic-source-bound-v1`, `semantic-source-bound-v3` en `deterministic-v1` blijven expliciet geconfigureerde routes voor compatibiliteit of operationele rollback. V3 is geen automatische opvolger van de standaardroute en geen nieuwe protocolversie. Beslisbomen behouden hun bestaande structurele route; kopstructuur blijft ook binnen semantische verwerking deterministisch.
+
+De brongebonden semantische route mag vóór Review kandidaatobjecten voorstellen. Bij ontbrekende providerconfiguratie, fout, weigering, timeout, ongeldig schema of ongeldige bronspan faalt die route gesloten; er is geen stille terugval naar een andere verwerkingsroute. Metis reconstrueert kandidaattekst uit exacte bronspans. Een model schrijft niet rechtstreeks canonieke kennis. Activering via Audit of experimentbesluiten is uitgesloten volgens §10.
+
+### 5.3 Context en herstel
+
+Noodzakelijke context telt pas als verwerkt wanneer zij aantoonbaar in de objectrevisie staat of geldig en versiegebonden eraan is gekoppeld. Een detectie- of mergevlag is geen bewijs. Betekenisonzekerheid blijft zichtbaar; bronbinding bewijst geen semantische of klinische volledigheid.
 
 De expliciet geconfigureerde V3-route gebruikt versiegebonden isolatie van producentfouten (`recoverable-formation-v1`). Onafhankelijk gevalideerde voorstellen mogen als onvolledig werk worden vastgelegd. Ongeldige voorstellen en hun afhankelijkheden worden niet toegelaten; onopgeloste broninhoud en vormingsfouten blijven zichtbaar en blokkeren publicatie. Bron-, integriteits-, opslag- en versieconflicten verhinderen toepassing. Herstel verleent geen review- of publicatierechten en overschrijft geen beoordeeld werk. Dit is geen versoepeling van letterlijke bronbinding of stille terugval naar een andere vormingsroute.
 
@@ -183,7 +195,7 @@ Voor onverifieerbare toevoegingen die als brongebonden kennis zouden kunnen door
 
 ### 11.1 Console
 
-De operations console is het menselijke werkoppervlak voor ingest, review, documentbeheer, audit en gecontroleerde publicatiehandelingen. De primaire consolevolgorde blijft herkenbaar als **Inleveren → Review → Publiceren → Documenten**.
+De operations console is het menselijke werkoppervlak voor ingest, bronselectie, review, documentbeheer, audit en gecontroleerde publicatiehandelingen. De primaire werkvolgorde is **Inleveren → Bronselectie → Review → Publicatie → Documenten**. Inleveren legt de bron vast; Bronselectie is de plek om verwerking te starten of te hervatten. Deze stappen verlenen geen review- of publicatierechten.
 
 Bij `METIS_CONSOLE_AUTH=entra` bepaalt Microsoft Entra de identiteit en app-rollen; PostgreSQL bewaart de stabiele Metis-accountbinding, sessies en lokale blokkering. Een e-mailadres of weergavenaam is geen bewijs voor koppeling aan een bestaand account. Bestaande revieweridentiteit mag bij een gecontroleerde omschakeling niet verloren gaan. De lokale authenticatieroute is alleen toegestaan wanneer zij expliciet als configuratiemodus is gekozen. De code voor Entra is geen bewijs dat de omgeving al is geconfigureerd of uitgerold.
 
@@ -253,7 +265,7 @@ Implementatiegeschiedenis, incidentdetails, tijdelijke volgordes en uitgevoerde 
 
 ## 16. Eerdere protocolversies zijn historie
 
-Protocol V4 bouwt voort op V3, dat de blijvende product-, veiligheids- en governancegrenzen uit de V2-reeks. De V2-documenten en approval-manifests blijven onveranderbaar auditbewijs, maar vormen geen aanvullende actuele stuurlaag.
+Protocol V4 bouwt voort op V3, waarin de blijvende product-, veiligheids- en governancegrenzen uit de V2-reeks zijn samengebracht. De V2-documenten en approval-manifests blijven onveranderbaar auditbewijs, maar vormen geen aanvullende actuele stuurlaag.
 
 De volledige pre-V3 rootstanden zijn bevroren onder `docs/history/protocol-v2/`. Oude V2-bestanden mogen op hun oorspronkelijke paden blijven wanneer approval-manifests of historische tests hun exacte bytes of paden nodig hebben. Dat maakt ze niet opnieuw normatief.
 
