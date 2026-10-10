@@ -825,6 +825,9 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         page: int = 1,
         work: str = "mine",
         theme: str = "",
+        context_target: str = "",
+        context_mode: str = "",
+        context_saved: str = "",
     ) -> str:
         account = _current_account(console, request)
         from src.review_participation_ui_v1 import overview, require_overview
@@ -848,6 +851,9 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             html.escape(document, quote=True),
             html.escape(object, quote=True),
             task=html.escape(chosen_task, quote=True),
+            context_target=context_target,
+            context_mode=context_mode,
+            context_saved=context_saved == "yes",
         )
 
         back = "/review?" + urlencode({"document": chosen, "q": q, "page": page})
