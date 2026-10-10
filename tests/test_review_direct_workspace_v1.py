@@ -152,8 +152,10 @@ def test_waiting_duties_are_not_counted_as_completed_work():
 
 
 def test_task_page_returns_to_selected_document(monkeypatch):
-    def render(console, account, document, object='', *, task='', counts=None):
+    def render(console, account, document, object='', *, task='', counts=None,
+               context_target='', context_mode='', context_saved=False):
         assert document == 'two' and task == 'structure'
+        assert (context_target, context_mode, context_saved) == ('', '', False)
         return '<h1>Koppen controleren</h1><a class="btn-secondary" href="/review">Ander document kiezen</a>'
     monkeypatch.setattr('src.review_workboard_v1._render_review_room', render)
     console = Console(documents=[('one', document('One')), ('two', document('Two'))])

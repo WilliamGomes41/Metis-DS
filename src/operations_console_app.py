@@ -2893,12 +2893,12 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
         raise ConsoleError("source_context_target_invalid")
 
     def review_url(row_id: str, *, pair_target: str = "", edit_source: bool = False) -> str:
-        url = f"/review?document={quote(snapshot_id, safe='')}&amp;object={quote(row_id, safe='')}"
+        url = f"/review?document={quote(snapshot_id, safe='')}&object={quote(row_id, safe='')}"
         if pair_target:
-            url += f"&amp;context_target={quote(pair_target, safe='')}"
+            url += f"&context_target={quote(pair_target, safe='')}"
         if edit_source:
-            url += "&amp;context_mode=source"
-        return url + "#passage-context"
+            url += "&context_mode=source"
+        return _esc(url + "#passage-context")
 
     def source_link(row: dict[str, Any]) -> str:
         return (f'<a href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(row["object_id"])}" '
