@@ -4163,8 +4163,7 @@ class OperationsConsole:
                 raise ConsoleError("revision_schema_invalid", " | ".join(errors))
         # Repair provenance and cleanup are preparation, never later activations.
         if source_repair_spec is not None:
-            revised["provenance"]["source_fragments"] = self._verified_finalized_source_refs(
-                snapshot_id, revised, additional_source_fragments or [])
+            revised["provenance"]["source_fragments"] = deepcopy(additional_source_fragments or [])
         revised.setdefault("metadata", {}).pop("review_passage", None)
         if revised.get("object_type") not in {"document", "heading"}:
             revised["object_type"] = "unclassified"
@@ -4236,6 +4235,10 @@ class OperationsConsole:
                        inventory=envelope.get("decision_graph_evidence"))
             revised = apply_passage_register([revised])[0]
         if source_repair_spec is not None:
+            # The construction kernel may reorder/expand raw references. Verify
+            # its complete result, never new text against predecessor evidence.
+            revised["provenance"]["source_fragments"] = self._verified_finalized_source_refs(
+                snapshot_id, revised, revised["provenance"]["source_fragments"])
             revised["provenance"].update(self._source_repair_provenance_patch(source_repair_spec))
         revised = revise_object(target, revised, snapshot_id=snapshot_id,
                                 reason=patch["reason"], actor=account["username"], force=True)

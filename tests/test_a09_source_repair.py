@@ -360,7 +360,7 @@ def test_authorization_revoked_during_preparation_cannot_commit(repair_setup, mo
     before_events = read_events(console._ledger_path)
     def revoke(previous, revised, *, fragments):
         rebind_revision_evidence(previous, revised, fragments=fragments)
-        fresh().assign_roles(actor_id=publisher['account_id'], account_id=reviewer['account_id'], roles=[])
+        fresh().assign_roles(actor_id=publisher['account_id'], account_id=reviewer['account_id'], roles=['publisher'])
     monkeypatch.setattr('src.source_bound_fields_v2.rebind_revision_evidence', revoke)
     with pytest.raises(ConsoleError, match='correction_role_required'):
         OperationsConsole.correct_object(console, actor_id=reviewer['account_id'], snapshot_id=sid,

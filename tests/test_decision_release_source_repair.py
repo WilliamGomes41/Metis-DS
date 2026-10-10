@@ -99,11 +99,21 @@ def test_merge_rebuilds_fidelity_then_graph_review_readiness(tmp_path):
     assert unit_issues(next(o for o in _console(tmp_path).snapshot_objects(sid) if o['object_id'] == target['object_id'])) == []
 
 
+@pytest.fixture(params=["file", "postgres"])
+def structured_repair_state(request, tmp_path):
+    if request.param == "postgres":
+        from tests.decision_graph_native_support import native_state
+        state, _store, _source = native_state(tmp_path)
+        return state
+    from src.review_closure_v1 import ReviewClosureConsole
+    return lambda node="default": ReviewClosureConsole(root=tmp_path,
+        source_store=tmp_path/"sources", runtime=tmp_path/"runtime")
+
+
 @pytest.mark.parametrize('later_primary', [False, True])
-def test_native_merge_resolution_preserves_immutable_source_order(tmp_path, later_primary):
-    from tests.decision_graph_native_support import native_state
+def test_native_merge_resolution_preserves_immutable_source_order(tmp_path, later_primary, structured_repair_state):
     from src.deterministic_review_repair_v1 import REPAIR_MERGE_OBJECTS
-    state, _store, _source = native_state(tmp_path)
+    state = structured_repair_state
     console = state()
     accounts = _accounts(console)
     sid = ingest(console, accounts, pdf_data(['Is er sprake van een', 'Mantelzorger?']))
@@ -328,12 +338,11 @@ def test_markerless_correction_keeps_legacy_contract(tmp_path, monkeypatch):
     assert revised['content']['clean_text'] == 'Bespreek'
 
 
-def test_native_interleaved_repeated_text_merge_preserves_kernel_proof(tmp_path, monkeypatch):
+def test_native_interleaved_repeated_text_merge_preserves_kernel_proof(tmp_path, monkeypatch, structured_repair_state):
     """Equal literal text must not hide reordered provenance during finalization."""
     import fitz
-    from tests.decision_graph_native_support import native_state
     from src.deterministic_review_repair_v1 import REPAIR_MERGE_OBJECTS
-    state, _store, _source = native_state(tmp_path)
+    state = structured_repair_state
     with fitz.open() as doc:
         page = doc.new_page()
         page.draw_rect(fitz.Rect(60, 45, 235, 150))
@@ -433,11 +442,10 @@ def test_native_interleaved_repeated_text_merge_preserves_kernel_proof(tmp_path,
 
 
 @pytest.mark.parametrize('action_primary', [False, True])
-def test_native_reverse_insertion_group_extension_preserves_verified_unit_order(tmp_path, action_primary):
+def test_native_reverse_insertion_group_extension_preserves_verified_unit_order(tmp_path, action_primary, structured_repair_state):
     import fitz
-    from tests.decision_graph_native_support import native_state
     from src.deterministic_review_repair_v1 import REPAIR_MERGE_OBJECTS
-    state, _store, _source = native_state(tmp_path)
+    state = structured_repair_state
     with fitz.open() as doc:
         page = doc.new_page()
         page.draw_rect(fitz.Rect(60, 45, 235, 150))
