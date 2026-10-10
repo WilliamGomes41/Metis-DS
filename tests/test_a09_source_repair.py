@@ -206,12 +206,17 @@ def test_overlapping_http_corrections_have_one_winner(repair_setup):
     assert len(corrections) == 1
 
 
-def test_failed_http_commit_rolls_back_objects_bindings_and_audit(repair_setup, monkeypatch):
+@pytest.mark.parametrize("kind", ["source", "merge"])
+def test_failed_http_commit_rolls_back_objects_bindings_and_audit(repair_setup, monkeypatch, kind):
     from src.review_ledger import read_events
-    console, sid, obj, reviewer, fresh = repair_setup()
+    console, sid, obj, reviewer, fresh = repair_setup(secondary="Bespreek de opties." if kind == "merge" else None)
+    console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid, object_id=obj["object_id"],
+        decision="approve", confirmed_object_type="recommendation", recommendation_direction="against",
+        recommendation_strength_level="not_stated", comment="Bron gecontroleerd.")
     units = console.source_units(snapshot_id=sid, object_id=obj['object_id'])
     before_objects = deepcopy(console._load_objects(sid, remember=False))
     before_bindings = deepcopy(console.object_review_bindings(sid))
+    assert any(binding["valid"] for binding in before_bindings)
     before_envelope = deepcopy(console._envelope(sid))
     before_events = read_events(console._ledger_path)
     if hasattr(console, 'workflow_review_store'):
@@ -231,7 +236,15 @@ def test_failed_http_commit_rolls_back_objects_bindings_and_audit(repair_setup, 
                 raise RuntimeError('a09_injected_commit_failure')
         monkeypatch.setattr(console, '_commit_prepared_store', fail)
     try:
-        response = repair(console, sid, obj, units)
+        if kind == "merge":
+            other = next(o for o in console.snapshot_objects(sid) if o["content"]["clean_text"] == "Bespreek de opties.")
+            with client(console) as c:
+                response = c.post('/review/resolve', data={'snapshot_id':sid, 'object_id':obj['object_id'],
+                    'snapshot_revision':console.objects_revision(sid), 'suitability':'samenvoegen',
+                    'comment':'Samenvoegen met commitfout.', 'repair_kind':'merge_objects',
+                    'merge_object_ids':[other['object_id']]}, follow_redirects=False)
+        else:
+            response = repair(console, sid, obj, units)
         assert response.status_code >= 400
     finally:
         if hasattr(console, 'workflow_review_store'):
