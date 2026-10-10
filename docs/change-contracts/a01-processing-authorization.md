@@ -81,5 +81,12 @@ current vs cached accounts, durable vs supplied attempts, existing checkpoint an
 activation writers, supported topology, rollback and concurrency. No new durable
 authority, schema, lifecycle state or authorization framework is introduced.
 
+Final surface-review verdict: bounded change accepted for human review. The four
+runtime files add 17 net lines and reuse existing authorization and transactions.
+The pass found and corrected standalone reextract activation outside the document
+transaction and stale identity reads in the separate publisher recovery command.
+No additional supported processing override or duplicate role/assignment rule was
+found. Account retirement checks remain explicit for the two distinct policies.
+
 Implementation, development verification, PR/merge, deployment and production
 acceptance remain separate. #551 stays open until production acceptance.
