@@ -15,19 +15,22 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.console_asgi import build_app
+from src.operations_console_app import _source_context_panel
 from src.source_context_review_v1 import links_of
 from tests.test_source_context_review_v1 import _system
-from tests.test_source_context_review_ui_v1 import _link_form, _payload
+from tests.test_source_context_review_ui_v1 import Forms, _link_form, _payload
 
 
 class Links(HTMLParser):
     def __init__(self, text):
         super().__init__()
         self.hrefs = []
+        self.tags = []
         self.feed(text)
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
+        self.tags.append((tag, attrs))
         if tag == 'a' and 'href' in attrs:
             self.hrefs.append(attrs['href'])
 
@@ -162,17 +165,58 @@ def test_installed_navigation_access_redirect_and_workboard_contract(installed):
     anonymous = TestClient(client.app, base_url='https://testserver')
     assert anonymous.get('/review', params={'document': sid, 'object': soid,
         'context_target': tid, 'context_mode': 'source', 'context_saved': 'yes'},
-        follow_redirects=False).status_code != 200
+        follow_redirects=False).status_code == 401
     outsider = TestClient(client.app, base_url='https://testserver')
     assert outsider.post('/login', data={'username': researcher['username'], 'password': 'anne-secret'},
                          follow_redirects=False).status_code == 303
     denied = outsider.get('/review', params={'document': sid, 'object': soid,
         'context_target': tid, 'context_mode': 'source', 'context_saved': 'yes'}, follow_redirects=False)
+    assert denied.status_code == 403
     assert 'data-source-context-form' not in denied.text
     assert outsider.post('/review/source-context', data=data, follow_redirects=False).status_code == 403
+    state.create_account(username='unassigned', password='unassigned-secret', roles=('reviewer',))
+    unassigned = TestClient(client.app, base_url='https://testserver')
+    assert unassigned.post('/login', data={'username': 'unassigned', 'password': 'unassigned-secret'},
+                           follow_redirects=False).status_code == 303
+    redirect = unassigned.get('/review', params={'document': sid, 'object': soid,
+        'context_target': tid, 'context_mode': 'source', 'context_saved': 'yes'}, follow_redirects=False)
+    assert redirect.status_code == 303
+    destination = urlsplit(redirect.headers['location'])
+    assert not destination.scheme and not destination.netloc
+    assert destination.path == '/review/trajectory'
+    assert parse_qs(destination.query) == {'document': [sid]}
+    trajectory = unassigned.get(redirect.headers['location'])
+    assert trajectory.status_code == 200
+    assert 'data-source-context-form' not in trajectory.text
+    refused = unassigned.post('/review/source-context', data=data, follow_redirects=False)
+    assert refused.status_code == 400  # Existing non-assignment error mapping.
+    assert 'Je bent niet aangewezen als beoordelaar voor dit document' in refused.text
     assert state.snapshot_objects(sid) == before
     external = client.post('/review/source-context', data={**data, 'return_object_id': 'https://example.com'},
                            follow_redirects=False)
     assert external.status_code == 303
     assert external.headers['location'].startswith('/review?')
     assert 'example.com' not in external.headers['location']
+
+
+def test_context_links_keep_url_values_inside_html_attributes(installed):
+    _, state, _, _, source, target, command = installed
+    sid = command['snapshot_id']
+    rows = deepcopy(state.snapshot_objects(sid))
+    # Presentation fixture only: exercise a valid selected target containing
+    # delimiters, without altering persisted identities or bypassing GET validation.
+    target_id = '\"><svg onload=alert(1)>&context_mode=source'
+    next(row for row in rows if row['object_id'] == target['object_id'])['object_id'] = target_id
+    panel = _source_context_panel(source, rows, sid, state.objects_revision(sid),
+                                  context_target=target_id, source_mode=True)
+    parsed = Links(panel)
+    assert not any(tag in {'svg', 'script', 'img'} or any(key.startswith('on') for key in attrs)
+                   for tag, attrs in parsed.tags)
+    assert '&amp;object=' in panel and '&amp;amp;' not in panel
+    back = next(href for href in parsed.hrefs
+                if parse_qs(urlsplit(href).query).get('object') == [target_id])
+    assert urlsplit(back).path == '/review'
+    assert parse_qs(urlsplit(back).query) == {'document': [sid], 'object': [target_id]}
+    fields = _payload(next(form for form in Forms(panel).forms
+                           if 'data-source-context-form' in form['attrs']))
+    assert fields['return_object_id'] == target_id
