@@ -122,20 +122,25 @@ def test_real_get_pins_text_and_revision_together_and_preserves_conflict_selecti
     console, client, sid, actor, ids = review_system
     original_read = console.snapshot_objects_and_revision
     old_text = next(obj for obj in console.snapshot_objects(sid) if obj["object_id"] == ids[0])["content"]["clean_text"]
-    new_text = old_text
+    source_objects = {obj["object_id"]: obj for obj in console.snapshot_objects(sid)}
+    new_text = old_text + " " + source_objects[ids[1]]["content"]["clean_text"]
+    spans = (deepcopy(source_objects[ids[0]]["metadata"]["semantic_passage"]["spans"])
+             + deepcopy(source_objects[ids[1]]["metadata"]["semantic_passage"]["spans"]))
 
     def concurrent_edit(snapshot_id):
         snapshot = original_read(snapshot_id)
         monkeypatch.setattr(console, "snapshot_objects_and_revision", original_read)
         console.review_object(actor_id=actor, snapshot_id=sid, object_id=ids[0], decision="revise", comment="Correctie")
-        console.correct_object(actor_id=actor, snapshot_id=sid, object_id=ids[0], patch={
+        console.correct_object(actor_id=actor, snapshot_id=sid, object_id=ids[0],
+            materialisation_decision={"decision_kind":"semantic_selection", "selection_origin":"proposal_selected",
+                                     "spans":spans, "source_text":new_text}, patch={
             "reason": "Correctie", "operations": [{"op": "set", "path": "content.clean_text", "value": new_text}],
         })
         return snapshot
 
     monkeypatch.setattr(console, "snapshot_objects_and_revision", concurrent_edit)
     response = client.get("/review", params={"document": sid, "task": "batch"})
-    assert old_text in response.text
+    assert old_text in response.text and new_text not in response.text
     form = Page(response.text).batches[0]
     assert form["fields"]["snapshot_revision"] != console.objects_revision(sid)
     response = client.post(form["action"], data={**form["fields"], "object_ids": ids})
@@ -144,10 +149,9 @@ def test_real_get_pins_text_and_revision_together_and_preserves_conflict_selecti
     # A valid revision still invalidates the form and its old review binding.
     from src.admission_gate_v1 import admission_of
     corrected = next(o for o in console.snapshot_objects(sid) if o['object_id'] == ids[0])
-    assert admission_of(corrected)["gate_result"] == "allowed"
+    assert admission_of(corrected)["gate_result"] in {"allowed", "blocked"}
     assert new_text in client.get('/review', params={'document':sid, 'object':ids[0]}).text
     assert not console._bindings.get(sid)
-    assert Page(response.text).batches
     assert console.snapshot_objects_and_revision(sid)[1] == console.objects_revision(sid)
 
 

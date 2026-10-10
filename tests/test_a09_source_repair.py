@@ -416,3 +416,32 @@ def test_nonadjacent_units_do_not_silently_include_the_gap(repair_setup):
     assert response.status_code == 400
     assert 'repair_source_units_must_be_contiguous' in response.text
     assert fresh()._load_objects(sid, remember=False) == before
+
+
+def test_older_direct_preparation_cannot_overwrite_a_committed_winner(repair_setup, monkeypatch):
+    from src.operations_console_v1 import OperationsConsole, ConsoleError
+    import src.source_bound_fields_v2 as fields
+    console, sid, obj, reviewer, fresh = repair_setup()
+    revision = console.objects_revision(sid)
+    selection = {'decision_kind':'semantic_selection', 'selection_origin':'proposal_selected',
+                 'spans':deepcopy(obj['metadata']['semantic_passage']['spans']),
+                 'source_text':obj['content']['clean_text']}
+    patch = {'reason':'Concurrente correctie.', 'operations':[
+        {'op':'set', 'path':'content.clean_text', 'value':obj['content']['clean_text']}]}
+    rebind = fields.rebind_revision_evidence
+    winner = []
+    def commit_other_then_prepare(previous, revised, *, fragments):
+        monkeypatch.setattr(fields, 'rebind_revision_evidence', rebind)
+        winner.append(OperationsConsole.correct_object(fresh(), actor_id=reviewer['account_id'],
+            snapshot_id=sid, object_id=obj['object_id'], patch=patch,
+            materialisation_decision=selection, expected_revision=revision))
+        rebind(previous, revised, fragments=fragments)
+    monkeypatch.setattr(fields, 'rebind_revision_evidence', commit_other_then_prepare)
+    with pytest.raises(ConsoleError, match='snapshot_object_write_conflict'):
+        OperationsConsole.correct_object(console, actor_id=reviewer['account_id'], snapshot_id=sid,
+            object_id=obj['object_id'], patch=patch, materialisation_decision=selection,
+            expected_revision=revision)
+    assert fresh()._current_object(sid, obj['object_id']) == winner[0]
+    from src.review_ledger import read_events
+    assert len([event for event in read_events(fresh()._ledger_path)
+                if event['event_type']=='quality_object_corrected']) == 1
