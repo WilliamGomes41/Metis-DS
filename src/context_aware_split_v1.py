@@ -132,6 +132,7 @@ def reject_candidate(
     previous_text: str | None = None,
     seen_clean_texts: Iterable[str] | None = None,
     is_heading: bool = False,
+    allow_standalone_advice: bool = False,
 ) -> RejectDecision:
     """Reject fragments that MUST NOT become standalone inhoudelijk objects.
 
@@ -162,7 +163,7 @@ def reject_candidate(
     if official:
         return RejectDecision(False, None, KEEP_OFFICIAL_HEADING)
 
-    if not official and is_continuation_fragment(blob):
+    if not official and is_continuation_fragment(blob, allow_standalone_advice=allow_standalone_advice):
         return RejectDecision(True, REJECT_CONTINUATION)
 
     if short_def:
@@ -176,7 +177,7 @@ def reject_candidate(
     if is_tiny_confirmable_text(blob):
         return RejectDecision(True, REJECT_NOT_STANDALONE)
 
-    if previous_text and is_continuation_fragment(blob):
+    if previous_text and is_continuation_fragment(blob, allow_standalone_advice=allow_standalone_advice):
         return RejectDecision(True, REJECT_CONTINUATION)
 
     return RejectDecision(False, None)
@@ -288,6 +289,7 @@ def split_context_aware_units(
                 unit,
                 previous_text=previous,
                 is_heading=is_heading,
+                allow_standalone_advice=span.explicit_advice_clause,
             )
             if decision.rejected and decision.reason == REJECT_NAV_ONLY:
                 continue

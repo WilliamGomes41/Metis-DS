@@ -48,7 +48,11 @@ afhankelijke clausules blijven samen. Lege tekst geldt niet als één claim.
 Een vervolgstarter zoals `Eventueel` is onvoldoende om een nieuwe aanbeveling
 aan een eerdere zin te plakken. Een expliciete adviesstart na de starter blijft
 apart; voorbeelden en grammaticale hangers behouden de bestaande behandeling.
-Dit is een heuristiek, geen volledige grammaticale analyse.
+Deze uitzondering wordt uitsluitend toegepast bij expliciete clausulegrenzen
+in objectvorming. Het gedeelde bronherstel behoudt zijn conservatieve default:
+`gebruik van ...` kan een grammaticaal vervolg zijn en is geen zelfstandige
+aanbeveling op grond van het eerste woord. Dit is een heuristiek, geen volledige
+grammaticale analyse.
 
 `relation_proposals_for_units` rekent op een kopie. De bestaande in-place API
 blijft als adapter beschikbaar. Nieuwe `applies_if`/`except_if`-voorstellen

@@ -16,6 +16,7 @@ from src.atomic_split_v1 import (
 )
 from src.context_aware_split_v1 import split_context_aware_units
 from src.object_taxonomy_v1 import is_continuation_fragment
+from src.source_reconstruction_v1 import reconstruct_source_fragments
 
 
 pytestmark = [
@@ -60,7 +61,8 @@ def test_independent_semicolon_claims_but_integrated_condition_stays():
 
 def test_optional_independent_advice_is_not_a_continuation():
     advice = "Eventueel bespreek het vervolg met de huisarts."
-    assert not is_continuation_fragment(advice)
+    assert is_continuation_fragment(advice)
+    assert not is_continuation_fragment(advice, allow_standalone_advice=True)
     assert split_meaning_units(f"Gebruik een dagboek. {advice}") == [
         "Gebruik een dagboek.", advice
     ]
@@ -126,3 +128,29 @@ def test_context_split_preserves_source_fragment_assignment():
     assert len(units) == 2
     assert units[0]["source_fragment_ids"] == ["f1"]
     assert units[1]["source_fragment_ids"] == ["f2"]
+
+
+def test_lowercase_advice_token_remains_a_source_continuation():
+    fragments = [
+        {"fragment_id": "f1", "clean_text": "Bespreek bij patiënten met"},
+        {"fragment_id": "f2", "clean_text": "gebruik van antistolling de risico's."},
+    ]
+    assert is_continuation_fragment(fragments[1]["clean_text"])
+    repaired = reconstruct_source_fragments(fragments)
+    assert len(repaired) == 1
+    assert repaired[0]["clean_text"] == "Bespreek bij patiënten met gebruik van antistolling de risico's."
+    assert repaired[0]["source_fragment_ids"] == ["f1", "f2"]
+    units = split_context_aware_units(fragments, document_id="doc")
+    assert len(units) == 1
+    assert units[0]["text"] == repaired[0]["clean_text"]
+    assert units[0]["source_fragment_ids"] == ["f1", "f2"]
+
+
+def test_explicit_advice_clauses_survive_context_split():
+    fragments = [{"fragment_id": "f1", "clean_text":
+                  "Gebruik een dagboek; controleer de klachten. Eventueel bespreek het vervolg."}]
+    units = split_context_aware_units(fragments, document_id="doc")
+    assert [unit["text"] for unit in units] == [
+        "Gebruik een dagboek;", "controleer de klachten.", "Eventueel bespreek het vervolg."
+    ]
+    assert all(unit["source_fragment_ids"] == ["f1"] for unit in units)

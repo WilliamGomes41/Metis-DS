@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Iterable
 
 from src.object_taxonomy_v1 import (
@@ -42,6 +42,7 @@ class MeaningUnitSpan:
     start: int
     end: int
     text: str
+    explicit_advice_clause: bool = False
 
 
 def _span(text: str, start: int, end: int) -> MeaningUnitSpan:
@@ -113,7 +114,7 @@ def _independent_advice_clauses(text: str, sentence: MeaningUnitSpan) -> list[Me
         and propose_object_type(clause.text) == "recommendation"
         for clause in clauses
     ):
-        return clauses
+        return [replace(clause, explicit_advice_clause=True) for clause in clauses]
     return [sentence]
 
 
@@ -132,7 +133,15 @@ def split_meaning_unit_spans(text: str, *, is_heading: bool = False) -> list[Mea
     merged: list[MeaningUnitSpan] = []
     for sentence in _sentence_spans(blob):
         for unit in _independent_advice_clauses(blob, sentence):
-            if merged and is_continuation_fragment(unit.text):
+            # Uppercase sentence candidates or validated semicolon clauses
+            # establish a local boundary; raw lowercase source lines do not.
+            explicit = unit.explicit_advice_clause or (
+                unit.text[0].isupper()
+                and is_continuation_fragment(unit.text)
+                and not is_continuation_fragment(unit.text, allow_standalone_advice=True)
+            )
+            unit = replace(unit, explicit_advice_clause=explicit)
+            if merged and is_continuation_fragment(unit.text, allow_standalone_advice=explicit):
                 merged[-1] = _span(blob, merged[-1].start, unit.end)
             else:
                 merged.append(unit)
