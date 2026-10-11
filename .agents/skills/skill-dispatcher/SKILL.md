@@ -10,6 +10,7 @@ Kies de kleinste samenhangende set skills die de opdracht dekt. Voer daarna de g
 ## 1. Bepaal de opdracht
 
 Leg kort vast:
+
 - het gewenste resultaat en de grenzen van de opdracht;
 - de huidige fase: onderzoeken, ontwerpen, uitvoeren, verifiëren, beoordelen of uitleggen;
 - concrete foutgevolgen die de keuze beïnvloeden, zoals verkeerde toegang, verloren werk, onjuiste selectie of misleidende conclusies;
@@ -65,4 +66,4 @@ Herselecteer wanneer de taakfase, scope, geraakt domein of materieel risico vera
 
 Controleer of alle noodzakelijke activiteiten zijn uitgevoerd, ook wanneer de primaire skill ze niet dekt. Rapporteer het resultaat, werkelijk uitgevoerde verificatie en materiële beperkingen. Scheid aangetoond gedrag, redelijke afleiding en open onzekerheid waar die het oordeel beïnvloeden.
 
-Noem een gekozen route geen uitgevoerde controle en een green build geen bewijs voor een opgelost productieprobleem.
+Noem een gekozen route geen uitgevoerde controle en een geslaagde build geen bewijs voor een opgelost productieprobleem.
