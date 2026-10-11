@@ -542,6 +542,11 @@ def _recommendation_semantics_codes(
     )
     if evidence_meta.get("version") not in SUPPORTED_RECOMMENDATION_SEMANTICS_EVIDENCE_VERSIONS:
         codes.append("recommendation_semantics_evidence_version_invalid")
+    if object_revision is not None and (
+        semantics != object_revision.get("proposed_recommendation_semantics")
+        or evidence_meta != (object_revision.get("metadata") or {}).get("recommendation_semantics_evidence")
+    ):
+        codes.append("recommendation_semantics_binding_mismatch")
     if evidence_meta.get("version") == RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION:
         if object_revision is None or source_fragments is None:
             codes.append("recommendation_semantics_source_required")

@@ -5,6 +5,9 @@ Touches lifecycle invariants: no
 Rewrite risk: none
 Assigned issue: #557
 
+Current correction: see “Audit corrections on 8f1cd76” below. Earlier dated
+results document intermediate revisions, not the final verification result.
+
 ## Before implementation: evidence and decision
 
 Baseline: origin/main 9ca7bfc (2026-10-11); Python 3.12.14, existing requirements-dev environment. Synthetic source fragments with exact offsets and fixed provider output; no live provider or production data. `python -m pytest -q tests/test_a07_strength_binding.py`: 18 failed, 5 passed before production edits. `PYTHONPATH=. python /tmp/a07_probe.py --assert-independence` also failed: B accepted without A's label, rejected with A's label in same/ancestor section; borrowed A evidence accepted; A strong + B weak accepted as not_stated. The retained test file replaces the temporary probe as the reproducible command/fixture.
@@ -26,7 +29,7 @@ The calculation is stateless. Its output enters the existing WorkingRevision obj
 
 Hard invariants: evidence solely owned by A is irrelevant to B; explicit strength needs literal and applicable evidence; any applicable known label blocks not_stated; contradictory labels are not absence; unknown association cannot justify explicit strength. Source fidelity, human confirmation and publication conditions remain unchanged.
 
-Binding scope: selected literal text, a whitespace-adjacent trailing strength stamp in the same reconstructed block, complete standalone stamps in the next source blocks without intervening prose/heading/section boundaries, and genuine preceding source headings whose structural path contains the candidate. Section proximity or an arbitrary neighboring body is insufficient. Only explicit extractor heading metadata is used; looking like a short heading is not evidence. Intervening headings that close the scope prevent inheritance. Punctuation between consecutive trailing stamps cannot mask a conflict. General table/group associations without this structural proof remain unsupported for explicit strength rather than guessed.
+Binding scope: the source-bound recommendation core for V2/V3 (selected literal text for historical V1 without a core), a whitespace-adjacent trailing strength stamp in the same reconstructed block, complete standalone stamps in the next source blocks without intervening prose/heading/section boundaries, and genuine preceding source headings whose structural path contains the candidate. Section proximity or an arbitrary neighboring body is insufficient. Only explicit extractor heading metadata is used; looking like a short heading is not evidence. Intervening headings that close the scope prevent inheritance. Punctuation between consecutive trailing stamps cannot mask a conflict. General table/group associations without this structural proof remain unsupported for explicit strength rather than guessed.
 
 Durable entity: existing candidate metadata in WorkingRevision. Before: old working set or no candidates. After: newly formed candidates/rejection observations under existing atomic commit; published set/review ledger untouched. Failure/recovery, idempotency and concurrency remain the existing ingest/re-extraction reservation, revision/CAS and atomic bundle rules; no new partial write exists. Rejected V3 candidates remain accounted for by source remainder/pending rejection, not silently lost. Recovery tests will check the durable caller; no unrelated authorization/performance/concurrency changes are planned.
 
@@ -293,3 +296,84 @@ production original-user acceptance and historical affected-data inventory remai
 or issue closure. Keep Code geverifieerd unchecked while the required suite is red.
 Historical affected work may need authorized source review/re-extraction and new
 working revisions; a codefix or rollback does not perform that repair.
+
+### Audit corrections on 8f1cd76
+
+Class B; Rewrite risk: none. The provider proposes, existing field binding validates
+literal recommendation-core coordinates, and semantic_passage owns applicability.
+Deterministic materialisation continues to reconstruct the original selection;
+this correction neither reselects source text nor creates a materialisation path.
+V2/V3 strength ranges use the bound recommendation core plus the existing adjacent
+stamp and shared-heading rules. Legacy V1 without a field core keeps its existing
+selection contract. Admission must compare the candidate semantics and evidence
+with the revision it validates. Canonical revisions cannot shadow nested evidence
+with wire-format root evidence; ancillary formation metadata remains supported.
+No durable state, review decision, published object or schema is rewritten.
+Failures use existing rejection/quarantine and atomic commit behavior.
+
+| Claim | Failure | Check | Expected | Boundary |
+|---|---|---|---|---|
+| Core owns evidence | A+B selected, core B borrows A | Public V2/V3 regression | Reject borrowed label | Synthetic source |
+| Admission checks admitted value | Candidate weak, validated revision strong | Direct Admission regression | Block mismatch | No production exploit claimed |
+| Evidence has one owner | Canonical v2 shadowed by root v1 | apply_admission_gate regression | Block mixed representation | Canonical schema already rejects root field |
+
+Before production edits, all four parameterized regression cases failed on
+8f1cd7602f97a1654cea3ec878c412c186878415, Python 3.12.14, with
+`PYTHONPATH=. ../review-venv/bin/python -m pytest -q tests/test_a07_strength_binding.py -k 'combined_selection_cannot or different_from_validated or shadowed'`.
+These corrections reuse the existing applicability algorithm; adding a second
+binder or replacing formation would increase migration and maintenance risk
+without demonstrated benefit. Historic frequency and production causality remain
+unknown. Existing incorrectly formed records may require explicit source-based
+reassessment; neither this fix nor rollback repairs them automatically.
+
+The final correction also rejects a direct candidate-only v2→v1 substitution
+when the supplied revision still has v2 evidence. Deliberately rewriting both
+legacy metadata representations remains the previously documented provenance
+limit, not a newly authenticated historical route. Replay identity is binding-v5.
+
+Minimal-surface review: APPROVE WITH NOTES. Two existing production modules;
+no new materializer, store, schema, lifecycle state or public entry point. The
+same core coordinates from existing source_bound_fields feed formation and
+recheck. Whole-selection heading bounds are retained separately from core-local
+stamps. AST complexity signals (8f1cd76→fix): ranges 19→20, semantic proposal
+36→39, bound recheck 16→21, Admission semantic codes 26→30. These branches enforce
+core containment, representation ownership and candidate/revision consistency at
+their existing owners. Extracting wrappers solely to lower these metrics would
+hide the checks without reducing decisions. The two core-span reads intentionally
+read the same existing field schema at the formation and recheck boundaries;
+there is one applicability algorithm. No unrelated cleanup is included.
+
+A preservation probe found that core-local binding must continue past consumed
+inline stamps to a following standalone stamp block. On afdc5ad that probe had
+2 failures (V2/V3), 1 pass (V1). The existing range traversal now uses the consumed
+end offset; it does not skip intervening prose or change section/heading bounds.
+The added regression rejects the mixed inline/block strong/weak conflict on all
+three routes. This is a bounded continuation of the same stamp rule.
+
+Final verification of product/test commit 02550a4408f127fca4ae2827910c5b2e75cba788
+(Python 3.12.14; PYTHONPATH=. and the requirements-dev.lock environment):
+
+- `python -m pytest -q tests/test_a07_strength_binding.py`: 79 passed, 3.12s.
+- Targeted source evidence/labels, D3.2/D3.3/D3.4, V3 context, V2 fields,
+  recoverable formation, PDF line gutter and architecture invariant set:
+  264 passed, 1 skipped, 15.33s.
+- `python -m pytest -q --tb=short`: 3357 passed, 308 skipped, 4 failed,
+  279.80s. Two superseded runs were interrupted after further corrections and
+  are not counted as final evidence.
+- Fresh unchanged 9ca7bfc comparison, `python -m pytest -q
+  tests/test_bounded_model_transport.py tests/test_security_harden_wave3.py`:
+  4 failed, 29 passed, 9.06s. The same failures are parent-death worker
+  termination, HTTPS SNI, redirect rebinding and metadata-redirect rejection.
+  Root causes unresolved; no controls removed or weakened.
+- Repository/release-control preflights, compilation, architecture boundaries,
+  Product API compatibility, PR contract and git whitespace checks pass.
+  The final materialisation module has no diff from 8f1cd76.
+
+Aangetoond: the three audit defects and the mixed stamp preservation case are
+corrected under deterministic source/provider fixtures through the real checks.
+Redelijk afgeleid: demonstrated attribution failures are prevented when source
+structure and the normative core are accurate. Open: full repository gate,
+production original-user/live-provider acceptance, native PostgreSQL, historical
+inventory and legacy provenance authentication. Oordeel: ready for renewed draft
+review, not merge/deployment or a production-resolution claim. Existing affected
+data needs separate authorized assessment; no silent data repair is performed.

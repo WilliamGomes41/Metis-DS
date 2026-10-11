@@ -460,3 +460,95 @@ def test_ordinary_provider_cannot_claim_historical_evidence_version():
     p['objects'][0]['recommendation_semantics_evidence'] = {'version': 'recommendation-semantics-evidence-v1'}
     with pytest.raises(SemanticPassageError, match='semantic_object_contains_untrusted_fields'):
         validate(fragments, candidates, p)
+
+@pytest.mark.parametrize('version', ['v2', 'v3'])
+def test_combined_selection_cannot_borrow_label_before_own_core(version):
+    fragments, candidates, proposal = case('Sterk – tegen', same_block=True,
+                                           explicit=('Sterk – tegen', 'ab'))
+    block = semantic_source_blocks(candidates)[0]
+    proposal['objects'][0]['spans'] = [{'block_id': block['block_id'], 'start': 0,
+                                       'end': len(block['text'])}]
+    with pytest.raises(ValueError, match='recommendation_strength_evidence'):
+        validate(fragments, candidates, proposal, version)
+
+
+@pytest.mark.parametrize('change', ['strength', 'evidence_version'])
+def test_admission_rejects_semantics_different_from_validated_revision(change):
+    from src.admission_gate_v1 import admit_candidate
+    _, rows, obj, fragments = prepare('Gebruik geen zalf. Sterk – tegen', stamp='Sterk – tegen')
+    candidate = deepcopy(obj['metadata']['admission'])
+    if change == 'strength':
+        candidate['proposed_recommendation_semantics']['strength'] = 'weak'
+    else:
+        candidate['recommendation_semantics_evidence']['version'] = 'recommendation-semantics-evidence-v1'
+    result = admit_candidate(candidate, object_revision=obj, context_objects=rows,
+                             source_fragments=fragments)
+    assert result['gate_result'] == 'blocked'
+    assert 'recommendation_semantics_binding_mismatch' in result['reason_codes']
+
+
+def test_canonical_evidence_cannot_be_shadowed_by_legacy_root_field():
+    from src.admission_gate_v1 import apply_admission_gate
+    _, rows, obj, fragments = prepare('Gebruik geen zalf. Sterk – tegen', stamp='Sterk – tegen')
+    obj['proposed_recommendation_semantics']['strength'] = 'weak'
+    obj['recommendation_semantics_evidence'] = {'version': 'recommendation-semantics-evidence-v1'}
+    result = apply_admission_gate(rows, klasse='richtlijn', fragments=fragments,
+                                  document_version='1', source_hash='a' * 64)
+    admission = next(r for r in result if r['object_id'] == obj['object_id'])['metadata']['admission']
+    assert admission['gate_result'] == 'blocked'
+
+
+def test_real_v2_provider_cannot_borrow_from_combined_selection():
+    import json
+    from tests.test_recommendation_context_v3 import response_for
+    from src.pre_review_semantic_v1 import semantic_spec_from_fragments
+    core = 'Voor verpleegkundigen: Gebruik geen zalf.'
+    text = 'Vermijd behandeling A. Sterk – tegen ' + core
+    fragments = source(text)
+
+    def provider(url, headers, payload, timeout):
+        proposal = response_for(payload, text)
+        obj = proposal['objects'][0]
+        block_id = obj['spans'][0]['block_id']
+
+        def ref(literal):
+            return {'block_id': block_id, 'literal': literal, 'occurrence': None}
+
+        obj['recommendation_semantics'].update(direction='against', direction_evidence=ref(core),
+            strength='strong', strength_status='explicit', strength_evidence=ref('Sterk – tegen'))
+        fields = obj['field_evidence']
+        for key in ('actor_span', 'target_group_span', 'scope_span'):
+            fields.pop(key)
+        for key, literal in {'subject_span': 'verpleegkundigen', 'actor_of_scope': 'verpleegkundigen',
+            'predicate_span': 'Gebruik', 'type_evidence_spans': core, 'recommended_action': 'Gebruik geen',
+            'action_object_or_goal': 'zalf', 'recommendation_evidence_span': core}.items():
+            fields[key] = {'span': ref(literal), 'missing_reason': None}
+        return {'output': [{'type': 'message', 'content': [{'type': 'output_text',
+                                                         'text': json.dumps(proposal)}]}]}
+
+    with pytest.raises(ValueError, match='recommendation_strength_evidence_not_applicable'):
+        semantic_spec_from_fragments(document_id='doc', title='Test', family='test', class_='richtlijn',
+            fragments=fragments, content_kind='html', api_key='test', model='test',
+            post_json=provider, field_contract_v2=True)
+
+
+@pytest.mark.parametrize('version', ['v2', 'v3'])
+@pytest.mark.parametrize('own', ['', 'Zwak – tegen', 'Sterk – tegen Zwak – tegen'])
+def test_combined_selection_keeps_b_absence_or_own_conflict(version, own):
+    args = case('Sterk – tegen', own=own, same_block=True)
+    block = semantic_source_blocks(args[1])[0]
+    args[2]['objects'][0]['spans'] = [{'block_id': block['block_id'], 'start': 0,
+                                      'end': len(block['text'])}]
+    if own:
+        with pytest.raises(ValueError, match='recommendation_strength_not_stated_conflict'):
+            validate(*args, version)
+    else:
+        validate(*args, version)
+
+
+@pytest.mark.parametrize('version', ['v1', 'v2', 'v3'])
+def test_inline_stamp_does_not_hide_conflicting_following_stamp_block(version):
+    fragments, candidates, proposal = case(own='Sterk – tegen', explicit=('Sterk – tegen', 'b'))
+    fragments.append(_fragment('weak', 'Zwak – tegen', section_path=['Aanbevelingen']))
+    with pytest.raises(ValueError, match='recommendation_strength_evidence_conflict'):
+        validate(fragments, candidates, proposal, version)
