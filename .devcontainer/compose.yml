@@ -1,12 +1,17 @@
 services:
   workspace:
-    image: mcr.microsoft.com/devcontainers/python:1-3.12-bookworm
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
     command: sleep infinity
     volumes:
       - ..:/workspaces/metis:cached
     networks:
-      - default
-      - test_database
+      - sandbox
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       sandbox-db:
         condition: service_healthy
@@ -19,14 +24,17 @@ services:
     volumes:
       - sandbox_database:/var/lib/postgresql/data
     networks:
-      - test_database
+      - sandbox
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U metis_sandbox -d metis_security_test"]
       interval: 5s
       timeout: 5s
       retries: 20
 networks:
-  test_database:
+  sandbox:
     internal: true
+    ipam:
+      config:
+        - subnet: 172.30.254.0/24
 volumes:
   sandbox_database:

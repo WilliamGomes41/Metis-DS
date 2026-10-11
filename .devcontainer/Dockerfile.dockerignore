@@ -1,0 +1,10 @@
+**
+!requirements-console.txt
+!requirements.lock
+!requirements-dev.lock
+!requirements-retrieval.txt
+!.devcontainer/
+!.devcontainer/Dockerfile
+!.devcontainer/Dockerfile.dockerignore
+!.devcontainer/requirements-security.lock
+!.devcontainer/semgrep.yml
