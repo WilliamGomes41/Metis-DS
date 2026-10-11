@@ -1,0 +1,40 @@
+services:
+  workspace:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    command: sleep infinity
+    volumes:
+      - ..:/workspaces/metis:cached
+    networks:
+      - sandbox
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      sandbox-db:
+        condition: service_healthy
+  sandbox-db:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_USER: metis_sandbox
+      POSTGRES_PASSWORD: sandbox-only
+      POSTGRES_DB: metis_security_test
+    volumes:
+      - sandbox_database:/var/lib/postgresql/data
+    networks:
+      - sandbox
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metis_sandbox -d metis_security_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+networks:
+  sandbox:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.254.0/24
+volumes:
+  sandbox_database:

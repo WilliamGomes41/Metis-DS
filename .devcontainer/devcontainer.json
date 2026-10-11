@@ -1,0 +1,17 @@
+{
+  "name": "Metis offline security sandbox",
+  "dockerComposeFile": "compose.yml",
+  "service": "workspace",
+  "workspaceFolder": "/workspaces/metis",
+  "remoteUser": "vscode",
+  "shutdownAction": "stopCompose",
+  "forwardPorts": [],
+  "otherPortsAttributes": {"onAutoForward": "ignore"},
+  "postCreateCommand": "python -c \"import pytest, psycopg; print('Preinstalled test dependencies available')\"",
+  "customizations": {
+    "vscode": {
+      "settings": {"python.defaultInterpreterPath": "/opt/metis-venv/bin/python", "remote.autoForwardPorts": false},
+      "extensions": ["ms-python.python"]
+    }
+  }
+}
