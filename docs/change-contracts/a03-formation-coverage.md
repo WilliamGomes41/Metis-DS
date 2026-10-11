@@ -55,6 +55,52 @@ Locks/transactions: closure is a pure read within existing console snapshot/read
 
 ## Diagnosis and evidence (2026-10-11)
 
+Continuation contract (PR review): extract-origin `linked_as_support` and
+`used_as_context` are automatic source classifications, not human decisions.
+Only explicit review-origin non-candidate dispositions may contribute to human
+formation closure. Rejected candidates require their current named human
+review/hash; approvals keep the existing exact-current T9 checks. All source,
+review, transaction, rollback and topology boundaries above remain unchanged.
+The added automatic-disposition regression fails twice on 8fda6a2 before edits;
+it injects only read inputs and historical errors, never a human decision.
+
+The second PR finding is also reproduced: the fixture provider's actual rejected
+selection leaves a coverage_remainder without proposal-only source_blocks_hash.
+Real confirm_source_context exclusions still leave formation_incomplete true.
+Before its fix, the new source_disposition HTTP story fails at that exact check.
+The reader now computes the existing producer's semantic-input fingerprint from
+retained fragments and verifies it against replay. Valid T10 source records may
+then use their exact literal/source-role evidence without a proposal-only stamp;
+proposal-origin objects still require their existing stamp. This is a pure block
+projection, not extraction, passage materialisation or model execution. A changed
+replay input with a recomputed identity hash still fails closed.
+
+Added controls prove that extract statuses and review markers without human
+evidence stay open; real candidate rejection and source exclusion close after
+console recreation; missing reviewer/date or stale rejection hash stays open.
+Approvals retain exact-current binding/stage enforcement. Non-approval evidence
+uses existing current review hashes or the T10-validated source-role record,
+plus human reviewer/date and explicit non-candidate register origin.
+
+Continuation focused verification: 71 passed, 4 local PostgreSQL skips in A03
+plus recoverable-formation (before the final stale-input assertion). Additional
+T9/T10/T12/source-container/source-context regressions: 121 passed, 6 backend
+skips. Mandatory preflights, compileall, architecture boundaries and 6 invariants
+passed. Native CI/final-tree full-suite results are reported in PR comments.
+Local installation of PostgreSQL is unavailable in this environment; skips do
+not establish backend acceptance. The new source-disposition story is included
+in both file and native-workflow PostgreSQL parametrizations.
+
+Continuation surface/adversarial review: EXTEND the existing read predicate;
+REUSE producer fragment partitioning/fingerprinting, T10 source records/role
+validation and T9 current approvals. No new writer or abstraction. The source-role
+exception is allowed only after source_accountability verifies its current
+literal/command/role evidence; stale role, source or input cannot gain closure.
+The extra branch complexity is bounded evidence filtering in the same reader,
+not another status engine. No changes to lock, transaction, CAS, schema or
+canonical/registry ownership. Engineering readiness remains bounded by exact
+head native CI; full canonical PostgreSQL, Azure and production are unproven.
+
 The initial tests-only stage (local 913b23f; remote 7991a42e51e70762c285a4e090b9461efc7d594e) ran against unchanged main. Command: `python -m pytest -q tests/test_a03_formation_coverage.py --tb=short`. Result: 12 failed, 14 passed, 2 PostgreSQL skips. Nine failures cover selected-object/call/source-assessment adjacency, reverse order and overlap; the other three are the real-review blocker and both local publication stories. After real reviews the only blocker was source_formation_incomplete. Recovery failed at formation_incomplete before review. Whole-span and gap guards passed.
 
 A union-only intervention made the original command green (26 passed, 2 PostgreSQL skips), supporting single-span containment as the local cause rather than missing independent review or publication authority. Additional context acceptance tests were added subsequently; they are not retrospectively claimed as baseline RED. Synthetic malformed inputs are passed to the read boundary rather than bypassing the append-only revision writer.

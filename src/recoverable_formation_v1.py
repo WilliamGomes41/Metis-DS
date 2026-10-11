@@ -198,10 +198,23 @@ def incomplete(envelope, *, objects=None, bindings=None, fragments=None):
             or identity.get("hash") != stable_json_hash(components)
             or exact_replay_lookup(replay, expected_identity=identity).status != LOOKUP_HIT):
         return True
+    from src.pre_review_semantic_v1 import _candidate_fragments, _evidence_fragments
+    from src.semantic_passage_v1 import semantic_source_blocks
+    # Source-only remainders have no proposal stamp. Pin their literal inputs
+    # with the same producer fingerprint; this computes blocks, never passages.
+    if stable_json_hash({
+            "source_blocks": semantic_source_blocks(_candidate_fragments(fragments)),
+            "evidence_blocks": semantic_source_blocks(_evidence_fragments(fragments)),
+    }) != components.get("source_blocks_hash"):
+        return True
+    from src.source_accountability_v1 import is_source_record
     from src.review_disposition_v1 import definitive_review_disposition
     from src.source_containers_v1 import source_accountability
-    from src.source_context_review_v1 import verify_literal_source
+    from src.source_context_review_v1 import verify_literal_source, role_of
     from src.review_duty_v1 import review_stage, exact_current_approver_ids
+    from src.passage_register_v1 import passage_register_of
+    from src.integrity_kernel import exact_review_snapshot_hash
+    from src.four_eyes_v1 import is_forbidden_reviewer
     from src.beslisboom_path_v1 import review_path_for_klasse
     review_path = review_path_for_klasse(envelope["class"])
     objects, bindings = list(objects), tuple(bindings or ())
@@ -211,11 +224,14 @@ def incomplete(envelope, *, objects=None, bindings=None, fragments=None):
     for obj in objects:
         source = obj.get("source") or {}
         semantic = ((obj.get("metadata") or {}).get("semantic_passage") or {})
+        source_blocks_hash = semantic.get("source_blocks_hash")
+        if source_blocks_hash is None and is_source_record(obj):
+            source_blocks_hash = components.get("source_blocks_hash")
         disposition = definitive_review_disposition(obj)
         if (not disposition["final"] or disposition["outcome"] == "superseded"
                 or any(source.get(key) != envelope[field] for key, field in (
                     ("source_id", "source_id"), ("source_checksum", "sha256"), ("version", "version")))
-                or semantic.get("source_blocks_hash") != components.get("source_blocks_hash")
+                or source_blocks_hash != components.get("source_blocks_hash")
                 or not spans_are_exact(semantic.get("spans"))
                 or projection.get(obj.get("object_id"), {}).get("closure") != "accounted"
                 or not verify_literal_source(obj, fragments, envelope["sha256"])):
@@ -223,6 +239,18 @@ def incomplete(envelope, *, objects=None, bindings=None, fragments=None):
         if disposition["outcome"] == "approved" and (
                 not exact_current_approver_ids(obj, bindings)
                 or review_stage(obj, review_path=review_path, bindings=bindings, fragments=fragments) is not None):
+            continue
+        if disposition["outcome"] != "approved":
+            governance = obj.get("governance") or {}
+            reviewer = str(governance.get("validated_by") or "").strip()
+            if (not reviewer or is_forbidden_reviewer(reviewer)
+                    or not governance.get("validation_date")
+                    or (not role_of(obj)
+                        and governance.get("review_snapshot_hash") != exact_review_snapshot_hash(obj))):
+                continue
+        if disposition["outcome"] not in {"approved", "rejected"} and passage_register_of(obj).get("source") != "review":
+            # Automatic context/support classification is not human closure,
+            # even when the source-accountability projection is accounted.
             continue
         final.extend(semantic["spans"])
     pending = evidence.get("pending_rejections") or []

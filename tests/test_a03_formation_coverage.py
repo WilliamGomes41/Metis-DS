@@ -153,6 +153,50 @@ def test_reviewed_split_closes_formation_blocker(tmp_path):
     assert state._envelope(sid)["semantic_replay"]["provider_evidence"] == history
 
 
+@pytest.mark.parametrize("status", ["linked_as_support", "used_as_context"])
+@pytest.mark.parametrize("origin", ["extract", "review"])
+def test_automatic_disposition_cannot_resolve_review_required_failure(tmp_path, status, origin):
+    from src.recoverable_formation_v1 import incomplete
+    from src.passage_register_v1 import passage_register_record
+    from src.source_containers_v1 import source_accountability
+    state, sid, _, _, _, _, _, _ = split_system(tmp_path)
+    history = inject_failure(state, sid)
+    objects = deepcopy(state.snapshot_objects(sid))
+    # Synthetic read input isolates an extract-generated disposition. No review
+    # command or durable object writer is bypassed to fabricate human evidence.
+    for obj in objects:
+        if obj.get("proposed_object_type") == "recommendation":
+            obj["metadata"]["passage_register"] = passage_register_record(status=status, source=origin)
+            if origin == "review":
+                # A marker and terminal status alone are not review evidence.
+                obj["governance"]["validation_status"] = "rejected"
+            assert not obj["governance"].get("validated_by")
+    fragments = state.review_source_fragments(sid)
+    projection = source_accountability(objects, fragments=fragments)
+    assert all(projection[obj["object_id"]]["closure"] == "accounted"
+               for obj in objects if obj.get("proposed_object_type") == "recommendation")
+    assert incomplete(state._envelope(sid), objects=objects, bindings=[], fragments=fragments)
+    technical = state.technical_publication_readiness(snapshot_id=sid, envelope=state._envelope(sid),
+        objects=objects, bindings=[], fragments=fragments)
+    assert "source_formation_incomplete" in technical["blockers"]
+    assert state._envelope(sid)["semantic_replay"]["provider_evidence"] == history
+
+
+def test_explicit_source_exclusions_close_formation_after_restart(tmp_path):
+    from src.source_context_review_v1 import confirm_source_context
+    state, sid, _, reviewer, _, _, make, _ = split_system(tmp_path)
+    history = inject_failure(state, sid)
+    for index, obj in enumerate(candidates(state, sid)):
+        confirm_source_context(state, actor_id=reviewer, snapshot_id=sid,
+            source_object_id=obj["object_id"], role="excluded", target_object_ids=[],
+            reason="Expliciete bronafhandeling", command_id=f"a03-exclude-{index}",
+            expected_revision=state.objects_revision(sid))
+        assert state.processing_status(sid)["formation_incomplete"] is (index == 0)
+    restarted = make()
+    assert not restarted.processing_status(sid)["formation_incomplete"]
+    assert restarted._envelope(sid)["semantic_replay"]["provider_evidence"] == history
+
+
 @pytest.mark.parametrize("invalid", [
     "source_id", "source_checksum", "version", "source_blocks_hash",
     "snapshot_id", "document_id", "replay_hash", "proposal_hash",
@@ -195,6 +239,29 @@ def test_stale_or_invalid_context_cannot_close(tmp_path, invalid):
     technical = state.technical_publication_readiness(snapshot_id=sid, envelope=envelope,
         objects=objects, bindings=bindings[sid], fragments=fragments)
     assert "source_formation_incomplete" in technical["blockers"]
+
+
+@pytest.mark.parametrize("invalid", [None, "reviewer", "review_hash", "review_date"])
+def test_current_human_rejections_close_but_stale_evidence_does_not(tmp_path, invalid):
+    from src.recoverable_formation_v1 import incomplete
+    state, sid, _, reviewer, _, _, make, _ = split_system(tmp_path)
+    history = inject_failure(state, sid)
+    for obj in candidates(state, sid):
+        state.review_object(actor_id=reviewer, snapshot_id=sid, object_id=obj["object_id"],
+                            decision="reject", comment="Geen geschikte kenniseenheid")
+    restarted = make()
+    objects = deepcopy(restarted.snapshot_objects(sid))
+    if invalid:
+        governance = next(o for o in objects if o.get("proposed_object_type") == "recommendation")["governance"]
+        if invalid == "reviewer":
+            governance["validated_by"] = ""
+        elif invalid == "review_hash":
+            governance["review_snapshot_hash"] = "stale"
+        else:
+            governance["validation_date"] = None
+    assert incomplete(restarted._envelope(sid), objects=objects,
+        bindings=restarted.object_review_bindings(sid), fragments=restarted.review_source_fragments(sid)) is bool(invalid)
+    assert restarted._envelope(sid)["semantic_replay"]["provider_evidence"] == history
 
 
 @pytest.mark.parametrize("location", [[], [span(0, 0)], [span(0, 1, "unknown")], [span(0, 1), {"block_id": "b"}]])
@@ -261,7 +328,30 @@ def publication_story(tmp_path, monkeypatch, *, recovery=False, postgres=None):
     from fastapi.testclient import TestClient
     from src.operations_console_app import create_console_app, COOKIE
     state, sid, author, reviewer, calls, mode, make, bind = split_system(tmp_path, recovery=recovery, postgres=postgres)
-    if recovery:
+    if recovery == "source_disposition":
+        from src.source_accountability_v1 import is_source_record
+        from src.source_context_review_v1 import confirm_source_context
+        history = deepcopy(state._envelope(sid)["semantic_replay"]["provider_evidence"])
+        assert history["formation_incomplete"]
+        remainders = [o for o in state.snapshot_objects(sid) if is_source_record(o)]
+        assert remainders
+        for index, obj in enumerate(remainders):
+            assert "source_blocks_hash" not in obj["metadata"]["semantic_passage"]
+            confirm_source_context(state, actor_id=reviewer, snapshot_id=sid,
+                source_object_id=obj["object_id"], role="excluded", target_object_ids=[],
+                reason="Geen kenniseenheid; bron expliciet afgehandeld",
+                command_id=f"a03-remainder-{index}", expected_revision=state.objects_revision(sid))
+        assert not state.processing_status(sid)["formation_incomplete"]
+        assert state._envelope(sid)["semantic_replay"]["provider_evidence"] == history
+        from src.recoverable_formation_v1 import incomplete
+        from src.semantic_replay_v1 import stable_json_hash
+        stale = deepcopy(state._envelope(sid))
+        identity = stale["semantic_replay"]["identity"]
+        identity["components"]["source_blocks_hash"] = "other-input"
+        identity["hash"] = stable_json_hash(identity["components"])
+        assert incomplete(stale, objects=state.snapshot_objects(sid),
+            bindings=state.object_review_bindings(sid), fragments=state.review_source_fragments(sid))
+    elif recovery:
         history = deepcopy(state._envelope(sid)["semantic_replay"]["provider_evidence"])
         assert history["formation_incomplete"]
         mode["broken"] = False
@@ -303,11 +393,11 @@ def publication_story(tmp_path, monkeypatch, *, recovery=False, postgres=None):
     assert len(calls) == count
 
 
-@pytest.mark.parametrize("recovery", [False, True])
+@pytest.mark.parametrize("recovery", [False, True, "source_disposition"])
 def test_authorized_http_publication_restart(tmp_path, monkeypatch, recovery):
     publication_story(tmp_path, monkeypatch, recovery=recovery)
 
 
-@pytest.mark.parametrize("recovery", [False, True])
+@pytest.mark.parametrize("recovery", [False, True, "source_disposition"])
 def test_postgres_authorized_http_publication_restart(workflow_postgres, tmp_path, monkeypatch, recovery):
     publication_story(tmp_path, monkeypatch, recovery=recovery, postgres=workflow_postgres)
