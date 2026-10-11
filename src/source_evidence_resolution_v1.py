@@ -10,6 +10,7 @@ from copy import deepcopy
 import re
 
 from src.semantic_passage_v1 import SemanticPassageError
+from src.recommendation_semantics_v1 import adjacent_source_strength_span
 
 VERSION = "source-evidence-resolution-v1"
 V3_VERSION = "source-evidence-resolution-v1/v3-adjacent-strength-v2"
@@ -64,15 +65,10 @@ def resolve_proposal_evidence(proposal, *, blocks, evidence_blocks, field_contra
                 or type(candidate["start"]) is not int or type(candidate["end"]) is not int
                 or not 0 <= candidate["start"] <= selected["start"] < selected["end"] <= candidate["end"] <= len(text)):
             return None
-        end = selected["end"]
-        tail = text[end:]
-        start = end + len(tail) - len(tail.lstrip())
-        if start == end or not text.startswith(ref["literal"], start):
-            return None
-        after = start + len(ref["literal"])
-        if after < len(text) and (text[after].isalnum() or text[after] == "_"):
-            return None
-        return start
+        span = adjacent_source_strength_span(text, selected["end"])
+        if span and text[span[0]:span[1]] == ref["literal"]:
+            return span[0]
+        return None
 
     def resolve(value, path):
         if isinstance(value, list):

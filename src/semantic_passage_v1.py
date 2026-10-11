@@ -26,6 +26,9 @@ from src.recommendation_semantics_v1 import (
     RECOMMENDATION_SEMANTICS_VERSION,
     source_label_direction,
     source_literal_strength,
+    source_strength_cues,
+    adjacent_source_strength_span,
+    is_source_strength_label,
     validate_recommendation_semantics,
 )
 from src.source_reconstruction_v1 import reconstruct_source_fragments, source_fragment_ids_for_text
@@ -34,7 +37,8 @@ from src.source_layout_v1 import mapped_raw_spans
 
 LEGACY_SEMANTIC_PASSAGE_VERSION = "semantic-passage-v1.0.0"
 SEMANTIC_PASSAGE_VERSION = "semantic-passage-v1.1.0"
-RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION = "recommendation-semantics-evidence-v1"
+RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION = "recommendation-semantics-evidence-v2"
+STRENGTH_BINDING_VERSION = "recommendation-strength-binding-v2"
 SELECTION_ORIGIN_PROPOSAL = "proposal_selected"
 SELECTION_ORIGIN_COVERAGE = "coverage_remainder"
 ALLOWED_PROPOSED_TYPES = frozenset(
@@ -285,6 +289,65 @@ def _direction_ref_within_candidate(
     return False
 
 
+def _source_heading(public, source):
+    # Explicit extractor structure only; a short body can look like a heading.
+    return source.get("object_type") == "heading" or public.get("heading") == public["text"]
+
+
+def _applicable_strength_ranges(selected, evidence_by_id):
+    """Source-owned ranges, not model proximity or a matching section alone.
+
+    Candidate text and whitespace-adjacent trailing stamps belong to the
+    selection. Genuine source headings may cover several recommendations;
+    their structural path and intervening headings bound that group.
+    """
+    ranges = [dict(row) for row in selected]
+    for row in selected:
+        public, _ = evidence_by_id[row["block_id"]]
+        end = row["end"]
+        while (span := adjacent_source_strength_span(public["text"], end)):
+            ranges.append({"block_id": row["block_id"], "start": span[0], "end": span[1],
+                           "text": public["text"][span[0]:span[1]]})
+            end = span[1]
+            # Punctuation between stamps does not erase a conflicting label.
+            while end < len(public["text"]) and public["text"][end] in ".!?:;,":
+                end += 1
+    # Historical producers also expose a stamp as its own source fragment.
+    # It must be the next complete block after the complete selection, with
+    # no intervening prose or section boundary. Never borrow a preceding stamp.
+    last = selected[-1]
+    owner = evidence_by_id[last["block_id"]][0]
+    if last["end"] == len(owner["text"]):
+        by_position = {public["position"]: (public, source) for public, source in evidence_by_id.values()}
+        position = owner["position"] + 1
+        while position in by_position:
+            following, source = by_position[position]
+            if (following["section_path"] != owner["section_path"]
+                    or _source_heading(following, source)
+                    or not is_source_strength_label(following["text"])):
+                break
+            ranges.append({"block_id": following["block_id"], "start": 0,
+                           "end": len(following["text"]), "text": following["text"]})
+            position += 1
+    first = evidence_by_id[selected[0]["block_id"]][0]
+    headings = [public for public, source in evidence_by_id.values()
+                if _source_heading(public, source)]
+    path = first["section_path"]
+    for heading in headings:
+        scope = heading["section_path"]
+        if (not scope or path[:len(scope)] != scope
+                or heading["position"] >= first["position"]):
+            continue
+        # A later heading at the same level (or above it) closes the range,
+        # even if malformed extraction repeated the same section path.
+        if any(heading["position"] < other["position"] < first["position"]
+               and len(other["section_path"]) <= len(scope) for other in headings):
+            continue
+        ranges.append({"block_id": heading["block_id"], "start": 0,
+                       "end": len(heading["text"]), "text": heading["text"]})
+    return ranges
+
+
 def _recommendation_semantics_from_proposal(
     raw_semantics: Any,
     *,
@@ -327,6 +390,8 @@ def _recommendation_semantics_from_proposal(
     strength = raw_semantics.get("strength")
     strength_evidence: dict[str, Any] | None = None
     strength_text: str | None = None
+    applicable = _applicable_strength_ranges(selected, evidence_by_id)
+    cues = [match.group() for row in applicable for match in source_strength_cues(row["text"])]
 
     if status == "explicit":
         if strength not in {"strong", "weak"}:
@@ -346,20 +411,7 @@ def _recommendation_semantics_from_proposal(
     elif status == "not_stated":
         if strength is not None or raw_semantics.get("strength_evidence") is not None:
             _fail("recommendation_strength_not_stated_invalid")
-        related_evidence_text = [
-            str(public.get("text") or "")
-            for public, _source in evidence_by_id.values()
-            if _paths_related(
-                candidate_section_path,
-                list(public.get("section_path") or []),
-            )
-        ]
-        context_for_strength = " ".join(
-            [str(row.get("text") or "") for row in selected]
-            + list(candidate_section_path)
-            + related_evidence_text
-        )
-        if source_literal_strength(context_for_strength) is not None:
+        if cues:
             _fail("recommendation_strength_not_stated_conflict")
     else:
         if strength is not None:
@@ -372,6 +424,17 @@ def _recommendation_semantics_from_proposal(
         )
         if source_literal_strength(strength_text) is not None:
             _fail("recommendation_strength_unmapped_literal_conflict")
+
+    if strength_evidence is not None:
+        if not any(row["block_id"] == strength_evidence["block_id"]
+                   and row["start"] <= strength_evidence["start"]
+                   and strength_evidence["end"] <= row["end"] for row in applicable):
+            _fail("recommendation_strength_evidence_not_applicable")
+        if status == "explicit" and any(
+            source_literal_strength(cue) != strength
+            or source_label_direction(cue) not in {None, direction} for cue in cues
+        ):
+            _fail("recommendation_strength_evidence_conflict")
 
     semantics = {
         "version": RECOMMENDATION_SEMANTICS_VERSION,
@@ -392,6 +455,38 @@ def _recommendation_semantics_from_proposal(
         "strength": strength_evidence,
     }
     return semantics, evidence
+
+
+def validate_bound_recommendation_semantics(obj, *, fragments):
+    """Recheck new evidence at materialisation/Admission; leave old records alone."""
+    metadata = obj.get("metadata") or obj
+    evidence = metadata.get("recommendation_semantics_evidence") or {}
+    if (evidence.get("version") != RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION
+            or obj.get("proposed_object_type") != "recommendation"):
+        # Type corrections retain the existing field-contract rejection path.
+        return
+    semantics = obj.get(PROPOSED_FIELD)
+    if not isinstance(semantics, dict):
+        _fail("recommendation_semantics_invalid")
+    from src.knowledge_materialisation_v1 import _read_source_blocks
+    blocks = _read_source_blocks(list(fragments), include_headings=True)
+    spans = (metadata.get("semantic_passage") or {}).get("spans") or []
+    selected = []
+    for span in spans:
+        public, _ = blocks[span["block_id"]]
+        selected.append({**span, "text": public["text"][span["start"]:span["end"]],
+                         "section_path": public["section_path"]})
+    if not selected:
+        _fail("recommendation_semantics_invalid")
+    def wire(ref):
+        return {key: ref[key] for key in _SPAN_KEYS} if isinstance(ref, dict) else None
+    rebuilt, binding = _recommendation_semantics_from_proposal(
+        {"direction": semantics.get("direction"), "direction_evidence": wire(evidence.get("direction")),
+         "strength": semantics.get("strength"), "strength_status": semantics.get("strength_status"),
+         "strength_evidence": wire(evidence.get("strength"))},
+        proposed_type=obj.get("proposed_object_type"), selected=selected, evidence_by_id=blocks)
+    if rebuilt != semantics or binding != evidence:
+        _fail("recommendation_semantics_binding_mismatch")
 
 
 def _span_signature(spans: list[dict[str, Any]]) -> tuple[tuple[str, int, int], ...]:

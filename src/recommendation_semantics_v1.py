@@ -190,6 +190,24 @@ def has_source_literal_strength(text: str) -> bool:
     return source_literal_strength(text) is not None
 
 
+def source_strength_cues(text: str):
+    """Keep every literal cue; conflicting cues must never mean absence."""
+    for pattern in (SOURCE_LITERAL_STRONG_RE, SOURCE_LITERAL_WEAK_RE, SOURCE_DIRECTIONAL_LABEL_RE):
+        yield from pattern.finditer(str(text or ""))
+
+
+def adjacent_source_strength_span(text: str, end: int) -> tuple[int, int] | None:
+    """A trailing stamp binds only across whitespace, never across prose."""
+    start = end + len(text[end:]) - len(text[end:].lstrip())
+    if start == end:
+        return None
+    for pattern in (SOURCE_DIRECTIONAL_LABEL_RE, SOURCE_LITERAL_STRONG_RE, SOURCE_LITERAL_WEAK_RE):
+        match = pattern.match(text, start)
+        if match:
+            return match.span()
+    return None
+
+
 def is_source_strength_label(text: str) -> bool:
     """Recognize a standalone label without excluding mixed advice blocks."""
     blob = str(text or "").strip().rstrip(".!?:;").strip()

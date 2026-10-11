@@ -499,6 +499,7 @@ def _has_sentence_continuation(row: dict[str, Any]) -> bool:
 def _recommendation_semantics_codes(
     row: dict[str, Any],
     proposed: str,
+    *, object_revision=None, source_fragments=None,
 ) -> list[str]:
     """Validate D3.2 semantic proposal evidence without changing Admission authority."""
 
@@ -535,6 +536,17 @@ def _recommendation_semantics_codes(
     if not isinstance(evidence_meta, dict):
         codes.append("recommendation_semantics_invalid")
         return codes
+    from src.semantic_passage_v1 import (
+        RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION, validate_bound_recommendation_semantics,
+    )
+    if evidence_meta.get("version") == RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION:
+        if object_revision is None or source_fragments is None:
+            codes.append("recommendation_semantics_source_required")
+        else:
+            try:
+                validate_bound_recommendation_semantics(object_revision, fragments=source_fragments)
+            except (ValueError, KeyError, TypeError) as exc:
+                codes.append(str(exc) if str(exc).startswith("recommendation_") else "recommendation_semantics_invalid")
     if not isinstance(evidence_meta.get("direction"), dict):
         codes.append("recommendation_direction_evidence_missing")
     if status in {"explicit", "unmapped"} and not isinstance(
@@ -670,7 +682,8 @@ def admit_candidate(
     if _recommendation_evidence_missing(row, proposed, source):
         codes.append("recommendation_evidence_missing")
 
-    codes.extend(_recommendation_semantics_codes(row, proposed))
+    codes.extend(_recommendation_semantics_codes(row, proposed,
+        object_revision=object_revision, source_fragments=source_fragments))
     if _has_impliciet_filler(row):
         codes.append("source_fidelity_failure")
     if _EXCEPTION_RE.search(source) and not _EXCEPTION_RE.search(text):
