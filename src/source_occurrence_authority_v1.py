@@ -1,9 +1,8 @@
 """Exact source-occurrence authority for passage formation.
 
-Repeated source prose is one candidate, not extra knowledge. This module keeps
-all exact occurrences as provenance while choosing the most authoritative
-occurrence as the principal candidate location. It performs no fuzzy or
-semantic deduplication.
+Independently selected source occurrences retain their own candidate identity.
+Source-only and deterministic prose still folds by section authority. This
+module performs no fuzzy or semantic deduplication or evidence transfer.
 """
 from __future__ import annotations
 
@@ -13,9 +12,10 @@ from typing import Any, Iterable
 from src.object_taxonomy_v1 import normalize_visible_prose, section_role_for_path
 
 
-SOURCE_OCCURRENCE_AUTHORITY_VERSION = "source-occurrence-authority-v1.0.0"
+SOURCE_OCCURRENCE_AUTHORITY_VERSION = "source-occurrence-authority-v1.1.0"
 REASON_AUTHORITATIVE_SECTION = "authoritative_section_preferred"
 REASON_SAME_AUTHORITY = "same_authority_exact_duplicate"
+REASON_SELECTED_OCCURRENCE = "independently_selected_occurrence"
 
 _ROLE_RANK = {
     "structural": 0,
@@ -97,9 +97,11 @@ def prefer_authoritative_exact_occurrences(
 ) -> list[dict[str, Any]]:
     """Deduplicate exact visible prose and retain authoritative provenance.
 
-    Groups are keyed only by normalized exact visible text. If candidates are
-    present, choose a complete candidate by section priority among candidates.
-    Otherwise retain source-only section priority. Identity, text, spans, fields,
+    Groups are keyed by normalized exact visible text. Keep every independently
+    selected candidate as a complete row; section priority only chooses among
+    source-only/deterministic rows when there are no selected candidates.
+    Same-span conflicts/ambiguity remain the selection/relation validators'
+    responsibility; this operation never hides them. Identity, text, spans, fields,
     fragment references and source mapping always belong to that same row.
     Other occurrences provide evidence only, never candidate semantics.
     Principal source_fragment_ids remain principal-only so existing source
@@ -121,56 +123,50 @@ def prefer_authoritative_exact_occurrences(
             passthrough.append((position, unit))
             continue
 
-        current = groups.get(key)
-        if current is None:
-            groups[key] = {
-                "principal": unit,
-                "principal_position": position,
-                "occurrences": [_occurrence(unit)],
-            }
-            continue
-
+        current = groups.setdefault(key, {
+            "principal": unit,
+            "principal_position": position,
+            "occurrences": [],
+            "selected": [],
+        })
         current["occurrences"].append(_occurrence(unit))
+        if _proposal_rank(unit):
+            current["selected"].append((position, unit))
         principal = current["principal"]
-        # A source-only occurrence cannot displace a selected candidate. Choose
-        # a complete materialised row; never move its semantics to another ID.
-        if (_proposal_rank(unit), _rank(unit)) > (_proposal_rank(principal), _rank(principal)):
+        # This principal is used only if the group has no selected candidates.
+        if _rank(unit) > _rank(principal):
             current["principal"] = unit
             current["principal_position"] = position
 
     out: list[tuple[int, dict[str, Any]]] = list(passthrough)
     for group in groups.values():
-        principal = group["principal"]
-        occurrences = list(group["occurrences"])
-        principal_occurrence = _occurrence(principal)
+        principals = group["selected"] or [(group["principal_position"], group["principal"])]
+        for position, principal in principals:
+            occurrences = list(group["occurrences"])
+            principal_occurrence = _occurrence(principal)
 
-        remaining = occurrences.copy()
-        try:
+            remaining = occurrences.copy()
             remaining.remove(principal_occurrence)
-        except ValueError:
-            remaining = [
-                occurrence
-                for occurrence in remaining
-                if occurrence != principal_occurrence
-            ]
 
-        if remaining:
-            reason = (
-                REASON_AUTHORITATIVE_SECTION
-                if any(
-                    occurrence["section_role"]
-                    != principal_occurrence["section_role"]
-                    for occurrence in remaining
+            if remaining:
+                reason = (
+                    REASON_SELECTED_OCCURRENCE
+                    if len(group["selected"]) > 1
+                    else REASON_AUTHORITATIVE_SECTION
+                    if any(
+                        occurrence["section_role"]
+                        != principal_occurrence["section_role"]
+                        for occurrence in remaining
+                    )
+                    else REASON_SAME_AUTHORITY
                 )
-                else REASON_SAME_AUTHORITY
-            )
-            principal = _with_authority_metadata(
-                principal,
-                alternates=remaining,
-                reason=reason,
-            )
+                principal = _with_authority_metadata(
+                    principal,
+                    alternates=remaining,
+                    reason=reason,
+                )
 
-        out.append((int(group["principal_position"]), principal))
+            out.append((int(position), principal))
 
     out.sort(key=lambda item: item[0])
     return [row for _position, row in out]

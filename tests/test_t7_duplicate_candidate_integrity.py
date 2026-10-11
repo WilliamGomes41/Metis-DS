@@ -50,23 +50,25 @@ def without_occurrence_evidence(row):
 
 @pytest.mark.parametrize("selected", [(0,), (1,), (0, 1)])
 @pytest.mark.parametrize("reverse", [False, True])
-def test_dedup_preserves_one_existing_materialised_candidate_whole(selected, reverse):
+def test_dedup_preserves_each_existing_selected_candidate_whole(selected, reverse):
     fragments, candidates, coverage = selection_fixture(selected)
-    expected = candidates[-1]  # primary wins only when actually selected
     inputs = candidates + coverage
     before = deepcopy(inputs)
-    [actual] = prefer_authoritative_exact_occurrences(list(reversed(inputs)) if reverse else inputs)
-    assert without_occurrence_evidence(actual) == expected
+    actual = prefer_authoritative_exact_occurrences(list(reversed(inputs)) if reverse else inputs)
+    assert len(actual) == len(candidates)
+    expected = {c["object_id"]: c for c in candidates}
+    for row in actual:
+        candidate = expected[row["object_id"]]
+        assert without_occurrence_evidence(row) == candidate
+        authority = row["metadata"]["source_occurrence_authority"]
+        assert len(authority["alternate_occurrences"]) == 1
+        assert row["source_fragment_ids"] == candidate["source_fragment_ids"]
+        assert row["semantic_passage"] == candidate["semantic_passage"]
+        spans = row["semantic_passage"]["spans"]
+        material = "|".join(f'{s["block_id"]}:{s["start"]}:{s["end"]}' for s in spans)
+        assert row["object_id"] == "doc-sem-" + hashlib.sha256(material.encode()).hexdigest()[:16]
+        assert validate_materialised_candidate(row, fragments=fragments)["source_fragment_ids"] == row["source_fragment_ids"]
     assert inputs == before
-    authority = actual["metadata"]["source_occurrence_authority"]
-    assert authority["principal_section_role"] == ("primary" if 1 in selected else "summary")
-    assert len(authority["alternate_occurrences"]) == 1
-    assert actual["source_fragment_ids"] == expected["source_fragment_ids"]
-    assert actual["semantic_passage"] == expected["semantic_passage"]
-    spans = actual["semantic_passage"]["spans"]
-    material = "|".join(f'{s["block_id"]}:{s["start"]}:{s["end"]}' for s in spans)
-    assert actual["object_id"] == "doc-sem-" + hashlib.sha256(material.encode()).hexdigest()[:16]
-    assert validate_materialised_candidate(actual, fragments=fragments)["source_fragment_ids"] == actual["source_fragment_ids"]
 
 
 def test_source_only_duplicates_stay_source_records():
@@ -83,7 +85,8 @@ def test_dedup_never_transfers_a_binding_from_the_other_candidate():
     from src.integrity_kernel import stamp_canonical_hashes
     from src.review_duty_v1 import exact_current_approver_ids
     fragments, candidates, coverage = selection_fixture((0, 1))
-    [chosen] = prefer_authoritative_exact_occurrences(candidates + coverage)
+    summary_candidate, chosen = prefer_authoritative_exact_occurrences(candidates + coverage)
+    assert summary_candidate["object_id"] == candidates[0]["object_id"]
     def canonical(candidate):
         return stamp_canonical_hashes({
             "object_id": candidate["object_id"], "object_version": "1.0",
@@ -134,7 +137,9 @@ def test_real_ingest_review_and_restart_keep_selected_identity_and_source(tmp_pa
         family="test", named_reviewers=[reviewer["account_id"]])
     sid = receipt["snapshot_id"]
     rows = state.snapshot_objects(sid)
-    [candidate] = [o for o in rows if content_reviewable(o)]
+    selected = [o for o in rows if content_reviewable(o)]
+    assert len(selected) == (2 if both else 1)
+    candidate = selected[-1]
     envelope = state._envelope(sid)
     path, _ = state._verified_source_bytes(envelope)
     fragments = state._read_source_fragments(envelope, path)
@@ -147,8 +152,10 @@ def test_real_ingest_review_and_restart_keep_selected_identity_and_source(tmp_pa
     assert candidate["object_id"] == envelope["document_id"] + "-sem-" + digest
     assert [r["raw_object_id"] for r in candidate["provenance"]["source_fragments"]] == chosen["source_fragment_ids"]
     assert source_lineage_resolves(candidate, fragments=fragments)
-    state.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
-        object_id=candidate["object_id"], decision="approve", confirmed_object_type="definition")
+    for row in selected:
+        assert source_lineage_resolves(row, fragments=fragments)
+        state.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
+            object_id=row["object_id"], decision="approve", confirmed_object_type="definition")
     stored_rows = state.snapshot_objects(sid)
     stored_bindings = state.object_review_bindings(sid)
     restored = console()
