@@ -1,0 +1,21 @@
+{
+  "name": "Metis security sandbox",
+  "dockerComposeFile": "compose.yml",
+  "service": "workspace",
+  "workspaceFolder": "/workspaces/metis",
+  "remoteUser": "vscode",
+  "shutdownAction": "stopCompose",
+  "forwardPorts": [8000],
+  "portsAttributes": {
+    "8000": {"label": "Metis security sandbox", "onAutoForward": "notify", "protocol": "http"}
+  },
+  "otherPortsAttributes": {"onAutoForward": "ignore"},
+  "features": {"ghcr.io/devcontainers/features/github-cli:1": {}},
+  "postCreateCommand": "python -m venv .venv && .venv/bin/pip install -r requirements-dev.lock && .venv/bin/pip install --no-deps --no-build-isolation -e .",
+  "customizations": {
+    "vscode": {
+      "settings": {"python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python", "remote.autoForwardPorts": false},
+      "extensions": ["ms-python.python"]
+    }
+  }
+}
