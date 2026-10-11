@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skilldispatcher"
+  short_description: "Kies passende skills per taak, fase en risico"
+  default_prompt: "Gebruik $skill-dispatcher om passende skills voor deze opdracht te kiezen, te lezen en toe te passen."
