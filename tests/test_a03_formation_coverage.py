@@ -153,6 +153,110 @@ def test_reviewed_split_closes_formation_blocker(tmp_path):
     assert state._envelope(sid)["semantic_replay"]["provider_evidence"] == history
 
 
+@pytest.mark.parametrize("invalid", [
+    "source_id", "source_checksum", "version", "source_blocks_hash",
+    "snapshot_id", "document_id", "replay_hash", "proposal_hash",
+    "binding", "object_version", "spans", "text", "context",
+])
+def test_stale_or_invalid_context_cannot_close(tmp_path, invalid):
+    state, sid, _, reviewer, _, _, _, _ = split_system(tmp_path)
+    inject_failure(state, sid)
+    for obj in candidates(state, sid):
+        approve(state, sid, reviewer, obj)
+    envelope = deepcopy(state._envelope(sid))
+    objects = deepcopy(state.snapshot_objects(sid))
+    obj = next(o for o in objects if o.get("proposed_object_type") == "recommendation")
+    bindings = deepcopy(state._bindings)
+    if invalid in {"source_id", "source_checksum", "version"}:
+        obj["source"][invalid] = "other"
+    elif invalid == "source_blocks_hash":
+        obj["metadata"]["semantic_passage"][invalid] = "stale"
+    elif invalid in {"snapshot_id", "document_id"}:
+        envelope["semantic_replay"]["identity"]["components"][invalid] = "other"
+    elif invalid == "replay_hash":
+        envelope["semantic_replay"]["identity"]["hash"] = "stale"
+    elif invalid == "proposal_hash":
+        envelope["semantic_replay"]["proposal_hash"] = "stale"
+    elif invalid == "binding":
+        bindings[sid] = []
+    elif invalid == "object_version":
+        obj["object_version"] = "99.0"
+    elif invalid == "spans":
+        obj["metadata"]["semantic_passage"]["spans"][0]["end"] -= 1
+    elif invalid == "text":
+        obj["content"]["clean_text"] += " invented"
+    else:
+        obj["metadata"]["source_bound_context"] = {"entries": "corrupt"}
+    # Synthetic malformed read inputs; the append-only writer correctly refuses
+    # in-place corruption, so do not bypass it to fabricate durable evidence.
+    fragments = state.review_source_fragments(sid)
+    from src.recoverable_formation_v1 import incomplete
+    assert incomplete(envelope, objects=objects, bindings=bindings[sid], fragments=fragments)
+    technical = state.technical_publication_readiness(snapshot_id=sid, envelope=envelope,
+        objects=objects, bindings=bindings[sid], fragments=fragments)
+    assert "source_formation_incomplete" in technical["blockers"]
+
+
+@pytest.mark.parametrize("location", [[], [span(0, 0)], [span(0, 1, "unknown")], [span(0, 1), {"block_id": "b"}]])
+def test_invalid_failure_location_remains_open(tmp_path, location):
+    state, sid, _, reviewer, _, _, _, _ = split_system(tmp_path)
+    inject_failure(state, sid, spans=location)
+    for obj in candidates(state, sid):
+        approve(state, sid, reviewer, obj)
+    assert "source_formation_incomplete" in state.publication_readiness(sid)["blockers"]
+
+
+@pytest.mark.parametrize("field", ["snapshot_id", "source_sha256", "document_id", "source_blocks_hash"])
+def test_new_selections_cannot_recover_stale_replay(tmp_path, field):
+    from src.operations_console_v1 import ConsoleError
+    from src.semantic_replay_v1 import stable_json_hash
+    state, sid, author, _, calls, mode, _, _ = split_system(tmp_path, recovery=True)
+    before = state.snapshot_objects(sid)
+    envelope = deepcopy(state._envelope(sid))
+    identity = envelope["semantic_replay"]["identity"]
+    identity["components"][field] = "other"
+    identity["hash"] = stable_json_hash(identity["components"])
+    state._commit_prepared_store(envelopes={sid: envelope}, snapshot_id=sid)
+    count = len(calls)
+    mode["broken"] = False
+    with pytest.raises(ConsoleError, match="semantic_replay_policy_mismatch"):
+        state.resume_formation(actor_id=author, snapshot_id=sid, command_id="stale",
+                               expected_revision=state.objects_revision(sid))
+    assert state.snapshot_objects(sid) == before
+    assert len(calls) == count
+    assert state.processing_status(sid)["formation_incomplete"]
+
+
+def test_formation_closure_does_not_authorize_other_publication_gates(tmp_path):
+    state, sid, _, reviewer, _, _, _, _ = split_system(tmp_path)
+    inject_failure(state, sid)
+    for obj in candidates(state, sid):
+        approve(state, sid, reviewer, obj)
+    envelope = deepcopy(state._envelope(sid))
+    envelope["immutable_storage_locator"] = "not-an-immutable-locator"
+    result = state.technical_publication_readiness(snapshot_id=sid, envelope=envelope,
+        objects=state.snapshot_objects(sid), bindings=state.object_review_bindings(sid),
+        fragments=state.review_source_fragments(sid))
+    assert "source_formation_incomplete" not in result["blockers"]
+    assert not result["publish_allowed"]
+    assert "blocked_pending_immutable_locator" in result["blockers"]
+
+
+def test_status_without_retained_source_fails_closed_without_extraction(tmp_path, monkeypatch):
+    from src.source_preparation_context_v1 import KEY
+    state, sid, _, reviewer, _, _, _, _ = split_system(tmp_path)
+    inject_failure(state, sid)
+    for obj in candidates(state, sid):
+        approve(state, sid, reviewer, obj)
+    envelope = deepcopy(state._envelope(sid))
+    envelope.pop(KEY)
+    state._commit_prepared_store(envelopes={sid: envelope}, snapshot_id=sid)
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("missing retained source must not rebuild")
+    monkeypatch.setattr(state, "_extract", forbidden)
+    assert state.processing_status(sid)["formation_incomplete"]
+
+
 def publication_story(tmp_path, monkeypatch, *, recovery=False, postgres=None):
     from fastapi.testclient import TestClient
     from src.operations_console_app import create_console_app, COOKIE
@@ -178,6 +282,7 @@ def publication_story(tmp_path, monkeypatch, *, recovery=False, postgres=None):
     def forbidden(*_args, **_kwargs):
         raise AssertionError("closure must not invoke model or extraction")
     monkeypatch.setattr(restarted, "_fragments_and_spec", forbidden)
+    monkeypatch.setattr(restarted, "_extract", forbidden)
     client = TestClient(create_console_app(restarted))
     data = {"snapshot_id": sid, "publish_confirmed": "yes"}
     assert client.post("/publish", data=data, follow_redirects=False).status_code in {302, 303, 401, 403}

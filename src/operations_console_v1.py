@@ -2064,7 +2064,16 @@ class OperationsConsole:
                 or self._bindings.get(snapshot_id) or self._envelope(snapshot_id).get("review_passes")):
             result["retry_allowed"] = False
         from src.recoverable_formation_v1 import incomplete
-        result["formation_incomplete"] = incomplete(self._envelope(snapshot_id), objects=self.snapshot_objects(snapshot_id))
+        envelope = self._envelope(snapshot_id)
+        objects = self.snapshot_objects(snapshot_id)
+        from src.source_preparation_context_v1 import stored_extraction
+        try:
+            formation_fragments = stored_extraction(envelope) if incomplete(envelope) else None
+        except ConsoleError:
+            formation_fragments = None
+        result["formation_incomplete"] = incomplete(envelope) and incomplete(envelope, objects=objects,
+            bindings=self.object_review_bindings(snapshot_id, objects=objects),
+            fragments=formation_fragments)
         evidence = (self._envelope(snapshot_id).get("semantic_replay") or {}).get("provider_evidence") or {}
         result["formation_state"] = "pending" if result["formation_incomplete"] else "complete"
         if evidence.get("task_policy"):
@@ -4474,7 +4483,13 @@ class OperationsConsole:
         ]
         blockers: list[str] = []
         from src.recoverable_formation_v1 import incomplete
-        if incomplete(envelope, objects=objects):
+        if incomplete(envelope) and fragments is None and not context_supplied:
+            from src.source_preparation_context_v1 import stored_extraction
+            try:
+                fragments = stored_extraction(envelope)
+            except ConsoleError:
+                fragments = None
+        if incomplete(envelope, objects=objects, bindings=all_bindings, fragments=fragments):
             blockers.append("source_formation_incomplete")
         independence = bool(others)
         from src.review_policy_v1 import participants, object_policy, validate_policy

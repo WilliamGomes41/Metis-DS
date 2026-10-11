@@ -10,6 +10,8 @@ from src.semantic_passage_v1 import (
 )
 from src.source_evidence_resolution_v1 import resolve_proposal_evidence
 from src.source_accountability_v1 import validate_assessments
+from src.source_containers_v1 import _covers
+from src.knowledge_path_v1 import spans_are_exact
 
 VERSION = "recoverable-formation-v1"
 
@@ -178,31 +180,68 @@ quarantine to both endpoints, transitively, rather than disappearing silently.
                     "rejections": rejected, "accepted_object_count": len(result["objects"])}
 
 
-def incomplete(envelope, *, objects=None):
-    evidence = (envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
+def incomplete(envelope, *, objects=None, bindings=None, fragments=None):
+    """Derive closure from the current source and review bundle, without writes."""
+    replay = envelope.get("semantic_replay") or {}
+    evidence = replay.get("provider_evidence") or {}
     if not evidence.get("formation_incomplete"):
         return False
     if objects is None:
         return True
+    from src.semantic_replay_v1 import exact_replay_lookup, stable_json_hash, LOOKUP_HIT
+    identity = replay.get("identity") or {}
+    components = identity.get("components") or {}
+    if (not fragments or not envelope.get("source_id") or not envelope.get("version")
+            or any(not envelope.get(field) or components.get(key) != envelope[field]
+                   for key, field in (("snapshot_id", "snapshot_id"),
+                                      ("source_sha256", "sha256"), ("document_id", "document_id")))
+            or identity.get("hash") != stable_json_hash(components)
+            or exact_replay_lookup(replay, expected_identity=identity).status != LOOKUP_HIT):
+        return True
     from src.review_disposition_v1 import definitive_review_disposition
-    final = [s for obj in objects if definitive_review_disposition(obj)["final"]
-             for s in ((obj.get("metadata") or {}).get("semantic_passage") or {}).get("spans", [])]
+    from src.source_containers_v1 import source_accountability
+    from src.source_context_review_v1 import verify_literal_source
+    from src.review_duty_v1 import review_stage, exact_current_approver_ids
+    from src.beslisboom_path_v1 import review_path_for_klasse
+    review_path = review_path_for_klasse(envelope["class"])
+    objects, bindings = list(objects), tuple(bindings or ())
+    projection = source_accountability(objects, review_path=review_path,
+                                       bindings=bindings, fragments=fragments)
+    final = []
+    for obj in objects:
+        source = obj.get("source") or {}
+        semantic = ((obj.get("metadata") or {}).get("semantic_passage") or {})
+        disposition = definitive_review_disposition(obj)
+        if (not disposition["final"] or disposition["outcome"] == "superseded"
+                or any(source.get(key) != envelope[field] for key, field in (
+                    ("source_id", "source_id"), ("source_checksum", "sha256"), ("version", "version")))
+                or semantic.get("source_blocks_hash") != components.get("source_blocks_hash")
+                or not spans_are_exact(semantic.get("spans"))
+                or projection.get(obj.get("object_id"), {}).get("closure") != "accounted"
+                or not verify_literal_source(obj, fragments, envelope["sha256"])):
+            continue
+        if disposition["outcome"] == "approved" and (
+                not exact_current_approver_ids(obj, bindings)
+                or review_stage(obj, review_path=review_path, bindings=bindings, fragments=fragments) is not None):
+            continue
+        final.extend(semantic["spans"])
     pending = evidence.get("pending_rejections") or []
     # Named human disposition can resolve a located rejection without deleting
     # the original model error. Unknown scope cannot be resolved by assumption.
-    return not pending or any(not r.get("spans") or not all(any(
-        s["block_id"] == ref["block_id"] and s["start"] <= ref["start"] and s["end"] >= ref["end"]
-        for s in final) for ref in r["spans"]) for r in pending)
+    return not pending or any(not spans_are_exact(r.get("spans")) or not all(
+        _covers(ref, final) for ref in r["spans"]) for r in pending)
 
 
 def pending_rejections(evidence, proposal):
     """Historical rejection is resolved only by a validated covering selection.
 
+    The caller must supply the joint source-validated proposal and its evidence
+    from one pinned preparation/replay. Block offsets alone do not bind a source.
     Unknown failure locations remain open; a new successor may re-evaluate the
     entire source. A successful HTTP call alone never clears a formation error.
     """
-    selected = [s for o in proposal.get("objects", []) for s in o["spans"]]
-    selected += [r["span"] for r in proposal.get("source_assessments", [])]
+    selected = [s for o in proposal.get("objects", []) if spans_are_exact(o.get("spans")) for s in o["spans"]]
+    selected += [r["span"] for r in proposal.get("source_assessments", []) if spans_are_exact([r.get("span")])]
     pending = []
     calls = [evidence, *evidence.get("supplementary_calls", [])]
     for index, call in enumerate(calls):
@@ -211,27 +250,21 @@ def pending_rejections(evidence, proposal):
         # still blocks source closure; it is no longer an unexecuted task.
         answered = False
         if evidence.get("task_policy") == "bounded-formation-v1" and call.get("target_spans"):
-            from src.source_containers_v1 import _covers
             later_spans = [s for later in calls[index + 1:]
                 if later.get("task_id") and not later.get("error_code")
                 and (later.get("formation") or {}).get("status") == "validated"
                 and not (later.get("formation") or {}).get("rejections")
-                for s in later.get("target_spans", [])]
-            answered = all(_covers(ref, later_spans) for ref in call["target_spans"])
+                if spans_are_exact(later.get("target_spans"))
+                for s in later["target_spans"]]
+            answered = spans_are_exact(call["target_spans"]) and all(_covers(ref, later_spans) for ref in call["target_spans"])
         if call.get("error_code") and not answered:
             pending.append({"kind": "call", "reason_code": call.get("failure_reason") or call["error_code"],
                             "spans": call.get("target_spans", [])})
-        for rejection in (call.get("formation") or {}).get("rejections", []):
-            spans = rejection.get("spans", [])
-            if rejection.get("requires_review") or not spans or not all(any(s["block_id"] == ref["block_id"]
-                    and s["start"] <= ref["start"] and s["end"] >= ref["end"]
-                    for s in selected) for ref in spans):
-                pending.append(deepcopy(rejection))
+        pending.extend(deepcopy((call.get("formation") or {}).get("rejections", [])))
     # A call-level error may be recovered only when all its explicit source
     # targets are covered. Unknown-location errors still require successor work.
-    return [r for r in pending if r.get("requires_review") or not r.get("spans") or not all(any(
-        s["block_id"] == ref["block_id"] and s["start"] <= ref["start"] and s["end"] >= ref["end"]
-        for s in selected) for ref in r["spans"])]
+    return [r for r in pending if r.get("requires_review") or not spans_are_exact(r.get("spans")) or not all(
+        _covers(ref, selected) for ref in r["spans"])]
 
 
 def restrict_supplement(proposal, *, primary, targets):
