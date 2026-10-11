@@ -53,3 +53,71 @@ Context contract:
 | replay identity | producer | retry/resume | existing semantic_replay | contract version | exact source/config/occurrence rule | reject incompatible resume; authorized fresh inference only |
 
 #556 stays open pending separately evidenced deployment and production acceptance.
+
+## A06 verification and separate adversarial review (2026-10-11)
+
+Reviewed production revision: `6056b4373c2077e80ed00e6d99c46b218373fd34`;
+base `09bedd447b0b4dead980a078360a26002b054c5c`. The subsequent CI-only
+commit exposes the existing A06 tests as a named native PostgreSQL step.
+
+Confirmed cause: the original shared selector folds selected equal-text rows
+before exact relation attachment and deletes a valid source or target. The same
+V3 ingest regression failed in all 12 direction/order/section combinations on
+the unmodified base. Bypassing only that selector on the base made all 12 pass,
+without changing materialisation or relation resolution. On the repair they pass
+with the selector enabled. The different-text control also passes.
+
+Executed evidence:
+
+| Boundary | Evidence | Result |
+|---|---|---|
+| File V3 ingest and reload | 12 outgoing/incoming/both × reversed-order/section variants | Three admitted candidates; exact IDs, own spans, source lineage and endpoints retained |
+| Field/context isolation | Different literal field evidence and adult/child context on identical candidate text | Own evidence and fragment mappings retained; no semantic or approval transfer |
+| Retry/replay | Authorized retry and reextract after reload | No extra objects/relations or provider call for compatible replay |
+| Old replay/checkpoint | Existing replay identity changed to the earlier occurrence contract | Fresh authorized inference; incompatible resume rejected without overwriting stored work |
+| Invalid endpoints | Unknown block, invalid bounds/type, unselected endpoint, ambiguity, same-block distinct offsets | Existing exact validation rejects invalid/ambiguous proposals; distinct selected offsets survive |
+| Failure and stale activation | Preparation failure, injected bundle-write failure, another runtime changing revision or authority | Durable winning object bundle retained; no successful stale attempt |
+| Fresh process | File and native PostgreSQL object/binding projection read in a new Python subprocess | Identical stored IDs, spans, mapping, fields/context, relations and review bindings |
+| Native backend and concurrency | Existing full suite with PostgreSQL 16.15 workflow authority | PostgreSQL A06 tests and existing transaction/concurrency/commit-failure regressions pass |
+
+Native evidence: [CI run 38144693203](https://github.com/WilliamGomes41/Metis-DS/actions/runs/38144693203),
+jobs `114485517667` (Python 3.13) and `114485518076` (Python 3.12), each
+**3575 passed, 15 skipped**. Both complete jobs succeeded; 3.12 browser checks
+also passed. A06 backend tests require the CI-provided native DSN and are not
+among the local backend skips. Local focused execution: **74 passed, 4 skipped**
+(the four native PostgreSQL cases). Repository/release preflight, compilation,
+architecture-boundary check and architecture invariants (6 tests) pass.
+
+Separate adversarial review: both selector callers were traced. The semantic
+caller supplies materialised proposal-selected rows, then exact relation
+attachment; the deterministic splitter supplies unstamped rows and retains its
+existing folding. Heading/source-only behavior has no new authority. Selection
+and relation validators retain same-span conflict/ambiguity rejection. The
+selector copies complete rows and alternate occurrence metadata only; no donor
+fields, ID aliases, review transfers or second materialiser are introduced.
+Source preparation and activation still enforce current source/version/hash,
+revision, actor authority and active-attempt ownership in the existing kernel.
+Replay mismatch prevents a partial old checkpoint from being silently promoted.
+Published objects and serving authority are untouched. Rollback retains durable
+work and suspends incompatible formation; it does not rerun an older selector on
+new selected endpoints.
+
+Minimal-code-surface review: **surface verdict APPROVE**. Before the named CI step,
+9 files changed, 541 additions/77 deletions; only two production files change
+(48 additions/50 deletions). The selector measures 140 nonblank LOC, maximum
+cyclomatic signal 11 with the bundled AST metric. Its two-phase grouping and
+complete-row output remain local; no new abstraction is warranted. Highest-risk
+branches distinguish proposal-selected rows from source-only rows and exact
+alternate provenance. No duplicate validation or text-based fallback was found.
+
+Engineering readiness: **READY WITHIN STATED LIMITS** for repository review of
+the synthetic-provider V3 kernel slice. The restart boundary is a fresh
+application process against the same durable storage, not a database-server
+restart or Azure instance failover. The A06 rollback case injects a failure
+after the native bundle write inside the transaction; actual deferred PostgreSQL
+COMMIT failures are covered by unchanged transaction regressions in the full
+suite. Live-provider quality, production causality and production deployment
+acceptance remain unproved. No backfill or historical release change occurred.
+
+Local implementation and remote branch are available. Merge and deployment
+are not performed. Progress issue #556 remains open.
