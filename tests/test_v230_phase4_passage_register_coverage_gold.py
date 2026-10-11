@@ -554,7 +554,7 @@ def test_section_role_distribution_exposes_summary_bias_without_opening_quality_
         int(row["passages"]) for row in distribution["roles"].values()
     )
     # The fixture explicitly selects this repeated recommendation through the
-    # creator; diagnostics retain one candidate at its principal source role.
+    # creator; A06 retains each selected occurrence at its own source role.
     assert distribution["roles"]["primary"]["counts"]["selected_as_candidate"] == 1
     assert distribution["roles"]["summary"]["counts"]["selected_as_candidate"] >= 1
     assert distribution["roles"]["context"]["counts"]["selected_as_candidate"] >= 1
@@ -562,8 +562,9 @@ def test_section_role_distribution_exposes_summary_bias_without_opening_quality_
     repeated = [
         obj for obj in objects if _text_of(obj) == "Overweeg behandeling X bij ouderen."
     ]
-    assert len(repeated) == 1
-    assert repeated[0]["metadata"]["source_occurrence_authority"]["principal_section_role"] == "primary"
+    assert len(repeated) == 2
+    assert {o["metadata"]["source_occurrence_authority"]["principal_section_role"] for o in repeated} == {"summary", "primary"}
+    assert len({o["object_id"] for o in repeated}) == 2
 
 
 def test_soft_scores_or_single_guideline_without_gold_are_not_quality(tmp_path: Path) -> None:

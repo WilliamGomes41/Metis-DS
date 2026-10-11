@@ -1,10 +1,39 @@
 # T7 duplicate occurrence repair
 
 Change class: A
-Promise: Exact duplicate folding selects an existing materialised candidate without transferring another occurrence's identity, spans, provenance or candidate authority.
+Promise: Exact duplicate folding preserves every independently selected materialised candidate without transferring another occurrence's identity, spans, provenance or candidate authority.
 Proof: Red-before-green tests for summary-only, primary-only and both selections in either order; source-only duplicates; binding isolation; actual ingest/approval/restart; complete repository CI.
 Touches lifecycle invariants: yes
 Rewrite risk: high
+
+## A06 contract revision (#599, progress #556)
+
+The historical one-candidate-per-text rule below is superseded for independently
+selected occurrences. Distinct selected spans retain their own materialised IDs,
+field/context evidence, fragment references and source mapping. Incoming and
+outgoing relations remain bound to those exact selected spans; neither section
+priority nor input order may choose a substitute endpoint. Same-span conflicts
+and ambiguous endpoints remain subject to existing selection/relation validation.
+Review decisions never transfer between occurrences.
+
+Source-only records, headings and deterministic splitter passages retain the
+existing exact-text/section-priority folding. With one selected candidate, an
+unselected equal-text source row remains alternate provenance, never a second
+candidate or semantic donor. With several selected candidates, all selected
+rows survive; alternate provenance grants no review or relation authority.
+
+The occurrence rule is versioned in the existing semantic replay identity for
+all semantic modes using the shared selector. Older records remain readable;
+incompatible resume fails with `semantic_replay_policy_mismatch`, and explicitly
+authorized fresh processing obtains a new proposal. No backfill, approval
+inheritance or published-object mutation occurs. Rollback retains stored work
+and suspends new formation rather than letting an old producer discard endpoints.
+The complete current transition/context/mitigation contract is in
+[A06 selected occurrence relations](a06-selected-occurrence-relations.md).
+
+The following original T7 implementation and evidence describe the historical
+repair. Their binding-isolation and no-transfer invariants remain required;
+their one-candidate assertions are revised explicitly by A06 tests.
 
 ## Boundary and mitigation
 

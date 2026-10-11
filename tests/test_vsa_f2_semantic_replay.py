@@ -270,7 +270,10 @@ def test_exact_replay_survives_restart_and_makes_zero_provider_calls(tmp_path: P
     assert inference_record["origin_execution"] == EXECUTION_INFERENCE
     assert inference_record["identity"]["components"]["source_sha256"] == receipt["sha256"]
     candidate = next(row for row in first if row.get("object_type") != "document")
-    assert candidate["metadata"]["source_occurrence_authority"]["principal_section_role"] == "primary"
+    candidates = [row for row in first if row.get("object_type") != "document"]
+    assert len(candidates) == 2
+    assert {row["metadata"]["source_occurrence_authority"]["principal_section_role"] for row in candidates} == {"summary", "primary"}
+    assert candidate["metadata"]["source_occurrence_authority"]["principal_section_role"] == "summary"
 
     restarted = _new_console(tmp_path)
     replay_env = {

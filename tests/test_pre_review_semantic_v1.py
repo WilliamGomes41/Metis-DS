@@ -943,7 +943,7 @@ def test_semantic_review_does_not_guess_when_selection_is_ambiguous() -> None:
 
 
 
-def test_semantic_source_authority_prefers_primary_duplicate_over_summary() -> None:
+def test_semantic_source_authority_keeps_both_selected_duplicate_occurrences() -> None:
     fragments = [
         {
             **_fragment("summary", "Gebruik de afgesproken interventie."),
@@ -966,8 +966,10 @@ def test_semantic_source_authority_prefers_primary_duplicate_over_summary() -> N
         post_json=fake_post,
     )
 
-    assert len(units) == 1
-    row = units[0]
+    assert len(units) == 2
+    summary, row = units
+    assert summary["source_fragment_ids"] == ["summary"]
+    assert summary["semantic_passage"]["spans"] != row["semantic_passage"]["spans"]
     assert row["section_path"] == ["Richtlijn", "2 Aanbevelingen"]
     assert row["source_fragment_ids"] == ["primary"]
     authority = row["metadata"]["source_occurrence_authority"]
@@ -1177,8 +1179,9 @@ def test_f1_end_to_end_primary_authority_survives_restart(tmp_path: Path) -> Non
         for row in console.snapshot_objects(snapshot_id)
         if row.get("object_type") != "document"
     ]
-    assert len(current) == 1
-    candidate = current[0]
+    assert len(current) == 2
+    assert current[0]["provenance"]["source_fragments"][0]["raw_object_id"] == "summary-e2e"
+    candidate = current[1]
     assert candidate["structure"]["section_path"] == ["Richtlijn", "2 Aanbevelingen"]
     assert [
         ref["raw_object_id"]

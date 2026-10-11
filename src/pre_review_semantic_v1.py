@@ -70,7 +70,9 @@ from src.semantic_replay_v1 import (
     replayed_record,
     validated_inference_record,
 )
-from src.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
+from src.source_occurrence_authority_v1 import (
+    SOURCE_OCCURRENCE_AUTHORITY_VERSION, prefer_authoritative_exact_occurrences,
+)
 from src.source_reconstruction_v1 import RECONSTRUCTION_VERSION
 from src.source_bound_fields_v2 import MODE as SEMANTIC_V2_MODE, evidence_schema, context_evidence_schema, CONTEXT_VERSION
 from src.source_bound_fields_v3 import MODE as SEMANTIC_V3_MODE, VERSION as FIELDS_V3_VERSION
@@ -579,7 +581,7 @@ def _replay_identity(
         extractor_version=_extractor_contract(source_fragments),
         reconstruction_version=RECONSTRUCTION_VERSION,
         formation_policy_version=PASSAGE_FORMATION_POLICY_VERSION,
-        semantic_contract_version=("source-accountability-v2/bounded-formation-v1/" if field_contract_v3 else "source-accountability-v1/") + (f"recoverable-formation-v1/{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}"),
+        semantic_contract_version=("source-accountability-v2/bounded-formation-v1/" if field_contract_v3 else "source-accountability-v1/") + (f"recoverable-formation-v1/{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}") + f"/{SOURCE_OCCURRENCE_AUTHORITY_VERSION}",
         prompt_hash=_stable_json_hash(SEMANTIC_DEVELOPER_PROMPT + _semantic_instruction(field_contract_v2, field_contract_v3)),
         schema_hash=_stable_json_hash(_proposal_schema(field_contract_v2, field_contract_v3)),
         provider_id=SEMANTIC_PROVIDER_ID,
