@@ -56,3 +56,27 @@ The source-fidelity read validator is deliberately unchanged: applicability is c
 Surface verdict: APPROVE WITH NOTES. Six existing production modules are extended; no new module/store/policy authority, no parallel strength normalizer. The V3 literal resolver and the semantic validator share adjacent_source_strength_span (AST complexity 4). _applicable_strength_ranges has measured AST complexity 17: selection, trailing stamps and structurally scoped headings are kept in one local operation so maintainers can see the applicability rule together; splitting it into wrappers would not remove those decisions. validate_bound_recommendation_semantics measures 12. The established semantic validator and Admission evidence function remain the owners. No unrelated cleanup is included.
 
 Engineering readiness remains limited to local fixed-provider/source tests until all mandatory checks and external acceptance evidence are reviewed. PostgreSQL/live-provider/production acceptance is not inferred from local persistence. Authorization/concurrency boundaries and resource limits are not modified; their additional tests are not added beyond the existing required suite.
+
+## Executed acceptance evidence (2026-10-11)
+
+Code revision: `c2f54b90cdabe0327e122ea9786bf73f672a15d9`, byte-identical Git tree `f3b1b105bbac2126c426bb9371f804c574fea875` to locally tested `6563743`. Subsequent report-only edits do not change product/test code. Environment: Python 3.12.14, freshly installed `requirements-dev.lock`, editable repository install; no production/provider credentials. Fixtures are the synthetic constructors in `tests/test_a07_strength_binding.py` and existing referenced test helpers. No evidence binding or Admission implementation is mocked; only provider output is fixed.
+
+| Executed command | Result | Boundary |
+| --- | --- | --- |
+| `python -m pytest -q tests/test_a07_strength_binding.py` | 34 passed (included in full run) | Public v1/v2/v3 validator, fixed-provider V3, transform, Admission, local ingest/restart/replay/quarantine/fatal failure |
+| Targeted D3.2, V3 repairs/context, v2 fields, literal resolution, D3.3/D3.4 and recoverable formation | 178 passed, 1 skipped before final extra stamp checks | Existing compatibility and human confirmation/serving contracts |
+| Source strength labels, PDF line gutters and A07 set | 84 passed before final extra stamp checks | Preserves supported standalone labels and source reconstruction |
+| Repair, navigation, availability, review source reuse, source labels/PDF and A07 | 147 passed, 28 skipped before final extra stamp checks | Current repair/read routes preserved, external PostgreSQL cases skipped |
+| `python scripts/repository_preflight.py` | PASS, 963 files | Repository consistency only |
+| `python scripts/release_control_preflight.py --base origin/main` | PASS on committed changed paths | Evidence mapping, not live release evidence |
+| `python -m compileall -q src` | PASS | Compilation only |
+| `python scripts/check_architecture_boundaries.py` | PASS | Bounded import contracts |
+| `python -m pytest -q tests/test_architecture_invariants.py` | 6 passed | Existing invariant tests |
+| `python scripts/product_api_contract.py --check --base-ref origin/main` | PASS in installed test environment | API compatibility only |
+| `python -m pytest -q` on final code | 3312 passed, 308 skipped, 4 failed in 242.05 seconds | Entire local suite; NOT green |
+
+The remaining failures are `test_bounded_model_transport.py::test_parent_process_death_terminates_transport_worker` and three `test_security_harden_wave3.py` cases: HTTPS SNI under DNS rebinding, redirect-hop revalidation/rebinding, and redirect to metadata rejection. All four were independently reproduced in the same fresh environment on unchanged `9ca7bfc` (`4 failed, 93 passed, 28 skipped` for the affected baseline files), and again on the final branch (`4 failed`). Their root causes were not established here; baseline failure is not proof they are harmless. No tests were deleted, skipped or weakened to hide them. They remain a repository acceptance gate for maintainers/CI, outside the A07 fix.
+
+Measured final code/test/design diff before this report: 8 files, 478 additions, 26 deletions; six production files account for 151 additions/26 deletions, the rest is regressions and design evidence. Historical reader compatibility is covered by existing tests, without historical migration. No new authorization/concurrency/performance suite or production mutation was introduced.
+
+Aangetoond: the three starting faults on main, repaired independence/binding/conflict behavior, preserved external label/headings, downstream local state and recovery, and the checks above. Redelijk afgeleid: newly formed recommendations through these supported validators will avoid this demonstrated borrowing/masking, assuming accurate source structure. Open: live-provider behavior, native PostgreSQL acceptance, deployed revision/original user route, historical affected-data inventory, and the four baseline failures. Oordeel: sufficient for a draft code-review PR; not a merge, deployment, issue-closure or production-resolution claim.
