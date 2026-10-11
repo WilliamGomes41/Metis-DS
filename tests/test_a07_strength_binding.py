@@ -139,7 +139,8 @@ def test_heading_after_b_and_closed_heading_do_not_bind():
             validate(fragments, candidates, p)
 
 
-def test_new_binding_is_rechecked_at_transform_and_admission():
+@pytest.mark.parametrize('ancillary_metadata', [False, True])
+def test_new_binding_is_rechecked_at_transform_and_admission(ancillary_metadata):
     from src.semantic_transform_generic_v1 import transform
     from src.admission_gate_v1 import apply_admission_gate
     fragments = source(CORE + ' Sterk – tegen')
@@ -148,6 +149,8 @@ def test_new_binding_is_rechecked_at_transform_and_admission():
     bad = deepcopy(spec)
     target = next(o for o in bad['objects'] if o.get('proposed_recommendation_semantics'))
     target['proposed_recommendation_semantics']['strength'] = 'weak'
+    if ancillary_metadata:
+        target['metadata'] = {'passage_formation': {'test': 'ancillary'}}
     with pytest.raises(SemanticPassageError, match='recommendation_strength_literal_mismatch'):
         transform(bad, manifest, fragments)
     forged = deepcopy(rows)
@@ -267,3 +270,83 @@ def test_complete_recommendation_binds_only_following_standalone_stamps(version)
     p['objects'][0]['recommendation_semantics'].update(strength=None, strength_status='not_stated', strength_evidence=None)
     with pytest.raises(SemanticPassageError, match='recommendation_strength_not_stated_conflict'):
         validate(fragments, candidates, p, version)
+
+
+@pytest.mark.parametrize('version', ['v1', 'v2', 'v3'])
+@pytest.mark.parametrize('labels', ['Sterk – tegen; Zwak – tegen',
+                                  'Sterke aanbeveling. Zwakke aanbeveling',
+                                  'Sterk – tegen, Sterk – voor'])
+def test_combined_standalone_labels_do_not_become_absence(version, labels):
+    fragments, candidates, p = case()
+    fragments.append(_fragment('labels', labels, section_path=['Aanbevelingen']))
+    with pytest.raises(SemanticPassageError, match='recommendation_strength_not_stated_conflict'):
+        validate(fragments, candidates, p, version)
+    block = semantic_source_blocks(fragments)[-1]
+    literal = labels.split(';')[0].split('.')[0].split(',')[0]
+    p['objects'][0]['recommendation_semantics'].update(strength='strong', strength_status='explicit',
+        strength_evidence={'block_id': block['block_id'], 'start': 0, 'end': len(literal)})
+    with pytest.raises(SemanticPassageError, match='recommendation_strength_evidence_conflict'):
+        validate(fragments, candidates, p, version)
+
+
+def test_combined_stamp_block_is_rejected_by_real_v3_formation():
+    fragments = source(CORE)
+    fragments.append(_fragment('labels', 'Sterk – tegen; Zwak – tegen', section_path=['Aanbevelingen']))
+    _, rows, obj, _ = prepare(CORE, fragments=fragments, allow_empty=True)
+    assert obj is None
+    assert not any((o.get('metadata') or {}).get('admission', {}).get('gate_result') == 'allowed'
+                   and o.get('proposed_object_type') == 'recommendation' for o in rows)
+
+
+@pytest.mark.parametrize('labels', ['Sterk – tegen; Sterk – tegen', 'Sterke aanbeveling. Sterke aanbeveling'])
+def test_consistent_stamp_sequence_remains_usable_without_binding_prose(labels):
+    fragments, candidates, p = case()
+    fragments.append(_fragment('labels', labels, section_path=['Aanbevelingen']))
+    block = semantic_source_blocks(fragments)[-1]
+    literal = labels.split(';')[0].split('.')[0]
+    p['objects'][0]['recommendation_semantics'].update(strength='strong', strength_status='explicit',
+        strength_evidence={'block_id': block['block_id'], 'start': 0, 'end': len(literal)})
+    assert validate(fragments, candidates, p)[0]['proposed_recommendation_semantics']['strength'] == 'strong'
+    fragments[-1]['raw_text'] = fragments[-1]['clean_text'] = labels + ' Dit betreft behandeling A.'
+    p['objects'][0]['recommendation_semantics']['strength_evidence']['block_id'] = semantic_source_blocks(fragments)[-1]['block_id']
+    with pytest.raises(SemanticPassageError, match='recommendation_strength_evidence_not_applicable'):
+        validate(fragments, candidates, p)
+
+
+@pytest.mark.parametrize('version', [None, '', 'recommendation-semantics-evidence-v999'])
+def test_unknown_evidence_version_cannot_skip_transform_or_admission(version):
+    from src.semantic_transform_generic_v1 import transform
+    from src.admission_gate_v1 import apply_admission_gate
+    spec, rows, obj, fragments = prepare(CORE + ' Sterk – tegen', stamp='Sterk – tegen')
+    target = next(o for o in spec['objects'] if o.get('proposed_recommendation_semantics'))
+    target['proposed_recommendation_semantics']['strength'] = 'weak'
+    target['recommendation_semantics_evidence']['version'] = version
+    with pytest.raises(SemanticPassageError, match='recommendation_semantics_evidence_version_invalid'):
+        transform(spec, {'canonical_source': obj['source']}, fragments)
+    target = next(o for o in rows if o['object_id'] == obj['object_id'])
+    target['proposed_recommendation_semantics']['strength'] = 'weak'
+    target['metadata']['recommendation_semantics_evidence']['version'] = version
+    gated = apply_admission_gate(rows, klasse='richtlijn', fragments=fragments,
+                                document_version='1', source_hash='a'*64)
+    target = next(o for o in gated if o['object_id'] == obj['object_id'])
+    assert target['metadata']['admission']['gate_result'] == 'blocked'
+    assert 'recommendation_semantics_evidence_version_invalid' in target['metadata']['admission']['reason_codes']
+
+
+@pytest.mark.parametrize('ancillary_metadata', [False, True])
+def test_historical_v1_evidence_is_preserved_at_transform_and_admission(ancillary_metadata):
+    from src.semantic_transform_generic_v1 import transform
+    from src.admission_gate_v1 import apply_admission_gate
+    spec, _, obj, fragments = prepare(CORE + ' Sterk – tegen', stamp='Sterk – tegen')
+    target = next(o for o in spec['objects'] if o.get('proposed_recommendation_semantics'))
+    target['recommendation_semantics_evidence']['version'] = 'recommendation-semantics-evidence-v1'
+    if ancillary_metadata:
+        target['metadata'] = {'passage_formation': {'test': 'ancillary'}}
+    before = deepcopy(spec)
+    rows = transform(spec, {'canonical_source': obj['source']}, fragments)
+    rows = apply_admission_gate(rows, klasse='richtlijn', fragments=fragments,
+                               document_version='1', source_hash='a'*64)
+    target = next(o for o in rows if o['object_id'] == obj['object_id'])
+    assert target['metadata']['admission']['gate_result'] == 'allowed'
+    assert target['metadata']['recommendation_semantics_evidence']['version'] == 'recommendation-semantics-evidence-v1'
+    assert spec == before

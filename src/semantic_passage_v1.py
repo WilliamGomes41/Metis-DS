@@ -38,7 +38,10 @@ from src.source_layout_v1 import mapped_raw_spans
 LEGACY_SEMANTIC_PASSAGE_VERSION = "semantic-passage-v1.0.0"
 SEMANTIC_PASSAGE_VERSION = "semantic-passage-v1.1.0"
 RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION = "recommendation-semantics-evidence-v2"
-STRENGTH_BINDING_VERSION = "recommendation-strength-binding-v2"
+SUPPORTED_RECOMMENDATION_SEMANTICS_EVIDENCE_VERSIONS = (
+    "recommendation-semantics-evidence-v1", RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION,
+)
+STRENGTH_BINDING_VERSION = "recommendation-strength-binding-v3"
 SELECTION_ORIGIN_PROPOSAL = "proposal_selected"
 SELECTION_ORIGIN_COVERAGE = "coverage_remainder"
 ALLOWED_PROPOSED_TYPES = frozenset(
@@ -459,11 +462,20 @@ def _recommendation_semantics_from_proposal(
 
 def validate_bound_recommendation_semantics(obj, *, fragments):
     """Recheck new evidence at materialisation/Admission; leave old records alone."""
-    metadata = obj.get("metadata") or obj
+    # Formation specs keep evidence at the top level even with ancillary metadata;
+    # canonical revisions keep it inside metadata.
+    metadata = obj if "recommendation_semantics_evidence" in obj else obj.get("metadata") or {}
     evidence = metadata.get("recommendation_semantics_evidence") or {}
-    if (evidence.get("version") != RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION
-            or obj.get("proposed_object_type") != "recommendation"):
+    if obj.get("proposed_object_type") != "recommendation":
         # Type corrections retain the existing field-contract rejection path.
+        return
+    if obj.get(PROPOSED_FIELD) is None:
+        # No new-format proposal: Admission owns its missing-semantics rejection.
+        return
+    if (not isinstance(evidence, dict)
+            or evidence.get("version") not in SUPPORTED_RECOMMENDATION_SEMANTICS_EVIDENCE_VERSIONS):
+        _fail("recommendation_semantics_evidence_version_invalid")
+    if evidence["version"] != RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION:
         return
     semantics = obj.get(PROPOSED_FIELD)
     if not isinstance(semantics, dict):

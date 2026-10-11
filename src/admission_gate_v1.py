@@ -538,7 +538,10 @@ def _recommendation_semantics_codes(
         return codes
     from src.semantic_passage_v1 import (
         RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION, validate_bound_recommendation_semantics,
+        SUPPORTED_RECOMMENDATION_SEMANTICS_EVIDENCE_VERSIONS,
     )
+    if evidence_meta.get("version") not in SUPPORTED_RECOMMENDATION_SEMANTICS_EVIDENCE_VERSIONS:
+        codes.append("recommendation_semantics_evidence_version_invalid")
     if evidence_meta.get("version") == RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION:
         if object_revision is None or source_fragments is None:
             codes.append("recommendation_semantics_source_required")

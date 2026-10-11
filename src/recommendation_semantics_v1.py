@@ -209,11 +209,14 @@ def adjacent_source_strength_span(text: str, end: int) -> tuple[int, int] | None
 
 
 def is_source_strength_label(text: str) -> bool:
-    """Recognize a standalone label without excluding mixed advice blocks."""
-    blob = str(text or "").strip().rstrip(".!?:;").strip()
-    return any(pattern.fullmatch(blob) for pattern in (
-        SOURCE_LITERAL_STRONG_RE, SOURCE_LITERAL_WEAK_RE, SOURCE_DIRECTIONAL_LABEL_RE,
-    ))
+    """Recognize only standalone cues, including contradictory sequences."""
+    blob = str(text or "").strip()
+    end = 0
+    for match in sorted(source_strength_cues(blob), key=lambda cue: cue.start()):
+        if blob[end:match.start()].strip(" \t\r\n.!?:;,"):
+            return False
+        end = max(end, match.end())
+    return end > 0 and not blob[end:].strip(" \t\r\n.!?:;,")
 
 
 def source_label_direction(text: str) -> str | None:
