@@ -14,7 +14,7 @@ MAX_FILE_BYTES = 5 * 1024 * 1024
 SECRET_PATTERNS = {
     'private_key': re.compile(r'-----BEGIN [A-Z ]*PRIVATE KEY-----'),
     'github_token': re.compile(r'(?:github_pat_|ghp_)[A-Za-z0-9_]{20,}'),
-    'openai_key': re.compile(r'sk-[A-Za-z0-9_-]{20,}'),
+    'openai_key': re.compile(r'\bsk-[A-Za-z0-9_-]{20,}'),
     'azure_storage_key': re.compile(r'AccountKey=(?!<)[^\s;]{20,}'),
 }
 
