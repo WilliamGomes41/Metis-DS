@@ -34,6 +34,8 @@ def resolve_proposal_evidence(proposal, *, blocks, evidence_blocks, field_contra
     def fail(code, path, ref):
         error = SemanticPassageError(code)
         error.finding.update(field=path, evidence_ref=deepcopy(ref))
+        if code == "semantic_evidence_literal_ambiguous" and path.endswith(".recommendation_semantics.strength_evidence"):
+            error.finding["strength_applicability"] = {"outcome": "uncertain"}
         if path.startswith("objects."):
             error.finding["candidate_index"] = int(path.split(".")[1])
         raise error

@@ -105,3 +105,191 @@ Follow-up results (2026-10-11), product/test commit `70e2467`, Python 3.12.14:
 Retro/surface: **APPROVE WITH NOTES**, engineering readiness remains constrained by the four repository failures and missing production acceptance. The correction extends three existing product modules (27 additions, 9 deletions at 70e2467), uses the existing cue matcher, and shares a two-version allowlist; no parallel binder, parser framework, store or migration. `validate_bound_recommendation_semantics` has measured AST complexity 18 after adding explicit evidence version/shape boundaries and preserving existing no-semantics/type-correction paths. These decisions belong at this shared validator; no helper extraction solely to lower the score is justified. Formation specs and canonical revisions intentionally retain their existing different evidence locations.
 
 Aangetoond: both review counterexamples are rejected, pure consistent stamp sequences remain usable, mixed prose does not bind, and historical v1 behavior remains unchanged. Redelijk afgeleid: supported new formation avoids these demonstrated conflicts and unknown-version bypasses, assuming source structure is accurate. Open: deliberate substitution of recognized historical v1 metadata is not provenance-verified, production impact/historical inventory remain unknown, and the four baseline failures remain unresolved. Oordeel: corrections are reviewable on #602; no merge, deployment, publication, historical rewrite or issue closure is claimed.
+
+## Architectural follow-up: explicit applicability diagnostics (#557 / #602)
+
+Design and proof plan recorded before production changes, baseline `6c5636a`, main `9ca7bfc`.
+Change class: B. Rewrite risk: none. This is a local extension of the existing
+source-owned applicability rule and existing diagnostic evidence, not a replacement
+of shared boundaries, schema semantics, workflow states or durable authority.
+
+Actual path: `pre_review_semantic_v1` obtains provider-selected spans and closed
+semantics; `source_evidence_resolution_v1.resolve_proposal_evidence` positions exact
+literals (ambiguity rejects); `semantic_passage_v1.semantic_units_from_proposal`
+checks selections and binds recommendation evidence;
+`knowledge_materialisation_v1.materialise_knowledge_candidates` alone assigns
+identity and reconstructs canonical candidate text from source;
+`semantic_transform_generic_v1.transform` verifies materialisation and bound
+semantics and copies system evidence into canonical metadata;
+`admission_gate_v1.apply_admission_gate` independently checks materialised source,
+field/context realization, semantics and the same bound-evidence operation.
+Human confirmation and publication remain subsequent independent requirements.
+
+Provider selection is a proposal, not an applicability decision. The semantic
+validator owns applicability; the literal resolver only positions references.
+Admission repeats the same validator, not an alternative attribution rule.
+Formation specs keep evidence at top level, canonical revisions in metadata.
+`recoverable_formation_v1.prepare` captures `SemanticPassageError.finding` and
+preserves selected source spans for quarantine/open work; source/provider records
+and previous revisions remain available to retry/re-extraction. General source
+reads and human confirmation rules are unchanged.
+
+Smallest design: annotate the existing internal applicable ranges with
+`selected_text`, `adjacent_strength_label`, or `shared_heading`. A heading must
+cover **every** selected span, including malformed repeated section paths. Record
+ranges/reasons and recognized cue outcome in the existing failure finding.
+Concrete reader: recovery investigation through existing formation findings and
+`processing_evidence_export_v1` (which already exports the finding). No new success
+metadata, result class, validator, materialiser, status or UI is necessary.
+
+Outcomes: `absent` means no recognized applicable literal cue; `matching` means
+consistent applicable cues (not confirmation of clinical meaning); `conflicting`
+means applicable cues disagree in strength/direction; an explicit proposal
+contradicting another applicable cue also rejects. Literal mismatch keeps its
+existing dedicated reason code. Literal-resolution ambiguity on strength evidence yields `uncertain`.
+This is uncertainty of exact attribution, not a general semantic uncertainty
+detector. A borrowed/out-of-scope label records reference_applicable=false; it
+is not automatically uncertain. Unmapped wording remains the existing unmapped
+proposal and Admission rejection, not a newly guessed normalization.
+
+Stateful Class B overlay: entity = existing unpublished WorkingRevision and
+attempt/provider diagnostic records; before = source plus prior candidate bundle;
+after = same bundle shape with additive failure finding details when rejected.
+Invariant = no evidence outside demonstrable scope and no loss of source work.
+Transaction = existing prepared object/envelope commit; no new writer or transaction.
+Failure/recovery = isolate invalid V3 proposals, retain source spans/reasons and
+prior work; fatal failure does not replace the bundle. Duplicate/replay = existing
+replay identity, advanced binding contract prevents silently reusing old judgments.
+Concurrency = existing reservation/CAS/commit boundaries, no new shared mutable
+state; finding context remains call-local. Audit = exact derived ranges and reasons
+inside the existing diagnostic finding, never an Admission/review authority.
+
+Compatibility: successful evidence-v1/v2 schema remains unchanged. Diagnostic
+writers are the existing validator/resolver and recovery capture; readers are the
+existing export and investigator. Older readers ignore extra finding keys;
+historical records lacking details remain readable and are not reconstructed.
+No migration/backfill or publication/review mutation. Missing/unknown evidence
+versions still reject. Recognized v1 is supported compatibility, **not proof of
+historical provenance**: a deliberately changed candidate version can opt into
+legacy interpretation. Ordinary provider output cannot set evidence version.
+Document/reproduce this boundary separately; do not invent provenance machinery.
+
+| Claim | Failure scenario | Control | Expected result | Evidence boundary |
+|---|---|---|---|---|
+| Whole heading scope | Candidate spans straddle same-level closing heading with repeated path | Public v1/v2/v3 plus real formation/materialisation/transform/Admission | External heading rejected; inside-scope selection accepted | Extractor-provided structure, synthetic source |
+| Inspectable binding | Own, adjacent, or shared strength ignored as not_stated | Existing failure finding and formation export | Derived range, reason and matching outcome retained | Diagnostic, not durable decision authority |
+| Conflict versus absence | Strong/weak or opposite directions coexist | Existing and new A07 regressions | Conflicting evidence rejects and is explained | Recognized literal cues only |
+| Absence versus uncertainty | Borrowed A label vs repeated unresolved strength literal | Public validator and real resolver | Non-applicable is not uncertain; ambiguity is uncertain | No general semantic uncertainty claim |
+| Compatibility/provenance | Missing/unknown version vs historical v1 vs changed v2-to-v1 | Real transform/Admission; closed provider schema | Invalid versions reject; legacy remains readable; substitution limit explicit | Version alone cannot authenticate origin |
+| One candidate creator | Added diagnostic detail or bounded rejection | Fixed provider → real formation/materialiser → transform → Admission | Exact candidate text/identity unchanged for valid input | No live provider or production claim |
+| Source/recovery preservation | Rejected borrowed evidence and fatal replacement | Existing local ingest/restart/replay test plus export | Source and prior work retained, findings exported | Native PostgreSQL acceptance separate |
+
+Retro alternatives: retain unchanged would keep demonstrated whole-selection
+scope bug and opaque recovery findings. Extend existing ranges/findings addresses
+both with no migration; chosen. A persisted success binding/result framework adds
+compatibility burden without an identified reader needing stored success reasons;
+defer. Replacing the formation architecture loses proven materialisation/recovery
+contracts and has no demonstrated benefit for this bounded issue. Owner remains
+the existing semantic validator under #557. Revisit when a real source needs a
+binding current extractor structure cannot establish, or a concrete reader needs
+persisted success reasons. No incident rate or strategic deterioration is inferred.
+
+Fresh pre-change proof: Python 3.12.14, isolated requirements-dev.lock environment.
+Existing A07 set: 52 passed. New minimized tests: 9 failed, 52 deselected;
+three expose accepted cross-heading strength, six establish missing diagnostic
+contract. Command: `python -m pytest -q tests/test_a07_strength_binding.py -k
+'entire_selection or finding or non_applicable_label or ambiguous_strength'`.
+
+Additional baseline proof: the final regression fixtures were run on detached,
+unmodified product code `6c5636a`: **11 failed, 53 deselected** in 0.56s. This
+includes real fixed-provider formation/materialisation and transformation rejecting
+at neither scope boundary before the fix. Command: `python -m pytest -q
+tests/test_a07_strength_binding.py -k 'entire_selection or finding or
+non_applicable_label or ambiguous_strength or whole_heading_scope'`.
+The initial three hypotheses were first-span-only scope, missing reconstructed
+heading, and mixed block ordering. Full evidence reconstruction preserves positions
+0 heading / 1 first body / 2 closing heading / 3 final body after minimization;
+the old predicate explicitly ends at the first span. Extending that boundary to
+the final source position corrects the fault without changing candidate selection.
+
+Fresh targeted proof: **243 passed, 1 skipped**, 16.09s. Command:
+`python -m pytest -q tests/test_a07_strength_binding.py
+tests/test_source_strength_labels.py tests/test_source_evidence_resolution_v1.py
+tests/test_d3_2_recommendation_semantics_proposal.py
+tests/test_d3_3_human_recommendation_semantics.py
+tests/test_d3_4_confirmed_recommendation_serving.py
+tests/test_source_bound_fields_v2.py tests/test_recommendation_context_v3.py
+tests/test_recoverable_formation_v1.py tests/test_pdf_line_gutter_pipeline.py`.
+This includes the existing local persisted restart/replay/fatal-replacement proof,
+now checking the actual exported rejection finding. Materialisation, binding,
+transform and Admission are not mocked. The whole-heading regression also verifies
+unchanged exact candidate text, top-level evidence with ancillary metadata,
+canonical evidence, source-preserving rejection in new V3 formation, and no input
+mutation. The existing provider schema rejects supplied evidence-version metadata.
+
+Provenance probe: create the valid fixed-provider candidate `Gebruik geen zalf.
+Sterk – tegen`, deliberately change proposed strength to weak and generated evidence
+version from v2 to supported v1, then run real `apply_admission_gate`: **allowed,
+reason_codes=[]**. This demonstrates the legacy compatibility boundary and does not
+establish an ordinary-provider exploit or historical origin. Missing/unknown
+versions continue to reject in retained tests. Authentication of altered legacy
+metadata would need a separately scoped provenance decision and historical data
+inventory; this diagnostic/scope repair does not claim to solve it.
+
+Surface review: **APPROVE WITH NOTES**. Two existing product modules, 37 additions /
+16 deletions relative to `6c5636a`; no new product file, result class or alternate
+entry point. Reuse the existing range computation, normalization and finding.
+AST signals from the skill's `measure_code_surface.py`: applicable ranges 17→19,
+semantic proposal validator 30→36, bound recheck 16→16. The added decisions describe
+source outcomes and bounded ranges at the existing owner; extracting wrappers to
+lower the signal would obscure the one rule rather than remove decisions. The
+normalization sets are reused for explicit conflict rejection. Whole-repository
+metrics include tests and unrelated modules and are not treated as A07 quality
+scores. Engineering readiness is not established for release: full repository,
+native PostgreSQL, live provider and production acceptance have separate boundaries.
+Authorization, concurrency, resource limits and serving authorities are unchanged;
+no new capacity/security/release claims or infrastructure work are introduced.
+
+Final fresh checks on product/test revision `332d0ffeb6125c050b295fce1d01f613da5dea4d`
+(Python 3.12.14, isolated locked dependencies, no native PostgreSQL or live provider):
+
+| Executed check | Result | Boundary |
+|---|---|---|
+| Original scope/diagnostic loop on unchanged `6c5636a` | 11 failed, 53 deselected | Real regression baseline, not earlier reported counts |
+| Same loop on final product code | 11 passed, 53 deselected, 0.26s | Whole scope and diagnostic contracts |
+| Targeted command listed above | 243 passed, 1 skipped, 16.09s | Includes all 64 A07 cases, local persistence/recovery/export and human review regressions |
+| `python -m pytest -q` | **3342 passed, 308 skipped, 4 failed**, 294.96s | Full local suite; repository gate remains red |
+| Affected baseline on unmodified main `9ca7bfc` | **4 failed, 18 passed**, 5.80s | Same four transport/SSRF failures reproduced anew; cause unresolved |
+| `python scripts/repository_preflight.py` | PASS, 963 checked files | Repository consistency |
+| `python scripts/release_control_preflight.py --base origin/main` | PASS after commit | Evidence path mapping, not deployment |
+| `python -m compileall -q src tests` | PASS | Syntax only |
+| `python scripts/check_architecture_boundaries.py` | PASS | Import boundary only |
+| `python -m pytest -q tests/test_architecture_invariants.py` | 6 passed | Existing architecture checks |
+| `python scripts/product_api_contract.py --check --base-ref origin/main` | PASS | API compatibility |
+| `git diff --check origin/main` | PASS | Whitespace |
+
+The four failures are the parent-death transport-worker termination test and the
+three HTTPS SNI/redirect/rebinding tests named in the previous execution section.
+No test is removed, weakened or newly skipped. The original normal runtime call to
+`validate_change_contract.py` skips without a PR event; the final PR text is checked
+separately with its `--text-file` interface, not reported as an executed PR-event CI
+run. Python 3.13, native PostgreSQL and browser/live/production acceptance are not
+established by this environment. Byte comparison confirms
+`knowledge_materialisation_v1.py` is unchanged (SHA256
+`4b4a0aa1f7d9c00da121cecbe6662d18d0fb1698df19dcc12e029dda96b1933a`).
+
+**Aangetoond:** the minimized scope fault fails before and passes after; the real
+provider-fixed formation → materialisation → transform → Admission path uses one
+applicability rule; exact valid candidate text and successful evidence schema are
+unchanged; failure reasons/ranges survive local storage/restart and actual export;
+retained version, review and recovery controls pass in the targeted suite.
+**Redelijk afgeleid:** accurate extractor headings/paths permit bounded attribution
+on these supported routes; this assumes source structure is reliable and does not
+prove clinical correctness or general layout understanding.
+**Open:** deliberately substituted supported v1 metadata is not provenance-
+authenticated; four baseline repository failures, native PostgreSQL/live provider,
+production original-user acceptance and historical affected-data inventory remain.
+**Oordeel:** sufficient for renewed review of draft #602, not for merge/deployment
+or issue closure. Keep Code geverifieerd unchecked while the required suite is red.
+Historical affected work may need authorized source review/re-extraction and new
+working revisions; a codefix or rollback does not perform that repair.

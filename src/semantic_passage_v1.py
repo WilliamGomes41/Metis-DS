@@ -41,7 +41,7 @@ RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION = "recommendation-semantics-evidence-v
 SUPPORTED_RECOMMENDATION_SEMANTICS_EVIDENCE_VERSIONS = (
     "recommendation-semantics-evidence-v1", RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION,
 )
-STRENGTH_BINDING_VERSION = "recommendation-strength-binding-v3"
+STRENGTH_BINDING_VERSION = "recommendation-strength-binding-v4"
 SELECTION_ORIGIN_PROPOSAL = "proposal_selected"
 SELECTION_ORIGIN_COVERAGE = "coverage_remainder"
 ALLOWED_PROPOSED_TYPES = frozenset(
@@ -304,13 +304,14 @@ def _applicable_strength_ranges(selected, evidence_by_id):
     selection. Genuine source headings may cover several recommendations;
     their structural path and intervening headings bound that group.
     """
-    ranges = [dict(row) for row in selected]
+    ranges = [{**row, "reason": "selected_text"} for row in selected]
     for row in selected:
         public, _ = evidence_by_id[row["block_id"]]
         end = row["end"]
         while (span := adjacent_source_strength_span(public["text"], end)):
             ranges.append({"block_id": row["block_id"], "start": span[0], "end": span[1],
-                           "text": public["text"][span[0]:span[1]]})
+                           "text": public["text"][span[0]:span[1]],
+                           "reason": "adjacent_strength_label"})
             end = span[1]
             # Punctuation between stamps does not erase a conflicting label.
             while end < len(public["text"]) and public["text"][end] in ".!?:;,":
@@ -330,7 +331,8 @@ def _applicable_strength_ranges(selected, evidence_by_id):
                     or not is_source_strength_label(following["text"])):
                 break
             ranges.append({"block_id": following["block_id"], "start": 0,
-                           "end": len(following["text"]), "text": following["text"]})
+                           "end": len(following["text"]), "text": following["text"],
+                           "reason": "adjacent_strength_label"})
             position += 1
     first = evidence_by_id[selected[0]["block_id"]][0]
     headings = [public for public, source in evidence_by_id.values()
@@ -341,13 +343,17 @@ def _applicable_strength_ranges(selected, evidence_by_id):
         if (not scope or path[:len(scope)] != scope
                 or heading["position"] >= first["position"]):
             continue
-        # A later heading at the same level (or above it) closes the range,
-        # even if malformed extraction repeated the same section path.
-        if any(heading["position"] < other["position"] < first["position"]
-               and len(other["section_path"]) <= len(scope) for other in headings):
+        # Bound the whole selection, not just its first span. A repeated path
+        # cannot reopen a scope closed by a same-level or parent heading.
+        scope_end = min((other["position"] for other in headings
+                         if heading["position"] < other["position"]
+                         and len(other["section_path"]) <= len(scope)), default=None)
+        if scope_end is not None and owner["position"] >= scope_end:
             continue
         ranges.append({"block_id": heading["block_id"], "start": 0,
-                       "end": len(heading["text"]), "text": heading["text"]})
+                       "end": len(heading["text"]), "text": heading["text"],
+                       "reason": "shared_heading", "scope": {
+                           "start_position": heading["position"], "end_position": scope_end}})
     return ranges
 
 
@@ -395,6 +401,16 @@ def _recommendation_semantics_from_proposal(
     strength_text: str | None = None
     applicable = _applicable_strength_ranges(selected, evidence_by_id)
     cues = [match.group() for row in applicable for match in source_strength_cues(row["text"])]
+    strengths = {source_literal_strength(cue) for cue in cues}
+    directions = {source_label_direction(cue) for cue in cues} - {None}
+    assessment = {
+        "outcome": "conflicting" if len(strengths) > 1 or len(directions) > 1
+                   else "matching" if cues else "absent",
+        "ranges": [{key: row[key] for key in ("block_id", "start", "end", "reason", "scope")
+                    if key in row} for row in applicable],
+    }
+    if _FINDING.get() is not None:
+        _FINDING.get()["strength_applicability"] = assessment
 
     if status == "explicit":
         if strength not in {"strong", "weak"}:
@@ -429,14 +445,16 @@ def _recommendation_semantics_from_proposal(
             _fail("recommendation_strength_unmapped_literal_conflict")
 
     if strength_evidence is not None:
-        if not any(row["block_id"] == strength_evidence["block_id"]
-                   and row["start"] <= strength_evidence["start"]
-                   and strength_evidence["end"] <= row["end"] for row in applicable):
+        bound_range = next((row for row in applicable
+                            if row["block_id"] == strength_evidence["block_id"]
+                            and row["start"] <= strength_evidence["start"]
+                            and strength_evidence["end"] <= row["end"]), None)
+        assessment["reference_applicable"] = bound_range is not None
+        if bound_range is None:
             _fail("recommendation_strength_evidence_not_applicable")
-        if status == "explicit" and any(
-            source_literal_strength(cue) != strength
-            or source_label_direction(cue) not in {None, direction} for cue in cues
-        ):
+        assessment["binding_reason"] = bound_range["reason"]
+        if status == "explicit" and (strengths - {strength} or directions - {direction}):
+            assessment["outcome"] = "conflicting"
             _fail("recommendation_strength_evidence_conflict")
 
     semantics = {
@@ -460,6 +478,7 @@ def _recommendation_semantics_from_proposal(
     return semantics, evidence
 
 
+@_finding_scope
 def validate_bound_recommendation_semantics(obj, *, fragments):
     """Recheck new evidence at materialisation/Admission; leave old records alone."""
     # Formation specs keep evidence at the top level even with ancillary metadata;
