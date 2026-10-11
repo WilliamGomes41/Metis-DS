@@ -206,7 +206,7 @@ def is_truncated_sentence(text: str) -> bool:
     return not has_terminal_sentence_boundary(blob)
 
 
-def is_continuation_fragment(text: str) -> bool:
+def is_continuation_fragment(text: str, *, allow_standalone_advice: bool = False) -> bool:
     """True for a trailing clause that MUST stay with the previous sentence.
 
     Protocol v2.18: extract MUST NOT split a grammatical continuation into a
@@ -219,9 +219,23 @@ def is_continuation_fragment(text: str) -> bool:
         return False
     if is_strength_stamp(blob) or looks_like_structural_heading(blob):
         return False
+    # Source reconstruction uses the conservative default. An advice word
+    # can also be a noun in a lowercase continuation ("gebruik van...").
+    # Only the object splitter may supply an explicit clause-boundary signal.
+    if allow_standalone_advice:
+        if has_standalone_recommendation_start(blob):
+            return False
+        starter = _TRAILING_CLAUSE_STARTER_RE.match(blob)
+        if starter and has_standalone_recommendation_start(blob[starter.end():].lstrip(" ,:")):
+            return False
     if blob[0].islower() or is_lone_trailing_word(blob):
         return True
     return bool(_TRAILING_CLAUSE_STARTER_RE.match(blob))
+
+
+def has_standalone_recommendation_start(text: str) -> bool:
+    """Explicit advice starter, not proof of a complete/eligible claim."""
+    return bool(_RECOMMENDATION_EVIDENCE_RE.match(normalize_visible_prose(text)))
 
 
 def normalize_visible_prose(text: str) -> str:
