@@ -121,3 +121,16 @@ acceptance remain unproved. No backfill or historical release change occurred.
 
 Local implementation and remote branch are available. Merge and deployment
 are not performed. Progress issue #556 remains open.
+
+Final local verification: full suite **3277 passed, 308 skipped, 5 failed**.
+Four failures (three SSRF transport fixtures and parent-death transport cleanup)
+also reproduce on the unchanged base (**18 passed, 4 failed** in the focused
+comparison), while both complete CI matrices pass them. The fifth was the
+packaging commit marker changing from `57c752a` to the documentation-only
+`9e9ebee` during that test; the unchanged-base packaging test and repaired-head
+packaging rerun both pass. No product test or security gate was weakened.
+The named A06/native PostgreSQL step subsequently passed on both Python
+versions in [CI run 38145942211](https://github.com/WilliamGomes41/Metis-DS/actions/runs/38145942211)
+at `57c752ae98cd6e861c6a426abcf5c8a77deef025` (only CI differs from the fully
+tested production revision). Documentation-only follow-ups do not change the
+production diff. Final PR CI must still pass before merge.
