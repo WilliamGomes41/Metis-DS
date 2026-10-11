@@ -219,6 +219,8 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
         if semantic_passage and semantic_passage["selection_origin"] == SELECTION_ORIGIN_PROPOSAL:
             from src.knowledge_materialisation_v1 import validate_materialised_candidate
             validate_materialised_candidate(item, fragments=raw_rows)
+            from src.semantic_passage_v1 import validate_bound_recommendation_semantics
+            validate_bound_recommendation_semantics(item, fragments=raw_rows)
         refs = []
         for rid in item.get("source_fragment_ids", []):
             if rid not in raw_by_id:
