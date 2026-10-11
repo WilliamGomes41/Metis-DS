@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,3 +51,37 @@ def test_class_b_program_design_gate_requires_existing_path_before_code() -> Non
     )
     for phrase in required_contract:
         assert phrase in agents
+
+
+def test_dispatcher_is_discoverable_and_preserves_selection_boundaries() -> None:
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    relative_path = ".agents/skills/skill-dispatcher/SKILL.md"
+    assert f"[skill-dispatcher]({relative_path})" in agents
+    skill = (ROOT / relative_path).read_text(encoding="utf-8")
+    assert skill.startswith("---\nname: skill-dispatcher\ndescription: ")
+    assert "gearchiveerde" in skill
+    assert "expliciet" in skill
+    assert "geen extra toestemming" in skill
+    assert "routeer niet recursief" in skill
+    interface = (ROOT / relative_path).parent / "agents/openai.yaml"
+    assert "$skill-dispatcher" in interface.read_text(encoding="utf-8")
+
+
+def test_dispatcher_examples_use_current_names_and_explicit_only_boundaries() -> None:
+    skill = (ROOT / ".agents/skills/skill-dispatcher/SKILL.md").read_text(encoding="utf-8")
+    rows = [line for line in skill.splitlines() if line.startswith("| ")]
+    examples = "\n".join(rows)
+    assert "`decision-oriented-writing`" in examples
+    assert "`literature-review`" in examples
+    for name in (
+        "codebase-architecture-review",
+        "agent-authorization-and-completion-gates",
+        "assumption-testing-interview",
+    ):
+        row = next(line for line in rows if f"`{name}`" in line)
+        assert "expliciet" in row
+    obsolete = {
+        "external-agent-gates", "grill-me", "minto", "via-negativa-redacteur",
+        "heldere-uitleg", "literature-review-suite", "concise-text-editor", "clear-explanation",
+    }
+    assert not obsolete.intersection(re.findall(r"`([^`]+)`", examples))

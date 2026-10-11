@@ -24,6 +24,8 @@ Gebruik de actuele skillcatalogus van de sessie of het beschikbare skill-discove
 
 Selecteer kandidaten op hun volledige beschrijving. Lees hun actuele `SKILL.md` voordat je ze toepast; lees relevante verwijzingen volgens hun instructies. Namen en onderstaande voorbeelden zijn zoekhulp, geen gesloten catalogus of vervanging voor de bron.
 
+Los hernoemde skills op via de actuele catalogus; verzin geen aliassen. Respecteer gearchiveerde, verouderde, uitgeschakelde en uitsluitend expliciet aanroepbare skills. Hun aanwezigheid maakt ze geen standaardkandidaat.
+
 Neem nieuwe beschikbare skills mee zonder deze dispatcher te hoeven wijzigen. Zoek bij een ontbrekende expliciet gevraagde skill gericht naar een andere beschikbare bron. Meld een blijvende ontbrekende skill en de gevolgen; verzin geen inhoud en beweer niet dat je haar hebt toegepast. Ga verder met onafhankelijk uitvoerbaar werk. Gebruik bij een niet-essentiële ontbrekende kandidaat de geldende contracten en benoem de bewijsgrens.
 
 ## 3. Kies per fase
@@ -39,18 +41,20 @@ Gebruik deze voorbeelden alleen na controle tegen de actuele beschrijvingen:
 | Domeinregels, eigenaarschap, duurzame toestand of transacties ontwerpen of wijzigen | `domain-first-architecture`: leg het domein vast vóór implementatie. Houd stateless werk licht. |
 | Identiteit, versie, selectie, reviewcontext of voortgang over stappen behouden | `preserve-workflow-context`: borg de benodigde context op de geraakte route. |
 | Een ontwerp, patch of codebase op onnodige complexiteit beoordelen | `minimal-code-surface-reviewer`: beoordeel de uiteindelijke oppervlakte; leid daaruit geen automatisch refactorwerk af. |
-| Een expliciet gevraagde architectuurverkenning | `improve-codebase-architecture`: respecteer eventuele beperking tot expliciete aanroep. |
-| Externe agents en hun toegangs- of uitvoeringsgrenzen | `external-agent-gates`: gebruik alleen wanneer de opdracht zulke agents betreft. |
-| Onduidelijke voorstellen kritisch uitvragen | `grill-me`: selecteer wanneer gerichte besluitvorming ontbreekt; vermijd een interview bij een al uitvoerbare opdracht. |
-| Strategische memo of bestuurlijk advies | `minto`: orden redenering en besluit. |
-| Tekst redigeren of herschrijven | `via-negativa-redacteur`: verwijder overbodige tekst met behoud van betekenis en bewijs. |
-| Complexe resultaten uitleggen | `heldere-uitleg`: stem uitleg af op lezer en gewenste beslissing. |
-| Verandertheorie, beleidseffecten, KPI's of literatuuronderzoek | Zoek de passende actuele domeinskill, zoals `theory-of-change-builder`, `policy-impact-evaluator`, `kpi-designer` of `literature-review-suite`. |
+| Een expliciet gevraagde architectuurverkenning | `codebase-architecture-review`: gebruik alleen bij een expliciete opdracht binnen de actuele aanroepregels. De lokale `improve-codebase-architecture` is een afzonderlijke bron; controleer haar eigen instructies en neem geen gelijkwaardigheid aan. |
+| Lessen uit een incident, project of herhaalde ineffectieve reparaties | `project-retrospective`: vergelijk bewijs, alternatieven en verbeteringen binnen de opdracht. |
+| Expliciet gevraagd ontwerp of review van externe agentautorisatie en voltooiingsgrenzen | `agent-authorization-and-completion-gates`: gebruik alleen voor de expliciet gevraagde control plane, niet voor gewone review of als runtimehandhaving. |
+| Een expliciet gevraagd kritisch interview | `assumption-testing-interview`: voer het gevraagde interview uit; activeer niet voor gewone kritiek of onduidelijke voorstellen. |
+| Strategische memo, bestuurlijk advies, redactie of uitleg | `decision-oriented-writing`: pas de actuele argumentatie-, redactie- en uitlegregels toe voor zover relevant; forceer geen eenvoudige tekstcorrectie in een bestuursformat. |
+| Expliciet gevraagd herhaalbaar werkproces, checklist of SOP | `workflow-builder`: bepaal invoer, regels, eigenaars, uitkomsten en voltooiingscriteria; activeer niet voor gewone mails of notities. |
+| Verandertheorie, beleidseffecten, KPI's of literatuuronderzoek | Zoek de passende actuele domeinskill, zoals `theory-of-change-builder`, `policy-impact-evaluator`, `kpi-designer` of `literature-review`. |
 | Bestanden, visuals, apps of andere specialistische uitvoering | Kies de toepasselijke tool- of artefactskill uit de actuele catalogus. Respecteer verplichte prerequisites. |
 
 Kies bij een bugreparatie normaal diagnose en risicogerichte verificatie; voeg domeinontwerp of contextbehoud toe als de geraakte regels of route dat vereisen. Bepaal bewijs vóór de reparatie, en voer controles erna uit. Behandel review als een afzonderlijke activiteit zodra er een concreet ontwerp of definitieve diff is.
 
 Gebruik bij eenvoudige tekstcorrecties of feitelijke antwoorden geen uitgebreid selectieproces. Pas rechtstreeks de relevante instructie toe; forceer geen skill als geen skill past.
+
+Selecteer `concise-text-editor` en `clear-explanation` niet automatisch: het zijn gearchiveerde zelfstandige workflows. Gebruik de onderhouden redactie- en uitlegregels in `decision-oriented-writing`. Lees een legacyworkflow alleen wanneer de gebruiker die expliciet vraagt en zij beschikbaar is.
 
 ## 4. Voer de route uit
 
