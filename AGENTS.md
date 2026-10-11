@@ -1,5 +1,13 @@
 ## Agent skills
 
+### Skill selection
+
+For complex or multi-phase work, read and apply [skill-dispatcher](.agents/skills/skill-dispatcher/SKILL.md) before substantive work, and reconsider the route when the task phase, scope, or material risk changes. Use the current available skill catalog and read the selected skills before applying them. Briefly state the selected skills and their purpose; do not require the user to remember skill names.
+
+For bug repairs, normally select `diagnosing-bugs` and `risk-proportional-verification`. Add domain design, workflow-context preservation, or code-surface review when the affected behavior warrants them. Explicitly requested skills and mandatory skill prerequisites remain applicable. Keep simple tasks proportionate, resolve renamed skills through the current catalog, and respect archived and explicit-only restrictions.
+
+The dispatcher selects working methods; it grants no execution, deployment, messaging, or merge permission and does not replace this repository's development or lifecycle contracts. If a required skill is unavailable, report the limitation and continue independent work without claiming that skill was applied.
+
 ### Issue tracker
 
 Issues live in this repo’s GitHub Issues (`gh` CLI). See `docs/agents/issue-tracker.md`.
