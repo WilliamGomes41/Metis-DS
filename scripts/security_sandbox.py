@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "output/runtime/security-sandbox"
 TEST_DSN = "postgresql://metis_sandbox:sandbox-only@sandbox-db:5432/metis_security_test"
 LOCAL_TESTS = (
+    "tests/test_security_sandbox.py",
     "tests/test_security_harden_wave3.py",
     "tests/test_processing_authorization.py",
     "tests/test_api_access_domain_v1.py",
