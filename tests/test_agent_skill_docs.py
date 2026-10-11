@@ -85,3 +85,17 @@ def test_dispatcher_examples_use_current_names_and_explicit_only_boundaries() ->
         "heldere-uitleg", "literature-review-suite", "concise-text-editor", "clear-explanation",
     }
     assert not obsolete.intersection(re.findall(r"`([^`]+)`", examples))
+def test_agents_requires_one_deterministic_candidate_creator_before_review():
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    section = agents.split("### Hard invariant: one deterministic candidate creator before human review", 1)[1].split("\n### ", 1)[0]
+    for obligation in (
+        "deterministic materialisation MUST be the sole KnowledgeCandidate creator",
+        "src/knowledge_materialisation_v1.py::materialise_knowledge_candidates",
+        "They MUST NOT independently assign candidate identity",
+        "they MUST NOT independently create, rewrite, split, merge, or silently repair a candidate",
+        "Rejection MUST preserve source work and recovery findings",
+        "every supported pre-review route uses the same creator",
+        "This pre-review invariant grants no additional review or publication authority",
+        "agents MUST NOT weaken or bypass it autonomously",
+    ):
+        assert obligation in section
