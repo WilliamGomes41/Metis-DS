@@ -55,7 +55,7 @@ def system(root, make=None, *, reverse=False, swap_sections=False, direction='bo
             return {'status': 'completed', 'output': [{'type': 'message', 'content': [{'type': 'output_text', 'text': json.dumps({'objects': [], 'relations': [], 'abstain_reason': 'uncertain'})}]}]}
         repeated = [o for o in objects if o['spans'][0]['literal'] != OTHER]
         other = next(o for o in objects if o['spans'][0]['literal'] == OTHER)
-        # The first duplicate has lower section authority unless explicitly swapped.
+        # The old selector keeps the first equal-text row and removes this endpoint.
         endpoint = repeated[1]
         relations = []
         for source, target in ([(endpoint, other)] if direction == 'outgoing' else
@@ -146,6 +146,8 @@ def durable_story(root, monkeypatch, make=None):
         context = o['metadata']['source_bound_context']
         assert context['target_object_id'] == o['object_id']
         assert context['entries'][0]['span'] == fields['evidence']['scope_span']['span']
+        assert fields['values']['action_object_or_goal'] == (
+            'voorkeuren' if context['entries'][0]['text'] == 'Bij volwassenen:' else 'de voorkeuren')
     assert set(r['raw_object_id'] for r in repeated[0]['provenance']['source_fragments']).isdisjoint(
         r['raw_object_id'] for r in repeated[1]['provenance']['source_fragments'])
     def projection(rows):
@@ -184,7 +186,7 @@ def durable_story(root, monkeypatch, make=None):
                 raise WorkflowDocumentStoreError('injected_a06_commit_failure')
             return result
         monkeypatch.setattr(store, 'write_bundle', fail_commit)
-        expected = 'workflow_document_write_failed'
+        expected = 'injected_a06_commit_failure'
     else:
         saved = []
         write_objects = restarted._save_objects_pinned
@@ -198,8 +200,12 @@ def durable_story(root, monkeypatch, make=None):
         monkeypatch.setattr(restarted, '_save_objects_pinned', save_objects)
         monkeypatch.setattr(restarted, '_save_envelopes', fail_envelope)
         expected = 'injected_a06_commit_failure'
-    with pytest.raises((RuntimeError, ConsoleError), match=expected):
+    with pytest.raises((RuntimeError, ConsoleError), match=expected) as rejected:
         restarted.reextract_unpublished(actor_id=actor, snapshot_id=sid)
+    if store is not None:
+        assert isinstance(rejected.value, ConsoleError)
+        assert rejected.value.code == 'workflow_document_write_failed'
+        assert str(rejected.value.__cause__) == 'injected_a06_commit_failure'
     restored = make()
     assert restored.snapshot_objects(sid, include_blocked=True) == current
     # An approval on one occurrence still grants no approval on the other.
