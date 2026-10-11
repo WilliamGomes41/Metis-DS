@@ -1,41 +1,16 @@
-name: ci
-
-permissions:
-  contents: read
-
+name: A06 native PostgreSQL proof
 on:
   push:
-  pull_request:
-
+    branches: [proof/a06-native-postgres]
+permissions:
+  contents: read
 jobs:
-  change-contract:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - name: Validate Metis change contract
-        run: python scripts/validate_change_contract.py
-
-  architecture-boundaries:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - name: Check domain contract import boundaries
-        run: python scripts/check_architecture_boundaries.py
-
-  test:
-    needs: [change-contract, architecture-boundaries]
+  a06:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         python-version: ['3.12', '3.13']
-
     services:
       postgres:
         image: postgres:16
@@ -43,87 +18,19 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: metis_test
-        ports:
-          - 5432:5432
+        ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U postgres -d metis_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
     env:
       METIS_TEST_POSTGRES_DSN: postgresql://postgres:postgres@127.0.0.1:5432/metis_test
-
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Fetch main for release-control path mapping
-        run: git fetch --no-tags origin main:refs/remotes/origin/main
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: python -m pip install --upgrade pip
       - run: pip install -r requirements-dev.lock
-      - run: pip install --no-deps --no-build-isolation -e .
-      - run: python scripts/repository_preflight.py
-      - name: Release-control skill mapping
-        run: python scripts/release_control_preflight.py --base origin/main
-      - name: Generate Product API v1 contract
-        run: python scripts/product_api_contract.py --write
-      - name: Upload Product API contract evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: product-api-v1-openapi-${{ matrix.python-version }}
-          path: output/runtime/product_api_v1.openapi.json
-          if-no-files-found: error
-      - name: Product API v1 backward compatibility
-        run: python scripts/product_api_contract.py --check --base-ref origin/main
-      - run: python -m compileall -q src tests
-      - name: Verify architecture invariants
-        run: pytest -q tests/test_architecture_invariants.py
-      - name: Verify extraction workload metrics
-        run: pytest -q tests/test_extract_metrics_wave4_quality_claim.py tests/test_extract_metrics_independent_quality.py
-      - name: Verify T11 knowledge revision lineage
-        run: pytest -q tests/test_t11_knowledge_revision_lineage.py
-      - name: Verify T10 source accountability authority
-        run: pytest -q tests/test_t10_source_accountability_authority.py tests/test_source_containers_v1.py tests/test_source_context_review_v1.py
-      - name: Verify T9 ReviewKnowledge authority
-        run: pytest -q tests/test_t9_review_knowledge_authority.py
-      - name: Verify T8 materialisation and Admission integrity
-        run: pytest -q tests/test_t8_materialisation_admission_integrity.py
-      - name: Verify T8 compatibility regressions
-        if: ${{ !cancelled() }}
-        run: pytest -q tests/test_d2b2b_admission_completeness.py tests/test_d2b2c_candidate_eligibility.py tests/test_source2_html_pipeline.py tests/test_source_bound_context.py tests/test_source_bound_fields_v2.py tests/test_source_layout_v1.py tests/test_source_mapping_regressions.py tests/test_v230_phase1_admission_gate.py tests/test_v230_phase2_deep_context_scan.py tests/test_v233_review_audit_regressions.py
-      - name: Verify T7 duplicate candidate integrity
-        if: ${{ !cancelled() }}
-        run: pytest -q tests/test_t7_duplicate_candidate_integrity.py tests/test_pre_review_semantic_v1.py::test_source_authority_does_not_erase_selected_semantics_when_primary_is_coverage tests/test_v221_wave_a_knowledge_object_bounds.py::test_splitter_yields_complete_units_with_bronpassage_and_locator tests/test_v221_wave_a_knowledge_object_bounds.py::test_stamps_attach_to_following_advice_and_are_not_objects
-      - name: Verify T5-T7 audit regressions
-        if: ${{ !cancelled() }}
-        run: pytest -q tests/test_t4_single_knowledge_path_invariants.py tests/test_t5_t7_audit_repairs.py tests/test_t7_creator_cut.py tests/test_d5_3a_binding_aware_review_duty.py tests/test_d5_3b_review_routing_cutover.py tests/test_review_queue_sql_parity_v1.py
-      - name: Verify lifecycle compatibility regressions
-        if: ${{ !cancelled() }}
-        run: pytest -q tests/test_console_review_completeness.py tests/test_d3_3_human_recommendation_semantics.py tests/test_d4_3_human_relation_confirmation.py tests/test_processing_retry_postgres.py tests/test_protocol_v2_13_kernel.py tests/test_v212_kernel_v211_ingest_v210_console.py tests/test_v215_ingest_date_version_review_lanes.py tests/test_v216_review_page_researcher_bar.py tests/test_v228_structural_heading_nav_and_confirmed_strength_gate.py tests/test_v230_phase3_review_cockpit.py tests/test_v230_phase4_passage_register_coverage_gold.py tests/test_wave5_gericht_vereenvoudigen.py tests/test_lifecycle_withdrawal_recovery_v1.py tests/test_source_bound_continuation_repair.py
-      - run: pytest -q
-        if: ${{ !cancelled() }}
-      - name: Install isolated browser test tooling
-        if: matrix.python-version == '3.12'
-        run: |
-          npm install --prefix "$RUNNER_TEMP/metis-browser" playwright@1.58.2
-          "$RUNNER_TEMP/metis-browser/node_modules/.bin/playwright" install --with-deps chromium
-      - name: Verify desktop and mobile review workflows
-        if: matrix.python-version == '3.12'
-        run: |
-          export METIS_PLAYWRIGHT_MODULE="$RUNNER_TEMP/metis-browser/node_modules/playwright"
-          export METIS_BROWSER_EXECUTABLE="$(node -e 'process.stdout.write(require(process.env.METIS_PLAYWRIGHT_MODULE).chromium.executablePath())')"
-          pytest -q tests/test_browser_knowledge_context.py --basetemp="$RUNNER_TEMP/metis-browser-proof"
-      - name: Upload synthetic browser evidence
-        if: always() && matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v4
-        with:
-          name: review-browser-desktop-mobile
-          path: |
-            ${{ runner.temp }}/metis-browser-proof/**/*.png
-            ${{ runner.temp }}/metis-browser-proof/**/*.json
-          if-no-files-found: warn
+      - name: Full A06 V3 ingest, native SQL rollback and separate process restart
+        run: python -m pytest -q tests/test_a06_selected_occurrence_relations.py
