@@ -197,8 +197,10 @@ def source_strength_cues(text: str):
 
 
 def adjacent_source_strength_span(text: str, end: int) -> tuple[int, int] | None:
-    """A trailing stamp binds only across whitespace, never across prose."""
-    start = end + len(text[end:]) - len(text[end:].lstrip())
+    """A trailing stamp binds across whitespace/punctuation, never prose."""
+    start = end
+    while start < len(text) and (text[start].isspace() or text[start] in ".!?:;,"):
+        start += 1
     if start == end:
         return None
     for pattern in (SOURCE_DIRECTIONAL_LABEL_RE, SOURCE_LITERAL_STRONG_RE, SOURCE_LITERAL_WEAK_RE):
