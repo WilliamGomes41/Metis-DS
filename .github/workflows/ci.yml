@@ -83,6 +83,29 @@ jobs:
       - run: python -m compileall -q src tests
       - name: Verify architecture invariants
         run: pytest -q tests/test_architecture_invariants.py
+      - name: Verify A10 source repair against native PostgreSQL
+        if: ${{ !cancelled() }}
+        run: pytest -q tests/test_a10_source_cache_repair.py --junitxml=output/a10-native.xml
+      - name: Require executed A10 evidence without skipped cases
+        if: ${{ !cancelled() }}
+        run: |
+          python - <<'PYCODE'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("output/a10-native.xml").getroot()
+          cases = list(root.iter("testcase"))
+          assert cases, "A10 evidence is empty"
+          assert not list(root.iter("skipped")), "A10 acceptance skipped required cases"
+          assert not list(root.iter("failure")) and not list(root.iter("error")), "A10 acceptance failed"
+          assert any("historical_merge" in case.get("name", "") and "postgres" in case.get("name", "") for case in cases), "Missing native historical merge proof"
+          print(f"A10: {len(cases)} executed, zero skipped, zero failures/errors")
+          PYCODE
+      - name: Upload A10 native acceptance evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: a10-native-${{ matrix.python-version }}
+          path: output/a10-native.xml
+          if-no-files-found: error
       - name: Prove A08 review regressions on the unchanged merged base
         if: github.head_ref == 'fix/a08-review-completion' || github.ref == 'refs/heads/fix/a08-review-completion'
         run: |

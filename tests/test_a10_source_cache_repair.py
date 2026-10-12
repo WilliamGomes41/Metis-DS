@@ -432,3 +432,57 @@ def test_repair_reuses_authorization_without_domain_write(backend, tmp_path, mon
         assert resolve(client, console, sid, target, selected(units, target)).status_code >= 400
     _, fresh = installed(tmp_path, tmp_path / "cache-new", backend, monkeypatch)
     assert state(fresh, sid) == before
+
+
+@pytest.mark.parametrize("route", ["legacy-html", "legacy-pdf"])
+@pytest.mark.parametrize("fault", [None, "locator", "page", "bbox"])
+def test_historical_merge_verifies_every_target_after_cache_move(backend, tmp_path, monkeypatch, route, fault):
+    _, initial, _, sid, primary, _ = seed(tmp_path, backend, route, monkeypatch)
+    targets = [row for row in initial.snapshot_objects(sid)
+               if row["object_id"] != primary["object_id"]
+               and row["object_type"] not in {"document", "heading"}
+               and row.get("proposed_object_type") != "heading"
+               and row["provenance"]["source_fragments"]]
+    assert targets
+    other = targets[0]
+    assert not (other.get("metadata") or {}).get("semantic_passage")
+    if fault:
+        history = initial._load_objects(sid, remember=False)
+        row = next(row for row in history if row["object_id"] == other["object_id"]
+                   and row["object_version"] == other["object_version"])
+        ref = row["provenance"]["source_fragments"][0]
+        if fault == "locator":
+            ref["source_locator"]["locator_value"] = ("lines:1-1" if route == "legacy-html"
+                else "page:1;bbox:0.000000,0.000000,1.000000,1.000000")
+        elif fault == "page":
+            ref["page"] = 999
+        else:
+            ref["bbox"] = [0, 0, 1, 1]
+        stamp_canonical_hashes(row)
+        install_fixture_history(initial, sid, history)
+    before = state(initial, sid)
+    shutil.rmtree(tmp_path / "cache-old")
+    app, console = installed(tmp_path, tmp_path / "cache-new", backend, monkeypatch)
+    client = client_for(app)
+    response = client.post("/review/resolve", data={"snapshot_id": sid,
+        "object_id": primary["object_id"], "snapshot_revision": before["revision"],
+        "suitability": "samenvoegen", "comment": "Voeg de twee geverifieerde passages samen.",
+        "repair_kind": "merge_objects", "merge_object_ids": [other["object_id"]]}, follow_redirects=False)
+    _, fresh = installed(tmp_path, tmp_path / "cache-new", backend, monkeypatch)
+    assert not Path(before["envelope"]["binary_path"]).exists()
+    if fault:
+        assert response.status_code == 400, response.text
+        assert state(fresh, sid) == before  # includes revision, supersession, bindings and audit
+    else:
+        assert response.status_code == 303, response.text
+        repaired = fresh._current_object(sid, primary["object_id"])
+        absorbed = fresh._current_object(sid, other["object_id"])
+        assert repaired["object_version"] != primary["object_version"]
+        assert repaired["governance"]["validation_status"] == "needs_review"
+        assert absorbed["governance"]["validation_status"] == "superseded"
+        assert absorbed["governance"]["superseded_by"] == primary["object_id"]
+        assert repaired["content"]["clean_text"] == " ".join(
+            " ".join(row["content"]["clean_text"].split()) for row in [primary, other])
+        assert any(event["event_type"] == "review_audit_evidence"
+                   and event["details"].get("decision") == "repair_merge_objects"
+                   for event in read_events(fresh._ledger_path))
