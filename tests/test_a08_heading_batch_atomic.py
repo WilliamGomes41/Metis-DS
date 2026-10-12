@@ -380,7 +380,9 @@ def test_batch_and_single_review_overlap_preserves_winner(storage, tmp_path, mon
     content_status = next(row["governance"]["validation_status"] for row in after[0]
                           if row["object_id"] == content_id)
     assert content_status == ("rejected" if first_kind == "single" else "needs_review")
-    assert len([event for event in after[4] if event.get("object_id") in ids + [content_id]]) == (2 if first_kind == "batch" else 1)
+    events = [event for event in after[4] if event.get("object_id") in ids + [content_id]
+              and event.get("event_type") != "review_audit_evidence"]
+    assert len(events) == (2 if first_kind == "batch" else 1)
     assert _state(storage(tmp_path), sid) == after
 
 
@@ -446,9 +448,10 @@ def test_native_post_commit_refresh_failure_preserves_success(
     assert committed == [True] and injected == [refresh]
     # Check durable truth before checking the response, so a red test proves
     # committed work plus an apparent command failure, not an incidental 500.
-    after = _state(factory(tmp_path), sid)
+    fresh = factory(tmp_path)
+    after = _state(fresh, sid)
     assert all(row["governance"]["validation_status"] == "approved"
-               for row in after[0] if row["object_id"] in ids)
+               for row in fresh.snapshot_objects(sid) if row["object_id"] in ids)
     assert len([event for event in after[4] if event.get("object_id") in ids]) == 2
     assert after[3] != before[3] and after[5] > before[5]
     assert outcome == (303 if entry == "http" else ids), f"Committed batch reported failure: {outcome}"
@@ -469,10 +472,23 @@ def test_native_batch_and_single_review_use_consistent_lock_order(workflow_postg
 
     # Same host/database, independent disposable mirrors, as in the existing
     # native batch/batch proof. This does not authorize multi-instance hosting.
-    batch, accounts, sid, ids = _setup(tmp_path, lambda root: native(root, workflow_postgres))
+    from tests.semantic_fixture_support import bind_fixture_selections
+    from src.proportionate_review_v1 import normal_risk_batch_queue
+    batch = native(tmp_path, workflow_postgres)
+    bind_fixture_selections(batch)
+    accounts = _accounts(batch)
+    receipt = _ingest(batch, accounts, data=(
+        b'<html><body><h1>Begrippen</h1><h2>1 Begrippen</h2>'
+        b'<p>De Dutch Job Group is een meetinstrument voor werkbelasting.</p>'
+        b'<p>Een observatie is een systematische waarneming van gedrag.</p></body></html>'
+    ))
+    sid = receipt["snapshot_id"]
+    ids = [row["object_id"] for row in batch.snapshot_objects(sid) if row["object_type"] == "heading"][:2]
+    assert len(ids) == 2
     single = native(tmp_path / "other-runtime", workflow_postgres)
-    content_id = next(row["object_id"] for row in single.snapshot_objects(sid)
-                      if row["object_type"] == "unclassified")
+    content = normal_risk_batch_queue(single.snapshot_objects(sid), review_path="richtlijn",
+        fragments=single.review_source_fragments(sid), bindings=single.object_review_bindings(sid))[0]
+    content_id = content["object_id"]
     revision = batch.objects_revision(sid)
     auth_locked, release_single, batch_connected = Event(), Event(), Event()
     batch_pid = []
@@ -503,7 +519,7 @@ def test_native_batch_and_single_review_use_consistent_lock_order(workflow_postg
     monkeypatch.setattr(documents, "workflow_transaction", observe_batch_connection)
     with ThreadPoolExecutor(max_workers=2) as pool:
         winner = pool.submit(single.review_object, actor_id=accounts["reviewer"]["account_id"],
-            snapshot_id=sid, object_id=content_id, decision="reject", comment="Synthetische lockproef.",
+            snapshot_id=sid, object_id=content_id, decision="approve", confirmed_object_type=content["object_type"],
             expected_revision=revision)
         try:
             assert auth_locked.wait(10)
@@ -524,11 +540,13 @@ def test_native_batch_and_single_review_use_consistent_lock_order(workflow_postg
             release_single.set()
         winner.result(timeout=20)
         assert contender.result(timeout=20) == SNAPSHOT_OBJECT_WRITE_CONFLICT
-    after = _state(native(tmp_path, workflow_postgres), sid)
-    assert next(row["governance"]["validation_status"] for row in after[0]
-                if row["object_id"] == content_id) == "rejected"
+    fresh = native(tmp_path, workflow_postgres)
+    after = _state(fresh, sid)
+    current = fresh.snapshot_objects(sid)
+    assert next(row["governance"]["validation_status"] for row in current
+                if row["object_id"] == content_id) == "approved"
     assert all(row["governance"]["validation_status"] == "needs_review"
-               for row in after[0] if row["object_id"] in ids)
+               for row in current if row["object_id"] in ids)
     assert len([event for event in after[4] if event.get("object_id") in ids + [content_id]]) == 1
 
 
