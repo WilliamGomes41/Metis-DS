@@ -142,6 +142,14 @@ class _PostgresWorkflowReviewMixin:
         snapshot_id: str | None = None,
     ) -> None:
         sid = snapshot_id or (objects[0] if objects is not None else None)
+        if sid is not None and getattr(self._objects_tls, "heading_batch_snapshot", None) == sid:
+            # The batch owns native rollback, including the final commit. Avoid
+            # the legacy compensating writes from captured per-member state.
+            return super()._commit_prepared_store(
+                envelopes=envelopes, bindings=bindings, objects=objects,
+                expected_revision=expected_revision, ledger_fn=ledger_fn,
+                snapshot_id=snapshot_id,
+            )
         with self._store_write_lock():
             self._reload_store_locked()
             prior_bindings = deepcopy(self._bindings)
@@ -189,7 +197,21 @@ class _PostgresWorkflowReviewMixin:
                 raise
 
     @contextmanager
+    def _heading_batch_mutation(self, snapshot_id: str) -> Iterator[None]:
+        with self._store_write_lock():
+            try:
+                with super()._heading_batch_mutation(snapshot_id):
+                    with buffer_events(self._ledger_path):
+                        yield
+            finally:
+                self._remirror_review_runtime()
+                self._bindings_baseline = deepcopy(self._bindings)
+
+    @contextmanager
     def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
+        if getattr(self._objects_tls, "heading_batch_snapshot", None) == snapshot_id:
+            yield
+            return
         prior_bindings: dict[str, Any] = {}
         prior_envelope: dict[str, Any] | None = None
         prior_objects: list[dict[str, Any]] | None = None

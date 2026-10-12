@@ -683,8 +683,38 @@ class _PostgresWorkflowDocumentsMixin:
                 yield
 
     @contextmanager
+    def _heading_batch_mutation(self, snapshot_id: str) -> Iterator[None]:
+        """Lock and validate before the batch; rollback only through PostgreSQL."""
+        with self._store_write_lock():
+            bind_workflow_stores(
+                self.workflow_document_store,
+                self.workflow_identity_store,
+                getattr(self, "workflow_review_store", None),
+            )
+            try:
+                with super()._heading_batch_mutation(snapshot_id):
+                    with workflow_transaction(self.workflow_document_store) as connection:
+                        row = connection.execute(
+                            "SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
+                            (snapshot_id,),
+                        ).fetchone()
+                        if row is None:
+                            raise ConsoleError("unknown_snapshot")
+                        self._reload_store_locked()
+                        self._require_mutable_working_revision(snapshot_id)
+                        yield
+            finally:
+                # The native transaction has completed or rolled back. Refresh
+                # disposable state; never write captured bundles to authority.
+                self._reload_store_locked()
+                self.refresh_objects_expected_revision(snapshot_id)
+
+    @contextmanager
     def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
         """Preserve current rollback behavior while documents/objects are PostgreSQL-backed."""
+        if getattr(self._objects_tls, "heading_batch_snapshot", None) == snapshot_id:
+            yield
+            return
         with self._store_write_lock():
             self._reload_store_locked()
             before_envelope = deepcopy(self._envelope(snapshot_id))
