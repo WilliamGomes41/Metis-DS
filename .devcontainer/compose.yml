@@ -1,3 +1,11 @@
+# Two-container sandbox (see docs/SECURITY_SANDBOX.md):
+# - workspace: the Codespace/editor attaches here. It has egress (default
+#   network) so the Codespaces agent and VS Code server can start, and joins
+#   the internal sandbox network only to hand jobs to the runner.
+# - runner: executes tests/scans. Internal network ONLY (no egress), no
+#   capabilities, no new privileges, read-only root filesystem, no docker socket.
+# Jobs pass through a shared directory (scripts/sandbox_test.sh); no
+# docker-in-docker and no docker socket in either container.
 services:
   workspace:
     build:
@@ -7,11 +15,30 @@ services:
     volumes:
       - ..:/workspaces/metis:cached
     networks:
+      - egress
+      - sandbox
+    depends_on:
+      runner:
+        condition: service_started
+  runner:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    command: ["bash", "/workspaces/metis/scripts/sandbox_runner.sh"]
+    user: vscode
+    working_dir: /workspaces/metis
+    volumes:
+      - ..:/workspaces/metis:cached
+    networks:
       - sandbox
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/vscode
     depends_on:
       sandbox-db:
         condition: service_healthy
@@ -31,6 +58,7 @@ services:
       timeout: 5s
       retries: 20
 networks:
+  egress: {}
   sandbox:
     internal: true
     ipam:

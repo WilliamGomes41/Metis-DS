@@ -7,7 +7,7 @@
   "shutdownAction": "stopCompose",
   "forwardPorts": [],
   "otherPortsAttributes": {"onAutoForward": "ignore"},
-  "postCreateCommand": "python -c \"import pytest, psycopg; print('Preinstalled test dependencies available')\"",
+  "postCreateCommand": "python -c \"import pytest, psycopg; print('Preinstalled test dependencies available; run tests via scripts/sandbox_test.sh (isolated runner)')\"",
   "customizations": {
     "vscode": {
       "settings": {"python.defaultInterpreterPath": "/opt/metis-venv/bin/python", "remote.autoForwardPorts": false},
