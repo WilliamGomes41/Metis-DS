@@ -19,11 +19,9 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "output/runtime/security-sandbox"
 TEST_DSN = "postgresql://metis_sandbox:sandbox-only@sandbox-db:5432/metis_security_test"
-# Azurite (CON-03) on the internal sandbox network; well-known public dev account key.
-AZURITE_CONNECTION_STRING = (
-    "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;"
-    "AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;"
-    "BlobEndpoint=http://172.30.254.30:10000/devstoreaccount1;")
+# Azurite (CON-03) blob endpoint on the internal sandbox network (account
+# devstoreaccount1; the public Azurite dev key is supplied by the test itself).
+AZURITE_BLOB_ENDPOINT = "http://172.30.254.30:10000/devstoreaccount1"
 # Build-time preloaded offline assets (runner image); passed through only if set.
 OFFLINE_ASSET_ENV = ("PLAYWRIGHT_BROWSERS_PATH", "HF_HOME", "METIS_DOCLING_PYTHON",
                      "METIS_DOCLING_ARTIFACTS_PATH", "METIS_PI05_MODEL_PATH",
@@ -101,9 +99,9 @@ def sandbox_environment(*, postgres: bool = False) -> dict[str, str]:
     supplied = os.environ.get("METIS_TEST_POSTGRES_DSN", "")
     if supplied and supplied != TEST_DSN:
         raise SystemExit("Refusing non-sandbox METIS_TEST_POSTGRES_DSN; unset it first.")
-    supplied_blob = os.environ.get("METIS_TEST_AZURITE_CONNECTION_STRING", "")
-    if supplied_blob and supplied_blob != AZURITE_CONNECTION_STRING:
-        raise SystemExit("Refusing non-sandbox METIS_TEST_AZURITE_CONNECTION_STRING; unset it first.")
+    supplied_blob = os.environ.get("METIS_TEST_AZURITE_BLOB_ENDPOINT", "")
+    if supplied_blob and supplied_blob != AZURITE_BLOB_ENDPOINT:
+        raise SystemExit("Refusing non-sandbox METIS_TEST_AZURITE_BLOB_ENDPOINT; unset it first.")
     env = {key: os.environ[key] for key in ("PATH", "HOME", "LANG", "LC_ALL", "TERM") + OFFLINE_ASSET_ENV
            if key in os.environ}
     env.update(PYTHONPATH=str(ROOT), PYTHONDONTWRITEBYTECODE="1",
@@ -111,7 +109,7 @@ def sandbox_environment(*, postgres: bool = False) -> dict[str, str]:
                CONSOLE_RUNTIME=str(RUNTIME / "console"), CONSOLE_SOURCE_STORE=str(RUNTIME / "sources"),
                SEMGREP_SEND_METRICS="off", SEMGREP_ENABLE_VERSION_CHECK="0",
                HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1",
-               METIS_TEST_AZURITE_CONNECTION_STRING=AZURITE_CONNECTION_STRING)
+               METIS_TEST_AZURITE_BLOB_ENDPOINT=AZURITE_BLOB_ENDPOINT)
     if postgres:
         env["METIS_TEST_POSTGRES_DSN"] = TEST_DSN
     return env
