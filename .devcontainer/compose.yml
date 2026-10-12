@@ -48,7 +48,15 @@ services:
       retries: 40
       start_period: 5s
     networks:
-      - sandbox
+      sandbox:
+        ipv4_address: 172.30.254.20
+    # No resolver: Docker's embedded DNS forwards external names even on an
+    # internal network (DNS exfil). sandbox-db is pinned via extra_hosts.
+    dns:
+      - 127.0.0.1
+    dns_search: []
+    extra_hosts:
+      - "sandbox-db:172.30.254.10"
     cap_drop:
       - ALL
     security_opt:
@@ -69,7 +77,8 @@ services:
     volumes:
       - sandbox_database:/var/lib/postgresql/data
     networks:
-      - sandbox
+      sandbox:
+        ipv4_address: 172.30.254.10
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U metis_sandbox -d metis_security_test"]
       interval: 5s
