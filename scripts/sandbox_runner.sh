@@ -11,11 +11,14 @@ while true; do
     id=$(basename "$req" .request)
     cmd=$(cat "$req"); rm -f "$req"
     case "$cmd" in
-      check|scan|test|"test --local"|probe) ;;
+      check|scan|test|"test --local"|probe|rt) ;;
       *) echo "rejected: $cmd" > "$JOBS/$id.log"; echo 2 > "$JOBS/$id.exit"; continue ;;
     esac
     if [ "$cmd" = probe ]; then
       bash /workspaces/metis/scripts/sandbox_probe.sh > "$JOBS/$id.log" 2>&1
+    elif [ "$cmd" = rt ]; then
+      # Red-team tests dropped by the workspace into the job dir (repo stays read-only).
+      python -m pytest -q --rootdir "$JOBS/rt" "$JOBS/rt" > "$JOBS/$id.log" 2>&1
     else
       # shellcheck disable=SC2086
       python scripts/security_sandbox.py $cmd > "$JOBS/$id.log" 2>&1

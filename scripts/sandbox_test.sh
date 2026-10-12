@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run from the workspace (editor) container: hands a job to the isolated runner
-# and streams its result. Usage: scripts/sandbox_test.sh [check|probe|test|test --local|scan]
+# and streams its result. Usage: scripts/sandbox_test.sh [check|probe|test|test --local|scan|rt]  (rt = pytest on output/runtime/sandbox-runner/rt/)
 set -eu
 JOBS="$(cd "$(dirname "$0")/.." && pwd)/output/runtime/sandbox-runner"
 cmd="${*:-test}"
