@@ -486,6 +486,7 @@ def test_native_batch_and_single_review_use_consistent_lock_order(workflow_postg
     ids = [row["object_id"] for row in batch.snapshot_objects(sid) if row["object_type"] == "heading"][:2]
     assert len(ids) == 2
     single = native(tmp_path / "other-runtime", workflow_postgres)
+    single.source_store = batch.source_store
     content = normal_risk_batch_queue(single.snapshot_objects(sid), review_path="richtlijn",
         fragments=single.review_source_fragments(sid), bindings=single.object_review_bindings(sid))[0]
     content_id = content["object_id"]
