@@ -5,7 +5,10 @@
   "workspaceFolder": "/workspaces/metis",
   "remoteUser": "vscode",
   "features": {
-    "ghcr.io/devcontainers/features/sshd:1": {}
+    "ghcr.io/devcontainers/features/sshd:1": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    }
   },
   "shutdownAction": "stopCompose",
   "forwardPorts": [],
