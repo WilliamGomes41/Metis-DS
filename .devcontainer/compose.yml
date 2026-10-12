@@ -27,8 +27,14 @@ services:
     command: ["bash", "/workspaces/metis/scripts/sandbox_runner.sh"]
     user: vscode
     working_dir: /workspaces/metis
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTEST_ADDOPTS: "-p no:cacheprovider"
+    # Repo is READ-ONLY in the runner so a test cannot modify code that the
+    # egress-capable workspace could then push. Only the job directory is writable.
     volumes:
-      - ..:/workspaces/metis:cached
+      - ..:/workspaces/metis:ro
+      - ../output/runtime/sandbox-runner:/workspaces/metis/output/runtime/sandbox-runner:rw
     networks:
       - sandbox
     cap_drop:

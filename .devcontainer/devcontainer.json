@@ -4,14 +4,24 @@
   "service": "workspace",
   "workspaceFolder": "/workspaces/metis",
   "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/devcontainers/features/sshd:1": {}
+  },
   "shutdownAction": "stopCompose",
   "forwardPorts": [],
-  "otherPortsAttributes": {"onAutoForward": "ignore"},
+  "otherPortsAttributes": {
+    "onAutoForward": "ignore"
+  },
   "postCreateCommand": "python -c \"import pytest, psycopg; print('Preinstalled test dependencies available; run tests via scripts/sandbox_test.sh (isolated runner)')\"",
   "customizations": {
     "vscode": {
-      "settings": {"python.defaultInterpreterPath": "/opt/metis-venv/bin/python", "remote.autoForwardPorts": false},
-      "extensions": ["ms-python.python"]
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/metis-venv/bin/python",
+        "remote.autoForwardPorts": false
+      },
+      "extensions": [
+        "ms-python.python"
+      ]
     }
   }
 }
