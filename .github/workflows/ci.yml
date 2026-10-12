@@ -83,6 +83,31 @@ jobs:
       - run: python -m compileall -q src tests
       - name: Verify architecture invariants
         run: pytest -q tests/test_architecture_invariants.py
+      - name: Verify A08 atomic heading batches against native PostgreSQL
+        if: ${{ !cancelled() }}
+        run: pytest -q tests/test_a08_heading_batch_atomic.py --junitxml=output/a08-native.xml
+      - name: Require executed A08 native evidence without skipped cases
+        if: ${{ !cancelled() }}
+        run: |
+          python - <<'PYCODE'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("output/a08-native.xml").getroot()
+          cases = list(root.iter("testcase"))
+          assert cases, "A08 evidence is empty"
+          assert not list(root.iter("skipped")), "A08 acceptance skipped required cases"
+          assert not list(root.iter("failure")) and not list(root.iter("error")), "A08 acceptance failed"
+          required = ("test_native_final_commit_failure", "test_concurrent_same_revision_preserves_winner[postgres]", "test_second_object_storage_conflict_rolls_back_batch[postgres]")
+          for name in required:
+              assert any(name in case.get("name", "") for case in cases), f"Missing executed native case: {name}"
+          print(f"A08: {len(cases)} executed, zero skipped, zero failures/errors")
+          PYCODE
+      - name: Upload A08 native acceptance evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: a08-native-${{ matrix.python-version }}
+          path: output/a08-native.xml
+          if-no-files-found: error
       - name: Verify extraction workload metrics
         run: pytest -q tests/test_extract_metrics_wave4_quality_claim.py tests/test_extract_metrics_independent_quality.py
       - name: Verify T11 knowledge revision lineage

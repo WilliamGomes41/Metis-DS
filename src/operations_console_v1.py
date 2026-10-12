@@ -1104,8 +1104,8 @@ class OperationsConsole:
             raise ConsoleError("unknown_account")
         return account
 
-    def _require_role(self, account_id: str, role: str) -> dict[str, Any]:
-        account = self._account(account_id)
+    def _require_role(self, account_id: str, role: str, *, current: bool = False) -> dict[str, Any]:
+        account = self._account(account_id, current=current)
         if role not in account["roles"]:
             raise ConsoleError(f"{role}_role_required")
         return account
@@ -3246,9 +3246,46 @@ class OperationsConsole:
         )
 
     @contextmanager
+    def _heading_batch_mutation(self, snapshot_id: str) -> Iterator[None]:
+        """Own the whole heading command, including late revision conflicts.
+
+        The shared writer lock excludes supported local competing writers. Native
+        stores override this boundary with a transaction; these captures are only
+        files/mirrors, never compensating writes to database authority.
+        """
+        with self._store_write_lock():
+            self._reload_store_locked()
+            self._require_mutable_working_revision(snapshot_id)
+            path = self._objects_path(snapshot_id)
+            prior_objects = path.read_bytes() if path.exists() else None
+            prior_envelopes = deepcopy(self._envelopes)
+            prior_bindings = deepcopy(self._bindings)
+            prior_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
+            previous = getattr(self._objects_tls, "heading_batch_snapshot", None)
+            self._objects_tls.heading_batch_snapshot = snapshot_id
+            try:
+                yield
+            except Exception:
+                self._rollback_store_files(
+                    objects_snapshot=(snapshot_id, prior_objects),
+                    envelopes=prior_envelopes,
+                    bindings=prior_bindings,
+                    ledger_size=prior_ledger,
+                )
+                self._envelopes = prior_envelopes
+                self._bindings = prior_bindings
+                raise
+            finally:
+                self._objects_tls.heading_batch_snapshot = previous
+                self._objects_expected_revs().pop(snapshot_id, None)
+
+    @contextmanager
     def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
         """Rollback object/binding/envelope writes together with ledger evidence."""
         with self._store_write_lock():
+            if getattr(self._objects_tls, "heading_batch_snapshot", None) == snapshot_id:
+                yield
+                return
             self._reload_store_locked()
             self._require_mutable_working_revision(snapshot_id)
             path = self._objects_path(snapshot_id)
@@ -4069,61 +4106,64 @@ class OperationsConsole:
         reclassified onto a high-risk type. Serving still requires confirmed
         closed types plus the published projection and G2 locator.
         """
-        self._require_role(actor_id, "reviewer")
-        ids = [str(object_id).strip() for object_id in object_ids if str(object_id).strip()]
-        if not ids:
-            raise ConsoleError("fast_lane_heading_required")
-        review_path = review_path_for_klasse(self._envelope(snapshot_id)["class"])
-        structure_type = "path" if review_path == "boom" else "heading"
-        current = {row["object_id"]: row for row in self.snapshot_objects(snapshot_id)}
-        bindings = self.object_review_bindings(snapshot_id)
-        for object_id in ids:
-            target = current.get(object_id)
-            if target is None:
-                raise ConsoleError("unknown_object")
-            if review_path == "boom":
-                route = reviewer_route_for(
-                    target,
-                    review_path=review_path,
-                    reviewer_id=actor_id,
-                    bindings=bindings,
-                )
-                acceptable = bool(
-                    route
-                    and route.get("actionable")
-                    and route.get("canonical_task") == "structure"
-                )
-            else:
-                from src.knowledge_path_v1 import is_structural_projection
-                acceptable = (
-                    review_lane(target, review_path=review_path) == "fast"
-                    and is_structural_projection(target)
-                )
-            if not acceptable:
+        with self._heading_batch_mutation(snapshot_id):
+            self._require_role(actor_id, "reviewer", current=True)
+            ids = list(dict.fromkeys(str(object_id).strip() for object_id in object_ids if str(object_id).strip()))
+            if not ids:
                 raise ConsoleError("fast_lane_heading_required")
-        updated: list[dict[str, Any]] = []
-        pin = expected_revision
-        for object_id in ids:
-            token = _STRUCTURE_CONFIRMATION.set(review_path != "boom")
-            try:
-                rows = self.review_object(
-                    actor_id=actor_id,
-                    snapshot_id=snapshot_id,
-                    object_id=object_id,
-                    decision="approve",
-                    confirmed_object_type=structure_type,
-                    expected_revision=pin,
-                    interaction_evidence=interaction_evidence,
-                )
-            finally:
-                _STRUCTURE_CONFIRMATION.reset(token)
-            if pin is not None:
-                pin = self.objects_revision(snapshot_id)
-            refreshed = next(row for row in rows if row["object_id"] == object_id)
-            mark_four_eyes_on_object(refreshed, confirmed_type="heading")
-            stamp_canonical_hashes(refreshed)
-            updated.append(deepcopy(refreshed))
-        return updated
+            if expected_revision is not None and self.objects_revision(snapshot_id) != expected_revision:
+                raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=self.objects_revision(snapshot_id))
+            review_path = review_path_for_klasse(self._envelope(snapshot_id)["class"])
+            structure_type = "path" if review_path == "boom" else "heading"
+            current = {row["object_id"]: row for row in self.snapshot_objects(snapshot_id)}
+            bindings = self.object_review_bindings(snapshot_id)
+            for object_id in ids:
+                target = current.get(object_id)
+                if target is None:
+                    raise ConsoleError("unknown_object")
+                if review_path == "boom":
+                    route = reviewer_route_for(
+                        target,
+                        review_path=review_path,
+                        reviewer_id=actor_id,
+                        bindings=bindings,
+                    )
+                    acceptable = bool(
+                        route
+                        and route.get("actionable")
+                        and route.get("canonical_task") == "structure"
+                    )
+                else:
+                    from src.knowledge_path_v1 import is_structural_projection
+                    acceptable = (
+                        review_lane(target, review_path=review_path) == "fast"
+                        and is_structural_projection(target)
+                    )
+                if not acceptable:
+                    raise ConsoleError("fast_lane_heading_required")
+            updated: list[dict[str, Any]] = []
+            pin = expected_revision
+            for object_id in ids:
+                token = _STRUCTURE_CONFIRMATION.set(review_path != "boom")
+                try:
+                    rows = self.review_object(
+                        actor_id=actor_id,
+                        snapshot_id=snapshot_id,
+                        object_id=object_id,
+                        decision="approve",
+                        confirmed_object_type=structure_type,
+                        expected_revision=pin,
+                        interaction_evidence=interaction_evidence,
+                    )
+                finally:
+                    _STRUCTURE_CONFIRMATION.reset(token)
+                if pin is not None:
+                    pin = self.objects_revision(snapshot_id)
+                refreshed = next(row for row in rows if row["object_id"] == object_id)
+                mark_four_eyes_on_object(refreshed, confirmed_type="heading")
+                stamp_canonical_hashes(refreshed)
+                updated.append(deepcopy(refreshed))
+            return updated
 
     def correct_object(
         self,
