@@ -327,8 +327,8 @@ class _PostgresIdentityMixin:
             raise ConsoleError("unknown_account")
         return account
 
-    def _require_role(self, account_id: str, role: str) -> dict[str, Any]:
-        account = super()._require_role(account_id, role)
+    def _require_role(self, account_id: str, role: str, *, current: bool = False) -> dict[str, Any]:
+        account = super()._require_role(account_id, role, current=current)
         if account.get("retirement"):
             raise ConsoleError("not_authenticated")
         return account

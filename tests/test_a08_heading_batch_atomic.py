@@ -271,7 +271,7 @@ def test_concurrent_same_revision_preserves_winner(storage, tmp_path, monkeypatc
 
 
 @pytest.mark.parametrize("review_authority", [True, False])
-def test_native_final_commit_failure_preserves_fresh_state(workflow_postgres, tmp_path, review_authority):
+def test_native_final_commit_failure_preserves_fresh_state(workflow_postgres, tmp_path, monkeypatch, review_authority):
     import psycopg
     from tests.test_review_batch_atomic_postgres import _console as native
 
@@ -289,12 +289,35 @@ def test_native_final_commit_failure_preserves_fresh_state(workflow_postgres, tm
     console, accounts, sid, ids = _setup(tmp_path, factory)
     client = _client(console)
     before = _state(console, sid)
+    from contextlib import contextmanager
+    original_write = console.workflow_document_store.write_bundle
+    original_boundary = console._heading_batch_mutation
+    writes, commit_errors = [], []
+
+    def observe_write(**command):
+        result = original_write(**command)
+        writes.append(command["envelope"]["snapshot_id"])
+        return result
+
+    @contextmanager
+    def observe_commit(snapshot_id):
+        try:
+            with original_boundary(snapshot_id):
+                yield
+        except psycopg.errors.RaiseException as exc:
+            commit_errors.append(str(exc))
+            raise
+
+    monkeypatch.setattr(console.workflow_document_store, "write_bundle", observe_write)
+    monkeypatch.setattr(console, "_heading_batch_mutation", observe_commit)
     # A real deferred constraint trigger fires after all member writes and audit
     # flush, when PostgreSQL executes the outer COMMIT, not at a mocked seam.
     with psycopg.connect(workflow_postgres.dsn, autocommit=True) as connection:
         connection.execute("CREATE FUNCTION workflow.a08_commit_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'a08_deferred_commit_failure'; END $$")
         connection.execute("CREATE CONSTRAINT TRIGGER a08_commit_failure AFTER UPDATE ON workflow.documents DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION workflow.a08_commit_failure()")
     assert _post(client, sid, ids, before[3]).status_code == 500
+    assert writes == [sid, sid]
+    assert len(commit_errors) == 1 and "a08_deferred_commit_failure" in commit_errors[0]
     assert _state(factory(tmp_path), sid) == before
 
 
