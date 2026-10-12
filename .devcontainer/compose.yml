@@ -19,7 +19,7 @@ services:
       - sandbox
     depends_on:
       runner:
-        condition: service_started
+        condition: service_healthy
   runner:
     build:
       context: ..
@@ -35,6 +35,16 @@ services:
     volumes:
       - ..:/workspaces/metis:ro
       - ../output/runtime/sandbox-runner:/workspaces/metis/output/runtime/sandbox-runner:rw
+      # security_sandbox.py writes reports here (RUNTIME); everything else stays read-only.
+      - ../output/runtime/security-sandbox:/workspaces/metis/output/runtime/security-sandbox:rw
+    healthcheck:
+      # Build fails hard (workspace waits on service_healthy) if the runner never
+      # becomes ready, instead of a silent "runner not ready" later.
+      test: ["CMD", "test", "-f", "/workspaces/metis/output/runtime/sandbox-runner/ready"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
     networks:
       - sandbox
     cap_drop:

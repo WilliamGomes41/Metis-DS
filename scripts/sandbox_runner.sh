@@ -3,8 +3,11 @@
 # and executes only whitelisted security_sandbox.py subcommands.
 set -u
 JOBS=/workspaces/metis/output/runtime/sandbox-runner
-mkdir -p "$JOBS"
-echo "runner ready" > "$JOBS/ready"
+echo "sandbox-runner: uid=$(id -u) gid=$(id -g) cwd=$(pwd)"
+ls -ld /workspaces/metis "$JOBS" 2>&1 || true
+mkdir -p "$JOBS" || { echo "sandbox-runner: FATAL cannot create $JOBS" >&2; exit 1; }
+echo "runner ready" > "$JOBS/ready" || { echo "sandbox-runner: FATAL cannot write $JOBS/ready" >&2; exit 1; }
+echo "sandbox-runner: ready"
 while true; do
   for req in "$JOBS"/*.request; do
     [ -e "$req" ] || continue
