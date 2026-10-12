@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from contextlib import contextmanager, suppress
 from copy import deepcopy
 from pathlib import Path
@@ -204,8 +205,11 @@ class _PostgresWorkflowReviewMixin:
                     with buffer_events(self._ledger_path):
                         yield
             finally:
-                self._remirror_review_runtime()
-                self._bindings_baseline = deepcopy(self._bindings)
+                try:
+                    self._remirror_review_runtime()
+                    self._bindings_baseline = deepcopy(self._bindings)
+                except Exception:
+                    logging.getLogger(__name__).warning("heading_batch_review_mirror_refresh_failed")
 
     @contextmanager
     def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:

@@ -11,6 +11,7 @@ from src.revision_workflow import current_revisions, validate_revision_write
 
 import hashlib
 import json
+import logging
 from contextlib import contextmanager, suppress
 from copy import deepcopy
 from pathlib import Path
@@ -694,6 +695,10 @@ class _PostgresWorkflowDocumentsMixin:
             try:
                 with super()._heading_batch_mutation(snapshot_id):
                     with workflow_transaction(self.workflow_document_store) as connection:
+                        review_store = getattr(self, "workflow_review_store", None)
+                        if review_store is not None:
+                            # Ordinary review writes take this lock before the document row.
+                            review_store._lock_authorizations(connection)
                         row = connection.execute(
                             "SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
                             (snapshot_id,),
@@ -705,9 +710,12 @@ class _PostgresWorkflowDocumentsMixin:
                         yield
             finally:
                 # The native transaction has completed or rolled back. Refresh
-                # disposable state; never write captured bundles to authority.
-                self._reload_store_locked()
-                self.refresh_objects_expected_revision(snapshot_id)
+                # disposable state without changing its outcome or original error.
+                try:
+                    self._reload_store_locked()
+                    self.refresh_objects_expected_revision(snapshot_id)
+                except Exception:
+                    logging.getLogger(__name__).warning("heading_batch_document_mirror_refresh_failed")
 
     @contextmanager
     def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
