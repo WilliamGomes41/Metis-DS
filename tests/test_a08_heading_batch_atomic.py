@@ -52,6 +52,39 @@ def _state(console, sid):
                      bindings, console.objects_revision(sid), read_events(console._ledger_path), storage_revision))
 
 
+def _new_process_state(root, sid, mode):
+    import json
+    import subprocess
+    import sys
+    code = '''
+import json, os, sys
+from pathlib import Path
+from tests.test_a08_heading_batch_atomic import _state
+from tests.test_v219_review_duty_queue import _console
+root, sid, mode = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+if mode != "local":
+    from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+    config = PostgresCanonicalConfig(dsn=os.environ["METIS_TEST_POSTGRES_DSN"])
+    if mode == "postgres":
+        from tests.test_review_batch_atomic_postgres import _console as native
+        console = native(root, config)
+    else:
+        from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
+        from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
+        from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
+        console = PostgresWorkflowDurablePublicationConsole(
+            root=root, source_store=root / "sources", runtime=root / "runtime",
+            workflow_identity_store=PostgresWorkflowIdentityStore(config),
+            workflow_document_store=PostgresConcurrentWorkflowDocumentStore(config))
+else:
+    console = _console(root)
+print(json.dumps(_state(console, sid)))
+'''
+    completed = subprocess.run([sys.executable, "-c", code, str(root), sid, mode],
+                               capture_output=True, text=True, timeout=30, check=True)
+    return json.loads(completed.stdout)
+
+
 def test_http_later_binding_failure_is_atomic_after_restart(tmp_path, monkeypatch):
     console, accounts, sid, ids = _setup(tmp_path)
     client = _client(console)
@@ -271,7 +304,8 @@ def test_concurrent_same_revision_preserves_winner(storage, tmp_path, monkeypatc
 
 
 @pytest.mark.parametrize("review_authority", [True, False])
-def test_native_final_commit_failure_preserves_fresh_state(workflow_postgres, tmp_path, monkeypatch, review_authority):
+@pytest.mark.parametrize("refresh_failure", [False, True])
+def test_native_final_commit_failure_preserves_fresh_state(workflow_postgres, tmp_path, monkeypatch, review_authority, refresh_failure):
     import psycopg
     from tests.test_review_batch_atomic_postgres import _console as native
 
@@ -290,9 +324,27 @@ def test_native_final_commit_failure_preserves_fresh_state(workflow_postgres, tm
     client = _client(console)
     before = _state(console, sid)
     from contextlib import contextmanager
+    from src.workflows import workflow_documents_cutover_v1 as documents
     original_write = console.workflow_document_store.write_bundle
     original_boundary = console._heading_batch_mutation
     writes, commit_errors = [], []
+    ended, refresh_errors = [], []
+    transaction = documents.workflow_transaction
+    reload_store = console._reload_store_locked
+
+    @contextmanager
+    def observe_transaction_end(owner):
+        try:
+            with transaction(owner) as connection:
+                yield connection
+        finally:
+            ended.append(True)
+
+    def fail_refresh_after_rollback():
+        if ended and not refresh_errors:
+            refresh_errors.append(True)
+            raise RuntimeError("a08_refresh_after_rollback_failure")
+        return reload_store()
 
     def observe_write(**command):
         result = original_write(**command)
@@ -310,6 +362,9 @@ def test_native_final_commit_failure_preserves_fresh_state(workflow_postgres, tm
 
     monkeypatch.setattr(console.workflow_document_store, "write_bundle", observe_write)
     monkeypatch.setattr(console, "_heading_batch_mutation", observe_commit)
+    if refresh_failure:
+        monkeypatch.setattr(documents, "workflow_transaction", observe_transaction_end)
+        monkeypatch.setattr(console, "_reload_store_locked", fail_refresh_after_rollback)
     # A real deferred constraint trigger fires after all member writes and audit
     # flush, when PostgreSQL executes the outer COMMIT, not at a mocked seam.
     with psycopg.connect(workflow_postgres.dsn, autocommit=True) as connection:
@@ -318,7 +373,247 @@ def test_native_final_commit_failure_preserves_fresh_state(workflow_postgres, tm
     assert _post(client, sid, ids, before[3]).status_code == 500
     assert writes == [sid, sid]
     assert len(commit_errors) == 1 and "a08_deferred_commit_failure" in commit_errors[0]
+    assert refresh_errors == ([True] if refresh_failure else [])
     assert _state(factory(tmp_path), sid) == before
+
+
+@pytest.mark.parametrize("first_kind", ["batch", "single"])
+def test_batch_and_single_review_overlap_preserves_winner(storage, tmp_path, monkeypatch, first_kind):
+    from concurrent.futures import ThreadPoolExecutor
+    from contextlib import contextmanager
+    from threading import Event
+
+    first, accounts, sid, ids = _setup(tmp_path, storage)
+    second = storage(tmp_path)
+    content_id = next(row["object_id"] for row in first.snapshot_objects(sid)
+                      if row["object_type"] == "unclassified")
+    revision = first.objects_revision(sid)
+    ready, contender_entered = Event(), Event()
+    second_kind = "single" if first_kind == "batch" else "batch"
+    first_name = "_heading_batch_mutation" if first_kind == "batch" else "_atomic_snapshot_mutation"
+    second_name = "_heading_batch_mutation" if second_kind == "batch" else "_atomic_snapshot_mutation"
+    first_boundary, second_boundary = getattr(first, first_name), getattr(second, second_name)
+
+    @contextmanager
+    def hold_winner(snapshot_id):
+        with first_boundary(snapshot_id):
+            yield
+            ready.set()
+            assert contender_entered.wait(10)
+
+    @contextmanager
+    def observe_contender(snapshot_id):
+        contender_entered.set()
+        with second_boundary(snapshot_id):
+            yield
+
+    def command(console, kind):
+        try:
+            if kind == "batch":
+                console.batch_confirm_headings(actor_id=accounts["reviewer"]["account_id"],
+                    snapshot_id=sid, object_ids=ids, expected_revision=revision)
+            else:
+                console.review_object(actor_id=accounts["reviewer"]["account_id"], snapshot_id=sid,
+                    object_id=content_id, decision="reject", comment="Synthetische inhoudelijke review.",
+                    expected_revision=revision)
+            return "committed"
+        except ConsoleError as exc:
+            return exc.code
+
+    monkeypatch.setattr(first, first_name, hold_winner)
+    monkeypatch.setattr(second, second_name, observe_contender)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        winner = pool.submit(command, first, first_kind)
+        assert ready.wait(10)
+        loser = pool.submit(command, second, second_kind)
+        assert winner.result(timeout=20) == "committed"
+        assert loser.result(timeout=20) == SNAPSHOT_OBJECT_WRITE_CONFLICT
+    fresh = storage(tmp_path)
+    after = _state(fresh, sid)
+    approved_ids = {row["object_id"] for row in after[0]
+                    if row["object_id"] in ids and row["governance"]["validation_status"] == "approved"}
+    assert approved_ids == (set(ids) if first_kind == "batch" else set())
+    content_status = next(row["governance"]["validation_status"] for row in after[0]
+                          if row["object_id"] == content_id)
+    assert content_status == ("rejected" if first_kind == "single" else "needs_review")
+    events = [event for event in after[4] if event.get("object_id") in ids + [content_id]
+              and event.get("event_type") != "review_audit_evidence"]
+    assert len(events) == (2 if first_kind == "batch" else 1)
+    assert _state(storage(tmp_path), sid) == after
+
+
+@pytest.mark.parametrize("review_authority,refresh", [
+    (False, "_reload_store_locked"), (False, "refresh_objects_expected_revision"),
+    (True, "_reload_store_locked"), (True, "refresh_objects_expected_revision"),
+    (True, "_remirror_review_runtime"),
+])
+@pytest.mark.parametrize("entry", ["http", "direct"])
+def test_native_post_commit_refresh_failure_preserves_success(
+    workflow_postgres, tmp_path, monkeypatch, review_authority, refresh, entry,
+):
+    from contextlib import contextmanager
+    from src.workflows import workflow_documents_cutover_v1 as documents
+    from tests.test_review_batch_atomic_postgres import _console as native
+    from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
+    from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
+
+    def factory(root):
+        if review_authority:
+            return native(root, workflow_postgres)
+        return documents.PostgresWorkflowDurablePublicationConsole(
+            root=root, source_store=root / "sources", runtime=root / "runtime",
+            workflow_identity_store=PostgresWorkflowIdentityStore(workflow_postgres),
+            workflow_document_store=PostgresConcurrentWorkflowDocumentStore(workflow_postgres),
+        )
+
+    console, accounts, sid, ids = _setup(tmp_path, factory)
+    client = _client(console)
+    before = _state(console, sid)
+    committed, injected = [], []
+    transaction = documents.workflow_transaction
+    original_refresh = getattr(console, refresh)
+
+    @contextmanager
+    def observe_native_commit(owner):
+        with transaction(owner) as connection:
+            yield connection
+        # The real outer transaction and its connection context both exited.
+        committed.append(True)
+
+    def fail_after_commit(*args, **kwargs):
+        if committed and not injected:
+            injected.append(refresh)
+            raise RuntimeError("a08_post_commit_refresh_failure")
+        return original_refresh(*args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(documents, "workflow_transaction", observe_native_commit)
+        patch.setattr(console, refresh, fail_after_commit)
+        if entry == "http":
+            outcome = _post(client, sid, ids, before[3]).status_code
+        else:
+            try:
+                rows = console.batch_confirm_headings(
+                    actor_id=accounts["reviewer"]["account_id"], snapshot_id=sid,
+                    object_ids=ids, expected_revision=before[3],
+                )
+                outcome = [row["object_id"] for row in rows]
+            except Exception as exc:
+                outcome = type(exc).__name__
+
+    assert committed == [True] and injected == [refresh]
+    # Check durable truth before checking the response, so a red test proves
+    # committed work plus an apparent command failure, not an incidental 500.
+    fresh = factory(tmp_path)
+    after = _state(fresh, sid)
+    assert all(row["governance"]["validation_status"] == "approved"
+               for row in fresh.snapshot_objects(sid) if row["object_id"] in ids)
+    assert len([event for event in after[4] if event.get("object_id") in ids]) == 2
+    assert after[3] != before[3] and after[5] > before[5]
+    if entry == "http":
+        import json
+        mode = "postgres" if review_authority else "postgres-local-review"
+        assert _new_process_state(tmp_path, sid, mode) == json.loads(json.dumps(after))
+    assert outcome == (303 if entry == "http" else ids), f"Committed batch reported failure: {outcome}"
+    # The same instance must recover via its existing authoritative readers.
+    assert _post(client, sid, ids, before[3]).status_code == 409
+    assert _post(client, sid, ids, after[3]).status_code == 303
+    assert _state(factory(tmp_path), sid) == after
+
+
+def test_native_batch_and_single_review_use_consistent_lock_order(workflow_postgres, tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from contextlib import contextmanager
+    from threading import Event
+    from time import monotonic, sleep
+    import psycopg
+    from src.workflows import workflow_documents_cutover_v1 as documents
+    from tests.test_review_batch_atomic_postgres import _console as native
+
+    # Same host/database, independent disposable mirrors, as in the existing
+    # native batch/batch proof. This does not authorize multi-instance hosting.
+    from tests.semantic_fixture_support import bind_fixture_selections
+    from src.proportionate_review_v1 import normal_risk_batch_queue, _batch_type
+    batch = native(tmp_path, workflow_postgres)
+    bind_fixture_selections(batch)
+    accounts = _accounts(batch)
+    receipt = _ingest(batch, accounts, data=(
+        b'<html><body><h1>Begrippen</h1><h2>1 Begrippen</h2>'
+        b'<p>De Dutch Job Group is een meetinstrument voor werkbelasting.</p>'
+        b'<p>Een observatie is een systematische waarneming van gedrag.</p></body></html>'
+    ))
+    sid = receipt["snapshot_id"]
+    ids = [row["object_id"] for row in batch.snapshot_objects(sid) if row["object_type"] == "heading"][:2]
+    assert len(ids) == 2
+    single = native(tmp_path / "other-runtime", workflow_postgres)
+    single.source_store = batch.source_store
+    content = normal_risk_batch_queue(single.snapshot_objects(sid), review_path="richtlijn",
+        fragments=single.review_source_fragments(sid), bindings=single.object_review_bindings(sid))[0]
+    content_id = content["object_id"]
+    revision = batch.objects_revision(sid)
+    auth_locked, release_single, batch_connected = Event(), Event(), Event()
+    batch_pid = []
+    lock_authorizations = single.workflow_review_store._lock_authorizations
+    transaction = documents.workflow_transaction
+
+    def hold_authorization(connection):
+        lock_authorizations(connection)
+        auth_locked.set()
+        assert release_single.wait(15)
+
+    @contextmanager
+    def observe_batch_connection(owner):
+        with transaction(owner) as connection:
+            batch_pid.append(connection.info.backend_pid)
+            batch_connected.set()
+            yield connection
+
+    def approve_batch():
+        try:
+            batch.batch_confirm_headings(actor_id=accounts["reviewer"]["account_id"], snapshot_id=sid,
+                object_ids=ids, expected_revision=revision)
+            return "committed", []
+        except ConsoleError as exc:
+            causes = []
+            cause = exc.__cause__
+            while cause is not None:
+                causes.append((type(cause).__name__, getattr(cause, "sqlstate", None)))
+                cause = cause.__cause__
+            return exc.code, causes
+
+    monkeypatch.setattr(single.workflow_review_store, "_lock_authorizations", hold_authorization)
+    monkeypatch.setattr(documents, "workflow_transaction", observe_batch_connection)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        winner = pool.submit(single.review_object, actor_id=accounts["reviewer"]["account_id"],
+            snapshot_id=sid, object_id=content_id, decision="approve", confirmed_object_type=_batch_type(content),
+            expected_revision=revision)
+        try:
+            assert auth_locked.wait(10)
+            contender = pool.submit(approve_batch)
+            assert batch_connected.wait(10)
+            deadline = monotonic() + 10
+            observed_wait = None
+            with psycopg.connect(workflow_postgres.dsn, autocommit=True) as observer:
+                while monotonic() < deadline:
+                    row = observer.execute("SELECT wait_event_type,wait_event FROM pg_stat_activity WHERE pid=%s",
+                                           (batch_pid[0],)).fetchone()
+                    if row == ("Lock", "advisory"):
+                        observed_wait = row
+                        break
+                    sleep(0.01)
+            assert observed_wait == ("Lock", "advisory"), "Batch did not reach actual PostgreSQL advisory-lock wait"
+        finally:
+            release_single.set()
+        winner.result(timeout=20)
+        assert contender.result(timeout=20) == (SNAPSHOT_OBJECT_WRITE_CONFLICT, [])
+    fresh = native(tmp_path, workflow_postgres)
+    after = _state(fresh, sid)
+    current = fresh.snapshot_objects(sid)
+    assert next(row["governance"]["validation_status"] for row in current
+                if row["object_id"] == content_id) == "approved"
+    assert all(row["governance"]["validation_status"] == "needs_review"
+               for row in current if row["object_id"] in ids)
+    assert len([event for event in after[4] if event.get("object_id") in ids + [content_id]]) == 1
 
 
 def test_second_object_storage_conflict_rolls_back_batch(storage, tmp_path, monkeypatch):
@@ -376,8 +671,6 @@ def test_http_rejection_does_not_write(storage, tmp_path, rejection):
 
 def test_new_process_restart_preserves_failed_and_committed_batch(storage, tmp_path, monkeypatch):
     import json
-    import subprocess
-    import sys
 
     console, accounts, sid, ids = _setup(tmp_path, storage)
     native = hasattr(console, "workflow_document_store")
@@ -391,44 +684,16 @@ def test_new_process_restart_preserves_failed_and_committed_batch(storage, tmp_p
             raise RuntimeError("a08_restart_failure")
         return original(**command)
 
-    def restarted_state():
-        code = '''
-import json, os, sys
-from pathlib import Path
-from tests.test_a08_heading_batch_atomic import _state
-from tests.test_v219_review_duty_queue import _console
-root, sid, mode = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
-if mode != "local":
-    from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
-    config = PostgresCanonicalConfig(dsn=os.environ["METIS_TEST_POSTGRES_DSN"])
-    if mode == "postgres":
-        from tests.test_review_batch_atomic_postgres import _console as native
-        console = native(root, config)
-    else:
-        from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
-        from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-        from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
-        console = PostgresWorkflowDurablePublicationConsole(
-            root=root, source_store=root / "sources", runtime=root / "runtime",
-            workflow_identity_store=PostgresWorkflowIdentityStore(config),
-            workflow_document_store=PostgresConcurrentWorkflowDocumentStore(config))
-else:
-    console = _console(root)
-print(json.dumps(_state(console, sid)))
-'''
-        completed = subprocess.run([sys.executable, "-c", code, str(tmp_path), sid, mode],
-                                   capture_output=True, text=True, timeout=30, check=True)
-        return json.loads(completed.stdout)
 
     monkeypatch.setattr(console, "review_object", fail_second)
     with pytest.raises(RuntimeError, match="a08_restart_failure"):
         console.batch_confirm_headings(actor_id=accounts["reviewer"]["account_id"], snapshot_id=sid,
                                        object_ids=ids, expected_revision=before[3])
-    assert restarted_state() == json.loads(json.dumps(before))
+    assert _new_process_state(tmp_path, sid, mode) == json.loads(json.dumps(before))
     monkeypatch.setattr(console, "review_object", original)
     console.batch_confirm_headings(actor_id=accounts["reviewer"]["account_id"], snapshot_id=sid,
                                    object_ids=ids, expected_revision=before[3])
-    assert restarted_state() == json.loads(json.dumps(_state(console, sid)))
+    assert _new_process_state(tmp_path, sid, mode) == json.loads(json.dumps(_state(console, sid)))
 
 
 @pytest.mark.parametrize("table", ["documents", "document_objects", "publish_authorizations", "review_events"])

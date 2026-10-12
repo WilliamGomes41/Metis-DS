@@ -83,6 +83,40 @@ jobs:
       - run: python -m compileall -q src tests
       - name: Verify architecture invariants
         run: pytest -q tests/test_architecture_invariants.py
+      - name: Prove A08 review regressions on the unchanged merged base
+        if: github.head_ref == 'fix/a08-review-completion' || github.ref == 'refs/heads/fix/a08-review-completion'
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/a08-before" 76da2d7e29e3b8af8e1fb411f27f22d99930e1c3
+          cp tests/test_a08_heading_batch_atomic.py "$RUNNER_TEMP/a08-before/tests/test_a08_heading_batch_atomic.py"
+          cd "$RUNNER_TEMP/a08-before"
+          set +e
+          pytest -q tests/test_a08_heading_batch_atomic.py -k 'native_post_commit_refresh_failure or native_batch_and_single_review_use_consistent_lock_order or native_final_commit_failure' --junitxml="$GITHUB_WORKSPACE/output/a08-before.xml"
+          result=$?
+          set -e
+          test "$result" -eq 1
+          cd "$GITHUB_WORKSPACE"
+          python - <<'PYCODE'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("output/a08-before.xml").getroot()
+          cases = list(root.iter("testcase"))
+          failed = [case for case in cases if case.find("failure") is not None]
+          assert len(cases) == 15 and len(failed) == 13
+          assert not list(root.iter("skipped")) and not list(root.iter("error"))
+          post_commit = [case for case in failed if "native_post_commit_refresh_failure" in case.get("name", "")]
+          assert len(post_commit) == 10
+          assert all("Committed batch reported failure" in case.find("failure").get("message", "") for case in post_commit)
+          lock = next(case for case in failed if "consistent_lock_order" in case.get("name", ""))
+          trace = ET.tostring(lock, encoding="unicode")
+          assert "DeadlockDetected" in trace or "40P01" in trace, "Missing actual native deadlock evidence"
+          print("A08 unchanged base: 10 committed-result failures, 1 native deadlock, 2 masked COMMIT errors; 2 true rollback controls passed; zero skipped")
+          PYCODE
+      - name: Upload A08 unchanged-base reproduction evidence
+        if: always() && (github.head_ref == 'fix/a08-review-completion' || github.ref == 'refs/heads/fix/a08-review-completion')
+        uses: actions/upload-artifact@v4
+        with:
+          name: a08-before-${{ matrix.python-version }}
+          path: output/a08-before.xml
+          if-no-files-found: error
       - name: Verify A08 atomic heading batches against native PostgreSQL
         if: ${{ !cancelled() }}
         run: pytest -q tests/test_a08_heading_batch_atomic.py --junitxml=output/a08-native.xml
@@ -96,7 +130,14 @@ jobs:
           assert cases, "A08 evidence is empty"
           assert not list(root.iter("skipped")), "A08 acceptance skipped required cases"
           assert not list(root.iter("failure")) and not list(root.iter("error")), "A08 acceptance failed"
-          required = ("test_native_final_commit_failure", "test_concurrent_same_revision_preserves_winner[postgres]", "test_second_object_storage_conflict_rolls_back_batch[postgres]")
+          required = (
+              "test_native_final_commit_failure",
+              "test_concurrent_same_revision_preserves_winner[postgres]",
+              "test_second_object_storage_conflict_rolls_back_batch[postgres]",
+              "test_native_post_commit_refresh_failure_preserves_success",
+              "test_native_batch_and_single_review_use_consistent_lock_order",
+              "test_batch_and_single_review_overlap_preserves_winner[postgres-single]",
+          )
           for name in required:
               assert any(name in case.get("name", "") for case in cases), f"Missing executed native case: {name}"
           print(f"A08: {len(cases)} executed, zero skipped, zero failures/errors")
