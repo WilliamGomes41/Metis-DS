@@ -429,3 +429,54 @@ print(json.dumps(_state(console, sid)))
     console.batch_confirm_headings(actor_id=accounts["reviewer"]["account_id"], snapshot_id=sid,
                                    object_ids=ids, expected_revision=before[3])
     assert restarted_state() == json.loads(json.dumps(_state(console, sid)))
+
+
+@pytest.mark.parametrize("table", ["documents", "document_objects", "publish_authorizations", "review_events"])
+@pytest.mark.parametrize("member", [0, 1])
+def test_native_sql_write_failure_rolls_back_batch(workflow_postgres, tmp_path, monkeypatch, table, member):
+    from contextlib import contextmanager
+    import psycopg
+    from psycopg import sql
+    from tests.test_review_batch_atomic_postgres import _console as native
+
+    factory = lambda root: native(root, workflow_postgres)
+    console, accounts, sid, ids = _setup(tmp_path, factory)
+    client = _client(console)
+    before = _state(console, sid)
+    failures = []
+    original_boundary = console._heading_batch_mutation
+
+    @contextmanager
+    def observe_failure(snapshot_id):
+        try:
+            with original_boundary(snapshot_id):
+                yield
+        except Exception as exc:
+            while exc.__cause__ is not None:
+                exc = exc.__cause__
+            failures.append(exc)
+            raise
+
+    monkeypatch.setattr(console, "_heading_batch_mutation", observe_failure)
+    with psycopg.connect(workflow_postgres.dsn, autocommit=True) as connection:
+        if table == "documents":
+            connection.execute("CREATE SEQUENCE workflow.a08_write_counter")
+            condition = sql.SQL("nextval('workflow.a08_write_counter') = {} AND NEW.snapshot_id = {}").format(
+                sql.Literal(member + 1), sql.Literal(sid))
+            action = sql.SQL("UPDATE")
+        elif table == "document_objects":
+            condition = sql.SQL("NEW.object_id = {} AND NEW.payload->'governance'->>'validation_status' = 'approved'").format(sql.Literal(ids[member]))
+            action = sql.SQL("INSERT")
+        else:
+            condition = sql.SQL("NEW.object_id = {}").format(sql.Literal(ids[member]))
+            action = sql.SQL("INSERT")
+        # PostgreSQL itself rejects a statement mid-write. The wrapper above
+        # only records the propagated native error; it does not mock storage.
+        body = sql.SQL("BEGIN IF {} THEN RAISE EXCEPTION 'a08_native_write_failure'; END IF; RETURN NEW; END;").format(condition)
+        connection.execute(sql.SQL("CREATE FUNCTION workflow.a08_write_failure() RETURNS trigger LANGUAGE plpgsql AS {}").format(sql.Literal(body.as_string(connection))))
+        connection.execute(sql.SQL("CREATE TRIGGER a08_write_failure AFTER {} ON workflow.{} FOR EACH ROW EXECUTE FUNCTION workflow.a08_write_failure()").format(action, sql.Identifier(table)))
+    assert _post(client, sid, ids, before[3]).status_code >= 400
+    assert len(failures) == 1
+    assert isinstance(failures[0], psycopg.errors.RaiseException)
+    assert "a08_native_write_failure" in str(failures[0])
+    assert _state(factory(tmp_path), sid) == before
