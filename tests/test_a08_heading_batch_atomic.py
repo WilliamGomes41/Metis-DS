@@ -372,3 +372,60 @@ def test_http_rejection_does_not_write(storage, tmp_path, rejection):
     response = _post(client, sid, ids, before[3])
     assert response.status_code in {400, 403}
     assert _state(storage(tmp_path), sid) == before
+
+
+def test_new_process_restart_preserves_failed_and_committed_batch(storage, tmp_path, monkeypatch):
+    import json
+    import subprocess
+    import sys
+
+    console, accounts, sid, ids = _setup(tmp_path, storage)
+    native = hasattr(console, "workflow_document_store")
+    review_native = hasattr(console, "workflow_review_store")
+    mode = "postgres" if review_native else "postgres-local-review" if native else "local"
+    before = _state(console, sid)
+    original = console.review_object
+
+    def fail_second(**command):
+        if command["object_id"] == ids[1]:
+            raise RuntimeError("a08_restart_failure")
+        return original(**command)
+
+    def restarted_state():
+        code = '''
+import json, os, sys
+from pathlib import Path
+from tests.test_a08_heading_batch_atomic import _state
+from tests.test_v219_review_duty_queue import _console
+root, sid, mode = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+if mode != "local":
+    from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+    config = PostgresCanonicalConfig(dsn=os.environ["METIS_TEST_POSTGRES_DSN"])
+    if mode == "postgres":
+        from tests.test_review_batch_atomic_postgres import _console as native
+        console = native(root, config)
+    else:
+        from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
+        from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
+        from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
+        console = PostgresWorkflowDurablePublicationConsole(
+            root=root, source_store=root / "sources", runtime=root / "runtime",
+            workflow_identity_store=PostgresWorkflowIdentityStore(config),
+            workflow_document_store=PostgresConcurrentWorkflowDocumentStore(config))
+else:
+    console = _console(root)
+print(json.dumps(_state(console, sid)))
+'''
+        completed = subprocess.run([sys.executable, "-c", code, str(tmp_path), sid, mode],
+                                   capture_output=True, text=True, timeout=30, check=True)
+        return json.loads(completed.stdout)
+
+    monkeypatch.setattr(console, "review_object", fail_second)
+    with pytest.raises(RuntimeError, match="a08_restart_failure"):
+        console.batch_confirm_headings(actor_id=accounts["reviewer"]["account_id"], snapshot_id=sid,
+                                       object_ids=ids, expected_revision=before[3])
+    assert restarted_state() == json.loads(json.dumps(before))
+    monkeypatch.setattr(console, "review_object", original)
+    console.batch_confirm_headings(actor_id=accounts["reviewer"]["account_id"], snapshot_id=sid,
+                                   object_ids=ids, expected_revision=before[3])
+    assert restarted_state() == json.loads(json.dumps(_state(console, sid)))
