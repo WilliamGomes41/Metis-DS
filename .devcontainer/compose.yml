@@ -11,6 +11,7 @@ services:
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile
+      target: workspace
     command: sleep infinity
     volumes:
       - ..:/workspaces/metis:cached
@@ -24,6 +25,8 @@ services:
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile
+      # Offline test assets (Playwright, Docling+models, PI-05 model, osv DB) baked at build time.
+      target: runner
     command: ["bash", "/workspaces/metis/scripts/sandbox_runner.sh"]
     user: vscode
     working_dir: /workspaces/metis
@@ -57,6 +60,7 @@ services:
     dns_search: []
     extra_hosts:
       - "sandbox-db:172.30.254.10"
+      - "sandbox-azurite:172.30.254.30"
     cap_drop:
       - ALL
     security_opt:
@@ -68,6 +72,20 @@ services:
     depends_on:
       sandbox-db:
         condition: service_healthy
+      sandbox-azurite:
+        condition: service_started
+  # Blob emulator for CON-03. Internal network only (no egress), in-memory, fixed IP.
+  sandbox-azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.37.0
+    command: ["azurite-blob", "--blobHost", "0.0.0.0", "--blobPort", "10000",
+              "--inMemoryPersistence", "--skipApiVersionCheck", "--disableProductStyleUrl"]
+    networks:
+      sandbox:
+        ipv4_address: 172.30.254.30
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
   sandbox-db:
     image: postgres:16-bookworm
     environment:

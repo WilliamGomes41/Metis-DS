@@ -111,3 +111,23 @@ def test_supplied_skill_preserves_observe_only_and_offline_contract():
     assert "Stop immediately if isolation cannot be confirmed" in text
     for name in ("domain-rules.md", "example-report.md", "static-patterns.md"):
         assert (skill / "references" / name).is_file()
+
+
+def test_offline_assets_pass_through_and_hub_is_forced_offline(monkeypatch):
+    monkeypatch.delenv("METIS_TEST_POSTGRES_DSN", raising=False)
+    monkeypatch.delenv("METIS_TEST_AZURITE_CONNECTION_STRING", raising=False)
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", "/opt/ms-playwright")
+    monkeypatch.setenv("HF_HUB_OFFLINE", "0")
+    monkeypatch.setenv("AZURE_STORAGE_CONNECTION_STRING", "prod")
+    env = sandbox.sandbox_environment(postgres=True)
+    assert env["PLAYWRIGHT_BROWSERS_PATH"] == "/opt/ms-playwright"
+    assert env["HF_HUB_OFFLINE"] == "1" and env["TRANSFORMERS_OFFLINE"] == "1"
+    assert "172.30.254.30:10000" in env["METIS_TEST_AZURITE_CONNECTION_STRING"]
+    assert "AZURE_STORAGE_CONNECTION_STRING" not in env
+
+
+def test_external_blob_store_is_rejected(monkeypatch):
+    monkeypatch.delenv("METIS_TEST_POSTGRES_DSN", raising=False)
+    monkeypatch.setenv("METIS_TEST_AZURITE_CONNECTION_STRING", "BlobEndpoint=https://prod.blob.core.windows.net/")
+    with pytest.raises(SystemExit, match="Refusing non-sandbox METIS_TEST_AZURITE"):
+        sandbox.sandbox_environment()
