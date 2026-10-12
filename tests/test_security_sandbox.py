@@ -64,6 +64,34 @@ def test_internal_route_and_unreachable_probe_pass(monkeypatch):
         sandbox.assert_isolated_network()
 
 
+INTERNAL_DEFAULT = "eth0 00000000 01FE1EAC 0003 0 0 0 00000000 0 0 0\n"
+
+
+@pytest.mark.parametrize("probe", [OSError(errno.EHOSTUNREACH, "unreachable"), TimeoutError("timeout")])
+def test_internal_gateway_default_route_passes_when_egress_and_dns_fail(monkeypatch, probe):
+    routes(monkeypatch, ipv4=INTERNAL_DEFAULT)
+    with patch.object(socket, "getaddrinfo", side_effect=socket.gaierror("no dns")), \
+         patch.object(socket, "create_connection", side_effect=probe):
+        sandbox.assert_isolated_network()
+
+
+def test_internal_gateway_default_route_rejected_when_dns_resolves(monkeypatch):
+    routes(monkeypatch, ipv4=INTERNAL_DEFAULT)
+    with patch.object(socket, "getaddrinfo", return_value=[("ok",)]), \
+         patch.object(socket, "create_connection") as connection:
+        with pytest.raises(SystemExit, match="DNS"):
+            sandbox.assert_isolated_network()
+    connection.assert_not_called()
+
+
+def test_internal_gateway_default_route_rejected_when_egress_connects(monkeypatch):
+    routes(monkeypatch, ipv4=INTERNAL_DEFAULT)
+    with patch.object(socket, "getaddrinfo", side_effect=socket.gaierror("no dns")), \
+         patch.object(socket, "create_connection"):
+        with pytest.raises(SystemExit, match="reachable"):
+            sandbox.assert_isolated_network()
+
+
 @pytest.mark.parametrize("result", [None, TimeoutError("timeout")])
 def test_reachable_or_uncertain_probe_blocks_tests(monkeypatch, result):
     routes(monkeypatch)

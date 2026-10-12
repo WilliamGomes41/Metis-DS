@@ -41,8 +41,12 @@ POSTGRES_TESTS = (
 def assert_isolated_network() -> None:
     """Reject default/external routes; then require an explicit unreachable result.
 
+    A default route is tolerated only when its gateway lies inside the internal
+    sandbox network (Docker internal-network gateway); in that case the external
+    probe must fail (unreachable or timeout) AND external DNS must fail.
     This verifies the expected container namespace, not arbitrary malware containment.
     """
+    internal_default = False
     for line in Path("/proc/net/route").read_text().splitlines()[1:]:
         fields = line.split()
         if not int(fields[3], 16) & 1:
@@ -50,8 +54,13 @@ def assert_isolated_network() -> None:
         destination = ipaddress.IPv4Address(bytes.fromhex(fields[1])[::-1])
         mask = str(ipaddress.IPv4Address(bytes.fromhex(fields[7])[::-1]))
         network = ipaddress.IPv4Network((str(destination), mask), strict=False)
-        if not (network.subnet_of(SANDBOX_NETWORK) or network.subnet_of(ipaddress.ip_network("127.0.0.0/8"))):
-            raise SystemExit("Network isolation unconfirmed: external/default IPv4 route.")
+        if network.subnet_of(SANDBOX_NETWORK) or network.subnet_of(ipaddress.ip_network("127.0.0.0/8")):
+            continue
+        gateway = ipaddress.IPv4Address(bytes.fromhex(fields[2])[::-1])
+        if network.prefixlen == 0 and gateway in SANDBOX_NETWORK:
+            internal_default = True
+            continue
+        raise SystemExit("Network isolation unconfirmed: external/default IPv4 route.")
     for line in Path("/proc/net/ipv6_route").read_text().splitlines():
         fields = line.split()
         flags = int(fields[8], 16)
@@ -60,11 +69,20 @@ def assert_isolated_network() -> None:
         network = ipaddress.IPv6Network((ipaddress.IPv6Address(int(fields[0], 16)), int(fields[1], 16)), strict=False)
         if not (network.subnet_of(ipaddress.ip_network("::1/128")) or network.subnet_of(ipaddress.ip_network("fe80::/10"))):
             raise SystemExit("Network isolation unconfirmed: external/default IPv6 route.")
+    if internal_default:
+        try:
+            socket.getaddrinfo("example.com", 443)
+        except OSError:
+            pass
+        else:
+            raise SystemExit("External DNS resolves; refusing security execution.")
     try:
         with socket.create_connection(("1.1.1.1", 443), timeout=2):
             pass
     except OSError as exc:
         if exc.errno in {errno.ENETUNREACH, errno.EHOSTUNREACH}:
+            return
+        if internal_default and isinstance(exc, TimeoutError):
             return
         raise SystemExit("Network isolation unconfirmed: probe did not report unreachable.") from exc
     raise SystemExit("External network reachable; refusing security execution.")
