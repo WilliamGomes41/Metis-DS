@@ -473,7 +473,7 @@ def test_native_batch_and_single_review_use_consistent_lock_order(workflow_postg
     # Same host/database, independent disposable mirrors, as in the existing
     # native batch/batch proof. This does not authorize multi-instance hosting.
     from tests.semantic_fixture_support import bind_fixture_selections
-    from src.proportionate_review_v1 import normal_risk_batch_queue
+    from src.proportionate_review_v1 import normal_risk_batch_queue, _batch_type
     batch = native(tmp_path, workflow_postgres)
     bind_fixture_selections(batch)
     accounts = _accounts(batch)
@@ -519,7 +519,7 @@ def test_native_batch_and_single_review_use_consistent_lock_order(workflow_postg
     monkeypatch.setattr(documents, "workflow_transaction", observe_batch_connection)
     with ThreadPoolExecutor(max_workers=2) as pool:
         winner = pool.submit(single.review_object, actor_id=accounts["reviewer"]["account_id"],
-            snapshot_id=sid, object_id=content_id, decision="approve", confirmed_object_type=content["object_type"],
+            snapshot_id=sid, object_id=content_id, decision="approve", confirmed_object_type=_batch_type(content),
             expected_revision=revision)
         try:
             assert auth_locked.wait(10)
