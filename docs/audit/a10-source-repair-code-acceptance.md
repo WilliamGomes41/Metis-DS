@@ -3,6 +3,63 @@
 Implementation issue: #609. Acceptance/progress: #560.
 Change class: B. Rewrite risk: none. No migration, merge or deployment.
 
+## Follow-up to bounded review of PR #610
+
+The first-pass acceptance below was too broad: it covered source-unit repair,
+but did not exercise altered geometry on a historical merge target. On PR head
+`7a8ff24f`, the real merge POST accepted changed locator, page and bbox on the
+second object in both historical HTML and native PDF. On each backend, six
+negative cases failed their rejection assertion and two valid controls passed.
+This was reproduced locally and on native PostgreSQL, after deleting only the
+old cache and restarting with another cacheroot.
+
+The existing catalog and `_verified_object_source_position` now use one
+`_verified_catalog_fragment` check in their existing owner. Every merged object's
+references are checked before correction/supersession/audit writes. The merge
+position/text checks, proposal-selected validation and transaction boundaries
+are retained. The narrow helper removes duplicated reference validation; it
+does not resolve bytes, construct candidates or create a second authority.
+
+Tested follow-up code/test revision: `8847ca389be5d529a427828eacdeba600d78eef8`.
+Published equivalent code tree: commit `9f08c364f09f9797a87db181a7470268ade78ae1`.
+The combined native run now has **76 A10 cases and 98 supporting cases: 174
+passed, zero skips/errors/failures**. The 16 additional merge cases cover valid
+merge plus changed locator/page/bbox, HTML/PDF, local/native PostgreSQL. Rejection
+compares complete history, supersession, bindings, envelope, revision and audit
+after fresh-runtime reconstruction.
+
+The missing PR contract fields were a separate reporting defect. `Change class`,
+`Promise`, `Proof`, `Touches lifecycle invariants` and `Rewrite risk` now have
+individual machine-readable lines. The local change-contract validator and the
+new pull-request CI `change-contract` job both pass. The existing CI PostgreSQL
+job now explicitly runs this A10 file on Python 3.12 and 3.13, rejects empty or
+skipped/failed evidence and uploads its JUnit record. General CI and production
+acceptance remain separate from these specific steps.
+
+Follow-up final verification: repository preflight, release-control preflight,
+compileall, architecture boundaries, architecture invariants (6 tests) and the
+PR-body change-contract validator pass. The full suite on the follow-up code
+reports **3462 passed, 418 skipped, 4 failed** in 316.40 seconds: the same four
+independently reproduced baseline failures listed below. These are not resolved
+or reclassified by this A10 patch.
+
+On [pull-request CI run 38311980702](https://github.com/WilliamGomes41/Metis-DS/actions/runs/38311980702)
+for code commit `9f08c364`, **both Python 3.12 and 3.13** completed all three A10
+steps successfully: native execution, no-skips/no-errors evidence validation and
+JUnit upload. The change-contract and architecture-boundaries jobs also passed.
+The general test jobs were still running when this evidence was recorded;
+this does not assert that the entire CI run passed. Later documentation-only
+commits leave the tested product/test/workflow blobs unchanged.
+
+Follow-up surface verdict: APPROVE WITH NOTES within this bounded scope. The
+shared reference check removes duplication and closes the demonstrated historical
+merge bypass without changing authorization, creation, source authority or
+transaction ownership. Deployment and production acceptance remain open.
+
+The sections below retain the first-pass diagnosis and executed evidence. Their
+60-case total and initial surface verdict describe that earlier pass and do not
+include the historical-merge follow-up.
+
 ## Findings and scope
 
 Inspected base: `293a69a7e5660e0f222dab3856c59b6494b0c7b9`.
