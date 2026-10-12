@@ -64,10 +64,9 @@ RUN curl -fsSL -o /usr/local/bin/osv-scanner \
         "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" \
     && echo "${OSV_SCANNER_SHA256}  /usr/local/bin/osv-scanner" | sha256sum -c - \
     && chmod 0755 /usr/local/bin/osv-scanner \
-    && mkdir -p /opt/osv-db/osv-scanner/PyPI \
-    && curl -fsSL -o /opt/osv-db/osv-scanner/PyPI/all.zip \
-        https://osv-vulnerabilities.storage.googleapis.com/PyPI/all.zip \
+    && mkdir -p /opt/osv-db \
+    && (OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY=/opt/osv-db osv-scanner scan --offline-vulnerabilities --download-offline-databases -L requirements.txt:/tmp/metis-requirements/requirements.lock >/dev/null; rc=$?; test "$rc" -le 1) \
     && chmod -R a+rX /opt/osv-db \
-    && (osv-scanner scan --offline-vulnerabilities -L requirements.txt:/tmp/metis-requirements/requirements.lock >/dev/null; rc=$?; test "$rc" -le 1)
+    && (OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY=/opt/osv-db osv-scanner scan --offline-vulnerabilities -L requirements.txt:/tmp/metis-requirements/requirements.lock >/dev/null; rc=$?; test "$rc" -le 1)
 ENV HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1
