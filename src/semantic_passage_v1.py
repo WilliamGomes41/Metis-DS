@@ -41,7 +41,7 @@ RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION = "recommendation-semantics-evidence-v
 SUPPORTED_RECOMMENDATION_SEMANTICS_EVIDENCE_VERSIONS = (
     "recommendation-semantics-evidence-v1", RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION,
 )
-STRENGTH_BINDING_VERSION = "recommendation-strength-binding-v5"
+STRENGTH_BINDING_VERSION = "recommendation-strength-binding-v6"
 SELECTION_ORIGIN_PROPOSAL = "proposal_selected"
 SELECTION_ORIGIN_COVERAGE = "coverage_remainder"
 ALLOWED_PROPOSED_TYPES = frozenset(
@@ -297,7 +297,7 @@ def _source_heading(public, source):
     return source.get("object_type") == "heading" or public.get("heading") == public["text"]
 
 
-def _applicable_strength_ranges(selected, evidence_by_id, *, heading_selection=None):
+def _applicable_strength_ranges(selected, evidence_by_id, *, candidate_selection=None):
     """Source-owned ranges, not model proximity or a matching section alone.
 
     Candidate text and whitespace-adjacent trailing stamps belong to the
@@ -313,16 +313,16 @@ def _applicable_strength_ranges(selected, evidence_by_id, *, heading_selection=N
                            "text": public["text"][span[0]:span[1]],
                            "reason": "adjacent_strength_label"})
             end = span[1]
-            # Punctuation between stamps does not erase a conflicting label.
-            while end < len(public["text"]) and public["text"][end] in ".!?:;,":
-                end += 1
     # Historical producers also expose a stamp as its own source fragment.
     # It must be the next complete block after the complete selection, with
     # no intervening prose or section boundary. Never borrow a preceding stamp.
-    last = selected[-1]
+    candidate_selection = candidate_selection or selected
+    last = candidate_selection[-1]
     owner = evidence_by_id[last["block_id"]][0]
-    # Continue after any inline stamps consumed above, not just the core end.
-    if not owner["text"][end:].strip():
+    # Core-local inline stamps may extend the last selected span. They cannot
+    # move the standalone-label boundary before another selected block.
+    end = max(last["end"], end) if last["block_id"] == selected[-1]["block_id"] else last["end"]
+    if all(char.isspace() or char in ".!?:;," for char in owner["text"][end:]):
         by_position = {public["position"]: (public, source) for public, source in evidence_by_id.values()}
         position = owner["position"] + 1
         while position in by_position:
@@ -335,9 +335,8 @@ def _applicable_strength_ranges(selected, evidence_by_id, *, heading_selection=N
                            "end": len(following["text"]), "text": following["text"],
                            "reason": "adjacent_strength_label"})
             position += 1
-    heading_selection = heading_selection or selected
-    first = evidence_by_id[heading_selection[0]["block_id"]][0]
-    owner = evidence_by_id[heading_selection[-1]["block_id"]][0]
+    first = evidence_by_id[candidate_selection[0]["block_id"]][0]
+    owner = evidence_by_id[candidate_selection[-1]["block_id"]][0]
     headings = [public for public, source in evidence_by_id.values()
                 if _source_heading(public, source)]
     path = first["section_path"]
@@ -413,7 +412,7 @@ def _recommendation_semantics_from_proposal(
             _fail("recommendation_strength_evidence_outside_candidate")
         core["text"] = evidence_by_id[core["block_id"]][0]["text"][core["start"]:core["end"]]
         strength_selection = [core]
-    applicable = _applicable_strength_ranges(strength_selection, evidence_by_id, heading_selection=selected)
+    applicable = _applicable_strength_ranges(strength_selection, evidence_by_id, candidate_selection=selected)
     cues = [match.group() for row in applicable for match in source_strength_cues(row["text"])]
     strengths = {source_literal_strength(cue) for cue in cues}
     directions = {source_label_direction(cue) for cue in cues} - {None}

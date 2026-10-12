@@ -5,8 +5,103 @@ Touches lifecycle invariants: no
 Rewrite risk: none
 Assigned issue: #557
 
-Current correction: see “Audit corrections on 8f1cd76” below. Earlier dated
-results document intermediate revisions, not the final verification result.
+Current correction: see “Completion review on main 3008176” below. Earlier dated
+results document intermediate revisions, not the current verification result.
+
+## Completion review on main 3008176 — 2026-10-12
+
+William explicitly reassigned A07 for completion on 12 October. Issue #557 is the
+single execution/acceptance issue for this continuation. PR #602 is merged, with
+merge commit 721f021bfd0cbb59ef50fc9dce24d8be39618462. Its exact-head hosted CI,
+source-processing-proof and Docling acceptance succeeded (runs 38173212439,
+38173212523 and 38173212389). Those runs precede the two post-merge review findings
+and do not prove this continuation. No A08 behavior is changed.
+
+### Existing mechanism and intended correction
+
+Class B, Rewrite risk: none. Applicability remains a pure calculation in
+semantic_passage_v1. Provider proposals pass existing literal field binding;
+semantic_units_from_proposal and validate_bound_recommendation_semantics share
+_recommendation_semantics_from_proposal and _applicable_strength_ranges.
+Deterministic knowledge_materialisation_v1 remains the sole candidate creator;
+transform and Admission recheck its output without rewriting text/identity/mapping.
+Source reconstruction, review, publication, concurrency and storage owners remain
+unchanged. No new authority, schema, store, lifecycle or migration is introduced.
+
+Inline strength cues belong to the bound recommendation core and its directly
+adjacent label sequence. Standalone labels begin after the entire selected
+candidate, not after the core alone. Genuine shared-heading scope continues to
+cover the entire selection. Whitespace and the existing punctuation delimiter set
+may separate labels, but intervening prose closes the sequence. Legacy V1 without
+a normative core retains its selection contract. Existing successful evidence
+schemas remain unchanged; replay advances from binding-v5 to binding-v6 so a
+previously validated proposal is not silently reused under corrected judgments.
+
+These validators mutate no durable state. Formation rejection uses the existing
+quarantine/source-work mechanism, and fatal failures retain the previous bundle.
+Authorized ingest/reprocessing still owns the existing atomic commit/CAS boundary.
+Duplicate/restart/recovery semantics are unchanged apart from replay invalidation.
+Published history and human review decisions are not modified; rollback is not
+historical data repair. Rollback must retain a current reader for existing metadata
+and must not silently restore the known borrowing/conflict bypasses for new work.
+
+### Reproduction, diagnosis and evidence
+
+Python 3.12.14 with retained requirements-dev.lock dependencies; synthetic source
+fragments and a fixed provider, no production data or live-provider calls.
+
+The original 79 A07 tests pass on unmodified current main. The new minimized loop
+reproduces both review findings and a positive-control failure: compact conflicting
+labels are accepted, a between-core-and-tail label is borrowed, and a valid label
+after the complete multi-block selection is rejected. Source reconstruction retains
+positions 0 core / 1 label / 2 tail, falsifying lost block order. The standalone
+search uses the core's end rather than the full selection; the caller consumes
+punctuation before the helper's required whitespace check. Correct the existing
+owners locally; no second binder or alternate materialisation path is needed.
+
+| Claim | Executed check | Result / boundary |
+| --- | --- | --- |
+| Both review patterns and positive control are detectable | Final test fixtures copied onto detached unchanged main 3008176; `pytest -q tests/test_a07_strength_binding.py -k 'complete_multiblock or explicit_trailing_stamp or compact_conflict or complete_selection_boundary' --tb=no` | 19 failed, 9 passed, 76 deselected; includes real formation/transform/Admission |
+| Same scenarios corrected | Same loop on repaired code | 28 pass in the full targeted set; synthetic exact-source/provider evidence |
+| Original A07 plus affected downstream routes | A07, source_strength_labels, source_evidence_resolution_v1, D3.2/D3.3/D3.4, source_bound_fields_v2, recommendation_context_v3, recoverable_formation_v1, pdf_line_gutter_pipeline, architecture_invariants | 289 passed, 1 optional backend skip; includes 104 A07 tests and persisted restart/replay/fatal-replacement/source-export proof |
+| Fix does not erase useful labels or cross prose | Separate public V1/V2/V3 probe: consistent compact labels and strong label followed by prose then weak label | All three routes retain strong semantics; intervening prose is not traversed |
+| Source text and identity remain authoritative | Valid multi-block fixed-provider candidate followed by reordered label boundary at real transform and Admission | Exact original candidate retained; reordered boundary rejected without input mutation; rejected formation retains source work |
+| Known local failures are independent | Fresh bounded_model_transport and security_harden_wave3 tests on unchanged 3008176 | Same four failures, 29 passed; parent-death worker lookup and HTTPS SNI/redirect/rebinding; not modified or hidden |
+
+Full local suite: 3399 passed, 308 skipped, 4 failed in 332.15s. The failures are
+exactly the four freshly reproduced on unchanged main above; no controls were
+removed, skipped or weakened. Repository preflight (981 files), release-control
+preflight, architecture boundaries, compileall, Product API compatibility and
+whitespace checks pass. The local full-suite gate is not green. New-head hosted
+evidence is reported in the completion PR and issue #557 when available. No live
+Azure, original-user production acceptance or historical data inventory is inferred.
+
+### Separate surface and adversarial review
+
+Surface verdict: APPROVE WITH NOTES. Two existing product modules plus one existing
+test file: 15 product additions / 14 deletions, 78 test additions / 3 deletions.
+No new product file, helper, flag, store or candidate creator. The deterministic
+materialisation module is unchanged. AST branch signals (ifs, loops, handlers,
+conditional expressions and boolean decisions) are 18 -> 18 for applicability and
+4 -> 7 for delimiter scanning. The existing applicability algorithm exceeds the
+usual 12 signal; its existing selected/adjacent/shared-heading responsibilities
+remain local, and this correction adds no net decisions. Do not extract wrappers
+solely to lower the signal.
+
+The separate review challenges public V1/V2/V3 validation, candidate-selectable
+versus evidence-only blocks, valid and invalid multi-block boundaries, compact
+conflicts, consistent cues and intervening prose, real transform/Admission,
+quarantine and source retention, current input immutability, old replay identity,
+and the existing persistence/restart/review/serving tests. No new durable write or
+concurrency mechanism is present. Native storage on the continuation head and
+live production remain separate acceptance evidence; no broad security, capacity,
+clinical correctness or historical-remediation claim is made.
+
+The code can move to reviewed merge only after required new-head checks. A07
+production acceptance remains open until the deployed revision and original user
+operation are established. There is no demonstrated dependency requiring A07
+production acceptance before investigation of A08; this continuation does not
+start or implement A08.
 
 ## Before implementation: evidence and decision
 

@@ -121,11 +121,86 @@ def test_v3_provider_to_candidate_and_admission_is_independent():
     assert not obj.get('confirmed_recommendation_semantics')
 
 
-@pytest.mark.parametrize("separator", [" ", "; ", ". "])
-def test_explicit_trailing_stamp_cannot_hide_another_strength(separator):
+@pytest.mark.parametrize('version', ['v1', 'v2', 'v3'])
+@pytest.mark.parametrize("separator", [" ", "; ", ". ", ";", ",", ".", ":"])
+def test_explicit_trailing_stamp_cannot_hide_another_strength(separator, version):
     fragments, candidates, p = case(gap="Sterk – tegen" + separator + "Zwak – tegen", explicit=('Sterk – tegen', 'b'))
     with pytest.raises(SemanticPassageError, match='recommendation_strength_evidence_conflict'):
-        validate(fragments, candidates, p)
+        validate(fragments, candidates, p, version)
+
+
+@pytest.mark.parametrize('version', ['v2', 'v3'])
+@pytest.mark.parametrize('label_after_selection', [False, True])
+def test_standalone_stamp_binds_only_after_complete_multiblock_selection(version, label_after_selection):
+    from src.pre_review_semantic_v1 import _candidate_fragments
+    fragments, _, proposal = case()
+    core = fragments[-1]
+    tail = _fragment('tail', 'Bij deze patiënten.', section_path=['Aanbevelingen'])
+    label = _fragment('label', 'Sterk – tegen', section_path=['Aanbevelingen'])
+    fragments = [core, tail, label] if label_after_selection else [core, label, tail]
+    candidates = _candidate_fragments(fragments)
+    assert candidates == [core, tail]
+    blocks = semantic_source_blocks(fragments)
+    core_block, tail_block, label_block = [next(b for b in blocks if f['fragment_id'] in b['source_fragment_ids']) for f in [core, tail, label]]
+    def whole(block):
+        return {'block_id': block['block_id'], 'start': 0, 'end': len(block['text'])}
+    obj = proposal['objects'][0]
+    obj['spans'] = [whole(core_block), whole(tail_block)]
+    obj['recommendation_semantics'].update(strength='strong', strength_status='explicit', strength_evidence=whole(label_block))
+    if label_after_selection:
+        decisions = validate(fragments, candidates, proposal, version)
+        assert decisions[0]['proposed_recommendation_semantics']['strength'] == 'strong'
+    else:
+        with pytest.raises(SemanticPassageError, match='recommendation_strength_evidence_not_applicable'):
+            validate(fragments, candidates, proposal, version)
+
+
+@pytest.mark.parametrize('separator', [';', ','])
+def test_compact_conflict_is_quarantined_by_real_formation(separator):
+    text = CORE + ' Sterk – tegen' + separator + 'Zwak – tegen'
+    def explicit(proposal):
+        obj = proposal['objects'][0]
+        obj['spans'][0]['literal'] = CORE
+        obj['field_evidence']['recommendation_evidence_span']['span']['literal'] = CORE
+        obj['recommendation_semantics'].update(strength='strong', strength_status='explicit',
+            strength_evidence={**obj['spans'][0], 'literal': 'Sterk – tegen'})
+    _, rows, obj, _ = prepare(CORE, fragments=source(text), mutate=explicit, allow_empty=True)
+    assert obj is None
+    from src.source_accountability_v1 import evidence_of
+    assert any(CORE in (evidence_of(row).get('text') or '') for row in rows)
+
+
+def test_complete_selection_boundary_is_rechecked_without_rewriting_candidate():
+    from src.semantic_transform_generic_v1 import transform
+    from src.admission_gate_v1 import apply_admission_gate
+    tail = 'Bij deze patiënten.'
+    label = 'Sterk – tegen'
+    fragments = [_fragment('core', CORE, section_path=['Aanbevelingen']),
+                 _fragment('tail', tail, section_path=['Aanbevelingen']),
+                 _fragment('label', label, section_path=['Aanbevelingen'])]
+    blocks = semantic_source_blocks(fragments)
+    def explicit(proposal):
+        obj = proposal['objects'][0]
+        obj['spans'].append({'block_id': blocks[1]['block_id'], 'literal': tail, 'occurrence': None})
+        obj['recommendation_semantics'].update(strength='strong', strength_status='explicit',
+            strength_evidence={'block_id': blocks[2]['block_id'], 'literal': label, 'occurrence': None})
+    spec, rows, obj, _ = prepare(CORE, fragments=fragments, mutate=explicit)
+    assert obj['content']['clean_text'] == CORE + ' ' + tail
+    assert obj['proposed_recommendation_semantics']['strength'] == 'strong'
+    original = deepcopy((spec, rows))
+    changed = [fragments[0], fragments[2], fragments[1]]
+    with pytest.raises(SemanticPassageError, match='recommendation_strength_evidence_not_applicable'):
+        transform(spec, {'canonical_source': obj['source']}, changed)
+    gated = apply_admission_gate(rows, klasse='richtlijn', fragments=changed,
+                                document_version='1', source_hash='a' * 64)
+    admission = next(row for row in gated if row['object_id'] == obj['object_id'])['metadata']['admission']
+    assert admission['gate_result'] == 'blocked'
+    assert 'recommendation_strength_evidence_not_applicable' in admission['reason_codes']
+    assert (spec, rows) == original
+    _, rejected_rows, rejected, _ = prepare(CORE, fragments=changed, mutate=explicit, allow_empty=True)
+    assert rejected is None
+    from src.source_accountability_v1 import evidence_of
+    assert any(CORE in (evidence_of(row).get('text') or '') for row in rejected_rows)
 
 
 def test_heading_after_b_and_closed_heading_do_not_bind():
