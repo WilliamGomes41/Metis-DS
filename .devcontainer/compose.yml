@@ -37,6 +37,8 @@ services:
       - ../output/runtime/sandbox-runner:/workspaces/metis/output/runtime/sandbox-runner:rw
       # security_sandbox.py writes reports here (RUNTIME); everything else stays read-only.
       - ../output/runtime/security-sandbox:/workspaces/metis/output/runtime/security-sandbox:rw
+      # Host-visible startup diagnostics (readable from a recovery container).
+      - ../output/runtime/sandbox-runner-diag:/workspaces/metis/output/runtime/sandbox-runner-diag:rw
     healthcheck:
       # Build fails hard (workspace waits on service_healthy) if the runner never
       # becomes ready, instead of a silent "runner not ready" later.
