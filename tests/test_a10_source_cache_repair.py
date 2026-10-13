@@ -59,6 +59,10 @@ class DiskBlobTransport:
 def installed(root, cache, backend, patch):
     """Use the real composition root; only inject isolated infrastructure factories."""
     from src import console_asgi as composition
+    from src import audit_room_v1
+    # build_app replaces this global constructor for native storage. Record it
+    # before composition so fixture teardown cannot leak a dropped test schema.
+    patch.setattr(audit_room_v1, "AuditRegistry", audit_room_v1.AuditRegistry)
     patch.delenv("WEBSITE_SITE_NAME", raising=False)
     patch.setenv("CONSOLE_DATA_ROOT", str(root))
     patch.setenv("CONSOLE_RUNTIME", str(root / "runtime"))

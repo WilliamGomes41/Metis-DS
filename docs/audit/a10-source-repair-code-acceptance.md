@@ -3,6 +3,32 @@
 Implementation issue: #609. Acceptance/progress: #560.
 Change class: B. Rewrite risk: none. No migration, merge or deployment.
 
+## CI isolation correction, 13 October 2026
+
+PR CI run `38312547355` on head `8914214e` passed the contract,
+architecture and dedicated native A10 steps on both Python versions, but each
+general suite reported **10 failed, 3859 passed, 15 skipped**. These ten
+audit/navigation failures are distinct from the four local baseline failures
+recorded below. A10's real native `build_app` composition replaced the global
+`audit_room_v1.AuditRegistry` constructor; test teardown dropped its schema but
+did not restore the constructor, contaminating later tests.
+
+The test fixture now registers the original constructor with its existing
+pytest monkeypatch before composition. Production composition and product code
+are unchanged. On head `8914214e`, the sequence of one native A10 case followed
+by the audit-room and navigation probes reproduces **2 failed, 1 passed**.
+The same sequence with the fixture correction is **3 passed**.
+
+Tested correction revision: `42f198d2b5bb25a03c0e45bee17f50c27dfbaee6`.
+`METIS_TEST_POSTGRES_DSN=<isolated native PostgreSQL> python -m pytest -q
+tests/test_a10_source_cache_repair.py tests/test_audit_room_v1.py
+tests/test_console_access_availability.py --junitxml=<scratch evidence>`:
+**111 passed, zero skips/errors/failures**, including all 76 A10 cases and all
+ten tests that failed in CI. Repository preflight, architecture boundaries,
+compileall and release-control preflight pass. A newly published commit must
+still complete the full CI matrix; these targeted results do not assert a full
+suite pass or production acceptance.
+
 ## Follow-up to bounded review of PR #610
 
 The first-pass acceptance below was too broad: it covered source-unit repair,
