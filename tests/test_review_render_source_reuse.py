@@ -111,6 +111,34 @@ def test_http_review_render_reuses_source_and_matches_uncached_read(review_clien
     assert console.snapshot_objects(sid) == before
 
 
+@pytest.mark.parametrize("review_client", [None, "retained"], indirect=True)
+@pytest.mark.parametrize("path", ["/review", "/source-selection", "/settings/technical/processing"])
+def test_http_overview_does_not_serialize_full_source_per_candidate(review_client, monkeypatch, path):
+    import src.integrity_kernel as kernel
+
+    console, client, sid = review_client
+    before = deepcopy(console.snapshot_objects(sid))
+    envelope_before = deepcopy(console._envelope(sid))
+    original = kernel.stable_hash
+    source_hashes = []
+
+    def counted(value):
+        if isinstance(value, list) and value and isinstance(value[0], dict) and "fragment_id" in value[0]:
+            source_hashes.append(1)
+        return original(value)
+
+    monkeypatch.setattr(kernel, "stable_hash", counted)
+    for _ in range(2):
+        source_hashes.clear()
+        response = client.get(path, params={"document": sid} if path != "/review" else {})
+        assert response.status_code == 200
+        # One document, at most candidate and full-source views. Hashing the
+        # entire document for every candidate makes overview work quadratic.
+        assert len(source_hashes) <= 2
+    assert console.snapshot_objects(sid) == before
+    assert console._envelope(sid) == envelope_before
+
+
 @pytest.mark.parametrize("review_client", ["retained"], indirect=True)
 def test_postgres_overview_reuses_full_source_for_retained_records(review_client, monkeypatch):
     import src.knowledge_materialisation_v1 as materialisation

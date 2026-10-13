@@ -121,6 +121,21 @@ def test_reuse_never_caches_candidate_approval(source_navigation):
         assert source_lineage_resolves(original, fragments=fragments)
 
 
+@pytest.mark.parametrize("original,replacement", [(1, True), (1, 1.0), (-0.0, 0.0)])
+def test_source_scalar_type_changes_do_not_reuse_prior_representation(source_navigation, original, replacement):
+    import src.knowledge_materialisation_v1 as materialisation
+
+    _, fragments = source_navigation
+    fragments[0]["source_page"] = original
+    with materialisation.source_reconstruction_scope():
+        initial = materialisation._read_source_blocks(fragments)
+        fragments[0]["source_page"] = replacement
+        changed = materialisation._read_source_blocks(fragments)
+        assert changed is not initial
+        source = next(iter(changed.values()))[1]
+        assert type(source["source_page"]) is type(replacement)
+
+
 def test_parallel_work_items_have_independent_source_scopes(source_navigation, monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier, get_ident

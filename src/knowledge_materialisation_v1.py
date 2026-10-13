@@ -6,6 +6,7 @@ returns decisions. It does not assign object identity or canonical text.
 from __future__ import annotations
 
 import hashlib
+import math
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
@@ -43,6 +44,38 @@ def source_reconstruction_scope(*, reuse_existing=False):
         _source_reconstruction.reset(token)
 
 
+class _SourceNumber:
+    """Keep bool/int/float distinct in native container equality (True == 1)."""
+
+    __slots__ = ("value",)
+
+    def __init__(self, value):
+        self.value = value
+
+    def __eq__(self, other):
+        if type(other) is not type(self.value) or other != self.value:
+            return False
+        # Canonical JSON distinguishes -0.0 and 0.0 although Python does not.
+        return (not isinstance(other, float) or other != 0
+                or math.copysign(1, other) == math.copysign(1, self.value))
+
+    def __hash__(self):
+        return hash(self.value)
+
+
+def _source_input_snapshot(value):
+    """Independent comparison-only copy; never used to reconstruct source."""
+    if isinstance(value, (bool, int, float)):
+        return _SourceNumber(value)
+    if isinstance(value, dict):
+        return {_source_input_snapshot(k): _source_input_snapshot(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_source_input_snapshot(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(_source_input_snapshot(v) for v in value)
+    return deepcopy(value)
+
+
 def _read_source_blocks(fragments, *, include_headings=False):
     def reconstruct():
         if include_headings:
@@ -53,12 +86,18 @@ def _read_source_blocks(fragments, *, include_headings=False):
     scope = _source_reconstruction.get()
     if scope is None:
         return reconstruct()
-    from src.integrity_kernel import stable_hash
-    key = stable_hash(fragments)
-    entry = scope.get(key)
+    # Most validators read the same source for every candidate. Compare with
+    # the retained copy before serializing the entire document again. Equality
+    # (not object identity) still detects in-place edits to nested fragments.
+    entry = scope.get("last_source")
     if entry is None or fragments != entry["fragments"]:
-        entry = {"fragments": deepcopy(fragments), "blocks": {}}
-        scope[key] = entry
+        from src.integrity_kernel import stable_hash
+        key = stable_hash(fragments)
+        entry = scope.get(key)
+        if entry is None or fragments != entry["fragments"]:
+            entry = {"fragments": _source_input_snapshot(fragments), "blocks": {}}
+            scope[key] = entry
+        scope["last_source"] = entry
     if include_headings not in entry["blocks"]:
         entry["blocks"][include_headings] = reconstruct()
     return entry["blocks"][include_headings]
