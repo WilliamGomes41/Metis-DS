@@ -147,6 +147,21 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             with _allow_revise_write():
                 return super().accept_source_continuation(**kwargs)
 
+    @staticmethod
+    def _verified_catalog_fragment(
+        ref: dict[str, Any], catalog_by_id: dict[str, dict[str, Any]]
+    ) -> dict[str, Any]:
+        row = catalog_by_id.get(str(ref.get("raw_object_id") or ""))
+        if row is None:
+            raise ConsoleError("repair_source_fragment_missing")
+        expected_hash = str(ref.get("raw_content_hash") or "")
+        if ((expected_hash and row.get("fragment_hash") != expected_hash)
+                or ref.get("source_locator") != row["source_locator"]
+                or ref.get("page") != row["source_page"]
+                or ref.get("bbox") != row["bbox"]):
+            raise ConsoleError("repair_source_fragment_changed")
+        return row
+
     def source_fragment_catalog(
         self, *, snapshot_id: str, object_id: str
     ) -> list[dict[str, Any]]:
@@ -185,13 +200,19 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
         by_id = {row["fragment_id"]: row for row in catalog}
         current = self._current_object(snapshot_id, object_id)
         for ref in (current.get("provenance") or {}).get("source_fragments") or []:
-            raw_id = str(ref.get("raw_object_id") or "")
-            expected_hash = str(ref.get("raw_content_hash") or "")
-            row = by_id.get(raw_id)
-            if row is None:
-                raise ConsoleError("repair_source_fragment_missing")
-            if expected_hash and row.get("fragment_hash") != expected_hash:
-                raise ConsoleError("repair_source_fragment_changed")
+            self._verified_catalog_fragment(ref, by_id)
+        semantic = (current.get("metadata") or {}).get("semantic_passage") or {}
+        if semantic.get("selection_origin") == "proposal_selected":
+            from src.knowledge_materialisation_v1 import resolve_source_selection
+            from src.semantic_passage_v1 import LEGACY_SEMANTIC_PASSAGE_VERSION
+            try:
+                mapping = resolve_source_selection(semantic.get("spans"), fragments=fragments)["source_mapping"]
+                if semantic.get("version") == LEGACY_SEMANTIC_PASSAGE_VERSION:
+                    mapping = [row for row in mapping if row.get("kind") != "join_separator"]
+                if semantic.get("source_mapping") != mapping:
+                    raise ValueError("materialisation_source_mapping_invalid")
+            except (ValueError, KeyError, TypeError) as exc:
+                raise ConsoleError(str(exc)) from exc
         return catalog
 
     def source_units(
@@ -429,13 +450,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
         positions: list[int] = []
         source_texts: list[str] = []
         for ref in (obj.get("provenance") or {}).get("source_fragments") or []:
-            raw_id = str(ref.get("raw_object_id") or "")
-            row = catalog_by_id.get(raw_id)
-            if row is None:
-                raise ConsoleError("repair_source_fragment_missing")
-            expected_hash = str(ref.get("raw_content_hash") or "")
-            if expected_hash and row.get("fragment_hash") != expected_hash:
-                raise ConsoleError("repair_source_fragment_changed")
+            row = self._verified_catalog_fragment(ref, catalog_by_id)
             positions.append(int(row["catalog_index"]))
             source_texts.append(str(row["text"]))
         if not positions:
@@ -699,6 +714,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
         expected_kind = self.repair_kind_for_submission(submission)
         if repair_kind != expected_kind:
             raise ConsoleError("repair_kind_mismatch")
+        source_envelope = deepcopy(self._envelope(snapshot_id))
 
         source_units: list[dict[str, Any]] = []
         catalog: list[dict[str, Any]] = []
@@ -714,6 +730,10 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
                        else self._store_write_lock())
         with transaction, self._atomic_snapshot_mutation(snapshot_id):
             self._preflight_structured_repair(submission)
+            if repair_kind in {REPAIR_SOURCE_UNITS, REPAIR_MERGE_OBJECTS}:
+                self._assert_source_work_unchanged(
+                    source_envelope, expected_revision, "published_working_revision_immutable"
+                )
             if self.objects_revision(snapshot_id) != expected_revision:
                 raise ConsoleError(
                     SNAPSHOT_OBJECT_WRITE_CONFLICT,
