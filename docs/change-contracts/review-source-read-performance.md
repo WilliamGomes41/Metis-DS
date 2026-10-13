@@ -9,6 +9,9 @@ Rewrite risk: none
 ## Existing mechanism and bounded change
 
 Base: `4615c5da`. GET requests enter the existing `source_reconstruction_scope`.
+Tracked in issue #611 and draft PR #612. The PR description must include the
+literal `Promise:` and `Proof:` fields; prose headings do not satisfy
+`scripts/validate_change_contract.py`. The corrected PR text passes that validator.
 Review workboard and source-accountability readers call exact source validators,
 which use `knowledge_materialisation_v1._read_source_blocks`. Its content-keyed
 cache previously serialized and hashed the complete fragment list on every hit.
