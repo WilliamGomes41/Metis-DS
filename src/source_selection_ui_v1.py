@@ -1,4 +1,6 @@
 """Source selection room: presentation and dispatch over durable kernel commands."""
+from src.request_diagnostics_v1 import diagnostic_phase
+
 import asyncio
 import uuid
 from urllib.parse import urlencode
@@ -28,8 +30,10 @@ def install(app, console, require, page, nav, esc):
     dispatcher = install_dispatcher(app, console)
 
     @app.get('/source-selection', response_class=HTMLResponse)
+    @console.source_selection_read_scope()
     def selection_get(request: Request, document: str = ''):
-        actor = require(request)
+        with diagnostic_phase("authorization"):
+            actor = require(request)
         receipts = console.list_envelopes()
         documents = [console._envelope(row['snapshot_id']) for row in receipts]
         visible = [row for row in documents if "researcher" in actor['roles'] or actor['account_id'] in row.get('named_reviewers', [])]

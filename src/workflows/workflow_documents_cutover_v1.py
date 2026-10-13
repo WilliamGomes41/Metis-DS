@@ -7,6 +7,8 @@ outside the supported topology.
 """
 from __future__ import annotations
 
+from src.request_diagnostics_v1 import diagnostic_phase
+
 from src.revision_workflow import current_revisions, validate_revision_write
 
 import hashlib
@@ -111,6 +113,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         envelope["family"] = display_name
         return envelope
 
+    @diagnostic_phase("document_store_read")
     def list_envelopes(self) -> list[dict[str, Any]]:
         try:
             with self._connect() as con:
@@ -387,12 +390,28 @@ class _PostgresWorkflowDocumentsMixin:
             raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
         self._envelopes = {str(row["snapshot_id"]): row for row in envelopes}
 
+    @diagnostic_phase("document_list")
     def list_envelopes(self) -> list[dict[str, Any]]:
         """Read the authoritative list instead of a process-local startup cache."""
+        reads = self._source_selection_reads()
+        if reads is not None:
+            if reads["envelopes"] is None:
+                try:
+                    rows = self.workflow_document_store.list_envelopes()
+                except WorkflowDocumentStoreError as exc:
+                    raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
+                reads["envelopes"] = {str(row["snapshot_id"]): row for row in rows}
+            return [self._receipt(row) for row in reads["envelopes"].values()]
         self.refresh_workflow_documents()
         return [self._receipt(row) for row in self._envelopes.values()]
 
+    @diagnostic_phase("document_load")
     def _envelope(self, snapshot_id: str) -> dict[str, Any]:
+        reads = self._source_selection_reads()
+        if reads is not None and reads["envelopes"] is not None:
+            if snapshot_id not in reads["envelopes"]:
+                raise ConsoleError("unknown_snapshot")
+            return reads["envelopes"][snapshot_id]
         try:
             envelope = self.workflow_document_store.get_envelope(snapshot_id)
         except WorkflowDocumentStoreError as exc:
@@ -403,6 +422,9 @@ class _PostgresWorkflowDocumentsMixin:
         return deepcopy(envelope)
 
     def _load_objects(self, snapshot_id: str, *, remember: bool = True) -> list[dict[str, Any]]:
+        reads = self._source_selection_reads() if not remember else None
+        if reads is not None and snapshot_id in reads["objects"]:
+            return reads["objects"][snapshot_id][0]
         try:
             rows = self.workflow_document_store.list_document_objects(snapshot_id)
             revision = self.workflow_document_store.revision_for_rows(rows)
@@ -410,8 +432,11 @@ class _PostgresWorkflowDocumentsMixin:
             raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
         if remember:
             self._objects_expected_revs()[snapshot_id] = revision
+        elif reads is not None:
+            reads["objects"][snapshot_id] = (rows, revision)
         return rows
 
+    @diagnostic_phase("objects_read")
     def snapshot_objects_and_revision(
         self,
         snapshot_id: str,
@@ -429,6 +454,10 @@ class _PostgresWorkflowDocumentsMixin:
         return deepcopy(current_revisions(rows, snapshot_id=snapshot_id)), revision
 
     def objects_revision(self, snapshot_id: str) -> str:
+        reads = self._source_selection_reads()
+        if reads is not None:
+            self._load_objects(snapshot_id, remember=False)
+            return reads["objects"][snapshot_id][1]
         try:
             return self.workflow_document_store.objects_revision(snapshot_id)
         except WorkflowDocumentStoreError as exc:

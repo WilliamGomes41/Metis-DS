@@ -6,6 +6,8 @@ is added; explicit task links continue to use the existing review room.
 """
 from __future__ import annotations
 
+from src.request_diagnostics_v1 import diagnostic_phase
+
 import html
 from dataclasses import dataclass
 from typing import Any
@@ -66,6 +68,7 @@ _TASK_COPY = {
 }
 
 
+@diagnostic_phase("authorization")
 def _current_account(console: OperationsConsole, request: Request) -> dict[str, Any]:
     token = request.cookies.get(COOKIE)
     try:
@@ -375,6 +378,7 @@ def review_work_item(
 
 
 
+@diagnostic_phase("review_work_items")
 def review_workboard_items(
     console: OperationsConsole,
     *,
@@ -609,6 +613,7 @@ def _review_activity_status(item: dict[str, Any], started: set[str]) -> str:
     return "Gestart" if has_human_review else "Nog niet gestart"
 
 
+@diagnostic_phase("review_render")
 def _workboard_page(
     console: OperationsConsole,
     *,

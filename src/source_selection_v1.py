@@ -1,4 +1,6 @@
 """Explicit processing command over existing durable source/attempt authority."""
+
+from src.request_diagnostics_v1 import diagnostic_phase
 from copy import deepcopy
 from datetime import datetime
 from statistics import median
@@ -128,6 +130,7 @@ def estimate(envelope, documents):
             "sample_count": len(rates), "basis": "Grove bandbreedte uit volledige eerdere pogingen en bestandsgrootte; broncomplexiteit kan afwijken."}
 
 
+@diagnostic_phase("selection_projection")
 def projection(console, *, actor_id, snapshot_id, documents):
     from pathlib import Path
     from src.source_accountability_v1 import is_source_record
