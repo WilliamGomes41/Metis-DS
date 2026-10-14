@@ -13,6 +13,7 @@ import logging
 import os
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 import time
 import uuid
 from contextvars import ContextVar
@@ -27,8 +28,22 @@ PHASES = frozenset({'authorization', 'document_list', 'document_store_read', 'do
     'selection_projection', 'processing_status', 'objects_read', 'source_read',
     'source_reconstruction', 'source_verify', 'review_bindings', 'review_render', 'review_index',
     'db_connect', 'db_execute', 'db_fetch', 'document_summary', 'review_work_items'})
+COUNTERS = frozenset({'source_reconstruction_built', 'source_reconstruction_reused',
+    'source_reconstruction_unscoped', 'source_input_compared', 'source_input_hashed'})
 HEARTBEAT_SECONDS = 15
 MAX_PHASE_EVENTS = 40
+MAX_TREE_NODES = 64
+DEPLOYED_COMMIT_MARKER = Path(__file__).resolve().parents[1] / 'config' / 'deployed_commit.txt'
+_COMMIT_RE = re.compile(r'[0-9a-f]{40}')
+
+
+def deployed_commit():
+    """Full lowercase commit written into the deployment package, else None."""
+    try:
+        value = DEPLOYED_COMMIT_MARKER.read_text(encoding='ascii').strip()
+    except (OSError, UnicodeDecodeError):
+        return None
+    return value if _COMMIT_RE.fullmatch(value) else None
 
 
 @dataclass
@@ -41,6 +56,9 @@ class RequestEvidence:
     started: float = field(default_factory=time.perf_counter)
     stack: tuple = ()
     totals: dict = field(default_factory=dict)
+    tree: dict = field(default_factory=dict)
+    tree_truncated: bool = False
+    counters: dict = field(default_factory=dict)
     phase_events: int = 0
 
     def report(self, event, **fields):
@@ -71,6 +89,21 @@ def detached_request_diagnostics():
         _CURRENT.reset(token)
 
 
+def diagnostic_count(name, amount=1):
+    """Increment a fixed request-local counter; a no-op outside diagnosed requests."""
+    evidence = _CURRENT.get()
+    if evidence is None or name not in COUNTERS:
+        return
+    evidence.counters[name] = evidence.counters.get(name, 0) + amount
+
+
+def _add_phase_time(table, key, inclusive, exclusive):
+    total = table.setdefault(key, {'calls': 0, 'inclusive_ms': 0.0, 'exclusive_ms': 0.0})
+    total['calls'] += 1
+    total['inclusive_ms'] += inclusive
+    total['exclusive_ms'] += exclusive
+
+
 @contextlib.contextmanager
 def diagnostic_phase(name):
     evidence = _CURRENT.get()
@@ -79,17 +112,25 @@ def diagnostic_phase(name):
         return
     started = time.perf_counter()
     previous = evidence.stack
-    evidence.stack = (*previous, (name, started))
+    # Entry: (name, started, [child inclusive ms]); path is fixed phase names only.
+    children = [0.0]
+    evidence.stack = (*previous, (name, started, children))
     if evidence.phase_events < MAX_PHASE_EVENTS:
         evidence.phase_events += 1
-        evidence.report('phase_started', phase=name)
+        evidence.report('phase_started', phase=name, parent_phase=previous[-1][0] if previous else None)
     try:
         yield
     finally:
         elapsed = (time.perf_counter()-started)*1000
-        total = evidence.totals.setdefault(name, {'calls': 0, 'inclusive_ms': 0.0})
-        total['calls'] += 1
-        total['inclusive_ms'] += elapsed
+        exclusive = elapsed - children[0]
+        _add_phase_time(evidence.totals, name, elapsed, exclusive)
+        path = '/'.join([entry[0] for entry in previous] + [name])
+        if path in evidence.tree or len(evidence.tree) < MAX_TREE_NODES:
+            _add_phase_time(evidence.tree, path, elapsed, exclusive)
+        else:
+            evidence.tree_truncated = True
+        if previous:
+            previous[-1][2][0] += elapsed
         evidence.stack = previous
 
 
@@ -147,7 +188,9 @@ class RequestDiagnostics:
         self.app = app
         self.heartbeat_seconds = heartbeat_seconds
         self.telemetry = telemetry
-        self.identity = identity or {'version': os.getenv('METIS_BUILD_COMMIT', 'unknown')[:64],
+        # METIS_BUILD_COMMIT stays authoritative; the packaged marker is the fallback.
+        self.identity = identity or {'version': (os.getenv('METIS_BUILD_COMMIT')
+                                                 or deployed_commit() or 'unknown')[:64],
             'instance': os.getenv('WEBSITE_INSTANCE_ID', 'local')[:128], 'pid': os.getpid()}
         if not _LOGGER.handlers:
             handler = logging.StreamHandler()
@@ -259,9 +302,13 @@ class RequestDiagnostics:
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
+                def rounded(table):
+                    return {k: {'calls': v['calls'], 'inclusive_ms': round(v['inclusive_ms'], 3),
+                                'exclusive_ms': round(v['exclusive_ms'], 3)} for k, v in table.items()}
+                extra = {'phase_tree_truncated': True} if evidence.tree_truncated else {}
                 evidence.report('request_finished', status=status, outcome=outcome,
-                    phases={k: {'calls': v['calls'], 'inclusive_ms': round(v['inclusive_ms'], 3)}
-                            for k, v in evidence.totals.items()})
+                    phases=rounded(evidence.totals), phase_tree=rounded(evidence.tree),
+                    counters=dict(evidence.counters), **extra)
                 try:
                     if span:
                         from opentelemetry.trace import Status, StatusCode

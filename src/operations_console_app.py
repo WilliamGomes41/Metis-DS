@@ -6069,12 +6069,15 @@ def create_console_app(
         )
         return RedirectResponse("/accounts", status_code=303)
 
+    from src.request_diagnostics_v1 import deployed_commit as _deployed_commit
+
     @app.get("/health")
     def health() -> dict[str, Any]:
         return {
             "status": "ok",
             "service": "operations-console",
             "version": SERVICE_VERSION,
+            "deployed_commit": _deployed_commit() or "not_recorded",
             "product_api": False,
             "chat_room": False,
             "nurse_frontend": False,
