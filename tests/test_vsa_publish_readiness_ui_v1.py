@@ -167,6 +167,11 @@ def _client(console: DurablePublicationConsole) -> TestClient:
     )
 
 
+def _only_snapshot(console) -> str:
+    (envelope,) = console.list_envelopes()
+    return str(envelope["snapshot_id"])
+
+
 def _login(client: TestClient, username: str) -> None:
     response = client.post(
         "/login",
@@ -244,7 +249,7 @@ def test_publish_page_separates_curation_and_technical_blockers(
     client = _client(console)
     _login(client, "publisher.carla")
 
-    page = client.get("/publish")
+    page = client.get("/publish", params={"document": _only_snapshot(console)})
 
     assert page.status_code == 200
     assert 'data-publication-state="blocked"' in page.text
@@ -281,7 +286,7 @@ def test_publish_form_is_only_rendered_for_publication_ready(
     client = _client(console)
     _login(client, "publisher.carla")
 
-    page = client.get("/publish")
+    page = client.get("/publish", params={"document": _only_snapshot(console)})
 
     assert page.status_code == 200
     assert 'data-publication-state="ready"' in page.text
@@ -313,7 +318,7 @@ def test_published_document_has_no_publish_form(
     client = _client(console)
     _login(client, "publisher.carla")
 
-    page = client.get("/publish")
+    page = client.get("/publish", params={"document": _only_snapshot(console)})
 
     assert page.status_code == 200
     assert 'data-publication-state="published"' in page.text
@@ -353,7 +358,7 @@ def test_stale_ready_page_is_rechecked_on_publish_post(tmp_path: Path) -> None:
     client = _client(console)
     _login(client, "publisher.carla")
 
-    ready = client.get("/publish")
+    ready = client.get("/publish", params={"document": receipt["snapshot_id"]})
     assert ready.status_code == 200
     assert 'data-publication-state="ready"' in ready.text
     assert 'data-publish-form' in ready.text

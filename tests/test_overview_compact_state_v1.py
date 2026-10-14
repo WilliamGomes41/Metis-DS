@@ -73,6 +73,9 @@ def helper_calls(monkeypatch: pytest.MonkeyPatch) -> Counter:
     monkeypatch.setattr(preparation, "stored_extraction",
                         counted("stored_extraction", preparation.stored_extraction))
     monkeypatch.setattr(formation, "incomplete", counted("incomplete", formation.incomplete))
+    from src.operations_console_v1 import OperationsConsole
+    monkeypatch.setattr(OperationsConsole, "snapshot_objects",
+                        counted("snapshot_objects_deepcopy", OperationsConsole.snapshot_objects))
     return calls
 
 
@@ -132,7 +135,7 @@ def test_publish_selected_document_runs_full_check_for_that_document_only(tmp_pa
     assert helper_calls["publication_readiness"] == 1
     assert 'data-publication-state="ready"' in page.text
     assert page.text.count("data-publish-form") == 1
-    assert page.text.count(UNCHECKED) == N_DOCUMENTS - 1
+    assert page.text.count('data-publication-state="unchecked"') == N_DOCUMENTS - 1
 
 
 def test_invalid_publish_is_still_refused_at_post(tmp_path, helper_calls):
@@ -167,6 +170,8 @@ def test_source_selection_overview_makes_zero_helper_calls_for_n_documents(tmp_p
     assert helper_calls["read_source_blocks"] == 0
     assert helper_calls["stored_extraction"] == 0
     assert helper_calls["incomplete_deep"] == 0
+    # D-PERF-4: het overzicht MAG NIET de volledige objectlijst kopiëren.
+    assert helper_calls["snapshot_objects_deepcopy"] == 0
 
 
 def test_source_selection_never_shows_unchecked_formation_as_complete(tmp_path, helper_calls):
@@ -219,4 +224,5 @@ def test_overview_cost_is_independent_of_document_count(tmp_path, helper_calls):
     assert helper_calls["publication_readiness"] == 0
     assert helper_calls["stored_extraction"] == 0
     assert helper_calls["incomplete_deep"] == 0
+    assert helper_calls["snapshot_objects_deepcopy"] == 0
     assert elapsed < 10

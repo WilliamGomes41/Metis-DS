@@ -147,7 +147,43 @@ def _blocker_list(items: list[dict[str, Any]]) -> str:
     return f'<ul class="stack">{"".join(rows)}</ul>' if rows else ""
 
 
+UNCHECKED_STATE = "unchecked"
+UNCHECKED_LABEL = "volledigheid nog niet gecontroleerd"
+
+
+def unchecked_publish_view(*, snapshot_id: str) -> dict[str, Any]:
+    """Compacte overzichtskaart zonder actueel gereedheidsbewijs.
+
+    Het overzicht MAG NIET per document de volledige gereedheidscontrole
+    draaien (D-PERF-1). Zonder dat bewijs MOET de kaart dit eerlijk tonen en
+    NOOIT een publicatieformulier of een gereed-status bevatten.
+    """
+    return {
+        "snapshot_id": snapshot_id,
+        "overall_state": UNCHECKED_STATE,
+        "publication_ready": False,
+        "publish_form_allowed": False,
+        "publishable_object_count": 0,
+        "blocker_codes": [],
+        "curation_ready": False,
+        "curation_blocker_codes": [],
+        "curation_blockers": [],
+        "unresolved_review_object_count": 0,
+        "unresolved_source_passage_count": 0,
+        "technical_ready": False,
+        "technical_blocker_codes": [],
+        "technical_blockers": [],
+    }
+
+
 def _render_publish_state(view: dict[str, Any]) -> str:
+    if view["overall_state"] == UNCHECKED_STATE:
+        href = f"/publish?document={quote(str(view['snapshot_id']), safe='')}"
+        return (
+            f'<div class="banner warn" data-publication-state="{UNCHECKED_STATE}">'
+            f"Status: {UNCHECKED_LABEL}.</div>"
+            f'<p><a class="btn-secondary" href="{_esc(href)}">Volledigheid controleren</a></p>'
+        )
     historical = {
         "withdrawn": "Ingetrokken. Deze versie is niet beschikbaar via de API.",
         "superseded": "Vervangen door een opvolgende publicatie. Deze versie is historisch.",
@@ -253,6 +289,63 @@ def _withdrawal_retry_form(snapshot_id: str, release_id: str, reason: str) -> st
     '''
 
 
+_RELEASE_DISPLAY = {
+    "published": "published", "withdrawn": "Ingetrokken", "superseded": "Vervangen",
+    "inactive": "Niet actief", "authority_unavailable": "Publicatiestatus onbekend",
+    UNCHECKED_STATE: UNCHECKED_LABEL,
+}
+
+
+def _apply_release_state(console: OperationsConsole, envelope: dict[str, Any], view: dict[str, Any]) -> None:
+    """Opgeslagen release-autoriteit; leest NOOIT objecten of bronblokken."""
+    if isinstance(console, DurablePublicationConsole) and isinstance(
+        console.canonical_publication_store, PostgresCanonicalPublicationStore,
+    ):
+        try:
+            release = console.canonical_publication_store.release_for_snapshot(envelope["snapshot_id"])
+            if release:
+                lifecycle = console.document_release_serving_status(envelope["snapshot_id"])
+                if lifecycle["serving_status"] == "active":
+                    view["overall_state"] = "published"
+                    if release.get("logical_document_id"):
+                        view["withdraw_release_id"] = release["release_id"]
+                else:
+                    state = lifecycle["release_status"]
+                    view["overall_state"] = state if state in {"withdrawn", "superseded"} else "inactive"
+        except (ConsoleError, CanonicalPublicationStoreError):
+            view["overall_state"] = "authority_unavailable"
+
+
+def _card(envelope: dict[str, Any], view: dict[str, Any], display_status: str) -> str:
+    return f'''
+                <article class="doc-card" data-publish-document="{_esc(envelope['snapshot_id'])}">
+                  {_document_card_heading({**envelope, "status": display_status, "meaningful_status": display_status})}
+                  {_render_publish_state(view)}
+                  <p><a href="/source-selection/publication-evidence?document={quote(str(envelope['snapshot_id']), safe='')}">Publicatiebewijs downloaden</a></p>
+                </article>
+                '''
+
+
+def _compact_card(console: OperationsConsole, envelope: dict[str, Any]) -> str:
+    """Overzichtskaart uit opgeslagen envelope- en releasestatus (D-PERF-1).
+
+    MAG NIET ``consider_publish``/``publication_readiness`` of bronreconstructie
+    aanroepen. Een gepubliceerde envelope blijft gepubliceerd; elke andere
+    toestand MOET "volledigheid nog niet gecontroleerd" tonen.
+    """
+    snapshot_id = str(envelope["snapshot_id"])
+    if str(envelope.get("state") or "") == "published":
+        view = publish_readiness_view(
+            snapshot_id=snapshot_id, envelope_state="published",
+            considered={"state": "published", "technical_ready": False,
+                        "technical_blockers": ["already_published"], "curation_ready": True},
+        )
+    else:
+        view = unchecked_publish_view(snapshot_id=snapshot_id)
+    _apply_release_state(console, envelope, view)
+    return _card(envelope, view, _RELEASE_DISPLAY[view["overall_state"]])
+
+
 def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> None:
     """Present readiness and explicit withdrawal; keep publication POST unchanged."""
     if getattr(app.state, "publish_readiness_ui_v1", False):
@@ -271,10 +364,13 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
     app.router.routes[:] = retained
 
     @app.get("/publish", response_class=HTMLResponse)
-    def publish_get(request: Request) -> str:
+    def publish_get(request: Request, document: str = "") -> str:
         account = _publisher_account(console, request)
         rows: list[str] = []
         for envelope in console.list_envelopes():
+            if str(envelope["snapshot_id"]) != document:
+                rows.append(_compact_card(console, envelope))
+                continue
             try:
                 considered = console.consider_publish(
                     actor_id=account["account_id"],
@@ -297,38 +393,12 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
                 envelope_state=str(envelope.get("state") or ""),
                 considered=considered,
             )
-            if isinstance(console, DurablePublicationConsole) and isinstance(
-                console.canonical_publication_store, PostgresCanonicalPublicationStore,
-            ):
-                try:
-                    release = console.canonical_publication_store.release_for_snapshot(envelope["snapshot_id"])
-                    if release:
-                        lifecycle = console.document_release_serving_status(envelope["snapshot_id"])
-                        if lifecycle["serving_status"] == "active":
-                            view["overall_state"] = "published"
-                            if release.get("logical_document_id"):
-                                view["withdraw_release_id"] = release["release_id"]
-                        else:
-                            state = lifecycle["release_status"]
-                            view["overall_state"] = state if state in {"withdrawn", "superseded"} else "inactive"
-                except (ConsoleError, CanonicalPublicationStoreError):
-                    view["overall_state"] = "authority_unavailable"
-            display_status = {
-                "published": "published", "withdrawn": "Ingetrokken", "superseded": "Vervangen",
-                "inactive": "Niet actief", "authority_unavailable": "Publicatiestatus onbekend",
-            }.get(view["overall_state"], derive_document_status(
+            _apply_release_state(console, envelope, view)
+            display_status = _RELEASE_DISPLAY.get(view["overall_state"]) or derive_document_status(
                 envelope_state="captured_not_published",
                 readiness=considered,
-            ))
-            rows.append(
-                f'''
-                <article class="doc-card" data-publish-document="{_esc(envelope['snapshot_id'])}">
-                  {_document_card_heading({**envelope, "status": display_status, "meaningful_status": display_status})}
-                  {_render_publish_state(view)}
-                  <p><a href="/source-selection/publication-evidence?document={quote(str(envelope['snapshot_id']), safe='')}">Publicatiebewijs downloaden</a></p>
-                </article>
-                '''
             )
+            rows.append(_card(envelope, view, display_status))
 
         success = ""
         if request.query_params.get("published") == "yes":
