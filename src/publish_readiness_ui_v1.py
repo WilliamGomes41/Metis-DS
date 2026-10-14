@@ -325,6 +325,7 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
                 <article class="doc-card" data-publish-document="{_esc(envelope['snapshot_id'])}">
                   {_document_card_heading({**envelope, "status": display_status, "meaningful_status": display_status})}
                   {_render_publish_state(view)}
+                  <p><a href="/source-selection/publication-evidence?document={quote(str(envelope['snapshot_id']), safe='')}">Publicatiebewijs downloaden</a></p>
                 </article>
                 '''
             )

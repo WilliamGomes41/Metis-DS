@@ -22,7 +22,7 @@ from typing import Callable, Any
 _LOGGER = logging.getLogger('metis.console.diagnostics')
 _CURRENT = ContextVar('metis_request_diagnostics', default=None)
 ROUTES = frozenset({'/login', '/ingest', '/tree', '/source-selection', '/review', '/publish'})
-COMMAND_ROUTES = frozenset({'/source-selection/start'})
+COMMAND_ROUTES = frozenset({'/source-selection/start', '/publish'})
 PHASES = frozenset({'authorization', 'document_list', 'document_store_read', 'document_load',
     'selection_projection', 'processing_status', 'objects_read', 'source_read',
     'source_reconstruction', 'source_verify', 'review_bindings', 'review_render', 'review_index',
