@@ -1,6 +1,6 @@
 # CHANGE_DESIGN: H2, goedkeuringen binnen het contract (herstelstap 2)
 
-**Status:** ontwerp. H2-1 tot en met H2-3 en D-DEL-1 zijn beantwoord (14-10-2026, 20:51 en 20:52 CEST). De implementatie staat STIL op OPENVRAAG-H2-4 (zie §9).
+**Status:** ontwerp. H2-1 tot en met H2-3 en D-DEL-1 zijn beantwoord (14-10-2026, 20:51 en 20:52 CEST). H2-4 is beantwoord (20:58 CEST). Het onafhankelijke deel staat in PR 2a (#623). PR 2b staat STIL op OPENVRAAG-H2-5 en H2-6 (zie §11).
 **Basis:** main `4ac0b7b`. Bron: `/workspace/metis-ds-e2e/E2E-BUGREGISTER.md` (D-SEC-1, D-SEC-2, D-SEC-3, D-API-5, OPENVRAAG-B10), plus de besluiten van William van 14-10-2026 (via Metis, 20:48 CEST).
 **Change class:** A (raakt de review- en publicatie-invarianten en de serving-autoriteit).
 **Buiten scope:** D-API-1 en D-API-2, D-PERF. D-DEL-1 valt binnen scope (zie §10).
@@ -113,20 +113,10 @@ De tests van §7, de volledige suite en de Postgres-tests met `METIS_TEST_POSTGR
 - **H2-2 (beantwoord).** `one_other` + four-eyes: de uploader is het eerste oog en de andere reviewer het tweede. Twee niet-uploaders voldoen ook. De uploader telt NOOIT als tweede oog. Hoog-risico-objecten (`requires_four_eyes(obj)`) eisen four-eyes ALTIJD, ook bij `four_eyes_required=false`. Bij `uploader_sole` met een hoog-risico-object is publicatie daarom geblokkeerd met `four_eyes_required`.
 - **H2-3 (beantwoord, optie b).** Migratie `017` voegt de kolommen toe. Een eenmalig, idempotent herclassificatiecommando (`scripts/publication_review_provenance_backfill.py`) controleert elke actieve release opnieuw tegen §4 en de workflow-bindings, en zet alleen de gefaalde releases op `recovered_unverified`. Het commando kent een plan-modus (alleen lezen) en een execute-modus met `--confirm-count`. Het draait NOOIT automatisch bij boot. Alleen Argos voert het uit op live, na GO van William.
 - **OPENVRAAG-B10-1.** Four-eyes + `uploader_sole` wordt geweigerd (W6).
-- **OPENVRAAG-H2-4 (nieuw, blokkeert).** `review_policy` is ook de autoriteit voor de review van beslisbomen (decision graphs):
-  - `decision_graph_v1.py:294–334`: `required_reviewers(envelope["review_policy"])` bepaalt wie een graph MOET bevestigen;
-  - `decision_review_commands_v1.py:67–153`: `project_policy` bij een graph-wijziging.
-
-  Daarnaast kent het beleid twee dingen die de drie B10-opties niet uitdrukken:
-  - **benoemde** verplichte reviewers ("deze twee personen"; B10 zegt alleen "twee andere reviewers");
-  - optionele deelnemers via `manage_review_participation`, met een eigen UI (`review_participation_ui_v1.py`).
-
-  Vragen:
-  - (a) Geldt B10 ook voor beslisboom-graphs, of blijft daar het bestaande beleid?
-  - (b) Bij `one_other`/`two_others`: voldoet elke benoemde reviewer (`named_reviewers`) die niet de uploader is, of kiest de uploader specifieke personen?
-  - (c) Blijft het beheer van deelnemers bestaan als lijst van benoemde reviewers zonder required/optional-betekenis, of vervalt het?
-
-  Zonder deze antwoorden wordt de vervanging een eigen interpretatie van een duurzaam model, en die maak ik NIET.
+- **H2-4 (beantwoord).**
+  - (a) Beslisbomen volgen dezelfde `review_configuration`: één reviewregel voor alle documenttypen.
+  - (b) De uploader MOET specifieke reviewers benoemen (`review_configuration.reviewers`). Alleen hun goedkeuringen tellen, plus de uploader als eerste oog waar §4 dat toelaat.
+  - (c) Optionele deelnemers blijven als `review_configuration.readers` en tellen NOOIT mee.
 
 ## 10. D-DEL-1: verwijderen van een ongepubliceerd document (beantwoord, binnen scope)
 - **Regel.** Een ongepubliceerd document MOET verwijderbaar zijn door:
@@ -139,3 +129,28 @@ De tests van §7, de volledige suite en de Postgres-tests met `METIS_TEST_POSTGR
   - publisher-delete slaagt (nu: geweigerd, omdat de publisher geen researcher of reviewer is);
   - uploader-delete slaagt;
   - een andere researcher of een reviewer die niet de uploader is → geweigerd (nu: verwijderd).
+
+## 11. Uitvoering: gesplitst in PR 2a en PR 2b
+- **PR 2a (#623, branch `fix/approvals-independent`):** D-DEL-1, D-SEC-1, D-SEC-2 (herstel en CLI) en D-SEC-3. Daarin verandert de reviewregel NIET.
+- **PR 2b (deze branch, gestapeld op 2a):** `review_configuration`, migratie `017`, het backfill-commando, beslisbomen, benoemde reviewers en lezers.
+
+### OPENVRAAG-H2-5 (nieuw, blokkeert 2b): de rol "primary" bij beslisbomen
+`review_policy.primary` is meer dan een reviewer. Bij beslisbomen bepaalt die rol:
+- wie de graph opbouwt en bevestigt; de andere reviewers "beoordelen mee" (`decision_review_ui_v1.py:140`, `decision_graph_v1.py:294–334`);
+- wie een opvolgende versie (successor) MOET registreren (`decision_successor_v1.py:7–14`, `review_policy_owner_required`).
+
+Daarnaast schakelt de aanwezigheid van `review_policy` de expliciete beslisboommodus in (`source_preparation_context_v1.py:126`, `operations_console_v1.py:2467`).
+
+B10 kent geen primary. Wie heeft deze rol onder `review_configuration`?
+- (a) altijd de uploader;
+- (b) de eerste benoemde reviewer;
+- (c) een apart veld `graph_owner`, gekozen door de uploader.
+
+En wat schakelt de beslisboommodus in: `class == "beslisboom"` alleen?
+
+### OPENVRAAG-H2-6 (nieuw, blokkeert 2b): projecties in gehashte objecten
+Bestaande objecten dragen het beleid in `metadata.review_policy` of `governance.review_policy`. Dat telt mee in `canonical_object_hash`, en daar hangen alle review-bindings aan. Twee opties:
+- **Voorstel (niet-destructief):** de bestaande projectie blijft als inerte historische metadata in het object, zodat hash en bindings ongewijzigd blijven. Alleen de envelope-`review_configuration` is nog autoriteit. Nieuwe objecten krijgen geen beleidsprojectie meer.
+- **Alternatief:** de projectie wordt verwijderd. Dan wijzigen alle hashes en vervallen alle bestaande goedkeuringen op documenten met een beleid. Dat staat gelijk aan een volledige her-review, en W3 dekt dat alleen bij een wijziging van de optie.
+
+Besluit nodig: geldt het voorstel?
