@@ -2085,26 +2085,46 @@ class OperationsConsole:
                 and class_ != "beslisboom" and self._passage_formation_mode_reader() != DETERMINISTIC_MODE)
 
     @diagnostic_phase("processing_status")
-    def processing_status(self, snapshot_id: str, *, actor_id: str | None = None) -> dict[str, Any]:
+    def processing_status(self, snapshot_id: str, *, actor_id: str | None = None,
+                          deep: bool = True) -> dict[str, Any]:
+        """Verwerkingsstatus van één document.
+
+        ``deep=False`` is de compacte variant voor overzichten (D-PERF-2): die
+        MOET alleen opgeslagen attempt- en ``provider_evidence``-velden lezen en
+        MAG NIET ``stored_extraction`` of ``incomplete(objects=...)`` aanroepen.
+        Een opgeslagen ``formation_incomplete`` blijft dan ongecontroleerd
+        (``formation_checked`` False) en MOET NOOIT als voltooid gelden.
+        """
         from src.processing_retry_v1 import status
         if actor_id is not None:
             from src.source_selection_v1 import authorize
             authorize(self, actor_id, self._envelope(snapshot_id))
         result = status(self._envelope(snapshot_id), policy=self._processing_limits())
-        if (self.snapshot_is_published(snapshot_id) or self.snapshot_objects(snapshot_id)
+        # Compact: één alleen-lezen objectread zonder deepcopy (D-PERF-4).
+        overview_rows = None if deep else self._overview_rows(snapshot_id)
+        if (self.snapshot_is_published(snapshot_id)
+                or (self.snapshot_objects(snapshot_id) if deep else overview_rows)
                 or self._bindings.get(snapshot_id) or self._envelope(snapshot_id).get("review_passes")):
             result["retry_allowed"] = False
         from src.recoverable_formation_v1 import incomplete
         envelope = self._envelope(snapshot_id)
-        objects = self.snapshot_objects(snapshot_id)
-        from src.source_preparation_context_v1 import stored_extraction
-        try:
-            formation_fragments = stored_extraction(envelope) if incomplete(envelope) else None
-        except ConsoleError:
-            formation_fragments = None
-        result["formation_incomplete"] = incomplete(envelope) and incomplete(envelope, objects=objects,
-            bindings=self.object_review_bindings(snapshot_id, objects=objects),
-            fragments=formation_fragments)
+        stored_incomplete = incomplete(envelope)
+        if not deep or not stored_incomplete:
+            # Zonder opgeslagen open vorming is de diepe controle identiek
+            # (``incomplete`` eindigt dan direct op False).
+            result["formation_incomplete"] = stored_incomplete
+            result["formation_checked"] = not stored_incomplete
+        else:
+            objects = self.snapshot_objects(snapshot_id)
+            from src.source_preparation_context_v1 import stored_extraction
+            try:
+                formation_fragments = stored_extraction(envelope)
+            except ConsoleError:
+                formation_fragments = None
+            result["formation_incomplete"] = incomplete(envelope, objects=objects,
+                bindings=self.object_review_bindings(snapshot_id, objects=objects),
+                fragments=formation_fragments)
+            result["formation_checked"] = True
         evidence = (self._envelope(snapshot_id).get("semantic_replay") or {}).get("provider_evidence") or {}
         result["formation_state"] = "pending" if result["formation_incomplete"] else "complete"
         if evidence.get("task_policy"):
@@ -2114,13 +2134,22 @@ class OperationsConsole:
             )
         else:
             result["formation_progress"] = {}
-        result["resume_allowed"] = bool(self._can_resume_formation(snapshot_id)
+        result["resume_allowed"] = bool(self._can_resume_formation(snapshot_id, rows=overview_rows)
             and result["state"] != "running"
             and (result["retry_attempts_used"] < result["max_attempts"] or result["recovery_available"])
             and result["reason_code"] not in {"processing_retry_cooldown", "processing_structural_limit"})
         return result
 
-    def _can_resume_formation(self, snapshot_id):
+    def _overview_rows(self, snapshot_id: str) -> list[dict[str, Any]]:
+        """Huidige objectrevisies voor overzichten, zonder deepcopy (D-PERF-4).
+
+        De rijen zijn gedeelde opgeslagen staat: aanroepers MOETEN ze alleen
+        lezen; wijzigen of doorgeven aan schrijfpaden MAG NIET.
+        """
+        self._envelope(snapshot_id)
+        return current_revisions(self._load_objects(snapshot_id, remember=False), snapshot_id=snapshot_id)
+
+    def _can_resume_formation(self, snapshot_id, *, rows=None):
         from src.recoverable_formation_v1 import incomplete, VERSION
         from src.source_context_review_v1 import ROLE_KEY, LINKS_KEY
         envelope = self._envelope(snapshot_id)
@@ -2134,7 +2163,7 @@ class OperationsConsole:
                               and (lineage_evidence(row) or {}).get("reason") == "same-source candidate retirement"))
                 or ROLE_KEY in (row.get("metadata") or {}) or LINKS_KEY in (row.get("metadata") or {})
                     or ((row.get("metadata") or {}).get("passage_register") or {}).get("source") == "review"
-                for row in self.snapshot_objects(snapshot_id)))
+                for row in (rows if rows is not None else self.snapshot_objects(snapshot_id))))
 
     def resume_formation(self, *, actor_id, snapshot_id, command_id, expected_revision):
         """Resume open producer work; reviewed/published work requires successor."""

@@ -9,7 +9,7 @@ from fastapi import Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from src.operations_console_v1 import ConsoleError
-from src.source_selection_v1 import projection
+from src.source_selection_v1 import UNCHECKED, projection
 
 
 def _minutes(seconds):
@@ -88,13 +88,17 @@ def install(app, console, require, page, nav, esc):
         running_selected = False
         for envelope in visible:
             sid = envelope['snapshot_id']
-            result = projection(console, actor_id=actor['account_id'], snapshot_id=sid, documents=documents)
+            # Volledige controle alleen voor het expliciet gekozen document (D-PERF-2).
+            result = projection(console, actor_id=actor['account_id'], snapshot_id=sid, documents=documents,
+                                deep=bool(document) and sid == document)
             action = ''
             if result['state'] in {'bezig', 'wacht op uitvoering'}:
                 action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Voortgang bekijken</a>'
                 running_selected = running_selected or sid == selected
             elif result['state'] == 'voltooid':
                 action = f'<a class="btn-secondary" href="/review?document={esc(sid)}">Resultaat bekijken</a>'
+            elif result['state'] == UNCHECKED:
+                action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Volledigheid controleren</a>'
             elif result['can_start']:
                 label = 'Starten' if result['state'] == 'nog niet gestart' else 'Hervatten'
                 action = (f'<form method="post" action="/source-selection/start">'
@@ -126,7 +130,7 @@ def install(app, console, require, page, nav, esc):
                             '<p>De tijdslimiet loopt vanaf de aanvraag. Verloopt deze tijdens wachten, '
                             'dan telt deze poging mee voor de herstelgrens. De geschatte verwerkingstijd bevat ook wachttijd.</p>')
             summary = ''
-            if result['state'] in {'voltooid', 'onderbroken', 'mislukt'}:
+            if result['state'] in {'voltooid', 'onderbroken', 'mislukt', UNCHECKED}:
                 summary = (f'<p>{result["candidates"]} gevormde kandidaten · {result["source_passages"]} overige bronpassages · {result["blocked"]} geblokkeerde kandidaten · {result["formation_blockers"]} verwerkingsblokkades.</p>'
                            f'<p>Poging technisch geslaagd: {"ja" if result["attempt_succeeded"] else "nee"}. '
                            f'Volledige bronverwerking: {"ja" if result["formation_complete"] else "nog niet bevestigd"}.</p>')

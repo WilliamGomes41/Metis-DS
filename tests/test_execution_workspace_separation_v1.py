@@ -148,7 +148,7 @@ def test_publish_keeps_review_recovery_and_hides_technical_diagnosis(tmp_path, m
         'blockers': ['four_eyes_required', 'private_provider_error']})
     client = client_for(console)
     login(client, 'publisher.carla')
-    page = client.get('/publish')
+    page = client.get('/publish', params={'document': sid})
     assert page.status_code == 200
     text = ' '.join(Surface(page.text).text)
     assert 'private_provider_error' not in text and 'four_eyes_required' not in text

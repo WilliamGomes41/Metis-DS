@@ -408,16 +408,16 @@ def test_next_http_read_observes_tampered_source_and_new_review_decision(tmp_pat
     app=installed_app(console)
     with TestClient(app,base_url='https://testserver') as client:
         assert client.post('/login',data={'username':'reviewer','password':'strong-test-password'},follow_redirects=False).status_code==303
-        before=client.get('/publish').text
+        before=client.get('/publish',params={'document':sid}).text
         source,_=console._verified_source_bytes(console._envelope(sid));original=source.read_bytes()
         try:
             source.write_bytes(b'corrupted source')
-            changed=client.get('/publish').text
+            changed=client.get('/publish',params={'document':sid}).text
             assert before!=changed  # genuine file change, no source-reader mock
         finally:source.write_bytes(original)
-        assert client.get('/publish').text==before
+        assert client.get('/publish',params={'document':sid}).text==before
         console.review_object(actor_id=reviewer,snapshot_id=sid,object_id=candidate['object_id'],decision='reject',comment='Bewaar mijn besluit')
-        after=client.get('/publish').text
+        after=client.get('/publish',params={'document':sid}).text
         assert before!=after
         assert not console.publication_readiness(sid)['publish_allowed']
         assert next(o for o in console.snapshot_objects(sid) if o['object_id']==candidate['object_id'])['governance']['validation_status']=='rejected'

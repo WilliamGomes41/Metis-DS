@@ -174,6 +174,15 @@ def _login(client: TestClient, username: str) -> None:
     assert response.status_code == 303
 
 
+def _selected_publish(client):
+    """Overzicht is compact (H1); de volledige status MOET via het gekozen document lopen."""
+    import re
+    overview = client.get("/publish")
+    assert overview.status_code == 200
+    snapshot_id = re.search(r'data-publish-document="([^"]+)"', overview.text).group(1)
+    return client.get("/publish", params={"document": snapshot_id})
+
+
 def _assert_room_statuses(
     client: TestClient,
     *,
@@ -190,7 +199,7 @@ def _assert_room_statuses(
     assert f"status <b>{expected_label}</b>" in review.text
 
     _login(client, publisher_username)
-    publish = client.get("/publish")
+    publish = _selected_publish(client)
     assert publish.status_code == 200
     assert f"status <b>{expected_label}</b>" in publish.text
 
@@ -240,7 +249,7 @@ def test_open_review_has_same_meaningful_status_in_all_three_rooms(tmp_path: Pat
         publisher_username="publisher.carla",
         expected_label="in review",
     )
-    assert "captured_not_published" not in client.get("/publish").text
+    assert "captured_not_published" not in _selected_publish(client).text
 
 
 def test_complete_review_moves_from_blocked_to_ready_without_persisting_status(
@@ -313,13 +322,13 @@ def test_publish_evaluates_readiness_once_per_document_and_refreshes_next_reques
     client = _client(console)
     _login(client, "publisher.carla")
     calls.clear()
-    first = client.get("/publish")
+    first = client.get("/publish", params={"document": receipt["snapshot_id"]})
     assert first.status_code == 200
     assert "klaar voor publicatie" in first.text
     assert calls == [receipt["snapshot_id"]]
     source.blobs.pop(str(receipt["immutable_storage_locator"]))
     calls.clear()
-    second = client.get("/publish")
+    second = client.get("/publish", params={"document": receipt["snapshot_id"]})
     assert second.status_code == 200
     assert "geblokkeerd" in second.text
     assert calls == [receipt["snapshot_id"]]

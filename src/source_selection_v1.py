@@ -9,6 +9,9 @@ from src.operations_console_v1 import ConsoleError, PRE_REVIEW_BLOCKED, SNAPSHOT
 from src.processing_retry_v1 import reserve, now, status
 
 
+UNCHECKED = "volledigheid nog niet gecontroleerd"
+
+
 def authorize(console, actor_id, envelope):
     account = console._account(actor_id, current=True)
     if account.get("retirement"):
@@ -131,21 +134,25 @@ def estimate(envelope, documents):
 
 
 @diagnostic_phase("selection_projection")
-def projection(console, *, actor_id, snapshot_id, documents):
+def projection(console, *, actor_id, snapshot_id, documents, deep=True):
     from pathlib import Path
     from src.source_accountability_v1 import is_source_record
     from src.admission_gate_v1 import is_admission_blocked
     envelope = console._envelope(snapshot_id)
     authorize(console, actor_id, envelope)
-    processing = console.processing_status(snapshot_id, actor_id=actor_id)
-    objects = console.snapshot_objects(snapshot_id)
+    processing = console.processing_status(snapshot_id, actor_id=actor_id, deep=deep)
+    # Overzicht: alleen-lezen rijen zonder deepcopy; het gekozen document leest volledig.
+    objects = console.snapshot_objects(snapshot_id) if deep else console._overview_rows(snapshot_id)
     attempt = next(reversed(envelope.get("processing_attempts") or []), {})
     succeeded = bool(attempt.get("state") == "succeeded" or (not attempt and envelope.get("quality_processing_runs")))
     complete = succeeded and not processing["formation_incomplete"]
+    # Zonder actuele controle MOET de status ongecontroleerd blijven, NOOIT voltooid.
+    unchecked = succeeded and not processing.get("formation_checked", True)
     current = processing["state"]
     waiting = current == "running" and (attempt.get("dispatch") or {}).get("state") == "pending"
     state = ("wacht op uitvoering" if waiting else "bezig" if current == "running" else "onderbroken" if current in {"expired", "interrupted"}
-             or (succeeded and not complete) else "mislukt" if current == "failed"
+             else UNCHECKED if unchecked
+             else "onderbroken" if (succeeded and not complete) else "mislukt" if current == "failed"
              else "voltooid" if complete else "nog niet gestart")
     elapsed = _duration(attempt.get("started_at"), attempt.get("finished_at") or now().isoformat())
     timing = estimate({**envelope, "processing_configuration": configuration(console)}, documents)
@@ -164,7 +171,8 @@ def projection(console, *, actor_id, snapshot_id, documents):
     return {"snapshot_id": snapshot_id, "title": envelope["title"],
             "filename": (envelope.get("received_source") or {}).get("filename") or Path(envelope["binary_path"]).name,
             "version": envelope["version"], "bytes": (envelope.get("received_source") or {}).get("bytes"),
-            "state": state, "attempt_succeeded": succeeded, "formation_complete": complete,
+            "state": state, "attempt_succeeded": succeeded, "formation_complete": complete and not unchecked,
+            "formation_checked": not unchecked,
             "phase": (attempt.get("diagnostic") or {}).get("phase") or attempt.get("phase") or "Nog niet gestart", "elapsed_seconds": elapsed,
             "deadline_seconds": _duration(now().isoformat(), attempt.get("expires_at")),
             "estimate": timing, "remaining_seconds": remaining, "candidates": len(candidates),
