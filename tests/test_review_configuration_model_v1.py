@@ -162,7 +162,7 @@ def test_migration_017_adds_provenance_columns_non_destructively():
 
 def test_no_gate_reads_the_configuration_in_this_slice():
     """Slice 2b-1 MAG NIET het gedrag veranderen: geen import buiten het model."""
-    import subprocess
-    out = subprocess.run(["git", "grep", "-l", "review_configuration_v1", "--", "src"], cwd=ROOT,
-                         capture_output=True, text=True).stdout.split()
-    assert out == ["src/review_configuration_v1.py"]
+    users = sorted(str(path.relative_to(ROOT)) for path in (ROOT / "src").rglob("*.py")
+                   if "review_configuration_v1" in path.read_text(encoding="utf-8"))
+    assert (ROOT / "src/review_configuration_v1.py").exists()
+    assert users == []
