@@ -692,6 +692,31 @@ class PostgresCanonicalPublicationStore:
             )
         return out
 
+    def active_release_items(self, release_id: str, *, limit: int = 2048) -> list[dict[str, str]]:
+        """Compact bounded registry membership for a diagnostic release read."""
+        if not release_id or not 1 <= limit <= 2048:
+            raise CanonicalPublicationStoreError("canonical_release_selector_invalid")
+        try:
+            with self._connect() as con:
+                rows = con.execute(
+                    """
+                    SELECT r.object_id, r.object_version, c.content_hash
+                    FROM publication_registry r
+                    JOIN canonical_object_versions c
+                      ON c.object_id=r.object_id AND c.object_version=r.object_version
+                    WHERE r.release_id=%s AND r.state='active'
+                    ORDER BY r.object_id, r.object_version
+                    LIMIT %s
+                    """, (release_id, limit + 1),
+                ).fetchall()
+        except CanonicalPublicationStoreError:
+            raise
+        except Exception as exc:
+            raise CanonicalPublicationStoreError("canonical_postgres_read_failed") from exc
+        if len(rows) > limit:
+            raise CanonicalPublicationStoreError("canonical_release_items_limit_exceeded")
+        return [{key: str(row[key]) for key in ("object_id", "object_version", "content_hash")} for row in rows]
+
     def release_for_snapshot(self, snapshot_id: str) -> dict[str, Any] | None:
         """Return the durable release record for one console source snapshot."""
         if not snapshot_id:

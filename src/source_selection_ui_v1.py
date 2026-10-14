@@ -162,6 +162,14 @@ def install(app, console, require, page, nav, esc):
         return JSONResponse(processing_trace(envelope), headers={'Cache-Control': 'no-store',
             'Content-Disposition': 'attachment; filename=processing-trace.json'})
 
+    @app.get('/source-selection/publication-evidence')
+    def publication_evidence_get(request: Request, document: str = ''):
+        from src.publication_evidence_v1 import collect_publication
+        actor = require(request)
+        return JSONResponse(collect_publication(console, actor_id=actor['account_id'], snapshot_id=document),
+            headers={'Cache-Control':'no-store',
+                     'Content-Disposition':'attachment; filename=publication-evidence.json'})
+
     @app.get('/source-selection/blockage')
     def blockage_get(request: Request, document: str = '', checks: bool = False,
                      download: bool = False, attempt: str = Query('', pattern=r'^(?:pa_[0-9a-f]{32})?$')):

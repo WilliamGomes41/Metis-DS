@@ -40,6 +40,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--browser')
     parser.add_argument('--processing')
+    parser.add_argument('--publication', help='Authorized publication observation JSON')
+    parser.add_argument('--publication-route', help='Captured browser/readiness/product route evidence')
+    parser.add_argument('--publication-after-restart', help='Observation from a later process')
     parser.add_argument('--evidence', help='Existing processing-evidence ZIP; read recorded tables only')
     parser.add_argument('--attempt-id')
     parser.add_argument('--request-id')
@@ -48,8 +51,10 @@ def main():
     parser.add_argument('--output', required=True, help='New output directory; never overwritten')
     args = parser.parse_args()
     hashes = {}
-    if not args.browser and not args.processing and not args.evidence:
-        parser.error('Supply --browser, --processing or --evidence')
+    if not args.browser and not args.processing and not args.evidence and not args.publication:
+        parser.error('Supply --browser, --processing, --evidence or --publication')
+    if (args.publication_after_restart or args.publication_route) and not args.publication:
+        parser.error('--publication-after-restart requires --publication')
     probe = None
     if args.browser:
         probe, hashes['browser'] = read(args.browser)
@@ -74,6 +79,31 @@ def main():
             context = result['blockage']['context']
             result['processing_context_match'] = all(trace.get(key) and trace.get(key) == context.get(key)
                                                      for key in ('snapshot_id', 'source_hash'))
+    if args.publication:
+        from src.publication_evidence_v1 import publication_report
+        publication, hashes['publication'] = read(args.publication)
+        after = None
+        if args.publication_after_restart:
+            after, hashes['publication_after_restart'] = read(args.publication_after_restart)
+        route = None
+        if args.publication_route:
+            route, hashes['publication_route'] = read(args.publication_route)
+        if args.application:
+            from src.publication_evidence_v1 import publication_route_from_events
+            boundary = publication_route_from_events(publication, app, request_id=args.request_id)
+            route = {**(route or {}), **boundary}
+        if route is not None and probe is not None:
+            route = {**route, 'browser_incident':{key:value for key,value in result.items() if key in ('schema','browser','application','platform','correlation','missing_evidence','contradictions')}}
+        result['publication'] = publication_report(publication, after_restart=after, route_evidence=route)
+        for name in ('processing', 'blockage'):
+            if name in result:
+                context = result[name]['trace' if name == 'processing' else 'context']
+                matches = all(context.get(key) and context.get(key) == publication.get(key)
+                              for key in ('snapshot_id', 'source_hash'))
+                result['publication'][name + '_context_matches'] = bool(matches)
+                if not matches:
+                    result['publication']['identity_conflicts'].append(name + '_context_not_bound')
+                    result['publication']['end_to_end_proven'] = False
     result['input_sha256'] = hashes
     result['snapshot_consistency'] = 'independent_observations_not_atomic'
     output = Path(args.output)
@@ -89,6 +119,13 @@ def main():
     if 'blockage' in result:
         from src.blockage_diagnostics_v1 import blockage_summary
         report += '\n' + blockage_summary(result['blockage'])
+    if 'publication' in result:
+        item = result['publication']
+        report += '\nPublicatie: duurzaam waargenomen=' + str(item['canonical_release_observed'])
+        report += '; exact actief=' + str(item['exact_release_active'])
+        report += '; na procesherstart=' + str(item['same_release_after_process_restart'])
+        report += '\nOntbrekend bewijs: ' + ', '.join(item['missing_evidence'])
+        report += '\nConflicten: ' + ', '.join(item['identity_conflicts']) + '\n'
     (output / 'summary.txt').write_text(report)
 
 

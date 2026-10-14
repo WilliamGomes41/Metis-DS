@@ -19,6 +19,7 @@ from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError
 from src.document_status_v1 import DocumentStatusReadinessMixin
 from src.operations_console_v1 import PUBLICATION_PROTOCOL_VERSION, RELEASE_MANIFEST_DIRNAME, ConsoleError, _atomic_replace_bytes, _atomic_write
 from src.published_projection_v1 import atomic_replace_projection
+from src.publication_evidence_v1 import observe_publication
 from src.retrieval.retrieval_projection_v2 import build_projection
 from src.review_closure_v1 import ReviewClosureConsole
 from src.review_ledger import append_event
@@ -261,6 +262,12 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
                 }
             return {"status":"PASS","state":"published","snapshot_id":snapshot_id,"release_id":str(existing["release_id"]),"release_version":str(existing["release_version"]),"published_items":len(existing["objects"]),"g2":"PASS","cutover":True,"canonical_authority":"postgres","local_projection":"reconciled"}
         considered = self.consider_publish(actor_id=actor_id, snapshot_id=snapshot_id); envelope = self._envelope(snapshot_id)
+        # Capture the existing gate result under the existing publication lock.
+        # Optional telemetry is never a commit or a second readiness authority.
+        try: evidence_revision = self.objects_revision(snapshot_id)
+        except Exception: evidence_revision = None
+        observe_publication('publication_checked', snapshot_id=snapshot_id, envelope=envelope,
+                            revision=evidence_revision, readiness=considered)
         if not considered.get("publish_allowed"): return {"status":"BLOCKED","state":envelope["state"],"snapshot_id":snapshot_id,"blockers":considered.get("blockers") or ["object_tuple_required"],"g2":considered.get("g2","BLOCKED"),"cutover":False}
         account = self._require_role(actor_id, "publisher"); publish_ids = set(considered["publishable_object_ids"]); objects = [deepcopy(obj) for obj in self.snapshot_objects(snapshot_id) if obj.get("object_id") in publish_ids]
         logical_document_id = str(envelope.get("logical_document_id") or "")
@@ -272,12 +279,18 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
         if blocked: return {"status":"BLOCKED","state":envelope["state"],"snapshot_id":snapshot_id,"blockers":["prepublication_projection_failed"],"projection_errors":blocked,"g2":"PASS","cutover":False}
         from src.decision_graph_v1 import release_graph
         graph_args = {"decision_graph_release": release_graph(envelope, self.snapshot_objects(snapshot_id))} if "decision_graph" in envelope else {}
+        observe_publication('publication_submitted', snapshot_id=snapshot_id, envelope=envelope,
+                            revision=evidence_revision, release_id=release_id, objects=objects)
         try: store.persist_published_release(**graph_args,logical_document_id=logical_document_id,working_revision_id=working_revision_id,snapshot_id=snapshot_id,source_sha256=str(envelope.get("sha256") or ""),source_locator=str(envelope.get("immutable_storage_locator") or ""),release_id=release_id,release_version=release_version,release_owner=str(account["username"]),published_at=published_at,objects=objects)
         except CanonicalPublicationStoreError as exc: raise ConsoleError("durable_publication_store_failed", str(exc)) from exc
         release = self._durable_release_for_snapshot(snapshot_id)
         if release is None or str(release.get("release_id") or "") != release_id: raise ConsoleError("durable_publication_commit_not_readable")
+        observe_publication('publication_committed', snapshot_id=snapshot_id, envelope=envelope,
+                            revision=evidence_revision, release_id=release_id)
         try: projection = self._projection_from_authority(); self._apply_local_release_copy(release, projection)
         except Exception as exc: raise ConsoleError("durable_publication_local_copy_failed", str(exc)) from exc
+        observe_publication('publication_completed', snapshot_id=snapshot_id, envelope=envelope,
+                            revision=evidence_revision, release_id=release_id)
         return {"status":"PASS","state":"published","snapshot_id":snapshot_id,"release_id":release_id,"release_version":release_version,"published_items":len(objects),"g2":"PASS","cutover":True,"canonical_authority":"postgres","local_projection":"derived"}
 
     def reconcile_durable_publications(self) -> dict[str, int]:
