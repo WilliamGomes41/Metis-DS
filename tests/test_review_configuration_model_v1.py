@@ -166,7 +166,7 @@ def test_ambiguous_policy_needs_a_new_choice(policy):
 def test_migration_017_adds_provenance_columns_non_destructively():
     sql = (ROOT / "db/migrations/017_publication_review_provenance.sql").read_text(encoding="utf-8")
     assert "ALTER TABLE publication_releases" in sql
-    assert "ADD COLUMN IF NOT EXISTS review_provenance TEXT NOT NULL DEFAULT 'verified_review'" in sql
+    assert "ADD COLUMN IF NOT EXISTS review_provenance TEXT NOT NULL DEFAULT 'pending_verification'" in sql
     assert "ADD COLUMN IF NOT EXISTS review_provenance_changed_at TIMESTAMPTZ" in sql
     assert "'recovered_unverified'" in sql
     for forbidden in ("DROP ", "DELETE ", "UPDATE ", "TRUNCATE"):
