@@ -1,7 +1,8 @@
 """Bounded operational evidence for slow read pages; never domain state.
 
-Only fixed route/phase names and numeric counters leave this module. No request
-headers, query strings, user IDs, SQL, source content or exception text.
+Only fixed route/phase names, bounded identities, times and counters leave this
+module. The optional attempt token is strictly validated. No arbitrary headers,
+query strings, user IDs, SQL, source content or exception text.
 """
 from __future__ import annotations
 
@@ -10,6 +11,8 @@ import contextlib
 import json
 import logging
 import os
+import re
+from datetime import datetime, timezone
 import time
 import uuid
 from contextvars import ContextVar
@@ -18,7 +21,7 @@ from typing import Callable, Any
 
 _LOGGER = logging.getLogger('metis.console.diagnostics')
 _CURRENT = ContextVar('metis_request_diagnostics', default=None)
-ROUTES = frozenset({'/source-selection', '/review'})
+ROUTES = frozenset({'/login', '/ingest', '/tree', '/source-selection', '/review', '/publish'})
 PHASES = frozenset({'authorization', 'document_list', 'document_store_read', 'document_load',
     'selection_projection', 'processing_status', 'objects_read', 'source_read',
     'source_reconstruction', 'source_verify', 'review_bindings', 'review_render', 'review_index',
@@ -32,6 +35,7 @@ class RequestEvidence:
     request_id: str
     route: str
     emit: Callable[[dict[str, Any]], None]
+    attempt_id: str | None = None
     started: float = field(default_factory=time.perf_counter)
     stack: tuple = ()
     totals: dict = field(default_factory=dict)
@@ -39,7 +43,9 @@ class RequestEvidence:
 
     def report(self, event, **fields):
         payload = {'event': event, 'request_id': self.request_id,
-                   'route': self.route, 'elapsed_ms': round((time.perf_counter()-self.started)*1000, 3),
+                   'route': self.route, 'attempt_id': self.attempt_id,
+                   'timestamp': datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z'),
+                   'elapsed_ms': round((time.perf_counter()-self.started)*1000, 3),
                    **fields}
         try:
             self.emit(payload)
@@ -196,7 +202,12 @@ class RequestDiagnostics:
         if scope['type'] != 'http' or scope.get('method') != 'GET' or scope.get('path') not in ROUTES:
             await self.app(scope, receive, send)
             return
-        evidence = RequestEvidence(uuid.uuid4().hex, scope['path'], self.emit)
+        # Caller-controlled correlation only; never an identity or access credential.
+        candidates = [value for key, value in scope.get('headers', [])
+                      if key.lower() == b'x-metis-attempt-id']
+        attempt = (candidates[0].decode('ascii') if len(candidates) == 1
+                   and re.fullmatch(rb'[0-9a-f]{32}', candidates[0]) else None)
+        evidence = RequestEvidence(uuid.uuid4().hex, scope['path'], self.emit, attempt_id=attempt)
         token = _CURRENT.set(evidence)
         status = None
         completed = False
@@ -208,8 +219,11 @@ class RequestDiagnostics:
                 message = {**message, 'headers': [*message.get('headers', []),
                     (b'x-metis-request-id', evidence.request_id.encode('ascii'))]}
             await send(message)
+            if message['type'] == 'http.response.start':
+                evidence.report('response_started', status=status)
             if message['type'] == 'http.response.body' and not message.get('more_body', False):
                 completed = True
+                evidence.report('response_completed', status=status)
         # Export initialization is outside the request path. The SDK uses bounded
         # asynchronous queues; request processing never waits for network export.
         with self.request_span(scope['path']) as span:
