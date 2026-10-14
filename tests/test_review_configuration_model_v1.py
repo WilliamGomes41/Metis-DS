@@ -71,6 +71,19 @@ def test_invalid_configuration_is_refused(value, code):
         _model().validate_configuration(value, uploader_id=UP)
 
 
+@pytest.mark.parametrize("uploader", ["ai", "metis"])
+def test_uploader_sole_refuses_forbidden_uploader_identity(uploader):
+    """Codex P2: bij uploader_sole is de uploader de reviewer; die MOET door is_forbidden_reviewer."""
+    with pytest.raises(ValueError, match="forbidden_reviewer_identity"):
+        _model().validate_configuration(_cfg(option="uploader_sole", reviewers=[]), uploader_id=uploader)
+
+
+def test_migration_017_constraint_check_is_scoped_to_table():
+    """Codex P2: de pg_constraint-check MOET op conrelid zijn gescoped, net als de andere migraties."""
+    sql = (ROOT / "db/migrations/017_publication_review_provenance.sql").read_text(encoding="utf-8")
+    assert "AND conrelid = 'publication_releases'::regclass" in sql
+
+
 # --- legacy default (H2-7 a) -----------------------------------------------------
 
 def test_envelope_without_choice_projects_legacy_default_matching_main():
