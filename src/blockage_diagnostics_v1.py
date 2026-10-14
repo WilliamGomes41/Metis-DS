@@ -10,7 +10,7 @@ from pathlib import Path
 from zipfile import ZipFile
 from datetime import datetime, timezone
 
-from src.processing_trace_v1 import attempt_id, digest, mapping, project_attempt, sha, token
+from src.processing_trace_v1 import attempt_id, clean_runtime, digest, mapping, project_attempt, runtime_identity, sha, token
 from src.section_incident_v1 import choice, number, timestamp
 from src.attempt_diagnostics_v1 import VALIDATOR_FILES
 
@@ -273,6 +273,7 @@ def _checked_conditions(checks, snapshot, revision_hash, source_hash, conflicts,
         'evidence_ref':'current_checks.processing.'+field, 'execution_authorized':False,
         'requires_current_kernel_recheck':True} for name, field in (('resume', 'resume_allowed'), ('retry', 'retry_allowed'))]
     return actions, {'observed_at':timestamp(checks.get('observed_at')), 'context_matches':valid,
+        'runtime':clean_runtime(checks.get('runtime')),
         'provenance':'supplied_check_observation_not_authenticated_by_report',
         'processing':{**{k:processing.get(k) for k in ('retry_allowed', 'resume_allowed', 'formation_incomplete', 'recovery_available') if type(processing.get(k)) is bool},
             'reason_code':code(processing.get('reason_code')), 'state':choice(processing.get('state'), {'running','succeeded','failed','interrupted','expired','not_recorded'}),
@@ -301,7 +302,7 @@ def collect_blockage(console, *, actor_id, snapshot_id, current_checks=False, se
     if current_checks:
         before = digest(json.dumps(envelope, sort_keys=True))
         checks = {'snapshot_id':snapshot_id, 'revision_sha256':digest(revision), 'source_hash':envelope.get('sha256'),
-                  'observed_at':datetime.now(timezone.utc).isoformat(), 'errors':{}}
+                  'observed_at':datetime.now(timezone.utc).isoformat(), 'runtime':runtime_identity(), 'errors':{}}
         with console.source_selection_read_scope(retained_only=True):
             for name, call in (('processing', lambda: console.processing_status(snapshot_id, actor_id=actor_id)),
                                ('readiness', lambda: console.publication_readiness(snapshot_id))):
@@ -313,8 +314,8 @@ def collect_blockage(console, *, actor_id, snapshot_id, current_checks=False, se
                             checks['errors'][name] = 'retained_source_not_recorded'
                             continue
                     checks[name] = call()
-                except Exception:
-                    checks['errors'][name] = 'check_unavailable'
+                except Exception as error:
+                    checks['errors'][name] = code(getattr(error, 'code', None)) or 'check_unavailable'
             if mapping(checks.get('processing')).get('resume_allowed'):
                 try:
                     assert_resume_configuration(console, envelope)

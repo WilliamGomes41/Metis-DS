@@ -57,6 +57,8 @@ No authoritative workflow/review/object data is written by diagnostics.
   fields state the limited checks observed; every command rechecks all its
   existing conditions and permissions. Context/revision changes invalidate the
   advice. Revoked access is denied, not downgraded to a partial response.
+  Current observations include runtime/build identity when available and bounded
+  kernel error codes; private exception/provider messages are not copied.
 - Review follow-up is shown from existing curation blockers after formation is
   complete; pending formation keeps priority. A technically succeeded attempt
   does not establish formation completion, review completion or publication.

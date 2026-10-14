@@ -183,6 +183,7 @@ def test_actual_kernel_conditions_and_configuration_guard_are_reused(console, mo
     before = deepcopy(state._envelope(sid)), state.snapshot_objects(sid)
     report = collect_blockage(state, actor_id=actor, snapshot_id=sid, current_checks=True)
     assert report['current_checks']['context_matches']
+    assert len(report['current_checks']['runtime']['runtime_id']) == 32
     assert report['follow_up'][0]['observed_conditions_met'] is True
     assert report['follow_up'][0]['execution_authorized'] is False
     assert 'source_formation_incomplete' in report['current_checks']['readiness']['blockers']
@@ -204,6 +205,12 @@ def test_changed_revision_and_partial_check_failure_leave_recorded_evidence_avai
     assert report['finding_counts']['pending'] > 0
     assert report['current_checks']['errors']['readiness'] == 'check_unavailable'
     assert 'private dependency failure' not in json.dumps(report)
+    from src.operations_console_v1 import ConsoleError
+    def coded_failure(*args, **kwargs):
+        raise ConsoleError('freeze_bytes_missing')
+    monkeypatch.setattr(state,'publication_readiness',coded_failure)
+    coded=collect_blockage(state,actor_id=actor,snapshot_id=sid,current_checks=True)
+    assert coded['current_checks']['errors']['readiness'] == 'freeze_bytes_missing'
     monkeypatch.setattr(state,'publication_readiness',original)
     revision = state.objects_revision
     calls_read = []
