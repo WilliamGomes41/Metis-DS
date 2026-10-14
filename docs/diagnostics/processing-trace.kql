@@ -1,0 +1,12 @@
+// Existing App Service console destination. Restrict resource and time window
+// to the affected deployment; replace either/both opaque identifiers.
+let RequestId = "REPLACE_WITH_32_HEX_REQUEST_ID";
+let AttemptId = "REPLACE_WITH_pa_ATTEMPT_ID";
+AppServiceConsoleLogs
+| where TimeGenerated > ago(1h)
+| where ResultDescription startswith "metis_diagnostic "
+| extend d = parse_json(substring(ResultDescription, strlen("metis_diagnostic ")))
+| where tostring(d.request_id) == RequestId or tostring(d.attempt_id) == AttemptId
+| project d
+// Export projected d objects as JSON/JSONL. No rows means missing collected
+// evidence, not proof of non-arrival, cancellation, rollback or safe retry.

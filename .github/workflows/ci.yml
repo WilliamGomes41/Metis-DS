@@ -197,6 +197,18 @@ jobs:
       - name: Verify lifecycle compatibility regressions
         if: ${{ !cancelled() }}
         run: pytest -q tests/test_console_review_completeness.py tests/test_d3_3_human_recommendation_semantics.py tests/test_d4_3_human_relation_confirmation.py tests/test_processing_retry_postgres.py tests/test_protocol_v2_13_kernel.py tests/test_v212_kernel_v211_ingest_v210_console.py tests/test_v215_ingest_date_version_review_lanes.py tests/test_v216_review_page_researcher_bar.py tests/test_v228_structural_heading_nav_and_confirmed_strength_gate.py tests/test_v230_phase3_review_cockpit.py tests/test_v230_phase4_passage_register_coverage_gold.py tests/test_wave5_gericht_vereenvoudigen.py tests/test_lifecycle_withdrawal_recovery_v1.py tests/test_source_bound_continuation_repair.py
+      - name: Verify durable processing trace and restart evidence
+        if: ${{ !cancelled() }}
+        run: |
+          pytest -q tests/test_processing_trace_v1.py --junitxml=output/processing-trace.xml
+          python - <<'PYCODE'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("output/processing-trace.xml").getroot()
+          cases = list(root.iter("testcase"))
+          assert cases and any("postgres" in c.get("name", "") for c in cases), "Missing native trace proof"
+          assert not list(root.iter("skipped")), "Processing trace proof must execute every backend"
+          assert not list(root.iter("failure")) and not list(root.iter("error")), "Processing trace proof failed"
+          PYCODE
       - run: pytest -q
         if: ${{ !cancelled() }}
       - name: Install isolated browser test tooling

@@ -219,3 +219,58 @@ def test_real_azure_sdk_exports_start_before_request_finishes(events,monkeypatch
                    'request_started' in r['data']['baseData']['message'] for r in logs)
     finally:
         server.shutdown();server.server_close();listener.join(2)
+
+
+def test_pre_response_attempt_correlation_and_distinct_send_boundaries(events):
+    async def run():
+        app_entered = asyncio.Event()
+        release = asyncio.Event()
+        async def app(scope, receive, send):
+            app_entered.set()
+            await release.wait()
+            await send({'type':'http.response.start', 'status':200, 'headers':[]})
+            await send({'type':'http.response.body', 'body':b'ok'})
+        async def send(message):
+            pass
+        scope = {'type':'http', 'method':'GET', 'path':'/source-selection',
+                 'headers':[(b'x-metis-attempt-id', b'a'*32)]}
+        task = asyncio.create_task(RequestDiagnostics(app)(scope, None, send))
+        await app_entered.wait()
+        try:
+            started = next(row for row in events if row['event'] == 'request_started')
+            assert started['attempt_id'] == 'a'*32
+            assert started['timestamp'].endswith('Z')
+        finally:
+            release.set()
+            await task
+    asyncio.run(run())
+    names = [row['event'] for row in events]
+    assert names.index('response_started') < names.index('response_completed') < names.index('request_finished')
+
+
+def test_untrusted_attempt_header_is_not_arbitrary_log_input(events):
+    app = FastAPI()
+    @app.get('/login')
+    def login(): return 'unchanged'
+    app.add_middleware(RequestDiagnostics)
+    with TestClient(app) as client:
+        response = client.get('/login', headers={'x-metis-attempt-id':'private-secret'})
+        assert response.status_code == 200
+        assert 'x-metis-request-id' in response.headers
+    assert 'private-secret' not in json.dumps(events)
+    assert all(row.get('attempt_id') is None for row in events)
+
+
+def test_failed_response_transport_does_not_claim_completed_body(events):
+    async def app(scope, receive, send):
+        await send({'type':'http.response.start','status':200,'headers':[]})
+        await send({'type':'http.response.body','body':b'body'})
+    async def broken_send(message):
+        if message['type'] == 'http.response.body':
+            raise OSError('private transport failure')
+    with pytest.raises(OSError):
+        asyncio.run(RequestDiagnostics(app)({'type':'http','method':'GET','path':'/review'}, None, broken_send))
+    names = [r['event'] for r in events]
+    assert 'response_started' in names and 'response_completed' not in names
+    assert events[-1]['outcome'] == 'exception'
+    assert 'private' not in json.dumps(events)

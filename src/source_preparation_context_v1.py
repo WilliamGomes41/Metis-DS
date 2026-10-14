@@ -145,7 +145,10 @@ def build_formation_context(console, *, envelope, actor_id, expected_revision,
 
     def retain(fragments):
         record = extraction_record(envelope, fragments, contract)
+        summary = {key: record[key] for key in ('record_hash', 'fragments_hash')}
         if envelope.get(KEY) == record:
+            if context['diagnostic_checkpoint']:
+                context['diagnostic_checkpoint']('extraction_reused', {'extraction_checkpoint': summary})
             return
         if attempt is not None or expected_revision is not None:
             from src.processing_retry_v1 import assert_active, now
@@ -164,6 +167,9 @@ def build_formation_context(console, *, envelope, actor_id, expected_revision,
                 if deadline is not None and time.monotonic() >= deadline:
                     raise _error('processing_attempt_expired')
                 current[KEY] = record
+                if active is not None:
+                    from src.attempt_diagnostics_v1 import checkpoint
+                    checkpoint(active, 'extraction_checkpoint', {'extraction_checkpoint': summary})
                 console._commit_prepared_store(envelopes={source.snapshot_id: current}, snapshot_id=source.snapshot_id)
         # Update only the producing prepared value after a successful checkpoint.
         # Activation compares this value with the same existing durable envelope.

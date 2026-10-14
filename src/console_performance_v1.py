@@ -36,6 +36,15 @@ def performance_scope() -> Iterator[ConsolePerformance]:
         _CURRENT.reset(token)
 
 
+@contextmanager
+def detached_performance_scope():
+    token = _CURRENT.set(None)
+    try:
+        yield
+    finally:
+        _CURRENT.reset(token)
+
+
 def measure_badges(function: Any) -> Any:
     @wraps(function)
     def measured(*args: Any, **kwargs: Any) -> Any:
