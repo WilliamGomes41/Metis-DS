@@ -1,6 +1,6 @@
 # CHANGE_DESIGN: H2, goedkeuringen binnen het contract (herstelstap 2)
 
-**Status:** ontwerp. H2-1 tot en met H2-3 en D-DEL-1 zijn beantwoord (14-10-2026, 20:51 en 20:52 CEST). H2-4 is beantwoord (20:58 CEST). Het onafhankelijke deel staat in PR 2a (#623). PR 2b staat STIL op OPENVRAAG-H2-5 en H2-6 (zie §11).
+**Status:** ontwerp. H2-1 tot en met H2-3 en D-DEL-1 zijn beantwoord (14-10-2026, 20:51 en 20:52 CEST). H2-4 is beantwoord (20:58 CEST). Het onafhankelijke deel staat in PR 2a (#623). H2-5 en H2-6 zijn beantwoord (21:51 CEST). PR 2b staat STIL op OPENVRAAG-H2-7 (zie §12).
 **Basis:** main `4ac0b7b`. Bron: `/workspace/metis-ds-e2e/E2E-BUGREGISTER.md` (D-SEC-1, D-SEC-2, D-SEC-3, D-API-5, OPENVRAAG-B10), plus de besluiten van William van 14-10-2026 (via Metis, 20:48 CEST).
 **Change class:** A (raakt de review- en publicatie-invarianten en de serving-autoriteit).
 **Buiten scope:** D-API-1 en D-API-2, D-PERF. D-DEL-1 valt binnen scope (zie §10).
@@ -154,3 +154,25 @@ Bestaande objecten dragen het beleid in `metadata.review_policy` of `governance.
 - **Alternatief:** de projectie wordt verwijderd. Dan wijzigen alle hashes en vervallen alle bestaande goedkeuringen op documenten met een beleid. Dat staat gelijk aan een volledige her-review, en W3 dekt dat alleen bij een wijziging van de optie.
 
 Besluit nodig: geldt het voorstel?
+
+### H2-5 (beantwoord)
+De uploader is de eigenaar en bevestiger van de beslisboom-graph en registreert opvolgende versies. De beslisboommodus MOET uitsluitend volgen uit `class == "beslisboom"`, en NOOIT uit de aanwezigheid van een beleid.
+
+### H2-6 (beantwoord, voorstel aangenomen)
+Het bestaande `review_policy` blijft inerte historie in de bestaande hashes, zodat goedkeuringen geldig blijven. Alleen de envelope-`review_configuration` beslist. Nieuwe objecten krijgen de policy NOOIT meer gekopieerd.
+
+## 12. OPENVRAAG-H2-7 (nieuw, blokkeert 2b): W1 is strijdig met het huidige gedrag
+W1 zegt: bestaande documenten krijgen optie 3 met four-eyes **verplicht**, "which is current behaviour". Op main (`c7a9959`) eist four-eyes echter alleen een **hoog-risico-object** (`requires_four_eyes(obj)`: exception, `risk_level=high`, risicovelden). Een gewoon object publiceert vandaag met één goedkeuring van een benoemde reviewer die niet de uploader is.
+- **Bewijs:** `tests/test_vsa_publish_readiness_ui_v1.py::_complete_review` keurt één object goed door `reviewer.bert` (niet de uploader). Het document is daarna `ready`; die test is groen op main.
+- **Gevolg van de letterlijke lezing (four-eyes aan voor elk object):**
+  - elk bestaand document heeft dan voor elk gewoon object ook de goedkeuring van de uploader of van een tweede reviewer nodig;
+  - de backfill van H2-3 labelt dan elke actieve release met één reviewer als `recovered_unverified`.
+
+  Dat is geen voortzetting van het huidige gedrag.
+- **Twee lezingen:**
+  - (a) **Huidig gedrag exact (voorstel):** de backfill-default is `one_other` met `four_eyes_required=false`. Hoog-risico-objecten eisen four-eyes ALTIJD (H2-2). Dit reproduceert main exact. Nieuwe documenten kiezen de vlag zelf.
+  - (b) **Letterlijk W1:** de default is `four_eyes_required=true` voor elk object. Bestaande documenten en releases met één reviewer worden dan geblokkeerd of gelabeld.
+
+Besluit nodig: (a) of (b).
+
+**Uitvoeringsnoot (ingest-default, ter bevestiging bij hetzelfde besluit).** Honderden bestaande tests en scripts roepen de kernel-`ingest` aan zonder keuze. Voorstel: het HTTP-uploadformulier MOET de keuze afdwingen (de uploader MOET kiezen). De kernel-`ingest` zonder `review_configuration` krijgt dezelfde default als de backfill (W1, volgens de gekozen lezing), met `source: "legacy_default"`, zichtbaar in het document. Dit wijkt af van §2.1 ("ingest weigert zonder keuze").
