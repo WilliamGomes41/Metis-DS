@@ -5,7 +5,7 @@ import asyncio
 import uuid
 from urllib.parse import urlencode
 
-from fastapi import Request
+from fastapi import Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from src.operations_console_v1 import ConsoleError
@@ -23,6 +23,49 @@ def _range(values):
     if values is None:
         return "Onvoldoende gegevens voor een schatting."
     return f"ongeveer {_minutes(values[0])}–{_minutes(values[1])} (onzeker)"
+
+
+def _blockage_html(report, esc):
+    stages = {'source_formation':'Bronverwerking', 'publication_conditions':'Publicatievoorwaarden',
+              'identity_verification':'Eerst controleren of het bewijs bij hetzelfde document hoort',
+              'not_established':'Nog niet vastgesteld'}
+    counts = report['finding_counts']
+    body = '<h1>Blokkade en bewijs</h1><p>Hier zie je wat is vastgelegd, wat nog openstaat en welk bewijs ontbreekt.</p>'
+    body += '<h2>Eerst te onderzoeken</h2><p>' + esc(stages[report['next_blocking_stage']]) + '</p>'
+    pending = report['formation_progress']['pending_task_count']
+    body += f'<p>Open verwerkingstaken: {esc(pending) if pending is not None else "niet vastgelegd"}. '
+    body += f'Actuele afwijzingen: {counts.get("pending", 0)}. Historische afwijzingen: {counts.get("historical", 0)}.</p>'
+    selected = report['selected_attempt_result']
+    if selected:
+        states = {'succeeded':'technisch geslaagd', 'failed':'mislukt', 'interrupted':'onderbroken', 'running':'als actief opgeslagen'}
+        body += '<h2>Gekozen poging</h2><p>Status: ' + esc(states.get(selected['stored_state'], 'onbekend')) + '.</p>'
+        if selected['error']:
+            body += '<p>' + esc(selected['error']['title']) + ' · controlecode: ' + esc(selected['error']['code'] or 'onbekend') + '.</p>'
+        body += '<p>Deze poging is apart weergegeven; het huidige document kan inmiddels verder zijn verwerkt.</p>'
+    for item in report['blockers']:
+        body += '<h3>' + esc(item['title']) + '</h3><p>' + esc(item['expected_condition'] or 'De controlevoorwaarde is nog niet verklaard.') + '</p>'
+    body += '<h2>Vervolgvoorwaarden</h2><p>Dit betreft de getoonde controles. Bij uitvoering controleert Metis alle opdrachtvoorwaarden en bevoegdheden opnieuw.</p><ul>'
+    for action in report['follow_up']:
+        value = action['observed_conditions_met']
+        label = {'resume':'Hervatten', 'retry':'Opnieuw proberen', 'review_obligations':'Openstaande reviewverplichtingen bekijken'}[action['action']]
+        status = 'vervolgstap voor de toegewezen reviewer' if action['action'] == 'review_obligations' else 'gecontroleerde voorwaarden voldaan' if value is True else 'gecontroleerde voorwaarden niet voldaan' if value is False else 'nog niet gecontroleerd of inmiddels verouderd'
+        body += '<li>' + label + ': ' + status + '</li>'
+    body += '</ul><h2>Bewijs en onzekerheid</h2><p>Een technisch geslaagde poging bevestigt op zichzelf geen volledige bronverwerking of publicatiegereedheid.</p>'
+    for problem in report['identity_conflicts']:
+        body += '<p role="alert">Bewijs hoort mogelijk niet bij dezelfde toestand: ' + esc(problem) + '</p>'
+    body += '<details><summary>Vastgelegde bevindingen en bewijsverwijzingen</summary><ol>'
+    states = {'pending':'nog open', 'historical':'historisch', 'unknown':'actualiteit onbekend',
+              'stored_candidate_admission':'opgeslagen kandidaatcontrole; geen publicatiebesluit'}
+    for item in report['findings']:
+        refs = ', '.join(str(ref.get('dataset')) + ' · gegevensrij ' + str(ref.get('row')) for ref in item['evidence_refs'])
+        body += '<li>' + esc(item['title']) + ' — ' + esc(states[item['scope']])
+        body += '<p>' + esc(item['expected_condition'] or 'Voor deze code is nog geen verklaring vastgelegd.') + '</p>'
+        body += '<p>Controlecode: ' + esc(item['code'] or 'onbekend') + '. Bewijs: ' + esc(refs) + '.</p></li>'
+    body += '</ol></details><details><summary>Ontbrekende gegevens en controle-uitkomsten</summary><ul>'
+    body += ''.join('<li>' + esc(value) + '</li>' for value in report['missing_evidence'])
+    for key, value in report['current_checks']['errors'].items():
+        body += '<li>' + esc(key) + ': ' + esc(value) + '</li>'
+    return body + '</ul></details>'
 
 
 def install(app, console, require, page, nav, esc):
@@ -88,6 +131,7 @@ def install(app, console, require, page, nav, esc):
                            f'<p>Poging technisch geslaagd: {"ja" if result["attempt_succeeded"] else "nee"}. '
                            f'Volledige bronverwerking: {"ja" if result["formation_complete"] else "nog niet bevestigd"}.</p>')
             trace_link = f'<a class="btn-secondary" href="/source-selection/processing-trace?document={esc(sid)}">Verwerkingsspoor downloaden</a>'
+            trace_link += f'<a class="btn-secondary" href="/source-selection/blockage?document={esc(sid)}">Blokkade en bewijs bekijken</a>'
             review = f'<a class="btn-primary" href="/review?document={esc(sid)}">Naar Review</a>' if result['review_available'] else ''
             extent = f'{result["bytes"]:,} bytes' if result['bytes'] is not None else 'Bestandsgrootte onbekend'
             records = (envelope.get('quality_processing_runs') or [])
@@ -117,6 +161,29 @@ def install(app, console, require, page, nav, esc):
         authorize(console, actor['account_id'], envelope)
         return JSONResponse(processing_trace(envelope), headers={'Cache-Control': 'no-store',
             'Content-Disposition': 'attachment; filename=processing-trace.json'})
+
+    @app.get('/source-selection/blockage')
+    def blockage_get(request: Request, document: str = '', checks: bool = False,
+                     download: bool = False, attempt: str = Query('', pattern=r'^(?:pa_[0-9a-f]{32})?$')):
+        from src.blockage_diagnostics_v1 import collect_blockage
+        actor = require(request)
+        report = collect_blockage(console, actor_id=actor['account_id'], snapshot_id=document,
+                                 current_checks=checks, selected_attempt=attempt or None)
+        if download:
+            return JSONResponse(report, headers={'Cache-Control':'no-store',
+                'Content-Disposition':'attachment; filename=blockage-report.json'})
+        query = {'document':document, **({'attempt':attempt} if attempt else {})}
+        selector = '<form method="get"><input type="hidden" name="document" value="' + esc(document) + '"><label>Verwerkingspoging<select name="attempt"><option value="">Documentgegevens zonder een poging te kiezen</option>'
+        for row in report['attempts']:
+            if row['attempt_id']:
+                selected = ' selected' if row['attempt_id'] == report['selected_attempt_id'] else ''
+                selector += '<option value="' + esc(row['attempt_id']) + '"' + selected + '>' + esc((row['started_at'] or 'Tijd niet vastgelegd') + ' · ' + (row['stored_state'] or 'onbekend') + ' · ' + row['attempt_id'][-8:]) + '</option>'
+        selector += '</select></label><button>Bewijs van deze poging bekijken</button></form>'
+        links = '<p><a href="?' + esc(urlencode({**query, 'checks':1})) + '">Actuele voorwaarden controleren</a></p>'
+        links += '<p><a href="?' + esc(urlencode({**query, 'download':1})) + '">Opgeslagen bewijs downloaden</a></p>'
+        links += '<p><a href="?' + esc(urlencode({**query, 'checks':1, 'download':1})) + '">Opnieuw controleren en rapport downloaden</a></p>'
+        return HTMLResponse(page(nav(actor, 'selection') + '<section class="room" id="blockage-report" style="overflow-wrap:anywhere">' +
+            _blockage_html(report, esc) + selector + links + '</section>'), headers={'Cache-Control':'no-store'})
 
     @app.post('/source-selection/start')
     async def selection_start(request: Request):

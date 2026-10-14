@@ -405,7 +405,7 @@ def test_processing_evidence_download_preserves_recorded_and_missing_evidence(tm
     assert response.headers["content-type"] == "application/zip"
     assert "attachment;" in response.headers["content-disposition"]
     with ZipFile(io.BytesIO(response.content)) as archive:
-        assert set(archive.namelist()) == {"manifest.csv", "revision.csv", "README.txt", *(name + ".csv" for name in SCHEMAS)}
+        assert set(archive.namelist()) == {"manifest.csv", "revision.csv", "README.txt", "blockage_summary.txt", *(name + ".csv" for name in SCHEMAS)}
         def rows(name):
             data = archive.read(name + ".csv")
             assert data.startswith(b"\xef\xbb\xbf")
@@ -458,7 +458,7 @@ def test_long_revision_is_stored_once_and_resolvable_for_every_dataset():
         {'object_id': f'object-{i}', 'object_version': '1.0'} for i in range(300)]}]}
     tables, projected = processing_evidence_tables(snapshot_id='snap-compact', revision=revision,
                                                    envelope=envelope, objects=[])
-    assert all(r['schema_version'] == 'processing-evidence-export-v13' for r in projected)
+    assert all(r['schema_version'] == 'processing-evidence-export-v14' for r in projected)
     assert tables['run_candidates'][0]['objects_revision'] == revision
     payload = processing_evidence_zip(snapshot_id='snap-compact', revision=revision,
                                       envelope=envelope, objects=[])

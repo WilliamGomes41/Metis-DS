@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Join a browser probe with normalized JSON arrays or JSONL diagnostic events."""
 import argparse
+import csv
 import hashlib
 import json
 import sys
 from pathlib import Path
+from zipfile import BadZipFile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.section_incident_v1 import build_incident, summary
@@ -38,6 +40,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--browser')
     parser.add_argument('--processing')
+    parser.add_argument('--evidence', help='Existing processing-evidence ZIP; read recorded tables only')
     parser.add_argument('--attempt-id')
     parser.add_argument('--request-id')
     parser.add_argument('--application')
@@ -45,8 +48,8 @@ def main():
     parser.add_argument('--output', required=True, help='New output directory; never overwritten')
     args = parser.parse_args()
     hashes = {}
-    if not args.browser and not args.processing:
-        parser.error('Supply --browser or --processing')
+    if not args.browser and not args.processing and not args.evidence:
+        parser.error('Supply --browser, --processing or --evidence')
     probe = None
     if args.browser:
         probe, hashes['browser'] = read(args.browser)
@@ -60,6 +63,17 @@ def main():
         from src.processing_trace_v1 import processing_incident
         processing, hashes['processing'] = read(args.processing)
         result['processing'] = processing_incident(processing, app, selected_attempt=args.attempt_id, selected_request=args.request_id)
+    if args.evidence:
+        from src.blockage_diagnostics_v1 import read_blockage_zip, blockage_report
+        tables = read_blockage_zip(args.evidence)
+        with Path(args.evidence).open('rb') as source:
+            hashes['evidence'] = hashlib.file_digest(source, 'sha256').hexdigest()
+        result['blockage'] = blockage_report(tables, selected_attempt=args.attempt_id)
+        if 'processing' in result:
+            trace = result['processing']['trace']
+            context = result['blockage']['context']
+            result['processing_context_match'] = all(trace.get(key) and trace.get(key) == context.get(key)
+                                                     for key in ('snapshot_id', 'source_hash'))
     result['input_sha256'] = hashes
     result['snapshot_consistency'] = 'independent_observations_not_atomic'
     output = Path(args.output)
@@ -72,13 +86,16 @@ def main():
         report += '\nLast recorded checkpoint: ' + str(item['assessment']['last_recorded_checkpoint'])
         report += '\nMissing evidence: ' + ', '.join(item['missing_evidence'])
         report += '\nNext check: ' + item['assessment']['next_check'] + '\n'
+    if 'blockage' in result:
+        from src.blockage_diagnostics_v1 import blockage_summary
+        report += '\n' + blockage_summary(result['blockage'])
     (output / 'summary.txt').write_text(report)
 
 
 if __name__ == '__main__':
     try:
         main()
-    except (OSError, ValueError, TypeError):
+    except (OSError, ValueError, TypeError, BadZipFile, csv.Error, RuntimeError):
         # Paths and parser exception text can contain private source material.
         print('Incident export failed: check input schema, size and new output directory.', file=sys.stderr)
         sys.exit(2)

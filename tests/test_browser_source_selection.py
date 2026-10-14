@@ -39,6 +39,8 @@ def test_browser_workflow_order_receipt_selection_review_mobile(workflow_postgre
             result = json.loads((tmp_path/"browser-result.json").read_text())
             assert result["receiptDidNotStart"] and result["reviewOpened"] and result["pageErrors"] == []
             assert result["namedReviewerEnteredReview"] and result["unassignedUploaderDirectedToTrajectory"]
+            assert result["blockageOpenedBeforeProcessing"] and result["blockageDownloadReadOnly"]
+            assert result["blockageMobileOverflow"] is False
             assert len(list(tmp_path.glob("*.png"))) == 5
         finally:
             server.terminate()
