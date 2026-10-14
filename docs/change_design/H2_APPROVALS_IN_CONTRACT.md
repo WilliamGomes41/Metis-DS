@@ -1,9 +1,10 @@
 # CHANGE_DESIGN: H2, goedkeuringen binnen het contract (herstelstap 2)
 
-**Status:** ontwerp; implementatie staat STIL op OPENVRAAG-H2-1 tot en met H2-3 (zie §9).
+**Status:** ontwerp. H2-1 tot en met H2-3 en D-DEL-1 zijn beantwoord (14-10-2026, 20:51 en 20:52 CEST). De implementatie staat STIL op OPENVRAAG-H2-4 (zie §9).
 **Basis:** main `4ac0b7b`. Bron: `/workspace/metis-ds-e2e/E2E-BUGREGISTER.md` (D-SEC-1, D-SEC-2, D-SEC-3, D-API-5, OPENVRAAG-B10), plus de besluiten van William van 14-10-2026 (via Metis, 20:48 CEST).
 **Change class:** A (raakt de review- en publicatie-invarianten en de serving-autoriteit).
-**Buiten scope:** de verwijderrechten (D-DEL-1 wacht op William), D-API-1 en D-API-2, D-PERF.
+**Buiten scope:** D-API-1 en D-API-2, D-PERF. D-DEL-1 valt binnen scope (zie §10).
+**Rewrite risk:** high. `review_configuration` vervangt `review_policy_v1` in 15 src-modules en 22 testbestanden.
 
 ## 1. Besluiten van William (vast)
 - **W1.** Bestaande documenten krijgen optie 3 (één andere reviewer) met four-eyes verplicht.
@@ -101,21 +102,40 @@
 ## 8. Proof-plan
 De tests van §7, de volledige suite en de Postgres-tests met `METIS_TEST_POSTGRES_DSN` in de sandbox (#605). Op de box zijn die laatste ONBEWEZEN.
 
-## 9. OPENVRAAG: besluiten die de implementatie blokkeren
-- **OPENVRAAG-H2-1 (bestaand beleidsmodel).** Main heeft al een envelope-eigen reviewbeleid: `review_policy` (`explicit-review-v1` / `managed-review-v2`, `review_policy_v1.py`). Dat beleid kent een primary, `required`/`optional`-assignments en beheercommando's (`manage_review_participation`). In `publish_authorization_contract` (`four_eyes_v1.py:233–238`) vervangt het al de independence- en four-eyes-regel. Twee vragen:
-  - Vervangt B10 dit beleid, ligt B10 eroverheen (beide MOETEN gelden), of wordt B10 een projectie ervan (bijvoorbeeld `uploader_sole` = primary uploader zonder required assignments)?
-  - Wat gebeurt er met documenten die nu een managed beleid hebben?
+## 9. Besluiten en open punten
+- **H2-1 (beantwoord).** `review_configuration` VERVANGT `review_policy_v1`. Bestaande beleidsregels worden één keer gemigreerd naar de best passende optie. De mapping (deterministisch; `k` = het aantal required reviewers dat niet de uploader is, inclusief een primary die niet de uploader is):
+  - primary = uploader en `k=0` → `uploader_sole`, four-eyes uit;
+  - `k=1` → `one_other`, four-eyes aan;
+  - `k=2` → `two_others`;
+  - elk ander geval (`k>2`, `minimum_required>2`, archived-required, een ongeldig beleid) → `needs_choice`.
 
-  Dit is een duurzaam modelbesluit en staat niet in W1–W6.
-- **OPENVRAAG-H2-2 (betekenis van four-eyes bij `one_other`).** Huidig gedrag (W1 noemt dit "current behaviour"): four-eyes = ≥2 approvers waarvan ≥1 niet de uploader (`four_eyes_v1.py:179–191`). Daarbij telt de uploader dus als **eerste** oog. Twee lezingen:
-  - (a) De uploader telt als eerste oog: one_other+four-eyes = uploader + één ander. Dat is consistent met W1 en W2.
-  - (b) Four-eyes eist twee ogen buiten de uploader: dan valt `one_other`+four-eyes samen met `two_others`, en dat wijkt af van het huidige gedrag.
+  Bij `needs_choice` MOET het document opnieuw een optie kiezen. Publicatie blijft fail-closed met `review_configuration_choice_required`.
+- **H2-2 (beantwoord).** `one_other` + four-eyes: de uploader is het eerste oog en de andere reviewer het tweede. Twee niet-uploaders voldoen ook. De uploader telt NOOIT als tweede oog. Hoog-risico-objecten (`requires_four_eyes(obj)`) eisen four-eyes ALTIJD, ook bij `four_eyes_required=false`. Bij `uploader_sole` met een hoog-risico-object is publicatie daarom geblokkeerd met `four_eyes_required`.
+- **H2-3 (beantwoord, optie b).** Migratie `017` voegt de kolommen toe. Een eenmalig, idempotent herclassificatiecommando (`scripts/publication_review_provenance_backfill.py`) controleert elke actieve release opnieuw tegen §4 en de workflow-bindings, en zet alleen de gefaalde releases op `recovered_unverified`. Het commando kent een plan-modus (alleen lezen) en een execute-modus met `--confirm-count`. Het draait NOOIT automatisch bij boot. Alleen Argos voert het uit op live, na GO van William.
+- **OPENVRAAG-B10-1.** Four-eyes + `uploader_sole` wordt geweigerd (W6).
+- **OPENVRAAG-H2-4 (nieuw, blokkeert).** `review_policy` is ook de autoriteit voor de review van beslisbomen (decision graphs):
+  - `decision_graph_v1.py:294–334`: `required_reviewers(envelope["review_policy"])` bepaalt wie een graph MOET bevestigen;
+  - `decision_review_commands_v1.py:67–153`: `project_policy` bij een graph-wijziging.
 
-  Daarnaast is onbeantwoord wat `four_eyes_required=false` doet bij een hoog-risico-object (dosering, leeftijdsgrens). Nu forceert `requires_four_eyes(obj)` dan four-eyes per object. Schakelt de documentkeuze die objectregel uit, of blijft four-eyes voor hoog-risico-objecten altijd verplicht?
-- **OPENVRAAG-H2-3 (backfill van herstelde live releases).** Het register onderscheidt herstelde releases niet van normale: `recover_legacy_canonical_release` schrijft via hetzelfde `persist_published_release` zonder marker. Een migratie herkent ze daarom niet deterministisch zonder live data, en live data raak ik NOOIT aan. Opties:
-  - (a) William levert een lijst van release-ids. De migratie markeert precies die.
-  - (b) De migratie markeert elke actieve release `recovered_unverified` waarvan de bindings niet aan §4 voldoen. Dat vraagt een herberekening over de workflow-autoriteit tijdens de migratie.
-  - (c) Alle releases van vóór de Postgres-cutover worden gemarkeerd, op basis van `published_at` < cutover-tijdstempel.
+  Daarnaast kent het beleid twee dingen die de drie B10-opties niet uitdrukken:
+  - **benoemde** verplichte reviewers ("deze twee personen"; B10 zegt alleen "twee andere reviewers");
+  - optionele deelnemers via `manage_review_participation`, met een eigen UI (`review_participation_ui_v1.py`).
 
-  Keuze nodig.
-- **OPENVRAAG-B10-1 (W6).** Four-eyes plus `uploader_sole` wordt geweigerd. Of deze combinatie later toch toegestaan wordt, blijft open bij William.
+  Vragen:
+  - (a) Geldt B10 ook voor beslisboom-graphs, of blijft daar het bestaande beleid?
+  - (b) Bij `one_other`/`two_others`: voldoet elke benoemde reviewer (`named_reviewers`) die niet de uploader is, of kiest de uploader specifieke personen?
+  - (c) Blijft het beheer van deelnemers bestaan als lijst van benoemde reviewers zonder required/optional-betekenis, of vervalt het?
+
+  Zonder deze antwoorden wordt de vervanging een eigen interpretatie van een duurzaam model, en die maak ik NIET.
+
+## 10. D-DEL-1: verwijderen van een ongepubliceerd document (beantwoord, binnen scope)
+- **Regel.** Een ongepubliceerd document MOET verwijderbaar zijn door:
+  - een account met de rol `publisher`;
+  - de uploader (`envelope["uploader_account_id"]`).
+
+  Elke andere rol of elk ander account MAG NIET verwijderen en krijgt `unpublished_delete_not_permitted`. Het verwijderen van gepubliceerde documenten blijft ongewijzigd: dat wordt geweigerd.
+- **Plek.** `delete_unpublished_snapshot` (`operations_console_v1.py:2613+`; de rolcheck staat nu op `:2605–2607` en eist researcher of reviewer). Ook `_can_delete_unpublished` in `operations_console_app.py:1320` MOET dezelfde regel volgen (de UI-knop).
+- **Tests (eerst rood, daarna groen):**
+  - publisher-delete slaagt (nu: geweigerd, omdat de publisher geen researcher of reviewer is);
+  - uploader-delete slaagt;
+  - een andere researcher of een reviewer die niet de uploader is → geweigerd (nu: verwijderd).
