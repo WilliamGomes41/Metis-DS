@@ -68,6 +68,10 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
     checkpoint(attempt, "reserved", {"source_hash": envelope["sha256"], "source_version": envelope["version"],
                "expected_revision": revision, "actor_id": actor_id, "deployed_commit": deployment_identity(),
                "processing_reference": attempt["processing_reference"]})
+    from src.request_diagnostics_v1 import current_request_id
+    from src.processing_trace_v1 import runtime_identity
+    attempt['diagnostic']['origin_request_id'] = current_request_id()
+    attempt['diagnostic']['origin_runtime'] = runtime_identity()
     attempts.append(attempt)
     return attempt, True
 

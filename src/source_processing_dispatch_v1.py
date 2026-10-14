@@ -27,9 +27,13 @@ def claim(console, *, snapshot_id, attempt_id, actor_id=None, stop_event=None):
         if stop_event is not None and stop_event.is_set():
             return None
         dispatch.update(state="claimed", token=uuid.uuid4().hex, claimed_at=now().isoformat())
+        from src.processing_trace_v1 import runtime_identity
+        attempt.setdefault('diagnostic', {})['execution_runtime'] = runtime_identity()
         console._commit_prepared_store(envelopes={snapshot_id: envelope}, snapshot_id=snapshot_id)
         result = deepcopy(attempt)
     # Configuration and authorization are checked again by preparation/activation.
+    from src.processing_trace_v1 import observe
+    observe('processing_claimed', snapshot_id, result)
     return result
 
 
@@ -102,10 +106,15 @@ class SourceProcessingDispatcher:
 
     async def _deliver(self, sid, attempt):
         try:
-            await asyncio.to_thread(self._execute, sid, attempt)
+            from src.request_diagnostics_v1 import detached_request_diagnostics
+            from src.console_performance_v1 import detached_performance_scope
+            with detached_request_diagnostics(), detached_performance_scope():
+                await asyncio.to_thread(self._execute, sid, attempt)
         except Exception:
             # Kernel failure evidence/expiry remains authoritative. Do not
             # print provider prose, source text or credentials.
+            from src.processing_trace_v1 import observe
+            observe('processing_delivery_stopped', sid, attempt)
             LOG.warning("source_dispatch_attempt_stopped")
 
     async def scan(self):

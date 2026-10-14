@@ -17,10 +17,11 @@ from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v12"
-PROJECTOR_VERSION = "processing-evidence-export-v12"
+VERSION = "processing-evidence-export-v13"
+PROJECTOR_VERSION = "processing-evidence-export-v13"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
+    "processing_trace": ("trace",),
     "source_usage": ("object_id", "object_version", "container", "kind", "reason", "target_ids", "accounted", "policy_version", "role", "closure", "human_action"),
     "formation_tasks": ("task_id", "section_path", "target_spans", "phase", "status", "policy_version"),
     "formation_progress": ("formation_state", "planned_task_count", "terminal_task_count", "pending_task_count",
@@ -111,6 +112,9 @@ def processing_evidence_tables(
     def add(name: str, **values: Any) -> None:
         tables[name].append({**common, **values})
 
+    from src.processing_trace_v1 import processing_trace
+    if "processing_attempts" in envelope:
+        add("processing_trace", trace=processing_trace(envelope))
     runs = envelope.get("quality_processing_runs") or []
     recovery = envelope.get("processing_recovery")
     if recovery:
@@ -271,6 +275,7 @@ def processing_evidence_tables(
         add("forensic_trace", **row)
 
     statuses = {
+        "processing_trace": ("recorded" if "processing_attempts" in envelope else "not_recorded", "Bounded stored command/attempt/checkpoint projection; no source reconstruction, historical backfill or resume/publication authority. Observed independently from objects."),
         "source_usage": (
             "invalid" if source_inputs == "invalid" else "partial" if source_inputs == "not_recorded" else "derived",
             "Shared source accountability projection; not a new approval or clinical completeness proof. "

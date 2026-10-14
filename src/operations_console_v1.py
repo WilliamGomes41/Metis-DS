@@ -2049,8 +2049,11 @@ class OperationsConsole:
     def reserve_source_selection(self, *, actor_id, snapshot_id, command_id, expected_revision):
         """Short durable reservation, shared by HTTP and synchronous workers."""
         from src.source_selection_v1 import reserve_selection
-        return reserve_selection(self, actor_id=actor_id, snapshot_id=snapshot_id,
-                                 command_id=command_id, expected_revision=expected_revision)
+        result = reserve_selection(self, actor_id=actor_id, snapshot_id=snapshot_id,
+                                   command_id=command_id, expected_revision=expected_revision)
+        from src.processing_trace_v1 import observe
+        observe('processing_reserved' if result[1] else 'processing_command_reused', snapshot_id, result[0])
+        return result
 
     def execute_source_selection(self, *, actor_id, snapshot_id, attempt, _dispatch_stop=None):
         from datetime import datetime
@@ -2186,6 +2189,8 @@ class OperationsConsole:
                     self._commit_prepared_store(envelopes={snapshot_id: current}, snapshot_id=snapshot_id)
                 except Exception as error:
                     raise ConsoleError("processing_diagnostic_write_failed") from error
+            from src.processing_trace_v1 import observe
+            observe('processing_checkpoint', snapshot_id, active, phase=phase)
         return write
 
     def authorize_processing_recovery(self, *, actor_id, snapshot_id, reason):
@@ -2240,6 +2245,9 @@ class OperationsConsole:
                     record_processing(current, [], fragments=[], replay=None, started_at=active["started_at"],
                                       outcome="blocked", reason=active["error_code"])
                 self._commit_prepared_store(envelopes={snapshot_id:current}, snapshot_id=snapshot_id)
+
+        from src.processing_trace_v1 import observe
+        observe('processing_finished', snapshot_id, active)
 
     @contextmanager
     def _source_attempt_failure(self, snapshot_id, attempt_id):
@@ -2489,6 +2497,9 @@ class OperationsConsole:
                 bindings={snapshot_id: []},
                 expected_revision=expected_revision,
             )
+        if _attempt_id is not None:
+            from src.processing_trace_v1 import observe
+            observe('processing_finished', snapshot_id, stored)
         return self._receipt(prepared_envelope)
 
     def snapshot_is_published(self, snapshot_id: str) -> bool:

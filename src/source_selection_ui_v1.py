@@ -6,7 +6,7 @@ import uuid
 from urllib.parse import urlencode
 
 from fastapi import Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from src.operations_console_v1 import ConsoleError
 from src.source_selection_v1 import projection
@@ -87,6 +87,7 @@ def install(app, console, require, page, nav, esc):
                 summary = (f'<p>{result["candidates"]} gevormde kandidaten · {result["source_passages"]} overige bronpassages · {result["blocked"]} geblokkeerde kandidaten · {result["formation_blockers"]} verwerkingsblokkades.</p>'
                            f'<p>Poging technisch geslaagd: {"ja" if result["attempt_succeeded"] else "nee"}. '
                            f'Volledige bronverwerking: {"ja" if result["formation_complete"] else "nog niet bevestigd"}.</p>')
+            trace_link = f'<a class="btn-secondary" href="/source-selection/processing-trace?document={esc(sid)}">Verwerkingsspoor downloaden</a>'
             review = f'<a class="btn-primary" href="/review?document={esc(sid)}">Naar Review</a>' if result['review_available'] else ''
             extent = f'{result["bytes"]:,} bytes' if result['bytes'] is not None else 'Bestandsgrootte onbekend'
             records = (envelope.get('quality_processing_runs') or [])
@@ -97,7 +98,7 @@ def install(app, console, require, page, nav, esc):
                          f'<p role="status">Status: {esc(result["state"])}</p>'
                          f'<p>Geschatte verwerkingstijd: {esc(_range(result["estimate"]["range_seconds"]))} '
                          f'{esc(result["estimate"]["basis"])} ({result["estimate"]["sample_count"]} metingen)</p>'
-                         f'{progress}{summary}{action}{review}</article>')
+                         f'{progress}{summary}{action}{review}{trace_link}</article>')
         notice = '<div class="banner ok">Document veilig ontvangen. Start bronselectie wanneer je wilt.</div>' if request.query_params.get('received') == 'yes' else ''
         # Only a selected running document is polled. Every refresh reads the
         # durable authority; no browser state can start another attempt.
@@ -106,6 +107,16 @@ def install(app, console, require, page, nav, esc):
         return page(nav(actor, 'selection') + '<section class="room" id="source-selection"><h1>Bronselectie</h1>' + notice
                     + '<form method="get"><label>Document<select name="document">' + options + '</select></label><button>Document selecteren</button></form>'
                     + ''.join(sorted(cards, key=lambda card: 'data-selected="true"' not in card)) + '</section>' + script)
+
+    @app.get('/source-selection/processing-trace')
+    def processing_trace_export(request: Request, document: str = ''):
+        from src.source_selection_v1 import authorize
+        from src.processing_trace_v1 import processing_trace
+        actor = require(request)
+        envelope = console._envelope(document)
+        authorize(console, actor['account_id'], envelope)
+        return JSONResponse(processing_trace(envelope), headers={'Cache-Control': 'no-store',
+            'Content-Disposition': 'attachment; filename=processing-trace.json'})
 
     @app.post('/source-selection/start')
     async def selection_start(request: Request):
