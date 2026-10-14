@@ -173,6 +173,15 @@ def test_migration_017_adds_provenance_columns_non_destructively():
         assert forbidden not in sql.upper()
 
 
+def test_migration_017_defaults_to_pending_verification():
+    """OPENVRAAG-624-P1 optie A (William): NOOIT verified_review voor een controle; 2b-6 promoveert."""
+    sql = (ROOT / "db/migrations/017_publication_review_provenance.sql").read_text(encoding="utf-8")
+    assert "ADD COLUMN IF NOT EXISTS review_provenance TEXT NOT NULL DEFAULT 'pending_verification'" in sql
+    assert "DEFAULT 'verified_review'" not in sql
+    assert ("CHECK (review_provenance IN ('pending_verification', 'verified_review', 'recovered_unverified'))"
+            in sql)
+
+
 def test_no_gate_reads_the_configuration_in_this_slice():
     """Slice 2b-1 MAG NIET het gedrag veranderen: geen import buiten het model."""
     users = sorted(str(path.relative_to(ROOT)) for path in (ROOT / "src").rglob("*.py")
