@@ -2,6 +2,8 @@
 # official Docling interpreter. This recipe does not create Azure resources.
 FROM python:3.12-slim AS runtime
 WORKDIR /app
+ARG METIS_BUILD_COMMIT=unknown
+ENV METIS_BUILD_COMMIT=${METIS_BUILD_COMMIT}
 RUN apt-get update \
  && apt-get install -y --no-install-recommends fonts-urw-base35 \
  && rm -rf /var/lib/apt/lists/*

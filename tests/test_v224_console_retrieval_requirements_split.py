@@ -69,6 +69,11 @@ ALLOWED_CONSOLE_PACKAGES = frozenset(
         "azure-storage-blob",
         "cryptography",
         "psycopg",
+        # Explicit console-only telemetry from request_diagnostics_v1.
+        "azure-monitor-opentelemetry-exporter",
+        "opentelemetry-api",
+        "opentelemetry-sdk",
+        "opentelemetry-semantic-conventions",
     }
 )
 

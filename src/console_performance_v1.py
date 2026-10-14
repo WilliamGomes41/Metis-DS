@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Iterator
 
+from src.request_diagnostics_v1 import diagnostic_phase
+
 
 @dataclass
 class ConsolePerformance:
@@ -64,7 +66,8 @@ def connect_postgres(psycopg: Any, *args: Any, **kwargs: Any) -> Any:
             metrics.queries += 1
             start = time.perf_counter()
             try:
-                return super().execute(*args, **kwargs)
+                with diagnostic_phase("db_execute"):
+                    return super().execute(*args, **kwargs)
             finally:
                 metrics.query_ms += (time.perf_counter() - start) * 1000
 
@@ -72,14 +75,32 @@ def connect_postgres(psycopg: Any, *args: Any, **kwargs: Any) -> Any:
             metrics.queries += 1
             start = time.perf_counter()
             try:
-                return super().executemany(*args, **kwargs)
+                with diagnostic_phase("db_execute"):
+                    return super().executemany(*args, **kwargs)
             finally:
                 metrics.query_ms += (time.perf_counter() - start) * 1000
+
+        def fetchone(self):
+            with diagnostic_phase("db_fetch"):
+                return super().fetchone()
+
+        def fetchmany(self, *args, **kwargs):
+            with diagnostic_phase("db_fetch"):
+                return super().fetchmany(*args, **kwargs)
+
+        def fetchall(self):
+            with diagnostic_phase("db_fetch"):
+                return super().fetchall()
+
+        def __next__(self):
+            with diagnostic_phase("db_fetch"):
+                return super().__next__()
 
     kwargs["cursor_factory"] = MeasuredCursor
     start = time.perf_counter()
     try:
-        return psycopg.connect(*args, **kwargs)
+        with diagnostic_phase("db_connect"):
+            return psycopg.connect(*args, **kwargs)
     finally:
         metrics.connect_ms += (time.perf_counter() - start) * 1000
 
@@ -118,3 +139,7 @@ def install_console_performance(app: Any) -> None:
                 except Exception:
                     # Diagnostics must not change the result of a domain request.
                     pass
+
+    # Outermost observer sees request start and the complete ASGI response.
+    from src.request_diagnostics_v1 import RequestDiagnostics
+    app.add_middleware(RequestDiagnostics)

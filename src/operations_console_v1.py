@@ -7,6 +7,8 @@ local ``sources/private/`` remains the G0 stand-in for local development.
 """
 from __future__ import annotations
 
+from src.request_diagnostics_v1 import diagnostic_phase
+
 import fcntl
 import hashlib
 import json
@@ -445,6 +447,8 @@ def review_stacks(
     return koppen, inhoud
 
 
+_SOURCE_SELECTION_READS = ContextVar("source_selection_reads", default=None)
+
 _STRUCTURE_CONFIRMATION = ContextVar("metis_structure_confirmation", default=False)
 
 SLOW_REVIEW_DUTY_TYPES = frozenset({"recommendation", "condition", "exception"})
@@ -668,6 +672,23 @@ def _spec_from_fragments(
 
 
 class OperationsConsole:
+    @contextmanager
+    def source_selection_read_scope(self):
+        """Borrow authoritative read data only during one source-selection GET.
+
+        Do not use around commands. Each request owns its state; even nested
+        scopes are independent. PostgreSQL uses this to avoid repeated reads.
+        """
+        token = _SOURCE_SELECTION_READS.set({"console": self, "envelopes": None, "objects": {}})
+        try:
+            yield
+        finally:
+            _SOURCE_SELECTION_READS.reset(token)
+
+    def _source_selection_reads(self):
+        reads = _SOURCE_SELECTION_READS.get()
+        return reads if reads is not None and reads["console"] is self else None
+
     def __init__(
         self,
         *,
@@ -1110,6 +1131,7 @@ class OperationsConsole:
             raise ConsoleError(f"{role}_role_required")
         return account
 
+    @diagnostic_phase("document_load")
     def _envelope(self, snapshot_id: str) -> dict[str, Any]:
         envelope = self._envelopes.get(snapshot_id)
         if not envelope:
@@ -1359,6 +1381,7 @@ class OperationsConsole:
             "accounts": 0,
         }
 
+    @diagnostic_phase("review_bindings")
     def object_review_bindings(self, snapshot_id: str, *, objects=None) -> list[dict[str, Any]]:
         self._envelope(snapshot_id)
         current = {row["object_id"]: row for row in (self.snapshot_objects(snapshot_id) if objects is None else objects)}
@@ -1558,6 +1581,7 @@ class OperationsConsole:
         filename = safe_store_filename(Path(str(envelope["binary_path"])).name)
         return safe_path_under(self.source_store, digest, filename)
 
+    @diagnostic_phase("source_verify")
     def _verified_source_bytes(self, envelope: dict[str, Any]) -> tuple[Path, bytes]:
         """Rebuild the configured cache from the existing immutable authority."""
         freeze_path = self._source_cache_path(envelope)
@@ -2054,6 +2078,7 @@ class OperationsConsole:
         return (getattr(self, "_pre_review_semantic_bound", False) and kind in {"html", "pdf"}
                 and class_ != "beslisboom" and self._passage_formation_mode_reader() != DETERMINISTIC_MODE)
 
+    @diagnostic_phase("processing_status")
     def processing_status(self, snapshot_id: str, *, actor_id: str | None = None) -> dict[str, Any]:
         from src.processing_retry_v1 import status
         if actor_id is not None:
@@ -2650,6 +2675,7 @@ class OperationsConsole:
         except DoclingError as exc:
             raise ConsoleError(exc.code) from exc
 
+    @diagnostic_phase("source_read")
     def _read_source_fragments(self, envelope, path):
         from src.source_preparation_context_v1 import stored_extraction
         from src.docling_contract_v1 import stored_fragments
@@ -2814,11 +2840,11 @@ class OperationsConsole:
             "unchanged": sorted(text for text in curr if text in prev and curr[text] == prev[text]),
         }
 
+    @diagnostic_phase("document_summary")
     def _receipt(self, envelope: dict[str, Any]) -> dict[str, Any]:
-        receipt = deepcopy(envelope)
-        receipt.pop("semantic_replay", None)
-        return receipt
+        return deepcopy({key: value for key, value in envelope.items() if key != "semantic_replay"})
 
+    @diagnostic_phase("objects_read")
     def snapshot_objects(
         self,
         snapshot_id: str,
@@ -2845,6 +2871,7 @@ class OperationsConsole:
                          bindings=self.object_review_bindings(snapshot_id),
                          fragments=self.review_source_fragments(snapshot_id))
 
+    @diagnostic_phase("objects_read")
     def snapshot_objects_and_revision(
         self,
         snapshot_id: str,
@@ -4857,6 +4884,7 @@ class OperationsConsole:
                 )
         return out
 
+    @diagnostic_phase("document_list")
     def list_envelopes(self) -> list[dict[str, Any]]:
         return [self._receipt(row) for row in self._envelopes.values()]
 

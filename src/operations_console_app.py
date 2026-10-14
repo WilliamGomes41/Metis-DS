@@ -6,6 +6,8 @@ Chat is not a room.
 """
 from __future__ import annotations
 
+from src.request_diagnostics_v1 import diagnostic_phase
+
 import asyncio
 import hashlib
 import html
@@ -3044,6 +3046,7 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
     return ''.join(parts) + '</section>'
 
 
+@diagnostic_phase("review_index")
 def _render_review_index(
     snapshot_id: str,
     snapshot_objects: list[dict[str, Any]],
@@ -3430,6 +3433,7 @@ def _source_context_card(console: OperationsConsole, snapshot_id: str, obj: dict
 
 
 @source_reconstruction_scope(reuse_existing=True)
+@diagnostic_phase("review_render")
 def _render_review_room(
     console: OperationsConsole,
     account: dict[str, Any],
@@ -5191,7 +5195,8 @@ def create_console_app(
     @app.get("/review", response_class=HTMLResponse)
     def review_get(request: Request, document: str = "", object: str = "", task: str = "",
                    context_target: str = "", context_mode: str = "", context_saved: str = "") -> str:
-        account = _require(request)
+        with diagnostic_phase("authorization"):
+            account = _require(request)
         return _render_review_room(
             state,
             account,

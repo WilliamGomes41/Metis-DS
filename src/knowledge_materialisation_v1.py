@@ -5,6 +5,8 @@ returns decisions. It does not assign object identity or canonical text.
 """
 from __future__ import annotations
 
+from src.request_diagnostics_v1 import diagnostic_phase
+
 import hashlib
 import math
 from contextlib import contextmanager
@@ -76,6 +78,7 @@ def _source_input_snapshot(value):
     return deepcopy(value)
 
 
+@diagnostic_phase("source_reconstruction")
 def _read_source_blocks(fragments, *, include_headings=False):
     def reconstruct():
         if include_headings:
