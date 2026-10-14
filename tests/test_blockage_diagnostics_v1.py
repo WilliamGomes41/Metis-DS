@@ -1,7 +1,12 @@
 """#618: explain recorded blockages without becoming their authority.
 
-# release-control-evidence: scope/belofte toegang beschikbaarheid kwaliteit opslag
-# release-control-evidence: concurrent stale interrupt retry version-compat recovery slop releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: opslag concurrent stale interrupt retry version-compat recovery
+# release-control-evidence: toegang
+# release-control-evidence: beschikbaarheid
+# release-control-evidence: kwaliteit
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from copy import deepcopy
 import hashlib
