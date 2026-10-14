@@ -183,8 +183,8 @@ def test_migration_017_defaults_to_pending_verification():
 
 
 def test_no_gate_reads_the_configuration_in_this_slice():
-    """Slice 2b-1 MAG NIET het gedrag veranderen: geen import buiten het model."""
+    """Slice 2b-1/2b-2 MAG NIET het poortgedrag veranderen: alleen ingest schrijft de keuze."""
     users = sorted(str(path.relative_to(ROOT)) for path in (ROOT / "src").rglob("*.py")
                    if "review_configuration_v1" in path.read_text(encoding="utf-8"))
     assert (ROOT / "src/review_configuration_v1.py").exists()
-    assert users == []
+    assert users == ["src/operations_console_v1.py"]

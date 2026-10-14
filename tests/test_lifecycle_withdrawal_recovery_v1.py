@@ -81,6 +81,7 @@ def _ingest(console, accounts, title, version, prior=None):
             "title": title, "version": version, "date": "2026-09-01",
             "live_url": f"https://example.test/{title}", "class_": "richtlijn", "family": "continentie",
             "named_reviewers": [accounts["researcher"]["account_id"], accounts["reviewer"]["account_id"]],
+            "review_option": "one_other", "review_reviewers": [accounts["reviewer"]["account_id"]],
             "command_id": "receipt-" + uuid.uuid4().hex,
         }, files={"file": (f"source-{title}-{version}.html",
             HTML_FIXTURE.read_bytes() + f"<!-- {title} {version} -->".encode(), "text/html")}, follow_redirects=False)

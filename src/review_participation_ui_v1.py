@@ -66,6 +66,29 @@ def people(console):
 
 def roster(console, env, names=None):
     names = people(console) if names is None else names
+    return _roster(env, names) + configuration(env, names)
+
+
+OPTION_LABELS = {'uploader_sole': 'alleen de uploader', 'one_other': 'één andere reviewer',
+                 'two_others': 'twee andere reviewers'}
+SOURCE_LABELS = {'chosen': 'gekozen bij uploaden', 'legacy_default': 'standaard voor bestaande regels (legacy_default)',
+                 'migrated_policy': 'afgeleid van de reviewdeelname (migrated_policy)'}
+
+
+def configuration(env, names):
+    """H2 2b-2: toont de opgeslagen B10-keuze; schrijft NOOIT en verandert geen poort."""
+    value = env.get('review_configuration')
+    if not isinstance(value, dict):
+        return ''
+    reviewers = ', '.join(names.get(i, i) for i in value.get('reviewers') or []) or 'geen'
+    readers = ', '.join(names.get(i, i) for i in value.get('readers') or []) or 'geen'
+    return ('<p>Reviewkeuze: ' + esc(OPTION_LABELS.get(value.get('option'), str(value.get('option'))))
+            + ' · vier ogen: ' + ('ja' if value.get('four_eyes_required') else 'nee')
+            + ' · reviewers: ' + esc(reviewers) + ' · lezers: ' + esc(readers)
+            + ' · bron: ' + esc(SOURCE_LABELS.get(value.get('source'), str(value.get('source')))) + '</p>')
+
+
+def _roster(env, names):
     policy = env.get("review_policy")
     if not policy:
         return '<p>Toegewezen: ' + esc(', '.join(names.get(i, i) for i in env["named_reviewers"])) + '</p>'
