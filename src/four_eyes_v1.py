@@ -191,6 +191,12 @@ def four_eyes_satisfied(
     return True
 
 
+# D-SEC-3: de enige contractblocker die de console zelf afhandelt (met de echte
+# G2-readback). Elke andere contractblocker MOET publicatie weigeren. Deze set
+# MAG NIET breder worden zonder contractwijziging en test.
+CONSOLE_VERIFIED_BLOCKERS = frozenset({"blocked_pending_immutable_locator"})
+
+
 def publish_authorization_contract(
     *,
     obj: dict[str, Any],
@@ -248,7 +254,10 @@ def publish_authorization_contract(
     if not is_g2_locator(immutable_locator):
         blockers.append("blocked_pending_immutable_locator")
     unique_blockers = list(dict.fromkeys(blockers))
+    authorization_blockers = [code for code in unique_blockers if code not in CONSOLE_VERIFIED_BLOCKERS]
     return {
+        "authorization_blockers": authorization_blockers,
+        "authorization_ok": not authorization_blockers,
         "object_id": object_id,
         "tuple_authorization": bool(eligible),
         "independence_satisfied": independence,

@@ -70,7 +70,35 @@ def invalidate_for_object(bindings: list[dict[str, Any]], object_id: str) -> lis
     return out
 
 
-def record_authorization(bindings: list[dict[str, Any]], binding: dict[str, Any]) -> list[dict[str, Any]]:
+class ApproverIdentityError(ValueError):
+    """Een goedkeuring zonder geverifieerde menselijke reviewer (D-SEC-1)."""
+
+
+def verify_approver_identity(binding: dict[str, Any], account: dict[str, Any] | None) -> None:
+    """De goedkeurder MOET een bestaand, actief menselijk reviewer-account zijn.
+
+    De binding MOET exact naar dat account wijzen (``reviewer_id`` en
+    ``reviewer``). Een agent of verboden identiteit telt NOOIT.
+    """
+    from src.four_eyes_v1 import reviewer_is_agent
+    if not isinstance(account, dict) or not account.get("account_id"):
+        raise ApproverIdentityError("approver_account_unknown")
+    if reviewer_is_agent(account) or reviewer_is_agent(binding):
+        raise ApproverIdentityError("forbidden_reviewer_identity")
+    if str(binding.get("reviewer_id") or "") != str(account["account_id"]):
+        raise ApproverIdentityError("approver_identity_mismatch")
+    if str(binding.get("reviewer") or "") != str(account.get("username") or ""):
+        raise ApproverIdentityError("approver_identity_mismatch")
+    if account.get("retirement") or "reviewer" not in set(account.get("roles") or []):
+        raise ApproverIdentityError("approver_not_active_reviewer")
+
+
+def record_authorization(
+    bindings: list[dict[str, Any]],
+    binding: dict[str, Any],
+    *,
+    account: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
     """One current authorization per exact approval tuple; events retain history.
 
     Only an authorized, successful review command calls this operation. A fresh
@@ -78,6 +106,7 @@ def record_authorization(bindings: list[dict[str, Any]], binding: dict[str, Any]
     Merely reassigning a reviewer never calls it. Distinct reviewed tuples stay
     in the existing store, and the command records every decision in the ledger.
     """
+    verify_approver_identity(binding, account)
     fields = ("object_id", "object_version", "canonical_object_hash", "reviewer_id", "decision")
     key = tuple(binding.get(field) for field in fields)
     rows = [dict(row) for row in bindings]

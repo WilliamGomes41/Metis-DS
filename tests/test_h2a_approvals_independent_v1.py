@@ -14,6 +14,8 @@ Regels:
 # release-control-evidence: opslag concurrent stale
 # release-control-evidence: toegang
 # release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from __future__ import annotations
 
@@ -30,7 +32,8 @@ from tests import test_legacy_canonical_recovery_v1 as recovery_fixture
 from tests import test_storage_publication_v2 as cli_fixture
 
 pytestmark = [pytest.mark.release_control_opslag, pytest.mark.release_control_toegang,
-              pytest.mark.release_control_scope_belofte]
+              pytest.mark.release_control_scope_belofte, pytest.mark.release_control_slop,
+              pytest.mark.release_control_releasebewijs]
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -158,6 +161,18 @@ def test_recovery_refuses_high_risk_without_four_eyes(tmp_path):
     prepare = _recovery(tmp_path, approvers=[("Reviewer", "reviewer-1"), ("Grok Bot", "grok bot")], high_risk=True)
     with pytest.raises(LegacyCanonicalRecoveryError, match="legacy_release_object_four_eyes_missing"):
         prepare()
+
+
+def test_recovery_refuses_stale_human_approval(tmp_path):
+    """Opslag stale: een goedkeuring op een oudere objecthash telt NOOIT."""
+    from src.legacy_canonical_recovery_v1 import LegacyCanonicalRecoveryError
+    from src.legacy_canonical_recovery_v1 import prepare_legacy_canonical_candidate
+    path, documents, reviews, blobs, _manifest = recovery_fixture._fixture(tmp_path)
+    documents.envelope["uploader_account_id"] = "uploader-1"
+    template = reviews.read_bindings()[reviews.snapshot_id][0]
+    reviews.read_bindings = lambda: {reviews.snapshot_id: [{**template, "canonical_object_hash": "0" * 64}]}
+    with pytest.raises(LegacyCanonicalRecoveryError, match="legacy_release_object_authorization_missing"):
+        prepare_legacy_canonical_candidate(path, documents=documents, reviews=reviews, source_store=blobs)
 
 
 def test_recovery_accepts_independent_human_approval(tmp_path):

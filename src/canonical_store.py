@@ -138,7 +138,40 @@ def audit(con: sqlite3.Connection, *, entity_type: str, entity_id: str, entity_v
     )
 
 
-def eligibility_errors(obj: dict[str, Any], validator: Draft202012Validator) -> list[str]:
+PILOT_RUNTIME_MODES = frozenset({"pilot", "dev"})
+
+
+def assert_pilot_runtime() -> None:
+    """W5: de pilot-SQLite-CLI publiceert NOOIT; buiten pilot/dev MOET hij weigeren."""
+    import os
+    if os.environ.get("METIS_RUNTIME_MODE", "").strip().lower() not in PILOT_RUNTIME_MODES:
+        raise PermissionError("canonical_store_cli_disabled_outside_pilot")
+
+
+def load_accounts(accounts: Path | list[dict[str, Any]] | None) -> dict[str, dict[str, Any]]:
+    """Accountregister voor de pilot-import: ``account_id`` → account."""
+    rows = json.loads(accounts.read_text(encoding="utf-8")) if isinstance(accounts, Path) else (accounts or [])
+    return {str(row["account_id"]): dict(row) for row in rows if isinstance(row, dict) and row.get("account_id")}
+
+
+def _reviewer_errors(account_id: Any, accounts: dict[str, dict[str, Any]]) -> list[str]:
+    """D-SEC-2: reviewervelden MOETEN account-ids zijn van een actief, menselijk reviewer-account."""
+    from src.four_eyes_v1 import reviewer_is_agent, is_forbidden_reviewer
+    value = str(account_id or "")
+    if is_forbidden_reviewer(value):
+        return ["forbidden_reviewer_identity"]
+    account = accounts.get(value)
+    if account is None:
+        return ["reviewer_account_id_unknown"]
+    if reviewer_is_agent(account):
+        return ["forbidden_reviewer_identity"]
+    if account.get("retirement") or "reviewer" not in set(account.get("roles") or []):
+        return ["reviewer_account_not_active_reviewer"]
+    return []
+
+
+def eligibility_errors(obj: dict[str, Any], validator: Draft202012Validator,
+                       accounts: dict[str, dict[str, Any]] | None = None) -> list[str]:
     errors: list[str] = []
     if list(validator.iter_errors(obj)):
         errors.append("schema_invalid")
@@ -153,6 +186,8 @@ def eligibility_errors(obj: dict[str, Any], validator: Draft202012Validator) -> 
         errors.append("canonical_object_must_remain_unpublished")
     if not g.get("validated_by") or not g.get("validation_date") or not g.get("review_snapshot_hash"):
         errors.append("approval_metadata_incomplete")
+    elif accounts is not None:
+        errors.extend(_reviewer_errors(g.get("validated_by"), accounts))
     elif g.get("review_snapshot_hash") != first_review_snapshot_hash(obj):
         errors.append("first_review_snapshot_mismatch")
     if g.get("validated_by") == p.get("created_by"):
@@ -173,6 +208,8 @@ def eligibility_errors(obj: dict[str, Any], validator: Draft202012Validator) -> 
         sr = g["second_review"]
         if sr.get("status") != "approved" or not sr.get("reviewer") or not sr.get("review_date") or not sr.get("snapshot_hash"):
             errors.append("second_review_incomplete")
+        elif accounts is not None and _reviewer_errors(sr.get("reviewer"), accounts):
+            errors.extend(_reviewer_errors(sr.get("reviewer"), accounts))
         elif sr.get("reviewer") == g.get("validated_by"):
             errors.append("second_reviewer_must_differ_from_first")
         elif sr.get("snapshot_hash") != first_review_snapshot_hash(obj):
@@ -180,7 +217,11 @@ def eligibility_errors(obj: dict[str, Any], validator: Draft202012Validator) -> 
     return errors
 
 
-def import_approved(db: Path, input_path: Path, schema_path: Path, actor: str) -> dict[str, Any]:
+def import_approved(db: Path, input_path: Path, schema_path: Path, actor: str, *,
+                    accounts: Path | list[dict[str, Any]]) -> dict[str, Any]:
+    """Pilot-import. ``validated_by`` en ``second_review.reviewer`` zijn account-ids;
+    vergelijkingen gebeuren op account-id, NOOIT op namen."""
+    known_accounts = load_accounts(accounts)
     init_db(db)
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     validator = Draft202012Validator(schema)
@@ -189,7 +230,7 @@ def import_approved(db: Path, input_path: Path, schema_path: Path, actor: str) -
     blocked: list[dict[str, Any]] = []
     with connect(db) as con:
         for obj in rows:
-            errs = eligibility_errors(obj, validator)
+            errs = eligibility_errors(obj, validator, known_accounts)
             if errs:
                 blocked.append({"object_id": obj.get("object_id"), "object_version": obj.get("object_version"), "errors": errs})
                 continue
@@ -425,6 +466,7 @@ def main() -> int:
     p = sub.add_parser("import-approved")
     p.add_argument("--db", type=Path, required=True); p.add_argument("--input", type=Path, required=True)
     p.add_argument("--schema", type=Path, required=True); p.add_argument("--actor", required=True)
+    p.add_argument("--accounts", type=Path, required=True, help="JSON-lijst met account_id/username/roles")
     p.add_argument("--report", type=Path)
 
     p = sub.add_parser("create-release")
@@ -452,10 +494,15 @@ def main() -> int:
 
     args = ap.parse_args()
     try:
+        assert_pilot_runtime()
+    except PermissionError as exc:
+        write_report({"status": "BLOCKED", "errors": [{"error": str(exc)}]}, getattr(args, "report", None))
+        return 2
+    try:
         if args.cmd == "init":
             init_db(args.db); report = {"status": "PASS", "db": str(args.db)}
         elif args.cmd == "import-approved":
-            report = import_approved(args.db, args.input, args.schema, args.actor)
+            report = import_approved(args.db, args.input, args.schema, args.actor, accounts=args.accounts)
             report["status"] = "PASS" if report["blocked_objects"] == 0 else "BLOCKED"
         elif args.cmd == "create-release":
             report = create_release(args.db, args.spec, args.actor)
