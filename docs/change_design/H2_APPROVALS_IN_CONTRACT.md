@@ -36,7 +36,8 @@
 
 ### 2.2 Herkomst in het publicatieregister (Postgres)
 - Nieuwe migratie `db/migrations/017_publication_review_provenance.sql`. Die is niet-destructief, alleen `ADD COLUMN ... DEFAULT`:
-  - `review_provenance TEXT NOT NULL DEFAULT 'verified_review' CHECK (review_provenance IN ('verified_review','recovered_unverified'))`;
+  - `review_provenance TEXT NOT NULL DEFAULT 'pending_verification' CHECK (review_provenance IN ('pending_verification','verified_review','recovered_unverified'))`;
+  - Bestaande en nieuwe rijen krijgen `pending_verification`. Een release MOET NOOIT `verified_review` krijgen voor een controle (OPENVRAAG-624-P1, optie A, William 15-10-2026).
   - `review_provenance_changed_at TIMESTAMPTZ NULL`.
 - De kolom komt op de release-rij (zie de tabel in `007_publication_registry_serving_authority.sql`).
 - `persist_published_release(..., review_provenance=...)` is een verplicht argument zonder default, zodat elke schrijver kiest.
@@ -80,6 +81,7 @@
 
 ## 6. API-label
 - `/v1/knowledge/{id}`, `/v1/retrieve` en `/v1/documents` leveren `review_provenance` mee. Bij `recovered_unverified` komt er ook `review_status_label: "hersteld zonder geverifieerde review"` bij.
+- Bij `pending_verification` MOET de API de release NOOIT als geverifieerd tonen. OPENVRAAG-624-P1-LABEL: de tekst van `review_status_label` voor `pending_verification`.
 - De answerability-gate MOET dit doorgeven en verbergt het NOOIT.
 
 ## 7. Tests (eerst rood, daarna groen)
@@ -97,7 +99,7 @@
 | W3 | Configuratie wijzigen na de eerste binding → bindings ongeldig en ledger-event; daarna eist publiceren een nieuwe review |
 | W4 | Hersteld item → API-label aanwezig; na een nieuwe review en publicatie → label weg |
 | W4 nieuw | Herstel zonder geverifieerde review → registry `recovered_unverified`, NOOIT `verified_review` |
-| Migratie | `017` op een bestaande tabel: rijen blijven, default `verified_review`, idempotent |
+| Migratie | `017` op een bestaande tabel: rijen blijven, default `pending_verification`, NOOIT `verified_review` voor een controle, idempotent |
 
 ## 8. Proof-plan
 De tests van §7, de volledige suite en de Postgres-tests met `METIS_TEST_POSTGRES_DSN` in de sandbox (#605). Op de box zijn die laatste ONBEWEZEN.
@@ -111,7 +113,7 @@ De tests van §7, de volledige suite en de Postgres-tests met `METIS_TEST_POSTGR
 
   Bij `needs_choice` MOET het document opnieuw een optie kiezen. Publicatie blijft fail-closed met `review_configuration_choice_required`.
 - **H2-2 (beantwoord).** `one_other` + four-eyes: de uploader is het eerste oog en de andere reviewer het tweede. Twee niet-uploaders voldoen ook. De uploader telt NOOIT als tweede oog. Hoog-risico-objecten (`requires_four_eyes(obj)`) eisen four-eyes ALTIJD, ook bij `four_eyes_required=false`. Bij `uploader_sole` met een hoog-risico-object is publicatie daarom geblokkeerd met `four_eyes_required`.
-- **H2-3 (beantwoord, optie b).** Migratie `017` voegt de kolommen toe. Een eenmalig, idempotent herclassificatiecommando (`scripts/publication_review_provenance_backfill.py`) controleert elke actieve release opnieuw tegen §4 en de workflow-bindings, en zet alleen de gefaalde releases op `recovered_unverified`. Het commando kent een plan-modus (alleen lezen) en een execute-modus met `--confirm-count`. Het draait NOOIT automatisch bij boot. Alleen Argos voert het uit op live, na GO van William.
+- **H2-3 (beantwoord, optie b).** Migratie `017` voegt de kolommen toe. Een eenmalig, idempotent herclassificatiecommando (`scripts/publication_review_provenance_backfill.py`) controleert elke actieve release opnieuw tegen §4 en de workflow-bindings, Het MOET geslaagde releases van `pending_verification` promoveren naar `verified_review` en gefaalde releases op `recovered_unverified` zetten. Een release MAG NIET op `verified_review` komen zonder die controle (OPENVRAAG-624-P1, optie A). Het commando kent een plan-modus (alleen lezen) en een execute-modus met `--confirm-count`. Het draait NOOIT automatisch bij boot. Alleen Argos voert het uit op live, na GO van William.
 - **OPENVRAAG-B10-1.** Four-eyes + `uploader_sole` wordt geweigerd (W6).
 - **H2-4 (beantwoord).**
   - (a) Beslisbomen volgen dezelfde `review_configuration`: één reviewregel voor alle documenttypen.
