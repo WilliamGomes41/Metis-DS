@@ -673,13 +673,16 @@ def _spec_from_fragments(
 
 class OperationsConsole:
     @contextmanager
-    def source_selection_read_scope(self):
+    def source_selection_read_scope(self, *, retained_only=False):
         """Borrow authoritative read data only during one source-selection GET.
 
         Do not use around commands. Each request owns its state; even nested
         scopes are independent. PostgreSQL uses this to avoid repeated reads.
+        Diagnostic callers can forbid native extraction when retained evidence
+        disappears during the read. Other callers keep the existing fallback.
         """
-        token = _SOURCE_SELECTION_READS.set({"console": self, "envelopes": None, "objects": {}})
+        token = _SOURCE_SELECTION_READS.set({"console": self, "envelopes": None, "objects": {},
+                                           "retained_only": retained_only})
         try:
             yield
         finally:
@@ -2695,6 +2698,9 @@ class OperationsConsole:
             retained = stored_fragments(envelope)
         if retained is not None:
             return retained
+        reads = self._source_selection_reads()
+        if reads is not None and reads.get('retained_only'):
+            raise ConsoleError('retained_source_not_recorded')
         args = {"document_id": envelope["document_id"], "source_id": envelope["source_id"]}
         if envelope["content_kind"] == "pdf":
             # Historical compatibility is selected by persisted provenance,

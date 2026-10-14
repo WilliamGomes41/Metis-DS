@@ -17,10 +17,11 @@ from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v13"
-PROJECTOR_VERSION = "processing-evidence-export-v13"
+VERSION = "processing-evidence-export-v14"
+PROJECTOR_VERSION = "processing-evidence-export-v14"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
+    "blockage_report": ("report",),
     "processing_trace": ("trace",),
     "source_usage": ("object_id", "object_version", "container", "kind", "reason", "target_ids", "accounted", "policy_version", "role", "closure", "human_action"),
     "formation_tasks": ("task_id", "section_path", "target_spans", "phase", "status", "policy_version"),
@@ -89,33 +90,19 @@ def _field_producer_status(bound: dict, obj: dict) -> str:
     return "source_bound_proposal"
 
 
-def processing_evidence_tables(
-    *, snapshot_id: str, revision: str, envelope: dict[str, Any],
-    objects: list[dict[str, Any]], bindings=None, fragments=None,
-) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
-    """Project stored values; absent data is not reconstructed from current code."""
-    # Exports never reread/reextract native sources. Only accepted retained
-    # evidence may complete validation; absent historical inputs stay partial.
-    source_inputs = "provided" if fragments is not None else "not_recorded"
-    if fragments is None:
-        from src.docling_contract_v1 import stored_fragments, DoclingError
-        try:
-            fragments = stored_fragments(envelope)
-            if fragments is not None:
-                source_inputs = "recorded"
-        except DoclingError:
-            fragments = []  # Retained evidence is present but unusable: fail closed.
-            source_inputs = "invalid"
-    tables: dict[str, list[dict[str, Any]]] = {name: [] for name in SCHEMAS}
-    common = {"snapshot_id": snapshot_id, "objects_revision": revision}
-
-    def add(name: str, **values: Any) -> None:
+def recorded_processing_tables(*, snapshot_id: str, revision: str, envelope: dict) -> dict:
+    """The shared recorded metadata projection; no objects/source reconstruction."""
+    names = ('processing_trace', 'processing_attempts', 'attempt_diagnostics',
+             'semantic_proposals', 'formation_tasks', 'formation_progress',
+             'formation_findings', 'model_calls', 'processing_recovery')
+    tables = {name: [] for name in names}
+    common = {'snapshot_id': snapshot_id, 'objects_revision': revision}
+    def add(name, **values):
         tables[name].append({**common, **values})
-
+    runs = envelope.get('quality_processing_runs') or []
     from src.processing_trace_v1 import processing_trace
     if "processing_attempts" in envelope:
         add("processing_trace", trace=processing_trace(envelope))
-    runs = envelope.get("quality_processing_runs") or []
     recovery = envelope.get("processing_recovery")
     if recovery:
         add("processing_recovery", **{key: recovery.get(key) for key in SCHEMAS["processing_recovery"]})
@@ -124,15 +111,6 @@ def processing_evidence_tables(
             add("attempt_diagnostics", attempt_id=attempt["attempt_id"], state=attempt["state"],
                 diagnostic=attempt["diagnostic"], evidence_kind="attempt_evidence_not_admission_authority")
         add("processing_attempts", **{key: attempt.get(key) for key in SCHEMAS["processing_attempts"]})
-    for run in runs:
-        for fragment in run.get("source_fragments") or []:
-            add("source_views", run_id=run.get("run_id"), **{key: fragment.get(key) for key in SCHEMAS["source_views"] if key != "run_id"})
-        add("runs", **{key: run.get(key) for key in SCHEMAS["runs"] if key != "production_commit_status"},
-            production_commit_status="not_recorded")
-        for candidate in run.get("candidates") or []:
-            add("run_candidates", run_id=run.get("run_id"),
-                **{key: candidate.get(key) for key in SCHEMAS["run_candidates"] if key != "run_id"})
-
     replay = envelope.get("semantic_replay") or {}
     if replay:
         add("semantic_proposals", **{key: replay.get(key) for key in SCHEMAS["semantic_proposals"] if key != "evidence_kind"},
@@ -151,13 +129,6 @@ def processing_evidence_tables(
             **{key: progress.get(key) for key in SCHEMAS["formation_progress"]
                if key not in {"formation_state", "policy_version"}},
             policy_version=provider.get("task_policy"))
-    from src.source_containers_v1 import partition, VERSION as CONTAINER_VERSION
-    from src.beslisboom_path_v1 import review_path_for_klasse
-    for source in partition(objects, review_path=review_path_for_klasse(str(envelope["class"])) if envelope.get("class") else "richtlijn",
-                            bindings=bindings, fragments=fragments)["source"]:
-        obj = source["record"]
-        add("source_usage", object_id=obj["object_id"], object_version=obj["object_version"], container="source",
-            **source["usage"], policy_version=CONTAINER_VERSION)
     root_provider = provider
     proposal = replay.get("proposal") if isinstance(replay.get("proposal"), dict) else {}
     for call, rejection, state in classified_rejections(root_provider, proposal):
@@ -183,6 +154,54 @@ def processing_evidence_tables(
                 proposal_hash=replay.get("proposal_hash"),
                 evidence_kind="origin_call_of_latest_saved_proposal_not_all_attempts")
 
+    return tables
+
+
+def processing_evidence_tables(
+    *, snapshot_id: str, revision: str, envelope: dict[str, Any],
+    objects: list[dict[str, Any]], bindings=None, fragments=None,
+) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
+    """Project stored values; absent data is not reconstructed from current code."""
+    # Exports never reread/reextract native sources. Only accepted retained
+    # evidence may complete validation; absent historical inputs stay partial.
+    source_inputs = "provided" if fragments is not None else "not_recorded"
+    if fragments is None:
+        from src.docling_contract_v1 import stored_fragments, DoclingError
+        try:
+            fragments = stored_fragments(envelope)
+            if fragments is not None:
+                source_inputs = "recorded"
+        except DoclingError:
+            fragments = []  # Retained evidence is present but unusable: fail closed.
+            source_inputs = "invalid"
+    tables: dict[str, list[dict[str, Any]]] = {name: [] for name in SCHEMAS}
+    common = {"snapshot_id": snapshot_id, "objects_revision": revision}
+
+    def add(name: str, **values: Any) -> None:
+        tables[name].append({**common, **values})
+
+    for name, rows in recorded_processing_tables(snapshot_id=snapshot_id, revision=revision, envelope=envelope).items():
+        tables[name].extend(rows)
+    runs = envelope.get("quality_processing_runs") or []
+    for run in runs:
+        for fragment in run.get("source_fragments") or []:
+            add("source_views", run_id=run.get("run_id"), **{key: fragment.get(key) for key in SCHEMAS["source_views"] if key != "run_id"})
+        add("runs", **{key: run.get(key) for key in SCHEMAS["runs"] if key != "production_commit_status"},
+            production_commit_status="not_recorded")
+        for candidate in run.get("candidates") or []:
+            add("run_candidates", run_id=run.get("run_id"),
+                **{key: candidate.get(key) for key in SCHEMAS["run_candidates"] if key != "run_id"})
+
+    replay = envelope.get("semantic_replay") or {}
+    provider = replay.get("provider_evidence") or {}
+    providers = [provider, *(provider.get("supplementary_calls") or [])]
+    from src.source_containers_v1 import partition, VERSION as CONTAINER_VERSION
+    from src.beslisboom_path_v1 import review_path_for_klasse
+    for source in partition(objects, review_path=review_path_for_klasse(str(envelope["class"])) if envelope.get("class") else "richtlijn",
+                            bindings=bindings, fragments=fragments)["source"]:
+        obj = source["record"]
+        add("source_usage", object_id=obj["object_id"], object_version=obj["object_version"], container="source",
+            **source["usage"], policy_version=CONTAINER_VERSION)
     for obj, row in zip([o for o in objects if o.get("object_type") != "document"], passage_export_rows(objects)):
         keys = {"object_id": row["object_id"], "object_version": row["object_version"]}
         content = obj.get("content") or {}
@@ -254,7 +273,8 @@ def processing_evidence_tables(
     replay_components = {}
     if isinstance(replay.get("identity"), dict) and isinstance(replay["identity"].get("components"), dict):
         replay_components = replay["identity"]["components"]
-    producing = producing_run
+    producing, _producing_run_status = select_producing_run(
+        runs, replay.get("identity") if isinstance(replay.get("identity"), dict) else None)
     block_rows = []
     block_provenance = {"status": "unavailable"}
     fragments = (producing or {}).get("source_fragments") or []
@@ -274,7 +294,12 @@ def processing_evidence_tables(
     for row in trace_rows:
         add("forensic_trace", **row)
 
+    from src.blockage_diagnostics_v1 import blockage_report, revision_context
+    if any(tables[name] for name in ('processing_attempts', 'semantic_proposals', 'validation_findings')):
+        add('blockage_report', report=blockage_report({'revision':[revision_context(snapshot_id, revision, envelope)], **tables}))
     statuses = {
+        "blockage_report": ("derived" if tables["blockage_report"] else "not_recorded",
+            "Bounded recorded-evidence explanation, not current action permission or a new gate. Missing checks remain explicit."),
         "processing_trace": ("recorded" if "processing_attempts" in envelope else "not_recorded", "Bounded stored command/attempt/checkpoint projection; no source reconstruction, historical backfill or resume/publication authority. Observed independently from objects."),
         "source_usage": (
             "invalid" if source_inputs == "invalid" else "partial" if source_inputs == "not_recorded" else "derived",
@@ -289,7 +314,7 @@ def processing_evidence_tables(
         "formation_findings": ("recorded" if any("formation" in p for p in providers) else "not_recorded",
             "Versioned producer rejections; historical errors remain evidence after recovery. Not clinical validation or approval."),
         "attempt_diagnostics": ("recorded" if tables["attempt_diagnostics"] else "not_recorded", "Attempt-owned checkpoints, request/output, validator input and finding. Missing historical evidence is not reconstructed. Never admission/replay authority."),
-        "processing_recovery": ("recorded" if recovery else "not_recorded", "One document-scoped authorization and its atomic consumption."),
+        "processing_recovery": ("recorded" if tables["processing_recovery"] else "not_recorded", "One document-scoped authorization and its atomic consumption."),
         "processing_attempts": ("recorded" if "processing_attempts" in envelope else "not_recorded", "Durable retry outcomes; historical missing attempts are not reconstructed."),
         "source_views": ("recorded" if any("source_fragments" in run for run in runs) else "not_recorded", "Recorded original extraction and derived source views; no inferred historical layout evidence."),
         "runs": ("recorded" if "quality_processing_runs" in envelope else "not_recorded", "Stored processing runs; objects_revision identifies this export, not a historical run."),
@@ -336,8 +361,9 @@ def processing_evidence_zip(**kwargs: Any) -> bytes:
 
     output = io.BytesIO()
     with ZipFile(output, "w", ZIP_DEFLATED) as archive:
-        archive.writestr("revision.csv", _csv(COMMON + ("revision_id",), [
-            {"snapshot_id": kwargs["snapshot_id"], "objects_revision": revision, "revision_id": revision_id}]))
+        from src.blockage_diagnostics_v1 import revision_context
+        archive.writestr("revision.csv", _csv(COMMON + ("revision_id", "source_hash", "source_version_sha256", "configuration_sha256"), [
+            {**revision_context(kwargs['snapshot_id'], revision, kwargs['envelope']), "revision_id": revision_id}]))
         revision_manifest = {"snapshot_id": kwargs["snapshot_id"], "revision_id": revision_id,
                              "schema_version": VERSION, "dataset": "revision.csv", "row_count": 1,
                              "availability": "recorded", "limitation": "Exact opaque revision token for this export only."}
@@ -345,6 +371,9 @@ def processing_evidence_zip(**kwargs: Any) -> bytes:
                                               [revision_manifest, *compact(manifest)]))
         for name, fields in SCHEMAS.items():
             archive.writestr(name + ".csv", _csv(common + fields, compact(tables[name])))
+        if tables['blockage_report']:
+            from src.blockage_diagnostics_v1 import blockage_summary
+            archive.writestr('blockage_summary.txt', blockage_summary(tables['blockage_report'][0]['report']))
         for index, run in enumerate(kwargs.get("envelope", {}).get("quality_processing_runs") or []):
             extraction = run.get("document_extraction")
             if extraction is not None:
@@ -355,6 +384,7 @@ def processing_evidence_zip(**kwargs: Any) -> bytes:
             f"Metis {VERSION}\n"
             f"Exported at: {datetime.now(timezone.utc).isoformat()}\n"
             "Read manifest.csv first. This is a read-only projection of stored evidence.\n"
+            "CSV v14 adds blockage_report.csv and blockage_summary.txt. Current action checks are not rerun by ZIP export.\n"
             "CSV v11 adds forensic_trace.csv, a derived join of recorded evidence. It is not a new authority.\n"
             "CSV v10 adds formation_progress.csv with current planned, terminal and pending bounded-task counts.\n"
             "CSV v6 adds bounded attempt limits, transport observations and retry linkage; context evidence is retained.\n"
