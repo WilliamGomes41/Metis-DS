@@ -62,6 +62,8 @@ def validate_configuration(value: Any, *, uploader_id: str) -> dict[str, Any]:
     from src.four_eyes_v1 import is_forbidden_reviewer
     if any(is_forbidden_reviewer(item) for item in reviewers):
         raise ValueError("forbidden_reviewer_identity")
+    if option == "uploader_sole" and is_forbidden_reviewer(uploader_id):
+        raise ValueError("forbidden_reviewer_identity")
     return deepcopy(value)
 
 

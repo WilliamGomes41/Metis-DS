@@ -18,6 +18,7 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE conname = 'publication_releases_review_provenance_check'
+          AND conrelid = 'publication_releases'::regclass
     ) THEN
         ALTER TABLE publication_releases
         ADD CONSTRAINT publication_releases_review_provenance_check
