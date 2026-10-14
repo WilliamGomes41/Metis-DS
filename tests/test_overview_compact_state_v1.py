@@ -9,6 +9,7 @@ Regels:
 - De volledige controle MOET alleen voor het geselecteerde document draaien, en
   POST /publish MOET de volledige poort ongewijzigd opnieuw uitvoeren.
 
+# release-control-evidence: opslag concurrent stale
 # release-control-evidence: scope/belofte
 # release-control-evidence: beschikbaarheid
 # release-control-evidence: releasebewijs
@@ -26,6 +27,8 @@ import src.publication_readiness_v1 as readiness
 import src.recoverable_formation_v1 as formation
 import src.source_preparation_context_v1 as preparation
 from tests import test_vsa_publish_readiness_ui_v1 as publish_fixture
+
+pytestmark = [pytest.mark.release_control_opslag]
 
 UNCHECKED = "volledigheid nog niet gecontroleerd"
 N_DOCUMENTS = 3
@@ -226,3 +229,21 @@ def test_overview_cost_is_independent_of_document_count(tmp_path, helper_calls):
     assert helper_calls["incomplete_deep"] == 0
     assert helper_calls["snapshot_objects_deepcopy"] == 0
     assert elapsed < 10
+
+
+def test_stale_selected_check_is_recomputed_on_every_request(tmp_path, helper_calls):
+    """Opslag stale/concurrent: een eerder gereed resultaat MAG NIET blijven hangen."""
+    console, accounts, receipts, source = _documents(tmp_path, count=1)
+    publish_fixture._complete_review(console, accounts, receipts[0])
+    client = publish_fixture._client(console)
+    publish_fixture._login(client, "publisher.carla")
+    sid = receipts[0]["snapshot_id"]
+    assert 'data-publication-state="ready"' in client.get("/publish", params={"document": sid}).text
+    source.blobs.pop(str(receipts[0]["immutable_storage_locator"]))
+
+    stale = client.get("/publish", params={"document": sid})
+    overview = client.get("/publish")
+
+    assert 'data-publication-state="ready"' not in stale.text
+    assert "data-publish-form" not in stale.text
+    assert 'data-publication-state="unchecked"' in overview.text
