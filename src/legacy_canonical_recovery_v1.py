@@ -18,6 +18,7 @@ from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationSt
 from src.g2_source_store import G2SourceStoreError, parse_g2_locator
 from src.integrity_kernel import compute_canonical_object_hash, sha256_bytes
 from src.publish_authorization_v1 import still_matches
+from src.four_eyes_v1 import eligible_tuple_reviewers, four_eyes_satisfied, requires_four_eyes
 
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -132,6 +133,9 @@ def prepare_legacy_canonical_candidate(
         raise LegacyCanonicalRecoveryError("legacy_release_envelope_sha256_mismatch")
     if str(envelope.get("immutable_storage_locator") or "") != source_locator:
         raise LegacyCanonicalRecoveryError("legacy_release_envelope_locator_mismatch")
+    uploader_id = str(envelope.get("uploader_account_id") or "")
+    if not uploader_id:
+        raise LegacyCanonicalRecoveryError("legacy_release_uploader_missing")
 
     try:
         source_bytes = source_store.load_verified(source_locator)
@@ -185,13 +189,19 @@ def prepare_legacy_canonical_candidate(
             raise LegacyCanonicalRecoveryError(
                 f"legacy_release_object_source_mismatch:{object_id}@{object_version}"
             )
-        authorized = any(
-            binding.get("decision") == "approve" and still_matches(binding, obj)
-            for binding in bindings
-        )
-        if not authorized:
+        # D-SEC-2: dezelfde reviewregels als de contractpoort. Een agent telt
+        # NOOIT; de uploader alleen is NOOIT voldoende; hoog risico MOET
+        # four-eyes hebben.
+        current = [binding for binding in bindings if still_matches(binding, obj)]
+        eligible = eligible_tuple_reviewers(current, object_id=object_id, uploader_id=uploader_id)
+        if not any(str(row.get("reviewer_id") or "") != uploader_id for row in eligible):
             raise LegacyCanonicalRecoveryError(
                 f"legacy_release_object_authorization_missing:{object_id}@{object_version}"
+            )
+        if requires_four_eyes(obj) and not four_eyes_satisfied(
+                eligible, object_id=object_id, uploader_id=uploader_id):
+            raise LegacyCanonicalRecoveryError(
+                f"legacy_release_object_four_eyes_missing:{object_id}@{object_version}"
             )
         selected.append(obj)
 

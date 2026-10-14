@@ -191,6 +191,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Documents, Reviews, Blobs, dict]:
         "snapshot_id": snapshot_id,
         "sha256": checksum,
         "immutable_storage_locator": locator,
+        "uploader_account_id": "uploader-1",
     }
     return path, Documents(envelope, [obj]), Reviews(snapshot_id, obj), Blobs(locator, source), manifest
 

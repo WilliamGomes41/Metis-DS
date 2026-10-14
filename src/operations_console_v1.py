@@ -671,6 +671,25 @@ def _spec_from_fragments(
     }
 
 
+
+def unpublished_delete_permitted(account: dict[str, Any] | None, envelope: dict[str, Any]) -> bool:
+    """D-DEL-1: de rol publisher of de uploader van dit document; NOOIT een ander account."""
+    if not account or account.get("retirement"):
+        return False
+    if "publisher" in set(account.get("roles") or []):
+        return True
+    uploader = str(envelope.get("uploader_account_id") or "")
+    return bool(uploader) and str(account.get("account_id") or "") == uploader
+
+
+def _recorded_authorization(bindings, binding, account):
+    """D-SEC-1: elke goedkeuring loopt via de identiteitscontrole van het contract."""
+    from src.publish_authorization_v1 import ApproverIdentityError
+    try:
+        return record_authorization(bindings, binding, account=account)
+    except ApproverIdentityError as exc:
+        raise ConsoleError(str(exc)) from exc
+
 class OperationsConsole:
     @contextmanager
     def source_selection_read_scope(self, *, retained_only=False):
@@ -2631,14 +2650,15 @@ class OperationsConsole:
         account = self._account(actor_id)
         if _is_forbidden_identity(account["username"]) or _is_forbidden_identity(account["display_name"]):
             raise ConsoleError("forbidden_reviewer_identity")
-        roles = set(account["roles"])
-        if "researcher" not in roles and "reviewer" not in roles:
-            raise ConsoleError("unpublished_delete_role_required")
         if not confirmed:
             raise ConsoleError("delete_confirmation_required")
         with self._store_write_lock():
             self._reload_store_locked()
             envelope = deepcopy(self._envelope(token))
+            # D-DEL-1: alleen de rol publisher en de uploader MOETEN verwijderen;
+            # elk ander account MAG NIET verwijderen.
+            if not unpublished_delete_permitted(account, envelope):
+                raise ConsoleError("unpublished_delete_not_permitted")
             result = self._delete_unpublished_snapshot_locked(
                 actor_id=actor_id,
                 token=token,
@@ -3979,7 +3999,7 @@ class OperationsConsole:
                     binding["eindoordeel"] = passage_meta.get("eindoordeel")
                     binding["documentpositie"] = passage_meta.get("documentpositie")
                 # Retain historical exact tuples. Current authority matches only this tuple.
-                rows = record_authorization(new_bindings.get(snapshot_id, []), binding)
+                rows = _recorded_authorization(new_bindings.get(snapshot_id, []), binding, reviewer)
                 new_bindings[snapshot_id] = rows
             else:
                 new_bindings[snapshot_id] = invalidate_for_object(
@@ -4110,7 +4130,7 @@ class OperationsConsole:
             binding["review_domain"] = "content" if review_path != "boom" else "decision_tree"
             binding["reviewed_at"] = utc_now()
             new_bindings = deepcopy(self._bindings)
-            rows = record_authorization(new_bindings.get(snapshot_id, []), binding)
+            rows = _recorded_authorization(new_bindings.get(snapshot_id, []), binding, reviewer)
             new_bindings[snapshot_id] = rows
 
             history = self._load_objects(snapshot_id)
@@ -4666,11 +4686,10 @@ class OperationsConsole:
                 fragments=fragments,
             )
             contracts.append(contract)
-            blockers.extend(
-                code
-                for code in contract["blockers"]
-                if code != "blocked_pending_immutable_locator"
-            )
+            # D-SEC-3: het contract beslist; de console filtert NOOIT zelf.
+            blockers.extend(contract["authorization_blockers"])
+            if not contract["authorization_ok"] and not contract["authorization_blockers"]:
+                blockers.append("publish_authorization_contract_refused")
             if requires_four_eyes(obj):
                 four_eyes_needed = True
                 if not contract["four_eyes_satisfied"]:

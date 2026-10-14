@@ -392,6 +392,7 @@ ERROR_COPY = {
     "prepublication_projection_failed": "Metis kon de publicatie niet voorbereiden. Controleer de publicatiestatus en meld dit bij de beheerder voordat je opnieuw probeert.",
     "object_tuple_required": "Nog niet alle vereiste passagebeoordelingen zijn afgerond. Ga naar Review en rond de open beoordelingen af.",
     "unpublished_delete_role_required": "Je account heeft geen rechten om dit document te verwijderen. Vraag een onderzoeker of beoordelaar om deze stap uit te voeren.",
+    "unpublished_delete_not_permitted": "Alleen de uploader van dit document of een publicatiebeheerder verwijdert een ongepubliceerd document.",
     "hide_selected_objects_forbidden": "Losse passages kunnen niet worden verborgen terwijl dit document in beoordeling blijft. Rond de beoordeling van deze passages af.",
     "cross_model_direct_change_blocked": "Omzetten tussen een beslisboom en een ander documenttype vereist opnieuw verwerken. Gebruik de actie voor opnieuw verwerken van dit document.",
     "class_change_confirmation_required": "Bevestig eerst de consequentie van Klasse wijzigen.",
@@ -1317,9 +1318,9 @@ def _document_card_heading(row: dict[str, Any]) -> str:
     """
 
 
-def _can_delete_unpublished(account: dict[str, Any] | None) -> bool:
-    roles = set((account or {}).get("roles") or [])
-    return bool(roles & {"researcher", "reviewer"})
+def _can_delete_unpublished(account: dict[str, Any] | None, row: dict[str, Any]) -> bool:
+    from src.operations_console_v1 import unpublished_delete_permitted
+    return unpublished_delete_permitted(account, row)
 
 
 def _unpublished_delete_control(
@@ -1333,10 +1334,15 @@ def _unpublished_delete_control(
     """Researcher Dutch delete control. Documenten room (/tree) only. Type-to-confirm title."""
     if next_path != "/tree":
         return ""
-    if not _can_delete_unpublished(account):
-        return ""
     snap = str(row.get("snapshot_id") or "")
     if not snap:
+        return ""
+    if "uploader_account_id" not in row:
+        try:
+            row = {**row, "uploader_account_id": console._envelope(snap).get("uploader_account_id")}
+        except ConsoleError:
+            return ""
+    if not _can_delete_unpublished(account, row):
         return ""
     if mutable is False:
         return ""

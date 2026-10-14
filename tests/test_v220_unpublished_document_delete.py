@@ -663,34 +663,33 @@ def test_uploader_may_delete_without_second_reviewer_or_four_eyes(tmp_path: Path
     assert deleted["second_named_reviewer_required"] is False
 
 
-def test_reviewer_may_delete_unpublished_they_did_not_upload(tmp_path: Path) -> None:
+def test_reviewer_who_is_not_the_uploader_is_not_the_delete_operator(tmp_path: Path) -> None:
+    """D-DEL-1 (William, 14-10-2026): alleen publisher en uploader MOETEN verwijderen."""
     console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Reviewer delete")
-    console.delete_unpublished_snapshot(
-        actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        confirmed=True,
-        confirm_title="Reviewer delete",
-    )
-    assert receipt["snapshot_id"] not in {row["snapshot_id"] for row in console.list_envelopes()}
-
-
-def test_publisher_only_is_not_the_delete_operator(tmp_path: Path) -> None:
-    console = _console(tmp_path)
-    accounts = _accounts(console)
-    receipt = _ingest(console, accounts, title="Publisher niet")
-    with pytest.raises(ConsoleError, match="unpublished_delete_role_required"):
+    with pytest.raises(ConsoleError, match="unpublished_delete_not_permitted"):
         console.delete_unpublished_snapshot(
-            actor_id=accounts["publisher"]["account_id"],
+            actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=receipt["snapshot_id"],
             confirmed=True,
+            confirm_title="Reviewer delete",
         )
     assert receipt["snapshot_id"] in {row["snapshot_id"] for row in console.list_envelopes()}
-    client = _client(console, "publisher.carla")
-    html = client.get("/review").text
-    assert DELETE_LABEL not in html
-    assert DELETE_LABEL not in client.get("/tree").text
+
+
+def test_publisher_is_a_delete_operator(tmp_path: Path) -> None:
+    """D-DEL-1: de rol publisher MOET een ongepubliceerd document verwijderen."""
+    console = _console(tmp_path)
+    accounts = _accounts(console)
+    receipt = _ingest(console, accounts, title="Publisher wel")
+    console.delete_unpublished_snapshot(
+        actor_id=accounts["publisher"]["account_id"],
+        snapshot_id=receipt["snapshot_id"],
+        confirmed=True,
+        confirm_title="Publisher wel",
+    )
+    assert receipt["snapshot_id"] not in {row["snapshot_id"] for row in console.list_envelopes()}
 
 
 def test_forbidden_identities_are_not_the_delete_operator() -> None:

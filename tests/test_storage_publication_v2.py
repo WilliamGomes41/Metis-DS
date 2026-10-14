@@ -7,11 +7,11 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
+from src.canonical_store import import_approved as _import_approved
 from src.canonical_store import (
     create_release,
     emergency_unpublish,
     export_published,
-    import_approved,
     init_db,
     publish_release,
     recompute_content_hash,
@@ -22,6 +22,18 @@ from src.canonical_store import (
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "schemas/knowledge_object.schema.v1.0.json"
 REAL_INPUT = ROOT / "data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v2.jsonl"
+
+
+# Pilot-accounts: reviewervelden zijn account-ids (D-SEC-2), NOOIT namen.
+PILOT_ACCOUNTS = [
+    {"account_id": "Reviewer A", "username": "reviewer.a", "roles": ["reviewer"]},
+    {"account_id": "Reviewer B", "username": "reviewer.b", "roles": ["reviewer"]},
+]
+
+
+def import_approved(*args, **kwargs):
+    kwargs.setdefault("accounts", PILOT_ACCOUNTS)
+    return _import_approved(*args, **kwargs)
 
 
 def semantic_rows():
