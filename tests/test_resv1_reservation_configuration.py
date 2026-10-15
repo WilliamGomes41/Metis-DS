@@ -135,3 +135,43 @@ def test_reextract_reserved_contract_follows_active_configuration_not_stale_enve
     [attempt] = _attempts(console, sid, 'reextract')
     active = selection.configuration(console)
     assert attempt['reserved_semantic_contract_version'] == semantic_contract_version_for_mode(active['mode'])
+
+
+# --- #628 F3: configuration change between reserve and execute (mid-flight deploy) ---
+# Documented outcome: the attempt MOET end 'failed' with error_code processing_configuration_changed,
+# the command MOET be refused with that code, and no new objects MAG NIET be written.
+
+def _deploy_after_reservation(console):
+    real = console._processing_configuration_reader
+    calls = {'n': 0}
+
+    def reader():
+        calls['n'] += 1
+        current = dict(real())
+        if calls['n'] > 1:
+            current['mode'] = 'deployed-mid-flight'
+        return current
+    console._processing_configuration_reader = reader
+
+
+def test_reextract_config_change_mid_flight_gives_configuration_changed(tmp_path):
+    console, sid, actor = _reextract_ready(tmp_path)
+    before = console.snapshot_objects(sid)
+    _deploy_after_reservation(console)
+    with pytest.raises(ConsoleError, match='processing_configuration_changed'):
+        console.reextract_unpublished(actor_id=actor, snapshot_id=sid)
+    attempt = _attempts(console, sid, 'reextract')[-1]
+    assert (attempt['state'], attempt['error_code']) == ('failed', 'processing_configuration_changed')
+    assert console.snapshot_objects(sid) == before
+
+
+def test_ingest_config_change_mid_flight_gives_configuration_changed(tmp_path):
+    console = _console(tmp_path)
+    bound(console, reject=False)
+    _deploy_after_reservation(console)
+    with pytest.raises(ConsoleError, match='processing_configuration_changed'):
+        ingest(console)
+    [sid] = list(console._envelopes)
+    attempt = _attempts(console, sid, 'ingest')[-1]
+    assert (attempt['state'], attempt['error_code']) == ('failed', 'processing_configuration_changed')
+    assert console.snapshot_objects(sid) == []
