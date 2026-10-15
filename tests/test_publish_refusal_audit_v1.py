@@ -205,3 +205,13 @@ def test_refusal_store_is_bounded_and_append_only(tmp_path, monkeypatch):
     assert store.append_refusal(path, snapshot_id='s', object_version='1', actor='c', reason_codes=['r'], revision=None, clock=t0) == 'capacity_reached'
     assert path.read_bytes() == first
     assert all(len(r['reason_codes']) == store.MAX_REASON_CODES for r in store.read_records(path))
+
+
+def test_file_store_is_visibly_marked_temporary(tmp_path):
+    # TIJDELIJK until William's GO on a PostgreSQL table: every record MOET carry the marker.
+    path = tmp_path / store.FILE_NAME
+    store.append_refusal(path, snapshot_id='s', object_version='1', actor='a', reason_codes=['r'], revision=None)
+    [row] = store.read_records(path)
+    assert store.STORE_STATUS == 'temporary_file_store_pending_postgres_table'
+    assert row['store_status'] == store.STORE_STATUS
+    assert 'TIJDELIJK' in store.__doc__
