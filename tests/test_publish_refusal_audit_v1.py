@@ -24,6 +24,7 @@ from tests.test_recoverable_formation_v1 import system
 def audit_key(monkeypatch):
     monkeypatch.setenv('METIS_AUDIT_HMAC_KEY', 'test-audit-key')
     monkeypatch.setattr(audit, '_FAILURE_COUNT', [0])
+    monkeypatch.setattr(audit, '_SUPPRESSED_COUNT', [0], raising=False)
 
 
 @pytest.fixture
@@ -255,9 +256,14 @@ def test_capacity_reached_emits_audit_failed_diagnostic(tmp_path, events, warnin
 
 def test_audit_failed_diagnostic_is_bounded_per_process(warnings_, monkeypatch):
     monkeypatch.setattr(audit, '_FAILURE_COUNT', [0])
+    monkeypatch.setattr(audit, '_SUPPRESSED_COUNT', [0])
     for _ in range(audit.MAX_FAILURE_DIAGNOSTICS + 50):
         audit._audit_failed('durable_store', error=OSError('x'), snapshot_id='s')
     assert len(_failures(warnings_)) == audit.MAX_FAILURE_DIAGNOSTICS
+    # After the cap: exactly ONE suppression event with a counter; MAG NIET go silent.
+    [suppressed] = [w for w in warnings_ if w.get('event') == 'publication_refusal_audit_failed_suppressed']
+    assert suppressed['cap'] == audit.MAX_FAILURE_DIAGNOSTICS and suppressed['suppressed_count'] == 1
+    assert audit.suppressed_failure_count() == 50
 
 
 def test_hostile_error_class_and_snapshot_are_bounded(warnings_, monkeypatch):
