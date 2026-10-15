@@ -23,6 +23,7 @@ from src.publication_evidence_v1 import observe_publication
 from src.retrieval.retrieval_projection_v2 import build_projection
 from src.review_closure_v1 import ReviewClosureConsole
 from src.review_ledger import append_event
+from src import publish_refusal_audit_v1 as _publish_refusal_audit
 
 
 _HISTORICAL_RELEASE_STATES = frozenset({"superseded", "withdrawn"})
@@ -268,6 +269,7 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
         except Exception: evidence_revision = None
         observe_publication('publication_checked', snapshot_id=snapshot_id, envelope=envelope,
                             revision=evidence_revision, readiness=considered)
+        _publish_refusal_audit.record_publish_refusal(self, actor_id=actor_id, snapshot_id=snapshot_id, verdict=considered, revision=evidence_revision)
         if not considered.get("publish_allowed"): return {"status":"BLOCKED","state":envelope["state"],"snapshot_id":snapshot_id,"blockers":considered.get("blockers") or ["object_tuple_required"],"g2":considered.get("g2","BLOCKED"),"cutover":False}
         account = self._require_role(actor_id, "publisher"); publish_ids = set(considered["publishable_object_ids"]); objects = [deepcopy(obj) for obj in self.snapshot_objects(snapshot_id) if obj.get("object_id") in publish_ids]
         logical_document_id = str(envelope.get("logical_document_id") or "")
