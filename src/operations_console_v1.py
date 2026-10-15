@@ -1279,6 +1279,22 @@ class OperationsConsole:
             raise ConsoleError("uploader_cannot_be_sole_required_reviewer")
         return unique
 
+    def _chosen_review_configuration(self, choice: dict[str, Any] | None, uploader_id: str) -> dict[str, Any] | None:
+        """H2 2b-2: B10-keuze van de uploader; lezers tellen NOOIT en krijgen geen toegang."""
+        if choice is None:
+            return None
+        from src.review_configuration_v1 import CONTRACT, validate_configuration
+        if not isinstance(choice, dict) or set(choice) != {"option", "four_eyes_required", "reviewers", "readers"}:
+            raise ConsoleError("invalid_review_configuration")
+        value = {"contract": CONTRACT, **choice, "revision": 1, "locked_at": None, "source": "chosen"}
+        try:
+            value = validate_configuration(value, uploader_id=uploader_id)
+        except ValueError as exc:
+            raise ConsoleError(str(exc)) from None
+        if any(reader not in self._accounts for reader in value["readers"]):
+            raise ConsoleError("unknown_reader")
+        return value
+
     def manage_review_participation(self, **command: Any) -> dict[str, Any]:
         from src.review_participation_v1 import execute
         return execute(self, **command)
@@ -1690,6 +1706,7 @@ class OperationsConsole:
         url: str | None = None,
         replaces_snapshot_id: str | None = None,
         review_policy: dict[str, Any] | None = None,
+        review_choice: dict[str, Any] | None = None,
         source_status: str = "unknown",
         command_id: str | None = None,
         revision_reason: str = "",
@@ -1719,14 +1736,42 @@ class OperationsConsole:
             pattern=ISO_DATE_RE,
             code="invalid_source_date",
         )
+        review_configuration = self._chosen_review_configuration(review_choice, actor_id)
         if review_policy is None:
+            if review_configuration is not None and not named_reviewers:
+                named_reviewers = list(review_configuration["reviewers"])
             reviewers = self._resolve_named_reviewers(named_reviewers, actor_id)
+            if review_configuration is not None and \
+                    {r for r in reviewers if r != actor_id} != set(review_configuration["reviewers"]):
+                raise ConsoleError("review_configuration_policy_conflict")
         else:
             review_policy = self._validated_review_policy(review_policy)
-            from src.review_policy_v1 import participants
+            from src.review_policy_v1 import participants, required_reviewers
             reviewers = participants(review_policy)
             if named_reviewers and set(named_reviewers) != set(reviewers):
                 raise ConsoleError("review_policy_membership_conflict")
+            required = set(required_reviewers(review_policy))
+            if review_configuration is not None and required - {actor_id} != set(review_configuration["reviewers"]):
+                raise ConsoleError("review_configuration_policy_conflict")
+            if review_configuration is not None:
+                # H2-1 wint: alleen een eenduidige mapping legt vier ogen vast; needs_choice NOOIT.
+                from src.review_configuration_v1 import from_review_policy
+                mapped = from_review_policy(review_policy, uploader_id=actor_id)
+                if not mapped["needs_choice"] and \
+                        mapped["four_eyes_required"] != review_configuration["four_eyes_required"]:
+                    raise ConsoleError("review_configuration_policy_conflict")
+            if review_configuration is not None and set(review_configuration["readers"]) & set(reviewers):
+                # Lezers krijgen NOOIT reviewtoegang via een (optionele) policy-deelname.
+                raise ConsoleError("review_configuration_reader_is_reviewer")
+        if review_configuration is None and review_policy is None:
+            # H2-7 (a): ingest zonder keuze slaat de legacy-default op.
+            from src.review_configuration_v1 import legacy_default, validate_configuration
+            review_configuration = legacy_default({"uploader_account_id": actor_id, "named_reviewers": reviewers})
+            review_configuration.pop("needs_choice")
+            try:
+                review_configuration = validate_configuration(review_configuration, uploader_id=actor_id)
+            except ValueError as exc:
+                raise ConsoleError(str(exc)) from None
         review_path = review_path_for_klasse(class_)
         candidate_url = url or live_url or ""
         if review_path == "boom" and is_live_rest_url(candidate_url):
@@ -1774,6 +1819,7 @@ class OperationsConsole:
                 "payload_hash": stable_hash({"digest": digest, "filename": filename, "kind": kind,
                     "title": title.strip(), "version": source_version, "date": source_date,
                     "class": class_, "family": family_hook, "reviewers": reviewers, "policy": review_policy,
+                    "review_configuration": review_configuration,
                     "source_status": source_status, "live_url": live_url or url or "", "ingest_kind": ingest_kind,
                     "replaces_snapshot_id": replaces_snapshot_id, "revision_reason": revision_reason})}
             identity_hash = stable_hash({"actor_id": actor_id, "command_id": command_id})
@@ -1848,6 +1894,11 @@ class OperationsConsole:
             envelope["ingest_command"] = ingest_command
         if review_policy is not None:
             envelope["review_policy"] = deepcopy(review_policy)
+        if review_configuration is not None:
+            envelope["review_configuration"] = deepcopy(review_configuration)
+        elif review_policy is not None:
+            # H2 2b-2: gedrag volgt de policy-mapping (H2-1); de herkomst MOET zichtbaar zijn.
+            envelope["configuration_source"] = "legacy_policy_mapping"
         if _receive_only:
             # Durable receipt is a separate command. No extractor/provider has
             # run, and no attempt is implicitly authorized by receiving bytes.

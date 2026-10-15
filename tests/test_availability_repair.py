@@ -60,7 +60,8 @@ def login(client, username='author'):
 
 def upload(client, reviewer, *, command='receipt', title='Fixture'):
     return client.post('/ingest', data={'ingest_kind':'new','title':title,'version':'1','date':'2026-10-08',
-        'class_':'richtlijn','family':'fixture','review_mode':'single','primary_reviewer':reviewer,'command_id':command},
+        'class_':'richtlijn','family':'fixture','review_mode':'single','primary_reviewer':reviewer,
+        'review_option':'one_other','review_reviewers':reviewer,'command_id':command},
         files={'file':('fixture.html',b'<html><body><p>Gebruik geen zalf.</p></body></html>','text/html')},follow_redirects=False)
 
 

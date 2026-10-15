@@ -85,6 +85,11 @@ def upload(tmp_path):
         yield console, client, payload, form, actor
 
 
+def _http(form):
+    """H2 2b-2: het HTTP-uploadformulier MOET een B10-reviewkeuze meekrijgen."""
+    return {**form, "review_option": "one_other", "review_reviewers": form["named_reviewers"]}
+
+
 @pytest.mark.parametrize(("name", "expected"), [
     (r"C:\Users\x\Doc.pdf", "Doc.pdf"),
     ("/tmp/Doc.pdf", "Doc.pdf"),
@@ -95,7 +100,7 @@ def upload(tmp_path):
 def test_browser_filename_ingest_preserves_bytes_and_stays_under_store(upload, name, expected):
     console, client, payload, form, _ = upload
     assert normalize_upload_filename(name) == expected
-    response = client.post("/ingest", data=form, files={"file": (name, payload, "application/pdf")})
+    response = client.post("/ingest", data=_http(form), files={"file": (name, payload, "application/pdf")})
     assert response.status_code == 200
     assert "Document veilig ontvangen" in response.text
     envelope, = console.list_envelopes()
@@ -136,7 +141,7 @@ def test_path_joins_remain_strict_and_symlink_escape_is_rejected(tmp_path):
 def test_filename_error_has_same_hint_and_keeps_valid_session(upload):
     console, client, payload, form, _ = upload
     assert FILENAME_HINT in client.get("/ingest").text
-    response = client.post("/ingest", data=form, files={"file": ("..", payload, "application/pdf")})
+    response = client.post("/ingest", data=_http(form), files={"file": ("..", payload, "application/pdf")})
     assert response.status_code == 400
     assert FILENAME_HINT in response.text
     assert "De bestandsnaam kan niet veilig worden verwerkt" in response.text
@@ -150,7 +155,7 @@ def test_filename_error_has_same_hint_and_keeps_valid_session(upload):
 
 def test_pdf_review_index_uses_human_labels_and_working_object_links(upload):
     console, client, payload, form, _ = upload
-    assert client.post("/ingest", data=form, files={"file": ("Eenzaamheid bij ouderen.pdf", payload, "application/pdf")}).status_code == 200
+    assert client.post("/ingest", data=_http(form), files={"file": ("Eenzaamheid bij ouderen.pdf", payload, "application/pdf")}).status_code == 200
     envelope, = console.list_envelopes()
     sid = envelope["snapshot_id"]
     selected = client.post("/source-selection/start", data={"document": sid, "command_id": "filename-selection",

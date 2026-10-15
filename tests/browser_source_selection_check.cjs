@@ -25,6 +25,8 @@ const fs = require('fs');
   await page.locator('[name=family]').fill('fixture');
   await page.locator('[name=review_mode]').selectOption('single');
   await page.locator('[name=primary_reviewer]').selectOption(manifest.reviewer);
+  await page.locator('[name=review_option][value=one_other]').check();
+  await page.locator('[name=review_reviewers]').selectOption(manifest.reviewer);
   await Promise.all([page.waitForURL('**/source-selection?**'), page.locator('#ingest-submit').click()]);
   const sid = new URL(page.url()).searchParams.get('document');
   if (await page.locator('select[name=document]').inputValue()!==sid) throw Error('selected document');
