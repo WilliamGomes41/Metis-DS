@@ -319,6 +319,9 @@ ERROR_COPY = {
     "condition_fused_into_outcome": "Leg de voorwaarde ook vast met de relatie ‘geldt indien’, zodat duidelijk is wanneer deze uitkomst geldt.",
     "official_file_or_url_required": "Kies een HTML-, PDF- of boom-freezebestand, of een URL.",
     "named_reviewers_required": "Kies minstens één andere reviewer dan jezelf.",
+    "review_configuration_required": "Kies een reviewkeuze: alleen jij, één andere reviewer of twee andere reviewers.",
+    "review_configuration_policy_conflict": "De reviewkeuze en de reviewdeelname noemen verschillende reviewers. Maak beide gelijk.",
+    "unknown_reader": "Een gekozen lezer is niet gevonden. Kies lezers uit de keuzelijst.",
     "publisher_role_required": "Je account heeft geen rechten om te publiceren. Vraag een bevoegde publiceerder om deze stap uit te voeren.",
     "reviewer_role_required": "Je account heeft geen rechten om te beoordelen. Vraag de beheerder om de juiste rol.",
     "researcher_role_required": "Je account heeft geen rechten om documenten in te leveren. Vraag de beheerder om de juiste rol.",
@@ -4860,6 +4863,17 @@ def create_console_app(
                     <select id="source_status" name="source_status"><option value="unknown">Niet opgegeven</option><option value="established">Vastgesteld</option><option value="draft">Concept</option></select>
                     <label for="named_reviewers">Aanvullende beoordelaars</label>
                     <select id="named_reviewers" name="named_reviewers" multiple size="6">{options}</select>
+                    <fieldset id="review-configuration">
+                      <legend>Reviewkeuze (verplicht)</legend>
+                      <label><input type="radio" name="review_option" value="uploader_sole" required> Alleen ik als uploader</label>
+                      <label><input type="radio" name="review_option" value="one_other" required> Eén andere reviewer</label>
+                      <label><input type="radio" name="review_option" value="two_others" required> Twee andere reviewers</label>
+                      <label><input type="checkbox" name="four_eyes" value="yes"> Vier ogen verplicht</label>
+                      <label for="review_reviewers">Reviewers voor deze keuze</label>
+                      <select id="review_reviewers" name="review_reviewers" multiple size="6">{options}</select>
+                      <label for="review_readers">Lezers (tellen NOOIT mee voor goedkeuring)</label>
+                      <select id="review_readers" name="review_readers" multiple size="6">{options}</select>
+                    </fieldset>
 
                   </div>
                 </div>
@@ -4929,6 +4943,10 @@ def create_console_app(
         named_reviewers: list[str] = Form(default=[]),
         review_mode: str = Form("legacy"),
         primary_reviewer: str = Form(""),
+        review_option: str = Form(""),
+        four_eyes: str = Form(""),
+        review_reviewers: list[str] = Form(default=[]),
+        review_readers: list[str] = Form(default=[]),
         source_status: str = Form("unknown"),
         command_id: str = Form(""),
         file: UploadFile | None = File(None),
@@ -4943,6 +4961,12 @@ def create_console_app(
             content_type = file.content_type
         if isinstance(named_reviewers, str):
             named_reviewers = [named_reviewers] if named_reviewers.strip() else []
+        # H2-7 (a): het HTTP-uploadformulier MOET een B10-keuze meekrijgen.
+        if not review_option.strip():
+            raise ConsoleError("review_configuration_required")
+        review_choice = {"option": review_option.strip(), "four_eyes_required": four_eyes == "yes",
+                         "reviewers": [i for i in review_reviewers if i.strip()],
+                         "readers": [i for i in review_readers if i.strip()]}
         policy = None
         if review_mode != "legacy":
             if review_mode not in {"single", "optional", "required"}:
@@ -4970,6 +4994,7 @@ def create_console_app(
             family=family,
             named_reviewers=[] if policy else named_reviewers,
             review_policy=policy,
+            review_choice=review_choice,
             source_status=source_status,
             command_id=command_id or None,
             replaces_snapshot_id=replaces_document.strip() or None,

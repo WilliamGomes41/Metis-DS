@@ -952,6 +952,8 @@ def test_html_ingest_submits_document_and_publish_stays_blocked(tmp_path: Path) 
             "class_": "richtlijn",
             "family": "continentie",
             "named_reviewers": accounts["reviewer"]["account_id"],
+            "review_option": "one_other",
+            "review_reviewers": accounts["reviewer"]["account_id"],
         },
         files={"file": ("continentie.html", HTML_FIXTURE.read_bytes(), "text/html")},
     )

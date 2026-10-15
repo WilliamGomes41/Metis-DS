@@ -59,6 +59,9 @@ def validate_configuration(value: Any, *, uploader_id: str) -> dict[str, Any]:
         raise ValueError("review_configuration_uploader_sole_has_reviewers")
     if len(reviewers) < MINIMUM_REVIEWERS[option]:
         raise ValueError("review_configuration_reviewers_missing")
+    if value["source"] == "chosen" and len(reviewers) != MINIMUM_REVIEWERS[option]:
+        # Alleen nieuwe uploadkeuzes; een legacy_default of migrated_policy MAG NIET ongeldig worden.
+        raise ValueError("review_configuration_reviewer_count_mismatch")
     from src.four_eyes_v1 import is_forbidden_reviewer
     if any(is_forbidden_reviewer(item) for item in reviewers):
         raise ValueError("forbidden_reviewer_identity")
