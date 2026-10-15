@@ -168,3 +168,39 @@ def test_non_propagating_logger_handlers_emit_only_redacted_text(name):
     out = stream.getvalue()
     assert 'abcdefghijk' not in out and 's3cr3t' not in out and 'hunter2' not in out
     assert '[REDACTED]' in out
+
+
+# --- Metis 638-1: re-install idempotently at startup, AFTER the server's own log setup ---
+
+@pytest.mark.parametrize('name', ['uvicorn.error', 'uvicorn.access', 'gunicorn.error'])
+def test_server_handlers_added_after_build_are_redacted_after_startup(name):
+    import io
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from src.structured_logging_v1 import install_startup_reinstall
+    app = FastAPI()
+    install_structured_logging()
+    install_startup_reinstall(app)
+    logger = logging.getLogger(name)
+    saved = (list(logger.handlers), logger.propagate, logger.level)
+    stream = io.StringIO()
+    logger.handlers = [_foreign(stream)]  # server dictConfig runs after build_app()
+    logger.propagate = False
+    logger.setLevel(logging.INFO)
+    try:
+        with TestClient(app):  # runs startup
+            logger.info('Cookie: sessionid=s3cr3t password=hunter2')
+            install_structured_logging()  # idempotent: no second filter, no second root handler
+            assert sum(1 for f in logger.handlers[0].filters if f.__class__.__name__ == 'RedactingFilter') == 1
+    finally:
+        logger.handlers, logger.propagate = saved[0], saved[1]
+        logger.setLevel(saved[2])
+    out = stream.getvalue()
+    assert 's3cr3t' not in out and 'hunter2' not in out and '[REDACTED]' in out
+    assert sum(1 for h in logging.getLogger().handlers if getattr(h, 'name', None) == 'metis-structured-json') == 1
+
+
+def test_build_app_registers_the_startup_reinstall():
+    import inspect
+    import src.console_asgi as asgi
+    assert 'install_startup_reinstall(app)' in inspect.getsource(asgi.build_app)
