@@ -2406,6 +2406,12 @@ class OperationsConsole:
                     raise ConsoleError("pre_review_reprocess_not_required")
                 if objects or self._bindings.get(snapshot_id) or envelope.get("review_passes"):
                     raise ConsoleError("pre_review_retry_existing_work")
+                # Reservation MOET read the configuration in force now; fail closed if unreadable.
+                try:
+                    from src import source_selection_v1
+                    envelope["processing_configuration"] = source_selection_v1.configuration(self)
+                except Exception as error:
+                    raise ConsoleError("processing_configuration_unavailable") from error
             attempt, fresh = reserve(envelope, command_id=command_id, actor_id=actor_id, revision=revision, clock=now(), limits=limits)
             self._commit_prepared_store(envelopes={snapshot_id: envelope}, snapshot_id=snapshot_id)
         if not fresh:
