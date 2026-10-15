@@ -1880,6 +1880,9 @@ class OperationsConsole:
             envelope["review_policy"] = deepcopy(review_policy)
         if review_configuration is not None:
             envelope["review_configuration"] = deepcopy(review_configuration)
+        elif review_policy is not None:
+            # H2 2b-2: gedrag volgt de policy-mapping (H2-1); de herkomst MOET zichtbaar zijn.
+            envelope["configuration_source"] = "legacy_policy_mapping"
         if _receive_only:
             # Durable receipt is a separate command. No extractor/provider has
             # run, and no attempt is implicitly authorized by receiving bytes.

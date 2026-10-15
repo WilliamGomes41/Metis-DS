@@ -79,6 +79,8 @@ def configuration(env, names):
     """H2 2b-2: toont de opgeslagen B10-keuze; schrijft NOOIT en verandert geen poort."""
     value = env.get('review_configuration')
     if not isinstance(value, dict):
+        if env.get('configuration_source') == 'legacy_policy_mapping':
+            return '<p>Reviewkeuze: afgeleid van de reviewdeelname · configuratiebron: legacy_policy_mapping</p>'
         return ''
     reviewers = ', '.join(names.get(i, i) for i in value.get('reviewers') or []) or 'geen'
     readers = ', '.join(names.get(i, i) for i in value.get('readers') or []) or 'geen'
