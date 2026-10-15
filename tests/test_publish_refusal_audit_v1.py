@@ -205,3 +205,69 @@ def test_refusal_store_is_bounded_and_append_only(tmp_path, monkeypatch):
     assert store.append_refusal(path, snapshot_id='s', object_version='1', actor='c', reason_codes=['r'], revision=None, clock=t0) == 'capacity_reached'
     assert path.read_bytes() == first
     assert all(len(r['reason_codes']) == store.MAX_REASON_CODES for r in store.read_records(path))
+
+
+# --- #629 F2: bounded publication_refusal_audit_failed diagnostic, no silent except-pass ---
+
+@pytest.fixture
+def warnings_(monkeypatch):
+    rows = []
+    monkeypatch.setattr(_LOGGER, 'warning', lambda fmt, msg: rows.append(json.loads(msg)))
+    return rows
+
+
+def _failures(rows):
+    return [r for r in rows if r.get('event') == 'publication_refusal_audit_failed']
+
+
+@pytest.mark.parametrize('build', [_blocked_base, _durable_blocked], ids=['file', 'durable'])
+def test_store_failure_emits_bounded_audit_failed_diagnostic(tmp_path, events, warnings_, monkeypatch, build):
+    def failing_store(*args, **kwargs):
+        raise OSError('private /secret/path failure hunter2')
+    monkeypatch.setattr(store, 'append_refusal', failing_store)
+    console, sid, actor = build(tmp_path)
+    assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
+    [failure] = _failures(warnings_)
+    assert failure['stage'] == 'durable_store' and failure['error_class'] == 'OSError'
+    assert failure['snapshot_id'] == sid
+    text = json.dumps(warnings_)
+    assert 'hunter2' not in text and '/secret/path' not in text and actor not in text
+    assert set(failure) <= {'event', 'stage', 'error_class', 'outcome', 'snapshot_id', 'request_id', 'authority'}
+
+
+def test_log_failure_emits_audit_failed_diagnostic(tmp_path, warnings_, monkeypatch):
+    def broken(*args, **kwargs):
+        raise OSError('private logging failure')
+    monkeypatch.setattr(_LOGGER, 'info', broken)
+    console, sid, actor = _blocked_base(tmp_path)
+    assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
+    assert [f['stage'] for f in _failures(warnings_)] == ['log']
+
+
+def test_capacity_reached_emits_audit_failed_diagnostic(tmp_path, events, warnings_, monkeypatch):
+    monkeypatch.setattr(store, 'MAX_RECORDS', 0)
+    console, sid, actor = _blocked_base(tmp_path)
+    assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
+    [failure] = _failures(warnings_)
+    assert failure['stage'] == 'durable_store' and failure['outcome'] == 'capacity_reached'
+
+
+def test_audit_failed_diagnostic_is_bounded_per_process(warnings_, monkeypatch):
+    monkeypatch.setattr(audit, '_FAILURE_COUNT', [0])
+    for _ in range(audit.MAX_FAILURE_DIAGNOSTICS + 50):
+        audit._audit_failed('durable_store', error=OSError('x'), snapshot_id='s')
+    assert len(_failures(warnings_)) == audit.MAX_FAILURE_DIAGNOSTICS
+
+
+def test_hostile_error_class_and_snapshot_are_bounded(warnings_, monkeypatch):
+    monkeypatch.setattr(audit, '_FAILURE_COUNT', [0])
+    Hostile = type('Hostile Error <script>', (Exception,), {})
+    audit._audit_failed('durable_store', error=Hostile(), snapshot_id='bad id with spaces' * 20)
+    [failure] = _failures(warnings_)
+    assert failure['error_class'] == 'unrecognized_error' and failure['snapshot_id'] is None
+
+
+def test_no_silent_except_pass_in_refusal_audit():
+    import inspect
+    source = inspect.getsource(audit)
+    assert 'except Exception:\n        pass' not in source and 'except Exception:\n            pass' not in source
