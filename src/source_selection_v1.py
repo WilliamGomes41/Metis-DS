@@ -23,6 +23,13 @@ def authorize(console, actor_id, envelope):
     return account
 
 
+def resume_contract_current(envelope):
+    """A resume MAG NIET continue a checkpoint formed under another full contract identifier."""
+    from src.pre_review_semantic_v1 import semantic_contract_version
+    components = ((envelope.get("semantic_replay") or {}).get("identity") or {}).get("components") or {}
+    return components.get("semantic_contract_version") == semantic_contract_version(field_contract_v3=True)
+
+
 def assert_resume_configuration(console, envelope):
     """A resume continues a persisted V3 checkpoint, never a new strategy.
 
@@ -38,6 +45,8 @@ def assert_resume_configuration(console, envelope):
     if (current.get("mode") != MODE
             or str(current.get("model") or "").strip() != components.get("model_id")
             or "source-bound-fields-v3" not in components.get("semantic_contract_version", "")):
+        raise ConsoleError("processing_resume_configuration_incompatible")
+    if not resume_contract_current(envelope):
         raise ConsoleError("processing_resume_configuration_incompatible")
     previous = envelope.get("processing_configuration")
     if previous and any(previous.get(key) != current.get(key) for key in ("mode", "model", "docling")):
@@ -144,13 +153,14 @@ def projection(console, *, actor_id, snapshot_id, documents, deep=True):
     # Overzicht: alleen-lezen rijen zonder deepcopy; het gekozen document leest volledig.
     objects = console.snapshot_objects(snapshot_id) if deep else console._overview_rows(snapshot_id)
     attempt = next(reversed(envelope.get("processing_attempts") or []), {})
+    budget_stopped = attempt.get("state") == "incomplete_budget"
     succeeded = bool(attempt.get("state") == "succeeded" or (not attempt and envelope.get("quality_processing_runs")))
     complete = succeeded and not processing["formation_incomplete"]
     # Zonder actuele controle MOET de status ongecontroleerd blijven, NOOIT voltooid.
     unchecked = succeeded and not processing.get("formation_checked", True)
     current = processing["state"]
     waiting = current == "running" and (attempt.get("dispatch") or {}).get("state") == "pending"
-    state = ("wacht op uitvoering" if waiting else "bezig" if current == "running" else "onderbroken" if current in {"expired", "interrupted"}
+    state = ("wacht op uitvoering" if waiting else "bezig" if current == "running" else "onderbroken" if current in {"expired", "interrupted", "incomplete_budget"}
              else UNCHECKED if unchecked
              else "onderbroken" if (succeeded and not complete) else "mislukt" if current == "failed"
              else "voltooid" if complete else "nog niet gestart")
@@ -180,4 +190,5 @@ def projection(console, *, actor_id, snapshot_id, documents, deep=True):
             "formation_blockers": formation_blockers,
             "review_available": len(candidates) > blocked,
             "can_start": processing["retry_allowed"] or processing["resume_allowed"],
+            "budget_stopped": budget_stopped,
             "revision": console.objects_revision(snapshot_id), "progress": processing.get("formation_progress", {})}

@@ -37,7 +37,7 @@ def _blockage_html(report, esc):
     body += f'Actuele afwijzingen: {counts.get("pending", 0)}. Historische afwijzingen: {counts.get("historical", 0)}.</p>'
     selected = report['selected_attempt_result']
     if selected:
-        states = {'succeeded':'technisch geslaagd', 'failed':'mislukt', 'interrupted':'onderbroken', 'running':'als actief opgeslagen'}
+        states = {'succeeded':'technisch geslaagd', 'failed':'mislukt', 'interrupted':'onderbroken', 'incomplete_budget':'gestopt op taakbudget', 'running':'als actief opgeslagen'}
         body += '<h2>Gekozen poging</h2><p>Status: ' + esc(states.get(selected['stored_state'], 'onbekend')) + '.</p>'
         if selected['error']:
             body += '<p>' + esc(selected['error']['title']) + ' · controlecode: ' + esc(selected['error']['code'] or 'onbekend') + '.</p>'
@@ -121,6 +121,11 @@ def install(app, console, require, page, nav, esc):
                          'formation_accounted': 'Brondekking controleren', 'stopped': 'Verwerking gestopt'}.get(result['phase'], 'Bronselectie en controle')
                 progress = (f'<p>Fase: {esc(phase)} · Verstreken: {esc(_minutes(elapsed)) if elapsed is not None else "onbekend"}'
                             f' · Geschat resterend: {esc(_range(result["remaining_seconds"]))}</p>')
+            if result.get('budget_stopped'):
+                counts = result.get('progress') or {}
+                done, open_ = counts.get('terminal_task_count'), counts.get('pending_task_count')
+                progress = (f'<p>Gestopt op taakbudget: {esc(done) if done is not None else "onbekend"} taken klaar, '
+                            f'{esc(open_) if open_ is not None else "onbekend"} taken open.</p>')
             if result['state'] == 'wacht op uitvoering':
                 elapsed = result['elapsed_seconds']
                 deadline = result['deadline_seconds']

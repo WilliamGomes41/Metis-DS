@@ -24,9 +24,10 @@ def _retry_budget_attempts(attempts):
     resumes still consume the cap.
     """
     return [attempt for attempt in attempts
-            if attempt.get("kind") != "resume"
+            if attempt.get("state") != "incomplete_budget"
+            and (attempt.get("kind") != "resume"
             or attempt.get("state") != "succeeded"
-            or not attempt.get("formation_progress_made")]
+            or not attempt.get("formation_progress_made"))]
 
 
 def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, clock: datetime, limits=None, kind="retry") -> tuple[dict, bool]:
@@ -93,9 +94,24 @@ def assert_active(envelope: dict, attempt_id: str, clock: datetime) -> dict:
     return attempt
 
 
-def finish(envelope: dict, attempt_id: str, *, state: str, error: Exception | None = None) -> dict:
+def formation_budget_exhausted(envelope: dict) -> bool:
+    """Current replay is incomplete AND stopped on the bounded task budget."""
+    provider = ((envelope.get("semantic_replay") or {}).get("provider_evidence") or {})
+    if provider.get("formation_incomplete") is not True:
+        return False
+    calls = [provider, *(provider.get("supplementary_calls") or [])]
+    return any(isinstance(c, dict) and c.get("error_code") == "source_task_budget_exhausted" for c in calls)
+
+
+def finish(envelope: dict, attempt_id: str, *, state: str, error: Exception | None = None,
+           budget_aware: bool = False) -> dict:
     attempt = next(a for a in envelope[KEY] if a["attempt_id"] == attempt_id)
-    attempt.update(state=state, finished_at=now().isoformat(), phase="activated" if state == "succeeded" else "stopped")
+    # A budget-exhausted attempt MOET NOOIT 'succeeded' zijn. Callers opt in per
+    # path; the ingest path (operations_console_v1 ingest) follows after #626.
+    if budget_aware and state == "succeeded" and formation_budget_exhausted(envelope):
+        state = "incomplete_budget"
+    attempt.update(state=state, finished_at=now().isoformat(),
+                   phase="activated" if state == "succeeded" else "budget_stopped" if state == "incomplete_budget" else "stopped")
     if error is not None:
         code = getattr(error, "code", "processing_timeout" if isinstance(error, TimeoutError) else "processing_dependency_failed")
         if not re.fullmatch(r"[a-z][a-z0-9_]{0,95}", str(code)):
