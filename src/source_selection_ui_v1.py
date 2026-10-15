@@ -68,6 +68,15 @@ def _blockage_html(report, esc):
     return body + '</ul></details>'
 
 
+@diagnostic_phase("document_list")
+def document_keys(console):
+    """Snapshot ids in list_envelopes order, without per-document receipts."""
+    lister = getattr(console, "list_snapshot_ids", None)
+    if lister is not None:
+        return lister()
+    return list(console._envelopes)
+
+
 def install(app, console, require, page, nav, esc):
     from src.source_processing_dispatch_v1 import install_dispatcher
     dispatcher = install_dispatcher(app, console)
@@ -77,8 +86,8 @@ def install(app, console, require, page, nav, esc):
     def selection_get(request: Request, document: str = ''):
         with diagnostic_phase("authorization"):
             actor = require(request)
-        receipts = console.list_envelopes()
-        documents = [console._envelope(row['snapshot_id']) for row in receipts]
+        # PR-a: lichte sleutellijst; NOOIT een deepcopy-receipt per document.
+        documents = [console._envelope(sid) for sid in document_keys(console)]
         visible = [row for row in documents if "researcher" in actor['roles'] or actor['account_id'] in row.get('named_reviewers', [])]
         if document and document not in {row['snapshot_id'] for row in visible}:
             raise ConsoleError('reviewer_not_named_on_snapshot')
