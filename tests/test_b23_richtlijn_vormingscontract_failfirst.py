@@ -7,10 +7,14 @@ Referentieset: tests/fixtures/smetten-reference.json.
 Deze tests MOETEN falen op huidige main (xfail strict). Ze raken de
 formatielogica en check-uitkomsten NIET aan; die zijn van Forge.
 Asserties zijn inhoudelijk; een vast objectaantal is NOOIT het criterium (RL-F3-04).
+Deze tests zijn alleen fail-first; ze zijn NOOIT acceptatiebewijs. De referentieset
+heeft status 'not validated by William'.
+Elke brontekst-literal MOET letterlijk uit de PDF komen (pagina per literal);
+test_every_literal_is_verbatim_in_pdftotext bewaakt dat.
 
-OPENVRAAG-B23-T1: het contract noemt geen veldnaam voor passage-disposities
-(RL-F1-03/-04); deze tests zoeken de status `excluded_with_reason` daarom
-inhoudelijk op elke plek in spec en rijen.
+OPENVRAAG-B23-T1: het contract noemt nog geen veldnaam voor passage-disposities
+(RL-F1-03/-04). `excluded_with_reason` wordt daarom voorlopig overal in spec en
+rijen gezocht; de assertie MOET versmallen tot het veld dat Forge benoemt.
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: kwaliteit
@@ -18,7 +22,10 @@ inhoudelijk op elke plek in spec en rijen.
 # release-control-evidence: releasebewijs
 """
 import json
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -42,8 +49,8 @@ INTRO = ("Hoewel preventieve maatregelen ter voorkoming van smetten eenvoudig va
 # p18, Aanbevelingen + stempel.
 REC = "Breng bij iedere patiënt de risicofactoren voor smetten in kaart, om te bepalen of preventieve maatregelen nodig zijn."
 STAMP = "Sterk – voor"
-# p18, "De risicofactoren zijn:" (voorwaarde/toelichting buiten de aanbevelingstekst).
-CONDITION = "De risicofactoren zijn: Obesitas; Diabetes mellitus; Eerder smetten gehad; Overmatige huidplooien"
+# p18, voorwaarde/toelichting buiten de aanbevelingstekst (letterlijke kopregel van de lijst).
+CONDITION = "De risicofactoren zijn:"
 # p18, Rationale (overwegingen).
 CONSIDERATION = ("Het vroegtijdig herkennen van risicofactoren maakt gerichte preventieve maatregelen mogelijk.")
 # p41, module 4 "nat" groep 2: zwakke aanbeveling; doelgroep staat alleen in de groepskop.
@@ -160,11 +167,31 @@ def admitted(row):
     return ((row.get("metadata") or {}).get("admission") or {}).get("gate_result") == "allowed"
 
 
+EXCERPTS = json.loads((Path(__file__).parent / "fixtures" / "smetten-pdftotext-excerpts.json").read_text())
+LITERALS = [(INTRO, 14), (REC, 18), (STAMP, 18), (CONDITION, 18), (CONSIDERATION, 18), (WEAK, 41), (WEAK_STAMP, 41)]
+
+
+def _norm(text):
+    return " ".join(text.split())
+
+
+@pytest.mark.parametrize("literal,page", LITERALS)
+def test_every_literal_is_verbatim_in_pdftotext(literal, page):
+    """Niet-xfail: elke literal staat letterlijk (op witruimte na) in pdftotext van zijn pagina."""
+    assert _norm(literal) in _norm(EXCERPTS["pages"][str(page)])
+    pdf = os.environ.get("METIS_SMETTEN_PDF")
+    if pdf and shutil.which("pdftotext"):
+        live = subprocess.run(["pdftotext", "-f", str(page), "-l", str(page), pdf, "-"],
+                              capture_output=True, text=True, check=True).stdout
+        assert _norm(literal) in _norm(live)
+
+
 def test_reference_fixture_is_content_complete():
     """Niet-xfail sanity: de referentie bevat de gebruikte brontekst letterlijk."""
     texts = [r["text"] for m in REFERENCE["modules"] for r in m["recs"]]
     assert REC in texts and WEAK in texts
     assert REFERENCE["inleiding"]["objects"] == 0
+    assert REFERENCE["status"] == "not validated by William"
 
 
 @XFAIL
@@ -203,7 +230,7 @@ def test_order_recommendation_then_consideration_then_condition(mode):
     assert standalone == [], "overweging MAG NIET een zelfstandig object zijn (RL-F2-08)"
     assert "m1-overweging" in set(_strings(rec)), "overweging MOET via passagereferentie aan de aanbeveling hangen (RL-F2-09)"
     # Stap 3: voorwaarde buiten de tekst MOET een veld van de aanbeveling zijn, met letterlijke tekst + eigen referentie.
-    cond_objects = [r for r in objects if r is not rec and CONDITION[:40] in _text(r)]
+    cond_objects = [r for r in objects if r is not rec and CONDITION in _text(r)]
     assert cond_objects == [], "voorwaarde MAG NIET een apart object worden (RL-F2-12)"
     rec_strings = set(_strings(rec))
     assert "m1-condition" in rec_strings and any(CONDITION in s for s in rec_strings), "RL-F2-16"

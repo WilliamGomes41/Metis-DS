@@ -1,778 +1,779 @@
 {
-  "source": "metis-new/.golden-sources/smetten/Conceptrichtlijn-Smetten-v1-2026-07.pdf",
-  "source_pages": 46,
-  "title": "Conceptrichtlijn Smetten – commentaarronde juli 2026",
-  "extraction": "pdftotext (poppler), handmatig gecontroleerd; tekst letterlijk, regelnummers verwijderd",
-  "inleiding": {
-    "pages": [
-      6,
-      13
-    ],
-    "objects": 0,
-    "rule": "De inleiding MOET 0 objecten opleveren."
-  },
-  "modules": [
-    {
-      "module": 1,
-      "title": "Risicofactoren",
-      "pages": [
-        14,
-        20
-      ],
-      "uitgangsvraag": "Welke risicofactoren voor het ontstaan van smetten moeten door zorgverleners in kaart gebracht worden om te bepalen of preventieve maatregelen nodig zijn?",
-      "uitgangsvraag_page": 14,
-      "overwegingen_pages": [
-        16,
-        18
-      ],
-      "implementatietabel": {
-        "text": "Zie bijlage 1.6",
-        "page": 18
-      },
-      "recs": [
-        {
-          "n": "1",
-          "text": "Breng bij iedere patiënt de risicofactoren voor smetten in kaart, om te bepalen of preventieve maatregelen nodig zijn.",
-          "direction": "voor",
-          "strength": "sterk",
-          "page": 18,
-          "doelgroep": "iedere patiënt",
-          "toelichting": [
-            {
-              "kind": "lijst",
-              "page": 18,
-              "text": "De risicofactoren zijn: Obesitas; Diabetes mellitus; Beperkingen in de ADL / tekortschietende persoonlijke hygiëne; Eerder smetten gehad; Overmatige huidplooien; Vochtige huid als gevolg van transpireren en/of incontinentie; Vrouwelijk geslacht; Verminderde mobiliteit; Verhoogde lichaamstemperatuur"
-            }
-          ],
-          "rationale_page": 18,
-          "overwegingen": {
-            "pages": [
-              16,
-              18
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie bijlage 1.6",
-            "page": 18,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        }
-      ]
-    },
-    {
-      "module": 2,
-      "title": "Preventieve maatregelen",
-      "pages": [
-        21,
-        28
-      ],
-      "uitgangsvraag": "Welke interventies worden aanbevolen om smetten te voorkómen bij patiënten met een verhoogd risico op het ontstaan van smetten.",
-      "uitgangsvraag_page": 21,
-      "overwegingen_pages": [
-        22,
-        25
-      ],
-      "implementatietabel": {
-        "text": "Zie Bijlage 2.4",
-        "page": 26
-      },
-      "recs": [
-        {
-          "n": "1",
-          "text": "Overweeg (een combinatie van) de volgende preventieve maatregelen [zie Tabel 1] toe te passen bij patiënten met een verhoogd risico op smetten en stem de keuze af op de individuele situatie, risicofactoren en voorkeuren van de patiënt.",
-          "direction": "voor",
-          "strength": "zwak",
-          "page": 25,
-          "doelgroep": "patiënten met een verhoogd risico op smetten",
-          "toelichting": [
-            {
-              "kind": "tabel",
-              "page": [
-                25,
-                26
-              ],
-              "text": "Tabel 1. Preventieve maatregelen: Pas dagelijkse huidzorg toe (dagelijks wassen en goed (deppend) drogen van de huidplooien; weinig of geen zeep (parfumvrij) en zeepresten goed afspoelen; dagelijks observeren van de huid in de huidplooien; bij incontinentie de client direct verschonen, te wassen en te drogen) | Voorkom overmatig transpireren (ademende kleding) | Voorkom huid-op-huid contact (ondersteunende kleding; tussen de huidplooien Engels pluksel, Non-woven gaas of Scheurlinnen) | Het droog houden van de huidplooien (katoenen beddengoed; absorberende kleding; Engels pluksel, Non-woven gaas of Scheurlinnen tussen de huidplooien; barrièreproduct (alcoholvrij))"
-            }
-          ],
-          "rationale_page": 25,
-          "overwegingen": {
-            "pages": [
-              22,
-              25
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie Bijlage 2.4",
-            "page": 26,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        },
-        {
-          "n": "2",
-          "text": "Gebruik geen poeders of pasta’s bij de preventie van smetten",
-          "direction": "tegen",
-          "strength": "sterk",
-          "page": 26,
-          "doelgroep": "OPENVRAAG: niet expliciet in de aanbeveling; uit de module-uitgangsvraag: patiënten met een verhoogd risico op smetten",
-          "toelichting": [],
-          "rationale_page": 25,
-          "overwegingen": {
-            "pages": [
-              22,
-              25
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie Bijlage 2.4",
-            "page": 26,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        },
-        {
-          "n": "3",
-          "text": "Gebruik geen apparatuur (zoals een föhn) om de huidplooien te drogen bij de preventie van smetten",
-          "direction": "tegen",
-          "strength": "sterk",
-          "page": 26,
-          "doelgroep": "OPENVRAAG: niet expliciet in de aanbeveling; uit de module-uitgangsvraag: patiënten met een verhoogd risico op smetten",
-          "toelichting": [],
-          "rationale_page": 25,
-          "overwegingen": {
-            "pages": [
-              22,
-              25
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie Bijlage 2.4",
-            "page": 26,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        }
-      ]
-    },
-    {
-      "module": 3,
-      "title": "Diagnostiek",
-      "pages": [
-        29,
-        34
-      ],
-      "uitgangsvraag": "Op basis van welke kenmerken kan de behandeling van een smetplek ingezet worden?",
-      "uitgangsvraag_page": 29,
-      "overwegingen_pages": [
-        30,
-        32
-      ],
-      "implementatietabel": {
-        "text": "Zie bijlage 3.4",
-        "page": 33
-      },
-      "recs": [
-        {
-          "n": "1",
-          "text": "Stel de diagnose smetten aan de hand van klinische verschijnselen",
-          "direction": "voor",
-          "strength": "sterk",
-          "page": 32,
-          "doelgroep": "OPENVRAAG: niet expliciet; impliciet patiënten bij wie smetten vermoed wordt",
-          "toelichting": [
-            {
-              "kind": "lijst",
-              "page": 32,
-              "text": "De klinische verschijnselen zijn: (Glanzende) roodheid (erytheem) van de huid aan beide zijden van de plooi; Lineair erytheem in de plooi; Bij mensen met een donkere huidskleur: kleurverschil (lichter of donkerder) van de huid aan beide zijden van de plooi. In combinatie met één (of meerdere) van: Maceratie (verweking); Erosies; Nattende huid (exsudaat vorming); Fissuren; Korstvorming; Ervaren klachten zijn: jeuk, pijn, branderigheid en onaangename geur)"
-            }
-          ],
-          "rationale_page": 32,
-          "overwegingen": {
-            "pages": [
-              30,
-              32
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie bijlage 3.4",
-            "page": 33,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        },
-        {
-          "n": "2",
-          "text": "Stel de diagnose van geïnfecteerd smetten en smetten waarbij een gist of schimmel aanwezig is aan de hand van klinische verschijnselen",
-          "direction": "voor",
-          "strength": "sterk",
-          "page": 32,
-          "doelgroep": "OPENVRAAG: niet expliciet; impliciet patiënten met (vermoed) geïnfecteerd smetten of gist/schimmel",
-          "toelichting": [
-            {
-              "kind": "lijst",
-              "page": 33,
-              "text": "Geïnfecteerd smetten: Uitbreiding smetten tot buiten de huidplooien; Pustels (puistjes); Geel/groen exsudaat/pus; Randschilfering; Felrode huid. Bij mensen met een donkere huidskleur: kleurverschil van de huid aan beide zijden van de plooi. Smetten waarbij een gist of schimmel aanwezig is: Uitbreiding smetten tot buiten de huidplooien; Satelliet laesies (‘eilandjes voor de kust’) bij Candida-infecties; Randschilfering"
-            }
-          ],
-          "rationale_page": 32,
-          "overwegingen": {
-            "pages": [
-              30,
-              32
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie bijlage 3.4",
-            "page": 33,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        },
-        {
-          "n": "3",
-          "text": "Wees alert dat smetten een ander klinisch beeld kan geven bij mensen met een donkere huidskleur, aangezien erytheem (roodheid) niet altijd geobserveerd wordt zoals dat bij mensen met een witte huid",
-          "direction": "voor",
-          "strength": "sterk",
-          "page": 33,
-          "doelgroep": "mensen met een donkere huidskleur",
-          "toelichting": [],
-          "rationale_page": 32,
-          "overwegingen": {
-            "pages": [
-              30,
-              32
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie bijlage 3.4",
-            "page": 33,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        },
-        {
-          "n": "4",
-          "text": "Stel vast of er sprake kan zijn van een andere huidafwijking dan smetten wanneer:",
-          "direction": "voor",
-          "strength": "sterk",
-          "page": 33,
-          "doelgroep": "OPENVRAAG: niet expliciet; de voorwaarden staan in de lijst",
-          "voorwaarden": [
-            {
-              "page": 33,
-              "text": "Er ook huidafwijkingen op andere lichaamsdelen aanwezig zijn"
-            },
-            {
-              "page": 33,
-              "text": "Er druk aanwezig is ter hoogte van de huidafwijking (mogelijkheid van decubitus)"
-            },
-            {
-              "page": 33,
-              "text": "Er sprake is van inwerking van urine en/of feces (mogelijkheid van incontinentie dermatitis)"
-            }
-          ],
-          "toelichting": [],
-          "rationale_page": 32,
-          "overwegingen": {
-            "pages": [
-              30,
-              32
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie bijlage 3.4",
-            "page": 33,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        },
-        {
-          "n": "5",
-          "text": "Zet geen aanvullende (laboratorium-)onderzoeken in voor de eerste diagnose van smetten.",
-          "direction": "tegen",
-          "strength": "sterk",
-          "page": 33,
-          "doelgroep": "OPENVRAAG: niet expliciet",
-          "toelichting": [],
-          "rationale_page": 32,
-          "overwegingen": {
-            "pages": [
-              30,
-              32
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie bijlage 3.4",
-            "page": 33,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        }
-      ]
-    },
-    {
-      "module": 4,
-      "title": "Behandeling van smetten",
-      "pages": [
-        35,
-        43
-      ],
-      "uitgangsvraag": "1. Welke verpleegkundige interventies worden aanbevolen bij volwassen patiënten met smetten binnen de huidplooien? 2. Welke verpleegkundige interventies worden aanbevolen bij volwassen patiënten met smetten dat zich uitbreidt tot buiten de plooien?",
-      "uitgangsvraag_page": 35,
-      "overwegingen_pages": [
-        38,
-        40
-      ],
-      "implementatietabel": {
-        "text": "Zie bijlage 4.5",
-        "page": 41
-      },
-      "recs": [
-        {
-          "n": "huidplooien-1",
-          "group": "Smetten in de huidplooien",
-          "text": "Pas minimaal 2 keer per dag de basismaatregelen toe bij smetten in de huidplooien.",
-          "direction": "voor",
-          "strength": "sterk",
-          "page": 41,
-          "doelgroep": "patiënten met smetten in de huidplooien",
-          "toelichting": [
-            {
-              "kind": "lijst",
-              "page": 41,
-              "text": "Pas dagelijkse huidzorg toe (waar mogelijk door de patiënt en/of naaste); Voorkom huid-op-huid contact; Houd de huidplooien droog"
-            }
-          ],
-          "rationale_page": 40,
-          "overwegingen": {
-            "pages": [
-              38,
-              40
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie bijlage 4.5",
-            "page": 41,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        },
-        {
-          "n": "huidplooien-2",
-          "group": "Smetten in de huidplooien",
-          "text": "Zet bij smetten in de huidplooien een zinkoxidesmeersel FNA (zinkolie) 2 keer per dag in of barrière product (volgens voorschrift)",
-          "direction": "voor",
-          "strength": "sterk",
-          "page": 41,
-          "doelgroep": "patiënten met smetten in de huidplooien",
-          "toelichting": [],
-          "rationale_page": 40,
-          "overwegingen": {
-            "pages": [
-              38,
-              40
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie bijlage 4.5",
-            "page": 41,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        },
-        {
-          "n": "uitbreiding-1",
-          "group": "Smetten dat zich uitbreidt tot buiten de huidplooien",
-          "text": "Als smetten zich uitbreidt tot buiten de huidplooien, controleer of de basismaatregelen en de inzet van zinkoxidesmeersel FNA (zinkolie) of barrière crème of barrière spray correct toegepast zijn",
-          "direction": "voor",
-          "strength": "sterk",
-          "page": 41,
-          "doelgroep": "patiënten met smetten dat zich uitbreidt tot buiten de huidplooien",
-          "voorwaarden": [
-            {
-              "page": 41,
-              "text": "Als smetten zich uitbreidt tot buiten de huidplooien"
-            }
-          ],
-          "toelichting": [],
-          "rationale_page": 40,
-          "overwegingen": {
-            "pages": [
-              38,
-              40
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie bijlage 4.5",
-            "page": 41,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        },
-        {
-          "n": "uitbreiding-2",
-          "group": "Smetten dat zich uitbreidt tot buiten de huidplooien",
-          "text": "Zet lokaal een combinatiepreparaat van zinkoxidesmeersel FNA met een antimycoticum in als de basismaatregelen niet werken en de smetplek zich uitbreidt tot buiten de plooien",
-          "direction": "voor",
-          "strength": "sterk",
-          "page": 41,
-          "doelgroep": "patiënten met smetten dat zich uitbreidt tot buiten de huidplooien",
-          "voorwaarden": [
-            {
-              "page": 41,
-              "text": "als de basismaatregelen niet werken en de smetplek zich uitbreidt tot buiten de plooien"
-            }
-          ],
-          "toelichting": [],
-          "rationale_page": 40,
-          "overwegingen": {
-            "pages": [
-              38,
-              40
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie bijlage 4.5",
-            "page": 41,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        },
-        {
-          "n": "nat-1",
-          "group": "Bij een natte smetplek met een kapotte huid",
-          "text": "Gebruik geen zalf",
-          "direction": "tegen",
-          "strength": "sterk",
-          "page": 41,
-          "doelgroep": "patiënten met een natte smetplek met een kapotte huid (uit groepskop)",
-          "toelichting": [],
-          "rationale_page": 40,
-          "overwegingen": {
-            "pages": [
-              38,
-              40
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie bijlage 4.5",
-            "page": 41,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        },
-        {
-          "n": "nat-2",
-          "group": "Bij een natte smetplek met een kapotte huid",
-          "text": "Overweeg een zinkoxidesmeersel FNA",
-          "direction": "voor",
-          "strength": "zwak",
-          "page": 41,
-          "doelgroep": "patiënten met een natte smetplek met een kapotte huid (uit groepskop)",
-          "toelichting": [],
-          "rationale_page": 40,
-          "overwegingen": {
-            "pages": [
-              38,
-              40
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie bijlage 4.5",
-            "page": 41,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        },
-        {
-          "n": "nat-3",
-          "group": "Bij een natte smetplek met een kapotte huid",
-          "text": "Gebruik een alternatief antimycoticum in plaats van micozanol bij patiënten die bekend zijn bij de trombosedienst of eigen bloedstolling thuis onder controle houden met (acenocoumarol (sintrom) en fenprocoumon (marcoumar) met behulp van een zelfstandig apparaat",
-          "direction": "voor",
-          "strength": "sterk",
-          "page": 41,
-          "doelgroep": "patiënten die bekend zijn bij de trombosedienst of eigen bloedstolling thuis onder controle houden (vitamine K-antagonisten)",
-          "openvraag": [
-            "OPENVRAAG: staat onder de kop 'Bij een natte smetplek met een kapotte huid', maar de rationale (p40) koppelt hem niet aan een natte smetplek; geldt hij alleen daar of algemeen?",
-            "OPENVRAAG: brontekst schrijft 'micozanol'; de rationale (p40) noemt 'miconazol'. Letterlijk overgenomen, niet gecorrigeerd."
-          ],
-          "toelichting": [],
-          "rationale_page": 40,
-          "overwegingen": {
-            "pages": [
-              38,
-              40
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie bijlage 4.5",
-            "page": 41,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        }
-      ]
-    },
-    {
-      "module": 5,
-      "title": "Evaluatie van behandelinterventies",
-      "pages": [
-        44,
-        46
-      ],
-      "uitgangsvraag": "1. Na welke termijn moet het effect van behandeling van smetten worden geëvalueerd? 2. Welke stappen moeten worden genomen bij een afwijking van het verwachte herstel van smetten?",
-      "uitgangsvraag_page": 44,
-      "overwegingen_pages": [
-        44,
-        46
-      ],
-      "implementatietabel": {
-        "text": "Zie bijlage 5.1",
-        "page": 46
-      },
-      "recs": [
-        {
-          "n": "1",
-          "text": "Evalueer de behandelopties na het starten van de behandeling:",
-          "direction": "voor",
-          "strength": "sterk",
-          "page": 46,
-          "doelgroep": "OPENVRAAG: niet expliciet; impliciet patiënten die voor smetten behandeld worden",
-          "toelichting": [
-            {
-              "kind": "lijst",
-              "page": 46,
-              "text": "Niet-medicamenteuze behandeling na 5-7 dagen; Medicamenteuze behandeling wekelijks"
-            }
-          ],
-          "rationale_page": 46,
-          "overwegingen": {
-            "pages": [
-              44,
-              46
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie bijlage 5.1",
-            "page": 46,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        },
-        {
-          "n": "2",
-          "text": "Consulteer een deskundige (bijv. een dermatologie-verpleegkundige of verpleegkundig specialist, wondconsultent, huisarts, specialist ouderengeneeskunde of een dermatoloog) als de smetplek zich uitbreidt, verslechterd of niet verbeterd ondanks de correcte inzet van behandeling",
-          "direction": "voor",
-          "strength": "sterk",
-          "page": 46,
-          "doelgroep": "patiënten bij wie de smetplek zich uitbreidt, verslechtert of niet verbetert",
-          "voorwaarden": [
-            {
-              "page": 46,
-              "text": "als de smetplek zich uitbreidt, verslechterd of niet verbeterd ondanks de correcte inzet van behandeling"
-            }
-          ],
-          "toelichting": [],
-          "rationale_page": 46,
-          "overwegingen": {
-            "pages": [
-              44,
-              46
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie bijlage 5.1",
-            "page": 46,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        },
-        {
-          "n": "3",
-          "text": "Gebruik geen kweek om de behandeling te bepalen bij smetten met een afwijkend beloop",
-          "direction": "tegen",
-          "strength": "sterk",
-          "page": 46,
-          "doelgroep": "patiënten met smetten met een afwijkend beloop",
-          "toelichting": [],
-          "rationale_page": 46,
-          "overwegingen": {
-            "pages": [
-              44,
-              46
-            ],
-            "sections": [
-              "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
-              "Waarden en voorkeuren van patiënten en hun naasten",
-              "Kosten(effectiviteit)",
-              "Aanvaardbaarheid, haalbaarheid en implementatie",
-              "Rationale"
-            ],
-            "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
-            "role": "toelichting (MAG NIET een zelfstandig object zijn)"
-          },
-          "implementatietabel": {
-            "text": "Zie bijlage 5.1",
-            "page": 46,
-            "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
-          }
-        }
-      ]
-    }
+ "source": "metis-new/.golden-sources/smetten/Conceptrichtlijn-Smetten-v1-2026-07.pdf",
+ "source_pages": 46,
+ "title": "Conceptrichtlijn Smetten – commentaarronde juli 2026",
+ "extraction": "pdftotext (poppler), handmatig gecontroleerd; tekst letterlijk, regelnummers verwijderd",
+ "inleiding": {
+  "pages": [
+   6,
+   13
   ],
-  "counts": {
-    "modules": 5,
-    "aanbevelingen": 19,
-    "sterk_voor": 12,
-    "sterk_tegen": 5,
-    "zwak_voor": 2,
-    "zwak_tegen": 0,
-    "tabellen_als_toelichting": 1,
-    "openvragen": 28
+  "objects": 0,
+  "rule": "De inleiding MOET 0 objecten opleveren."
+ },
+ "modules": [
+  {
+   "module": 1,
+   "title": "Risicofactoren",
+   "pages": [
+    14,
+    20
+   ],
+   "uitgangsvraag": "Welke risicofactoren voor het ontstaan van smetten moeten door zorgverleners in kaart gebracht worden om te bepalen of preventieve maatregelen nodig zijn?",
+   "uitgangsvraag_page": 14,
+   "overwegingen_pages": [
+    16,
+    18
+   ],
+   "implementatietabel": {
+    "text": "Zie bijlage 1.6",
+    "page": 18
+   },
+   "recs": [
+    {
+     "n": "1",
+     "text": "Breng bij iedere patiënt de risicofactoren voor smetten in kaart, om te bepalen of preventieve maatregelen nodig zijn.",
+     "direction": "voor",
+     "strength": "sterk",
+     "page": 18,
+     "doelgroep": "iedere patiënt",
+     "toelichting": [
+      {
+       "kind": "lijst",
+       "page": 18,
+       "text": "De risicofactoren zijn: Obesitas; Diabetes mellitus; Beperkingen in de ADL / tekortschietende persoonlijke hygiëne; Eerder smetten gehad; Overmatige huidplooien; Vochtige huid als gevolg van transpireren en/of incontinentie; Vrouwelijk geslacht; Verminderde mobiliteit; Verhoogde lichaamstemperatuur"
+      }
+     ],
+     "rationale_page": 18,
+     "overwegingen": {
+      "pages": [
+       16,
+       18
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie bijlage 1.6",
+      "page": 18,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    }
+   ]
+  },
+  {
+   "module": 2,
+   "title": "Preventieve maatregelen",
+   "pages": [
+    21,
+    28
+   ],
+   "uitgangsvraag": "Welke interventies worden aanbevolen om smetten te voorkómen bij patiënten met een verhoogd risico op het ontstaan van smetten.",
+   "uitgangsvraag_page": 21,
+   "overwegingen_pages": [
+    22,
+    25
+   ],
+   "implementatietabel": {
+    "text": "Zie Bijlage 2.4",
+    "page": 26
+   },
+   "recs": [
+    {
+     "n": "1",
+     "text": "Overweeg (een combinatie van) de volgende preventieve maatregelen [zie Tabel 1] toe te passen bij patiënten met een verhoogd risico op smetten en stem de keuze af op de individuele situatie, risicofactoren en voorkeuren van de patiënt.",
+     "direction": "voor",
+     "strength": "zwak",
+     "page": 25,
+     "doelgroep": "patiënten met een verhoogd risico op smetten",
+     "toelichting": [
+      {
+       "kind": "tabel",
+       "page": [
+        25,
+        26
+       ],
+       "text": "Tabel 1. Preventieve maatregelen: Pas dagelijkse huidzorg toe (dagelijks wassen en goed (deppend) drogen van de huidplooien; weinig of geen zeep (parfumvrij) en zeepresten goed afspoelen; dagelijks observeren van de huid in de huidplooien; bij incontinentie de client direct verschonen, te wassen en te drogen) | Voorkom overmatig transpireren (ademende kleding) | Voorkom huid-op-huid contact (ondersteunende kleding; tussen de huidplooien Engels pluksel, Non-woven gaas of Scheurlinnen) | Het droog houden van de huidplooien (katoenen beddengoed; absorberende kleding; Engels pluksel, Non-woven gaas of Scheurlinnen tussen de huidplooien; barrièreproduct (alcoholvrij))"
+      }
+     ],
+     "rationale_page": 25,
+     "overwegingen": {
+      "pages": [
+       22,
+       25
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie Bijlage 2.4",
+      "page": 26,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    },
+    {
+     "n": "2",
+     "text": "Gebruik geen poeders of pasta’s bij de preventie van smetten",
+     "direction": "tegen",
+     "strength": "sterk",
+     "page": 26,
+     "doelgroep": "OPENVRAAG: niet expliciet in de aanbeveling; uit de module-uitgangsvraag: patiënten met een verhoogd risico op smetten",
+     "toelichting": [],
+     "rationale_page": 25,
+     "overwegingen": {
+      "pages": [
+       22,
+       25
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie Bijlage 2.4",
+      "page": 26,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    },
+    {
+     "n": "3",
+     "text": "Gebruik geen apparatuur (zoals een föhn) om de huidplooien te drogen bij de preventie van smetten",
+     "direction": "tegen",
+     "strength": "sterk",
+     "page": 26,
+     "doelgroep": "OPENVRAAG: niet expliciet in de aanbeveling; uit de module-uitgangsvraag: patiënten met een verhoogd risico op smetten",
+     "toelichting": [],
+     "rationale_page": 25,
+     "overwegingen": {
+      "pages": [
+       22,
+       25
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie Bijlage 2.4",
+      "page": 26,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    }
+   ]
+  },
+  {
+   "module": 3,
+   "title": "Diagnostiek",
+   "pages": [
+    29,
+    34
+   ],
+   "uitgangsvraag": "Op basis van welke kenmerken kan de behandeling van een smetplek ingezet worden?",
+   "uitgangsvraag_page": 29,
+   "overwegingen_pages": [
+    30,
+    32
+   ],
+   "implementatietabel": {
+    "text": "Zie bijlage 3.4",
+    "page": 33
+   },
+   "recs": [
+    {
+     "n": "1",
+     "text": "Stel de diagnose smetten aan de hand van klinische verschijnselen",
+     "direction": "voor",
+     "strength": "sterk",
+     "page": 32,
+     "doelgroep": "OPENVRAAG: niet expliciet; impliciet patiënten bij wie smetten vermoed wordt",
+     "toelichting": [
+      {
+       "kind": "lijst",
+       "page": 32,
+       "text": "De klinische verschijnselen zijn: (Glanzende) roodheid (erytheem) van de huid aan beide zijden van de plooi; Lineair erytheem in de plooi; Bij mensen met een donkere huidskleur: kleurverschil (lichter of donkerder) van de huid aan beide zijden van de plooi. In combinatie met één (of meerdere) van: Maceratie (verweking); Erosies; Nattende huid (exsudaat vorming); Fissuren; Korstvorming; Ervaren klachten zijn: jeuk, pijn, branderigheid en onaangename geur)"
+      }
+     ],
+     "rationale_page": 32,
+     "overwegingen": {
+      "pages": [
+       30,
+       32
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie bijlage 3.4",
+      "page": 33,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    },
+    {
+     "n": "2",
+     "text": "Stel de diagnose van geïnfecteerd smetten en smetten waarbij een gist of schimmel aanwezig is aan de hand van klinische verschijnselen",
+     "direction": "voor",
+     "strength": "sterk",
+     "page": 32,
+     "doelgroep": "OPENVRAAG: niet expliciet; impliciet patiënten met (vermoed) geïnfecteerd smetten of gist/schimmel",
+     "toelichting": [
+      {
+       "kind": "lijst",
+       "page": 33,
+       "text": "Geïnfecteerd smetten: Uitbreiding smetten tot buiten de huidplooien; Pustels (puistjes); Geel/groen exsudaat/pus; Randschilfering; Felrode huid. Bij mensen met een donkere huidskleur: kleurverschil van de huid aan beide zijden van de plooi. Smetten waarbij een gist of schimmel aanwezig is: Uitbreiding smetten tot buiten de huidplooien; Satelliet laesies (‘eilandjes voor de kust’) bij Candida-infecties; Randschilfering"
+      }
+     ],
+     "rationale_page": 32,
+     "overwegingen": {
+      "pages": [
+       30,
+       32
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie bijlage 3.4",
+      "page": 33,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    },
+    {
+     "n": "3",
+     "text": "Wees alert dat smetten een ander klinisch beeld kan geven bij mensen met een donkere huidskleur, aangezien erytheem (roodheid) niet altijd geobserveerd wordt zoals dat bij mensen met een witte huid",
+     "direction": "voor",
+     "strength": "sterk",
+     "page": 33,
+     "doelgroep": "mensen met een donkere huidskleur",
+     "toelichting": [],
+     "rationale_page": 32,
+     "overwegingen": {
+      "pages": [
+       30,
+       32
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie bijlage 3.4",
+      "page": 33,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    },
+    {
+     "n": "4",
+     "text": "Stel vast of er sprake kan zijn van een andere huidafwijking dan smetten wanneer:",
+     "direction": "voor",
+     "strength": "sterk",
+     "page": 33,
+     "doelgroep": "OPENVRAAG: niet expliciet; de voorwaarden staan in de lijst",
+     "voorwaarden": [
+      {
+       "page": 33,
+       "text": "Er ook huidafwijkingen op andere lichaamsdelen aanwezig zijn"
+      },
+      {
+       "page": 33,
+       "text": "Er druk aanwezig is ter hoogte van de huidafwijking (mogelijkheid van decubitus)"
+      },
+      {
+       "page": 33,
+       "text": "Er sprake is van inwerking van urine en/of feces (mogelijkheid van incontinentie dermatitis)"
+      }
+     ],
+     "toelichting": [],
+     "rationale_page": 32,
+     "overwegingen": {
+      "pages": [
+       30,
+       32
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie bijlage 3.4",
+      "page": 33,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    },
+    {
+     "n": "5",
+     "text": "Zet geen aanvullende (laboratorium-)onderzoeken in voor de eerste diagnose van smetten.",
+     "direction": "tegen",
+     "strength": "sterk",
+     "page": 33,
+     "doelgroep": "OPENVRAAG: niet expliciet",
+     "toelichting": [],
+     "rationale_page": 32,
+     "overwegingen": {
+      "pages": [
+       30,
+       32
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie bijlage 3.4",
+      "page": 33,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    }
+   ]
+  },
+  {
+   "module": 4,
+   "title": "Behandeling van smetten",
+   "pages": [
+    35,
+    43
+   ],
+   "uitgangsvraag": "1. Welke verpleegkundige interventies worden aanbevolen bij volwassen patiënten met smetten binnen de huidplooien? 2. Welke verpleegkundige interventies worden aanbevolen bij volwassen patiënten met smetten dat zich uitbreidt tot buiten de plooien?",
+   "uitgangsvraag_page": 35,
+   "overwegingen_pages": [
+    38,
+    40
+   ],
+   "implementatietabel": {
+    "text": "Zie bijlage 4.5",
+    "page": 41
+   },
+   "recs": [
+    {
+     "n": "huidplooien-1",
+     "group": "Smetten in de huidplooien",
+     "text": "Pas minimaal 2 keer per dag de basismaatregelen toe bij smetten in de huidplooien.",
+     "direction": "voor",
+     "strength": "sterk",
+     "page": 41,
+     "doelgroep": "patiënten met smetten in de huidplooien",
+     "toelichting": [
+      {
+       "kind": "lijst",
+       "page": 41,
+       "text": "Pas dagelijkse huidzorg toe (waar mogelijk door de patiënt en/of naaste); Voorkom huid-op-huid contact; Houd de huidplooien droog"
+      }
+     ],
+     "rationale_page": 40,
+     "overwegingen": {
+      "pages": [
+       38,
+       40
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie bijlage 4.5",
+      "page": 41,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    },
+    {
+     "n": "huidplooien-2",
+     "group": "Smetten in de huidplooien",
+     "text": "Zet bij smetten in de huidplooien een zinkoxidesmeersel FNA (zinkolie) 2 keer per dag in of barrière product (volgens voorschrift)",
+     "direction": "voor",
+     "strength": "sterk",
+     "page": 41,
+     "doelgroep": "patiënten met smetten in de huidplooien",
+     "toelichting": [],
+     "rationale_page": 40,
+     "overwegingen": {
+      "pages": [
+       38,
+       40
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie bijlage 4.5",
+      "page": 41,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    },
+    {
+     "n": "uitbreiding-1",
+     "group": "Smetten dat zich uitbreidt tot buiten de huidplooien",
+     "text": "Als smetten zich uitbreidt tot buiten de huidplooien, controleer of de basismaatregelen en de inzet van zinkoxidesmeersel FNA (zinkolie) of barrière crème of barrière spray correct toegepast zijn",
+     "direction": "voor",
+     "strength": "sterk",
+     "page": 41,
+     "doelgroep": "patiënten met smetten dat zich uitbreidt tot buiten de huidplooien",
+     "voorwaarden": [
+      {
+       "page": 41,
+       "text": "Als smetten zich uitbreidt tot buiten de huidplooien"
+      }
+     ],
+     "toelichting": [],
+     "rationale_page": 40,
+     "overwegingen": {
+      "pages": [
+       38,
+       40
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie bijlage 4.5",
+      "page": 41,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    },
+    {
+     "n": "uitbreiding-2",
+     "group": "Smetten dat zich uitbreidt tot buiten de huidplooien",
+     "text": "Zet lokaal een combinatiepreparaat van zinkoxidesmeersel FNA met een antimycoticum in als de basismaatregelen niet werken en de smetplek zich uitbreidt tot buiten de plooien",
+     "direction": "voor",
+     "strength": "sterk",
+     "page": 41,
+     "doelgroep": "patiënten met smetten dat zich uitbreidt tot buiten de huidplooien",
+     "voorwaarden": [
+      {
+       "page": 41,
+       "text": "als de basismaatregelen niet werken en de smetplek zich uitbreidt tot buiten de plooien"
+      }
+     ],
+     "toelichting": [],
+     "rationale_page": 40,
+     "overwegingen": {
+      "pages": [
+       38,
+       40
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie bijlage 4.5",
+      "page": 41,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    },
+    {
+     "n": "nat-1",
+     "group": "Bij een natte smetplek met een kapotte huid",
+     "text": "Gebruik geen zalf",
+     "direction": "tegen",
+     "strength": "sterk",
+     "page": 41,
+     "doelgroep": "patiënten met een natte smetplek met een kapotte huid (uit groepskop)",
+     "toelichting": [],
+     "rationale_page": 40,
+     "overwegingen": {
+      "pages": [
+       38,
+       40
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie bijlage 4.5",
+      "page": 41,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    },
+    {
+     "n": "nat-2",
+     "group": "Bij een natte smetplek met een kapotte huid",
+     "text": "Overweeg een zinkoxidesmeersel FNA",
+     "direction": "voor",
+     "strength": "zwak",
+     "page": 41,
+     "doelgroep": "patiënten met een natte smetplek met een kapotte huid (uit groepskop)",
+     "toelichting": [],
+     "rationale_page": 40,
+     "overwegingen": {
+      "pages": [
+       38,
+       40
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie bijlage 4.5",
+      "page": 41,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    },
+    {
+     "n": "nat-3",
+     "group": "Bij een natte smetplek met een kapotte huid",
+     "text": "Gebruik een alternatief antimycoticum in plaats van micozanol bij patiënten die bekend zijn bij de trombosedienst of eigen bloedstolling thuis onder controle houden met (acenocoumarol (sintrom) en fenprocoumon (marcoumar) met behulp van een zelfstandig apparaat",
+     "direction": "voor",
+     "strength": "sterk",
+     "page": 41,
+     "doelgroep": "patiënten die bekend zijn bij de trombosedienst of eigen bloedstolling thuis onder controle houden (vitamine K-antagonisten)",
+     "openvraag": [
+      "OPENVRAAG: staat onder de kop 'Bij een natte smetplek met een kapotte huid', maar de rationale (p40) koppelt hem niet aan een natte smetplek; geldt hij alleen daar of algemeen?",
+      "OPENVRAAG: brontekst schrijft 'micozanol'; de rationale (p40) noemt 'miconazol'. Letterlijk overgenomen, niet gecorrigeerd."
+     ],
+     "toelichting": [],
+     "rationale_page": 40,
+     "overwegingen": {
+      "pages": [
+       38,
+       40
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie bijlage 4.5",
+      "page": 41,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    }
+   ]
+  },
+  {
+   "module": 5,
+   "title": "Evaluatie van behandelinterventies",
+   "pages": [
+    44,
+    46
+   ],
+   "uitgangsvraag": "1. Na welke termijn moet het effect van behandeling van smetten worden geëvalueerd? 2. Welke stappen moeten worden genomen bij een afwijking van het verwachte herstel van smetten?",
+   "uitgangsvraag_page": 44,
+   "overwegingen_pages": [
+    44,
+    46
+   ],
+   "implementatietabel": {
+    "text": "Zie bijlage 5.1",
+    "page": 46
+   },
+   "recs": [
+    {
+     "n": "1",
+     "text": "Evalueer de behandelopties na het starten van de behandeling:",
+     "direction": "voor",
+     "strength": "sterk",
+     "page": 46,
+     "doelgroep": "OPENVRAAG: niet expliciet; impliciet patiënten die voor smetten behandeld worden",
+     "toelichting": [
+      {
+       "kind": "lijst",
+       "page": 46,
+       "text": "Niet-medicamenteuze behandeling na 5-7 dagen; Medicamenteuze behandeling wekelijks"
+      }
+     ],
+     "rationale_page": 46,
+     "overwegingen": {
+      "pages": [
+       44,
+       46
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie bijlage 5.1",
+      "page": 46,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    },
+    {
+     "n": "2",
+     "text": "Consulteer een deskundige (bijv. een dermatologie-verpleegkundige of verpleegkundig specialist, wondconsultent, huisarts, specialist ouderengeneeskunde of een dermatoloog) als de smetplek zich uitbreidt, verslechterd of niet verbeterd ondanks de correcte inzet van behandeling",
+     "direction": "voor",
+     "strength": "sterk",
+     "page": 46,
+     "doelgroep": "patiënten bij wie de smetplek zich uitbreidt, verslechtert of niet verbetert",
+     "voorwaarden": [
+      {
+       "page": 46,
+       "text": "als de smetplek zich uitbreidt, verslechterd of niet verbeterd ondanks de correcte inzet van behandeling"
+      }
+     ],
+     "toelichting": [],
+     "rationale_page": 46,
+     "overwegingen": {
+      "pages": [
+       44,
+       46
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie bijlage 5.1",
+      "page": 46,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    },
+    {
+     "n": "3",
+     "text": "Gebruik geen kweek om de behandeling te bepalen bij smetten met een afwijkend beloop",
+     "direction": "tegen",
+     "strength": "sterk",
+     "page": 46,
+     "doelgroep": "patiënten met smetten met een afwijkend beloop",
+     "toelichting": [],
+     "rationale_page": 46,
+     "overwegingen": {
+      "pages": [
+       44,
+       46
+      ],
+      "sections": [
+       "Voor- en nadelen van de interventie en de kwaliteit van het bewijs",
+       "Waarden en voorkeuren van patiënten en hun naasten",
+       "Kosten(effectiviteit)",
+       "Aanvaardbaarheid, haalbaarheid en implementatie",
+       "Rationale"
+      ],
+      "note": "kop in bron p17/25/32/39 gespeld als 'Aanvaarbaarheid'",
+      "role": "toelichting (MAG NIET een zelfstandig object zijn)"
+     },
+     "implementatietabel": {
+      "text": "Zie bijlage 5.1",
+      "page": 46,
+      "status": "OPENVRAAG: bijlage niet in de 46-pagina-PDF; inhoud onbekend"
+     }
+    }
+   ]
   }
+ ],
+ "counts": {
+  "modules": 5,
+  "aanbevelingen": 19,
+  "sterk_voor": 12,
+  "sterk_tegen": 5,
+  "zwak_voor": 2,
+  "zwak_tegen": 0,
+  "tabellen_als_toelichting": 1,
+  "openvragen": 28
+ },
+ "status": "not validated by William"
 }
