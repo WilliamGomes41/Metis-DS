@@ -35,9 +35,9 @@ _SECRET_PATTERNS = (
 # request bodies, connection strings) MAG NIET reach the root JSON handler.
 LIBRARY_LOGGERS = ('azure', 'urllib3', 'httpx', 'httpcore', 'openai', 'msal', 'psycopg', 'asyncio')
 # Known loggers with propagate=False and their own handlers (ASGI/WSGI servers). Their
-# handlers MOETEN get the RedactingFilter explicitly. Known limitation: a handler added
-# after install_structured_logging() (on root or on these loggers) is NOT covered until
-# install_structured_logging() runs again.
+# handlers MOETEN get the RedactingFilter explicitly. The server configures its loggers
+# after build_app(), so install_startup_reinstall() MOET re-run the (idempotent) install at
+# application startup (Metis 638-1). A handler added after startup is NOT covered.
 NON_PROPAGATING_LOGGERS = ('uvicorn', 'uvicorn.error', 'uvicorn.access', 'gunicorn', 'gunicorn.error',
                            'gunicorn.access')
 _SAFE = re.compile(r'[A-Za-z0-9_.:-]{1,128}')
@@ -116,3 +116,8 @@ def install_structured_logging(level=logging.INFO):
         library = logging.getLogger(name)
         if library.level == logging.NOTSET or library.level < logging.WARNING:
             library.setLevel(logging.WARNING)
+
+
+def install_startup_reinstall(app) -> None:
+    """Re-run install_structured_logging() at startup, AFTER the server's own log setup (idempotent)."""
+    app.add_event_handler('startup', install_structured_logging)
