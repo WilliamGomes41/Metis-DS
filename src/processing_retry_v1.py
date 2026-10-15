@@ -81,7 +81,8 @@ def expire_running(envelope, clock):
     from src.attempt_diagnostics_v1 import finish_diagnostic
     for attempt in envelope.get(KEY, []):
         if attempt["state"] == "running" and datetime.fromisoformat(attempt["expires_at"]) <= clock:
-            attempt.update(state="interrupted", finished_at=clock.isoformat(), phase="stopped", error_code="processing_attempt_expired")
+            attempt.update(state="interrupted", finished_at=clock.isoformat(), phase="stopped", error_code="processing_attempt_expired",
+                           stop_reason="error")
             finish_diagnostic(attempt, ConsoleError("processing_attempt_expired"))
 
 
@@ -94,24 +95,46 @@ def assert_active(envelope: dict, attempt_id: str, clock: datetime) -> dict:
     return attempt
 
 
-def formation_budget_exhausted(envelope: dict) -> bool:
-    """Current replay is incomplete AND stopped on the bounded task budget."""
-    provider = ((envelope.get("semantic_replay") or {}).get("provider_evidence") or {})
+STOP_REASONS = frozenset({"done", "budget_exhausted", "error"})
+
+
+def _formation_budget_exhausted(provider: dict) -> bool:
+    """Current formation is incomplete AND stopped on the bounded task budget."""
     if provider.get("formation_incomplete") is not True:
         return False
     calls = [provider, *(provider.get("supplementary_calls") or [])]
     return any(isinstance(c, dict) and c.get("error_code") == "source_task_budget_exhausted" for c in calls)
 
 
+def stop_evidence(envelope: dict, state: str) -> dict:
+    """Recorded stop evidence only; it MAG NIET change state, retry or resume rules."""
+    if state != "succeeded":
+        # The stored replay belongs to an earlier attempt; recording it would be stale.
+        return {"stop_reason": "error", "semantic_contract_version": None}
+    replay = envelope.get("semantic_replay") if isinstance(envelope.get("semantic_replay"), dict) else {}
+    identity = replay.get("identity") if isinstance(replay.get("identity"), dict) else {}
+    components = identity.get("components") if isinstance(identity.get("components"), dict) else {}
+    contract = components.get("semantic_contract_version")
+    provider = replay.get("provider_evidence") if isinstance(replay.get("provider_evidence"), dict) else {}
+    return {"stop_reason": "budget_exhausted" if _formation_budget_exhausted(provider) else "done",
+            "semantic_contract_version": contract if isinstance(contract, str) and contract else None}
+
+
+def formation_budget_exhausted(envelope: dict) -> bool:
+    """Current replay is incomplete AND stopped on the bounded task budget."""
+    return _formation_budget_exhausted((envelope.get("semantic_replay") or {}).get("provider_evidence") or {})
+
+
 def finish(envelope: dict, attempt_id: str, *, state: str, error: Exception | None = None,
            budget_aware: bool = False) -> dict:
     attempt = next(a for a in envelope[KEY] if a["attempt_id"] == attempt_id)
-    # A budget-exhausted attempt MOET NOOIT 'succeeded' zijn. Callers opt in per
-    # path; the ingest path (operations_console_v1 ingest) follows after #626.
+    evidence = stop_evidence(envelope, state)
+    # A3: a budget-exhausted attempt MOET NOOIT 'succeeded' zijn (budget-aware callers).
     if budget_aware and state == "succeeded" and formation_budget_exhausted(envelope):
         state = "incomplete_budget"
     attempt.update(state=state, finished_at=now().isoformat(),
-                   phase="activated" if state == "succeeded" else "budget_stopped" if state == "incomplete_budget" else "stopped")
+                   phase="activated" if state == "succeeded" else "budget_stopped" if state == "incomplete_budget" else "stopped",
+                   **evidence)
     if error is not None:
         code = getattr(error, "code", "processing_timeout" if isinstance(error, TimeoutError) else "processing_dependency_failed")
         if not re.fullmatch(r"[a-z][a-z0-9_]{0,95}", str(code)):

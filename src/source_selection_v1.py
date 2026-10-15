@@ -118,31 +118,44 @@ def _duration(start, end):
         return None
 
 
-def estimate(envelope, documents):
-    """Coarse range from recorded comparable full first attempts, never an SLA.
+def comparable_observations(documents):
+    """One pass over all documents: every complete first ingest attempt, grouped by route.
 
-    Bytes are an imperfect size proxy. Reject dissimilar size/route/config and
-    partial resumes; at least three observations are needed. No estimated
-    duration is manufactured from a configured timeout.
+    Envelope-independent filters only (attempt state/kind, formation_incomplete,
+    elapsed >= 1). Size ratio and configuration stay per envelope in ``estimate``.
     """
-    size = (envelope.get("received_source") or {}).get("bytes")
-    rates = []
+    groups = {}
     for prior in documents:
         prior_size = (prior.get("received_source") or {}).get("bytes")
-        if not size or not prior_size or not .5 <= prior_size / size <= 2:
+        if not prior_size:
             continue
-        if (prior.get("content_kind"), prior.get("class")) != (envelope.get("content_kind"), envelope.get("class")):
+        if prior.get("semantic_replay", {}).get("provider_evidence", {}).get("formation_incomplete"):
             continue
         for attempt in prior.get("processing_attempts", []):
             if attempt.get("state") != "succeeded" or attempt.get("kind") != "ingest":
                 continue
-            if prior.get("processing_configuration") != envelope.get("processing_configuration"):
-                continue
-            if prior.get("semantic_replay", {}).get("provider_evidence", {}).get("formation_incomplete"):
-                continue
             elapsed = _duration(attempt.get("started_at"), attempt.get("finished_at"))
             if elapsed and elapsed >= 1:
-                rates.append(elapsed / prior_size)
+                groups.setdefault((prior.get("content_kind"), prior.get("class")), []).append(
+                    (prior_size, prior.get("processing_configuration"), elapsed / prior_size))
+    return groups
+
+
+def estimate(envelope, documents, *, observations=None):
+    """Coarse range from recorded comparable full first attempts, never an SLA.
+
+    Bytes are an imperfect size proxy. Reject dissimilar size/route/config and
+    partial resumes; at least three observations are needed. No estimated
+    duration is manufactured from a configured timeout. ``observations`` is the
+    once-per-request result of ``comparable_observations(documents)``.
+    """
+    size = (envelope.get("received_source") or {}).get("bytes")
+    groups = comparable_observations(documents) if observations is None else observations
+    rates = []
+    if size:
+        for prior_size, prior_configuration, rate in groups.get((envelope.get("content_kind"), envelope.get("class")), ()):
+            if .5 <= prior_size / size <= 2 and prior_configuration == envelope.get("processing_configuration"):
+                rates.append(rate)
     if len(rates) < 3:
         return {"range_seconds": None, "sample_count": len(rates), "basis": "Onvoldoende vergelijkbare metingen."}
     central = median(rates) * size
@@ -151,7 +164,7 @@ def estimate(envelope, documents):
 
 
 @diagnostic_phase("selection_projection")
-def projection(console, *, actor_id, snapshot_id, documents, deep=True):
+def projection(console, *, actor_id, snapshot_id, documents, deep=True, observations=None):
     from pathlib import Path
     from src.source_accountability_v1 import is_source_record
     from src.admission_gate_v1 import is_admission_blocked
@@ -173,7 +186,8 @@ def projection(console, *, actor_id, snapshot_id, documents, deep=True):
              else "onderbroken" if (succeeded and not complete) else "mislukt" if current == "failed"
              else "voltooid" if complete else "nog niet gestart")
     elapsed = _duration(attempt.get("started_at"), attempt.get("finished_at") or now().isoformat())
-    timing = estimate({**envelope, "processing_configuration": configuration(console)}, documents)
+    timing = estimate({**envelope, "processing_configuration": configuration(console)}, documents,
+                      observations=observations)
     remaining = None
     if state == "bezig" and timing["range_seconds"] and elapsed is not None:
         lo, hi = timing["range_seconds"]

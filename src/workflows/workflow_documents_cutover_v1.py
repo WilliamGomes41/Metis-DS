@@ -405,6 +405,16 @@ class _PostgresWorkflowDocumentsMixin:
         self.refresh_workflow_documents()
         return [self._receipt(row) for row in self._envelopes.values()]
 
+    def list_snapshot_ids(self) -> list[str]:
+        """PR-a: the same authoritative read as list_envelopes, without per-row receipts."""
+        reads = self._source_selection_reads()
+        if reads is not None:
+            if reads["envelopes"] is None:
+                self.list_envelopes()
+            return list(reads["envelopes"])
+        self.refresh_workflow_documents()
+        return list(self._envelopes)
+
     @diagnostic_phase("document_load")
     def _envelope(self, snapshot_id: str) -> dict[str, Any]:
         reads = self._source_selection_reads()
