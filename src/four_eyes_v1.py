@@ -269,6 +269,9 @@ def publish_authorization_contract(
         four_ok = configured_four_ok
     if four_eyes_needed and not four_ok:
         blockers.append("four_eyes_required")
+        if configured is not None and configured["option"] == "uploader_sole":
+            # OPENVRAAG-2b3-1: hoe een tweede reviewer wordt toegevoegd, beslist William.
+            blockers.append("review_configuration_uploader_sole_high_risk")
     # Envelope ticks never authorize publish, even when present.
     _ = envelope_review_passes
     if not is_g2_locator(immutable_locator):

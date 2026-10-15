@@ -259,7 +259,7 @@ def test_legacy_mode_uploader_sole_without_reviewers_is_stored(system):
     sid = response.headers["location"].split("document=")[1].split("&")[0]
     stored = console._envelope(sid)
     assert (stored["review_configuration"]["option"], stored["review_configuration"]["source"]) == ("uploader_sole", "chosen")
-    assert stored["named_reviewers"] == []
+    assert stored["named_reviewers"] == [ids["uploader"]]
 
 
 def test_uploader_sole_with_other_named_reviewer_is_a_conflict(system):

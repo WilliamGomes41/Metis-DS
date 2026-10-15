@@ -39,6 +39,8 @@ def _ids(value: Any, code: str) -> list[str]:
 def validate_configuration(value: Any, *, uploader_id: str) -> dict[str, Any]:
     if not isinstance(value, dict) or set(value) != FIELDS or value.get("contract") != CONTRACT:
         raise ValueError("invalid_review_configuration")
+    if not isinstance(uploader_id, str) or not uploader_id.strip():
+        raise ValueError("uploader_identity_missing")
     option = value["option"]
     if option not in OPTIONS or type(value["four_eyes_required"]) is not bool:
         raise ValueError("invalid_review_configuration")

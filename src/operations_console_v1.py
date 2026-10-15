@@ -1741,8 +1741,8 @@ class OperationsConsole:
                 named_reviewers = list(review_configuration["reviewers"])
             if review_configuration is not None and review_configuration["option"] == "uploader_sole" \
                     and not named_reviewers:
-                # 2b-3: uploader_sole heeft geen andere reviewers; NOOIT named_reviewers_required.
-                reviewers = []
+                # 2b-3: uploader_sole: de uploader is de enige reviewer; NOOIT named_reviewers_required.
+                reviewers = [actor_id]
             else:
                 reviewers = self._resolve_named_reviewers(named_reviewers, actor_id)
             if review_configuration is not None and \
@@ -4715,8 +4715,17 @@ class OperationsConsole:
                 blockers.append("review_configuration_invalid")
             elif effective["source"] == "chosen":
                 review_configuration = envelope["review_configuration"]
-                counted = {uploader} if effective["option"] == "uploader_sole" else set(effective["reviewers"])
-                independence = any(row.get("reviewer_id") in counted for row in bindings)
+                # Review #631 A: dezelfde eligible reviewers en dezelfde regel als het contract.
+                from src.four_eyes_v1 import eligible_tuple_reviewers
+                from src.review_configuration_v1 import configured_approval
+                approved = [
+                    {str(row.get("reviewer_id") or "") for row in eligible}
+                    for obj in objects
+                    if (eligible := eligible_tuple_reviewers(
+                        all_bindings, object_id=obj.get("object_id") or "", uploader_id=uploader))
+                ]
+                independence = bool(approved) and all(
+                    configured_approval(effective, ids, uploader_id=uploader)[0] for ids in approved)
         from src.decision_graph_v1 import publication_issues
         blockers.extend(publication_issues(envelope, objects))
         if any((o.get("metadata") or {}).get("decision_graph_contract") for o in objects) and "decision_graph" not in envelope:
