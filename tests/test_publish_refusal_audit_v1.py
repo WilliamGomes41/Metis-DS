@@ -7,6 +7,7 @@
 # release-control-evidence: releasebewijs
 """
 import hashlib
+import hmac
 import json
 from copy import deepcopy
 
@@ -16,6 +17,11 @@ import src.publish_refusal_audit_v1 as audit
 from src.request_diagnostics_v1 import _LOGGER
 from tests.test_durable_publication_console_v1 import MemoryCanonicalStore, _ready_console
 from tests.test_recoverable_formation_v1 import system
+
+
+@pytest.fixture(autouse=True)
+def audit_key(monkeypatch):
+    monkeypatch.setenv('METIS_AUDIT_HMAC_KEY', 'test-audit-key')
 
 
 @pytest.fixture
@@ -57,8 +63,12 @@ def test_refusal_emits_one_bounded_audit_event(tmp_path, events, build):
     assert result['status'] == 'BLOCKED'
     [event] = _refusals(events)
     assert event['snapshot_id'] == sid
-    assert event['actor_sha256'] == hashlib.sha256(actor.encode()).hexdigest()
-    assert actor not in json.dumps(event)
+    assert event['actor_hmac'] == hmac.new(b'test-audit-key', actor.encode(), hashlib.sha256).hexdigest()
+    assert actor not in json.dumps(event) and 'test-audit-key' not in json.dumps(events)
+    from src.review_ledger import read_events
+    [durable] = [e for e in read_events(console._ledger_path) if e['event_type'] == 'publication_refused']
+    assert durable['actor'] == actor and durable['object_id'] == sid
+    assert durable['details']['reason_codes'] == event['reason_codes']
     assert event['reason_codes'] == [c if audit._CODE.fullmatch(c) else 'unrecognized_reason' for c in result['blockers']]
     assert event['verdict'] == 'refused'
     assert event['revision_sha256'] is None or len(event['revision_sha256']) == 64
@@ -113,3 +123,29 @@ def test_concurrent_refusals_each_emit_one_event_and_identical_verdicts(tmp_path
         verdicts = list(pool.map(lambda _: console.publish(actor_id=actor, snapshot_id=sid), range(4)))
     assert all(v == verdicts[0] for v in verdicts) and verdicts[0]['status'] == 'BLOCKED'
     assert len(_refusals(events)) == 4
+
+
+@pytest.mark.parametrize('build', [_blocked_base, _durable_blocked], ids=['file', 'durable'])
+def test_verdict_identical_when_durable_audit_write_raises(tmp_path, events, monkeypatch, build):
+    import src.review_ledger as ledger
+    reference, sid_r, actor_r = build(tmp_path / 'ref')
+    expected = reference.publish(actor_id=actor_r, snapshot_id=sid_r)
+    original = ledger.append_event
+
+    def failing(path, **kwargs):
+        if kwargs.get('event_type') == 'publication_refused':
+            raise OSError('private audit store failure')
+        return original(path, **kwargs)
+    monkeypatch.setattr(ledger, 'append_event', failing)
+    console, sid, actor = build(tmp_path / 'broken')
+    verdict = console.publish(actor_id=actor, snapshot_id=sid)
+    normalise = lambda v, s: json.loads(json.dumps(v).replace(s, 'SID'))
+    assert normalise(verdict, sid) == normalise(expected, sid_r)
+
+
+def test_without_hmac_key_actor_is_not_logged(tmp_path, events, monkeypatch):
+    monkeypatch.delenv('METIS_AUDIT_HMAC_KEY')
+    console, sid, actor = _blocked_base(tmp_path)
+    console.publish(actor_id=actor, snapshot_id=sid)
+    [event] = _refusals(events)
+    assert event['actor_hmac'] is None and actor not in json.dumps(event)

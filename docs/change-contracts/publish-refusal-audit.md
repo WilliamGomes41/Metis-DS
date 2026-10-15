@@ -24,3 +24,9 @@ Taalregel: B18. Rules use MOET / MAG NIET / NOOIT only; open items are marked OP
 
 OPENVRAAG-GATE-1: MOET the actor be logged as an account id instead of a SHA-256 digest? The existing diagnostics policy forbids user identifiers in logs.
 OPENVRAAG-GATE-2: MOET the event also be written to a durable audit store? This PR is log-only (no durable write).
+
+## Uitbreiding (Forge-ack): HMAC-actor en duurzame audit
+- Logs MOETEN de actor alleen als keyed HMAC-SHA256 (`actor_hmac`) bevatten; sleutel uit app setting `METIS_AUDIT_HMAC_KEY`, die NOOIT gelogd wordt. Zonder sleutel MOET `actor_hmac` null zijn.
+- De weigering MOET ook in de duurzame auditstore staan via `review_ledger.append_event` (event_type `publication_refused`, actor in klare tekst); signatuur en semantiek van `append_event` MOGEN NIET wijzigen.
+- Een fout in de auditwrite MAG NOOIT het verdict wijzigen (test: `test_verdict_identical_when_durable_audit_write_raises`).
+- OPENVRAAG-GATE-HMAC: `METIS_AUDIT_HMAC_KEY` MOET nog als app setting/Key Vault-referentie op de omgevingen gezet worden; tot dan logt de app geen actor.
