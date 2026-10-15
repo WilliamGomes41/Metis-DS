@@ -27,6 +27,6 @@ OPENVRAAG-GATE-2: MOET the event also be written to a durable audit store? This 
 
 ## Uitbreiding (Forge-ack): HMAC-actor en duurzame audit
 - Logs MOETEN de actor alleen als keyed HMAC-SHA256 (`actor_hmac`) bevatten; sleutel uit app setting `METIS_AUDIT_HMAC_KEY`, die NOOIT gelogd wordt. Zonder sleutel MOET `actor_hmac` null zijn.
-- De weigering MOET ook in de duurzame auditstore staan via `review_ledger.append_event` (event_type `publication_refused`, actor in klare tekst); signatuur en semantiek van `append_event` MOGEN NIET wijzigen.
+- De weigering MOET in de aparte append-only weigeringsstore staan (src/publication_refusal_store_v1.py, actor in klare tekst, revisie alleen als SHA-256); zij MAG NIET in de review-ledger-hashketen komen (#629 F1, zie publication-refusal-store.md).
 - Een fout in de auditwrite MAG NOOIT het verdict wijzigen (test: `test_verdict_identical_when_durable_audit_write_raises`).
 - OPENVRAAG-GATE-HMAC: `METIS_AUDIT_HMAC_KEY` MOET nog als app setting/Key Vault-referentie op de omgevingen gezet worden; tot dan logt de app geen actor.
