@@ -3,7 +3,9 @@
 The gate's existing verdict is passed in after it is final. This module MOET only
 read it: the verdict, its reason codes, the document, the revision and a digest
 of the actor. It MAG NIET change, re-evaluate or delay the verdict, and a logging or
-audit-store failure MAG NOOIT reach the caller. Allowed verdicts produce no event.
+audit-store failure MAG NOOIT reach the caller. Every such failure MOET emit one
+bounded `publication_refusal_audit_failed` diagnostic (#629 F2); it MAG NIET be
+silently swallowed. The diagnostic carries no exception text, actor or key. Allowed verdicts produce no event.
 
 Logs carry the actor only as a keyed HMAC (key from app setting
 METIS_AUDIT_HMAC_KEY; the key MAG NOOIT be logged; without a key the field is None).
@@ -24,6 +26,9 @@ MAX_REASON_CODES = 128
 _CODE = re.compile(r'[a-z][a-z0-9_]{0,95}')
 _SNAPSHOT = re.compile(r'[A-Za-z0-9_.:-]{1,128}')
 HMAC_KEY_SETTING = 'METIS_AUDIT_HMAC_KEY'
+MAX_FAILURE_DIAGNOSTICS = 100  # per process; bounded so a failing store MAG NIET flood the logs
+_FAILURE_COUNT = [0]
+_ERROR_CLASS = re.compile(r'[A-Za-z_][A-Za-z0-9_]{0,63}')
 
 
 def actor_hmac(actor_id):
@@ -33,18 +38,46 @@ def actor_hmac(actor_id):
     return hmac.new(key.encode(), actor_id.encode(), hashlib.sha256).hexdigest()
 
 
+def _audit_failed(stage, *, error=None, outcome=None, snapshot_id=None):
+    """Bounded failure diagnostic: fixed fields, class name only, capped per process.
+
+    This is the last-resort observer: if the logger itself raises, nothing more can be
+    reported, and the verdict MOET still stand, so that one error is contained here.
+    """
+    try:
+        if _FAILURE_COUNT[0] >= MAX_FAILURE_DIAGNOSTICS:
+            return
+        _FAILURE_COUNT[0] += 1
+        from src.request_diagnostics_v1 import _LOGGER, current_request_id
+        name = type(error).__name__ if error is not None else None
+        payload = {
+            'event': 'publication_refusal_audit_failed', 'stage': stage,
+            'error_class': (name if name and _ERROR_CLASS.fullmatch(name) else 'unrecognized_error') if error is not None else None,
+            'outcome': outcome,
+            'snapshot_id': snapshot_id if isinstance(snapshot_id, str) and _SNAPSHOT.fullmatch(snapshot_id) else None,
+            'request_id': current_request_id(),
+            'authority': 'non_authoritative_gate_observation',
+        }
+        _LOGGER.warning('metis_diagnostic %s', json.dumps(payload, separators=(',', ':')))
+    except Exception:  # noqa: BLE001 - see docstring; bounded, verdict unaffected
+        return
+
+
 def _append_durable(console, *, actor_id, snapshot_id, reason_codes, revision):
     # #629 F1: separate append-only store; MAG NIET use the review ledger chain.
     try:
         from src import publication_refusal_store_v1 as store
         try:
             version = str(console._envelope(snapshot_id).get('version') or '')
-        except Exception:
+        except Exception as exc:  # version is optional evidence
             version = ''
-        store.append_refusal(store.store_path(console), snapshot_id=str(snapshot_id), object_version=version,
-                             actor=str(actor_id), reason_codes=reason_codes, revision=revision)
-    except Exception:
-        pass
+            _audit_failed('envelope_read', error=exc, snapshot_id=snapshot_id)
+        outcome = store.append_refusal(store.store_path(console), snapshot_id=str(snapshot_id), object_version=version,
+                                       actor=str(actor_id), reason_codes=reason_codes, revision=revision)
+        if outcome == 'capacity_reached':
+            _audit_failed('durable_store', outcome=outcome, snapshot_id=snapshot_id)
+    except Exception as exc:
+        _audit_failed('durable_store', error=exc, snapshot_id=snapshot_id)
 
 
 def record_publish_refusal(console, *, actor_id, snapshot_id, verdict, revision=None):
@@ -55,8 +88,9 @@ def record_publish_refusal(console, *, actor_id, snapshot_id, verdict, revision=
         if revision is None and console is not None:
             try:
                 revision = console.objects_revision(snapshot_id)
-            except Exception:
+            except Exception as exc:  # revision is optional evidence
                 revision = None
+                _audit_failed('revision_read', error=exc, snapshot_id=snapshot_id)
         blockers = verdict.get('blockers') or []
         blockers = blockers if isinstance(blockers, list) else []
         payload = {
@@ -73,10 +107,10 @@ def record_publish_refusal(console, *, actor_id, snapshot_id, verdict, revision=
         }
         try:
             _LOGGER.info('metis_diagnostic %s', json.dumps(payload, separators=(',', ':')))
-        except Exception:
-            pass
+        except Exception as exc:
+            _audit_failed('log', error=exc, snapshot_id=snapshot_id)
         if console is not None:
             _append_durable(console, actor_id=actor_id, snapshot_id=snapshot_id,
                             reason_codes=payload['reason_codes'], revision=revision)
-    except Exception:
-        pass
+    except Exception as exc:
+        _audit_failed('record', error=exc, snapshot_id=snapshot_id)

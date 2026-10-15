@@ -23,6 +23,7 @@ from tests.test_recoverable_formation_v1 import system
 @pytest.fixture(autouse=True)
 def audit_key(monkeypatch):
     monkeypatch.setenv('METIS_AUDIT_HMAC_KEY', 'test-audit-key')
+    monkeypatch.setattr(audit, '_FAILURE_COUNT', [0])
 
 
 @pytest.fixture
