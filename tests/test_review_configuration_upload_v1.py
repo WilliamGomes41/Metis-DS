@@ -248,3 +248,33 @@ def test_same_command_with_changed_choice_is_an_idempotency_conflict(system):
         assert error.value.code == "ingest_command_conflict"
     assert console._envelope(first)["review_configuration"]["four_eyes_required"] is False
     assert len(console.list_envelopes()) == 1
+
+
+def test_legacy_mode_uploader_sole_without_reviewers_is_a_clear_refusal(system):
+    console, password, ids = system
+    response = _client(console, password).post("/ingest", data=_form(ids, named_reviewers=[], review_option="uploader_sole"),
+                                               files={"file": ("bron.html", HTML, "text/html")})
+    assert response.status_code == 400
+    assert "named_reviewers_required" in response.text
+    assert console.list_envelopes() == []
+
+
+@pytest.mark.parametrize(("option", "count"), [("one_other", 2), ("two_others", 3)])
+def test_chosen_option_requires_exact_reviewer_count(system, option, count):
+    console, _, ids = system
+    extra = console.create_account("derde", token_urlsafe(24), roles=("reviewer",), display_name="Derde")["account_id"]
+    reviewers = [ids["first"], ids["second"], extra][:count]
+    with pytest.raises(ConsoleError) as error:
+        _kernel(console, ids, "Aantal", named_reviewers=[],
+                review_choice={"option": option, "four_eyes_required": False, "reviewers": reviewers, "readers": []})
+    assert error.value.code == "review_configuration_reviewer_count_mismatch"
+    assert console.list_envelopes() == []
+
+
+def test_legacy_document_with_two_reviewers_stays_valid(system):
+    console, _, ids = system
+    sid = _kernel(console, ids, "Legacy twee", named_reviewers=[ids["first"], ids["second"]])
+    envelope = console._envelope(sid)
+    assert envelope["review_configuration"]["source"] == "legacy_default"
+    assert envelope["review_configuration"]["reviewers"] == [ids["first"], ids["second"]]
+    assert effective_configuration(envelope)["needs_choice"] is False
