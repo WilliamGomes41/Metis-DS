@@ -1944,8 +1944,11 @@ class OperationsConsole:
                                      if getattr(self, "workflow_document_store", None) is not None else "")
                 envelope["publication_eligibility"] = PRE_REVIEW_BLOCKED
                 envelope["processing_blocker"] = "pre_review_llm_processing_in_progress"
+                from src.source_selection_v1 import active_configuration
+                envelope["processing_configuration"] = active_configuration(self)
                 attempt, _ = reserve(envelope, command_id=uuid.uuid4().hex, actor_id=actor_id,
                     revision=expected_revision, clock=now(), limits=limits, kind="ingest")
+                attempt["processing_configuration"] = deepcopy(envelope["processing_configuration"])
                 attempt_id = attempt["attempt_id"]
                 try:
                     # Existing create-if-absent CAS/advisory lock also protects
@@ -2060,7 +2063,7 @@ class OperationsConsole:
                             raise ConsoleError("processing_attempt_expired")
                         from src.attempt_diagnostics_v1 import merge_diagnostics
                         merge_diagnostics(envelope, self._envelope(snapshot_id))
-                        finish(envelope, attempt_id, state="succeeded")
+                        finish(envelope, attempt_id, state="succeeded", budget_aware=True)
                         attach_transport(next(a for a in envelope["processing_attempts"] if a["attempt_id"] == attempt_id),
                                          (replay_record or {}).get("provider_evidence", {}).get("transport", {}))
                     self._commit_prepared_store(
@@ -2261,7 +2264,7 @@ class OperationsConsole:
         if not fresh:
             if attempt["kind"] != "resume" or attempt["expected_revision"] != expected_revision:
                 raise ConsoleError("processing_command_conflict")
-            if attempt["state"] == "succeeded":
+            if attempt["state"] in {"succeeded", "incomplete_budget"}:
                 return self._receipt(envelope)
             raise ConsoleError("processing_attempt_in_progress" if attempt["state"] == "running"
                                else attempt.get("error_code") or "processing_dependency_failed")
@@ -2459,8 +2462,11 @@ class OperationsConsole:
                 authorize(self, actor_id, self._envelope(snapshot_id))
                 self._assert_source_work_unchanged(envelope, expected_revision, "published_objects_must_not_be_rewritten")
                 reserved = deepcopy(envelope)
+                from src.source_selection_v1 import active_configuration
+                active = active_configuration(self)
                 attempt, _ = reserve(reserved, command_id=uuid.uuid4().hex, actor_id=actor_id,
                                      revision=expected_revision, clock=now(), limits=limits, kind="reextract")
+                attempt["processing_configuration"] = active  # RESV-1: attempt only; envelope unchanged
                 self._commit_prepared_store(envelopes={snapshot_id:reserved}, snapshot_id=snapshot_id)
             return self._execute_source_attempt(actor_id=actor_id, snapshot_id=snapshot_id, attempt=attempt, deadline=deadline)
         freeze_path, freeze_bytes = self._verified_source_bytes(envelope)

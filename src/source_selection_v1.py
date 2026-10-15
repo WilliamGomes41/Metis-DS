@@ -103,6 +103,14 @@ def configuration(console):
             "docling": enabled(), "deployment": deployment_identity()}
 
 
+def active_configuration(console):
+    """RESV-1: the active configuration at a reservation point; fail-closed."""
+    try:
+        return configuration(console)
+    except Exception as error:
+        raise ConsoleError("processing_configuration_unavailable") from error
+
+
 def _duration(start, end):
     try:
         return max(0, (datetime.fromisoformat(end) - datetime.fromisoformat(start)).total_seconds())

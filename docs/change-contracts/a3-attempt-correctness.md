@@ -78,3 +78,10 @@ OPENVRAAG-A3-3 (from A3-2 'a fresh attempt starts instead'): after a contract ch
 
 ## Gewijzigde bestaande verwachting
 - `tests/test_a06_selected_occurrence_relations.py:307`: een oudere checkpoint MOET nu vooraf geweigerd worden met `processing_resume_configuration_incompatible` (A3-2, volledige contractidentifier) in plaats van laat met `semantic_replay_policy_mismatch`. Hervatten blijft fail-closed; de weigering komt eerder.
+
+## Na #626 (main 7d084fa, gemerged via merge, geen rebase)
+- Ingest-finish MOET budget-aware zijn: een uitgeput taakbudget wordt `incomplete_budget`, NOOIT `succeeded` (de strikte xfail is nu een pass).
+- Resume-duplicate-receipt MOET `incomplete_budget` als afgerond behandelen.
+- RESV-1 (besluit Metis): iedere reservering (ingest, re-extract) MOET de actieve configuratie vastleggen via `source_selection_v1.active_configuration`; een onleesbare configuratie MOET fail-closed `processing_configuration_unavailable` geven en er MAG NIET een poging ontstaan. Tests: `tests/test_resv1_reservation_configuration.py` (incl. stale en concurrent).
+- De payload_hash van ingest (incl. review_configuration, #626) MAG NIET wijzigen: `processing_configuration` wordt na de hashberekening gezet.
+- OPENVRAAG-A3-3 blijft open in deze PR; die wordt apart gebouwd na 2b-3.

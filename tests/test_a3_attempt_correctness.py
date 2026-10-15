@@ -45,7 +45,6 @@ def test_budget_exhausted_attempt_is_never_stored_as_succeeded(kind):
     assert status(envelope)['stored_state'] == 'incomplete_budget'
 
 
-@pytest.mark.xfail(strict=True, reason='OPEN: ingest finish (operations_console_v1 line 2012) waits for #626')
 def test_ingest_path_budget_exhaustion_is_never_succeeded():
     import inspect
     from src.operations_console_v1 import OperationsConsole
