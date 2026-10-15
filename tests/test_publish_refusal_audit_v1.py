@@ -1,7 +1,7 @@
 """Publish-gate refusal audit event: observation only, verdicts identical.
 
 # release-control-evidence: scope/belofte
-# release-control-evidence: opslag durable authority stale
+# release-control-evidence: opslag durable authority stale concurrent
 # release-control-evidence: toegang
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
@@ -104,3 +104,12 @@ def test_hostile_reason_codes_are_bounded(events):
     assert 'Private' not in json.dumps(event)
     audit.record_publish_refusal(None, actor_id='a', snapshot_id='snap-x', verdict={'publish_allowed': True})
     assert len(_refusals(events)) == 1  # allowed verdicts MOETEN NOOIT a refusal event produce
+
+
+def test_concurrent_refusals_each_emit_one_event_and_identical_verdicts(tmp_path, events):
+    from concurrent.futures import ThreadPoolExecutor
+    console, sid, actor = _blocked_base(tmp_path)
+    with ThreadPoolExecutor(4) as pool:
+        verdicts = list(pool.map(lambda _: console.publish(actor_id=actor, snapshot_id=sid), range(4)))
+    assert all(v == verdicts[0] for v in verdicts) and verdicts[0]['status'] == 'BLOCKED'
+    assert len(_refusals(events)) == 4
