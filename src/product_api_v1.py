@@ -250,6 +250,7 @@ class HealthResponse(ProductContractModel):
     corpus_reload_policy: str
     published_corpus_authority: str
     generation_enabled: bool
+    deployed_commit: str | None = None
 
 
 def _product_responses(
@@ -843,10 +844,12 @@ def create_product_app(
         response.headers["X-VVN-API-Version"] = API_VERSION
         return response
 
+    from src.request_diagnostics_v1 import deployed_commit as _deployed_commit
+
     @app.get("/v1/health", response_model=None, responses=_product_responses(HealthResponse))
     def health() -> dict[str, Any]:
         state.refresh()
-        return {"status": "ok", "api_version": API_VERSION, "service_version": SERVICE_VERSION, "mode": state.mode, "synthetic_fixture": state.synthetic, "published_retrieval_records": len(state.records) if state.synthetic else None, "published_corpus_ready": bool(state.records), "corpus_reload_policy": "postgres_active_registry_plus_blob_readback" if state.mode == "real" else "reload_fixture_on_file_change", "published_corpus_authority": "postgres+azure_blob" if state.mode == "real" else "fixture_jsonl", "generation_enabled": False}
+        return {"status": "ok", "api_version": API_VERSION, "service_version": SERVICE_VERSION, "mode": state.mode, "synthetic_fixture": state.synthetic, "published_retrieval_records": len(state.records) if state.synthetic else None, "published_corpus_ready": bool(state.records), "corpus_reload_policy": "postgres_active_registry_plus_blob_readback" if state.mode == "real" else "reload_fixture_on_file_change", "published_corpus_authority": "postgres+azure_blob" if state.mode == "real" else "fixture_jsonl", "generation_enabled": False, "deployed_commit": _deployed_commit() or "not_recorded"}
 
     @app.post(
         "/v1/retrieve",
