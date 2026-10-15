@@ -1752,6 +1752,9 @@ class OperationsConsole:
             if review_configuration is not None and \
                     set(required_reviewers(review_policy)) - {actor_id} != set(review_configuration["reviewers"]):
                 raise ConsoleError("review_configuration_policy_conflict")
+            if review_configuration is not None and set(review_configuration["readers"]) & set(reviewers):
+                # Lezers krijgen NOOIT reviewtoegang via een (optionele) policy-deelname.
+                raise ConsoleError("review_configuration_reader_is_reviewer")
         if review_configuration is None and review_policy is None:
             # H2-7 (a): ingest zonder keuze slaat de legacy-default op.
             from src.review_configuration_v1 import legacy_default
