@@ -85,3 +85,9 @@ OPENVRAAG-A3-3 (from A3-2 'a fresh attempt starts instead'): after a contract ch
 - RESV-1 (besluit Metis): iedere reservering (ingest, re-extract) MOET de actieve configuratie vastleggen via `source_selection_v1.active_configuration`; een onleesbare configuratie MOET fail-closed `processing_configuration_unavailable` geven en er MAG NIET een poging ontstaan. Tests: `tests/test_resv1_reservation_configuration.py` (incl. stale en concurrent).
 - De payload_hash van ingest (incl. review_configuration, #626) MAG NIET wijzigen: `processing_configuration` wordt na de hashberekening gezet.
 - OPENVRAAG-A3-3 blijft open in deze PR; die wordt apart gebouwd na 2b-3.
+
+## #630-reconcile
+- Re-extract-reservering (`operations_console_v1.py:2474-2484`): `reserve()` MOET de actieve configuratie zien, zodat `reserved_semantic_contract_version` (#630) de actieve contractversie vastlegt; de envelope-configuratie MAG NIET wijzigen (tijdelijk gezet en hersteld).
+- Fail-first: `test_reextract_reserved_contract_follows_active_configuration_not_stale_envelope` rood zonder, groen met.
+- `processing_retry_v1.finish`: A2 `stop_evidence` (main) en A3 `budget_aware` samengevoegd; stop_evidence gebruikt de oorspronkelijke staat, dus een budgetstop krijgt `stop_reason=budget_exhausted` en staat `incomplete_budget`.
+- Deze branch bevat ook #630 (normale merge van `anvil/reservation-contract-version`).

@@ -118,3 +118,20 @@ def test_resume_duplicate_receipt_accepts_incomplete_budget():
     import inspect
     source = inspect.getsource(OperationsConsole.resume_formation)
     assert 'attempt["state"] in {"succeeded", "incomplete_budget"}' in source
+
+
+def test_reextract_reserved_contract_follows_active_configuration_not_stale_envelope(tmp_path):
+    """#630 reconcile: reserve() records the contract of the active configuration."""
+    from src.pre_review_semantic_v1 import semantic_contract_version_for_mode
+    from copy import deepcopy
+    console, sid, actor = _reextract_ready(tmp_path)
+    stale = deepcopy(console._envelope(sid))
+    stale['processing_configuration'] = {'mode': 'stale-mode'}
+    console._commit_prepared_store(envelopes={sid: stale}, snapshot_id=sid)  # durable stale value
+    try:
+        console.reextract_unpublished(actor_id=actor, snapshot_id=sid)
+    except ConsoleError:
+        pass
+    [attempt] = _attempts(console, sid, 'reextract')
+    active = selection.configuration(console)
+    assert attempt['reserved_semantic_contract_version'] == semantic_contract_version_for_mode(active['mode'])

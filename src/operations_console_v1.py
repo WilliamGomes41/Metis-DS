@@ -2471,8 +2471,17 @@ class OperationsConsole:
                 reserved = deepcopy(envelope)
                 from src.source_selection_v1 import active_configuration
                 active = active_configuration(self)
-                attempt, _ = reserve(reserved, command_id=uuid.uuid4().hex, actor_id=actor_id,
-                                     revision=expected_revision, clock=now(), limits=limits, kind="reextract")
+                # #630 reconcile: reserve() reads the active configuration; the envelope keeps its own.
+                had, previous = "processing_configuration" in reserved, reserved.get("processing_configuration")
+                reserved["processing_configuration"] = active
+                try:
+                    attempt, _ = reserve(reserved, command_id=uuid.uuid4().hex, actor_id=actor_id,
+                                         revision=expected_revision, clock=now(), limits=limits, kind="reextract")
+                finally:
+                    if had:
+                        reserved["processing_configuration"] = previous
+                    else:
+                        reserved.pop("processing_configuration", None)
                 attempt["processing_configuration"] = active  # RESV-1: attempt only; envelope unchanged
                 self._commit_prepared_store(envelopes={snapshot_id:reserved}, snapshot_id=snapshot_id)
             return self._execute_source_attempt(actor_id=actor_id, snapshot_id=snapshot_id, attempt=attempt, deadline=deadline)
