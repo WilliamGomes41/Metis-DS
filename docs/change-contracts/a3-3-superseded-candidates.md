@@ -6,7 +6,7 @@ Taalregel: B18. Alleen MOET / MAG NIET / NOOIT; open punten als OPENVRAAG.
 
 ## Gebouwd
 - `src/candidate_supersession_v1.py` (nieuw): `supersede_for_contract_change` (append-only opvolger via `revise_object`, idempotent), `refuses_superseded` (alleen-lezen).
-- `src/operations_console_v1.py:4699-4701`: één poortcontrole, direct na het reviewer/review_policy-blok; dat blok is ongewijzigd.
+- `src/operations_console_v1.py:4774-4779`: twee poortcontroles naast elkaar, na het 2b-3 review_configuration-blok en buiten het reviewer-count-blok; ze voegen alleen toe aan blockers (`superseded_candidate_refused` r4774-4776, `superseded_not_reproduced` r4777-4779).
 - Tests: `tests/test_candidate_supersession_v1.py` (6), waarvan 3 poorttests fail-first faalden zonder de poortregel.
 
 ## Trigger (na merge van main met #628/#630)
@@ -15,5 +15,10 @@ Taalregel: B18. Alleen MOET / MAG NIET / NOOIT; open punten als OPENVRAAG.
 - Fail-first: `test_fresh_attempt_after_contract_change_supersedes_existing_candidates` rood zonder trigger, groen met.
 
 ## OPENVRAAG
-- OPENVRAAG-A3-3-1 (deels opgelost): de aanroep van `supersede_for_contract_change` op het pad "verse poging na contractwijziging" MOET wachten op #628 (helper `resume_contract_current`/volledige contractidentifier staat daar). Het re-extractpad weigert nu bij bestaande bindingen/review_passes (`pre_review_retry_existing_work`); of die weigering bij een contractwijziging MOET wijken, beslist Forge/Metis.
-- PR MAG NIET geopend worden voordat 2b-3 gemerged is (Forge).
+- OPENVRAAG-A3-3-1: opgelost. De trigger staat in `reextract_unpublished` r2544-2552 (#628/#630 op main); de weigering bij review-werk is besloten als A33-3 hieronder.
+
+## Besluiten Metis (15-10-2026)
+
+- **A33-1 (optie b):** een superseded kandidaat die de verse poging NIET reproduceert, MOET publicatie blokkeren met precies één reden `superseded_not_reproduced` (`src/candidate_supersession_v1.py::superseded_not_reproduced`, poort r4777-4779). Alleen supersessie met de lineage-reden `contract change supersession` telt; een gewone same-source retirement MAG NIET dit blok geven.
+- **A33-2:** deterministic-v1 heeft geen semantische contractversie en supersedeert daarom NOOIT (gedekt door `test_legacy_replay_without_contract_supersedes_nothing`).
+- **A33-3:** A3-3 geldt in deze PR alleen vóór review. Een automatische re-extract MOET geweigerd blijven zodra bindings of review_passes bestaan (`pre_review_retry_existing_work`); er wordt dan NOOIT iets gesupersedeerd. De Publisher-actie voor reviewed documenten volgt in een latere PR.

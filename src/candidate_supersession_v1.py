@@ -13,6 +13,7 @@ from copy import deepcopy
 
 REASON = "contract change supersession"
 REASON_CODE = "superseded_candidate_refused"
+NOT_REPRODUCED_CODE = "superseded_not_reproduced"
 
 
 def _status(row):
@@ -35,6 +36,14 @@ def supersede_for_contract_change(rows, *, snapshot_id, actor):
 def refuses_superseded(objects, approved_ids):
     """True when any approved candidate is superseded. Read-only."""
     return any(_status(obj) == "superseded" and str(obj.get("object_id") or "") in approved_ids
+               for obj in objects)
+
+
+def superseded_not_reproduced(objects):
+    """A33-1 (Metis, optie b): True when a current candidate is still the contract-change
+    superseded revision, i.e. the fresh attempt did not reproduce it. Read-only."""
+    from src.revision_workflow import lineage_evidence
+    return any(_status(obj) == "superseded" and (lineage_evidence(obj) or {}).get("reason") == REASON
                for obj in objects)
 
 

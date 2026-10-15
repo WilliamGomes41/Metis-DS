@@ -125,11 +125,12 @@ def _candidate_ids(console, sid):
 
 
 def _reextract(console, sid, actor):
-    from src.operations_console_v1 import ConsoleError
-    try:
-        console.reextract_unpublished(actor_id=actor, snapshot_id=sid)
-    except ConsoleError:
-        pass
+    """Strict: the fresh attempt MOET really run and succeed; NOOIT swallow a ConsoleError."""
+    before = len(console._envelope(sid).get('processing_attempts') or [])
+    console.reextract_unpublished(actor_id=actor, snapshot_id=sid)
+    attempts = console._envelope(sid)['processing_attempts']
+    assert len(attempts) == before + 1
+    assert (attempts[-1]['kind'], attempts[-1]['state']) == ('reextract', 'succeeded')
 
 
 def test_fresh_attempt_after_contract_change_supersedes_existing_candidates(tmp_path):
@@ -163,3 +164,55 @@ def test_legacy_replay_without_contract_supersedes_nothing():
     assert not contract_changed({'semantic_replay': {'identity': {'components': {}}}}, 'current')
     assert not contract_changed({'semantic_replay': {'identity': {'components': {'semantic_contract_version': 'a'}}}}, None)
     assert contract_changed({'semantic_replay': {'identity': {'components': {'semantic_contract_version': 'a'}}}}, 'b')
+
+
+# --- A33-1 (Metis: optie b): not reproduced after supersession blocks publication ---
+
+def test_gate_blocks_superseded_candidate_not_reproduced_with_one_reason(ready):
+    from src.candidate_supersession_v1 import NOT_REPRODUCED_CODE
+    console, sid, publisher, _ = ready
+    rows = console._load_objects(sid, remember=False)
+    history = supersede_for_contract_change(rows, snapshot_id=sid, actor=publisher)
+    current = deepcopy(current_revisions(history, snapshot_id=sid))  # no fresh reproduction
+    bindings = deepcopy(console.object_review_bindings(sid, objects=console.snapshot_objects(sid)))
+    console.snapshot_objects = lambda *_a, **_k: deepcopy(current)
+    console.object_review_bindings = lambda *_a, **_k: deepcopy(bindings)
+    refused = console.consider_publish(actor_id=publisher, snapshot_id=sid)
+    assert not refused['publish_allowed']
+    assert refused['blockers'].count(NOT_REPRODUCED_CODE) == 1
+
+
+def test_reproduced_candidates_are_not_blocked_as_not_reproduced(tmp_path):
+    from src.candidate_supersession_v1 import superseded_not_reproduced
+    console, sid, actor = _fresh_ready(tmp_path)
+    _set_stored_contract(console, sid, 'older-contract/v0')
+    _reextract(console, sid, actor)
+    history = console._load_objects(sid, remember=False)
+    assert any(r['governance'].get('validation_status') == 'superseded' for r in history)  # visible
+    assert not superseded_not_reproduced(current_revisions(history, snapshot_id=sid))
+
+
+def test_unrelated_superseded_retirement_is_not_not_reproduced(ready):
+    """Only contract-change supersession counts; same-source retirement keeps its old path."""
+    from src.candidate_supersession_v1 import superseded_not_reproduced
+    console, sid, publisher, verdict = ready
+    _with_superseded(console, sid, verdict)  # superseded without contract-change lineage
+    assert not superseded_not_reproduced(console.snapshot_objects(sid))
+
+
+# --- A33-3 (Metis): A3-3 applies only before review ---------------------------
+
+def test_contract_change_reextract_is_refused_once_review_work_exists(ready):
+    from src.operations_console_v1 import ConsoleError
+    console, sid, _, _ = ready
+    envelope = console._envelope(sid)
+    assert envelope.get('review_passes') and console.object_review_bindings(sid, objects=console.snapshot_objects(sid))
+    _set_stored_contract(console, sid, 'older-contract/v0')
+    before = deepcopy(console._load_objects(sid, remember=False))
+    researcher = next(a for a in console._accounts.values() if 'researcher' in (a.get('roles') or [])) \
+        if hasattr(console, '_accounts') else None
+    actor = researcher['account_id'] if researcher else envelope['uploader_account_id']
+    with pytest.raises(ConsoleError) as exc:
+        console.reextract_unpublished(actor_id=actor, snapshot_id=sid)
+    assert exc.value.code == 'pre_review_retry_existing_work'
+    assert console._load_objects(sid, remember=False) == before  # nothing superseded
