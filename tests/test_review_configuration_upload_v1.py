@@ -353,3 +353,29 @@ def test_h2_1_uploader_plus_two_does_not_force_four_eyes_on_choice(system, four_
                   review_choice={"option": "two_others", "four_eyes_required": four_eyes,
                                  "reviewers": [ids["first"], ids["second"]], "readers": []})
     assert console._envelope(sid)["review_configuration"]["four_eyes_required"] is four_eyes
+
+
+def _uploader_sole(console, ids):
+    return _kernel(console, ids, "Alleen uploader", named_reviewers=[],
+                   review_choice={"option": "uploader_sole", "four_eyes_required": False, "reviewers": [], "readers": []})
+
+
+def test_uploader_sole_overview_shows_uploader_as_reviewer(system):
+    # 2b3-2: met uploader_sole en lege named_reviewers MOET het overzicht de uploader tonen.
+    console, _, ids = system
+    from src.review_participation_ui_v1 import participation_choices, roster
+    envelope = console._envelope(_uploader_sole(console, ids))
+    html = roster(console, envelope)
+    assert "Toegewezen: Onderzoeker" in html
+    assert "wacht op" not in html.lower()
+    participation_choices(console, envelope)
+
+
+def test_uploader_sole_workboard_lists_document_for_uploader(system):
+    console, password, ids = system
+    _uploader_sole(console, ids)
+    response = _client(console, password).get("/review?work=all")
+    assert response.status_code == 200
+    assert "Alleen uploader" in response.text
+    assert "wacht op reviewer" not in response.text.lower()
+    assert "wacht op andere reviewer" not in response.text.lower()

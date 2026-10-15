@@ -143,3 +143,59 @@ def test_gate_missing_uploader_id_fails_closed(tmp_path, monkeypatch, value):
     readiness = _ready_with_envelope(tmp_path, monkeypatch, mutate)
     assert readiness["publish_allowed"] is False
     assert "uploader_identity_missing" in readiness["blockers"]
+
+
+# --- Review #631 ---------------------------------------------------------------
+
+def _readiness_with_bindings(tmp_path, configuration, rows):
+    """A: console-onafhankelijkheid zonder goedgekeurd object (alleen de console-poort beslist)."""
+    from tests import test_vsa_publish_readiness_ui_v1 as ready
+    console, accounts, receipt, _source = ready._console_with_document(tmp_path)
+    sid = receipt["snapshot_id"]
+    envelope = console._envelope(sid)
+    bert = accounts["reviewer"]["account_id"]
+    envelope["review_configuration"] = configuration(bert)
+    objects = console.snapshot_objects(sid)
+    target = next(obj for obj in objects if obj.get("object_type") != "document")
+    bindings = [{"valid": True, "decision": "approve", "object_id": target["object_id"], "reviewer_id": bert,
+                 **row} for row in rows]
+    return console.technical_publication_readiness(snapshot_id=sid, envelope=envelope, objects=objects,
+                                                   bindings=bindings)
+
+
+@pytest.mark.parametrize(("name", "configuration", "rows"), [
+    ("two_others_one_of_two", lambda bert: _config("two_others", [bert, "rev-elsewhere"]), [{}]),
+    ("reject_binding", lambda bert: _config("one_other", [bert]), [{"decision": "reject"}]),
+    ("invalid_binding", lambda bert: _config("one_other", [bert]), [{"valid": False}]),
+    ("unknown_object", lambda bert: _config("one_other", [bert]), [{"object_id": "elders"}]),
+])
+def test_console_independence_uses_configured_approval_over_eligible_reviewers(tmp_path, name, configuration, rows):
+    readiness = _readiness_with_bindings(tmp_path, configuration, rows)
+    assert readiness["independence_satisfied"] is False, name
+    assert readiness["publish_allowed"] is False, name
+    assert "second_named_reviewer_required" in readiness["blockers"], name
+
+
+def test_console_independence_met_when_configured_reviewer_approves(tmp_path):
+    readiness = _readiness_with_bindings(tmp_path, lambda bert: _config("one_other", [bert]), [{}])
+    assert readiness["independence_satisfied"] is True
+
+
+def test_uploader_sole_high_risk_object_is_refused_with_dutch_message():
+    # OPENVRAAG-2b3-1: hoe een tweede reviewer wordt toegevoegd, beslist William.
+    from src.operations_console_app import BLOCKER_LABELS
+    contract = _contract([UPLOADER], _config("uploader_sole", []), high_risk=True)
+    assert contract["authorization_ok"] is False
+    assert "review_configuration_uploader_sole_high_risk" in contract["authorization_blockers"]
+    message = BLOCKER_LABELS["review_configuration_uploader_sole_high_risk"]
+    assert "hoog-risico" in message and "tweede benoemde reviewer" in message
+    assert "review_configuration_uploader_sole_high_risk" not in _contract(
+        [UPLOADER], _config("uploader_sole", []))["blockers"]
+
+
+@pytest.mark.parametrize("uploader_id", ["", "   "])
+def test_validate_configuration_refuses_blank_uploader(uploader_id):
+    from src.review_configuration_v1 import validate_configuration
+    with pytest.raises(ValueError) as error:
+        validate_configuration(_config("one_other", ["rev-a"]), uploader_id=uploader_id)
+    assert str(error.value) == "uploader_identity_missing"
