@@ -292,3 +292,22 @@ def test_sherlock_chosen_one_approved_one_open_blocks_total_readiness(tmp_path, 
     assert readiness["publish_allowed"] is False
     assert "review_work_incomplete" in readiness["blockers"]
     assert readiness["independence_satisfied"] is False
+
+
+def test_chosen_without_loadable_source_text_blocks_with_own_code(tmp_path, monkeypatch):
+    # Metis: fail-closed zonder brontekst MOET een eigen code en Nederlandse melding geven.
+    import src.source_preparation_context_v1 as context
+    from src.operations_console_app import BLOCKER_LABELS
+    from src.operations_console_v1 import ConsoleError
+    ready, console, accounts, sid, _ = _harness(tmp_path)
+    envelope = console._envelope(sid)
+    envelope["review_configuration"] = _config("one_other", [accounts["reviewer"]["account_id"]])
+
+    def unavailable(_envelope):
+        raise ConsoleError("source_unavailable")
+
+    monkeypatch.setattr(context, "stored_extraction", unavailable)
+    readiness = console.technical_publication_readiness(snapshot_id=sid, envelope=envelope)
+    assert readiness["publish_allowed"] is False
+    assert "review_configuration_source_text_unavailable" in readiness["blockers"]
+    assert "brontekst" in BLOCKER_LABELS["review_configuration_source_text_unavailable"]
