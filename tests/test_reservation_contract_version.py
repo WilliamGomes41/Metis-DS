@@ -148,3 +148,26 @@ def test_concurrent_retries_all_reserve_the_refreshed_contract(blocked):
     assert attempts
     assert {a['reserved_semantic_contract_version'] for a in attempts} == {semantic_contract_version_for_mode(SEMANTIC_MODE)}
     assert sum(a['state'] == 'running' for a in attempts) == 0
+
+
+# --- RESV-1 F3: mid-flight deploy changes the configuration after reservation ---
+
+def test_retry_fails_with_configuration_changed_after_mid_flight_deploy(blocked, monkeypatch):
+    # Reservation reads configuration A; a deploy switches to B before execution.
+    # The retry attempt MOET pin A and MOET stop with processing_configuration_changed;
+    # work under B MAG NIET start.
+    import src.source_selection_v1 as selection
+    console, sid, actor = blocked
+    real = selection.configuration
+    calls = {'n': 0}
+
+    def deploy_after_reservation(target):
+        calls['n'] += 1
+        current = real(target)
+        return current if calls['n'] == 1 else {**current, 'mode': 'deployed-mid-flight'}
+    monkeypatch.setattr(selection, 'configuration', deploy_after_reservation)
+    with pytest.raises(ConsoleError, match='processing_configuration_changed'):
+        console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id='retry-deploy')
+    attempt = next(a for a in console._envelope(sid)['processing_attempts'] if a['command_id'] == 'retry-deploy')
+    assert attempt['processing_configuration']['mode'] != 'deployed-mid-flight', 'RETRY_ATTEMPT_NOT_PINNED'
+    assert attempt['state'] == 'failed' and attempt['error_code'] == 'processing_configuration_changed'
