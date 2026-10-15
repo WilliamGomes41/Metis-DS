@@ -40,18 +40,15 @@ when the refresh fails. Duplicate commands are unchanged.
 - The original Promise said the configuration "MAG NIET be written"; RESV-2 writes it on the retry
   path. The Promise above is the corrected record; the code on main is unchanged by this correction.
 
-## RESV-1 F3: mid-flight deploy (OPEN, code not changed here)
+## RESV-1 F3: mid-flight deploy (fixed in #639)
 
-Rule: a retry attempt MOET pin the configuration it was reserved under; when a deploy changes the
-configuration before execution, the attempt MOET stop with `processing_configuration_changed`
-before any provider call, and work under the new configuration MAG NIET start.
+Rule: a NEW retry attempt MOET pin a deepcopy of the configuration it was reserved under; when a
+deploy changes the configuration before execution, the attempt MOET stop with
+`processing_configuration_changed` before any provider call. A returned (duplicate) attempt MAG NIET
+get its configuration overwritten. Without a configuration the retry MOET fail closed with
+`processing_configuration_unavailable` before commit (no attempt, NOOIT KeyError).
 
-Current main (1624da7): `retry_pre_review` writes the configuration to the envelope only, not to
-the attempt, so `_execute_source_attempt` skips its configuration fence. Reproduced by
-`tests/test_reservation_contract_version.py::test_retry_fails_with_configuration_changed_after_mid_flight_deploy`
-(xfail strict, RETRY_ATTEMPT_NOT_PINNED; the provider runs under the new configuration).
-
-OPENVRAAG-RESV-1-F3: the fix is one line in `operations_console_v1.py` `retry_pre_review` after
-`reserve()` (`attempt["processing_configuration"] = deepcopy(envelope["processing_configuration"])`
-for a fresh attempt), outside the lines #630 added. It waits for the orchestrator's/Forge's go to
-touch operations_console_v1.py; then the xfail marker MOET be removed in the same PR.
+Code: `operations_console_v1.py` `retry_pre_review`, the `if fresh:` block directly after
+`reserve()`. This line is OUTSIDE the #630 scope (not among the lines #630 added); Forge cleared it.
+Proof: tests/test_reservation_contract_version.py: 4 tests red at 83fc6a8 (mid-flight, duplicate
+keeps pin, copy not reference, legacy fail-closed), green at dd3b663. The xfail marker is removed.
