@@ -335,7 +335,9 @@ def create_app(mode: Literal["real", "fixture"] | None = None, *, paths: Service
 
     @app.get("/health")
     def health() -> dict[str, Any]:
-        return {"status": "ok", "service_version": SERVICE_VERSION, "mode": state.mode, "synthetic_fixture_mode": state.synthetic}
+        from src.request_diagnostics_v1 import deployed_commit
+        return {"status": "ok", "service_version": SERVICE_VERSION, "mode": state.mode, "synthetic_fixture_mode": state.synthetic,
+                "deployed_commit": deployed_commit() or "not_recorded"}
 
     @app.get("/system/status")
     def system_status() -> dict[str, Any]:

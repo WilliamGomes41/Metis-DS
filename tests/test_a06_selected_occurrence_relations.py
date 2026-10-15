@@ -304,7 +304,7 @@ def test_older_occurrence_checkpoint_cannot_resume_silently(tmp_path):
     before = state.snapshot_objects(sid, include_blocked=True)
     restored = make(); bind(restored)
     count = len(calls)
-    with pytest.raises(ConsoleError, match='semantic_replay_policy_mismatch'):
+    with pytest.raises(ConsoleError, match='processing_resume_configuration_incompatible'):
         restored.resume_formation(actor_id=actor, snapshot_id=sid, command_id='old-rule', expected_revision=restored.objects_revision(sid))
     assert len(calls) == count
     assert make().snapshot_objects(sid, include_blocked=True) == before

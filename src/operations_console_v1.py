@@ -124,6 +124,7 @@ from src.serving_relations_v1 import (
     is_closed_relation_type,
 )
 from src.topic_identity_v1 import normalize_topic_label, topic_identity_key
+from src import publish_refusal_audit_v1 as _publish_refusal_audit
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -1739,7 +1740,12 @@ class OperationsConsole:
         if review_policy is None:
             if review_configuration is not None and not named_reviewers:
                 named_reviewers = list(review_configuration["reviewers"])
-            reviewers = self._resolve_named_reviewers(named_reviewers, actor_id)
+            if review_configuration is not None and review_configuration["option"] == "uploader_sole" \
+                    and not named_reviewers:
+                # 2b-3: uploader_sole: de uploader is de enige reviewer; NOOIT named_reviewers_required.
+                reviewers = [actor_id]
+            else:
+                reviewers = self._resolve_named_reviewers(named_reviewers, actor_id)
             if review_configuration is not None and \
                     {r for r in reviewers if r != actor_id} != set(review_configuration["reviewers"]):
                 raise ConsoleError("review_configuration_policy_conflict")
@@ -1944,8 +1950,11 @@ class OperationsConsole:
                                      if getattr(self, "workflow_document_store", None) is not None else "")
                 envelope["publication_eligibility"] = PRE_REVIEW_BLOCKED
                 envelope["processing_blocker"] = "pre_review_llm_processing_in_progress"
+                from src.source_selection_v1 import active_configuration
+                envelope["processing_configuration"] = active_configuration(self)
                 attempt, _ = reserve(envelope, command_id=uuid.uuid4().hex, actor_id=actor_id,
                     revision=expected_revision, clock=now(), limits=limits, kind="ingest")
+                attempt["processing_configuration"] = deepcopy(envelope["processing_configuration"])
                 attempt_id = attempt["attempt_id"]
                 try:
                     # Existing create-if-absent CAS/advisory lock also protects
@@ -2060,7 +2069,7 @@ class OperationsConsole:
                             raise ConsoleError("processing_attempt_expired")
                         from src.attempt_diagnostics_v1 import merge_diagnostics
                         merge_diagnostics(envelope, self._envelope(snapshot_id))
-                        finish(envelope, attempt_id, state="succeeded")
+                        finish(envelope, attempt_id, state="succeeded", budget_aware=True)
                         attach_transport(next(a for a in envelope["processing_attempts"] if a["attempt_id"] == attempt_id),
                                          (replay_record or {}).get("provider_evidence", {}).get("transport", {}))
                     self._commit_prepared_store(
@@ -2204,8 +2213,9 @@ class OperationsConsole:
             )
         else:
             result["formation_progress"] = {}
+        from src.source_selection_v1 import resume_contract_current
         result["resume_allowed"] = bool(self._can_resume_formation(snapshot_id, rows=overview_rows)
-            and result["state"] != "running"
+            and resume_contract_current(envelope) and result["state"] != "running"
             and (result["retry_attempts_used"] < result["max_attempts"] or result["recovery_available"])
             and result["reason_code"] not in {"processing_retry_cooldown", "processing_structural_limit"})
         return result
@@ -2260,7 +2270,7 @@ class OperationsConsole:
         if not fresh:
             if attempt["kind"] != "resume" or attempt["expected_revision"] != expected_revision:
                 raise ConsoleError("processing_command_conflict")
-            if attempt["state"] == "succeeded":
+            if attempt["state"] in {"succeeded", "incomplete_budget"}:
                 return self._receipt(envelope)
             raise ConsoleError("processing_attempt_in_progress" if attempt["state"] == "running"
                                else attempt.get("error_code") or "processing_dependency_failed")
@@ -2401,10 +2411,16 @@ class OperationsConsole:
                     raise ConsoleError("pre_review_reprocess_not_required")
                 if objects or self._bindings.get(snapshot_id) or envelope.get("review_passes"):
                     raise ConsoleError("pre_review_retry_existing_work")
+                # Reservation MOET read the configuration in force now; fail closed if unreadable.
+                try:
+                    from src import source_selection_v1
+                    envelope["processing_configuration"] = source_selection_v1.configuration(self)
+                except Exception as error:
+                    raise ConsoleError("processing_configuration_unavailable") from error
             attempt, fresh = reserve(envelope, command_id=command_id, actor_id=actor_id, revision=revision, clock=now(), limits=limits)
             self._commit_prepared_store(envelopes={snapshot_id: envelope}, snapshot_id=snapshot_id)
         if not fresh:
-            if attempt["state"] == "succeeded":
+            if attempt["state"] in {"succeeded", "incomplete_budget"}:
                 return self._receipt(envelope)
             if attempt["state"] == "running":
                 raise ConsoleError("processing_attempt_in_progress")
@@ -2458,8 +2474,20 @@ class OperationsConsole:
                 authorize(self, actor_id, self._envelope(snapshot_id))
                 self._assert_source_work_unchanged(envelope, expected_revision, "published_objects_must_not_be_rewritten")
                 reserved = deepcopy(envelope)
-                attempt, _ = reserve(reserved, command_id=uuid.uuid4().hex, actor_id=actor_id,
-                                     revision=expected_revision, clock=now(), limits=limits, kind="reextract")
+                from src.source_selection_v1 import active_configuration
+                active = active_configuration(self)
+                # #630 reconcile: reserve() reads the active configuration; the envelope keeps its own.
+                had, previous = "processing_configuration" in reserved, reserved.get("processing_configuration")
+                reserved["processing_configuration"] = active
+                try:
+                    attempt, _ = reserve(reserved, command_id=uuid.uuid4().hex, actor_id=actor_id,
+                                         revision=expected_revision, clock=now(), limits=limits, kind="reextract")
+                finally:
+                    if had:
+                        reserved["processing_configuration"] = previous
+                    else:
+                        reserved.pop("processing_configuration", None)
+                attempt["processing_configuration"] = active  # RESV-1: attempt only; envelope unchanged
                 self._commit_prepared_store(envelopes={snapshot_id:reserved}, snapshot_id=snapshot_id)
             return self._execute_source_attempt(actor_id=actor_id, snapshot_id=snapshot_id, attempt=attempt, deadline=deadline)
         freeze_path, freeze_bytes = self._verified_source_bytes(envelope)
@@ -2569,7 +2597,7 @@ class OperationsConsole:
                     raise ConsoleError("processing_attempt_expired")
                 from src.attempt_diagnostics_v1 import merge_diagnostics
                 merge_diagnostics(prepared_envelope, self._envelope(snapshot_id))
-                finish(prepared_envelope, _attempt_id, state="succeeded")
+                finish(prepared_envelope, _attempt_id, state="succeeded", budget_aware=True)
                 stored = next(a for a in prepared_envelope["processing_attempts"] if a["attempt_id"] == _attempt_id)
                 if stored.get("kind") == "resume":
                     from src.bounded_formation_v1 import formation_progress, pending_source_extent
@@ -4660,12 +4688,17 @@ class OperationsConsole:
             and str(obj.get("object_id") or "") in approved_ids
             and (obj.get("governance") or {}).get("validation_status") == "approved"
         ]
+        uploader = envelope.get("uploader_account_id")
+        uploader = uploader if isinstance(uploader, str) and uploader.strip() else ""
         others = [
             row
             for row in bindings
-            if row.get("reviewer_id") != envelope["uploader_account_id"]
+            if row.get("reviewer_id") != uploader
         ]
         blockers: list[str] = []
+        if not uploader:
+            # Sherlock-voorwaarde 3: lege of ontbrekende uploader MOET fail-closed.
+            blockers.append("uploader_identity_missing")
         from src.recoverable_formation_v1 import incomplete
         if incomplete(envelope) and fragments is None and not context_supplied:
             from src.source_preparation_context_v1 import stored_extraction
@@ -4696,6 +4729,40 @@ class OperationsConsole:
             except (ValueError, ConsoleError):
                 blockers.append("invalid_review_policy")
             independence = True
+        review_configuration = None
+        if policy is None and envelope.get("review_configuration") is not None:
+            # 2b-3: de poort leest de opgeslagen B10-configuratie; alleen ``chosen`` wijzigt het gedrag.
+            from src.review_configuration_v1 import effective_configuration
+            effective = effective_configuration({**envelope, "uploader_account_id": uploader})
+            if effective["needs_choice"]:
+                blockers.append("review_configuration_invalid")
+            elif effective["source"] == "chosen":
+                review_configuration = envelope["review_configuration"]
+                # Review #631 A/A2 (Metis optie b): elk publiceerbaar object én elk object met een
+                # open reviewplicht (dezelfde set als de readiness telt) MOET de regel van het contract halen.
+                from src.four_eyes_v1 import eligible_tuple_reviewers
+                from src.review_configuration_v1 import configured_approval
+                from src.review_duty_v1 import review_duties
+                duty_fragments = fragments
+                if duty_fragments is None and not context_supplied:
+                    from src.source_preparation_context_v1 import stored_extraction
+                    try:
+                        duty_fragments = stored_extraction(envelope)
+                    except ConsoleError:
+                        duty_fragments = None
+                # Zonder brontekst zijn open plichten onzichtbaar: dan MOET de check dicht (fail-closed).
+                if duty_fragments is None and review_path != "boom":
+                    blockers.append("review_configuration_source_text_unavailable")
+                counted = set() if duty_fragments is None and review_path != "boom" else {
+                    str(obj.get("object_id") or "") for obj in publishable} | {
+                    duty["object_id"] for duty in review_duties(
+                        objects, review_path=review_path, bindings=all_bindings, fragments=duty_fragments)}
+                independence = bool(counted) and all(
+                    configured_approval(effective, {str(row.get("reviewer_id") or "") for row in
+                                                    eligible_tuple_reviewers(all_bindings, object_id=object_id,
+                                                                             uploader_id=uploader)},
+                                        uploader_id=uploader)[0]
+                    for object_id in counted)
         from src.candidate_supersession_v1 import REASON_CODE as _SUPERSEDED, refuses_superseded
         if refuses_superseded(objects, approved_ids):
             blockers.append(_SUPERSEDED)
@@ -4733,18 +4800,19 @@ class OperationsConsole:
             contract = publish_authorization_contract(
                 obj=obj,
                 bindings=bindings,
-                uploader_id=envelope["uploader_account_id"],
+                uploader_id=uploader,
                 immutable_locator=envelope.get("immutable_storage_locator"),
                 envelope_review_passes=envelope.get("review_passes"),
                 review_path=review_path,
                 fragments=fragments,
+                review_configuration=review_configuration,
             )
             contracts.append(contract)
             # D-SEC-3: het contract beslist; de console filtert NOOIT zelf.
             blockers.extend(contract["authorization_blockers"])
             if not contract["authorization_ok"] and not contract["authorization_blockers"]:
                 blockers.append("publish_authorization_contract_refused")
-            if requires_four_eyes(obj):
+            if contract["four_eyes_required"]:
                 four_eyes_needed = True
                 if not contract["four_eyes_satisfied"]:
                     four_eyes_ok = False
@@ -4817,6 +4885,7 @@ class OperationsConsole:
     def _publish_locked(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         considered = self.consider_publish(actor_id=actor_id, snapshot_id=snapshot_id)
         envelope = self._envelope(snapshot_id)
+        _publish_refusal_audit.record_publish_refusal(self, actor_id=actor_id, snapshot_id=snapshot_id, verdict=considered)
         if not considered.get("publish_allowed"):
             return {
                 "status": "BLOCKED",

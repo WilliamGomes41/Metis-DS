@@ -79,7 +79,7 @@ def project_attempt(attempt):
         'origin_runtime': clean_runtime(diagnostic.get('origin_runtime')),
         'execution_runtime': clean_runtime(diagnostic.get('execution_runtime')),
         'kind': choice(attempt.get('kind'), {'ingest', 'retry', 'resume', 'reextract'}),
-        'stored_state': choice(attempt.get('state'), {'running', 'succeeded', 'failed', 'interrupted'}),
+        'stored_state': choice(attempt.get('state'), {'running', 'succeeded', 'incomplete_budget', 'failed', 'interrupted'}),
         'started_at': timestamp(attempt.get('started_at')), 'expires_at': timestamp(attempt.get('expires_at')),
         'finished_at': timestamp(attempt.get('finished_at')),
         'dispatch_state': choice(dispatch.get('state'), {'pending', 'claimed'}),
@@ -91,6 +91,9 @@ def project_attempt(attempt):
         'omitted_checkpoints': max(0, len(history)-MAX_CHECKPOINTS),
         'diagnostic_evidence_omitted': bool(diagnostic.get('omitted_evidence')),
         'extraction_checkpoint_hash': sha(mapping(diagnostic.get('extraction_checkpoint')).get('record_hash')),
+        # Absent on legacy attempts: None, never backfilled or inferred.
+        'stop_reason': choice(attempt.get('stop_reason'), {'done', 'budget_exhausted', 'error'}),
+        'semantic_contract_version': token(attempt.get('semantic_contract_version'), r'[A-Za-z0-9._/-]{1,512}'),
     }
 
 
@@ -136,7 +139,8 @@ def clean_trace(raw):
         proxy = dict(attempt_id=row.get('attempt_id'), retry_of=row.get('retry_of'),
             state=row.get('stored_state'), kind=row.get('kind'), source_hash=row.get('source_hash'),
             started_at=row.get('started_at'), expires_at=row.get('expires_at'), finished_at=row.get('finished_at'),
-            error_code=row.get('error_code'), dispatch={'state':row.get('dispatch_state'), 'claimed_at':row.get('claimed_at')},
+            error_code=row.get('error_code'), stop_reason=row.get('stop_reason'),
+            semantic_contract_version=row.get('semantic_contract_version'), dispatch={'state':row.get('dispatch_state'), 'claimed_at':row.get('claimed_at')},
             diagnostic={'origin_request_id':row.get('origin_request_id'), 'origin_runtime':row.get('origin_runtime'),
                 'execution_runtime':row.get('execution_runtime'), 'checkpoints':row.get('checkpoints') if isinstance(row.get('checkpoints'), list) else [],
                 'omitted_evidence':['omitted'] if row.get('diagnostic_evidence_omitted') is True else [],

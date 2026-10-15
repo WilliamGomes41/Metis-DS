@@ -88,6 +88,9 @@ def _execute(console, *, actor_id: str, snapshot_id: str, command_id: str,
         else:
             if not old and not publisher:
                 raise ConsoleError("legacy_participation_activation_requires_publisher")
+            if not old and (env.get("review_configuration") or {}).get("source") == "chosen":
+                # 2b-3: een gekozen B10-configuratie wint; deelname MAG NIET een policy erboven leggen.
+                raise ConsoleError("review_configuration_chosen_wins")
             from src.four_eyes_v1 import requires_four_eyes
             ids = list(dict.fromkeys(env["named_reviewers"]))
             if not ids:

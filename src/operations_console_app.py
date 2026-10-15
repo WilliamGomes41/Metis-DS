@@ -221,6 +221,8 @@ BLOCKER_LABELS = {
     "object_tuple_required": "Nog niet alle vereiste passagebeoordelingen zijn afgerond. Ga naar Review en rond de open beoordelingen af.",
     "pre_review_processing_incomplete": "Pre-review is nog niet afgerond; verwerk het document eerst opnieuw vanuit Documenten.",
     "four_eyes_required": "High-risk objecten vereisen four-eyes: een tweede benoemde reviewer op hetzelfde objecttupel.",
+    "review_configuration_source_text_unavailable": "De opgeslagen brontekst is niet te laden; daardoor is niet te controleren of alle passages volgens de reviewkeuze zijn beoordeeld. Publiceren is geblokkeerd. Meld dit bij de beheerder.",
+    "review_configuration_uploader_sole_high_risk": "Dit hoog-risico-object vereist een tweede benoemde reviewer. Met de reviewkeuze 'alleen de uploader' is publiceren daarom geblokkeerd.",
     "already_published": "Dit document is al gepubliceerd.",
     "g2_source_store_unavailable": "De bronopslag is niet bereikbaar. Publiceren is daarom geblokkeerd. Probeer later opnieuw; meld het bij de beheerder als dit blijft gebeuren.",
     "g2_source_checksum_mismatch": "Het opgeslagen bronbestand wijkt af van de gecontroleerde versie. Publiceren is geblokkeerd. Laat de beheerder dit onderzoeken.",
@@ -6094,12 +6096,15 @@ def create_console_app(
         )
         return RedirectResponse("/accounts", status_code=303)
 
+    from src.request_diagnostics_v1 import deployed_commit as _deployed_commit
+
     @app.get("/health")
     def health() -> dict[str, Any]:
         return {
             "status": "ok",
             "service": "operations-console",
             "version": SERVICE_VERSION,
+            "deployed_commit": _deployed_commit() or "not_recorded",
             "product_api": False,
             "chat_room": False,
             "nurse_frontend": False,
