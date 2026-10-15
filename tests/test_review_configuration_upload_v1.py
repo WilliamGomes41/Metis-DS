@@ -250,12 +250,24 @@ def test_same_command_with_changed_choice_is_an_idempotency_conflict(system):
     assert len(console.list_envelopes()) == 1
 
 
-def test_legacy_mode_uploader_sole_without_reviewers_is_a_clear_refusal(system):
+def test_legacy_mode_uploader_sole_without_reviewers_is_stored(system):
+    # 2b-3: uploader_sole MAG NIET meer met named_reviewers_required worden geweigerd.
     console, password, ids = system
     response = _client(console, password).post("/ingest", data=_form(ids, named_reviewers=[], review_option="uploader_sole"),
-                                               files={"file": ("bron.html", HTML, "text/html")})
-    assert response.status_code == 400
-    assert "named_reviewers_required" in response.text
+                                               files={"file": ("bron.html", HTML, "text/html")}, follow_redirects=False)
+    assert response.status_code == 303, response.text
+    sid = response.headers["location"].split("document=")[1].split("&")[0]
+    stored = console._envelope(sid)
+    assert (stored["review_configuration"]["option"], stored["review_configuration"]["source"]) == ("uploader_sole", "chosen")
+    assert stored["named_reviewers"] == []
+
+
+def test_uploader_sole_with_other_named_reviewer_is_a_conflict(system):
+    console, _, ids = system
+    with pytest.raises(ConsoleError) as error:
+        _kernel(console, ids, "Alleen ik", named_reviewers=[ids["first"]],
+                review_choice={"option": "uploader_sole", "four_eyes_required": False, "reviewers": [], "readers": []})
+    assert error.value.code == "review_configuration_policy_conflict"
     assert console.list_envelopes() == []
 
 
