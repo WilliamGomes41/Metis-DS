@@ -227,3 +227,26 @@ def test_console_health_reports_running_commit(tmp_path, marker):
     health = client.get('/health').json()
     assert health['deployed_commit'] == COMMIT
     assert health['status'] == 'ok' and health['product_api'] is False
+
+
+def test_inspection_service_health_reports_running_commit(marker):
+    from src.service_app import create_app
+    client = TestClient(create_app('fixture'))
+    assert client.get('/health').json()['deployed_commit'] == 'not_recorded'
+    marker.write_text(COMMIT + '\n')
+    health = client.get('/health').json()
+    assert health['deployed_commit'] == COMMIT
+    assert health['status'] == 'ok'
+
+
+def test_product_api_health_reports_running_commit(tmp_path, marker):
+    from tests.test_product_api_v1 import client
+    c, _ = client(tmp_path)
+    assert c.get('/v1/health').json()['deployed_commit'] == 'not_recorded'
+    marker.write_text(COMMIT + '\n')
+    health = c.get('/v1/health').json()
+    assert health['deployed_commit'] == COMMIT
+    assert health['status'] == 'ok' and health['generation_enabled'] is False
+    schema = c.get('/openapi.json').json()['components']['schemas']['HealthResponse']
+    assert 'deployed_commit' in schema['properties']
+    assert 'deployed_commit' not in schema.get('required', [])  # additive, backward compatible
