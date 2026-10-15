@@ -5,7 +5,7 @@ returns decisions. It does not assign object identity or canonical text.
 """
 from __future__ import annotations
 
-from src.request_diagnostics_v1 import diagnostic_phase
+from src.request_diagnostics_v1 import diagnostic_count, diagnostic_phase
 
 import hashlib
 import math
@@ -88,21 +88,31 @@ def _read_source_blocks(fragments, *, include_headings=False):
 
     scope = _source_reconstruction.get()
     if scope is None:
+        diagnostic_count("source_reconstruction_unscoped")
         return reconstruct()
     # Most validators read the same source for every candidate. Compare with
     # the retained copy before serializing the entire document again. Equality
     # (not object identity) still detects in-place edits to nested fragments.
+    # Counters are request-local evidence only; they never select a branch.
     entry = scope.get("last_source")
+    if entry is not None:
+        diagnostic_count("source_input_compared")
     if entry is None or fragments != entry["fragments"]:
         from src.integrity_kernel import stable_hash
+        diagnostic_count("source_input_hashed")
         key = stable_hash(fragments)
         entry = scope.get(key)
+        if entry is not None:
+            diagnostic_count("source_input_compared")
         if entry is None or fragments != entry["fragments"]:
             entry = {"fragments": _source_input_snapshot(fragments), "blocks": {}}
             scope[key] = entry
         scope["last_source"] = entry
     if include_headings not in entry["blocks"]:
+        diagnostic_count("source_reconstruction_built")
         entry["blocks"][include_headings] = reconstruct()
+    else:
+        diagnostic_count("source_reconstruction_reused")
     return entry["blocks"][include_headings]
 
 

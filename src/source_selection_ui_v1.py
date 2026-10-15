@@ -9,7 +9,7 @@ from fastapi import Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from src.operations_console_v1 import ConsoleError
-from src.source_selection_v1 import UNCHECKED, projection
+from src.source_selection_v1 import UNCHECKED, comparable_observations, projection
 
 
 def _minutes(seconds):
@@ -68,6 +68,15 @@ def _blockage_html(report, esc):
     return body + '</ul></details>'
 
 
+@diagnostic_phase("document_list")
+def document_keys(console):
+    """Snapshot ids in list_envelopes order, without per-document receipts."""
+    lister = getattr(console, "list_snapshot_ids", None)
+    if lister is not None:
+        return lister()
+    return list(console._envelopes)
+
+
 def install(app, console, require, page, nav, esc):
     from src.source_processing_dispatch_v1 import install_dispatcher
     dispatcher = install_dispatcher(app, console)
@@ -77,8 +86,8 @@ def install(app, console, require, page, nav, esc):
     def selection_get(request: Request, document: str = ''):
         with diagnostic_phase("authorization"):
             actor = require(request)
-        receipts = console.list_envelopes()
-        documents = [console._envelope(row['snapshot_id']) for row in receipts]
+        # PR-a: lichte sleutellijst; NOOIT een deepcopy-receipt per document.
+        documents = [console._envelope(sid) for sid in document_keys(console)]
         visible = [row for row in documents if "researcher" in actor['roles'] or actor['account_id'] in row.get('named_reviewers', [])]
         if document and document not in {row['snapshot_id'] for row in visible}:
             raise ConsoleError('reviewer_not_named_on_snapshot')
@@ -86,11 +95,13 @@ def install(app, console, require, page, nav, esc):
         options = ''.join(f'<option value="{esc(row["snapshot_id"])}" {"selected" if row["snapshot_id"] == selected else ""}>{esc(row["title"])} — {esc(row["version"])}</option>' for row in visible)
         cards = []
         running_selected = False
+        # Eén keer per verzoek (PR-b): vergelijkbare metingen over alle documenten.
+        observations = comparable_observations(documents)
         for envelope in visible:
             sid = envelope['snapshot_id']
             # Volledige controle alleen voor het expliciet gekozen document (D-PERF-2).
             result = projection(console, actor_id=actor['account_id'], snapshot_id=sid, documents=documents,
-                                deep=bool(document) and sid == document)
+                                deep=bool(document) and sid == document, observations=observations)
             action = ''
             if result['state'] in {'bezig', 'wacht op uitvoering'}:
                 action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Voortgang bekijken</a>'
