@@ -4696,6 +4696,9 @@ class OperationsConsole:
             except (ValueError, ConsoleError):
                 blockers.append("invalid_review_policy")
             independence = True
+        from src.candidate_supersession_v1 import REASON_CODE as _SUPERSEDED, refuses_superseded
+        if refuses_superseded(objects, approved_ids):
+            blockers.append(_SUPERSEDED)
         from src.decision_graph_v1 import publication_issues
         blockers.extend(publication_issues(envelope, objects))
         if any((o.get("metadata") or {}).get("decision_graph_contract") for o in objects) and "decision_graph" not in envelope:
