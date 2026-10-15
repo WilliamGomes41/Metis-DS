@@ -28,6 +28,11 @@ _SNAPSHOT = re.compile(r'[A-Za-z0-9_.:-]{1,128}')
 HMAC_KEY_SETTING = 'METIS_AUDIT_HMAC_KEY'
 MAX_FAILURE_DIAGNOSTICS = 100  # per process; bounded so a failing store MAG NIET flood the logs
 _FAILURE_COUNT = [0]
+_SUPPRESSED_COUNT = [0]
+
+
+def suppressed_failure_count():
+    return _SUPPRESSED_COUNT[0]
 _ERROR_CLASS = re.compile(r'[A-Za-z_][A-Za-z0-9_]{0,63}')
 
 
@@ -45,10 +50,16 @@ def _audit_failed(stage, *, error=None, outcome=None, snapshot_id=None):
     reported, and the verdict MOET still stand, so that one error is contained here.
     """
     try:
+        from src.request_diagnostics_v1 import _LOGGER, current_request_id
         if _FAILURE_COUNT[0] >= MAX_FAILURE_DIAGNOSTICS:
+            _SUPPRESSED_COUNT[0] += 1
+            if _SUPPRESSED_COUNT[0] == 1:  # ONE marker so the cap MAG NIET go silent
+                _LOGGER.warning('metis_diagnostic %s', json.dumps({
+                    'event': 'publication_refusal_audit_failed_suppressed', 'cap': MAX_FAILURE_DIAGNOSTICS,
+                    'suppressed_count': _SUPPRESSED_COUNT[0], 'authority': 'non_authoritative_gate_observation'},
+                    separators=(',', ':')))
             return
         _FAILURE_COUNT[0] += 1
-        from src.request_diagnostics_v1 import _LOGGER, current_request_id
         name = type(error).__name__ if error is not None else None
         payload = {
             'event': 'publication_refusal_audit_failed', 'stage': stage,
