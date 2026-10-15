@@ -75,3 +75,6 @@ the components that alter formation output?
 Still open: ingest finish (2012) is a strict xfail test until #626 merges; the resume duplicate receipt (2212) does not yet accept `incomplete_budget`.
 
 OPENVRAAG-A3-3 (from A3-2 'a fresh attempt starts instead'): after a contract change the existing unreviewed candidates block a fresh start (`pre_review_retry_existing_work`). MOET a fresh attempt retire those candidates? That changes `reserve_selection` and existing-work rules.
+
+## Gewijzigde bestaande verwachting
+- `tests/test_a06_selected_occurrence_relations.py:307`: een oudere checkpoint MOET nu vooraf geweigerd worden met `processing_resume_configuration_incompatible` (A3-2, volledige contractidentifier) in plaats van laat met `semantic_replay_policy_mismatch`. Hervatten blijft fail-closed; de weigering komt eerder.
