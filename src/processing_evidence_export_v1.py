@@ -51,6 +51,7 @@ SCHEMAS = {
     "object_events": ("run_id", "object_id", "event_id", "timestamp", "event", "reason"),
     "reference_review": ("object_id", "source_range", "expected_type", "expected_context", "reviewer", "judgment"),
     "forensic_trace": CSV_FIELDS,
+    "publication_refusals": ("refusal_snapshot_id", "recorded_at", "object_version", "actor", "verdict", "reason_codes", "revision_sha256", "store_status", "schema"),
 }
 FIELDS = (
     "proposed_type", "type_evidence_spans", "actor_of_scope", "recommended_action",
@@ -159,7 +160,7 @@ def recorded_processing_tables(*, snapshot_id: str, revision: str, envelope: dic
 
 def processing_evidence_tables(
     *, snapshot_id: str, revision: str, envelope: dict[str, Any],
-    objects: list[dict[str, Any]], bindings=None, fragments=None,
+    objects: list[dict[str, Any]], bindings=None, fragments=None, refusals=None,
 ) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
     """Project stored values; absent data is not reconstructed from current code."""
     # Exports never reread/reextract native sources. Only accepted retained
@@ -182,6 +183,11 @@ def processing_evidence_tables(
 
     for name, rows in recorded_processing_tables(snapshot_id=snapshot_id, revision=revision, envelope=envelope).items():
         tables[name].extend(rows)
+    # Refusal store (TIJDELIJK file store): only this document's records, NOOIT another's.
+    for record in refusals or []:
+        if isinstance(record, dict) and record.get("snapshot_id") == snapshot_id:
+            add("publication_refusals", refusal_snapshot_id=record.get("snapshot_id"),
+                **{k: record.get(k) for k in SCHEMAS["publication_refusals"][1:]})
     runs = envelope.get("quality_processing_runs") or []
     for run in runs:
         for fragment in run.get("source_fragments") or []:
@@ -339,6 +345,9 @@ def processing_evidence_tables(
         "object_events": ("not_exported", "This package does not read the review ledger and does not claim that no historical events exist."),
         "reference_review": ("not_exported", "A human reference assessment must be supplied separately; system review state is not a gold standard."),
         "forensic_trace": (trace_availability, trace_limitation),
+        "publication_refusals": ("recorded" if refusals is not None else "not_recorded",
+            "Publication refusals from the separate append-only refusal store (temporary file store until a PostgreSQL table); "
+            "deduplicated per document, reasons and actor within 10 minutes. Observation only, not a gate verdict."),
     }
     manifest = [{**common, "schema_version": PROJECTOR_VERSION, "dataset": name + ".csv",
                  "row_count": len(tables[name]), "availability": statuses[name][0],
