@@ -1740,7 +1740,12 @@ class OperationsConsole:
         if review_policy is None:
             if review_configuration is not None and not named_reviewers:
                 named_reviewers = list(review_configuration["reviewers"])
-            reviewers = self._resolve_named_reviewers(named_reviewers, actor_id)
+            if review_configuration is not None and review_configuration["option"] == "uploader_sole" \
+                    and not named_reviewers:
+                # 2b-3: uploader_sole: de uploader is de enige reviewer; NOOIT named_reviewers_required.
+                reviewers = [actor_id]
+            else:
+                reviewers = self._resolve_named_reviewers(named_reviewers, actor_id)
             if review_configuration is not None and \
                     {r for r in reviewers if r != actor_id} != set(review_configuration["reviewers"]):
                 raise ConsoleError("review_configuration_policy_conflict")
@@ -4661,12 +4666,17 @@ class OperationsConsole:
             and str(obj.get("object_id") or "") in approved_ids
             and (obj.get("governance") or {}).get("validation_status") == "approved"
         ]
+        uploader = envelope.get("uploader_account_id")
+        uploader = uploader if isinstance(uploader, str) and uploader.strip() else ""
         others = [
             row
             for row in bindings
-            if row.get("reviewer_id") != envelope["uploader_account_id"]
+            if row.get("reviewer_id") != uploader
         ]
         blockers: list[str] = []
+        if not uploader:
+            # Sherlock-voorwaarde 3: lege of ontbrekende uploader MOET fail-closed.
+            blockers.append("uploader_identity_missing")
         from src.recoverable_formation_v1 import incomplete
         if incomplete(envelope) and fragments is None and not context_supplied:
             from src.source_preparation_context_v1 import stored_extraction
@@ -4697,6 +4707,40 @@ class OperationsConsole:
             except (ValueError, ConsoleError):
                 blockers.append("invalid_review_policy")
             independence = True
+        review_configuration = None
+        if policy is None and envelope.get("review_configuration") is not None:
+            # 2b-3: de poort leest de opgeslagen B10-configuratie; alleen ``chosen`` wijzigt het gedrag.
+            from src.review_configuration_v1 import effective_configuration
+            effective = effective_configuration({**envelope, "uploader_account_id": uploader})
+            if effective["needs_choice"]:
+                blockers.append("review_configuration_invalid")
+            elif effective["source"] == "chosen":
+                review_configuration = envelope["review_configuration"]
+                # Review #631 A/A2 (Metis optie b): elk publiceerbaar object én elk object met een
+                # open reviewplicht (dezelfde set als de readiness telt) MOET de regel van het contract halen.
+                from src.four_eyes_v1 import eligible_tuple_reviewers
+                from src.review_configuration_v1 import configured_approval
+                from src.review_duty_v1 import review_duties
+                duty_fragments = fragments
+                if duty_fragments is None and not context_supplied:
+                    from src.source_preparation_context_v1 import stored_extraction
+                    try:
+                        duty_fragments = stored_extraction(envelope)
+                    except ConsoleError:
+                        duty_fragments = None
+                # Zonder brontekst zijn open plichten onzichtbaar: dan MOET de check dicht (fail-closed).
+                if duty_fragments is None and review_path != "boom":
+                    blockers.append("review_configuration_source_text_unavailable")
+                counted = set() if duty_fragments is None and review_path != "boom" else {
+                    str(obj.get("object_id") or "") for obj in publishable} | {
+                    duty["object_id"] for duty in review_duties(
+                        objects, review_path=review_path, bindings=all_bindings, fragments=duty_fragments)}
+                independence = bool(counted) and all(
+                    configured_approval(effective, {str(row.get("reviewer_id") or "") for row in
+                                                    eligible_tuple_reviewers(all_bindings, object_id=object_id,
+                                                                             uploader_id=uploader)},
+                                        uploader_id=uploader)[0]
+                    for object_id in counted)
         from src.decision_graph_v1 import publication_issues
         blockers.extend(publication_issues(envelope, objects))
         if any((o.get("metadata") or {}).get("decision_graph_contract") for o in objects) and "decision_graph" not in envelope:
@@ -4731,18 +4775,19 @@ class OperationsConsole:
             contract = publish_authorization_contract(
                 obj=obj,
                 bindings=bindings,
-                uploader_id=envelope["uploader_account_id"],
+                uploader_id=uploader,
                 immutable_locator=envelope.get("immutable_storage_locator"),
                 envelope_review_passes=envelope.get("review_passes"),
                 review_path=review_path,
                 fragments=fragments,
+                review_configuration=review_configuration,
             )
             contracts.append(contract)
             # D-SEC-3: het contract beslist; de console filtert NOOIT zelf.
             blockers.extend(contract["authorization_blockers"])
             if not contract["authorization_ok"] and not contract["authorization_blockers"]:
                 blockers.append("publish_authorization_contract_refused")
-            if requires_four_eyes(obj):
+            if contract["four_eyes_required"]:
                 four_eyes_needed = True
                 if not contract["four_eyes_satisfied"]:
                     four_eyes_ok = False
