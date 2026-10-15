@@ -104,6 +104,8 @@ def _ingest_form(accounts: dict, *, extra: dict | None = None) -> dict[str, str]
         "class_": "richtlijn",
         "family": "continentie",
         "named_reviewers": accounts["reviewer"]["account_id"],
+        "review_option": "one_other",
+        "review_reviewers": accounts["reviewer"]["account_id"],
     }
     if extra:
         data.update(extra)
