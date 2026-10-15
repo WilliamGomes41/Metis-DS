@@ -28,7 +28,7 @@ def test_error_has_safe_fallback_and_ingest_return_link(tmp_path, monkeypatch):
     monkeypatch.setattr(console, "ingest", fail)
     response = client.post("/ingest", data={
         "ingest_kind": "new", "title": "Test", "version": "1.0", "date": "2026-09-29",
-        "class_": "richtlijn", "family": "Test",
+        "class_": "richtlijn", "family": "Test", "review_option": "one_other",
     })
     assert response.status_code == 400
     assert "Controleer de huidige status" in response.text

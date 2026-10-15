@@ -68,7 +68,7 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
         response = client.post("/ingest", data={
             "ingest_kind": "new", "title": "Synthetic blocked document", "version": "1",
             "date": "2026-10-01", "class_": "richtlijn", "family": "Smetten",
-            "review_mode": "single", "primary_reviewer": actor["account_id"], "command_id": "receipt-diagnostics",
+            "review_mode": "single", "primary_reviewer": actor["account_id"], "review_option": "uploader_sole", "command_id": "receipt-diagnostics",
         }, files={"file": ("synthetic.html", b"<p>synthetic</p>", "text/html")})
         assert response.status_code == 200, response.text
         envelope = console.list_envelopes()[0]
