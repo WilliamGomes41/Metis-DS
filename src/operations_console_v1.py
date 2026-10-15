@@ -1750,12 +1750,15 @@ class OperationsConsole:
             if named_reviewers and set(named_reviewers) != set(reviewers):
                 raise ConsoleError("review_policy_membership_conflict")
             required = set(required_reviewers(review_policy))
-            # H2-1: uploader verplicht plus een andere reviewer betekent vier ogen.
-            if review_configuration is not None and (
-                    required - {actor_id} != set(review_configuration["reviewers"])
-                    or (actor_id in required and bool(required - {actor_id}))
-                    != review_configuration["four_eyes_required"]):
+            if review_configuration is not None and required - {actor_id} != set(review_configuration["reviewers"]):
                 raise ConsoleError("review_configuration_policy_conflict")
+            if review_configuration is not None:
+                # H2-1 wint: alleen een eenduidige mapping legt vier ogen vast; needs_choice NOOIT.
+                from src.review_configuration_v1 import from_review_policy
+                mapped = from_review_policy(review_policy, uploader_id=actor_id)
+                if not mapped["needs_choice"] and \
+                        mapped["four_eyes_required"] != review_configuration["four_eyes_required"]:
+                    raise ConsoleError("review_configuration_policy_conflict")
             if review_configuration is not None and set(review_configuration["readers"]) & set(reviewers):
                 # Lezers krijgen NOOIT reviewtoegang via een (optionele) policy-deelname.
                 raise ConsoleError("review_configuration_reader_is_reviewer")
