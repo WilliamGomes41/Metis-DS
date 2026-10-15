@@ -235,3 +235,16 @@ def test_reader_who_is_optional_policy_participant_is_refused(system):
                                "reviewers": [ids["first"]], "readers": [ids["reader"]]})
     assert error.value.code == "review_configuration_reader_is_reviewer"
     assert console.list_envelopes() == []
+
+
+def test_same_command_with_changed_choice_is_an_idempotency_conflict(system):
+    console, _, ids = system
+    choice = {"option": "one_other", "four_eyes_required": False, "reviewers": [ids["first"]], "readers": []}
+    first = _kernel(console, ids, "Idempotent", review_choice=choice, command_id="cmd-keuze")
+    assert _kernel(console, ids, "Idempotent", review_choice=dict(choice), command_id="cmd-keuze") == first
+    for changed in ({**choice, "four_eyes_required": True}, {**choice, "readers": [ids["reader"]]}):
+        with pytest.raises(ConsoleError) as error:
+            _kernel(console, ids, "Idempotent", review_choice=changed, command_id="cmd-keuze")
+        assert error.value.code == "ingest_command_conflict"
+    assert console._envelope(first)["review_configuration"]["four_eyes_required"] is False
+    assert len(console.list_envelopes()) == 1
