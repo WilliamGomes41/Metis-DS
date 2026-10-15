@@ -14,6 +14,7 @@ from copy import deepcopy
 import pytest
 
 import src.publish_refusal_audit_v1 as audit
+import src.publication_refusal_store_v1 as store
 from src.request_diagnostics_v1 import _LOGGER
 from tests.test_durable_publication_console_v1 import MemoryCanonicalStore, _ready_console
 from tests.test_recoverable_formation_v1 import system
@@ -66,9 +67,10 @@ def test_refusal_emits_one_bounded_audit_event(tmp_path, events, build):
     assert event['actor_hmac'] == hmac.new(b'test-audit-key', actor.encode(), hashlib.sha256).hexdigest()
     assert actor not in json.dumps(event) and 'test-audit-key' not in json.dumps(events)
     from src.review_ledger import read_events
-    [durable] = [e for e in read_events(console._ledger_path) if e['event_type'] == 'publication_refused']
-    assert durable['actor'] == actor and durable['object_id'] == sid
-    assert durable['details']['reason_codes'] == event['reason_codes']
+    assert [e for e in read_events(console._ledger_path) if e['event_type'] == 'publication_refused'] == []
+    [durable] = store.read_records(store.store_path(console))
+    assert durable['actor'] == actor and durable['snapshot_id'] == sid
+    assert durable['reason_codes'] == event['reason_codes']
     assert event['reason_codes'] == [c if audit._CODE.fullmatch(c) else 'unrecognized_reason' for c in result['blockers']]
     assert event['verdict'] == 'refused'
     assert event['revision_sha256'] is None or len(event['revision_sha256']) == 64
@@ -136,7 +138,11 @@ def test_verdict_identical_when_durable_audit_write_raises(tmp_path, events, mon
         if kwargs.get('event_type') == 'publication_refused':
             raise OSError('private audit store failure')
         return original(path, **kwargs)
+
+    def failing_store(*args, **kwargs):
+        raise OSError('private audit store failure')
     monkeypatch.setattr(ledger, 'append_event', failing)
+    monkeypatch.setattr(store, 'append_refusal', failing_store)
     console, sid, actor = build(tmp_path / 'broken')
     verdict = console.publish(actor_id=actor, snapshot_id=sid)
     normalise = lambda v, s: json.loads(json.dumps(v).replace(s, 'SID'))
@@ -149,3 +155,53 @@ def test_without_hmac_key_actor_is_not_logged(tmp_path, events, monkeypatch):
     console.publish(actor_id=actor, snapshot_id=sid)
     [event] = _refusals(events)
     assert event['actor_hmac'] is None and actor not in json.dumps(event)
+
+
+# --- #629 F1: separate append-only store, outside the review ledger hash chain ---
+
+@pytest.mark.parametrize('build', [_blocked_base, _durable_blocked], ids=['file', 'durable'])
+def test_refusal_never_enters_the_review_ledger_hash_chain(tmp_path, events, build):
+    from src.review_ledger import read_events, verify_ledger
+    console, sid, actor = build(tmp_path)
+    before = [(e['event_type'], e['event_hash'], e.get('previous_event_hash')) for e in read_events(console._ledger_path)]
+    assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
+    after = [(e['event_type'], e['event_hash'], e.get('previous_event_hash')) for e in read_events(console._ledger_path)]
+    assert after == before, 'REFUSAL_IN_LEDGER_CHAIN'
+    assert verify_ledger(console._ledger_path) == []
+    [record] = store.read_records(store.store_path(console))
+    assert record['event_type'] == 'publication_refused' and record['actor'] == actor
+
+
+def test_refusal_store_dedups_per_document_reason_actor_within_window(tmp_path, events):
+    console, sid, actor = _blocked_base(tmp_path)
+    for _ in range(3):
+        assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
+    assert len(store.read_records(store.store_path(console))) == 1
+    assert len(_refusals(events)) == 3  # logs are not deduplicated
+
+
+def test_refusal_store_dedup_window_and_key(tmp_path):
+    from datetime import datetime, timezone
+    path = tmp_path / store.FILE_NAME
+    t0 = datetime(2026, 10, 15, tzinfo=timezone.utc)
+    args = dict(snapshot_id='s', object_version='1', reason_codes=['r'], revision='rev')
+    assert store.append_refusal(path, actor='a', clock=t0, **args) == 'recorded'
+    assert store.append_refusal(path, actor='a', clock=t0 + store.DEDUP_WINDOW / 2, **args) == 'deduplicated'
+    assert store.append_refusal(path, actor='b', clock=t0, **args) == 'recorded'
+    assert store.append_refusal(path, actor='a', clock=t0, **{**args, 'reason_codes': ['q']}) == 'recorded'
+    assert store.append_refusal(path, actor='a', clock=t0 + store.DEDUP_WINDOW, **args) == 'recorded'
+    rows = store.read_records(path)
+    assert len(rows) == 4 and all(len(r['revision_sha256']) == 64 and 'rev' != r['revision_sha256'] for r in rows)
+
+
+def test_refusal_store_is_bounded_and_append_only(tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+    monkeypatch.setattr(store, 'MAX_RECORDS', 2)
+    path = tmp_path / store.FILE_NAME
+    t0 = datetime(2026, 10, 15, tzinfo=timezone.utc)
+    for actor in ('a', 'b'):
+        assert store.append_refusal(path, snapshot_id='s', object_version='1', actor=actor, reason_codes=['r'] * 500, revision=None, clock=t0) == 'recorded'
+    first = path.read_bytes()
+    assert store.append_refusal(path, snapshot_id='s', object_version='1', actor='c', reason_codes=['r'], revision=None, clock=t0) == 'capacity_reached'
+    assert path.read_bytes() == first
+    assert all(len(r['reason_codes']) == store.MAX_REASON_CODES for r in store.read_records(path))
