@@ -1749,8 +1749,12 @@ class OperationsConsole:
             reviewers = participants(review_policy)
             if named_reviewers and set(named_reviewers) != set(reviewers):
                 raise ConsoleError("review_policy_membership_conflict")
-            if review_configuration is not None and \
-                    set(required_reviewers(review_policy)) - {actor_id} != set(review_configuration["reviewers"]):
+            required = set(required_reviewers(review_policy))
+            # H2-1: uploader verplicht plus een andere reviewer betekent vier ogen.
+            if review_configuration is not None and (
+                    required - {actor_id} != set(review_configuration["reviewers"])
+                    or (actor_id in required and bool(required - {actor_id}))
+                    != review_configuration["four_eyes_required"]):
                 raise ConsoleError("review_configuration_policy_conflict")
             if review_configuration is not None and set(review_configuration["readers"]) & set(reviewers):
                 # Lezers krijgen NOOIT reviewtoegang via een (optionele) policy-deelname.
