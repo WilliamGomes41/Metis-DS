@@ -182,9 +182,9 @@ def test_migration_017_defaults_to_pending_verification():
             in sql)
 
 
-def test_no_gate_reads_the_configuration_in_this_slice():
-    """Slice 2b-1/2b-2 MAG NIET het poortgedrag veranderen: alleen ingest schrijft de keuze."""
+def test_only_ingest_and_publish_gate_read_the_configuration():
+    """Vanaf 2b-3 leest alleen de ingest en de publicatiepoort (console + contract) de keuze."""
     users = sorted(str(path.relative_to(ROOT)) for path in (ROOT / "src").rglob("*.py")
                    if "review_configuration_v1" in path.read_text(encoding="utf-8"))
     assert (ROOT / "src/review_configuration_v1.py").exists()
-    assert users == ["src/operations_console_v1.py"]
+    assert users == ["src/four_eyes_v1.py", "src/operations_console_v1.py"]
