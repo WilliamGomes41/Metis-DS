@@ -1,6 +1,6 @@
 # #629 F1: publication refusals in a separate append-only store
 
-> **Live store: PostgreSQL table `workflow.publication_refusals` (migration 018, needs William's GO to apply).** The file store is TIJDELIJK, local/test only, and MAG NIET go live: with WEBSITE_SITE_NAME set and no PostgreSQL workflow store it raises RefusalStoreUnavailable. File records carry `store_status: temporary_file_store_pending_postgres_table`.
+> **Live store: PostgreSQL table `workflow.publication_refusals` (migration 018, needs William's GO to apply).** The file store is TIJDELIJK, local/test only, and MAG NIET go live: the gate is the topology (assert_supported_topology PASS, one worker, one instance, no METIS_* store in postgres mode), NOOIT WEBSITE_SITE_NAME; any other topology without the PostgreSQL workflow store raises RefusalStoreUnavailable. File records carry `store_status: temporary_file_store_pending_postgres_table`.
 
 Change class: B
 Promise: A publication_refused record MAG NIET enter the review ledger hash chain; it MOET be written only to the separate append-only refusal store, deduplicated per (document, reason codes, actor) within 10 minutes and bounded by retention, NOOIT by a permanent refusal (table: 400 days / 200000 rows; file: rotation at 4 MiB, one generation; 128 reason codes per record); dedup reads at most 256 KiB, never the full file; a corrupt record is skipped, reported and NOOIT blocks later writes. Existing ledger event hashes MOETEN NOOIT change; the gate verdict MAG NIET change.
@@ -28,3 +28,9 @@ Taalregel: B18. Rules use MOET / MAG NIET / NOOIT only; open items are marked OP
 - Retention instead of capacity refusal; tail-only dedup; corrupt records skipped and reported; file store never live.
 - #636 and #637 are restacked and MOETEN merge together (Argos merge queue).
 - OPENVRAAG-F1-1 is closed by the table. OPENVRAAG-F1-3: RETENTION_DAYS (400) and MAX_ROWS (200000) are proposals; Metis confirms.
+
+## Sherlock re-audit (2026-10-16): F2 and F3
+- **F2 (topology gate):** `file_store_allowed()` uses `assert_supported_topology` plus postgres-mode detection (METIS_CANONICAL/WORKFLOW/WORKFLOW_DOCUMENT/WORKFLOW_REVIEW/WORKFLOW_REMAINING_STORE=postgres). WEBSITE_SITE_NAME MAG NIET decide. Proof: `test_file_store_blocked_by_topology_without_website_site_name` (4 cases, WEBSITE_SITE_NAME unset) and `test_file_store_allowed_in_single_worker_file_topology`.
+- **F3 (refusal path):** `PostgresRefusalStore.append` is ONE transactional `INSERT … SELECT … WHERE NOT EXISTS … RETURNING`: no advisory lock, no DELETE, no OFFSET. Retention is the explicit maintenance command `scripts/publication_refusal_retention.py` → `apply_retention()` (age bound, then row bound via `max(refusal_id) - max_rows`, no OFFSET); it MAG NIET run per refusal. Proof: `test_postgres_refusal_path_is_a_single_insert_without_lock_or_delete`, `test_postgres_refusal_dedup_returns_deduplicated_when_insert_skips`, `test_retention_is_an_explicit_maintenance_command_without_offset`, `test_retention_script_runs_apply_retention`; red c2456eb (7 failed).
+- OPENVRAAG-F1-4: concurrent identical refusals within the same instant MOETEN be accepted as at most a duplicate row (no lock); dedup is an observation aid, NOOIT a gate. Metis confirms.
+- Migration 018 is unchanged (byte-identical).

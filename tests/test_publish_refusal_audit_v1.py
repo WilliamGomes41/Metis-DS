@@ -240,8 +240,9 @@ def test_corrupt_record_is_skipped_reported_and_never_blocks_writes(tmp_path):
 
 
 def test_file_store_never_goes_live(tmp_path, monkeypatch):
-    # In Azure (WEBSITE_SITE_NAME) without a PostgreSQL refusal table the file store MAG NIET be used.
+    # Live topology (postgres mode) without a PostgreSQL refusal store: the file store MAG NIET be used.
     monkeypatch.setenv('WEBSITE_SITE_NAME', 'metis-prod')
+    monkeypatch.setenv('METIS_WORKFLOW_DOCUMENT_STORE', 'postgres')
     console, sid, actor = _blocked_base(tmp_path)
     with pytest.raises(store.RefusalStoreUnavailable):
         store.append(console, snapshot_id=sid, object_version='1', actor=actor, reason_codes=['r'], revision=None)
@@ -340,3 +341,11 @@ def test_retention_is_an_explicit_maintenance_command_without_offset():
     assert result['status'] == 'PASS'
     assert con.sql and all(s.startswith(('DELETE', 'SELECT')) for s in con.sql)
     assert 'OFFSET' not in ' '.join(con.sql) and 'ADVISORY' not in ' '.join(con.sql)
+
+
+def test_retention_script_runs_apply_retention(monkeypatch, capsys):
+    import scripts.publication_refusal_retention as script
+    con = _FakeCon(row=(0,))
+    monkeypatch.setattr(script, '_workflow_store', lambda: _FakeWorkflow(con))
+    assert script.main(['--max-rows', '10', '--retention-days', '30']) == 0
+    assert '"status": "PASS"' in capsys.readouterr().out and len(con.sql) == 2
