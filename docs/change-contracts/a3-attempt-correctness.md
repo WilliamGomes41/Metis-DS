@@ -1,8 +1,8 @@
 # A3 attempt correctness
 
 Change class: B
-Promise: A budget-exhausted attempt MOET NOOIT as 'succeeded' be stored on the cleared execution path (new state 'incomplete_budget', never counted against the retry cap), and 'Hervatten' MAG NIET be offered or accepted after any change of the full semantic contract identifier. The ingest path (line 2012) follows after #626.
-Proof: tests/test_a3_attempt_correctness.py: 6 tests fail on 8db82cb with the named defect markers (BUDGET_EXHAUSTED_STORED_AS_SUCCEEDED, RESUME_OFFERED_AFTER_CONTRACT_CHANGE, HERVATTEN_OFFERED_AFTER_CONTRACT_CHANGE, semantic_replay_policy_mismatch after work started); 1 guard test passes. CI on this draft MOET be red on exactly these 6 tests.
+Promise: A budget-exhausted attempt MOET NOOIT be stored as 'succeeded' on any execution path (ingest, retry, resume, re-extract; new state 'incomplete_budget'); it MAG NIET count against the retry cap only when formation_progress_made is True, otherwise it MOET count (#635, A3-1 F2). 'Hervatten' MAG NIET be offered or accepted after any change of the full semantic contract identifier.
+Proof: tests/test_a3_attempt_correctness.py is green on main (historical baseline: 6 tests failed on 8db82cb with BUDGET_EXHAUSTED_STORED_AS_SUCCEEDED, RESUME_OFFERED_AFTER_CONTRACT_CHANGE, HERVATTEN_OFFERED_AFTER_CONTRACT_CHANGE, semantic_replay_policy_mismatch). F2 tests red at 7eb0338, green at 163dd86.
 Touches lifecycle invariants: yes
 Rewrite risk: none
 Lifecycle entity: processing attempt
@@ -91,3 +91,9 @@ OPENVRAAG-A3-3 (from A3-2 'a fresh attempt starts instead'): after a contract ch
 - Fail-first: `test_reextract_reserved_contract_follows_active_configuration_not_stale_envelope` rood zonder, groen met.
 - `processing_retry_v1.finish`: A2 `stop_evidence` (main) en A3 `budget_aware` samengevoegd; stop_evidence gebruikt de oorspronkelijke staat, dus een budgetstop krijgt `stop_reason=budget_exhausted` en staat `incomplete_budget`.
 - Deze branch bevat ook #630 (normale merge van `anvil/reservation-contract-version`).
+
+## Correction after Sherlock retro-audit (#628 F2)
+
+- The earlier Promise ("never counted against the retry cap") was wrong: a budget stop without progress MOET count (Metis A3-1 intent). Fixed in #635.
+- The earlier Proof line ("CI MOET be red") described the reproduction draft, not the merged state; replaced above.
+- OPENVRAAG-A3-REWRITE: Codex classifies the durable `incomplete_budget` state as `Rewrite risk: high` (persisted schema change). Metis decides whether the classification and a rollback plan MOETEN be added.
