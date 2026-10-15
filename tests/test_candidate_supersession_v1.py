@@ -99,3 +99,67 @@ def test_concurrent_gate_evaluations_all_refuse_superseded(ready):
     [t.start() for t in threads]
     [t.join(30) for t in threads]
     assert len(results) == 4 and all(REASON_CODE in r['blockers'] and not r['publish_allowed'] for r in results)
+
+
+# --- trigger: fresh attempt after a full-contract change ---------------------
+
+def _fresh_ready(tmp_path):
+    from src.operations_console_v1 import OperationsConsole
+    from tests.test_attempt_diagnostics_postgres import bound, ingest
+    console = OperationsConsole(root=tmp_path, source_store=tmp_path / 's', runtime=tmp_path / 'r')
+    bound(console, reject=False)
+    sid, actor, _ = ingest(console)
+    return console, sid, actor
+
+
+def _set_stored_contract(console, sid, value):
+    envelope = deepcopy(console._envelope(sid))
+    envelope['semantic_replay']['identity']['components']['semantic_contract_version'] = value
+    console._commit_prepared_store(envelopes={sid: envelope}, snapshot_id=sid)
+
+
+def _candidate_ids(console, sid):
+    from src.revision_workflow import knowledge_revision
+    return {r['object_id'] for r in current_revisions(console._load_objects(sid, remember=False), snapshot_id=sid)
+            if knowledge_revision(r)}
+
+
+def _reextract(console, sid, actor):
+    from src.operations_console_v1 import ConsoleError
+    try:
+        console.reextract_unpublished(actor_id=actor, snapshot_id=sid)
+    except ConsoleError:
+        pass
+
+
+def test_fresh_attempt_after_contract_change_supersedes_existing_candidates(tmp_path):
+    console, sid, actor = _fresh_ready(tmp_path)
+    before = console._load_objects(sid, remember=False)
+    prior = _candidate_ids(console, sid)
+    assert prior
+    _set_stored_contract(console, sid, 'older-contract/v0')
+    _reextract(console, sid, actor)
+    history = console._load_objects(sid, remember=False)
+    keys = {(r['object_id'], r['object_version']) for r in history}
+    assert {(r['object_id'], r['object_version']) for r in before} <= keys, 'NOOIT verwijderen'
+    from src.revision_workflow import lineage_evidence
+    superseded = {r['object_id'] for r in history
+                  if r['governance'].get('validation_status') == 'superseded'
+                  and (lineage_evidence(r) or {}).get('reason') == 'contract change supersession'}
+    assert prior <= superseded
+
+
+def test_fresh_attempt_without_contract_change_supersedes_nothing(tmp_path):
+    console, sid, actor = _fresh_ready(tmp_path)
+    _reextract(console, sid, actor)
+    from src.revision_workflow import lineage_evidence
+    assert not [r for r in console._load_objects(sid, remember=False)
+                if (lineage_evidence(r) or {}).get('reason') == 'contract change supersession']
+
+
+def test_legacy_replay_without_contract_supersedes_nothing():
+    from src.candidate_supersession_v1 import contract_changed
+    assert not contract_changed({}, 'current')
+    assert not contract_changed({'semantic_replay': {'identity': {'components': {}}}}, 'current')
+    assert not contract_changed({'semantic_replay': {'identity': {'components': {'semantic_contract_version': 'a'}}}}, None)
+    assert contract_changed({'semantic_replay': {'identity': {'components': {'semantic_contract_version': 'a'}}}}, 'b')

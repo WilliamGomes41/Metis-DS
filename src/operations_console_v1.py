@@ -2541,7 +2541,15 @@ class OperationsConsole:
             from src.recoverable_formation_v1 import preserve_unchanged
             objects = preserve_unchanged(objects, self.snapshot_objects(snapshot_id))
         if review_path_for_klasse(envelope["class"]) != "boom":
-            objects = reprocessed_history(self._load_objects(snapshot_id, remember=False), objects,
+            history = self._load_objects(snapshot_id, remember=False)
+            if _attempt_id is None or attempt.get("kind") != "resume":
+                from src.candidate_supersession_v1 import supersede_if_contract_changed
+                from src.pre_review_semantic_v1 import semantic_contract_version_for_mode
+                from src.source_selection_v1 import active_configuration
+                history = supersede_if_contract_changed(
+                    history, envelope, snapshot_id=snapshot_id, actor=account["username"],
+                    active_contract=semantic_contract_version_for_mode(active_configuration(self).get("mode")))
+            objects = reprocessed_history(history, objects,
                                           snapshot_id=snapshot_id, actor=account["username"])
         if "decision_graph" in envelope or (envelope.get("review_policy") and envelope["class"] == "beslisboom"):
             from src.decision_graph_v1 import prepare_graph

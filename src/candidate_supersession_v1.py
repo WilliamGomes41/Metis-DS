@@ -36,3 +36,19 @@ def refuses_superseded(objects, approved_ids):
     """True when any approved candidate is superseded. Read-only."""
     return any(_status(obj) == "superseded" and str(obj.get("object_id") or "") in approved_ids
                for obj in objects)
+
+
+def contract_changed(envelope, active_contract):
+    """True only when a stored and an active full contract identifier exist and differ."""
+    components = ((envelope.get("semantic_replay") or {}).get("identity") or {}).get("components") or {}
+    stored = components.get("semantic_contract_version")
+    if not isinstance(stored, str) or not stored or not isinstance(active_contract, str) or not active_contract:
+        return False  # legacy/no replay or non-semantic mode: NOOIT supersede without evidence
+    return stored != active_contract
+
+
+def supersede_if_contract_changed(rows, envelope, *, active_contract, snapshot_id, actor):
+    """Trigger: a fresh attempt after a full-contract change supersedes the revision's candidates."""
+    if not contract_changed(envelope, active_contract):
+        return rows
+    return supersede_for_contract_change(rows, snapshot_id=snapshot_id, actor=actor)
