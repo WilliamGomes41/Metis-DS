@@ -271,3 +271,24 @@ def test_legacy_document_participation_unchanged(tmp_path):
     _participation(console, accounts, sid, extra)
     assert extra in console._envelope(sid)["named_reviewers"]
     assert console._envelope(sid)["review_policy"] is not None
+
+
+def test_sherlock_chosen_one_approved_one_open_blocks_total_readiness(tmp_path, monkeypatch):
+    # Bewaking (Sherlock): de readiness-blocker blijft gelden naast de console-check.
+    ready, console, accounts, sid, _ = _harness(tmp_path)
+    bert = accounts["reviewer"]["account_id"]
+    first = next(o for o in console.snapshot_objects(sid) if o.get("object_type") == "unclassified")
+    console.review_object(actor_id=bert, snapshot_id=sid, object_id=first["object_id"], decision="approve",
+                          confirmed_object_type="explanation")
+    original = console._envelope
+
+    def with_choice(snapshot_id, *args, **kwargs):
+        envelope = original(snapshot_id, *args, **kwargs)
+        envelope["review_configuration"] = _config("one_other", [bert])
+        return envelope
+
+    monkeypatch.setattr(console, "_envelope", with_choice)
+    readiness = console.publication_readiness(sid)
+    assert readiness["publish_allowed"] is False
+    assert "review_work_incomplete" in readiness["blockers"]
+    assert readiness["independence_satisfied"] is False
