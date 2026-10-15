@@ -10,7 +10,8 @@ Rules (B18):
 - A publication_refused record MAG NIET enter the review ledger hash chain; it MOET
   only be written here. Existing ledger event hashes MOETEN NOOIT change.
 - Records are NOOIT rewritten; only retention/rotation removes old records.
-- The PostgreSQL refusal path is ONE transactional INSERT (dedup inside that statement): it
+- The PostgreSQL refusal path is ONE transactional INSERT … ON CONFLICT (dedup_key) DO NOTHING
+  on the UNIQUE dedup_key (key + 10-minute window bucket); a duplicate row MAG NIET exist. It
   MAG NIET take an advisory lock and MAG NIET run DELETE. Table retention is the explicit
   maintenance command apply_retention (scripts/publication_refusal_retention.py); it MAG
   NIET run per refusal.
@@ -88,6 +89,12 @@ def read_records(path: Path, on_corrupt=None) -> list[dict]:
         return _parse(handle, on_corrupt)
 
 
+def dedup_key(key, clock: datetime) -> str:
+    """Key + fixed DEDUP_WINDOW bucket (UTC epoch); identical within a bucket, new in the next."""
+    bucket = int(clock.timestamp() // DEDUP_WINDOW.total_seconds())
+    return hashlib.sha256(json.dumps([key, bucket], separators=(',', ':')).encode()).hexdigest()
+
+
 def _key(snapshot_id, reason_codes, actor):
     return [str(snapshot_id), list(reason_codes)[:MAX_REASON_CODES], str(actor)]
 
@@ -148,18 +155,17 @@ class PostgresRefusalStore:
     def append(self, *, snapshot_id, object_version, actor, reason_codes, revision, clock=None) -> str:
         clock = clock or datetime.now(timezone.utc)
         key = _key(snapshot_id, reason_codes, actor)
-        dedup = hashlib.sha256(json.dumps(key, separators=(',', ':')).encode()).hexdigest()
+        dedup = dedup_key(key, clock)
         record = _record(key, object_version, revision, clock, POSTGRES_STATUS)
         with self._store._connect() as con:
             with con.transaction():
                 row = con.execute(
                     'INSERT INTO workflow.publication_refusals(recorded_at, snapshot_id, object_version, actor, verdict,'
                     ' reason_codes, revision_sha256, dedup_key, schema_version)'
-                    ' SELECT %s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s WHERE NOT EXISTS ('
-                    'SELECT 1 FROM workflow.publication_refusals WHERE dedup_key=%s AND recorded_at > %s)'
-                    ' RETURNING refusal_id',
+                    ' VALUES (%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s)'
+                    ' ON CONFLICT (dedup_key) DO NOTHING RETURNING refusal_id',
                     (clock, key[0], record['object_version'], key[2], 'refused', json.dumps(key[1]),
-                     record['revision_sha256'], dedup, SCHEMA, dedup, clock - DEDUP_WINDOW)).fetchone()
+                     record['revision_sha256'], dedup, SCHEMA)).fetchone()
         if row is None:
             return 'deduplicated'
         return 'recorded'

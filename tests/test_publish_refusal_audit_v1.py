@@ -349,3 +349,27 @@ def test_retention_script_runs_apply_retention(monkeypatch, capsys):
     monkeypatch.setattr(script, '_workflow_store', lambda: _FakeWorkflow(con))
     assert script.main(['--max-rows', '10', '--retention-days', '30']) == 0
     assert '"status": "PASS"' in capsys.readouterr().out and len(con.sql) == 2
+
+
+# --- Metis F1-4: a duplicate row is NOT acceptable: unique dedup key + ON CONFLICT DO NOTHING ---
+
+def test_migration_018_has_unique_dedup_key():
+    from pathlib import Path
+    sql = (Path(__file__).resolve().parents[1] / 'db' / 'migrations' / '018_publication_refusal_audit.sql').read_text()
+    assert 'UNIQUE' in sql.upper() and 'dedup_key' in sql
+
+
+def test_postgres_refusal_insert_uses_on_conflict_do_nothing_without_lock():
+    con = _FakeCon()
+    store.PostgresRefusalStore(_FakeWorkflow(con)).append(snapshot_id='s', object_version='1', actor='a',
+                                                          reason_codes=['r'], revision=None)
+    [sql] = con.sql
+    assert 'ON CONFLICT (DEDUP_KEY) DO NOTHING' in sql and 'ADVISORY' not in sql and 'NOT EXISTS' not in sql
+
+
+def test_dedup_key_is_stable_within_a_window_and_changes_across_windows():
+    from datetime import datetime, timezone
+    t0 = datetime(2026, 10, 16, 1, 0, tzinfo=timezone.utc)
+    k = lambda t, actor='a': store.dedup_key(['s', ['r'], actor], t)
+    assert k(t0) == k(t0 + store.DEDUP_WINDOW / 2)
+    assert k(t0) != k(t0 + store.DEDUP_WINDOW) and k(t0) != k(t0, actor='b')
