@@ -178,9 +178,10 @@ def test_console_independence_uses_configured_approval_over_eligible_reviewers(t
     assert "second_named_reviewer_required" in readiness["blockers"], name
 
 
-def test_console_independence_met_when_configured_reviewer_approves(tmp_path):
+def test_console_independence_not_met_with_open_objects_or_without_source_text(tmp_path):
+    # A2 (Metis optie b): open objecten tellen mee; zonder brontekst MOET de check dicht.
     readiness = _readiness_with_bindings(tmp_path, lambda bert: _config("one_other", [bert]), [{}])
-    assert readiness["independence_satisfied"] is True
+    assert readiness["independence_satisfied"] is False
 
 
 def test_uploader_sole_high_risk_object_is_refused_with_dutch_message():

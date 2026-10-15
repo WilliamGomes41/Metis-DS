@@ -4715,17 +4715,29 @@ class OperationsConsole:
                 blockers.append("review_configuration_invalid")
             elif effective["source"] == "chosen":
                 review_configuration = envelope["review_configuration"]
-                # Review #631 A: dezelfde eligible reviewers en dezelfde regel als het contract.
+                # Review #631 A/A2 (Metis optie b): elk publiceerbaar object én elk object met een
+                # open reviewplicht (dezelfde set als de readiness telt) MOET de regel van het contract halen.
                 from src.four_eyes_v1 import eligible_tuple_reviewers
                 from src.review_configuration_v1 import configured_approval
-                approved = [
-                    {str(row.get("reviewer_id") or "") for row in eligible}
-                    for obj in objects
-                    if (eligible := eligible_tuple_reviewers(
-                        all_bindings, object_id=obj.get("object_id") or "", uploader_id=uploader))
-                ]
-                independence = bool(approved) and all(
-                    configured_approval(effective, ids, uploader_id=uploader)[0] for ids in approved)
+                from src.review_duty_v1 import review_duties
+                duty_fragments = fragments
+                if duty_fragments is None and not context_supplied:
+                    from src.source_preparation_context_v1 import stored_extraction
+                    try:
+                        duty_fragments = stored_extraction(envelope)
+                    except ConsoleError:
+                        duty_fragments = None
+                # Zonder brontekst zijn open plichten onzichtbaar: dan MOET de check dicht (fail-closed).
+                counted = set() if duty_fragments is None and review_path != "boom" else {
+                    str(obj.get("object_id") or "") for obj in publishable} | {
+                    duty["object_id"] for duty in review_duties(
+                        objects, review_path=review_path, bindings=all_bindings, fragments=duty_fragments)}
+                independence = bool(counted) and all(
+                    configured_approval(effective, {str(row.get("reviewer_id") or "") for row in
+                                                    eligible_tuple_reviewers(all_bindings, object_id=object_id,
+                                                                             uploader_id=uploader)},
+                                        uploader_id=uploader)[0]
+                    for object_id in counted)
         from src.decision_graph_v1 import publication_issues
         blockers.extend(publication_issues(envelope, objects))
         if any((o.get("metadata") or {}).get("decision_graph_contract") for o in objects) and "decision_graph" not in envelope:
