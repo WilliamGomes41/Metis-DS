@@ -212,7 +212,7 @@ def _scenario(runtime, monkeypatch, boundary, *, block_eventloop=False):
             received = available(second, "post", "/ingest", data={
                 "ingest_kind": "new", "title": "Independent", "version": "1", "date": "2026-10-09",
                 "class_": "richtlijn", "family": "independent", "review_mode": "single",
-                "primary_reviewer": other, "command_id": "independent-receipt"},
+                "primary_reviewer": other, "review_option": "uploader_sole", "command_id": "independent-receipt"},
                 files={"file": ("other.html", b"<html><body><p>Andere bron.</p></body></html>", "text/html")},
                 follow_redirects=False)
             assert received.status_code == 303, received.text
