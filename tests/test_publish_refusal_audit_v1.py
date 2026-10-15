@@ -196,16 +196,17 @@ def test_refusal_store_dedup_window_and_key(tmp_path):
     assert len(rows) == 4 and all(len(r['revision_sha256']) == 64 and 'rev' != r['revision_sha256'] for r in rows)
 
 
-def test_refusal_store_is_bounded_and_append_only(tmp_path, monkeypatch):
+def test_refusal_store_rotates_instead_of_refusing_at_capacity(tmp_path, monkeypatch):
+    # Metis: rotation/retention, NOOIT a permanent refusal at the cap.
     from datetime import datetime, timezone
-    monkeypatch.setattr(store, 'MAX_RECORDS', 2)
+    monkeypatch.setattr(store, 'MAX_FILE_BYTES', 600)
     path = tmp_path / store.FILE_NAME
     t0 = datetime(2026, 10, 15, tzinfo=timezone.utc)
-    for actor in ('a', 'b'):
-        assert store.append_refusal(path, snapshot_id='s', object_version='1', actor=actor, reason_codes=['r'] * 500, revision=None, clock=t0) == 'recorded'
-    first = path.read_bytes()
-    assert store.append_refusal(path, snapshot_id='s', object_version='1', actor='c', reason_codes=['r'], revision=None, clock=t0) == 'capacity_reached'
-    assert path.read_bytes() == first
+    outcomes = [store.append_refusal(path, snapshot_id='s', object_version='1', actor=f'a{n}', reason_codes=['r'] * 500,
+                                     revision=None, clock=t0) for n in range(6)]
+    assert outcomes == ['recorded'] * 6
+    assert store.rotated_path(path).exists()
+    assert path.stat().st_size < 600 + 2000
     assert all(len(r['reason_codes']) == store.MAX_REASON_CODES for r in store.read_records(path))
 
 
@@ -246,13 +247,15 @@ def test_log_failure_emits_audit_failed_diagnostic(tmp_path, warnings_, monkeypa
     assert [f['stage'] for f in _failures(warnings_)] == ['log']
 
 
-def test_capacity_reached_emits_audit_failed_diagnostic(tmp_path, events, warnings_, monkeypatch):
-    monkeypatch.setattr(store, 'MAX_RECORDS', 0)
+def test_corrupt_record_emits_audit_failed_diagnostic_and_still_records(tmp_path, events, warnings_):
     console, sid, actor = _blocked_base(tmp_path)
+    path = store.store_path(console)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{not json\n')
     assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
     [failure] = _failures(warnings_)
-    assert failure['stage'] == 'durable_store' and failure['outcome'] == 'capacity_reached'
-
+    assert failure['stage'] == 'corrupt_record' and failure['outcome'] == 'skipped'
+    assert [r['actor'] for r in store.read_records(path)] == [actor]
 
 def test_audit_failed_diagnostic_is_bounded_per_process(warnings_, monkeypatch):
     monkeypatch.setattr(audit, '_FAILURE_COUNT', [0])
@@ -278,6 +281,45 @@ def test_no_silent_except_pass_in_refusal_audit():
     import inspect
     source = inspect.getsource(audit)
     assert 'except Exception:\n        pass' not in source and 'except Exception:\n            pass' not in source
+def test_dedup_reads_only_the_tail_not_the_full_file(tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+    path = tmp_path / store.FILE_NAME
+    t0 = datetime(2026, 10, 15, tzinfo=timezone.utc)
+    path.write_text('{"padding":"' + 'x' * (store.TAIL_BYTES * 3) + '"}\n')
+    reads = []
+    real_open = type(path).open
+
+    def spy(self, *a, **k):
+        handle = real_open(self, *a, **k)
+        real_read = handle.read
+        handle.read = lambda n=-1: (reads.append(n), real_read(n))[1]
+        return handle
+    monkeypatch.setattr(type(path), 'open', spy)
+    assert store.append_refusal(path, snapshot_id='s', object_version='1', actor='a', reason_codes=['r'], revision=None, clock=t0) == 'recorded'
+    assert reads and all(0 <= n <= store.TAIL_BYTES for n in reads), reads
+
+
+def test_corrupt_record_is_skipped_reported_and_never_blocks_writes(tmp_path):
+    from datetime import datetime, timezone
+    path = tmp_path / store.FILE_NAME
+    t0 = datetime(2026, 10, 15, tzinfo=timezone.utc)
+    store.append_refusal(path, snapshot_id='s', object_version='1', actor='a', reason_codes=['r'], revision=None, clock=t0)
+    with path.open('a') as handle:
+        handle.write('{not json\n{"recorded_at":"garbage","snapshot_id":"s","reason_codes":["r"],"actor":"b"}\n')
+    assert store.append_refusal(path, snapshot_id='s', object_version='1', actor='b', reason_codes=['r'], revision=None, clock=t0) == 'recorded'
+    corrupt = []
+    rows = store.read_records(path, on_corrupt=corrupt.append)
+    assert [r['actor'] for r in rows] == ['a', 'b'] and len(corrupt) == 2
+
+
+def test_file_store_never_goes_live(tmp_path, monkeypatch):
+    # In Azure (WEBSITE_SITE_NAME) without a PostgreSQL refusal table the file store MAG NIET be used.
+    monkeypatch.setenv('WEBSITE_SITE_NAME', 'metis-prod')
+    console, sid, actor = _blocked_base(tmp_path)
+    with pytest.raises(store.RefusalStoreUnavailable):
+        store.append(console, snapshot_id=sid, object_version='1', actor=actor, reason_codes=['r'], revision=None)
+    assert not store.store_path(console).exists()
+
 def test_file_store_is_visibly_marked_temporary(tmp_path):
     # TIJDELIJK until William's GO on a PostgreSQL table: every record MOET carry the marker.
     path = tmp_path / store.FILE_NAME

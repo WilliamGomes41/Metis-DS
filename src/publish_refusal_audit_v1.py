@@ -83,10 +83,9 @@ def _append_durable(console, *, actor_id, snapshot_id, reason_codes, revision):
         except Exception as exc:  # version is optional evidence
             version = ''
             _audit_failed('envelope_read', error=exc, snapshot_id=snapshot_id)
-        outcome = store.append_refusal(store.store_path(console), snapshot_id=str(snapshot_id), object_version=version,
-                                       actor=str(actor_id), reason_codes=reason_codes, revision=revision)
-        if outcome == 'capacity_reached':
-            _audit_failed('durable_store', outcome=outcome, snapshot_id=snapshot_id)
+        store.append(console, snapshot_id=str(snapshot_id), object_version=version,
+                     actor=str(actor_id), reason_codes=reason_codes, revision=revision,
+                     on_corrupt=lambda name: _audit_failed('corrupt_record', outcome='skipped', snapshot_id=snapshot_id))
     except Exception as exc:
         _audit_failed('durable_store', error=exc, snapshot_id=snapshot_id)
 

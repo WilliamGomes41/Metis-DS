@@ -25,6 +25,17 @@ from tests.test_vsa_publish_document_v1 import (  # noqa: F401 - fixture import
 pytestmark = [pytest.mark.release_control_opslag, pytest.mark.release_control_releasebewijs]
 
 
+@pytest.fixture()
+def refusal_postgres(workflow_postgres):  # noqa: F811 - adds migration 018 to the shared schema
+    import psycopg
+    from pathlib import Path
+    sql = (Path(__file__).resolve().parents[1] / 'db' / 'migrations' / '018_publication_refusal_audit.sql').read_text()
+    with psycopg.connect(workflow_postgres.dsn, autocommit=True) as con:
+        for statement in [p.strip() for p in '\n'.join(l for l in sql.splitlines() if not l.lstrip().startswith('--')).split(';') if p.strip()]:
+            con.execute(statement)
+    return workflow_postgres
+
+
 @pytest.fixture(autouse=True)
 def _key(monkeypatch):
     monkeypatch.setenv('METIS_AUDIT_HMAC_KEY', 'pg-audit-key')
@@ -45,28 +56,39 @@ def _chain(console):
     return [(e['event_type'], e['event_hash'], e.get('previous_event_hash')) for e in read_events(console._ledger_path)]
 
 
-def test_postgres_refusal_outside_ledger_chain_and_deduplicated(tmp_path, workflow_postgres):
-    console, sid, actor = _blocked(tmp_path, workflow_postgres)
+def test_postgres_refusal_outside_ledger_chain_and_deduplicated(tmp_path, refusal_postgres):
+    console, sid, actor = _blocked(tmp_path, refusal_postgres)
     before = _chain(console)
     results = [console.publish(actor_id=actor, snapshot_id=sid) for _ in range(3)]
     assert all(r['status'] == 'BLOCKED' and r['blockers'] == ['fixture_forced_refusal'] for r in results)
     assert _chain(console) == before
     assert verify_ledger(console._ledger_path) == []
-    [record] = store.read_records(store.store_path(console))
+    [record] = store.postgres_store(console).records_for(sid)  # table, deduplicated to one
     assert record['actor'] == actor and record['snapshot_id'] == sid
+    assert record['store_status'] == store.POSTGRES_STATUS
+    assert not store.store_path(console).exists()  # file store MAG NIET be used with PostgreSQL
     assert len(record['revision_sha256']) == 64  # m2. token MAG NIET be stored verbatim
 
 
-def test_postgres_store_failure_keeps_verdict_and_emits_diagnostic(tmp_path, workflow_postgres, monkeypatch):
+def test_postgres_store_failure_keeps_verdict_and_emits_diagnostic(tmp_path, refusal_postgres, monkeypatch):
     warnings = []
     monkeypatch.setattr(_LOGGER, 'warning', lambda fmt, msg: warnings.append(json.loads(msg)))
 
     def failing(*args, **kwargs):
         raise OSError('private failure')
-    monkeypatch.setattr(store, 'append_refusal', failing)
-    console, sid, actor = _blocked(tmp_path, workflow_postgres)
+    monkeypatch.setattr(store.PostgresRefusalStore, 'append', failing)
+    console, sid, actor = _blocked(tmp_path, refusal_postgres)
     before = _chain(console)
     result = console.publish(actor_id=actor, snapshot_id=sid)
     assert result['status'] == 'BLOCKED' and result['blockers'] == ['fixture_forced_refusal']
     assert _chain(console) == before
     assert [w['stage'] for w in warnings if w.get('event') == 'publication_refusal_audit_failed'] == ['durable_store']
+
+
+def test_postgres_retention_bounds_rows_without_refusing(tmp_path, refusal_postgres, monkeypatch):
+    monkeypatch.setattr(store, 'MAX_ROWS', 3)
+    console, sid, actor = _blocked(tmp_path, refusal_postgres)
+    pg = store.postgres_store(console)
+    outcomes = [pg.append(snapshot_id=sid, object_version='1', actor=f'a{n}', reason_codes=['r'], revision=None) for n in range(6)]
+    assert outcomes == ['recorded'] * 6
+    assert len(pg.records_for(sid)) <= 4 and pg.records_for(sid)[0]['actor'] == 'a5'
