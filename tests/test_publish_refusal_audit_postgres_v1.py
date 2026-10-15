@@ -96,3 +96,25 @@ def test_postgres_refusal_path_never_deletes_and_retention_is_maintenance(tmp_pa
     assert store.apply_retention(console.workflow_document_store, max_rows=3)['status'] == 'PASS'
     rows = pg.records_for(sid)
     assert [r['actor'] for r in rows] == ['a5', 'a4', 'a3']
+
+
+def test_postgres_concurrent_identical_refusals_leave_one_row(tmp_path, refusal_postgres):
+    # Metis F1-4: two concurrent identical refusals MOETEN leave exactly 1 row (UNIQUE + ON CONFLICT).
+    import threading
+    from datetime import datetime, timezone
+    console, sid, actor = _blocked(tmp_path, refusal_postgres)
+    pg = store.postgres_store(console)
+    clock = datetime.now(timezone.utc)
+    barrier, outcomes = threading.Barrier(2), []
+
+    def refuse():
+        barrier.wait()
+        outcomes.append(pg.append(snapshot_id=sid, object_version='1', actor=actor, reason_codes=['r'],
+                                  revision=None, clock=clock))
+    threads = [threading.Thread(target=refuse) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sorted(outcomes) == ['deduplicated', 'recorded']
+    assert len(pg.records_for(sid)) == 1
