@@ -1,5 +1,7 @@
 # #629 F1: publication refusals in a separate append-only store
 
+> **TIJDELIJK:** the file store is temporary until William's GO on a PostgreSQL table. No migration in this PR. Records carry `store_status: temporary_file_store_pending_postgres_table`.
+
 Change class: B
 Promise: A publication_refused record MAG NIET enter the review ledger hash chain; it MOET be written only to the separate append-only refusal store, deduplicated per (document, reason codes, actor) within 10 minutes and bounded (5000 records, 128 reason codes per record, no eviction). Existing ledger event hashes MOETEN NOOIT change; the gate verdict MAG NIET change.
 Proof: tests/test_publish_refusal_audit_v1.py: 5 tests red at the red commit (REFUSAL_IN_LEDGER_CHAIN; ledger contains publication_refused; no store records), green after the fix. The chain test compares (event_type, event_hash, previous_event_hash) of every ledger event before and after a refusal and runs verify_ledger, in file and durable topology.

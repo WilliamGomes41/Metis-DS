@@ -1,5 +1,8 @@
 """Separate append-only store for publication refusals (outside the review ledger).
 
+TIJDELIJK: this JSONL file store is temporary until William's GO on a PostgreSQL table
+(no migration in this PR). Every record carries store_status = STORE_STATUS.
+
 Rules (B18):
 - A publication_refused record MAG NIET enter the review ledger hash chain; it MOET
   only be written here. Existing ledger event hashes MOETEN NOOIT change.
@@ -22,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 SCHEMA = 'publication-refusal-audit-v1'
+STORE_STATUS = 'temporary_file_store_pending_postgres_table'
 FILE_NAME = 'publication_refusal_audit.jsonl'
 DEDUP_WINDOW = timedelta(minutes=10)
 MAX_RECORDS = 5000
@@ -63,7 +67,7 @@ def append_refusal(path: Path, *, snapshot_id: str, object_version: str, actor: 
                     return 'deduplicated'
             if len(rows) >= MAX_RECORDS:
                 return 'capacity_reached'
-            record = {'schema': SCHEMA, 'event_type': 'publication_refused', 'recorded_at': clock.isoformat(),
+            record = {'schema': SCHEMA, 'store_status': STORE_STATUS, 'event_type': 'publication_refused', 'recorded_at': clock.isoformat(),
                       'snapshot_id': key[0], 'object_version': str(object_version), 'actor': key[2],
                       'verdict': 'refused', 'reason_codes': codes,
                       'revision_sha256': hashlib.sha256(revision.encode()).hexdigest() if isinstance(revision, str) else None}

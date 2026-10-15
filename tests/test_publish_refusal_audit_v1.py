@@ -272,3 +272,11 @@ def test_no_silent_except_pass_in_refusal_audit():
     import inspect
     source = inspect.getsource(audit)
     assert 'except Exception:\n        pass' not in source and 'except Exception:\n            pass' not in source
+def test_file_store_is_visibly_marked_temporary(tmp_path):
+    # TIJDELIJK until William's GO on a PostgreSQL table: every record MOET carry the marker.
+    path = tmp_path / store.FILE_NAME
+    store.append_refusal(path, snapshot_id='s', object_version='1', actor='a', reason_codes=['r'], revision=None)
+    [row] = store.read_records(path)
+    assert store.STORE_STATUS == 'temporary_file_store_pending_postgres_table'
+    assert row['store_status'] == store.STORE_STATUS
+    assert 'TIJDELIJK' in store.__doc__
