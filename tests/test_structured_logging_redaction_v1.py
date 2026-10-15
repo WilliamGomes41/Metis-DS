@@ -66,3 +66,40 @@ def test_library_loggers_stay_at_warning(monkeypatch):
     for name in LIBRARIES:
         assert logging.getLogger(name).getEffectiveLevel() >= logging.WARNING, name
         assert not logging.getLogger(name).isEnabledFor(logging.INFO), name
+
+
+# --- OPENVRAAG-627-1 closed: pre-existing root handlers and the performance logger ---
+
+def test_preexisting_root_handler_emits_only_redacted_text():
+    import io
+    stream = io.StringIO()
+    foreign = logging.StreamHandler(stream)
+    foreign.setFormatter(logging.Formatter('%(message)s'))
+    root = logging.getLogger()
+    root.addHandler(foreign)
+    try:
+        install_structured_logging()
+        logging.getLogger('metis.test.foreign').warning('login %s password=%s', 'anne.de.vries@example.nl', 'hunter2')
+    finally:
+        root.removeHandler(foreign)
+    out = stream.getvalue()
+    assert 'hunter2' not in out and 'example.nl' not in out and '[REDACTED' in out
+
+
+def test_performance_logger_goes_through_the_json_formatter():
+    from fastapi import FastAPI
+    from src.console_performance_v1 import _LOGGER as perf, install_console_performance
+    saved = list(perf.handlers)
+    for h in saved:
+        perf.removeHandler(h)
+    try:
+        install_console_performance(FastAPI())
+        assert perf.handlers and all(isinstance(h.formatter, JsonLogFormatter) for h in perf.handlers)
+        record = logging.LogRecord(perf.name, logging.INFO, __file__, 1, 'perf Cookie: sessionid=s3cr3t', (), None)
+        row = json.loads(perf.handlers[0].format(record))
+        assert row['logger'] == perf.name and 's3cr3t' not in row['message']
+    finally:
+        for h in list(perf.handlers):
+            perf.removeHandler(h)
+        for h in saved:
+            perf.addHandler(h)
