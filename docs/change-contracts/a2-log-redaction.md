@@ -18,3 +18,8 @@ Not touched: operations_console_v1.py, publish gate, metis_diagnostic logger.
 
 - Redaction is pattern-based and fail-closed for unquoted header values (whole rest of the line).
 - OPENVRAAG-627-1 CLOSED: pre-existing root handlers get a RedactingFilter (they MAG NIET emit unredacted text) and metis.console.performance uses JsonLogFormatter. Red 2565fe8 (2 failed), green 86ae800.
+
+## Sherlock re-audit (2026-10-16): F1 and F2
+- **F1 (exc_info):** RedactingFilter reduces exc_info to `[ExceptionType: redacted message]` inside the redacted message and clears exc_info, exc_text and stack_info: a traceback MAG NIET reach a handler we do not own. JsonLogFormatter keeps type only. Proof: `test_exception_message_secret_is_redacted_in_foreign_handler`, `test_json_formatter_exception_secret_never_rendered`.
+- **F2 (non-propagating loggers):** handlers on uvicorn, uvicorn.error, uvicorn.access, gunicorn, gunicorn.error and gunicorn.access MOETEN get the RedactingFilter (NON_PROPAGATING_LOGGERS). Proof: `test_non_propagating_logger_handlers_emit_only_redacted_text` (5 cases). Red c608e91 (6 failed).
+- **Known limitation (documented, not a promise):** a handler added after `install_structured_logging()` (on root or on these loggers) is NOT covered until install runs again. OPENVRAAG-638-1: Metis decides whether a startup re-install after server log configuration is required.

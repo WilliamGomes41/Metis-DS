@@ -34,6 +34,12 @@ _SECRET_PATTERNS = (
 # Third-party loggers MOETEN stay at WARNING: their INFO/DEBUG output (HTTP headers,
 # request bodies, connection strings) MAG NIET reach the root JSON handler.
 LIBRARY_LOGGERS = ('azure', 'urllib3', 'httpx', 'httpcore', 'openai', 'msal', 'psycopg', 'asyncio')
+# Known loggers with propagate=False and their own handlers (ASGI/WSGI servers). Their
+# handlers MOETEN get the RedactingFilter explicitly. Known limitation: a handler added
+# after install_structured_logging() (on root or on these loggers) is NOT covered until
+# install_structured_logging() runs again.
+NON_PROPAGATING_LOGGERS = ('uvicorn', 'uvicorn.error', 'uvicorn.access', 'gunicorn', 'gunicorn.error',
+                           'gunicorn.access')
 _SAFE = re.compile(r'[A-Za-z0-9_.:-]{1,128}')
 _HANDLER_NAME = 'metis-structured-json'
 
@@ -77,8 +83,12 @@ class RedactingFilter(logging.Filter):
             message = record.getMessage()
         except Exception:
             message = str(record.msg)
+        if record.exc_info and record.exc_info[0] is not None:
+            # F1: the traceback MAG NIET reach a handler we do not own; keep type + redacted message.
+            exc_type, exc_value = record.exc_info[0], record.exc_info[1]
+            message = f'{message} [{exc_type.__name__}: {exc_value}]'
         record.msg, record.args = redact(message), None
-        record.exc_text = None
+        record.exc_info, record.exc_text, record.stack_info = None, None, None
         return True
 
 
@@ -98,6 +108,10 @@ def install_structured_logging(level=logging.INFO):
     for handler in root.handlers:
         if getattr(handler, 'name', None) != _HANDLER_NAME and _REDACTING_FILTER not in handler.filters:
             handler.addFilter(_REDACTING_FILTER)
+    for name in NON_PROPAGATING_LOGGERS:
+        for handler in logging.getLogger(name).handlers:
+            if _REDACTING_FILTER not in handler.filters:
+                handler.addFilter(_REDACTING_FILTER)
     for name in LIBRARY_LOGGERS:
         library = logging.getLogger(name)
         if library.level == logging.NOTSET or library.level < logging.WARNING:
