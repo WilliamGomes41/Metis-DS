@@ -41,8 +41,8 @@ def _append_durable(console, *, actor_id, snapshot_id, reason_codes, revision):
             version = str(console._envelope(snapshot_id).get('version') or '')
         except Exception:
             version = ''
-        store.append_refusal(store.store_path(console), snapshot_id=str(snapshot_id), object_version=version,
-                             actor=str(actor_id), reason_codes=reason_codes, revision=revision)
+        store.append(console, snapshot_id=str(snapshot_id), object_version=version,
+                     actor=str(actor_id), reason_codes=reason_codes, revision=revision)
     except Exception:
         pass
 
