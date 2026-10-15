@@ -104,3 +104,67 @@ def test_performance_logger_goes_through_the_json_formatter():
             perf.removeHandler(h)
         for h in saved:
             perf.addHandler(h)
+
+
+# --- Sherlock re-audit #638 F1: exc_info MAG NIET leak secrets through foreign handlers ---
+
+def _foreign(stream):
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(logging.Formatter('%(message)s'))  # default formatter appends the traceback
+    return handler
+
+
+def test_exception_message_secret_is_redacted_in_foreign_handler():
+    import io
+    stream = io.StringIO()
+    foreign = _foreign(stream)
+    root = logging.getLogger()
+    root.addHandler(foreign)
+    try:
+        install_structured_logging()
+        try:
+            raise RuntimeError('connect failed password=hunter2 for anne.de.vries@example.nl')
+        except RuntimeError:
+            logging.getLogger('metis.test.exc').exception('upstream failed')
+    finally:
+        root.removeHandler(foreign)
+    out = stream.getvalue()
+    assert 'hunter2' not in out and 'example.nl' not in out
+    assert 'RuntimeError' in out and 'Traceback' not in out
+
+
+def test_json_formatter_exception_secret_never_rendered():
+    try:
+        raise ValueError('token=abc123secret')
+    except ValueError:
+        import sys
+        record = logging.LogRecord('x', logging.ERROR, __file__, 1, 'boom', (), sys.exc_info())
+    out = JsonLogFormatter().format(record)
+    assert 'abc123secret' not in out and json.loads(out)['exc_type'] == 'ValueError'
+
+
+# --- Sherlock re-audit #638 F2: known non-propagating loggers are covered explicitly ---
+
+@pytest.mark.parametrize('name', ['uvicorn', 'uvicorn.error', 'uvicorn.access', 'gunicorn.error', 'gunicorn.access'])
+def test_non_propagating_logger_handlers_emit_only_redacted_text(name):
+    import io
+    stream = io.StringIO()
+    logger = logging.getLogger(name)
+    saved = (list(logger.handlers), logger.propagate, logger.level)
+    handler = _foreign(stream)
+    logger.handlers = [handler]
+    logger.propagate = False
+    logger.setLevel(logging.INFO)
+    try:
+        install_structured_logging()
+        logger.info('GET / Authorization: Bearer abcdefghijk cookie=sessionid=s3cr3t')
+        try:
+            raise OSError('password=hunter2')
+        except OSError:
+            logger.exception('failed')
+    finally:
+        logger.handlers, logger.propagate = saved[0], saved[1]
+        logger.setLevel(saved[2])
+    out = stream.getvalue()
+    assert 'abcdefghijk' not in out and 's3cr3t' not in out and 'hunter2' not in out
+    assert '[REDACTED]' in out
