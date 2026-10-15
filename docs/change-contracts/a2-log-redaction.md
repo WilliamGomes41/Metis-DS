@@ -10,11 +10,11 @@ Taalregel: B18. Rules use MOET / MAG NIET / NOOIT only; open items are marked OP
 
 ## Change
 
-- src/structured_logging_v1.py only: header-key pattern (value to closing quote or line end), quoted/unquoted assignment pattern, auth-scheme pattern, email pattern; LIBRARY_LOGGERS raised to WARNING (an explicitly higher level is kept).
+- src/structured_logging_v1.py and src/console_performance_v1.py (handler formatter only): header-key pattern (value to closing quote or line end), quoted/unquoted assignment pattern, auth-scheme pattern, email pattern; LIBRARY_LOGGERS raised to WARNING (an explicitly higher level is kept).
 
 Not touched: operations_console_v1.py, publish gate, metis_diagnostic logger.
 
 ## Limits
 
 - Redaction is pattern-based and fail-closed for unquoted header values (whole rest of the line).
-- OPENVRAAG-627-1: Codex P1 "pre-existing root handlers still emit unredacted copies" and P2 "metis.console.performance bypasses the JSON formatter" are not in this PR; Metis decides whether they MOETEN be fixed before deploy.
+- OPENVRAAG-627-1 CLOSED: pre-existing root handlers get a RedactingFilter (they MAG NIET emit unredacted text) and metis.console.performance uses JsonLogFormatter. Red 2565fe8 (2 failed), green 86ae800.
