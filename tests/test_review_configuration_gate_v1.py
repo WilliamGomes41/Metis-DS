@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+from copy import deepcopy
+
 import pytest
 
 from src.four_eyes_v1 import publish_authorization_contract
@@ -199,3 +201,72 @@ def test_validate_configuration_refuses_blank_uploader(uploader_id):
     with pytest.raises(ValueError) as error:
         validate_configuration(_config("one_other", ["rev-a"]), uploader_id=uploader_id)
     assert str(error.value) == "uploader_identity_missing"
+
+
+# --- Review #631 A2 (Metis optie b) en punt 2 --------------------------------------
+
+def _harness(tmp_path):
+    from tests import test_vsa_publish_readiness_ui_v1 as ready
+    console, accounts, receipt, _source = ready._console_with_document(tmp_path)
+    return ready, console, accounts, receipt["snapshot_id"], receipt
+
+
+def test_console_independence_counts_open_content_object(tmp_path):
+    ready, console, accounts, sid, _ = _harness(tmp_path)
+    bert = accounts["reviewer"]["account_id"]
+    first, second = [o for o in console.snapshot_objects(sid) if o.get("object_type") == "unclassified"][:2]
+    console.review_object(actor_id=bert, snapshot_id=sid, object_id=first["object_id"], decision="approve",
+                          confirmed_object_type="explanation")
+    envelope = console._envelope(sid)
+    envelope["review_configuration"] = _config("one_other", [bert])
+    readiness = console.technical_publication_readiness(snapshot_id=sid, envelope=envelope)
+    assert readiness["independence_satisfied"] is False
+    assert "second_named_reviewer_required" in readiness["blockers"]
+    assert readiness["publish_allowed"] is False
+
+
+def test_fully_reviewed_fixture_with_chosen_configuration_stays_publishable(tmp_path, monkeypatch):
+    def mutate(envelope, accounts):
+        envelope["review_configuration"] = _config("one_other", [accounts["reviewer"]["account_id"]])
+    readiness = _ready_with_envelope(tmp_path, monkeypatch, mutate)
+    assert readiness["independence_satisfied"] is True
+    assert readiness["publish_allowed"] is True, readiness["blockers"]
+
+
+def _participation(console, accounts, sid, reviewer_id):
+    return console.manage_review_participation(
+        actor_id=accounts["publisher"]["account_id"], snapshot_id=sid, action="add_required",
+        reviewer_id=reviewer_id, reason="Extra reviewer", command_id="cmd-deelname",
+        expected_revision=console.objects_revision(sid))
+
+
+@pytest.mark.parametrize("option", ["uploader_sole", "one_other"])
+def test_chosen_configuration_wins_over_participation_policy(tmp_path, monkeypatch, option):
+    from src.operations_console_v1 import ConsoleError
+    ready, console, accounts, sid, receipt = _harness(tmp_path)
+    ready._complete_review(console, accounts, receipt)
+    extra = console.create_account(username="extra.dirk", password=ready.TEST_PASSWORD, roles=("reviewer",))["account_id"]
+    bert = accounts["reviewer"]["account_id"]
+    chosen = _config(option, [] if option == "uploader_sole" else [bert])
+    original = console._envelope
+
+    def with_choice(snapshot_id, *args, **kwargs):
+        envelope = original(snapshot_id, *args, **kwargs)
+        envelope["review_configuration"] = deepcopy(chosen)
+        return envelope
+
+    monkeypatch.setattr(console, "_envelope", with_choice)
+    with pytest.raises(ConsoleError) as error:
+        _participation(console, accounts, sid, extra)
+    assert error.value.code == "review_configuration_chosen_wins"
+    assert console._envelope(sid).get("review_policy") is None
+
+
+def test_legacy_document_participation_unchanged(tmp_path):
+    ready, console, accounts, sid, receipt = _harness(tmp_path)
+    ready._complete_review(console, accounts, receipt)
+    assert console._envelope(sid)["review_configuration"]["source"] == "legacy_default"
+    extra = console.create_account(username="extra.dirk", password=ready.TEST_PASSWORD, roles=("reviewer",))["account_id"]
+    _participation(console, accounts, sid, extra)
+    assert extra in console._envelope(sid)["named_reviewers"]
+    assert console._envelope(sid)["review_policy"] is not None
