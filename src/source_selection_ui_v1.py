@@ -9,7 +9,7 @@ from fastapi import Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from src.operations_console_v1 import ConsoleError
-from src.source_selection_v1 import UNCHECKED, projection
+from src.source_selection_v1 import UNCHECKED, comparable_observations, projection
 
 
 def _minutes(seconds):
@@ -95,11 +95,13 @@ def install(app, console, require, page, nav, esc):
         options = ''.join(f'<option value="{esc(row["snapshot_id"])}" {"selected" if row["snapshot_id"] == selected else ""}>{esc(row["title"])} — {esc(row["version"])}</option>' for row in visible)
         cards = []
         running_selected = False
+        # Eén keer per verzoek (PR-b): vergelijkbare metingen over alle documenten.
+        observations = comparable_observations(documents)
         for envelope in visible:
             sid = envelope['snapshot_id']
             # Volledige controle alleen voor het expliciet gekozen document (D-PERF-2).
             result = projection(console, actor_id=actor['account_id'], snapshot_id=sid, documents=documents,
-                                deep=bool(document) and sid == document)
+                                deep=bool(document) and sid == document, observations=observations)
             action = ''
             if result['state'] in {'bezig', 'wacht op uitvoering'}:
                 action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Voortgang bekijken</a>'
