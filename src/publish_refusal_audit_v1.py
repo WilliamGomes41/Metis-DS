@@ -7,8 +7,9 @@ audit-store failure MAG NOOIT reach the caller. Allowed verdicts produce no even
 
 Logs carry the actor only as a keyed HMAC (key from app setting
 METIS_AUDIT_HMAC_KEY; the key MAG NOOIT be logged; without a key the field is None).
-The durable audit store (review ledger `append_event`, unchanged signature and
-semantics) records the actor in clear, as every other ledger event does.
+The durable audit store is the separate append-only refusal store
+(src/publication_refusal_store_v1.py), outside the review ledger hash chain; it
+records the actor in clear, as review and publish events do.
 """
 from __future__ import annotations
 
@@ -33,15 +34,15 @@ def actor_hmac(actor_id):
 
 
 def _append_durable(console, *, actor_id, snapshot_id, reason_codes, revision):
+    # #629 F1: separate append-only store; MAG NIET use the review ledger chain.
     try:
-        from src.review_ledger import append_event
+        from src import publication_refusal_store_v1 as store
         try:
             version = str(console._envelope(snapshot_id).get('version') or '')
         except Exception:
             version = ''
-        append_event(console._ledger_path, event_type='publication_refused', object_id=str(snapshot_id),
-                     object_version=version, actor=str(actor_id),
-                     details={'verdict': 'refused', 'reason_codes': reason_codes, 'revision': revision})
+        store.append_refusal(store.store_path(console), snapshot_id=str(snapshot_id), object_version=version,
+                             actor=str(actor_id), reason_codes=reason_codes, revision=revision)
     except Exception:
         pass
 
