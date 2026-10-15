@@ -79,7 +79,7 @@ def project_attempt(attempt):
         'origin_runtime': clean_runtime(diagnostic.get('origin_runtime')),
         'execution_runtime': clean_runtime(diagnostic.get('execution_runtime')),
         'kind': choice(attempt.get('kind'), {'ingest', 'retry', 'resume', 'reextract'}),
-        'stored_state': choice(attempt.get('state'), {'running', 'succeeded', 'failed', 'interrupted'}),
+        'stored_state': choice(attempt.get('state'), {'running', 'succeeded', 'incomplete_budget', 'failed', 'interrupted'}),
         'started_at': timestamp(attempt.get('started_at')), 'expires_at': timestamp(attempt.get('expires_at')),
         'finished_at': timestamp(attempt.get('finished_at')),
         'dispatch_state': choice(dispatch.get('state'), {'pending', 'claimed'}),

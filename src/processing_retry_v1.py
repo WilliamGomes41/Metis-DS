@@ -24,9 +24,10 @@ def _retry_budget_attempts(attempts):
     resumes still consume the cap.
     """
     return [attempt for attempt in attempts
-            if attempt.get("kind") != "resume"
+            if attempt.get("state") != "incomplete_budget"
+            and (attempt.get("kind") != "resume"
             or attempt.get("state") != "succeeded"
-            or not attempt.get("formation_progress_made")]
+            or not attempt.get("formation_progress_made"))]
 
 
 def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, clock: datetime, limits=None, kind="retry") -> tuple[dict, bool]:
@@ -125,10 +126,21 @@ def stop_evidence(envelope: dict, state: str) -> dict:
             "semantic_contract_version": contract if isinstance(contract, str) and contract else None}
 
 
-def finish(envelope: dict, attempt_id: str, *, state: str, error: Exception | None = None) -> dict:
+def formation_budget_exhausted(envelope: dict) -> bool:
+    """Current replay is incomplete AND stopped on the bounded task budget."""
+    return _formation_budget_exhausted((envelope.get("semantic_replay") or {}).get("provider_evidence") or {})
+
+
+def finish(envelope: dict, attempt_id: str, *, state: str, error: Exception | None = None,
+           budget_aware: bool = False) -> dict:
     attempt = next(a for a in envelope[KEY] if a["attempt_id"] == attempt_id)
-    attempt.update(state=state, finished_at=now().isoformat(), phase="activated" if state == "succeeded" else "stopped",
-                   **stop_evidence(envelope, state))
+    evidence = stop_evidence(envelope, state)
+    # A3: a budget-exhausted attempt MOET NOOIT 'succeeded' zijn (budget-aware callers).
+    if budget_aware and state == "succeeded" and formation_budget_exhausted(envelope):
+        state = "incomplete_budget"
+    attempt.update(state=state, finished_at=now().isoformat(),
+                   phase="activated" if state == "succeeded" else "budget_stopped" if state == "incomplete_budget" else "stopped",
+                   **evidence)
     if error is not None:
         code = getattr(error, "code", "processing_timeout" if isinstance(error, TimeoutError) else "processing_dependency_failed")
         if not re.fullmatch(r"[a-z][a-z0-9_]{0,95}", str(code)):
