@@ -152,6 +152,7 @@ def test_concurrent_retries_all_reserve_the_refreshed_contract(blocked):
 
 # --- RESV-1 F3: mid-flight deploy changes the configuration after reservation ---
 
+@pytest.mark.xfail(strict=True, reason='OPENVRAAG-RESV-1-F3: retry attempt not pinned; fix waits for go on operations_console_v1.py')
 def test_retry_fails_with_configuration_changed_after_mid_flight_deploy(blocked, monkeypatch):
     # Reservation reads configuration A; a deploy switches to B before execution.
     # The retry attempt MOET pin A and MOET stop with processing_configuration_changed;

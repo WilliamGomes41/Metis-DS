@@ -127,3 +127,9 @@ niet-productieve ingest op test uit en verifieer:
 - de SHA-256 readback klopt;
 - een herstart/deployment van de test-app de testdata behoudt;
 - productie geen nieuwe documenten of accounts heeft gekregen.
+
+## Deploynotitie: verwerkingsconfiguratie tijdens een deploy (RESV-1 F3)
+
+- Een poging die vóór een deploy is gereserveerd en na de deploy onder een andere verwerkingsconfiguratie zou draaien, MOET stoppen met `processing_configuration_changed`; er MAG NIET werk onder de nieuwe configuratie starten. De gebruiker start daarna een nieuwe poging.
+- Ingest-, Bronselectie-, hervat- en re-extract-pogingen pinnen de configuratie al op de poging. De retry-route (`retry_pre_review`) doet dat op main 1624da7 nog NIET (OPENVRAAG-RESV-1-F3, test als xfail strict). Tot die fix gemerged is MOET een deploy die `METIS_*`-verwerkingsinstellingen wijzigt pas gebeuren als er geen retry-poging `running` is.
+- Is de configuratie bij een retry niet leesbaar, dan MOET de retry geweigerd worden met `processing_configuration_unavailable` zonder nieuwe poging.
