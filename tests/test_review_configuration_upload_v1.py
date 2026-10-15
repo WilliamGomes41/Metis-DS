@@ -317,3 +317,27 @@ def test_legacy_default_runs_validation_before_any_write(system, monkeypatch):
         _kernel(console, ids, "Verboden")
     assert error.value.code == "forbidden_reviewer_identity"
     assert console.list_envelopes() == []
+
+
+def _uploader_plus_two(ids):
+    from src.review_policy_v1 import CONTRACT as POLICY
+    return {"contract": POLICY, "revision": 1, "primary": ids["uploader"],
+            "assignments": [{"reviewer_id": ids["first"], "participation": "required"},
+                            {"reviewer_id": ids["second"], "participation": "required"}]}
+
+
+def test_h2_1_uploader_plus_two_without_choice_needs_choice(system):
+    console, _, ids = system
+    sid = _kernel(console, ids, "H2-1 zonder keuze", named_reviewers=[], review_policy=_uploader_plus_two(ids))
+    envelope = console._envelope(sid)
+    assert envelope["configuration_source"] == "legacy_policy_mapping"
+    assert effective_configuration(envelope)["needs_choice"] is True
+
+
+@pytest.mark.parametrize("four_eyes", [False, True])
+def test_h2_1_uploader_plus_two_does_not_force_four_eyes_on_choice(system, four_eyes):
+    console, _, ids = system
+    sid = _kernel(console, ids, "H2-1 keuze", named_reviewers=[], review_policy=_uploader_plus_two(ids),
+                  review_choice={"option": "two_others", "four_eyes_required": four_eyes,
+                                 "reviewers": [ids["first"], ids["second"]], "readers": []})
+    assert console._envelope(sid)["review_configuration"]["four_eyes_required"] is four_eyes
