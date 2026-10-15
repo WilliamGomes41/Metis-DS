@@ -71,3 +71,43 @@ def test_resume_reservation_equals_contract_of_the_stored_replay(tmp_path):
         pass  # outcome irrelevant: the reservation is durable either way
     resume = next(a for a in state._envelope(sid)['processing_attempts'] if a['kind'] == 'resume')
     assert resume['reserved_semantic_contract_version'] == produced
+
+
+# --- RESV-2: legacy retry path refreshes configuration before reserving -----
+
+@pytest.fixture
+def blocked(tmp_path):
+    from src.operations_console_v1 import OperationsConsole
+    from tests.test_attempt_diagnostics_postgres import bound, ingest
+    console = OperationsConsole(root=tmp_path, source_store=tmp_path / 'sources' / 'private',
+                                runtime=tmp_path / 'output' / 'runtime' / 'operations-console')
+    bound(console)  # provider rejects: ingest leaves an empty, blocked document
+    sid, actor, _ = ingest(console)
+    assert console.snapshot_objects(sid) == []
+    return console, sid, actor
+
+
+def test_retry_refreshes_configuration_before_reserving(blocked, monkeypatch):
+    from src.pre_review_semantic_v1 import semantic_contract_version_for_mode, SEMANTIC_MODE
+    console, sid, actor = blocked
+    try:
+        console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id='retry-1')
+    except ConsoleError:
+        pass  # outcome irrelevant: the reservation is durable
+    envelope = console._envelope(sid)
+    attempt = next(a for a in envelope['processing_attempts'] if a['command_id'] == 'retry-1')
+    assert envelope['processing_configuration']['mode'] == SEMANTIC_MODE
+    assert attempt['reserved_semantic_contract_version'] == semantic_contract_version_for_mode(SEMANTIC_MODE)
+
+
+def test_retry_fails_closed_when_configuration_refresh_fails(blocked, monkeypatch):
+    import src.source_selection_v1 as selection
+    console, sid, actor = blocked
+    before = list(console._envelope(sid)['processing_attempts'])
+
+    def broken(_console):
+        raise OSError('private configuration failure')
+    monkeypatch.setattr(selection, 'configuration', broken)
+    with pytest.raises(ConsoleError, match='processing_configuration_unavailable'):
+        console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id='retry-2')
+    assert console._envelope(sid)['processing_attempts'] == before

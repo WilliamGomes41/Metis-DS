@@ -2,7 +2,7 @@
 
 Change class: B
 Promise: Every attempt reserved by processing_retry_v1.reserve MOET record `reserved_semantic_contract_version`, derived read-only from the envelope's processing configuration, and keep it whatever the outcome (succeeded, failed, interrupted); reservation, retry, resume, verdicts and replay identities MAG NIET change.
-Proof: tests/test_reservation_contract_version.py (8 red on 8db82cb, 9 green after), including identical helper output versus the replay identity built at pre_review_semantic_v1:585 and a real resume reservation; existing suites unchanged.
+Proof: tests/test_reservation_contract_version.py (8 red on 8db82cb, 9 green after; the 2 RESV-2 tests red on a3c5d58, green after; 11 total), including identical helper output versus the replay identity built at pre_review_semantic_v1:585 and a real resume reservation; existing suites unchanged.
 Touches lifecycle invariants: no
 Rewrite risk: none
 
@@ -17,7 +17,7 @@ Taalregel: B18. Rules use MOET / MAG NIET / NOOIT only; open items are marked OP
 - `src/processing_retry_v1.py` `reserve()`: reads `envelope["processing_configuration"]["mode"]`
   and stores `reserved_semantic_contract_version` on the new attempt. The configuration
   MAG NIET be written. Legacy attempts are NOT backfilled.
-- Not touched: `src/operations_console_v1.py`, `OperationsConsole.ingest`, upload form,
+- `src/operations_console_v1.py` lines 2353-2358 only (RESV-2). Not touched: `OperationsConsole.ingest`, upload form,
   `review_participation_ui_v1.py`, review_configuration paths, publication gate.
 
 ## Limits
@@ -30,5 +30,7 @@ run without a stored configuration on a first ingest and then record `None`.
 
 OPENVRAAG-RESV-1: MOETEN the ingest (line 1896) and re-extract (line 2410) reservations pass
 the active configuration? That change lies in operations_console_v1.py (ingest is Forge #626).
-OPENVRAAG-RESV-2: the legacy retry path (`operations_console_v1.py` line 2353) reads whatever
-configuration the envelope stores; MOET it be refreshed before reservation?
+DECIDED RESV-2 (Metis, Forge cleared): `retry_pre_review` (`operations_console_v1.py` lines 2353-2358)
+MOET refresh `processing_configuration` from `source_selection_v1.configuration` before a fresh
+reservation and MOET fail closed with `processing_configuration_unavailable` (no attempt reserved)
+when the refresh fails. Duplicate commands are unchanged.
