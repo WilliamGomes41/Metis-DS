@@ -222,3 +222,16 @@ def test_chosen_and_legacy_default_carry_no_policy_mapping_marker(system):
     console, _, ids = system
     sid = _kernel(console, ids, "Geen markering")
     assert "configuration_source" not in console._envelope(sid)
+
+
+def test_reader_who_is_optional_policy_participant_is_refused(system):
+    console, _, ids = system
+    from src.review_policy_v1 import CONTRACT as POLICY
+    policy = {"contract": POLICY, "revision": 1, "primary": ids["first"],
+              "assignments": [{"reviewer_id": ids["reader"], "participation": "optional"}]}
+    with pytest.raises(ConsoleError) as error:
+        _kernel(console, ids, "Lezer met toegang", named_reviewers=[], review_policy=policy,
+                review_choice={"option": "one_other", "four_eyes_required": False,
+                               "reviewers": [ids["first"]], "readers": [ids["reader"]]})
+    assert error.value.code == "review_configuration_reader_is_reviewer"
+    assert console.list_envelopes() == []
