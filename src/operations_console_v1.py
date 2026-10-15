@@ -124,6 +124,7 @@ from src.serving_relations_v1 import (
     is_closed_relation_type,
 )
 from src.topic_identity_v1 import normalize_topic_label, topic_identity_key
+from src import publish_refusal_audit_v1 as _publish_refusal_audit
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -4814,6 +4815,7 @@ class OperationsConsole:
     def _publish_locked(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         considered = self.consider_publish(actor_id=actor_id, snapshot_id=snapshot_id)
         envelope = self._envelope(snapshot_id)
+        _publish_refusal_audit.record_publish_refusal(self, actor_id=actor_id, snapshot_id=snapshot_id, verdict=considered)
         if not considered.get("publish_allowed"):
             return {
                 "status": "BLOCKED",
