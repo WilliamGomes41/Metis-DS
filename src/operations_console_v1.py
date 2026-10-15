@@ -1761,9 +1761,13 @@ class OperationsConsole:
                 raise ConsoleError("review_configuration_reader_is_reviewer")
         if review_configuration is None and review_policy is None:
             # H2-7 (a): ingest zonder keuze slaat de legacy-default op.
-            from src.review_configuration_v1 import legacy_default
+            from src.review_configuration_v1 import legacy_default, validate_configuration
             review_configuration = legacy_default({"uploader_account_id": actor_id, "named_reviewers": reviewers})
             review_configuration.pop("needs_choice")
+            try:
+                review_configuration = validate_configuration(review_configuration, uploader_id=actor_id)
+            except ValueError as exc:
+                raise ConsoleError(str(exc)) from None
         review_path = review_path_for_klasse(class_)
         candidate_url = url or live_url or ""
         if review_path == "boom" and is_live_rest_url(candidate_url):
