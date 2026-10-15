@@ -4728,6 +4728,8 @@ class OperationsConsole:
                     except ConsoleError:
                         duty_fragments = None
                 # Zonder brontekst zijn open plichten onzichtbaar: dan MOET de check dicht (fail-closed).
+                if duty_fragments is None and review_path != "boom":
+                    blockers.append("review_configuration_source_text_unavailable")
                 counted = set() if duty_fragments is None and review_path != "boom" else {
                     str(obj.get("object_id") or "") for obj in publishable} | {
                     duty["object_id"] for duty in review_duties(
