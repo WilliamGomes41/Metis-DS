@@ -199,3 +199,26 @@ def test_review_overview_shows_configuration_and_source(system):
     html = roster(console, console.list_envelopes()[0])
     assert "Reviewkeuze: één andere reviewer" in html
     assert "bron: standaard voor bestaande regels (legacy_default)" in html
+
+
+def test_kernel_review_policy_without_choice_marks_policy_mapping_visibly(system):
+    console, _, ids = system
+    from src.review_policy_v1 import CONTRACT as POLICY
+    from src.review_participation_ui_v1 import roster
+    policy = {"contract": POLICY, "revision": 1, "primary": ids["first"], "assignments": []}
+    receipt = console.receive_source(actor_id=ids["uploader"], ingest_kind="new", title="Markering", version="1.0",
+                                     date="2026-10-15", live_url="", class_="richtlijn", family="Configuratie",
+                                     filename="bron.html", data=HTML, content_type="text/html",
+                                     named_reviewers=[], review_policy=policy)
+    assert receipt["configuration_source"] == "legacy_policy_mapping"
+    envelope = console._envelope(receipt["snapshot_id"])
+    assert envelope["configuration_source"] == "legacy_policy_mapping"
+    assert "review_configuration" not in envelope
+    assert effective_configuration(envelope)["source"] == "migrated_policy"
+    assert "configuratiebron: legacy_policy_mapping" in roster(console, envelope)
+
+
+def test_chosen_and_legacy_default_carry_no_policy_mapping_marker(system):
+    console, _, ids = system
+    sid = _kernel(console, ids, "Geen markering")
+    assert "configuration_source" not in console._envelope(sid)
