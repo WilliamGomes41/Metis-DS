@@ -775,5 +775,12 @@
   "tabellen_als_toelichting": 1,
   "openvragen": 28
  },
- "status": "not validated by William"
+ "status": "validated by William (recommendations), 2026-10-15",
+ "validation": {
+  "by": "William Gomes",
+  "at": "2026-10-15T23:09+02:00",
+  "quote": "That are the right recommendations",
+  "covers": "de lijst van 19 aanbevelingen",
+  "not_covered": "alle OPENVRAAG-items (o.a. impliciete doelgroepen, ontbrekende bijlagen); die blijven open"
+ }
 }

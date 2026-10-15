@@ -8,7 +8,8 @@ Deze tests MOETEN falen op huidige main (xfail strict). Ze raken de
 formatielogica en check-uitkomsten NIET aan; die zijn van Forge.
 Asserties zijn inhoudelijk; een vast objectaantal is NOOIT het criterium (RL-F3-04).
 Deze tests zijn alleen fail-first; ze zijn NOOIT acceptatiebewijs. De referentieset
-heeft status 'not validated by William'.
+heeft status 'validated by William (recommendations), 2026-10-15': dat dekt de lijst van
+19 aanbevelingen; de OPENVRAAG-items vallen NIET onder die validatie en blijven open.
 Elke brontekst-literal MOET letterlijk uit de PDF komen (pagina per literal);
 test_every_literal_is_verbatim_in_pdftotext bewaakt dat.
 
@@ -191,7 +192,8 @@ def test_reference_fixture_is_content_complete():
     texts = [r["text"] for m in REFERENCE["modules"] for r in m["recs"]]
     assert REC in texts and WEAK in texts
     assert REFERENCE["inleiding"]["objects"] == 0
-    assert REFERENCE["status"] == "not validated by William"
+    assert REFERENCE["status"] == "validated by William (recommendations), 2026-10-15"
+    assert "OPENVRAAG" in REFERENCE["validation"]["not_covered"]
 
 
 @XFAIL
