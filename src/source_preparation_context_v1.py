@@ -161,9 +161,11 @@ def build_formation_context(console, *, envelope, actor_id, expected_revision,
                 active = assert_active(current, attempt['attempt_id'], now()) if attempt else None
                 authorize(console, actor_id, current)
                 if active is not None and (active['actor_id'] != actor_id or active['source_hash'] != source.sha256
-                        or active['expected_revision'] != attempt['expected_revision']
-                        or (active.get('processing_configuration') and active['processing_configuration'] != configuration(console))):
+                        or active['expected_revision'] != attempt['expected_revision']):
                     raise _error('processing_command_conflict')
+                # #628 F3: a deploy between reserve and execute MOET give processing_configuration_changed.
+                if active is not None and active.get('processing_configuration') and active['processing_configuration'] != configuration(console):
+                    raise _error('processing_configuration_changed')
                 if deadline is not None and time.monotonic() >= deadline:
                     raise _error('processing_attempt_expired')
                 current[KEY] = record
