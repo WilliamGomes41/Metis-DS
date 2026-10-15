@@ -278,3 +278,31 @@ def test_legacy_document_with_two_reviewers_stays_valid(system):
     assert envelope["review_configuration"]["source"] == "legacy_default"
     assert envelope["review_configuration"]["reviewers"] == [ids["first"], ids["second"]]
     assert effective_configuration(envelope)["needs_choice"] is False
+
+
+@pytest.mark.parametrize(("uploader_required", "four_eyes"), [(True, False), (False, True)])
+def test_policy_four_eyes_must_match_choice(system, uploader_required, four_eyes):
+    console, _, ids = system
+    from src.review_policy_v1 import CONTRACT as POLICY
+    if uploader_required:
+        policy = {"contract": POLICY, "revision": 1, "primary": ids["uploader"],
+                  "assignments": [{"reviewer_id": ids["first"], "participation": "required"}]}
+    else:
+        policy = {"contract": POLICY, "revision": 1, "primary": ids["first"], "assignments": []}
+    with pytest.raises(ConsoleError) as error:
+        _kernel(console, ids, "Vier ogen", named_reviewers=[], review_policy=policy,
+                review_choice={"option": "one_other", "four_eyes_required": four_eyes,
+                               "reviewers": [ids["first"]], "readers": []})
+    assert error.value.code == "review_configuration_policy_conflict"
+    assert console.list_envelopes() == []
+
+
+def test_policy_uploader_required_plus_one_other_accepts_four_eyes(system):
+    console, _, ids = system
+    from src.review_policy_v1 import CONTRACT as POLICY
+    policy = {"contract": POLICY, "revision": 1, "primary": ids["uploader"],
+              "assignments": [{"reviewer_id": ids["first"], "participation": "required"}]}
+    sid = _kernel(console, ids, "Vier ogen eens", named_reviewers=[], review_policy=policy,
+                  review_choice={"option": "one_other", "four_eyes_required": True,
+                                 "reviewers": [ids["first"]], "readers": []})
+    assert console._envelope(sid)["review_configuration"]["four_eyes_required"] is True
