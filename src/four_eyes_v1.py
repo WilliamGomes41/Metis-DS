@@ -206,10 +206,15 @@ def publish_authorization_contract(
     envelope_review_passes: dict[str, Any] | None = None,
     review_path: str = "richtlijn",
     fragments: Iterable[dict[str, Any]] | None = None,
+    review_configuration: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Contract any future publish path MUST check. Does not convert G2 to PASS."""
     bindings = list(bindings)
     blockers: list[str] = []
+    if not isinstance(uploader_id, str) or not uploader_id.strip():
+        # Sherlock-voorwaarde 3: zonder uploader-identiteit MOET de poort dicht.
+        blockers.append("uploader_identity_missing")
+        uploader_id = ""
     object_id = obj.get("object_id") or ""
     eligible = eligible_tuple_reviewers(bindings, object_id=object_id, uploader_id=uploader_id)
     from src.knowledge_path_v1 import knowledge_publication_blockers
@@ -239,14 +244,29 @@ def publish_authorization_contract(
         independence = not missing
         if missing:
             blockers.append("required_policy_review_missing")
+    configured = None
+    if policy is None and review_configuration is not None and review_configuration.get("source") == "chosen":
+        from src.review_configuration_v1 import configured_approval, validate_configuration
+        try:
+            configured = validate_configuration(review_configuration, uploader_id=uploader_id)
+        except ValueError:
+            blockers.append("review_configuration_invalid")
+            independence = False
+        else:
+            approver_ids = {str(row.get("reviewer_id") or "") for row in eligible}
+            independence, configured_four_ok = configured_approval(configured, approver_ids, uploader_id=uploader_id)
+            if not independence:
+                blockers.append("review_configuration_approval_missing")
     if not eligible:
         blockers.append("object_tuple_required")
-    if policy is None and not independence:
+    if policy is None and configured is None and not independence:
         blockers.append("second_named_reviewer_required")
-    four_eyes_needed = requires_four_eyes(obj)
+    four_eyes_needed = requires_four_eyes(obj) or bool(configured and configured["four_eyes_required"])
     four_ok = four_eyes_satisfied(eligible, object_id=object_id, uploader_id=uploader_id) if four_eyes_needed else True
     if policy is not None:
         four_ok = not missing
+    elif configured is not None:
+        four_ok = configured_four_ok
     if four_eyes_needed and not four_ok:
         blockers.append("four_eyes_required")
     # Envelope ticks never authorize publish, even when present.

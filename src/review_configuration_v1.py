@@ -14,7 +14,8 @@ Deze module schrijft NOOIT. ``effective_configuration`` projecteert:
 2. anders een eenmalige mapping van een bestaand ``review_policy`` (H2-1);
 3. anders de legacy-default (H2-7 a): ``one_other`` zonder four-eyes, gelijk aan
    het gedrag op main; hoog-risico-objecten eisen four-eyes los hiervan.
-In slice 2b-1 leest geen poort dit model; het gedrag blijft ongewijzigd.
+Vanaf slice 2b-3 leest de publicatiepoort alleen een ``chosen`` configuratie via
+``configured_approval``; legacy_default en migrated_policy houden het huidige gedrag.
 """
 from __future__ import annotations
 
@@ -135,3 +136,23 @@ def effective_configuration(envelope: dict[str, Any]) -> dict[str, Any]:
     if envelope.get("review_policy") is not None:
         return from_review_policy(envelope["review_policy"], uploader_id=uploader)
     return legacy_default(envelope)
+
+
+def configured_approval(configuration: dict[str, Any], approver_ids: set[str], *, uploader_id: str) -> tuple[bool, bool]:
+    """2b-3: (reviewplicht vervuld, vier ogen vervuld) voor een gevalideerde ``chosen`` configuratie.
+
+    Alleen de uploader (uploader_sole) of de benoemde reviewers tellen; lezers en
+    andere goedkeurders tellen NOOIT. Het exacte aantal geldt alleen voor ``chosen``.
+    """
+    reviewers = set(configuration["reviewers"])
+    option = configuration["option"]
+    if option == "uploader_sole":
+        # OPENVRAAG-2b3-1: vier ogen (hoog-risico) onder uploader_sole blijft fail-closed.
+        return uploader_id in approver_ids, False
+    if option == "one_other":
+        met = len(reviewers) == 1 and reviewers <= approver_ids
+        return met, met and uploader_id in approver_ids
+    # B10-besluit Metis: two_others MOET beide benoemde reviewers hebben, met of zonder
+    # vier ogen; de uploader telt NOOIT; die twee vervullen vier ogen, NOOIT een derde.
+    met = len(reviewers) == 2 and reviewers <= approver_ids
+    return met, met
