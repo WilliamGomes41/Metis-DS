@@ -306,3 +306,14 @@ def test_policy_uploader_required_plus_one_other_accepts_four_eyes(system):
                   review_choice={"option": "one_other", "four_eyes_required": True,
                                  "reviewers": [ids["first"]], "readers": []})
     assert console._envelope(sid)["review_configuration"]["four_eyes_required"] is True
+
+
+def test_legacy_default_runs_validation_before_any_write(system, monkeypatch):
+    console, _, ids = system
+    # Diepteverdediging: ook als de oude resolutie een verboden identiteit doorlaat,
+    # MAG NIET een legacy_default met die identiteit worden opgeslagen.
+    monkeypatch.setattr(console, "_resolve_named_reviewers", lambda named, uploader: ["ai"])
+    with pytest.raises(ConsoleError) as error:
+        _kernel(console, ids, "Verboden")
+    assert error.value.code == "forbidden_reviewer_identity"
+    assert console.list_envelopes() == []
