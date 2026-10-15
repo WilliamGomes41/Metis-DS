@@ -1,7 +1,8 @@
 """Global structured JSON logging; operational evidence only, never domain state.
 
 Every record MOET be one JSON object with fixed fields. Secrets MAG NOOIT leave
-this formatter: known credential shapes are redacted from the rendered message,
+this formatter: known credential shapes (assignments, Authorization and other
+auth headers, Cookie/Set-Cookie, emails) are redacted from the rendered message,
 exceptions report their type only (no prose, no traceback), and only a fixed set
 of `extra` fields is copied. The existing `metis_diagnostic` logger keeps its own
 handler and format.
@@ -14,13 +15,25 @@ import re
 from datetime import datetime, timezone
 
 EXTRA_FIELDS = ('request_id', 'event', 'attempt_id', 'snapshot_id', 'phase', 'reason_code')
+_ASSIGNMENT_KEYS = (r'password|passwd|pwd|secret|client_secret|token|access_token|refresh_token|id_token|'
+                    r'api[_-]?key|accountkey|sharedaccesskey|sharedaccesssignature|instrumentationkey|sig')
+# Header-like keys: the whole value (to line end or closing quote) is secret, e.g. "Basic x", "a=b; c=d".
+_HEADER_KEYS = (r'authorization|proxy-authorization|cookie|set-cookie|x-api-key|api-key|'
+                r'ocp-apim-subscription-key|x-functions-key|x-ms-client-secret')
+_QUOTED = r'"[^"\r\n]*"|\'[^\'\r\n]*\''
 _SECRET_PATTERNS = (
-    re.compile(r'(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+'),
-    re.compile(r'(?i)\b(password|passwd|pwd|secret|client_secret|token|access_token|refresh_token|api[_-]?key|'
-               r'accountkey|sharedaccesskey|sharedaccesssignature|instrumentationkey|sig)\b(\s*[=:]\s*)[^\s;,&"\']+'),
+    # header keys (optionally quoted, as in dict/JSON reprs): value to quote or line end
+    re.compile(r'(?i)(?<![A-Za-z0-9_-])(["\']?(?:' + _HEADER_KEYS + r')["\']?)(\s*[=:]\s*)(?:' + _QUOTED + r'|[^\r\n]+)'),
+    # credential assignments, quoted or unquoted values (password="x", {"password":"x"})
+    re.compile(r'(?i)(["\']?\b(?:' + _ASSIGNMENT_KEYS + r')\b["\']?)(\s*[=:]\s*)(?:' + _QUOTED + r'|[^\s;,&"\'}]+)'),
+    re.compile(r'(?i)\b(?:bearer|basic|digest|negotiate)\s+[A-Za-z0-9._~+/=-]{6,}'),
     re.compile(r'(?i)\b([a-z][a-z0-9+.-]*://)[^\s/:@]+:[^\s/@]+@'),
     re.compile(r'\bsk-[A-Za-z0-9_-]{8,}'),
+    re.compile(r'(?i)(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'),
 )
+# Third-party loggers MOETEN stay at WARNING: their INFO/DEBUG output (HTTP headers,
+# request bodies, connection strings) MAG NIET reach the root JSON handler.
+LIBRARY_LOGGERS = ('azure', 'urllib3', 'httpx', 'httpcore', 'openai', 'msal', 'psycopg', 'asyncio')
 _SAFE = re.compile(r'[A-Za-z0-9_.:-]{1,128}')
 _HANDLER_NAME = 'metis-structured-json'
 
@@ -66,3 +79,7 @@ def install_structured_logging(level=logging.INFO):
         handler.setFormatter(JsonLogFormatter())
         root.addHandler(handler)
     root.setLevel(level)
+    for name in LIBRARY_LOGGERS:
+        library = logging.getLogger(name)
+        if library.level == logging.NOTSET or library.level < logging.WARNING:
+            library.setLevel(logging.WARNING)
