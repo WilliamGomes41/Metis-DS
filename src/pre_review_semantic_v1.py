@@ -582,13 +582,31 @@ def _replay_identity(
         extractor_version=_extractor_contract(source_fragments),
         reconstruction_version=RECONSTRUCTION_VERSION,
         formation_policy_version=PASSAGE_FORMATION_POLICY_VERSION,
-        semantic_contract_version=("source-accountability-v2/bounded-formation-v1/" if field_contract_v3 else "source-accountability-v1/") + (f"recoverable-formation-v1/{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}") + f"/{STRENGTH_BINDING_VERSION}/{SOURCE_OCCURRENCE_AUTHORITY_VERSION}",
+        semantic_contract_version=semantic_contract_version(field_contract_v2=field_contract_v2,
+                                                            field_contract_v3=field_contract_v3),
         prompt_hash=_stable_json_hash(SEMANTIC_DEVELOPER_PROMPT + _semantic_instruction(field_contract_v2, field_contract_v3)),
         schema_hash=_stable_json_hash(_proposal_schema(field_contract_v2, field_contract_v3)),
         provider_id=SEMANTIC_PROVIDER_ID,
         model_id=model,
         model_config_hash=_stable_json_hash(SEMANTIC_MODEL_CONFIG),
     )
+
+def semantic_contract_version(*, field_contract_v2=False, field_contract_v3=False):
+    """The one semantic contract string; replay identity and reservation MOETEN share it."""
+    return ("source-accountability-v2/bounded-formation-v1/" if field_contract_v3 else "source-accountability-v1/") + (f"recoverable-formation-v1/{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}") + f"/{STRENGTH_BINDING_VERSION}/{SOURCE_OCCURRENCE_AUTHORITY_VERSION}"
+
+
+def semantic_contract_version_for_mode(mode):
+    """Read-only mapping from a stored processing mode; non-semantic modes have no contract."""
+    from src.passage_formation_policy_v1 import SEMANTIC_MODE
+    if mode == SEMANTIC_V3_MODE:
+        return semantic_contract_version(field_contract_v3=True)
+    if mode == SEMANTIC_V2_MODE:
+        return semantic_contract_version(field_contract_v2=True)
+    if mode == SEMANTIC_MODE:
+        return semantic_contract_version()
+    return None
+
 
 def validate_provider_proposal(proposal, *, field_contract_v2=False, field_contract_v3=False):
     """Pure proposal gates shared with read-only diagnostic reproduction."""

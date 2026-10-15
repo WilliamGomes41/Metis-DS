@@ -60,6 +60,12 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
                "expires_at": (clock + timedelta(seconds=limits.attempt)).isoformat(), "finished_at": None,
                "error_code": None, "validation_code": None, "processing_reference": uuid.uuid4().hex,
                "phase": "source_and_validation"}
+    # Read-only: the configuration in force for this reservation. Every attempt keeps
+    # this value, including failed and interrupted ones; legacy attempts have none.
+    from src.pre_review_semantic_v1 import semantic_contract_version_for_mode
+    configuration = envelope.get("processing_configuration")
+    attempt["reserved_semantic_contract_version"] = semantic_contract_version_for_mode(
+        configuration.get("mode") if isinstance(configuration, dict) else None)
     if recovery:
         grant["consumed_by"] = attempt["attempt_id"]
         grant["consumed_at"] = clock.isoformat()
