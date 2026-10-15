@@ -1,7 +1,7 @@
 """Semantic contract version recorded at reservation for every attempt.
 
 # release-control-evidence: scope/belofte
-# release-control-evidence: opslag version-compat retry interrupt
+# release-control-evidence: opslag version-compat retry interrupt stale concurrent
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
@@ -111,3 +111,40 @@ def test_retry_fails_closed_when_configuration_refresh_fails(blocked, monkeypatc
     with pytest.raises(ConsoleError, match='processing_configuration_unavailable'):
         console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id='retry-2')
     assert console._envelope(sid)['processing_attempts'] == before
+
+
+def test_retry_replaces_stale_stored_configuration(blocked):
+    from src.pre_review_semantic_v1 import semantic_contract_version_for_mode, SEMANTIC_MODE
+    console, sid, actor = blocked
+    envelope = console._envelope(sid)
+    envelope['processing_configuration'] = {'mode': 'stale-mode'}
+    assert console._envelope(sid)['processing_configuration'] == {'mode': 'stale-mode'}  # live state
+    try:
+        console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id='retry-stale')
+    except ConsoleError:
+        pass
+    after = console._envelope(sid)
+    attempt = next(a for a in after['processing_attempts'] if a['command_id'] == 'retry-stale')
+    assert after['processing_configuration']['mode'] == SEMANTIC_MODE
+    assert attempt['reserved_semantic_contract_version'] == semantic_contract_version_for_mode(SEMANTIC_MODE)
+
+
+def test_concurrent_retries_all_reserve_the_refreshed_contract(blocked):
+    import threading
+    from src.pre_review_semantic_v1 import semantic_contract_version_for_mode, SEMANTIC_MODE
+    console, sid, actor = blocked
+    barrier = threading.Barrier(4)
+
+    def run(n):
+        barrier.wait()
+        try:
+            console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id=f'retry-c{n}')
+        except ConsoleError:
+            pass
+    threads = [threading.Thread(target=run, args=(n,)) for n in range(4)]
+    [t.start() for t in threads]
+    [t.join(30) for t in threads]
+    attempts = [a for a in console._envelope(sid)['processing_attempts'] if a['command_id'].startswith('retry-c')]
+    assert attempts
+    assert {a['reserved_semantic_contract_version'] for a in attempts} == {semantic_contract_version_for_mode(SEMANTIC_MODE)}
+    assert sum(a['state'] == 'running' for a in attempts) == 0
