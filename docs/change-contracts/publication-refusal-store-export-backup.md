@@ -18,3 +18,7 @@ Not touched: operations_console_v1.py, publish gate.
 ## Limits
 - OPENVRAAG-EXP-1: export schema version stays processing-evidence-export-v14 (additive dataset); Metis decides whether it MOET become v15.
 - MCP export path (metis_mcp_queries_v1) does not pass refusals; its manifest says not_recorded.
+
+## After restack on #636 (PostgreSQL table)
+- Live export reads `workflow.publication_refusals` for that document only (max 500 newest); local topology reads the file. Red 3af3d56, green fe904dc.
+- Runtime backup includes the file store and its rotated generation `.jsonl.1`. In the PostgreSQL topology the table is covered by the database backup, not by this runtime archive (OPENVRAAG-EXP-2: Metis confirms that the PostgreSQL backup scope includes workflow.publication_refusals).
