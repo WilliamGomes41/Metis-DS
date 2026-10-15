@@ -85,10 +85,14 @@ def test_postgres_store_failure_keeps_verdict_and_emits_diagnostic(tmp_path, ref
     assert [w['stage'] for w in warnings if w.get('event') == 'publication_refusal_audit_failed'] == ['durable_store']
 
 
-def test_postgres_retention_bounds_rows_without_refusing(tmp_path, refusal_postgres, monkeypatch):
-    monkeypatch.setattr(store, 'MAX_ROWS', 3)
+def test_postgres_refusal_path_never_deletes_and_retention_is_maintenance(tmp_path, refusal_postgres):
+    # Sherlock re-audit #636 F3: refusals only INSERT; apply_retention is the explicit maintenance command.
     console, sid, actor = _blocked(tmp_path, refusal_postgres)
     pg = store.postgres_store(console)
     outcomes = [pg.append(snapshot_id=sid, object_version='1', actor=f'a{n}', reason_codes=['r'], revision=None) for n in range(6)]
     assert outcomes == ['recorded'] * 6
-    assert len(pg.records_for(sid)) <= 4 and pg.records_for(sid)[0]['actor'] == 'a5'
+    assert len(pg.records_for(sid)) == 6  # the refusal path MAG NIET delete
+    assert pg.append(snapshot_id=sid, object_version='1', actor='a0', reason_codes=['r'], revision=None) == 'deduplicated'
+    assert store.apply_retention(console.workflow_document_store, max_rows=3)['status'] == 'PASS'
+    rows = pg.records_for(sid)
+    assert [r['actor'] for r in rows] == ['a5', 'a4', 'a3']

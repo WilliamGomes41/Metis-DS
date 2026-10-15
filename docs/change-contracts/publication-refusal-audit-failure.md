@@ -23,3 +23,7 @@ Taalregel: B18. Rules use MOET / MAG NIET / NOOIT only; open items are marked OP
 - Restacked on #636 (PostgreSQL table, migration 018). #636 and #637 MOETEN merge together.
 - The capacity diagnostic is replaced: the store no longer refuses at capacity. A corrupt record emits `stage: corrupt_record, outcome: skipped`, and the new record is still written.
 - F3: tests/test_publish_refusal_audit_postgres_v1.py applies migration 018 and reads the table; it MOET show PASSED (not skipped) on the CI postgres:16 service.
+
+## Sherlock re-audit (2026-10-16)
+- CI proof: the step "Verify publication refusal store against native PostgreSQL (#637, PASSED proof)" runs `pytest -rA` on tests/test_publish_refusal_audit_postgres_v1.py with a junit report; it MOET fail on any skipped, failed or errored case, and the log MOET list every case as PASSED.
+- #636 F3 merged in: the PostgreSQL test now proves the refusal path NOOIT deletes and that `apply_retention` (maintenance) bounds the rows. Migration 018 comes only from #636; this PR MAG NIET carry a second copy.
