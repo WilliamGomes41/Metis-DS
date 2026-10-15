@@ -3,6 +3,7 @@
 # release-control-evidence: scope/belofte
 # release-control-evidence: toegang
 # release-control-evidence: slop
+# release-control-evidence: releasebewijs
 
 Rules (B18): emails, Basic/Bearer/other Authorization values, API-key headers and
 Cookie/Set-Cookie values MAG NIET leave the JSON formatter; library loggers MOETEN
