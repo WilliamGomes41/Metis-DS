@@ -2,7 +2,7 @@
 
 Change class: B
 Promise: Every publish-gate refusal MOET emit one bounded `publication_refused` audit event (actor digest, document, revision digest, reason codes); the gate verdict, its reasons, the returned result and all durable state MAG NIET change.
-Proof: tests/test_publish_refusal_audit_v1.py (fails on 8db82cb: module missing; 7 green after) with before/after verdict tests on the file and durable gate proving identical verdicts and envelope state, an allowed publication emitting no event, and a logging failure leaving the verdict unchanged; existing publication suites unchanged.
+Proof: tests/test_publish_refusal_audit_v1.py (fails on 8db82cb: module missing; 8 green after) with before/after verdict tests on the file and durable gate proving identical verdicts and envelope state, an allowed publication emitting no event, and a logging failure leaving the verdict unchanged; existing publication suites unchanged.
 Touches lifecycle invariants: no
 Rewrite risk: none
 
