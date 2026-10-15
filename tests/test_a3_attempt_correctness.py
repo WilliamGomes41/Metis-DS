@@ -1,8 +1,12 @@
 """A3: attempt correctness. Fail-first reproduction of two defects.
 
 # release-control-evidence: scope/belofte
-# release-control-evidence: opslag stale retry version-compat recovery
-# release-control-evidence: beschikbaarheid toegang kwaliteit slop releasebewijs
+# release-control-evidence: opslag stale retry version-compat recovery concurrent
+# release-control-evidence: beschikbaarheid
+# release-control-evidence: toegang
+# release-control-evidence: kwaliteit
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 
 Rules (B18):
 - A budget-exhausted attempt MOET NOOIT als 'succeeded' worden opgeslagen.
@@ -122,3 +126,20 @@ def test_source_selection_page_does_not_offer_hervatten_after_contract_change(ch
                            follow_redirects=False).status_code == 303
         page = client.get('/source-selection', params={'document': sid}).text
     assert '<button class="btn-primary">Hervatten</button>' not in page, 'HERVATTEN_OFFERED_AFTER_CONTRACT_CHANGE'
+
+
+def test_concurrent_resumes_after_contract_change_are_all_rejected_before_work(changed_contract):
+    from concurrent.futures import ThreadPoolExecutor
+    state, sid, actor = changed_contract
+    before = list(state._envelope(sid)['processing_attempts'])
+    revision = state.objects_revision(sid)
+
+    def attempt(i):
+        try:
+            state.resume_formation(actor_id=actor, snapshot_id=sid, command_id=f'c{i}', expected_revision=revision)
+        except ConsoleError as error:
+            return error.code
+    with ThreadPoolExecutor(4) as pool:
+        codes = list(pool.map(attempt, range(4)))
+    assert codes == ['processing_resume_configuration_incompatible'] * 4
+    assert state._envelope(sid)['processing_attempts'] == before
