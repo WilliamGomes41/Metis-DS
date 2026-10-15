@@ -1807,6 +1807,7 @@ class OperationsConsole:
                 "payload_hash": stable_hash({"digest": digest, "filename": filename, "kind": kind,
                     "title": title.strip(), "version": source_version, "date": source_date,
                     "class": class_, "family": family_hook, "reviewers": reviewers, "policy": review_policy,
+                    "review_configuration": review_configuration,
                     "source_status": source_status, "live_url": live_url or url or "", "ingest_kind": ingest_kind,
                     "replaces_snapshot_id": replaces_snapshot_id, "revision_reason": revision_reason})}
             identity_hash = stable_hash({"actor_id": actor_id, "command_id": command_id})
