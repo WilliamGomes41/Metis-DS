@@ -255,3 +255,88 @@ def test_file_store_is_visibly_marked_temporary(tmp_path):
     assert store.STORE_STATUS == 'temporary_file_store_pending_postgres_table'
     assert row['store_status'] == store.STORE_STATUS
     assert 'TIJDELIJK' in store.__doc__
+
+
+# --- Sherlock re-audit #636 F2: file store blocked by topology, not by WEBSITE_SITE_NAME ---
+
+@pytest.mark.parametrize('env', [
+    {'METIS_WORKFLOW_DOCUMENT_STORE': 'postgres'},
+    {'METIS_WORKFLOW_STORE': 'postgres'},
+    {'CONSOLE_GUNICORN_WORKERS': '2'},
+    {'CONSOLE_INSTANCE_COUNT': '2'},
+])
+def test_file_store_blocked_by_topology_without_website_site_name(tmp_path, monkeypatch, env):
+    monkeypatch.delenv('WEBSITE_SITE_NAME', raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    console, sid, actor = _blocked_base(tmp_path)
+    with pytest.raises(store.RefusalStoreUnavailable):
+        store.append(console, snapshot_id=sid, object_version='1', actor=actor, reason_codes=['r'], revision=None)
+    assert not store.store_path(console).exists()
+
+
+def test_file_store_allowed_in_single_worker_file_topology(tmp_path, monkeypatch):
+    for name in ('WEBSITE_SITE_NAME', 'METIS_WORKFLOW_DOCUMENT_STORE', 'METIS_WORKFLOW_STORE',
+                 'CONSOLE_GUNICORN_WORKERS', 'WEB_CONCURRENCY', 'GUNICORN_WORKERS', 'CONSOLE_INSTANCE_COUNT'):
+        monkeypatch.delenv(name, raising=False)
+    console, sid, actor = _blocked_base(tmp_path)
+    assert store.append(console, snapshot_id=sid, object_version='1', actor=actor, reason_codes=['r'], revision=None) == 'recorded'
+
+
+# --- Sherlock re-audit #636 F3: the refusal path is one transactional INSERT; retention is maintenance ---
+
+class _FakeResult:
+    def __init__(self, row):
+        self._row = row
+
+    def fetchone(self):
+        return self._row
+
+
+class _FakeCon:
+    def __init__(self, row=(1,)):
+        self.sql, self._row = [], row
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def transaction(self):
+        return self
+
+    def execute(self, sql, params=None):
+        self.sql.append(' '.join(sql.split()).upper())
+        return _FakeResult(self._row)
+
+
+class _FakeWorkflow:
+    def __init__(self, con):
+        self.con = con
+
+    def _connect(self):
+        return self.con
+
+
+def test_postgres_refusal_path_is_a_single_insert_without_lock_or_delete():
+    con = _FakeCon()
+    pg = store.PostgresRefusalStore(_FakeWorkflow(con))
+    assert pg.append(snapshot_id='s', object_version='1', actor='a', reason_codes=['r'], revision=None) == 'recorded'
+    assert len(con.sql) == 1 and con.sql[0].startswith('INSERT INTO WORKFLOW.PUBLICATION_REFUSALS')
+    joined = ' '.join(con.sql)
+    assert 'ADVISORY' not in joined and 'DELETE' not in joined and 'OFFSET' not in joined
+
+
+def test_postgres_refusal_dedup_returns_deduplicated_when_insert_skips():
+    con = _FakeCon(row=None)
+    pg = store.PostgresRefusalStore(_FakeWorkflow(con))
+    assert pg.append(snapshot_id='s', object_version='1', actor='a', reason_codes=['r'], revision=None) == 'deduplicated'
+
+
+def test_retention_is_an_explicit_maintenance_command_without_offset():
+    con = _FakeCon(row=(0,))
+    result = store.apply_retention(_FakeWorkflow(con))
+    assert result['status'] == 'PASS'
+    assert con.sql and all(s.startswith(('DELETE', 'SELECT')) for s in con.sql)
+    assert 'OFFSET' not in ' '.join(con.sql) and 'ADVISORY' not in ' '.join(con.sql)
