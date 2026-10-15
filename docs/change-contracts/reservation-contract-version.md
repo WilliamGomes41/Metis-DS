@@ -52,3 +52,11 @@ Code: `operations_console_v1.py` `retry_pre_review`, the `if fresh:` block direc
 `reserve()`. This line is OUTSIDE the #630 scope (not among the lines #630 added); Forge cleared it.
 Proof: tests/test_reservation_contract_version.py: 4 tests red at 83fc6a8 (mid-flight, duplicate
 keeps pin, copy not reference, legacy fail-closed), green at dd3b663. The xfail marker is removed.
+
+## #628 F3: reserve → execute configuration change on re-extract and ingest
+
+Documented outcome: the command MOET be refused with `processing_configuration_changed`, the attempt MOET end
+`failed` with that error_code, and no new objects MAG NIET be written. Re-extract already did this
+(passing test). Ingest returned `processing_command_conflict`: `source_preparation_context_v1.retain` now
+separates the configuration check from the identity check. Tests: tests/test_resv1_reservation_configuration.py,
+red at 3dbff26 (ingest), green at 07c55dc.
