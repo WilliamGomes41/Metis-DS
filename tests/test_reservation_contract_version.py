@@ -152,7 +152,6 @@ def test_concurrent_retries_all_reserve_the_refreshed_contract(blocked):
 
 # --- RESV-1 F3: mid-flight deploy changes the configuration after reservation ---
 
-@pytest.mark.xfail(strict=True, reason='OPENVRAAG-RESV-1-F3: retry attempt not pinned; fix waits for go on operations_console_v1.py')
 def test_retry_fails_with_configuration_changed_after_mid_flight_deploy(blocked, monkeypatch):
     # Reservation reads configuration A; a deploy switches to B before execution.
     # The retry attempt MOET pin A and MOET stop with processing_configuration_changed;
@@ -172,3 +171,50 @@ def test_retry_fails_with_configuration_changed_after_mid_flight_deploy(blocked,
     attempt = next(a for a in console._envelope(sid)['processing_attempts'] if a['command_id'] == 'retry-deploy')
     assert attempt['processing_configuration']['mode'] != 'deployed-mid-flight', 'RETRY_ATTEMPT_NOT_PINNED'
     assert attempt['state'] == 'failed' and attempt['error_code'] == 'processing_configuration_changed'
+
+
+def test_duplicate_retry_command_keeps_its_pinned_configuration(blocked, monkeypatch):
+    # A repeated command returns the existing attempt; its configuration MAG NIET be overwritten.
+    import src.source_selection_v1 as selection
+    console, sid, actor = blocked
+    try:
+        console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id='retry-dup')
+    except ConsoleError:
+        pass
+    pinned = deepcopy_attempt(console, sid, 'retry-dup')['processing_configuration']
+    assert pinned and pinned == selection.configuration(console), 'RETRY_ATTEMPT_NOT_PINNED'
+    real = selection.configuration
+    monkeypatch.setattr(selection, 'configuration', lambda c: {**real(c), 'mode': 'later-deploy'})
+    try:
+        console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id='retry-dup')
+    except ConsoleError:
+        pass
+    assert deepcopy_attempt(console, sid, 'retry-dup')['processing_configuration'] == pinned
+
+
+def test_retry_pin_is_a_copy_not_a_shared_reference(blocked):
+    console, sid, actor = blocked
+    try:
+        console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id='retry-copy')
+    except ConsoleError:
+        pass
+    envelope = console._envelope(sid)
+    attempt = next(a for a in envelope['processing_attempts'] if a['command_id'] == 'retry-copy')
+    assert attempt['processing_configuration'] == envelope['processing_configuration']
+    assert attempt['processing_configuration'] is not envelope['processing_configuration']
+
+
+def test_retry_without_configuration_fails_closed_without_attempt(blocked, monkeypatch):
+    # Legacy/empty configuration: MOET fail closed (processing_configuration_unavailable), NOOIT KeyError.
+    import src.source_selection_v1 as selection
+    console, sid, actor = blocked
+    before = list(console._envelope(sid)['processing_attempts'])
+    monkeypatch.setattr(selection, 'configuration', lambda c: None)
+    with pytest.raises(ConsoleError, match='processing_configuration_unavailable'):
+        console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id='retry-legacy')
+    assert console._envelope(sid)['processing_attempts'] == before
+
+
+def deepcopy_attempt(console, sid, command_id):
+    from copy import deepcopy
+    return deepcopy(next(a for a in console._envelope(sid)['processing_attempts'] if a['command_id'] == command_id))
