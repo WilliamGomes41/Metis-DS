@@ -70,6 +70,21 @@ class JsonLogFormatter(logging.Formatter):
         return json.dumps(row, separators=(',', ':'), ensure_ascii=False)
 
 
+class RedactingFilter(logging.Filter):
+    """Redacts the rendered message in place, so handlers we do not own MAG NIET emit secrets."""
+    def filter(self, record):
+        try:
+            message = record.getMessage()
+        except Exception:
+            message = str(record.msg)
+        record.msg, record.args = redact(message), None
+        record.exc_text = None
+        return True
+
+
+_REDACTING_FILTER = RedactingFilter()
+
+
 def install_structured_logging(level=logging.INFO):
     """Install exactly one JSON handler on the root logger; repeated calls MOETEN be no-ops."""
     root = logging.getLogger()
@@ -79,6 +94,10 @@ def install_structured_logging(level=logging.INFO):
         handler.setFormatter(JsonLogFormatter())
         root.addHandler(handler)
     root.setLevel(level)
+    # Pre-existing (host/embedding) root handlers MOETEN only see redacted records.
+    for handler in root.handlers:
+        if getattr(handler, 'name', None) != _HANDLER_NAME and _REDACTING_FILTER not in handler.filters:
+            handler.addFilter(_REDACTING_FILTER)
     for name in LIBRARY_LOGGERS:
         library = logging.getLogger(name)
         if library.level == logging.NOTSET or library.level < logging.WARNING:
