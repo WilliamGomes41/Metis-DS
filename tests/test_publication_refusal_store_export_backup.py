@@ -56,3 +56,24 @@ def test_runtime_backup_contains_and_restores_the_refusal_store(tmp_path):
     restored = tmp_path / 'restored'
     restore_runtime_data(archive, restored)
     assert (restored / RUNTIME / store.FILE_NAME).read_bytes() == path.read_bytes()
+
+
+def test_backup_includes_the_rotated_generation(tmp_path):
+    root = tmp_path / 'data'
+    path = _seed(root)
+    rotated = store.rotated_path(path)
+    rotated.write_bytes(path.read_bytes())
+    [category] = [c for c in inventory_runtime_data(root)['categories'] if c['category'] == 'publication_refusals']
+    assert f'{RUNTIME}/{store.FILE_NAME}.1' in category['files']
+
+
+def test_export_route_reads_postgres_table_when_present(monkeypatch):
+    from src import operations_console_app as app_module
+    calls = []
+
+    class FakePg:
+        def records_for(self, snapshot_id):
+            calls.append(snapshot_id)
+            return [{'snapshot_id': snapshot_id}]
+    monkeypatch.setattr(store, 'postgres_store', lambda state: FakePg())
+    assert app_module._refusal_records(object(), 'snap-a') == [{'snapshot_id': 'snap-a'}] and calls == ['snap-a']
