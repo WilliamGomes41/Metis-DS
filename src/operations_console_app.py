@@ -3649,10 +3649,13 @@ def _render_review_room(
     )
 
 
-def _refusal_records(state):
+def _refusal_records(state, snapshot_id):
     # Refusal store in the evidence export; unreadable store -> None (manifest: not_recorded).
     try:
         from src import publication_refusal_store_v1 as refusal_store
+        pg = refusal_store.postgres_store(state)
+        if pg is not None:  # live: PostgreSQL table, bounded per document
+            return pg.records_for(snapshot_id)
         return refusal_store.read_records(refusal_store.store_path(state))
     except Exception:
         return None
@@ -5292,7 +5295,7 @@ def create_console_app(
         payload = processing_evidence_zip(snapshot_id=snapshot_id, revision=revision,
                                           envelope=envelope, objects=objects,
                                           bindings=state.object_review_bindings(snapshot_id, objects=objects),
-                                          refusals=_refusal_records(state))
+                                          refusals=_refusal_records(state, snapshot_id))
         filename = re.sub(r"[^A-Za-z0-9_-]", "_", snapshot_id)
         return Response(payload, media_type="application/zip", headers={
             "Content-Disposition": f'attachment; filename="{filename}-processing-evidence.zip"',

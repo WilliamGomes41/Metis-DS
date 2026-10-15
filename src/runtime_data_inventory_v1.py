@@ -41,7 +41,8 @@ _CATEGORY_PATHS: dict[str, tuple[str, ...]] = {
     "derived_projections": ("output/runtime/operations-console/published_projection.jsonl",
                             "output/runtime/operations-console/quality_reports"),
     "experimental_evidence": ("output/runtime/operations-console/route_comparisons",),
-    "publication_refusals": ("output/runtime/operations-console/publication_refusal_audit.jsonl",),
+    "publication_refusals": ("output/runtime/operations-console/publication_refusal_audit.jsonl",
+                             "output/runtime/operations-console/publication_refusal_audit.jsonl.1"),
 }
 
 _SAFE_PART = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-")
