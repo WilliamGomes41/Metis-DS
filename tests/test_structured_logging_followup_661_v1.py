@@ -128,3 +128,10 @@ def test_hashable_mapping_key_never_raises():
 def test_smtputf8_local_part_with_domain_literal_is_redacted(addr):
     # 4297911904 (PII)
     assert addr.split('@')[0] not in redact('mail ' + addr)
+
+
+def test_frozenset_key_containing_hashable_mapping_never_raises():
+    # 4297911915: the frozenset fallback MAG NOOIT raise.
+    record = _record('x', context={frozenset({_FrozenMap({'owner': 'anne@example.com'})}): 'admin'})
+    assert RedactingFilter().filter(record) is True
+    assert 'anne@example.com' not in logging.Formatter('%(context)s').format(record)
