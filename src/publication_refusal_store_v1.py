@@ -21,7 +21,8 @@ Rules (B18):
   permanently refuse new records.
 - No full-file reads on the write path: dedup reads at most TAIL_BYTES.
 - A corrupt record is skipped and reported (on_corrupt) and NOOIT blocks later writes.
-- The actor is stored in clear (as review and publish events); the revision only as SHA-256.
+- The actor is stored in clear ONLY under Lex's conditions (account_id only, least-privilege access,
+  retention in docs/RETENTION_MATRIX.md) and MAG NIET be exported; the revision only as SHA-256.
 This store is an observation, NOOIT a gate authority.
 """
 from __future__ import annotations

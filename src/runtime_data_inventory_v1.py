@@ -25,6 +25,7 @@ INVENTORY_CATEGORIES = (
     "release_manifests",
     "derived_projections",
     "experimental_evidence",
+    "publication_refusals",
 )
 
 _CATEGORY_PATHS: dict[str, tuple[str, ...]] = {
@@ -40,6 +41,8 @@ _CATEGORY_PATHS: dict[str, tuple[str, ...]] = {
     "derived_projections": ("output/runtime/operations-console/published_projection.jsonl",
                             "output/runtime/operations-console/quality_reports"),
     "experimental_evidence": ("output/runtime/operations-console/route_comparisons",),
+    "publication_refusals": ("output/runtime/operations-console/publication_refusal_audit.jsonl",
+                             "output/runtime/operations-console/publication_refusal_audit.jsonl.1"),
 }
 
 _SAFE_PART = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-")
@@ -126,6 +129,10 @@ def inventory_runtime_data(data_root: Path | None = None) -> dict[str, Any]:
         elif name == "release_manifests":
             count = len(files)
             ids = [path.stem for path in files]
+        elif name == "publication_refusals":
+            refusals = root / "output" / "runtime" / "operations-console" / "publication_refusal_audit.jsonl"
+            if refusals.is_file():
+                count = sum(1 for line in refusals.read_text(encoding="utf-8").splitlines() if line.strip())
         elif name == "review_ledger":
             ledger = root / "output" / "runtime" / "operations-console" / "review_ledger.jsonl"
             if ledger.is_file():
@@ -142,6 +149,12 @@ def inventory_runtime_data(data_root: Path | None = None) -> dict[str, Any]:
     return {"data_root": str(root), "categories": categories}
 
 
+def _snapshot_bytes(path: Path) -> bytes:
+    from src.publication_refusal_store_v1 import _LOCK
+    with _LOCK:
+        return path.read_bytes()
+
+
 def export_runtime_data(data_root: Path, archive: Path) -> dict[str, Any]:
     root = Path(data_root)
     archive = Path(archive)
@@ -153,9 +166,15 @@ def export_runtime_data(data_root: Path, archive: Path) -> dict[str, Any]:
             for relative in category["files"]:
                 member = safe_backup_member(relative)
                 path = root.joinpath(*member.split("/"))
-                digest = _sha256_file(path)
-                files[member] = digest
-                zipf.write(path, member)
+                # Hash and archive ONE byte snapshot; refusal-store files are read under the store
+                # lock so a concurrent append MAG NIET split digest and bytes (4288477439).
+                if path.name.startswith("publication_refusal_audit.jsonl"):
+                    data = _snapshot_bytes(path)
+                    files[member] = hashlib.sha256(data).hexdigest()
+                    zipf.writestr(member, data)
+                else:  # unchanged streaming path for the other runtime files
+                    files[member] = _sha256_file(path)
+                    zipf.write(path, member)
         manifest = {
             "ok": True,
             "categories": [item["category"] for item in report["categories"]],
