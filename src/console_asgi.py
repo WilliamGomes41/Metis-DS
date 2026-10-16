@@ -33,7 +33,7 @@ from src.proportionate_review_v1 import install_proportionate_review_routes
 from src.publish_readiness_ui_v1 import install_publish_readiness_ui
 from src.review_closure_v1 import harden_legacy_repair_routes
 from src.review_workboard_v1 import install_review_workboard
-from src.structured_logging_v1 import install_structured_logging
+from src.structured_logging_v1 import install_startup_reinstall, install_structured_logging
 from src.topology_bound_v1 import assert_supported_topology
 from src.workflows.workflow_badge_counts_postgres_v1 import (
     FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
@@ -359,6 +359,7 @@ def build_app() -> object:
     # Register last so timings include status/auth middleware and all DB reads.
     from src.console_performance_v1 import install_console_performance
     install_console_performance(app)
+    install_startup_reinstall(app)  # Metis 638-1: after the server's own log setup
     return app
 
 

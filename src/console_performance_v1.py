@@ -118,9 +118,15 @@ def install_console_performance(app: Any) -> None:
     # Gunicorn need not configure the application's root logger. Keep this one
     # safe operational stream visible without changing other logger policies.
     if not _LOGGER.handlers:
+        from src.structured_logging_v1 import JsonLogFormatter
         handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter("%(message)s"))
+        handler.setFormatter(JsonLogFormatter())  # OPENVRAAG-627-1: JSON + redaction
         _LOGGER.addHandler(handler)
+    # A handler attached by the host before us MOET only see redacted records (Sherlock P2).
+    from src.structured_logging_v1 import _REDACTING_FILTER
+    for existing in _LOGGER.handlers:
+        if _REDACTING_FILTER not in existing.filters:
+            existing.addFilter(_REDACTING_FILTER)
     _LOGGER.setLevel(logging.INFO)
     _LOGGER.propagate = False
 
