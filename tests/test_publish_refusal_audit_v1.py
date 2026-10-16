@@ -391,3 +391,19 @@ def test_apply_retention_refuses_non_positive_max_rows():
     with pytest.raises(ValueError):
         store.apply_retention(_FakeWorkflow(con), max_rows=0)
     assert con.sql == []
+
+
+# --- Sherlock #636 P2: a failing durable write MOET emit publication_refusal_audit_failed (NOOIT silent) ---
+
+def test_durable_store_failure_emits_audit_failed_diagnostic(tmp_path, monkeypatch):
+    warnings = []
+    monkeypatch.setattr(_LOGGER, 'warning', lambda fmt, msg: warnings.append(json.loads(msg)))
+
+    def failing(*args, **kwargs):
+        raise OSError('disk gone password=hunter2')
+    monkeypatch.setattr(store, 'append', failing)
+    console, sid, actor = _blocked_base(tmp_path)
+    audit._append_durable(console, actor_id=actor, snapshot_id=sid, reason_codes=['r'], revision=None)
+    failed = [w for w in warnings if w.get('event') == 'publication_refusal_audit_failed']
+    assert [(w['stage'], w['error_class']) for w in failed] == [('durable_store', 'OSError')]
+    assert 'hunter2' not in json.dumps(warnings)
