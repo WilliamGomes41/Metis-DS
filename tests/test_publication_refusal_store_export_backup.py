@@ -33,7 +33,7 @@ def test_evidence_export_contains_only_this_documents_refusals(tmp_path):
         snapshot_id='snap-a', revision='rev', envelope={}, objects=[], refusals=store.read_records(path))
     rows = tables['publication_refusals']
     assert [r['refusal_snapshot_id'] for r in rows] == ['snap-a']
-    assert rows[0]['actor'] == 'acc-1' and rows[0]['store_status'] == store.STORE_STATUS
+    assert 'actor' not in rows[0] and rows[0]['store_status'] == store.STORE_STATUS
     [entry] = [m for m in manifest if m['dataset'] == 'publication_refusals.csv']
     assert entry['row_count'] == 1 and entry['availability'] == 'recorded'
 
@@ -127,3 +127,11 @@ def test_manifest_text_describes_the_current_store():
     assert 'until a PostgreSQL table' not in text and 'within 10 minutes' not in text
     assert 'workflow.publication_refusals' in text and 'single-worker file topology' in text
     assert 'fixed 10-minute window' in text
+
+
+# --- Lex advice / Metis GO (2026-10-16): actor identifiers MAG NIET be exported ---
+
+def test_actor_columns_are_not_in_the_export_schemas():
+    from src.processing_evidence_export_v1 import SCHEMAS
+    for name in ('publication_refusals', 'processing_attempts', 'processing_recovery'):
+        assert not {'actor', 'actor_id'} & set(SCHEMAS[name]), name
