@@ -7,6 +7,7 @@
 Rules (B18): the per-document evidence export MOET contain that document's refusal records and
 NOOIT another document's; the runtime backup MOET contain the store file and restore it byte-identical.
 """
+import json
 import csv
 import io
 from zipfile import ZipFile
@@ -135,3 +136,17 @@ def test_actor_columns_are_not_in_the_export_schemas():
     from src.processing_evidence_export_v1 import SCHEMAS
     for name in ('publication_refusals', 'processing_attempts', 'processing_recovery'):
         assert not {'actor', 'actor_id'} & set(SCHEMAS[name]), name
+
+
+def test_no_plain_account_id_appears_anywhere_in_the_export(tmp_path):
+    account = 'acc-lex-7f3a91'
+    path = tmp_path / store.FILE_NAME
+    store.append_refusal(path, snapshot_id='snap-a', object_version='1', actor=account, reason_codes=['r'], revision='rev')
+    envelope = {
+        'processing_attempts': [{'attempt_id': 'pa-1', 'command_id': 'c-1', 'actor_id': account, 'state': 'failed'}],
+        'processing_recovery': {'authorization_id': 'auth-1', 'actor_id': account, 'reason': 'r', 'consumed_by': 'pa-1'},
+    }
+    tables, manifest = processing_evidence_tables(snapshot_id='snap-a', revision='rev', envelope=envelope,
+                                                  objects=[], refusals=store.read_records(path))
+    assert tables['publication_refusals'] and tables['processing_attempts'] and tables['processing_recovery']
+    assert account not in json.dumps([tables, manifest], default=str)
