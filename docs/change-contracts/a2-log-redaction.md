@@ -32,3 +32,13 @@ Not touched: operations_console_v1.py, publish gate, metis_diagnostic logger.
 ## Sherlock audit 02:55 (2026-10-16)
 - F2 attribution corrected: accepted by Metis. Proof: `test_contract_attributes_f2_acceptance_to_metis`; red d75af8c.
 - uvicorn.access (PER_ARG_LOGGERS) MOET keep its 5 positional args, each redacted on its own, also when a header-shaped secret would otherwise force the render-and-empty fallback. Proof: `test_uvicorn_access_redacts_each_arg_and_keeps_five_args` (3 cases, real AccessFormatter); red 0a4706c (2 failed).
+
+## Sherlock P1/P2 (2026-10-16), red 6da399c + ac17676
+- Escaped quote delimiters MAG NIET end a quoted secret; an unterminated quoted value is redacted to line end (fd02837).
+- Every existing descendant of a library logger with an explicit level below WARNING MOET be clamped to WARNING; re-run at startup (2ddac50). A descendant created and lowered after startup is NOT covered (documented limitation, same as #638 F2).
+- Standalone Digest parameter lists MOETEN be redacted completely (330f664).
+- Capitalised scheme + any token MOET be redacted (`Bearer abc`, `Basic YTo=`); lowercase prose MAG only be redacted when the token carries credential characters (811a37e).
+- A value under a sensitive mapping key MOET be replaced before formatting (1b5031b).
+- Pre-existing handlers on `metis.console.performance` MOETEN get the RedactingFilter (fc94a8c).
+- Email redaction MOET be Unicode-aware (c44f823).
+Proof: tests/test_structured_logging_sherlock_p1p2_v1.py.
