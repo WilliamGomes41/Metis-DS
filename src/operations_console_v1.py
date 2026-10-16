@@ -2418,6 +2418,10 @@ class OperationsConsole:
                 except Exception as error:
                     raise ConsoleError("processing_configuration_unavailable") from error
             attempt, fresh = reserve(envelope, command_id=command_id, actor_id=actor_id, revision=revision, clock=now(), limits=limits)
+            if fresh:  # RESV-1 F3: pin on a NEW attempt only; a returned attempt MAG NIET be overwritten
+                if not envelope.get("processing_configuration"):
+                    raise ConsoleError("processing_configuration_unavailable")  # fail-closed, before commit
+                attempt["processing_configuration"] = deepcopy(envelope["processing_configuration"])
             self._commit_prepared_store(envelopes={snapshot_id: envelope}, snapshot_id=snapshot_id)
         if not fresh:
             if attempt["state"] in {"succeeded", "incomplete_budget"}:

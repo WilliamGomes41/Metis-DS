@@ -43,7 +43,7 @@ from src.publication_chain_recovery_v1 import (
     check_chain_integrity,
 )
 
-WORKFLOW_RECOVERY_VERSION = 6
+WORKFLOW_RECOVERY_VERSION = 7  # 7: workflow.publication_refusals (#636)
 API_ACCESS_TABLES = tuple(API_ACCESS_COLUMNS)
 _API_ACCESS_ORDER_BY = {
     table: ",".join(columns)
@@ -62,7 +62,9 @@ WORKFLOW_TABLES = (
     "publish_authorizations",
     "audit_records",
     "audit_secrets",
+    "publication_refusals",
 )
+REFUSALS_ADDED_RECOVERY_VERSION = 6  # last version without workflow.publication_refusals
 
 _WORKFLOW_COLUMNS: dict[str, tuple[str, ...]] = {
     "accounts": (
@@ -103,6 +105,10 @@ _WORKFLOW_COLUMNS: dict[str, tuple[str, ...]] = {
         "payload", "retention_state",
     ),
     "audit_secrets": ("secret_name", "secret_payload", "updated_at"),
+    "publication_refusals": (
+        "refusal_id", "recorded_at", "snapshot_id", "object_version", "actor", "verdict",
+        "reason_codes", "revision_sha256", "dedup_key", "schema_version",
+    ),
 }
 
 _WORKFLOW_ORDER_BY: dict[str, str] = {
@@ -116,6 +122,7 @@ _WORKFLOW_ORDER_BY: dict[str, str] = {
     "publish_authorizations": "snapshot_id,position NULLS LAST,authorization_id",
     "audit_records": "audit_id",
     "audit_secrets": "secret_name",
+    "publication_refusals": "refusal_id",
 }
 
 _WORKFLOW_JSON_COLUMNS = {
@@ -124,6 +131,7 @@ _WORKFLOW_JSON_COLUMNS = {
     "review_events": {"details", "event_payload"},
     "audit_records": {"payload"},
     "audit_secrets": {"secret_payload"},
+    "publication_refusals": {"reason_codes"},
 }
 
 _CANONICAL_JSON_COLUMNS = {
@@ -137,6 +145,8 @@ def _upgrade_workflow_state(state: Mapping[str, Any]) -> dict[str, Any]:
     version = int(state.get("workflow_recovery_version") or 0)
     if version == WORKFLOW_RECOVERY_VERSION:
         return deepcopy(dict(state))
+    if version == REFUSALS_ADDED_RECOVERY_VERSION:
+        return _add_empty_refusals(deepcopy(dict(state)))
     if version != LEGACY_WORKFLOW_RECOVERY_VERSION:
         _validate_workflow_shape(state)
         raise PublicationChainRecoveryError("workflow_backup_version_invalid")
@@ -176,6 +186,17 @@ def _upgrade_workflow_state(state: Mapping[str, Any]) -> dict[str, Any]:
         )
 
     tables["topics"] = [topics_by_key[key] for key in sorted(topics_by_key)]
+    return _add_empty_refusals(upgraded)
+
+
+def _add_empty_refusals(upgraded: dict[str, Any]) -> dict[str, Any]:
+    """A backup older than the refusal table has no refusals; NOOIT invent rows."""
+    tables = upgraded.get("workflow_tables")
+    if not isinstance(tables, dict):
+        raise PublicationChainRecoveryError("workflow_backup_tables_missing")
+    if "publication_refusals" in tables:
+        raise PublicationChainRecoveryError("workflow_backup_refusal_version_conflict")
+    tables["publication_refusals"] = []
     upgraded["workflow_recovery_version"] = WORKFLOW_RECOVERY_VERSION
     return upgraded
 
@@ -661,7 +682,7 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
 
                     for table in (
                         "document_reviewers", "document_objects", "review_events",
-                        "publish_authorizations", "audit_records", "audit_secrets",
+                        "publish_authorizations", "audit_records", "audit_secrets", "publication_refusals",
                     ):
                         _insert_rows(
                             con, schema="workflow", table=table, rows=workflow_rows[table],
@@ -684,6 +705,7 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
                     for table, column in (
                         ("workflow.review_events", "event_id"),
                         ("workflow.publish_authorizations", "authorization_id"),
+                        ("workflow.publication_refusals", "refusal_id"),
                         ("audit_events", "event_id"),
                     ):
                         row = con.execute(f"SELECT MAX({column}) AS n FROM {table}").fetchone()
@@ -742,6 +764,9 @@ def restore_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAd
     restored = database.export_state()
     with zipfile.ZipFile(archive) as zipf:
         expected = json.loads(zipf.read("database.json").decode("utf-8"))
+    # A legacy (v6) archive is restored through _upgrade_workflow_state; the round-trip MOET
+    # compare against that same upgraded state, NOOIT the raw legacy JSON (4291505161).
+    expected = _upgrade_workflow_state(expected)
     for group in ("workflow_tables", "api_access_tables"):
         if stable_hash(restored[group]) != stable_hash(expected[group]):
             raise PublicationChainRecoveryError(f"{group}_restore_roundtrip_mismatch")
