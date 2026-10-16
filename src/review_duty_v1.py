@@ -197,21 +197,6 @@ def _section_path(obj: dict[str, Any]) -> tuple[str, ...]:
     return tuple(str(part).strip() for part in raw or [] if str(part).strip())
 
 
-def first_review_open(
-    obj: dict[str, Any],
-    *,
-    review_path: str,
-    bindings: Iterable[dict[str, Any]] | None = None,
-    fragments: Iterable[dict[str, Any]] | None = None,
-) -> bool:
-    return review_stage(
-        obj,
-        review_path=review_path,
-        bindings=bindings,
-        fragments=fragments,
-    ) == FIRST_REVIEW
-
-
 def review_duty_lane(
     obj: dict[str, Any],
     *,
