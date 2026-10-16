@@ -205,3 +205,56 @@ def test_precheck_reads_through_workflow_store_connection(monkeypatch, capsys):
     monkeypatch.setattr(canonical, 'PostgresCanonicalPublicationStore', CanonicalStore)
     assert precheck.main(['--postgres']) == 0
     assert used == ['workflow']
+
+
+# --- Sherlock FAIL on 91c16c3, point 4: end-to-end ingest with an extractor counter ---
+# The switch closes attempt admission only: an LLM (bounded semantic) ingest MOET be refused before
+# extraction; a non-LLM ingest and a deterministic re-extract MOETEN still run.
+
+def _count_extract(console):
+    counter = {'n': 0}
+    real = console._extract
+
+    def extract(*args, **kwargs):
+        counter['n'] += 1
+        return real(*args, **kwargs)
+    console._extract = extract
+    return counter
+
+
+def test_e2e_llm_ingest_refused_before_extraction_when_admission_closed(tmp_path, monkeypatch):
+    from tests.test_resv1_reservation_configuration import _counting_provider
+    console = _console(tmp_path)
+    provider = _counting_provider(console)
+    extracted = _count_extract(console)
+    monkeypatch.setenv(ENV, 'closed')
+    with pytest.raises(ConsoleError, match='^processing_admission_closed$'):
+        ingest(console)
+    assert (extracted['n'], provider['n']) == (0, 0)
+    assert _console(tmp_path)._envelopes == {}
+
+
+def test_e2e_llm_ingest_extracts_once_when_admission_open(tmp_path, monkeypatch):
+    from tests.test_resv1_reservation_configuration import _counting_provider
+    monkeypatch.delenv(ENV, raising=False)
+    console = _console(tmp_path)
+    provider = _counting_provider(console)
+    extracted = _count_extract(console)
+    sid, _, _ = ingest(console)
+    assert (extracted['n'], provider['n']) == (1, 1)
+    assert console._envelope(sid)['processing_attempts'][-1]['state'] == 'succeeded'
+
+
+def test_e2e_non_llm_ingest_and_deterministic_reextract_run_when_admission_closed(tmp_path, monkeypatch):
+    console = _console(tmp_path)  # no semantic binding: deterministic, no attempt reserved
+    extracted = _count_extract(console)
+    monkeypatch.setenv(ENV, 'closed')
+    sid, actor, _ = ingest(console)
+    assert extracted['n'] == 1
+    assert console._envelope(sid).get('processing_attempts', []) == []
+    try:
+        console.reextract_unpublished(actor_id=actor, snapshot_id=sid)
+    except ConsoleError as error:
+        assert str(error) != 'processing_admission_closed'
+    assert extracted['n'] == 2
+    assert console._envelope(sid).get('processing_attempts', []) == []
