@@ -40,7 +40,8 @@ class FakeConnection:
         if "information_schema.columns" in query:
             return Rows([{"table_name": table, "column_name": column} for table, column in REQUIRED_COLUMNS])
         if query.startswith("SELECT c.conname"):  # #636: named constraints are part of verification
-            return Rows([{"conname": "publication_refusals_dedup_key_uniq", "table_name": "publication_refusals"}])
+            return Rows([{"conname": "publication_refusals_dedup_key_uniq", "table_name": "publication_refusals",
+                         "contype": "u", "columns": ["dedup_key"]}])
         if query.startswith("SELECT count"):
             return Rows([{"count": 0}])
         self.applied.append(query)
