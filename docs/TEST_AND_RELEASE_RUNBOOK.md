@@ -128,6 +128,17 @@ niet-productieve ingest op test uit en verifieer:
 - een herstart/deployment van de test-app de testdata behoudt;
 - productie geen nieuwe documenten of accounts heeft gekregen.
 
+## Migratie 018 (publication_refusals) en deploy-checklist
+
+- Migratie `018_publication_refusal_audit.sql` MOET vóór de code worden toegepast die de tabel gebruikt, en alleen met GO van William (`scripts/apply_workflow_postgres_migrations.py plan` → `apply` met `--confirm-target` en `--confirm-digest`, daarna `verify`). Code die de tabel gebruikt MAG NIET live gaan voordat `verify` de tabel en de constraint `publication_refusals_dedup_key_uniq` toont.
+- Na `apply` van 018 en vóór `verify` MOET de Entra-databasebeheerder de runtime-identity (test: de test-app-identity; productie: `vvn-metis-console`) rechten geven op de nieuwe tabel en sequence; `GRANT ... ON ALL TABLES` uit de eerste inrichting dekt 018 NIET:
+  `GRANT SELECT, INSERT, DELETE ON workflow.publication_refusals TO "<runtime-identity>";`
+  `GRANT USAGE, SELECT ON SEQUENCE workflow.publication_refusals_refusal_id_seq TO "<runtime-identity>";`
+- 018 is idempotent: veilig om twee keer te draaien en bovenop de oude 018 zonder UNIQUE. 018 wijzigt NOOIT bestaande rijen.
+- Faalt 018 met `publication_refusals_duplicate_dedup_keys count=N more=M keys=…` (maximaal 20 keys; haal de volledige lijst op met `SELECT dedup_key, count(*) FROM workflow.publication_refusals GROUP BY 1 HAVING count(*) > 1`), dan heeft de oude 018 dubbele dedup_keys achtergelaten. 018 heeft dan niets gewijzigd (transactie teruggedraaid). Een mens beslist: (1) exporteer eerst de genoemde rijen (`SELECT * FROM workflow.publication_refusals WHERE dedup_key IN (…)`) naar het evidence-archief; (2) leg de keuze vast met GO van William (bijvoorbeeld de latere dubbele rijen na export verwijderen); (3) draai daarna `plan` → `apply` → `verify` opnieuw. De code MAG NIET live gaan zolang 018 niet geslaagd is.
+- Deploy-checklist, retentie: plan `scripts/publication_refusal_retention.py` (standaard 400 dagen / 200000 rijen; `--max-rows` en `--retention-days` MOETEN > 0 zijn) als expliciet onderhoud. Retentie MAG NIET per weigering draaien. De planning zelf is niet gebouwd; dit is een checklistpunt.
+- Tests: de PostgreSQL-tests draaien `DROP SCHEMA workflow CASCADE`. METIS_TEST_POSTGRES_DSN MOET only point at a disposable database (CI-service of een lokale wegwerpdatabase), NOOIT naar test-, acceptatie- of productiedata.
+
 ## Deploynotitie: verwerkingsconfiguratie tijdens een deploy (RESV-1 F3)
 
 - Een poging die vóór een deploy is gereserveerd en na de deploy onder een andere verwerkingsconfiguratie zou draaien, MOET stoppen met `processing_configuration_changed`; er MAG NIET werk onder de nieuwe configuratie starten. De gebruiker start daarna een nieuwe poging.
