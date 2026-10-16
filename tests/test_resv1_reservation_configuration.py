@@ -194,6 +194,32 @@ def _counting_provider(console):
     return calls
 
 
+def exact_counters(console):
+    """C6: exact counters per stage. extract = console._extract calls; prepare = strategy.prepare calls;
+    provider = semantic provider HTTP calls. Each MOET be counted on its own call, not on attribute access."""
+    counters = {'extract': 0, 'prepare': 0, 'provider': 0}
+    provider_calls = _counting_provider(console)
+    strategy = console._source_processing_strategy
+    real_prepare = strategy.prepare
+    real_extract = console._extract
+
+    class ExactStrategy:
+        def prepare(self, *args, **kwargs):
+            counters['prepare'] += 1
+            return real_prepare(*args, **kwargs)
+
+        def __getattr__(self, name):
+            return getattr(strategy, name)
+
+    def extract(*args, **kwargs):
+        counters['extract'] += 1
+        return real_extract(*args, **kwargs)
+    console.configure_source_processing(ExactStrategy())
+    console._extract = extract
+
+    return lambda: {**counters, 'provider': provider_calls['n']}
+
+
 def test_reused_extraction_with_changed_configuration_is_refused_before_provider(tmp_path):
     # Same source: the re-extract produces the stored prepared_source_extraction (reuse return in retain()).
     # A deploy after the initial check in the re-extract wrapper and before the extraction checkpoint
@@ -201,16 +227,7 @@ def test_reused_extraction_with_changed_configuration_is_refused_before_provider
     console, sid, actor = _reextract_ready(tmp_path)
     stored = console._envelope(sid).get('prepared_source_extraction')
     assert stored, 'fixture MOET have a stored prepared_source_extraction (reuse path)'
-    calls = _counting_provider(console)
-    # Provider work starts in the source processing strategy, right after the extraction checkpoint.
-    strategy = console._source_processing_strategy
-    started = {'n': 0}
-
-    class CountedStrategy:
-        def __getattr__(self, name):
-            started['n'] += 1
-            return getattr(strategy, name)
-    console.configure_source_processing(CountedStrategy())
+    counts = exact_counters(console)
     real = console._processing_configuration_reader
     reads = {'n': 0}
 
@@ -226,8 +243,7 @@ def test_reused_extraction_with_changed_configuration_is_refused_before_provider
     with pytest.raises(ConsoleError, match='processing_configuration_changed'):
         console.reextract_unpublished(actor_id=actor, snapshot_id=sid)
     assert reads['n'] > 2, 'the fence MOET re-read the configuration at the extraction checkpoint'
-    assert started['n'] == 0, 'PROVIDER_WORK_STARTED_BEFORE_FENCE'
-    assert calls['n'] == 0, 'PROVIDER_CALLED_BEFORE_FENCE'
+    assert counts() == {'extract': 0, 'prepare': 0, 'provider': 0}, 'PROVIDER_WORK_STARTED_BEFORE_FENCE'
     attempt = _attempts(console, sid, 'reextract')[-1]
     assert (attempt['state'], attempt['error_code']) == ('failed', 'processing_configuration_changed')
     assert console._envelope(sid).get('prepared_source_extraction') == stored
