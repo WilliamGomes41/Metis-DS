@@ -20,7 +20,9 @@ _ASSIGNMENT_KEYS = (r'password|passwd|pwd|secret|client_secret|token|access_toke
 # Header-like keys: the whole value (to line end or closing quote) is secret, e.g. "Basic x", "a=b; c=d".
 _HEADER_KEYS = (r'authorization|proxy-authorization|cookie|set-cookie|x-api-key|api-key|'
                 r'ocp-apim-subscription-key|x-functions-key|x-ms-client-secret')
-_QUOTED = r'"[^"\r\n]*"|\'[^\'\r\n]*\''
+# Escaped delimiters (\" inside JSON strings) MOETEN NIET end the quoted value (Sherlock P1);
+# an unterminated quoted value is redacted to line end (fail-closed).
+_QUOTED = r'"(?:\\.|[^"\\\r\n])*(?:"|$)|\'(?:\\.|[^\'\\\r\n])*(?:\'|$)'
 _SECRET_PATTERNS = (
     # header keys (optionally quoted, as in dict/JSON reprs): value to quote or line end
     re.compile(r'(?i)(?<![A-Za-z0-9_-])(["\']?(?:' + _HEADER_KEYS + r')["\']?)(\s*[=:]\s*)(?:' + _QUOTED + r'|[^\r\n]+)'),
