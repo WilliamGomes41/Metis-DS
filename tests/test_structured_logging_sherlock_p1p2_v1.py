@@ -89,3 +89,8 @@ def test_quoted_secret_with_line_break_is_redacted():
     out = redact('password="hunter\nsecond-half"')
     assert 'hunter' not in out and 'second-half' not in out
     assert 'second' not in redact("Authorization: 'ab\r\nsecond'")
+
+
+def test_email_with_quoted_local_part_is_redacted():
+    out = redact('from "john..doe"@example.org today')
+    assert 'john..doe' not in out and 'example.org' not in out
