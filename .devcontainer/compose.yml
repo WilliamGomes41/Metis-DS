@@ -1,7 +1,8 @@
 # Two-container sandbox (see docs/SECURITY_SANDBOX.md):
 # - workspace: the Codespace/editor attaches here. It has egress (default
-#   network) so the Codespaces agent and VS Code server can start, and joins
-#   the internal sandbox network only to hand jobs to the runner.
+#   network) so the Codespaces agent and VS Code server can start. It MAG NIET
+#   join the sandbox network: jobs go through files (requests dir + read-only
+#   control volume), so untrusted rt code NOOIT reaches a container with egress.
 # - runner: executes tests/scans. Internal network ONLY (no egress), no
 #   capabilities, no new privileges, read-only root filesystem, no docker socket.
 # - control: no network at all; sole writer of the control volume (requests,
@@ -21,7 +22,6 @@ services:
       - sandbox_control:/sandbox-control:ro
     networks:
       - egress
-      - sandbox
     depends_on:
       control:
         condition: service_healthy

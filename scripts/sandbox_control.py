@@ -34,9 +34,18 @@ def dispatch(requests: Path, control: Path) -> None:
     jobs.mkdir(parents=True, exist_ok=True)
     for request in sorted(requests.glob("*.request")):
         command = request.read_text().strip()
-        if command == "rt" and (requests / "rt").is_dir():
+        if command == "rt":
+            # The previous job's tree MAG NOOIT be reused: clear it, then require a
+            # fresh payload, which is consumed (moved) so a next rt request finds none.
             shutil.rmtree(control / "rt", ignore_errors=True)
-            shutil.copytree(requests / "rt", control / "rt")
+            payload = requests / "rt"
+            if not payload.is_dir() or not any(payload.iterdir()):
+                _atomic_write(jobs / f"{request.stem}.log", "rejected: rt without fresh payload\n")
+                _atomic_write(jobs / f"{request.stem}.exit", "2\n")
+                request.unlink()
+                continue
+            shutil.copytree(payload, control / "rt")
+            shutil.rmtree(payload)
         if command in ALLOWED:
             _atomic_write(jobs / request.name, command)
         else:

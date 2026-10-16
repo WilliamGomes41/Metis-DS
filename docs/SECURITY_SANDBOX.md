@@ -86,10 +86,16 @@ Installatie in de repository betekent niet automatisch installatie in ChatGPT.
 De `runner` en `sandbox-db` zijn uitsluitend aangesloten op één intern
 Docker-netwerk (`172.30.254.0/24`), zonder gepubliceerde poorten. De runner heeft
 geen Docker-socket, laat geen nieuwe privileges toe, krijgt geen
-Linux-capabilities en heeft een alleen-lezen rootbestandssysteem (alleen de
-repository-mount en tmpfs zijn schrijfbaar). De `workspace`-container (editor)
-heeft wél internet en zit ook op het interne netwerk; voer daar geen
-dynamische tests uit: `security_sandbox.py check` weigert daar terecht.
+Linux-capabilities en heeft een alleen-lezen rootbestandssysteem. De repository
+en het control-volume zijn in de runner alleen-lezen. Schrijfbaar zijn uitsluitend
+`/workspaces/metis/output/runtime/sandbox-artifacts`,
+`/workspaces/metis/output/runtime/security-sandbox`,
+`/workspaces/metis/output/runtime/sandbox-runner-diag` en de tmpfs-mounts
+`/tmp` en `/home/vscode`. De `workspace`-container (editor) heeft wél internet
+en MAG NIET op het interne netwerk: opdrachten lopen via bestanden, zodat
+onvertrouwde `rt`-code NOOIT een container met internet bereikt. Voer in de
+workspace geen dynamische tests uit: `security_sandbox.py check` weigert daar
+terecht.
 De runner voert alleen `check`, `probe`, `test`, `test --local`, `scan` en `rt` uit.
 `rt` voert willekeurige pytest-bestanden uit die de workspace in
 `output/runtime/sandbox-requests/rt/` zet (control kopieert ze naar

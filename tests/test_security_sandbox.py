@@ -390,3 +390,82 @@ def test_attested_outcome_logs_errno_per_target(monkeypatch, tmp_path, capsys):
     assert "tcp 8.8.8.8:53 errno=EHOSTUNREACH" in out
     assert "tcp 1.1.1.1:443 errno=timeout" in out
     assert "udp 8.8.8.8:53 errno=" in out
+
+
+def _compose_services():
+    """Minimal parser: service name -> its indented block (no PyYAML in the test env)."""
+    text = (sandbox.ROOT / ".devcontainer/compose.yml").read_text()
+    body = text.split("\nservices:\n", 1)[1].split("\nnetworks:\n", 1)[0]
+    services, name = {}, None
+    for line in body.splitlines():
+        if line.startswith("  ") and not line.startswith("   ") and line.strip().endswith(":"):
+            name = line.strip()[:-1]
+            services[name] = []
+        elif name:
+            services[name].append(line)
+    return {key: "\n".join(lines) for key, lines in services.items()}
+
+
+def _networks(block):
+    lines = block.splitlines()
+    if any(line.strip() == "network_mode: none" for line in lines):
+        return set()
+    start = next(i for i, line in enumerate(lines) if line.strip() == "networks:")
+    found = set()
+    for line in lines[start + 1:]:
+        if not line.startswith("      "):
+            break
+        stripped = line.strip()
+        if line.startswith("      ") and not line.startswith("       "):
+            found.add(stripped.lstrip("- ").rstrip(":"))
+    return found
+
+
+def test_only_egress_free_services_join_the_sandbox_network():
+    # Sherlock P1 (f7e276b): rt-code MAG NIET een container met internet bereiken.
+    services = _compose_services()
+    on_sandbox = {name for name, block in services.items() if "sandbox" in _networks(block)}
+    assert on_sandbox == {"runner", "sandbox-db", "sandbox-azurite"}
+    assert _networks(services["workspace"]) == {"egress"}
+    assert _networks(services["control"]) == set()
+    for name in on_sandbox:
+        assert "egress" not in _networks(services[name])
+
+
+def test_rt_request_without_fresh_payload_is_refused_and_old_tree_cleared(tmp_path):
+    # Sherlock P2: een rt-job MAG NOOIT de testboom van een vorige job hergebruiken.
+    from scripts import sandbox_control as control
+    req, ctl = tmp_path / "requests", tmp_path / "control"
+    req.mkdir(); (ctl / "rt").mkdir(parents=True)
+    (ctl / "rt" / "test_old.py").write_text("def test_old(): pass\n")
+    (req / "10.request").write_text("rt")
+    control.dispatch(req, ctl)
+    assert not (ctl / "rt").exists()
+    assert not (ctl / "jobs" / "10.request").exists()
+    assert (ctl / "jobs" / "10.exit").read_text().strip() == "2"
+    assert "payload" in (ctl / "jobs" / "10.log").read_text()
+
+
+def test_rt_payload_is_consumed_so_next_rt_request_cannot_reuse_it(tmp_path):
+    from scripts import sandbox_control as control
+    req, ctl = tmp_path / "requests", tmp_path / "control"
+    (req / "rt").mkdir(parents=True); ctl.mkdir()
+    (req / "rt" / "test_x.py").write_text("def test_x(): pass\n")
+    (req / "11.request").write_text("rt")
+    control.dispatch(req, ctl)
+    assert (ctl / "rt" / "test_x.py").exists() and not (req / "rt").exists()
+    (req / "12.request").write_text("rt")
+    control.dispatch(req, ctl)
+    assert (ctl / "jobs" / "12.exit").read_text().strip() == "2"
+    assert not (ctl / "rt").exists()
+
+
+def test_docs_list_runner_writable_mounts_exactly_as_compose():
+    compose = _compose_services()["runner"]
+    writable = sorted(line.strip().lstrip("- ").split(":")[1] for line in compose.splitlines()
+                      if line.strip().startswith("- ") and line.strip().endswith(":rw"))
+    doc = (sandbox.ROOT / "docs/SECURITY_SANDBOX.md").read_text()
+    assert "alleen de\nrepository-mount en tmpfs zijn schrijfbaar" not in doc
+    for path in writable + ["/tmp", "/home/vscode"]:
+        assert f"`{path}`" in doc
+    assert "zit ook op het interne netwerk" not in doc
