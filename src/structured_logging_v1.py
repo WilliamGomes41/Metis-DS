@@ -25,21 +25,25 @@ _HEADER_KEYS = (r'authorization|proxy-authorization|cookie|set-cookie|x-api-key|
 # Line breaks inside a quoted value MOETEN NIET end it (multiline secrets, Sherlock P1);
 # without a closing quote the rest of the text is redacted.
 _QUOTED = r'"(?:\\.|[^"\\])*(?:"|\Z)|\'(?:\\.|[^\'\\])*(?:\'|\Z)'
+# bytes / bytearray reprs (b'x', bytearray(b'x')) MOETEN be treated as quoted values (Sherlock P1 4293501888).
+_VALUE_PREFIX = r'(?:bytearray\(\s*)?b?'
 _SECRET_PATTERNS = (
     # header keys (optionally quoted, as in dict/JSON reprs): value to quote or line end
-    re.compile(r'(?i)(?<![A-Za-z0-9_-])(["\']?(?:' + _HEADER_KEYS + r')["\']?)(\s*[=:]\s*)(?:' + _QUOTED + r'|[^\r\n]+)'),
+    re.compile(r'(?i)(?<![A-Za-z0-9_-])(["\']?(?:' + _HEADER_KEYS + r')["\']?)(\s*[=:]\s*)(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[^\r\n]+)'),
     # tuple-shaped header/credential pairs, (b'authorization', b'x') as in ASGI scopes and HTTP
     # clients: the comma separator and b-prefixes MOETEN be recognised (Sherlock P1 4291899701).
     re.compile(r'(?i)(\(\s*b?["\'](?:' + _HEADER_KEYS + r'|' + _ASSIGNMENT_KEYS + r')["\'])(\s*,\s*)'
-               r'(?:b?(?:' + _QUOTED + r')|[^\s)\]]+)'),
+               r'(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[^\s)\]]+)'),
     # credential assignments, quoted or unquoted values (password="x", {"password":"x"})
-    re.compile(r'(?i)(["\']?\b(?:' + _ASSIGNMENT_KEYS + r')\b["\']?)(\s*[=:]\s*)(?:' + _QUOTED + r'|[^\s;,&"\'}]+)'),
+    re.compile(r'(?i)(["\']?\b(?:' + _ASSIGNMENT_KEYS + r')\b["\']?)(\s*[=:]\s*)(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[^\s;,&"\'}]+)'),
     # Standalone scheme credentials. Digest-style parameter lists (k="v", k=v) are consumed
     # completely (Sherlock P1). Any-case scheme + any token MOET be redacted; casing MAG NIET
     # decide (Metis 2026-10-16, fail-closed: 'basic flow' is redacted too).
     re.compile(r'(?i)\b(?:bearer|basic|digest|negotiate)\s+'
-               r'[A-Za-z0-9_-]+\*?=(?:' + _QUOTED + r'|[^\s,]*)(?:\s*,\s*[A-Za-z0-9_-]+\*?=(?:' + _QUOTED + r'|[^\s,]*))*'),  # k*= RFC 7616
-    re.compile(r'(?i)\b(?:bearer|basic|digest|negotiate)\s+[A-Za-z0-9._~+/=-]+'),
+               r'[A-Za-z0-9_-]+\*?\s*=\s*(?:' + _QUOTED + r'|[^\s,]*)'
+               r'(?:\s*,\s*[A-Za-z0-9_-]+\*?\s*=\s*(?:' + _QUOTED + r'|[^\s,]*))*'),  # k*= RFC 5987/7616, any spacing
+    # any spacing, an '='/':' separator and quoted tokens (Metis 12:21 complete pass)
+    re.compile(r'(?i)\b(?:bearer|basic|digest|negotiate)(?:\s+|\s*[=:]\s*)(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[A-Za-z0-9._~+/=-]+)'),
     re.compile(r'(?i)\b([a-z][a-z0-9+.-]*://)[^\s/:@]+:[^\s/@]+@'),
     re.compile(r'\bsk-[A-Za-z0-9_-]{8,}'),
     # Domain literals (user@[127.0.0.1], user@[IPv6:...]) MOETEN be redacted (Sherlock P2 4291899714).
@@ -96,14 +100,39 @@ class JsonLogFormatter(logging.Formatter):
         return json.dumps(row, separators=(',', ':'), ensure_ascii=False)
 
 
-_SENSITIVE_KEY = re.compile(r'(?i)(?:' + _ASSIGNMENT_KEYS + r'|' + _HEADER_KEYS + r')')
+# A sensitive key MAG a prefix (x_api_key, http_authorization).
+_SENSITIVE_KEY = re.compile(r'(?i)(?:[a-z0-9]+[_-])*(?:' + _ASSIGNMENT_KEYS + r'|' + _HEADER_KEYS + r')')
+_MAX_DEPTH = 32
+
+
+def _is_sensitive_key(key):
+    if isinstance(key, (bytes, bytearray)):
+        key = bytes(key).decode('utf-8', 'replace')
+    return isinstance(key, str) and bool(_SENSITIVE_KEY.fullmatch(key))
+
+
+def _deep_redact(value, depth=0):
+    """Redact str/bytes/bytearray at any depth of dict/list/tuple/set; sensitive keys are replaced."""
+    if depth > _MAX_DEPTH:
+        return '[REDACTED]'  # fail-closed beyond the depth bound
+    if isinstance(value, (str, bytes, bytearray)):
+        return redact(value)
+    if isinstance(value, dict):
+        return {key: '[REDACTED]' if _is_sensitive_key(key) else _deep_redact(item, depth + 1)
+                for key, item in value.items()}
+    if isinstance(value, (list, tuple)) and len(value) == 2 and _is_sensitive_key(value[0]):
+        return type(value)((value[0], '[REDACTED]')) if not hasattr(value, '_fields') else value._replace(**{value._fields[1]: '[REDACTED]'})  # header pair
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return type(value)(_deep_redact(item, depth + 1) for item in value) if not hasattr(value, '_fields') \
+            else type(value)(*(_deep_redact(item, depth + 1) for item in value))
+    return value
 
 
 def _redact_mapping_value(key, value):
     # A value selected by a sensitive mapping key MOET be replaced whatever its shape (Sherlock P1).
-    if isinstance(key, str) and _SENSITIVE_KEY.fullmatch(key):
+    if _is_sensitive_key(key):
         return '[REDACTED]'
-    return _redact_arg(value)
+    return _deep_redact(value)
 
 
 def _redact_arg(value):
@@ -153,10 +182,10 @@ class RedactingFilter(logging.Filter):
         for key, value in list(record.__dict__.items()):
             if key in _STANDARD_ATTRS:
                 continue
-            if isinstance(key, str) and _SENSITIVE_KEY.fullmatch(key):
+            if _is_sensitive_key(key):
                 setattr(record, key, '[REDACTED]')  # any value type (4292037261)
-            elif isinstance(value, (str, bytes)):
-                setattr(record, key, _redact_arg(value))
+            else:
+                setattr(record, key, _deep_redact(value))  # any depth (4293501908)
         return True
 
 
