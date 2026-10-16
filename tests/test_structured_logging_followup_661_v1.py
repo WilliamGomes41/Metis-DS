@@ -83,3 +83,10 @@ def test_composite_keys_in_nested_extras_are_redacted(key):
     record = _record('x', context={key: 'admin'})
     RedactingFilter().filter(record)
     assert 'anne@example.com' not in logging.Formatter('%(context)s').format(record)
+
+
+@pytest.mark.parametrize('addr', ['\U0001F600@example.com', 'a\U0001F600b@example.com', '\u2603@example.com', '\u00a9x@example.com'])
+def test_smtputf8_local_part_outside_word_class_is_redacted(addr):
+    # 4296203827 (RFC 6531: UTF-8 non-ASCII is atext)
+    assert addr.split('@')[0] not in redact('mail ' + addr)
+    assert addr.split('@')[0] not in _json(_record('mail %s', (addr,)))
