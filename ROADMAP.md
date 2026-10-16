@@ -79,19 +79,24 @@ Een proof-slice wordt pas een nieuwe repair bij een reproduceerbare invariantbre
 **Volgorde:**
 
 1. [#661](https://github.com/WilliamGomes41/Metis-DS/issues/661) / [#663](https://github.com/WilliamGomes41/Metis-DS/pull/663) — lekfix secrets/PII (Anvil, loopt).
-2. Nesting N1 — meten: exclusieve tijd per functie + call tree voor Review en Bronselectie.
-3. Nesting N2 — leescontext: één vaste leescontext per documentrevisie. Forge MOET het ontwerp reviewen vóór er code komt.
-4. Nesting N3 — cache op revisie/hash in plaats van de volledige bronstructuur.
-5. Nesting N4 — Bronselectie-documentlijst (~17 s). OPENVRAAG-B-1: de live opbouw van die ~17 s is nog niet vastgesteld.
-6. RC-18 four-eyes (Forge, laatste V1-klus). RC-32-restrisico is geaccepteerd; RC-7 volgt daarna onder §12.
-7. Weigeringentabel echt append-only in de database (Class A).
-8. Goedkeuringen gebonden aan de Entra-sessie (Class A, review door Lex).
-9. [#634](https://github.com/WilliamGomes41/Metis-DS/pull/634) — eerst CHANGE_DESIGN, dan de fix (Class A).
-10. A23, A16, A25, A11/12/14 — elk een eigen PR.
-11. Dode code weg: `storage_prepare` + 17 bewezen dode functies. `docling_worker_v1` blijft (wordt aangeroepen).
-12. Deploypakket: migratie 018 MOET eerst bewezen zijn op een testdatabase; `METIS_AUDIT_HMAC_KEY` als Key Vault-referentie; App Insights; retentie. Argos meet live snelheid vóór en na (script `/workspace/metis-latency/baseline.sh`). Live gaat NOOIT zonder GO van William.
+2. R2 native reproductie (Forge): reviewherstel `_restore_review_state` schrijft na rollback en na vrijgave van de lock zonder verwachte objectrevisie. Twee echte console-instanties op wegwerp-Postgres, foutinjectie; een tweede commit na lockvrijgave MOET behouden blijven, inclusief audit. Rode test + diagnose; de fix volgt als aparte kleine PR na GO. NOOIT live.
+3. Nesting N1 — meten: exclusieve tijd per functie + call tree voor Review en Bronselectie.
+4. Nesting N2 — leescontext: één vaste leescontext per documentrevisie. Forge MOET het ontwerp reviewen vóór er code komt.
+5. Nesting N3 — cache op revisie/hash in plaats van de volledige bronstructuur.
+6. Nesting N4 — Bronselectie-documentlijst (~17 s). OPENVRAAG-B-1: de live opbouw van die ~17 s is nog niet vastgesteld. R4: `list_envelopes` is N+1 (101 SQL-queries bij 100 documenten); de dispatcher scant dezelfde lijst elke seconde.
+7. RC-18 four-eyes (Forge, laatste V1-klus). RC-32-restrisico is geaccepteerd; RC-7 volgt daarna onder §12.
+8. Weigeringentabel echt append-only in de database (Class A).
+9. Goedkeuringen gebonden aan de Entra-sessie (Class A, review door Lex).
+10. [#634](https://github.com/WilliamGomes41/Metis-DS/pull/634) — eerst CHANGE_DESIGN, dan de fix (Class A).
+11. A23, A16, A25, A11/12/14 — elk een eigen PR.
+12. Dode code weg: `storage_prepare` + 17 bewezen dode functies. `docling_worker_v1` blijft (wordt aangeroepen).
+13. Deploypakket: migratie 018 MOET eerst bewezen zijn op een testdatabase; `METIS_AUDIT_HMAC_KEY` als Key Vault-referentie; App Insights; retentie. Gecontroleerde export en restore van productiegegevens op een geïsoleerde omgeving; hashes en aantallen MOETEN overeenkomen. Argos meet live snelheid vóór en na (script `/workspace/metis-latency/baseline.sh`). Live gaat NOOIT zonder GO van William.
 
 **Na deploy, niet blokkerend:** A13, A17–A22, A24, A27.
+
+**OPENVRAAG-R5:** de publicatieprojectie verifieert alle actieve bronnen en startup reconcilieert synchroon. OPENVRAAG of dit de live 502's (~6%) verklaart.
+
+**Bron R2/R4/R5:** onafhankelijke audit 2026-10-16 op `8f354f5`; besluit William 2026-10-16 19:02.
 
 **Rolverdeling:** Forge gaat na RC-18 en de review van het N2-ontwerp naar Metis V2. Anvil blijft op V1.
 
