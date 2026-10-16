@@ -75,20 +75,12 @@ def test_r2_restore_after_lock_release_overwrites_concurrent_review(workflow_pos
 
     monkeypatch.setattr(a, "_commit_prepared_store", faulty_commit)
 
-    original_restore = a._restore_review_state
+    # Hook the post-rollback step: _restore_review_state on main, the remirror
+    # after the fix. B interleaves where A's step runs without the lock.
+    hook_name = "_restore_review_state" if hasattr(a, "_restore_review_state") else "_remirror_after_rollback"
+    original_restore = getattr(a, hook_name)
 
-    def interleave_then_restore(**kwargs):
-        seen.setdefault("restore_depths", []).append(a._store_lock_depth)
-        if a._store_lock_depth > 0:
-            # Nested review contexts (closed_review_loop) restore while the
-            # outer context still holds the lock; only the outermost restore
-            # runs after release.
-            return original_restore(**kwargs)
-        # Prove A no longer holds the store lock (thread depth + flock free).
-        seen["a_lock_depth"] = a._store_lock_depth
-        with open(lock_path, "a+b") as handle:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    def run_b():
         # B commits a second change through the normal path.
         _approve(b, rid, sid, obj_b["object_id"], type_b)
         seen["events_after_b"] = b.workflow_review_store.read_events()
@@ -96,9 +88,23 @@ def test_r2_restore_after_lock_release_overwrites_concurrent_review(workflow_pos
                                     if x["object_id"] == obj_b["object_id"]]
         seen["obj_after_b"] = next(o for o in b.workflow_document_store.list_document_objects(sid)
                                       if o["object_id"] == obj_b["object_id"])
-        return original_restore(**kwargs)
 
-    monkeypatch.setattr(a, "_restore_review_state", interleave_then_restore)
+    def interleave_then_restore(*args, **kwargs):
+        seen.setdefault("restore_depths", []).append(a._store_lock_depth)
+        if a._store_lock_depth > 0:
+            # Nested review contexts (closed_review_loop) restore while the
+            # outer context still holds the lock; only the outermost restore
+            # runs after release.
+            return original_restore(*args, **kwargs)
+        # Prove A no longer holds the store lock (thread depth + flock free).
+        seen["a_lock_depth"] = a._store_lock_depth
+        with open(lock_path, "a+b") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        run_b()
+        return original_restore(*args, **kwargs)
+
+    monkeypatch.setattr(a, hook_name, interleave_then_restore)
 
     try:
         _approve(a, rid, sid, obj_a["object_id"], type_a)
@@ -107,6 +113,10 @@ def test_r2_restore_after_lock_release_overwrites_concurrent_review(workflow_pos
     else:
         raise AssertionError("fault was not injected")
 
+    if "events_after_b" not in seen:
+        # No post-rollback step ran without the lock: B commits after A.
+        seen["a_lock_depth"] = a._store_lock_depth
+        run_b()
     assert seen["a_lock_depth"] == 0
     print("R2_RESTORE_DEPTHS", seen["restore_depths"])
     assert seen["bindings_after_b"], "precondition: B's binding committed"

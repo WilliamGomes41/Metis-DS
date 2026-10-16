@@ -5,6 +5,12 @@ T4: after the rollback no write reaches workflow.* from the review mixin's error
     path (including remirror/refresh_*), and disk mirrors are written under the lock.
 T5: two threads on one console object (sync route + threadpool): B's concurrent
     approve survives A's failed review.
+T6: a remirror failure logs codes, ids and error types only.
+
+# release-control-evidence: scope/belofte
+# release-control-evidence: opslag concurrent stale recovery
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 import threading
 import traceback
@@ -217,3 +223,31 @@ def test_t5_two_threads_same_console_concurrent_approve_survives(workflow_postgr
     assert len(b_bindings) == 1, "B's concurrent approve binding lost"
     assert a_bindings == [], "A's failed review left a binding"
     assert any(e.get("object_id") == obj_b["object_id"] for e in events), "B's audit event lost"
+
+
+def test_t6_remirror_failure_warning_carries_only_allowed_fields(workflow_postgres, tmp_path, monkeypatch, caplog):
+    import logging
+    console, rid, sid, (obj_a, _obj_b) = _setup(tmp_path, workflow_postgres)
+    flag = threading.Event()
+    _inject_fault(monkeypatch, flag)
+    secret_text = obj_a["content"]["clean_text"]
+    username = console._account(rid)["username"]
+
+    def failing_remirror():
+        raise RuntimeError(f"{secret_text} {username} {rid}")
+
+    monkeypatch.setattr(console, "_remirror_review_runtime", failing_remirror)
+    caplog.set_level(logging.WARNING, logger="src.workflows.workflow_review_cutover_v1")
+    with pytest.raises(RuntimeError, match="r2_injected_fault"):
+        _approve(console, rid, sid, obj_a)
+    records = [r for r in caplog.records if r.name == "src.workflows.workflow_review_cutover_v1"]
+    assert records, "a remirror failure MOET log a structured warning"
+    for record in records:
+        message = record.getMessage()
+        assert message == (
+            f"review_rollback_remirror_failed snapshot_id={sid} "
+            "error_code=RuntimeError remirror_error_type=RuntimeError"
+        )
+        for forbidden in (secret_text, username, rid, "r2_injected_fault"):
+            assert forbidden not in message
+        assert record.exc_info is None
