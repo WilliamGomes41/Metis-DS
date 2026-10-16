@@ -127,3 +127,14 @@ niet-productieve ingest op test uit en verifieer:
 - de SHA-256 readback klopt;
 - een herstart/deployment van de test-app de testdata behoudt;
 - productie geen nieuwe documenten of accounts heeft gekregen.
+
+## Deploynotitie: verwerkingsconfiguratie tijdens een deploy (RESV-1 F3)
+
+- Een poging die vóór een deploy is gereserveerd en na de deploy onder een andere verwerkingsconfiguratie zou draaien, MOET stoppen met `processing_configuration_changed`; er MAG NIET werk onder de nieuwe configuratie starten. De gebruiker start daarna een nieuwe poging.
+- Ingest-, Bronselectie-, hervat- en re-extract-pogingen pinnen de configuratie al op de poging. Sinds #639 pint ook de retry-route (`retry_pre_review`) de configuratie op een nieuwe poging. Zolang #639 niet gemerged is MOET een deploy die `METIS_*`-verwerkingsinstellingen wijzigt pas gebeuren als er geen retry-poging `running` is.
+- Ook bij hergebruik van een opgeslagen `prepared_source_extraction` (zelfde bron) MOET de configuratiecontrole vóór het providerwerk gebeuren; hergebruik MAG NIET de controle overslaan (#639, Codex P1).
+- Een poging zonder vastgepinde configuratie MOET geweigerd worden met `processing_configuration_unpinned`; er is NOOIT een uitzondering.
+- Deploynotitie (#639): een poging die al liep vóór de deploy en geen vastgepinde configuratie heeft (bijvoorbeeld een retry-poging van vóór #639), MOET na de deploy stoppen met `processing_configuration_unpinned`. De gebruiker start daarna een nieuwe poging; die pint de configuratie. Dit is verwacht gedrag en MAG NIET als incident gelden.
+- `METIS_PROCESSING_ADMISSION=closed` sluit alleen de toelating van pogingen (`reserve()`). Een deterministische re-extract en een niet-LLM-ingest reserveren geen poging en draaien door. Wie alle schrijfacties wil stoppen, MOET de console stoppen.
+- Rollback voorbij #628: eerst `METIS_PROCESSING_ADMISSION=closed` zetten, lopende pogingen laten uitlopen en dan `scripts/processing_rollback_precheck.py` draaien (exit 0 is de enige uitkomst die rollback voorbij #628 toestaat); zie `docs/change-contracts/a3-incomplete-budget-rollback.md`.
+- Is de configuratie bij een retry niet leesbaar, dan MOET de retry geweigerd worden met `processing_configuration_unavailable` zonder nieuwe poging.
