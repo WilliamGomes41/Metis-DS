@@ -40,6 +40,8 @@ LIBRARY_LOGGERS = ('azure', 'urllib3', 'httpx', 'httpcore', 'openai', 'msal', 'p
 # application startup (Metis 638-1). A handler added after startup is NOT covered.
 NON_PROPAGATING_LOGGERS = ('uvicorn', 'uvicorn.error', 'uvicorn.access', 'gunicorn', 'gunicorn.error',
                            'gunicorn.access')
+# Loggers whose formatter reads record.args positionally: args MOETEN stay per-arg redacted.
+PER_ARG_LOGGERS = ('uvicorn.access',)
 _SAFE = re.compile(r'[A-Za-z0-9_.:-]{1,128}')
 _HANDLER_NAME = 'metis-structured-json'
 
@@ -97,7 +99,10 @@ class RedactingFilter(logging.Filter):
             candidate = msg % redacted_args if redacted_args else msg
         except Exception:
             candidate = None
-        if candidate is not None and redact(candidate) == candidate:
+        if record.name in PER_ARG_LOGGERS and not isinstance(args, dict):
+            # uvicorn.access: AccessFormatter reads 5 positional args; each arg is redacted on its own.
+            record.msg, record.args = redact(msg), redacted_args
+        elif candidate is not None and redact(candidate) == candidate:
             record.msg, record.args = msg, redacted_args  # positional args kept for foreign formatters
         else:
             try:
