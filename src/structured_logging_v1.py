@@ -55,8 +55,9 @@ _SECRET_PATTERNS = (
     # Quoted local parts ("john..doe"@example.org) MOETEN be redacted too (Sherlock P2).
     re.compile(r'"(?:\\.|[^"\\\r\n])*"@[\w-]+(?:\.[\w-]+)*\b'),  # zero-dot domains (localhost) too, 4293592622
     # Unicode-aware: SMTPUTF8 addresses (josé@example.com) MOETEN be redacted too (Sherlock P2).
-    # Combining marks (jos\u0301e) MOETEN NIET split the local part (4294352280).
-    re.compile(r'(?<![\w.!#$%&\'*+/=?^`{|}~\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f-])[\w.!#$%&\'*+/=?^`{|}~\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f-]+@[\w-]+(?:\.[\w-]+)*\b'),  # zero-dot domains (localhost) too, 4293592622
+    # Combining marks (jos\u0301e) MOETEN NIET split the local part (4294352280); any UTF-8
+    # non-ASCII is atext under RFC 6531 (\U0001F600@example.com, 4296203827).
+    re.compile(r'(?<![\w.!#$%&\'*+/=?^`{|}~\u0080-\U0010ffff-])[\w.!#$%&\'*+/=?^`{|}~\u0080-\U0010ffff-]+@[\w-]+(?:\.[\w-]+)*\b'),  # zero-dot domains (localhost) too, 4293592622
 )
 # Third-party loggers MOETEN stay at WARNING: their INFO/DEBUG output (HTTP headers,
 # request bodies, connection strings) MAG NIET reach the root JSON handler.
@@ -124,7 +125,8 @@ def _deep_redact(value, depth=0):
         return redact(value)
     if isinstance(value, Mapping):  # UserDict too (4295084759)
         # Keys MOETEN be redacted too (PII keys, 4294629108).
-        return {(redact(key) if isinstance(key, (str, bytes, bytearray)) else key):
+        # Composite keys (tuples, frozensets) are redacted too (4296203813).
+        return {(redact(key) if isinstance(key, (str, bytes, bytearray)) else _deep_redact(key, depth + 1)):
                 '[REDACTED]' if _is_sensitive_key(key) else _deep_redact(item, depth + 1)
                 for key, item in value.items()}
     if isinstance(value, (list, tuple)) and len(value) == 2 and _is_sensitive_key(value[0]):
@@ -211,7 +213,7 @@ _REDACTING_FILTER = RedactingFilter()
 
 def _is_owned(handler):
     # The name alone MAG NIET be trusted: only our JsonLogFormatter handler counts (4294985552).
-    return getattr(handler, 'name', None) == _HANDLER_NAME and isinstance(handler.formatter, JsonLogFormatter)
+    return getattr(handler, 'name', None) == _HANDLER_NAME and type(handler.formatter) is JsonLogFormatter  # subclasses MAG NIET be trusted (4296203798)
 
 
 def install_structured_logging(level=logging.INFO):

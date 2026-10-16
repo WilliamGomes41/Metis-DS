@@ -14,3 +14,9 @@ Taalregel: B18. Rules use MOET / MAG NIET / NOOIT only. Source: #661 (threads 42
 
 ## Limits
 - A secret word that looks like `x=...` ends the value (`password=a b=c`). This is accepted: what follows is treated as a new assignment.
+
+## Scope extension (William, 18:21, 2026-10-16): three new #638 leaks
+Red commits d9c0465, f8d0280 and e52806a (6 failed); fix in one commit.
+- The reserved handler MOET only be trusted when its formatter is exactly JsonLogFormatter. A subclass that overrides format() MAG NIET count as owned, and that handler gets the RedactingFilter (4296203798).
+- Composite keys (tuples, frozensets) in nested extra mappings MOETEN be deep-redacted (4296203813).
+- SMTPUTF8: every UTF-8 non-ASCII character in a local part MOET count as atext (RFC 6531), for example \U0001F600@example.com (4296203827).
