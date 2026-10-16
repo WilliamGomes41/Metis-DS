@@ -48,3 +48,6 @@ Proof: tests/test_structured_logging_sherlock_p1p2_v1.py.
 - A line break inside a quoted value MAG NIET end it; an unterminated quoted value is redacted to the end of the text (red aa532cb, fix 03b16c2).
 - Emails with a quoted local part MOETEN be redacted (red 6557e90, fix d95de59).
 - Custom `extra` fields: values under sensitive keys MOETEN be replaced, other string fields redacted, before any handler formats them (red f08f855, fix 7197a79).
+
+## Known limitation: over-redaction (accepted by Metis, 2026-10-16)
+Any word that follows an auth scheme word (bearer, basic, digest, negotiate; any casing) is redacted, fail-closed. Ordinary prose is redacted too: 'use the basic flow' becomes 'use the [REDACTED]'. This MAG NIET be relaxed without a new Metis decision; a log reader MOET read '[REDACTED]' after a scheme word as possibly prose.

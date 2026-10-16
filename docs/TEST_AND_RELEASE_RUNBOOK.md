@@ -138,3 +138,6 @@ niet-productieve ingest op test uit en verifieer:
 - `METIS_PROCESSING_ADMISSION=closed` sluit alleen de toelating van pogingen (`reserve()`). Een deterministische re-extract en een niet-LLM-ingest reserveren geen poging en draaien door. Wie alle schrijfacties wil stoppen, MOET de console stoppen.
 - Rollback voorbij #628: eerst `METIS_PROCESSING_ADMISSION=closed` zetten, lopende pogingen laten uitlopen en dan `scripts/processing_rollback_precheck.py` draaien (exit 0 is de enige uitkomst die rollback voorbij #628 toestaat); zie `docs/change-contracts/a3-incomplete-budget-rollback.md`.
 - Is de configuratie bij een retry niet leesbaar, dan MOET de retry geweigerd worden met `processing_configuration_unavailable` zonder nieuwe poging.
+
+## Log redaction: known over-redaction (#638, accepted by Metis)
+Structured logging redacts every word after an auth scheme word (bearer, basic, digest, negotiate; any casing). Prose is redacted too: 'use the basic flow' is logged as 'use the [REDACTED]'. This is intended (fail-closed) and MAG NIET be treated as a log defect; a change to it MOET go through Metis.
