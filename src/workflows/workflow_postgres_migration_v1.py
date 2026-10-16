@@ -50,7 +50,9 @@ REFUSAL_COLUMNS = (
     "reason_codes", "revision_sha256", "dedup_key", "schema_version",
 )
 # Named constraints the runtime depends on (ON CONFLICT (dedup_key) needs the UNIQUE).
-REQUIRED_CONSTRAINTS = frozenset({("publication_refusals", "publication_refusals_dedup_key_uniq")})
+# (table, name, contype, columns): ON CONFLICT (dedup_key) needs UNIQUE(dedup_key) on exactly this
+# table; a same-named constraint elsewhere, a non-unique one or other columns MAG NIET pass (4291505169).
+REQUIRED_CONSTRAINTS = frozenset({("publication_refusals", "publication_refusals_dedup_key_uniq", "u", ("dedup_key",))})
 REQUIRED_COLUMNS = frozenset(
     {
         *(("publication_refusals", column) for column in REFUSAL_COLUMNS),
@@ -133,7 +135,10 @@ def observe_schema(connection: Any) -> dict[str, Any]:
             "WHERE table_schema='workflow'"
         ).fetchall()
         constraint_rows = connection.execute(
-            "SELECT c.conname AS conname, t.relname AS table_name FROM pg_constraint c "
+            "SELECT c.conname AS conname, t.relname AS table_name, c.contype::text AS contype, "
+            "ARRAY(SELECT a.attname::text FROM unnest(c.conkey) AS k(attnum) JOIN pg_attribute a "
+            "ON a.attrelid = c.conrelid AND a.attnum = k.attnum ORDER BY a.attnum) AS columns "
+            "FROM pg_constraint c "
             "JOIN pg_class t ON t.oid = c.conrelid JOIN pg_namespace n ON n.oid = t.relnamespace "
             "WHERE n.nspname='workflow'"
         ).fetchall()
@@ -148,8 +153,11 @@ def observe_schema(connection: Any) -> dict[str, Any]:
         raise WorkflowMigrationError("workflow_schema_observation_failed") from exc
     missing_tables = sorted(REQUIRED_TABLES - tables)
     missing_columns = sorted(f"{table}.{column}" for table, column in REQUIRED_COLUMNS - columns)
-    present_constraints = {str(row["conname"]) for row in constraint_rows}
-    missing_constraints = sorted(name for _table, name in REQUIRED_CONSTRAINTS if name not in present_constraints)
+    present_constraints = {
+        (str(row["table_name"]), str(row["conname"]), str(row.get("contype") or ""), tuple(row.get("columns") or ()))
+        for row in constraint_rows
+    }
+    missing_constraints = sorted(spec[1] for spec in REQUIRED_CONSTRAINTS if spec not in present_constraints)
     return {
         "status": "PASS" if not missing_tables and not missing_columns and not missing_constraints else "BLOCKED",
         "missing_constraints": missing_constraints,

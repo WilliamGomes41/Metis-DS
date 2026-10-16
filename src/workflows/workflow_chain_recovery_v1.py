@@ -764,6 +764,9 @@ def restore_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAd
     restored = database.export_state()
     with zipfile.ZipFile(archive) as zipf:
         expected = json.loads(zipf.read("database.json").decode("utf-8"))
+    # A legacy (v6) archive is restored through _upgrade_workflow_state; the round-trip MOET
+    # compare against that same upgraded state, NOOIT the raw legacy JSON (4291505161).
+    expected = _upgrade_workflow_state(expected)
     for group in ("workflow_tables", "api_access_tables"):
         if stable_hash(restored[group]) != stable_hash(expected[group]):
             raise PublicationChainRecoveryError(f"{group}_restore_roundtrip_mismatch")

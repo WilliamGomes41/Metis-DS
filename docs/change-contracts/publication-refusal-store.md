@@ -65,3 +65,8 @@ Taalregel: B18. Rules use MOET / MAG NIET / NOOIT only; open items are marked OP
 - **Sherlock P2 (schema verify):** `observe_schema` (verify/apply) checks all 10 refusal columns and the named constraint `publication_refusals_dedup_key_uniq` (`missing_constraints`); without them the status is BLOCKED. Proof: `test_schema_verify_requires_refusal_columns_and_named_constraint`; red c8288ce.
 - **Sherlock P2 (runtime grants):** both runbooks grant the runtime identity SELECT, INSERT, DELETE on workflow.publication_refusals and USAGE, SELECT on its sequence after 018 (no UPDATE: append-only; DELETE only for the retention command). Proof: `test_runbooks_grant_runtime_access_to_the_refusal_table_and_sequence`; red 2a82e13. OPENVRAAG-F1-7: the test-app runtime identity name; Argos fills it in on the deploy checklist.
 - **Sherlock P2 (export reads the rotation):** `read_records` reads `.jsonl.1` first, then the active file, under the in-process store lock. Proof: `test_read_records_includes_the_rotated_generation_first`; red f8b4d82.
+
+## Metis decisions (2026-10-16, 09:12)
+- A version-6 restore MOET compare the round-trip against the upgraded (v7) archive state (red aaa8ab1, fix eabbc41).
+- Schema verification MOET check the constraint's table, type (UNIQUE) and column (dedup_key), NOOIT the name alone (red a90d412, fix 0618c9d).
+- Not blocking (Metis): torn final record and future records in dedup in the JSONL file store; the file store MAG NIET live, it is topologically blocked.
