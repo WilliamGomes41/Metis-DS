@@ -1,6 +1,6 @@
 # Change contract: A3-3 superseded candidates
 
-Change class: B
+Change class: A
 Promise: Na een contractwijziging MOET een verse poging de bestaande kandidaten van die revisie als `superseded` markeren; zichtbaar, NOOIT verwijderd. Goedkeuringen MOGEN NIET meegaan. De publicatiepoort MOET een goedgekeurde `superseded` kandidaat weigeren met precies één reden `superseded_candidate_refused`.
 Taalregel: B18. Alleen MOET / MAG NIET / NOOIT; open punten als OPENVRAAG.
 
@@ -22,3 +22,6 @@ Taalregel: B18. Alleen MOET / MAG NIET / NOOIT; open punten als OPENVRAAG.
 - **A33-1 (optie b):** een superseded kandidaat die de verse poging NIET reproduceert, MOET publicatie blokkeren met precies één reden `superseded_not_reproduced` (`src/candidate_supersession_v1.py::superseded_not_reproduced`, poort r4777-4779). Alleen supersessie met de lineage-reden `contract change supersession` telt; een gewone same-source retirement MAG NIET dit blok geven.
 - **A33-2:** deterministic-v1 heeft geen semantische contractversie en supersedeert daarom NOOIT (gedekt door `test_legacy_replay_without_contract_supersedes_nothing`).
 - **A33-3:** A3-3 geldt in deze PR alleen vóór review. Een automatische re-extract MOET geweigerd blijven zodra bindings of review_passes bestaan (`pre_review_retry_existing_work`); er wordt dan NOOIT iets gesupersedeerd. De Publisher-actie voor reviewed documenten volgt in een latere PR.
+
+## Class A (herclassificatie 16-10-2026, r4287991338)
+AGENTS.md:52: supersessie en publicatiegereedheid zijn Class A. De lifecycle-velden staan in de PR-body. Restart en recovery van superseded revisies zijn nog niet apart bewezen: OPENVRAAG-A33-R1 / OPENVRAAG-A33-R2.
