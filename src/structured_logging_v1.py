@@ -151,8 +151,12 @@ class RedactingFilter(logging.Filter):
         # Custom `extra` fields reach foreign formatters (%(authorization)s): sensitive keys MOETEN
         # be replaced, other string fields redacted (Sherlock P1 4289472643).
         for key, value in list(record.__dict__.items()):
-            if key not in _STANDARD_ATTRS and isinstance(value, (str, bytes)):
-                setattr(record, key, _redact_mapping_value(key, value))
+            if key in _STANDARD_ATTRS:
+                continue
+            if isinstance(key, str) and _SENSITIVE_KEY.fullmatch(key):
+                setattr(record, key, '[REDACTED]')  # any value type (4292037261)
+            elif isinstance(value, (str, bytes)):
+                setattr(record, key, _redact_arg(value))
         return True
 
 
