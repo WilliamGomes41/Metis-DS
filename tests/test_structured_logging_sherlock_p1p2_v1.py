@@ -276,3 +276,16 @@ def test_full_dot_atom_local_parts_are_redacted(text):
     out = redact(text)
     for part in ('customer', 'department', 'shipping', "o'hara", 'hara', 'x!y', 'q@'):
         assert part not in out, out
+
+
+def _filtered_message(msg, args):
+    record = logging.LogRecord('x', logging.WARNING, __file__, 1, msg, None, None)
+    record.args = args
+    RedactingFilter().filter(record)
+    return record.getMessage()
+
+
+def test_non_dict_mapping_args_use_sensitive_key_redaction():
+    # 4294352255
+    from collections import UserDict
+    assert 'opaque-secret' not in _filtered_message('%(authorization)s', UserDict({'authorization': 'opaque-secret'}))
