@@ -373,3 +373,21 @@ def test_dedup_key_is_stable_within_a_window_and_changes_across_windows():
     k = lambda t, actor='a': store.dedup_key(['s', ['r'], actor], t)
     assert k(t0) == k(t0 + store.DEDUP_WINDOW / 2)
     assert k(t0) != k(t0 + store.DEDUP_WINDOW) and k(t0) != k(t0, actor='b')
+
+
+@pytest.mark.parametrize('bad', ['0', '-1'])
+def test_retention_script_refuses_non_positive_max_rows(monkeypatch, bad):
+    # Sherlock 02:10 F3: --max-rows <= 0 MAG NIET run (it would empty the table).
+    import scripts.publication_refusal_retention as script
+    con = _FakeCon(row=(0,))
+    monkeypatch.setattr(script, '_workflow_store', lambda: _FakeWorkflow(con))
+    with pytest.raises(SystemExit) as exit_info:
+        script.main(['--max-rows', bad])
+    assert exit_info.value.code == 2 and con.sql == []
+
+
+def test_apply_retention_refuses_non_positive_max_rows():
+    con = _FakeCon(row=(0,))
+    with pytest.raises(ValueError):
+        store.apply_retention(_FakeWorkflow(con), max_rows=0)
+    assert con.sql == []
