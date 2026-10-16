@@ -240,10 +240,6 @@ def parse_query(query: str) -> QuerySpec:
     )
 
 
-def _record_text(record: dict[str, Any]) -> str:
-    return normalize(record.get("retrieval_text") or "")
-
-
 def _content_evidence_text(record: dict[str, Any]) -> str:
     """Exclude generic projection boilerplate while retaining linked context."""
     raw = record.get("retrieval_text") or ""
