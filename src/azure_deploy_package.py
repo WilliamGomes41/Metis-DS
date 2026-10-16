@@ -59,6 +59,7 @@ RUNTIME_DATA_MARKERS = (
     "operations-console/sessions.json",
     "operations-console/envelopes.json",
     "operations-console/review_ledger.jsonl",
+    "operations-console/publication_refusal_audit.jsonl",
     "operations-console/published_projection.jsonl",
     "sources/private",
     ".env",
