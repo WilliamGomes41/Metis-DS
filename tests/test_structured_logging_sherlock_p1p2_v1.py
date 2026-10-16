@@ -294,3 +294,9 @@ def test_non_dict_mapping_args_use_sensitive_key_redaction():
 def test_interpolation_failure_after_redaction_fails_closed():
     # 4294352269
     assert '12345678' not in _filtered_message('%(token)d', {'token': 12345678})
+
+
+def test_smtputf8_local_part_with_combining_mark_is_redacted():
+    # 4294352280 (PII)
+    out = redact('mail jos\u0301e@example.com')
+    assert 'jos' not in out
