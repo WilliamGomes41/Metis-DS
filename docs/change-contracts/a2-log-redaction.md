@@ -74,3 +74,8 @@ Red commits 82f5b76, 2d0e6ab, c077a20, 7b117fc, 4fa2595, e995356; fix in one com
 - Header keys written as identifiers (x_functions_key, ocp_apim_subscription_key) MOETEN count as sensitive (4294629096).
 - Nested mapping keys MOETEN be redacted, for example PII keys (4294629108).
 - Positional container args MOETEN be deep-redacted. A container repr after a credential key MOET be redacted to line end (4294629122).
+
+## Round 2026-10-16 15:30 (threads on 899dca8)
+Red commits e1f26a1 and 12dbcdc; fix in one commit.
+- A root handler named metis-structured-json MOET only be trusted when its formatter is our JsonLogFormatter. Any other handler MOET get the RedactingFilter (4294985552).
+- String-valued standard LogRecord attributes (name, threadName, processName, ...) MOETEN be redacted. msg/args go through the existing path (4294985557, treated as secrets/PII).

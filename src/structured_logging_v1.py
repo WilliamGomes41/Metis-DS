@@ -184,7 +184,12 @@ class RedactingFilter(logging.Filter):
         # Custom `extra` fields reach foreign formatters (%(authorization)s): sensitive keys MOETEN
         # be replaced, other string fields redacted (Sherlock P1 4289472643).
         for key, value in list(record.__dict__.items()):
+            if key in ('msg', 'args'):
+                continue  # handled above
             if key in _STANDARD_ATTRS:
+                # String metadata (name, threadName, ...) MOET be redacted too (4294985557).
+                if isinstance(value, str):
+                    setattr(record, key, redact(value))
                 continue
             if _is_sensitive_key(key):
                 setattr(record, key, '[REDACTED]')  # any value type (4292037261)
@@ -196,10 +201,15 @@ class RedactingFilter(logging.Filter):
 _REDACTING_FILTER = RedactingFilter()
 
 
+def _is_owned(handler):
+    # The name alone MAG NIET be trusted: only our JsonLogFormatter handler counts (4294985552).
+    return getattr(handler, 'name', None) == _HANDLER_NAME and isinstance(handler.formatter, JsonLogFormatter)
+
+
 def install_structured_logging(level=logging.INFO):
     """Install exactly one JSON handler on the root logger; repeated calls MOETEN be no-ops."""
     root = logging.getLogger()
-    if not any(getattr(h, 'name', None) == _HANDLER_NAME for h in root.handlers):
+    if not any(_is_owned(h) for h in root.handlers):
         handler = logging.StreamHandler()
         handler.set_name(_HANDLER_NAME)
         handler.setFormatter(JsonLogFormatter())
@@ -207,7 +217,7 @@ def install_structured_logging(level=logging.INFO):
     root.setLevel(level)
     # Pre-existing (host/embedding) root handlers MOETEN only see redacted records.
     for handler in root.handlers:
-        if getattr(handler, 'name', None) != _HANDLER_NAME and _REDACTING_FILTER not in handler.filters:
+        if not _is_owned(handler) and _REDACTING_FILTER not in handler.filters:
             handler.addFilter(_REDACTING_FILTER)
     for name in NON_PROPAGATING_LOGGERS:
         for handler in logging.getLogger(name).handlers:
