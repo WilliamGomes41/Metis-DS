@@ -300,3 +300,9 @@ def test_smtputf8_local_part_with_combining_mark_is_redacted():
     # 4294352280 (PII)
     out = redact('mail jos\u0301e@example.com')
     assert 'jos' not in out
+
+
+@pytest.mark.parametrize('key', ['ocp_apim_subscription_key', 'x_functions_key', 'proxy_authorization', 'set_cookie'])
+def test_identifier_normalized_header_extra_keys_are_sensitive(key):
+    # 4294629096
+    assert 'opaque-secret' not in _render_extra('opaque-secret', key=key)
