@@ -65,7 +65,8 @@ def test_ingest_reservation_refused_when_admission_closed(tmp_path, monkeypatch)
     monkeypatch.setenv(ENV, 'closed')
     with pytest.raises(ConsoleError, match='^processing_admission_closed$'):
         ingest(console)
-    assert [e.get('processing_attempts') for e in console._envelopes.values() if e.get('processing_attempts')] == []
+    restarted = _console(tmp_path)
+    assert restarted._envelopes == {} and console._envelopes == {}
 
 
 # --- read-only pre-check script ---

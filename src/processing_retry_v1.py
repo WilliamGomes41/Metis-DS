@@ -32,6 +32,16 @@ def _retry_budget_attempts(attempts):
     return [attempt for attempt in attempts if not free(attempt)]
 
 
+ADMISSION_ENV = "METIS_PROCESSING_ADMISSION"
+
+
+def admission_closed(environ=None) -> bool:
+    """C3: rollback/maintenance switch; only unset, empty or 'open' admits new attempts."""
+    import os
+    value = (environ if environ is not None else os.environ).get(ADMISSION_ENV, "").strip().lower()
+    return value not in {"", "open"}
+
+
 def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, clock: datetime, limits=None, kind="retry") -> tuple[dict, bool]:
     if not command_id or len(command_id) > 128 or not re.fullmatch(r"[A-Za-z0-9_-]+", command_id):
         raise ConsoleError("processing_command_id_invalid")
@@ -44,6 +54,9 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
             if attempt["actor_id"] != actor_id or attempt["source_hash"] != envelope["sha256"] or attempt.get("source_version", envelope["version"]) != envelope["version"]:
                 raise ConsoleError("processing_command_conflict")
             return attempt, False
+    # C3 (#639): METIS_PROCESSING_ADMISSION other than unset/empty/'open' MOET refuse new work (fail-closed).
+    if admission_closed():
+        raise ConsoleError("processing_admission_closed")
     if any(attempt["state"] == "running" for attempt in attempts):
         raise ConsoleError("processing_attempt_in_progress")
     grant = envelope.get("processing_recovery") or {}
