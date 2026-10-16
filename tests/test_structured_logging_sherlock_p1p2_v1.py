@@ -306,3 +306,8 @@ def test_smtputf8_local_part_with_combining_mark_is_redacted():
 def test_identifier_normalized_header_extra_keys_are_sensitive(key):
     # 4294629096
     assert 'opaque-secret' not in _render_extra('opaque-secret', key=key)
+
+
+def test_nested_mapping_keys_are_redacted():
+    # 4294629108
+    assert 'anne@example.com' not in _render_extra({'context': {'anne@example.com': 'owner'}})
