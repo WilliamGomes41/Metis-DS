@@ -76,18 +76,41 @@ class JsonLogFormatter(logging.Formatter):
         return json.dumps(row, separators=(',', ':'), ensure_ascii=False)
 
 
+def _redact_arg(value):
+    return redact(value) if isinstance(value, (str, bytes)) else value
+
+
 class RedactingFilter(logging.Filter):
-    """Redacts the rendered message in place, so handlers we do not own MAG NIET emit secrets."""
+    """Redacts msg and every string arg in place, so handlers we do not own MAG NIET emit secrets.
+
+    record.args stays a tuple (or mapping) of redacted values and is NOOIT None: formatters such
+    as uvicorn's AccessFormatter read record.args positionally (Sherlock 02:10 #638 F1).
+    """
     def filter(self, record):
+        args = record.args
+        if isinstance(args, dict):
+            redacted_args = {key: _redact_arg(value) for key, value in args.items()}
+        else:
+            redacted_args = tuple(_redact_arg(value) for value in (args or ()))
+        msg = record.msg if isinstance(record.msg, str) else str(record.msg)
         try:
-            message = record.getMessage()
+            candidate = msg % redacted_args if redacted_args else msg
         except Exception:
-            message = str(record.msg)
+            candidate = None
+        if candidate is not None and redact(candidate) == candidate:
+            record.msg, record.args = msg, redacted_args  # positional args kept for foreign formatters
+        else:
+            try:
+                rendered = record.getMessage()
+            except Exception:
+                rendered = msg
+            # The secret spans template and args: render, redact, keep an empty tuple (NOOIT None).
+            record.msg, record.args = redact(rendered), ()
         if record.exc_info and record.exc_info[0] is not None:
-            # F1: the traceback MAG NIET reach a handler we do not own; keep type + redacted message.
+            # #638 F1: the traceback MAG NIET reach a handler we do not own; keep type + redacted message.
             exc_type, exc_value = record.exc_info[0], record.exc_info[1]
-            message = f'{message} [{exc_type.__name__}: {exc_value}]'
-        record.msg, record.args = redact(message), None
+            suffix = redact(f' [{exc_type.__name__}: {exc_value}]')
+            record.msg += suffix.replace('%', '%%') if record.args else suffix
         record.exc_info, record.exc_text, record.stack_info = None, None, None
         return True
 
