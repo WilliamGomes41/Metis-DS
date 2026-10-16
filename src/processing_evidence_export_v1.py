@@ -158,9 +158,25 @@ def recorded_processing_tables(*, snapshot_id: str, revision: str, envelope: dic
     return tables
 
 
+def _refusal_status(refusals, issues):
+    """Manifest entry for publication_refusals; corrupt/unreadable records MOETEN be visible."""
+    issues = list(issues or [])
+    base = ("Publication refusals from the separate append-only refusal store (temporary file store until a PostgreSQL table); "
+            "deduplicated per document, reasons and actor within 10 minutes. Observation only, not a gate verdict.")
+    corrupt = sum(1 for code in issues if code.startswith('corrupt_record:'))
+    if refusals is None and issues:
+        return ("unreadable", base + " Store unreadable: " + ", ".join(issues) + "; this table is incomplete.")
+    if refusals is None:
+        return ("not_recorded", base)
+    if corrupt:
+        return ("recorded_with_skipped_records",
+                base + f" {corrupt} corrupt record(s) skipped and reported: " + ", ".join(issues) + ".")
+    return ("recorded", base)
+
+
 def processing_evidence_tables(
     *, snapshot_id: str, revision: str, envelope: dict[str, Any],
-    objects: list[dict[str, Any]], bindings=None, fragments=None, refusals=None,
+    objects: list[dict[str, Any]], bindings=None, fragments=None, refusals=None, refusal_issues=None,
 ) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
     """Project stored values; absent data is not reconstructed from current code."""
     # Exports never reread/reextract native sources. Only accepted retained
@@ -345,9 +361,7 @@ def processing_evidence_tables(
         "object_events": ("not_exported", "This package does not read the review ledger and does not claim that no historical events exist."),
         "reference_review": ("not_exported", "A human reference assessment must be supplied separately; system review state is not a gold standard."),
         "forensic_trace": (trace_availability, trace_limitation),
-        "publication_refusals": ("recorded" if refusals is not None else "not_recorded",
-            "Publication refusals from the separate append-only refusal store (temporary file store until a PostgreSQL table); "
-            "deduplicated per document, reasons and actor within 10 minutes. Observation only, not a gate verdict."),
+        "publication_refusals": _refusal_status(refusals, refusal_issues),
     }
     manifest = [{**common, "schema_version": PROJECTOR_VERSION, "dataset": name + ".csv",
                  "row_count": len(tables[name]), "availability": statuses[name][0],

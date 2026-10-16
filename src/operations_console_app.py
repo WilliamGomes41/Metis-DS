@@ -3649,15 +3649,31 @@ def _render_review_room(
     )
 
 
-def _refusal_records(state, snapshot_id):
-    # Refusal store in the evidence export; unreadable store -> None (manifest: not_recorded).
+def _refusal_records(state, snapshot_id, issues=None):
+    """Refusal store records for the evidence export.
+
+    Corrupt records and an unreadable store MOETEN be reported (issues list + one
+    `publication_refusal_export_issue` warning each); they are NOOIT silently dropped.
+    An unreadable store returns None (manifest: unreadable).
+    """
+    import json as _json
+    import logging as _logging
+    issues = [] if issues is None else issues
+    logger = _logging.getLogger('metis.evidence_export')
+
+    def report(code):
+        issues.append(code)
+        logger.warning(_json.dumps({'event': 'publication_refusal_export_issue', 'snapshot_id': str(snapshot_id),
+                                    'issue': code}, sort_keys=True))
+    from src import publication_refusal_store_v1 as refusal_store
     try:
-        from src import publication_refusal_store_v1 as refusal_store
         pg = refusal_store.postgres_store(state)
         if pg is not None:  # live: PostgreSQL table, bounded per document
             return pg.records_for(snapshot_id)
-        return refusal_store.read_records(refusal_store.store_path(state))
-    except Exception:
+        return refusal_store.read_records(refusal_store.store_path(state),
+                                          on_corrupt=lambda name: report(f'corrupt_record:{name}'))
+    except Exception as error:  # reported with the type only (no message: it can carry secrets)
+        report(f'store_unreadable:{type(error).__name__}')
         return None
 
 
@@ -5292,10 +5308,12 @@ def create_console_app(
         if account["account_id"] not in (envelope.get("named_reviewers") or []):
             raise ConsoleError("reviewer_not_named_on_snapshot")
         objects, revision = state.snapshot_objects_and_revision(snapshot_id)
+        refusal_issues: list[str] = []
         payload = processing_evidence_zip(snapshot_id=snapshot_id, revision=revision,
                                           envelope=envelope, objects=objects,
                                           bindings=state.object_review_bindings(snapshot_id, objects=objects),
-                                          refusals=_refusal_records(state, snapshot_id))
+                                          refusals=_refusal_records(state, snapshot_id, issues=refusal_issues),
+                                          refusal_issues=refusal_issues)
         filename = re.sub(r"[^A-Za-z0-9_-]", "_", snapshot_id)
         return Response(payload, media_type="application/zip", headers={
             "Content-Disposition": f'attachment; filename="{filename}-processing-evidence.zip"',
