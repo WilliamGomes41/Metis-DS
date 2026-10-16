@@ -42,3 +42,9 @@ Not touched: operations_console_v1.py, publish gate, metis_diagnostic logger.
 - Pre-existing handlers on `metis.console.performance` MOETEN get the RedactingFilter (fc94a8c).
 - Email redaction MOET be Unicode-aware (c44f823).
 Proof: tests/test_structured_logging_sherlock_p1p2_v1.py.
+
+## Metis decisions (2026-10-16, 09:12)
+- Any-case auth scheme + any token MOET be redacted; casing MAG NIET decide. Fail-closed: prose such as 'basic flow' is redacted too (red fc425ae, fix bc146ec).
+- A line break inside a quoted value MAG NIET end it; an unterminated quoted value is redacted to the end of the text (red aa532cb, fix 03b16c2).
+- Emails with a quoted local part MOETEN be redacted (red 6557e90, fix d95de59).
+- Custom `extra` fields: values under sensitive keys MOETEN be replaced, other string fields redacted, before any handler formats them (red f08f855, fix 7197a79).
