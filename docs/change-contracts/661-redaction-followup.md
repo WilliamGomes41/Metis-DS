@@ -25,3 +25,5 @@ Red commits d9c0465, f8d0280 and e52806a (6 failed); fix in one commit.
 Red b3a7963 (3 failed); fix in one commit.
 - Redaction MAG NOOIT raise. A container subclass whose constructor does not take one iterable (a tuple subclass with `__new__(cls, a, b)`) MOET be rebuilt as its plain base type (tuple/list/set/frozenset). Composite keys stay redacted.
 - A redacted key MOET stay hashable. A hashable Mapping key that becomes a dict falls back to its redacted text. Redaction MAG NOOIT raise (4297499491; red 2a0999a).
+- SMTPUTF8 local parts with a domain literal (\U0001F600@[127.0.0.1]) MOETEN be redacted too (4297911904; red 7455d6b).
+- The set/frozenset fallback in `_rebuild` MAG NOOIT raise: unhashable redacted items become their redacted text (4297911915; red 2ec09c1).

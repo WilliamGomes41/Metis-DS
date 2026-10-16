@@ -51,7 +51,7 @@ _SECRET_PATTERNS = (
     re.compile(r'(?i)\b([a-z][a-z0-9+.-]*://)[^\s/:@]+:[^\s/@]+@'),
     re.compile(r'\bsk-[A-Za-z0-9_-]{8,}'),
     # Domain literals (user@[127.0.0.1], user@[IPv6:...]) MOETEN be redacted (Sherlock P2 4291899714).
-    re.compile(r'(?:"(?:\\.|[^"\\\r\n])*"|(?<![\w.!#$%&\'*+/=?^`{|}~-])[\w.!#$%&\'*+/=?^`{|}~-]+)@\[[^\]\s]+\]'),
+    re.compile(r'(?:"(?:\\.|[^"\\\r\n])*"|(?<![\w.!#$%&\'*+/=?^`{|}~\u0080-\U0010ffff-])[\w.!#$%&\'*+/=?^`{|}~\u0080-\U0010ffff-]+)@\[[^\]\s]+\]'),
     # Quoted local parts ("john..doe"@example.org) MOETEN be redacted too (Sherlock P2).
     re.compile(r'"(?:\\.|[^"\\\r\n])*"@[\w-]+(?:\.[\w-]+)*\b'),  # zero-dot domains (localhost) too, 4293592622
     # Unicode-aware: SMTPUTF8 addresses (josé@example.com) MOETEN be redacted too (Sherlock P2).
@@ -125,10 +125,28 @@ def _rebuild(value, items):
             return type(value)(*items)
         return type(value)(items)
     except Exception:
-        for base in (frozenset, set, tuple, list):
-            if isinstance(value, base):
-                return base(items)
-        return tuple(items)
+        pass
+    for base in (frozenset, set, tuple, list):
+        if isinstance(value, base):
+            break
+    else:
+        base = tuple
+    try:
+        return base(items)
+    except Exception:
+        # Unhashable redacted items in a set/frozenset become their redacted text (4297911915).
+        return base(_hashable(item) for item in items)
+
+
+def _hashable(item):
+    try:
+        hash(item)
+        return item
+    except Exception:
+        try:
+            return redact(str(item))
+        except Exception:
+            return '[REDACTED]'
 
 
 def _redact_key(key, depth):
