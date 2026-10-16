@@ -28,6 +28,10 @@ _SECRET_PATTERNS = (
     re.compile(r'(?i)(?<![A-Za-z0-9_-])(["\']?(?:' + _HEADER_KEYS + r')["\']?)(\s*[=:]\s*)(?:' + _QUOTED + r'|[^\r\n]+)'),
     # credential assignments, quoted or unquoted values (password="x", {"password":"x"})
     re.compile(r'(?i)(["\']?\b(?:' + _ASSIGNMENT_KEYS + r')\b["\']?)(\s*[=:]\s*)(?:' + _QUOTED + r'|[^\s;,&"\'}]+)'),
+    # Standalone scheme credentials. Digest-style parameter lists (k="v", k=v) are consumed
+    # completely (Sherlock P1).
+    re.compile(r'\b(?:[Bb]earer|BEARER|[Bb]asic|BASIC|[Dd]igest|DIGEST|[Nn]egotiate|NEGOTIATE)\s+'
+               r'[A-Za-z0-9_-]+=(?:' + _QUOTED + r'|[^\s,]*)(?:\s*,\s*[A-Za-z0-9_-]+=(?:' + _QUOTED + r'|[^\s,]*))*'),
     re.compile(r'(?i)\b(?:bearer|basic|digest|negotiate)\s+[A-Za-z0-9._~+/=-]{6,}'),
     re.compile(r'(?i)\b([a-z][a-z0-9+.-]*://)[^\s/:@]+:[^\s/@]+@'),
     re.compile(r'\bsk-[A-Za-z0-9_-]{8,}'),
