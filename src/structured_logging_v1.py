@@ -49,9 +49,9 @@ _SECRET_PATTERNS = (
     # Domain literals (user@[127.0.0.1], user@[IPv6:...]) MOETEN be redacted (Sherlock P2 4291899714).
     re.compile(r'(?:"(?:\\.|[^"\\\r\n])*"|(?<![\w.%+-])[\w.%+-]+)@\[[^\]\s]+\]'),
     # Quoted local parts ("john..doe"@example.org) MOETEN be redacted too (Sherlock P2).
-    re.compile(r'"(?:\\.|[^"\\\r\n])*"@[\w-]+(?:\.[\w-]+)*\.[^\W\d_]{2,}\b'),
+    re.compile(r'"(?:\\.|[^"\\\r\n])*"@[\w-]+(?:\.[\w-]+)*\b'),  # zero-dot domains (localhost) too, 4293592622
     # Unicode-aware: SMTPUTF8 addresses (josé@example.com) MOETEN be redacted too (Sherlock P2).
-    re.compile(r'(?<![\w.%+-])[\w.%+-]+@[\w-]+(?:\.[\w-]+)*\.[^\W\d_]{2,}\b'),
+    re.compile(r'(?<![\w.%+-])[\w.%+-]+@[\w-]+(?:\.[\w-]+)*\b'),  # zero-dot domains (localhost) too, 4293592622
 )
 # Third-party loggers MOETEN stay at WARNING: their INFO/DEBUG output (HTTP headers,
 # request bodies, connection strings) MAG NIET reach the root JSON handler.
