@@ -29,13 +29,11 @@ _SECRET_PATTERNS = (
     # credential assignments, quoted or unquoted values (password="x", {"password":"x"})
     re.compile(r'(?i)(["\']?\b(?:' + _ASSIGNMENT_KEYS + r')\b["\']?)(\s*[=:]\s*)(?:' + _QUOTED + r'|[^\s;,&"\'}]+)'),
     # Standalone scheme credentials. Digest-style parameter lists (k="v", k=v) are consumed
-    # completely (Sherlock P1); a capitalised scheme redacts any token, also short ones such as
-    # 'Bearer abc' (Sherlock P2); lowercase prose ('basic flow') only when the token carries
-    # credential characters.
-    re.compile(r'\b(?:[Bb]earer|BEARER|[Bb]asic|BASIC|[Dd]igest|DIGEST|[Nn]egotiate|NEGOTIATE)\s+'
+    # completely (Sherlock P1). Any-case scheme + any token MOET be redacted; casing MAG NIET
+    # decide (Metis 2026-10-16, fail-closed: 'basic flow' is redacted too).
+    re.compile(r'(?i)\b(?:bearer|basic|digest|negotiate)\s+'
                r'[A-Za-z0-9_-]+=(?:' + _QUOTED + r'|[^\s,]*)(?:\s*,\s*[A-Za-z0-9_-]+=(?:' + _QUOTED + r'|[^\s,]*))*'),
-    re.compile(r'\b(?:Bearer|BEARER|Basic|BASIC|Digest|DIGEST|Negotiate|NEGOTIATE)\s+[A-Za-z0-9._~+/=-]+'),
-    re.compile(r'(?i)\b(?:bearer|basic|digest|negotiate)\s+(?=[A-Za-z._~+/=-]*[0-9._~+/=])[A-Za-z0-9._~+/=-]+'),
+    re.compile(r'(?i)\b(?:bearer|basic|digest|negotiate)\s+[A-Za-z0-9._~+/=-]+'),
     re.compile(r'(?i)\b([a-z][a-z0-9+.-]*://)[^\s/:@]+:[^\s/@]+@'),
     re.compile(r'\bsk-[A-Za-z0-9_-]{8,}'),
     # Unicode-aware: SMTPUTF8 addresses (josé@example.com) MOETEN be redacted too (Sherlock P2).
