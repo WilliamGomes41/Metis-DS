@@ -22,6 +22,7 @@ from src.operations_console_v1 import ConsoleError, PRE_REVIEW_BLOCKED
 from src.processing_retry_v1 import now, reserve
 from tests.test_resv1_reservation_configuration import _console
 from tests.test_attempt_diagnostics_postgres import bound, ingest
+from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
 
 ENV = 'METIS_PROCESSING_ADMISSION'
 
@@ -126,3 +127,41 @@ def test_precheck_postgres_uses_read_only_transaction():
     assert executed[0] == 'BEGIN READ ONLY' and executed[-1] == 'ROLLBACK'
     assert not any(word in sql.upper() for sql in executed for word in ('INSERT', 'UPDATE', 'DELETE'))
     assert report['counts'] == {'running': 1, 'incomplete_budget': 0}
+
+
+# --- Sherlock FAIL on 91c16c3, point 1: the pre-check connection MOET be read-only (connection.read_only=True) ---
+
+def test_precheck_sets_connection_read_only_before_any_statement():
+    from scripts.processing_rollback_precheck import scan_postgres
+    seen = []
+
+    class Rows:
+        def fetchall(self):
+            return []
+
+    class Connection:
+        read_only = False
+
+        def execute(self, sql, *_):
+            seen.append((self.read_only, ' '.join(sql.split())))
+            return Rows()
+
+        def rollback(self):
+            seen.append((self.read_only, 'ROLLBACK'))
+    connection = Connection()
+    scan_postgres(connection)
+    assert connection.read_only is True
+    assert seen and all(flag is True for flag, _ in seen), seen
+
+
+def test_precheck_postgres_connection_refuses_insert(workflow_postgres):
+    import psycopg
+    from scripts.processing_rollback_precheck import scan_postgres
+    with psycopg.connect(workflow_postgres.dsn, row_factory=psycopg.rows.dict_row) as connection:
+        report = scan_postgres(connection)
+        assert report['status'] == 'clean'
+        with pytest.raises(psycopg.errors.ReadOnlySqlTransaction):
+            connection.execute("INSERT INTO workflow.documents (snapshot_id) VALUES ('precheck-write-probe')")
+        connection.rollback()
+    with psycopg.connect(workflow_postgres.dsn) as check:
+        assert check.execute("SELECT count(*) FROM workflow.documents WHERE snapshot_id='precheck-write-probe'").fetchone()[0] == 0
