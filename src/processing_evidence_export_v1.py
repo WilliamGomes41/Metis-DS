@@ -17,8 +17,8 @@ from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v14"
-PROJECTOR_VERSION = "processing-evidence-export-v14"
+VERSION = "processing-evidence-export-v15"
+PROJECTOR_VERSION = "processing-evidence-export-v15"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
     "blockage_report": ("report",),
@@ -31,8 +31,8 @@ SCHEMAS = {
                            "policy_version"),
     "formation_findings": ("call_id", "kind", "index", "reason_code", "spans", "requires_review", "finding", "proposed_object_type", "source_assessment_role", "evidence_span", "state", "evidence_kind"),
     "attempt_diagnostics": ("attempt_id", "state", "diagnostic", "evidence_kind"),
-    "processing_recovery": ("authorization_id", "actor_id", "reason", "authorized_at", "source_hash", "source_version", "revision", "consumed_by", "consumed_at"),
-    "processing_attempts": ("attempt_id", "command_id", "actor_id", "source_hash", "state", "started_at", "expires_at", "finished_at", "phase", "error_code", "validation_code", "processing_reference", "source_version", "kind", "retry_of", "limits", "transport", "retry_not_before", "replayed_call_id", "formation_progress_made"),
+    "processing_recovery": ("authorization_id", "reason", "authorized_at", "source_hash", "source_version", "revision", "consumed_by", "consumed_at"),
+    "processing_attempts": ("attempt_id", "command_id", "source_hash", "state", "started_at", "expires_at", "finished_at", "phase", "error_code", "validation_code", "processing_reference", "source_version", "kind", "retry_of", "limits", "transport", "retry_not_before", "replayed_call_id", "formation_progress_made"),
     "source_views": ("run_id", "fragment_id", "fragment_hash", "section_path", "heading", "source_page", "bbox", "source_locator", "raw_text", "clean_text", "source_text_view", "source_layout_findings"),
     "runs": ("run_id", "source_hash", "started_at", "finished_at", "outcome", "reason", "extractor_versions", "execution", "semantic_identity", "attempt_id", "production_commit_status"),
     "run_candidates": ("run_id", "object_id", "object_version", "canonical_hash", "origin", "structural"),
@@ -51,6 +51,7 @@ SCHEMAS = {
     "object_events": ("run_id", "object_id", "event_id", "timestamp", "event", "reason"),
     "reference_review": ("object_id", "source_range", "expected_type", "expected_context", "reviewer", "judgment"),
     "forensic_trace": CSV_FIELDS,
+    "publication_refusals": ("refusal_snapshot_id", "recorded_at", "object_version", "verdict", "reason_codes", "revision_sha256", "store_status", "schema"),
 }
 FIELDS = (
     "proposed_type", "type_evidence_spans", "actor_of_scope", "recommended_action",
@@ -157,9 +158,27 @@ def recorded_processing_tables(*, snapshot_id: str, revision: str, envelope: dic
     return tables
 
 
+def _refusal_status(refusals, issues):
+    """Manifest entry for publication_refusals; corrupt/unreadable records MOETEN be visible."""
+    issues = list(issues or [])
+    base = ("Publication refusals from the separate append-only refusal store (PostgreSQL table "
+            "workflow.publication_refusals live; the JSONL file store only in the single-worker file topology); "
+            "deduplicated per document, reasons and actor (fixed 10-minute window in PostgreSQL). "
+            "Observation only, not a gate verdict.")
+    corrupt = sum(1 for code in issues if code.startswith('corrupt_record:'))
+    if refusals is None and issues:
+        return ("unreadable", base + " Store unreadable: " + ", ".join(issues) + "; this table is incomplete.")
+    if refusals is None:
+        return ("not_recorded", base)
+    if corrupt:
+        return ("recorded_with_skipped_records",
+                base + f" {corrupt} corrupt record(s) skipped and reported: " + ", ".join(issues) + ".")
+    return ("recorded", base)
+
+
 def processing_evidence_tables(
     *, snapshot_id: str, revision: str, envelope: dict[str, Any],
-    objects: list[dict[str, Any]], bindings=None, fragments=None,
+    objects: list[dict[str, Any]], bindings=None, fragments=None, refusals=None, refusal_issues=None,
 ) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
     """Project stored values; absent data is not reconstructed from current code."""
     # Exports never reread/reextract native sources. Only accepted retained
@@ -182,6 +201,11 @@ def processing_evidence_tables(
 
     for name, rows in recorded_processing_tables(snapshot_id=snapshot_id, revision=revision, envelope=envelope).items():
         tables[name].extend(rows)
+    # Refusal store (PostgreSQL table, or file store off-live): only this document's records, NOOIT another's.
+    for record in refusals or []:
+        if isinstance(record, dict) and record.get("snapshot_id") == snapshot_id:
+            add("publication_refusals", refusal_snapshot_id=record.get("snapshot_id"),
+                **{k: record.get(k) for k in SCHEMAS["publication_refusals"][1:]})
     runs = envelope.get("quality_processing_runs") or []
     for run in runs:
         for fragment in run.get("source_fragments") or []:
@@ -339,6 +363,7 @@ def processing_evidence_tables(
         "object_events": ("not_exported", "This package does not read the review ledger and does not claim that no historical events exist."),
         "reference_review": ("not_exported", "A human reference assessment must be supplied separately; system review state is not a gold standard."),
         "forensic_trace": (trace_availability, trace_limitation),
+        "publication_refusals": _refusal_status(refusals, refusal_issues),
     }
     manifest = [{**common, "schema_version": PROJECTOR_VERSION, "dataset": name + ".csv",
                  "row_count": len(tables[name]), "availability": statuses[name][0],
