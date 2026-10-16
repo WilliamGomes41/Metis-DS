@@ -62,3 +62,4 @@ Any word that follows an auth scheme word (bearer, basic, digest, negotiate; any
 - Auth schemes MOETEN be redacted with any spacing, an '='/':' separator and quoted tokens; Digest/RFC 5987 parameters (k*=) with any spacing around '=' and ',' (red 7bd399a).
 - Extra fields and mapping args MOETEN be redacted at any depth of dict/list/tuple/set (bound 32 levels, fail-closed beyond); sensitive keys (also prefixed, e.g. x_api_key, and bytes keys) and (key, value) header pairs are replaced for any value type (red cdda703).
 - One combined red test for all forms: a0a9ea4.
+- Mailboxes with a dotless domain (user@localhost) MOETEN be redacted (PII; red a858fa9, fix 5321c84). Over-redaction of other 'x@y' tokens is accepted fail-closed.
