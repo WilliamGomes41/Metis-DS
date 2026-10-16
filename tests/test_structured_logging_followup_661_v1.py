@@ -109,3 +109,16 @@ def test_tuple_subclass_with_custom_constructor_never_raises(extra):
     assert RedactingFilter().filter(record) is True
     out = logging.Formatter('%(context)s').format(record)
     assert 'anne@example.com' not in out and 'opaque-secret' not in out
+
+
+class _FrozenMap(dict):
+    """A hashable Mapping used as a key."""
+    def __hash__(self):
+        return hash(tuple(sorted(self.items())))
+
+
+def test_hashable_mapping_key_never_raises():
+    # 4297499491: a key MOET stay hashable after redaction; redaction MAG NOOIT raise.
+    record = _record('x', context={_FrozenMap({'owner': 'anne@example.com'}): 'admin'})
+    assert RedactingFilter().filter(record) is True
+    assert 'anne@example.com' not in logging.Formatter('%(context)s').format(record)
