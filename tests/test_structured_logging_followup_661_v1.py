@@ -52,3 +52,26 @@ def test_owned_handler_redacts_whitelisted_extras(field):
     # 4295299116
     row = json.loads(_json(_record('hello', **{field: 'sk-abcdefghijk'})))
     assert 'sk-abcdefghijk' not in json.dumps(row)
+
+
+def test_reserved_handler_with_overriding_formatter_subclass_is_not_trusted():
+    # 4296203798
+    from src.structured_logging_v1 import install_structured_logging, _HANDLER_NAME
+
+    class Plain(JsonLogFormatter):
+        def format(self, record):
+            return record.getMessage()
+
+    root = logging.getLogger()
+    saved, level = list(root.handlers), root.level
+    stream = io.StringIO()
+    impostor = logging.StreamHandler(stream)
+    impostor.set_name(_HANDLER_NAME)
+    impostor.setFormatter(Plain())
+    try:
+        root.handlers = [impostor]
+        install_structured_logging()
+        logging.getLogger('impostor.subclass').warning('Authorization: Bearer opaque-secret')
+    finally:
+        root.handlers, root.level = saved, level
+    assert 'opaque-secret' not in stream.getvalue()
