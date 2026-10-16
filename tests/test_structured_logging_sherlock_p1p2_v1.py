@@ -268,3 +268,11 @@ def test_mailbox_with_dotless_domain_is_redacted(text):
 def test_unterminated_quoted_secret_with_dangling_escape_is_redacted(text):
     # 4293913967
     assert 'hunter2' not in redact(text)
+
+
+@pytest.mark.parametrize('text', ['to customer/department=shipping@example.com now', "from o'hara@example.com", 'x!y#z$%&*+?^`{|}~-q@example.org'])
+def test_full_dot_atom_local_parts_are_redacted(text):
+    # 4293913980 (PII)
+    out = redact(text)
+    for part in ('customer', 'department', 'shipping', "o'hara", 'hara', 'x!y', 'q@'):
+        assert part not in out, out
