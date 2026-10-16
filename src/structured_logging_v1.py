@@ -22,7 +22,9 @@ _HEADER_KEYS = (r'authorization|proxy-authorization|cookie|set-cookie|x-api-key|
                 r'ocp-apim-subscription-key|x-functions-key|x-ms-client-secret')
 # Escaped delimiters (\" inside JSON strings) MOETEN NIET end the quoted value (Sherlock P1);
 # an unterminated quoted value is redacted to line end (fail-closed).
-_QUOTED = r'"(?:\\.|[^"\\\r\n])*(?:"|$)|\'(?:\\.|[^\'\\\r\n])*(?:\'|$)'
+# Line breaks inside a quoted value MOETEN NIET end it (multiline secrets, Sherlock P1);
+# without a closing quote the rest of the text is redacted.
+_QUOTED = r'"(?:\\.|[^"\\])*(?:"|\Z)|\'(?:\\.|[^\'\\])*(?:\'|\Z)'
 _SECRET_PATTERNS = (
     # header keys (optionally quoted, as in dict/JSON reprs): value to quote or line end
     re.compile(r'(?i)(?<![A-Za-z0-9_-])(["\']?(?:' + _HEADER_KEYS + r')["\']?)(\s*[=:]\s*)(?:' + _QUOTED + r'|[^\r\n]+)'),
