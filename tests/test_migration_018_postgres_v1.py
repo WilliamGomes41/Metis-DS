@@ -61,20 +61,39 @@ def test_018_applies_twice(pg):
     assert _constraints(pg) == 1
 
 
-def test_018_applies_on_top_of_the_pre_unique_018_with_duplicate_rows(pg):
+def test_018_applies_on_top_of_the_pre_unique_018_without_duplicates(pg):
     pg.execute(OLD.read_text())
-    _insert(pg, 'k1', 3)  # the pre-UNIQUE 018 allowed repeated dedup keys across windows
+    _insert(pg, 'k1', 1)
     _insert(pg, 'k2', 1)
     pg.execute(NEW.read_text())
     pg.execute(NEW.read_text())
     assert _constraints(pg) == 1
-    assert pg.execute('SELECT count(*) FROM workflow.publication_refusals').fetchone()[0] == 4  # NOOIT deleted
+    assert sorted(r[0] for r in pg.execute('SELECT dedup_key FROM workflow.publication_refusals')) == ['k1', 'k2']
+
+
+def test_018_fails_on_duplicates_with_count_and_keys_and_updates_nothing(pg):
+    # Metis F1-5: 018 does NO UPDATE on audit rows; duplicates MOETEN stop 018 for a human decision.
     import psycopg
-    with pytest.raises(psycopg.errors.UniqueViolation):
-        _insert(pg, 'k2', 1)
+    pg.execute(OLD.read_text())
+    _insert(pg, 'k1', 3)
+    _insert(pg, 'k2', 2)
+    _insert(pg, 'k3', 1)
+    before = pg.execute('SELECT refusal_id, dedup_key FROM workflow.publication_refusals ORDER BY 1').fetchall()
+    with pytest.raises(psycopg.errors.RaiseException) as error:
+        pg.execute(NEW.read_text())
+    message = str(error.value)
+    assert 'publication_refusals_duplicate_dedup_keys' in message and 'count=2' in message
+    assert 'k1' in message and 'k2' in message and 'k3' not in message
+    assert pg.execute('SELECT refusal_id, dedup_key FROM workflow.publication_refusals ORDER BY 1').fetchall() == before
+    assert _constraints(pg) == 0
+
+
+def test_018_contains_no_update():
+    assert 'UPDATE' not in '\n'.join(l for l in NEW.read_text().splitlines() if not l.lstrip().startswith('--')).upper()
 
 
 def test_runbook_orders_018_before_code_with_williams_go_and_lists_retention():
     text = (ROOT / 'docs' / 'TEST_AND_RELEASE_RUNBOOK.md').read_text()
     assert '018_publication_refusal_audit.sql' in text and 'vóór de code' in text and 'GO van William' in text
     assert 'scripts/publication_refusal_retention.py' in text and 'Deploy-checklist' in text
+    assert 'publication_refusals_duplicate_dedup_keys' in text and 'Een mens beslist' in text
