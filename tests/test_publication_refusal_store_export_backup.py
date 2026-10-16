@@ -117,3 +117,13 @@ def test_unreadable_refusal_store_is_reported_not_swallowed(monkeypatch, caplog)
                                                   refusals=None, refusal_issues=issues)
     [entry] = [m for m in manifest if m['dataset'] == 'publication_refusals.csv']
     assert entry['availability'] == 'unreadable' and 'store_unreadable:OSError' in entry['limitation']
+
+
+def test_manifest_text_describes_the_current_store():
+    # Sherlock FAIL #641 (2): the manifest MAG NIET still call the file store the store "until a PostgreSQL table".
+    tables, manifest = processing_evidence_tables(snapshot_id='snap-a', revision='rev', envelope={}, objects=[], refusals=[])
+    [entry] = [m for m in manifest if m['dataset'] == 'publication_refusals.csv']
+    text = entry['limitation']
+    assert 'until a PostgreSQL table' not in text and 'within 10 minutes' not in text
+    assert 'workflow.publication_refusals' in text and 'single-worker file topology' in text
+    assert 'fixed 10-minute window' in text
