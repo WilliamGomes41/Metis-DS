@@ -519,3 +519,30 @@ def test_corrupt_record_diagnostic_keeps_the_error_class(tmp_path, events, warni
     console.publish(actor_id=actor, snapshot_id=sid)
     [failure] = _failures(warnings_)
     assert (failure['stage'], failure['error_class']) == ('corrupt_record', 'JSONDecodeError')
+
+
+def test_diagnostic_cap_is_atomic_under_concurrency(warnings_, monkeypatch):
+    import threading
+    import time
+
+    class SlowCounter(list):  # widens the check-then-increment window deterministically
+        def __getitem__(self, index):
+            value = list.__getitem__(self, index)
+            time.sleep(0.002)
+            return value
+    monkeypatch.setattr(audit, '_FAILURE_COUNT', SlowCounter([audit.MAX_FAILURE_DIAGNOSTICS - 1]))
+    monkeypatch.setattr(audit, '_SUPPRESSED_COUNT', [0])
+    barrier = threading.Barrier(16)
+
+    def burst():
+        barrier.wait()
+        for _ in range(20):
+            audit._audit_failed('durable_store', error=OSError('x'), snapshot_id='s')
+    threads = [threading.Thread(target=burst) for _ in range(16)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(_failures(warnings_)) == 1  # one slot left: exactly one diagnostic
+    assert len([w for w in warnings_ if w.get('event') == 'publication_refusal_audit_failed_suppressed']) == 1
+    assert audit.suppressed_failure_count() == 16 * 20 - 1
