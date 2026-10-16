@@ -209,6 +209,9 @@ def test_legacy_v5_workflow_backup_is_deterministically_upgraded(
     legacy = deepcopy(current)
     legacy["workflow_recovery_version"] = 5
     legacy["workflow_tables"].pop("topics")
+    # A faithful v5 backup predates workflow.publication_refusals (recovery v7, #636); a v5/v6 archive
+    # that carries the table is a version conflict by design.
+    legacy["workflow_tables"].pop("publication_refusals")
     for row in legacy["workflow_tables"]["documents"]:
         row.pop("topic_id", None)
 
@@ -220,6 +223,7 @@ def test_legacy_v5_workflow_backup_is_deterministically_upgraded(
     assert check_workflow_integrity(restored)["ok"] is True
     assert restored["workflow_tables"]["topics"][0]["topic_id"] == expected_topic_id
     assert restored["workflow_tables"]["documents"][0]["topic_id"] == expected_topic_id
+    assert restored["workflow_tables"]["publication_refusals"] == []
 
 
 def test_resealed_review_chain_tamper_is_rejected(recovery_postgres: PostgresCanonicalConfig, tmp_path: Path) -> None:
