@@ -39,7 +39,7 @@ _SECRET_PATTERNS = (
     re.compile(r'(?i)([\(\[]\s*b?["\'](?:' + _HEADER_KEY_ANY + r'|' + _ASSIGNMENT_KEYS + r')["\'])(\s*,\s*)'
                r'(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[^\s)\]]+)'),  # [ pairs too (4295084753)
     # credential assignments, quoted or unquoted values (password="x", {"password":"x"})
-    re.compile(r'(?i)(["\']?\b(?:' + _ASSIGNMENT_KEYS + r')\b["\']?)(\s*[=:]\s*)(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[\{\[\(][^\r\n]*|[^\s;,&"\'}]+)'),  # container reprs: to line end (4294629122)
+    re.compile(r'(?i)(["\']?\b(?:' + _ASSIGNMENT_KEYS + r')\b["\']?)(\s*[=:]\s*)(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[\{\[\(][^\r\n]*|[^\s;,&"\'}]+(?:[ \t]+(?![\w.-]+\s*[=:])[^\s;,&"\'}]+)*)'),  # spaces: to end of value, stop at the next key= (#661)  # container reprs: to line end (4294629122)
     # Standalone scheme credentials. Digest-style parameter lists (k="v", k=v) are consumed
     # completely (Sherlock P1). Any-case scheme + any token MOET be redacted; casing MAG NIET
     # decide (Metis 2026-10-16, fail-closed: 'basic flow' is redacted too).
@@ -94,12 +94,12 @@ class JsonLogFormatter(logging.Formatter):
             message = str(record.msg)
         row = {'timestamp': datetime.fromtimestamp(record.created, timezone.utc)
                    .isoformat(timespec='milliseconds').replace('+00:00', 'Z'),
-               'level': record.levelname, 'logger': record.name, 'message': redact(message),
+               'level': record.levelname, 'logger': redact(record.name), 'message': redact(message),  # #661
                'commit': deployment_identity()}
         for name in EXTRA_FIELDS:
             value = getattr(record, name, None)
             if isinstance(value, str) and _SAFE.fullmatch(value):
-                row[name] = value
+                row[name] = value if redact(value) == value else '[REDACTED]'  # whitelisted extras too (#661)
         if record.exc_info and record.exc_info[0] is not None:
             row['exc_type'] = record.exc_info[0].__name__
         return json.dumps(row, separators=(',', ':'), ensure_ascii=False)
