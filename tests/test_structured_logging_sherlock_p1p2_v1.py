@@ -122,3 +122,12 @@ def test_tuple_shaped_header_pairs_are_redacted(text):
     # 4291899701: ASGI/HTTP-client header pairs use a comma, not = or :.
     out = redact(text)
     assert 'opaque-secret' not in out
+
+
+@pytest.mark.parametrize('text', ['to user@[127.0.0.1] now', 'to anne.v@[IPv6:2001:db8::1] now', 'to "a b"@[10.0.0.1]'])
+def test_domain_literal_emails_are_redacted(text):
+    # 4291899714: bracketed domain literals.
+    out = redact(text)
+    assert '@[' not in out or '[REDACTED]' in out.split('@')[0]
+    for part in ('user@', 'anne.v', '127.0.0.1', '2001:db8', '10.0.0.1'):
+        assert part not in out
