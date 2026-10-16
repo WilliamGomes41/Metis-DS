@@ -131,3 +131,20 @@ def test_domain_literal_emails_are_redacted(text):
     assert '@[' not in out or '[REDACTED]' in out.split('@')[0]
     for part in ('user@', 'anne.v', '127.0.0.1', '2001:db8', '10.0.0.1'):
         assert part not in out
+
+
+@pytest.mark.parametrize('value', [{'token': 'opaque-secret'}, ['opaque-secret'], ('opaque-secret',)])
+def test_non_string_sensitive_extra_values_are_replaced(value):
+    # 4292037261: a sensitive extra key MOET be replaced whatever the value type.
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(logging.Formatter('%(message)s|%(authorization)s'))
+    handler.addFilter(RedactingFilter())
+    logger = logging.getLogger('test.extra.nonstring')
+    logger.addHandler(handler)
+    logger.propagate = False
+    try:
+        logger.warning('x', extra={'authorization': value})
+    finally:
+        logger.removeHandler(handler)
+    assert 'opaque-secret' not in stream.getvalue()
