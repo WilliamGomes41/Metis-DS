@@ -204,3 +204,25 @@ def test_build_app_registers_the_startup_reinstall():
     import inspect
     import src.console_asgi as asgi
     assert 'install_startup_reinstall(app)' in inspect.getsource(asgi.build_app)
+
+
+# --- Sherlock 02:10 #638 F1: record.args stays a redacted tuple (NEVER None); real uvicorn AccessFormatter ---
+
+def test_uvicorn_access_formatter_works_and_redacts_after_filter():
+    from uvicorn.logging import AccessFormatter
+    from src.structured_logging_v1 import RedactingFilter
+    formatter = AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s', use_colors=False)
+    record = logging.LogRecord('uvicorn.access', logging.INFO, __file__, 1, '%s - "%s %s HTTP/%s" %d',
+                               ('10.0.0.1:5000', 'GET', '/login?token=abc123secret&email=anne@example.nl', '1.1', 200), None)
+    assert RedactingFilter().filter(record) is True
+    assert isinstance(record.args, tuple) and len(record.args) == 5
+    out = formatter.format(record)
+    assert 'abc123secret' not in out and 'example.nl' not in out and '200' in out and 'GET' in out
+
+
+def test_redacting_filter_never_sets_args_to_none():
+    from src.structured_logging_v1 import RedactingFilter
+    for args in ((), ('password=hunter2',), None):
+        record = logging.LogRecord('x', logging.INFO, __file__, 1, 'm %s' if args else 'm', args, None)
+        RedactingFilter().filter(record)
+        assert record.args is not None and 'hunter2' not in record.getMessage()
