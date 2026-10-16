@@ -1,11 +1,15 @@
-"""R2 native reproduction: rollback restore runs after the store lock is released.
+"""R2 native reproduction: object loss via write_bundle (object/revise scenario).
 
 Two real console instances share one throwaway PostgreSQL database and one
 runtime (so they share the process store lock). Instance A gets an injected
-fault inside a supported review command (review_object). After A's document
-context has rolled back and released the lock, but before the review mixin's
-_restore_review_state runs, instance B commits a second review. B's change and
-its audit event MOET survive A's restore.
+fault inside a supported review command (review_object approve). After A's
+document context has rolled back and released the lock, but before A's
+post-rollback step runs (_restore_review_state on main, the remirror after
+the fix), instance B reviews object B with decision "revise" and then applies
+the correction via correct_object, which writes a new object version. B's
+corrected object (content and object_version), B's binding and B's audit
+events MOET survive A's post-rollback step; a blind write_bundle of A's
+pre-mutation copy MAG NIET overwrite them (see WilliamGomes41/Metis#33).
 """
 import fcntl
 
