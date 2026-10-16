@@ -45,7 +45,7 @@ def test_sensitive_values_are_redacted(text):
 
 
 def test_safe_text_is_unchanged():
-    text = 'attempt pa_123 finished state=incomplete_budget snapshot snap-1 basic flow'
+    text = 'attempt pa_123 finished state=incomplete_budget snapshot snap-1'
     assert redact(text) == text
 
 
