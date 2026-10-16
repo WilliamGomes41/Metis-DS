@@ -226,3 +226,10 @@ def test_redacting_filter_never_sets_args_to_none():
         record = logging.LogRecord('x', logging.INFO, __file__, 1, 'm %s' if args else 'm', args, None)
         RedactingFilter().filter(record)
         assert record.args is not None and 'hunter2' not in record.getMessage()
+
+
+def test_contract_attributes_f2_acceptance_to_metis():
+    # Sherlock 02:55: F2 (handlers added after startup) was accepted by Metis, not by Sherlock.
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[1] / 'docs' / 'change-contracts' / 'a2-log-redaction.md').read_text()
+    assert 'accepted by Sherlock' not in text and 'accepted by Metis' in text
