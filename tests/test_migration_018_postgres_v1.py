@@ -114,3 +114,10 @@ def test_018_duplicate_error_lists_a_capped_number_of_keys(pg):
 
 def test_018_caps_the_key_list_in_sql():
     assert 'LIMIT 20' in NEW.read_text()
+
+
+def test_disposable_database_rule_is_documented():
+    # Sherlock 02:55: these tests DROP SCHEMA workflow; the DSN MOET only point at a disposable database.
+    rule = 'METIS_TEST_POSTGRES_DSN MOET only point at a disposable database'
+    assert rule in (__doc__ or '')
+    assert rule in (ROOT / 'docs' / 'TEST_AND_RELEASE_RUNBOOK.md').read_text()
