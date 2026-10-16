@@ -142,10 +142,16 @@ def install_structured_logging(level=logging.INFO):
         for handler in logging.getLogger(name).handlers:
             if _REDACTING_FILTER not in handler.filters:
                 handler.addFilter(_REDACTING_FILTER)
+    # Explicitly configured descendants (azure.core...http_logging_policy at INFO) override the
+    # parent level, so every existing descendant MOET be clamped too (Sherlock P1).
+    existing = list(logging.root.manager.loggerDict)
     for name in LIBRARY_LOGGERS:
-        library = logging.getLogger(name)
-        if library.level == logging.NOTSET or library.level < logging.WARNING:
-            library.setLevel(logging.WARNING)
+        for logger_name in [name] + [n for n in existing if n.startswith(name + '.')]:
+            library = logging.getLogger(logger_name)
+            if library.level != logging.NOTSET and library.level < logging.WARNING:
+                library.setLevel(logging.WARNING)
+        if logging.getLogger(name).level == logging.NOTSET:
+            logging.getLogger(name).setLevel(logging.WARNING)
 
 
 def install_startup_reinstall(app) -> None:
