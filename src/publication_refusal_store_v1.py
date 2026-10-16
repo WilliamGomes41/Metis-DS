@@ -188,6 +188,8 @@ def apply_retention(workflow_store, *, clock: datetime | None = None,
     clock = clock or datetime.now(timezone.utc)
     days = RETENTION_DAYS if retention_days is None else int(retention_days)
     rows = MAX_ROWS if max_rows is None else int(max_rows)
+    if rows <= 0 or days <= 0:
+        raise ValueError('refusal_retention_bounds_must_be_positive')  # MAG NIET empty the table
     with workflow_store._connect() as con:
         with con.transaction():
             con.execute('DELETE FROM workflow.publication_refusals WHERE recorded_at < %s',

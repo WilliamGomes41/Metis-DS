@@ -127,3 +127,9 @@ niet-productieve ingest op test uit en verifieer:
 - de SHA-256 readback klopt;
 - een herstart/deployment van de test-app de testdata behoudt;
 - productie geen nieuwe documenten of accounts heeft gekregen.
+
+## Migratie 018 (publication_refusals) en deploy-checklist
+
+- Migratie `018_publication_refusal_audit.sql` MOET vóór de code worden toegepast die de tabel gebruikt, en alleen met GO van William (`scripts/apply_workflow_postgres_migrations.py plan` → `apply` met `--confirm-target` en `--confirm-digest`, daarna `verify`). Code die de tabel gebruikt MAG NIET live gaan voordat `verify` de tabel en de constraint `publication_refusals_dedup_key_uniq` toont.
+- 018 is idempotent: veilig om twee keer te draaien en bovenop de oude 018 zonder UNIQUE.
+- Deploy-checklist, retentie: plan `scripts/publication_refusal_retention.py` (standaard 400 dagen / 200000 rijen; `--max-rows` en `--retention-days` MOETEN > 0 zijn) als expliciet onderhoud. Retentie MAG NIET per weigering draaien. De planning zelf is niet gebouwd; dit is een checklistpunt.

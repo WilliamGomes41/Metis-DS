@@ -29,6 +29,8 @@ def main(argv=None) -> int:
     parser.add_argument('--retention-days', type=int, default=store.RETENTION_DAYS)
     parser.add_argument('--max-rows', type=int, default=store.MAX_ROWS)
     args = parser.parse_args(argv)
+    if args.max_rows <= 0 or args.retention_days <= 0:
+        parser.error('--max-rows and --retention-days MOETEN be > 0')  # exit 2, nothing deleted
     result = store.apply_retention(_workflow_store(), retention_days=args.retention_days, max_rows=args.max_rows)
     print(json.dumps(result, sort_keys=True))
     return 0

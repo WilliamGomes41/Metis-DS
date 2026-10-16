@@ -356,7 +356,7 @@ def test_retention_script_runs_apply_retention(monkeypatch, capsys):
 def test_migration_018_has_unique_dedup_key():
     from pathlib import Path
     sql = (Path(__file__).resolve().parents[1] / 'db' / 'migrations' / '018_publication_refusal_audit.sql').read_text()
-    assert 'UNIQUE' in sql.upper() and 'dedup_key' in sql
+    assert 'UNIQUE (dedup_key)' in sql
 
 
 def test_postgres_refusal_insert_uses_on_conflict_do_nothing_without_lock():
