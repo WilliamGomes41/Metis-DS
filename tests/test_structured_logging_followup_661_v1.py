@@ -75,3 +75,11 @@ def test_reserved_handler_with_overriding_formatter_subclass_is_not_trusted():
     finally:
         root.handlers, root.level = saved, level
     assert 'opaque-secret' not in stream.getvalue()
+
+
+@pytest.mark.parametrize('key', [('owner', 'anne@example.com'), frozenset({'anne@example.com'}), ('a', ('b', 'anne@example.com'))])
+def test_composite_keys_in_nested_extras_are_redacted(key):
+    # 4296203813
+    record = _record('x', context={key: 'admin'})
+    RedactingFilter().filter(record)
+    assert 'anne@example.com' not in logging.Formatter('%(context)s').format(record)
