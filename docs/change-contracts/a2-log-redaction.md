@@ -56,3 +56,9 @@ Any word that follows an auth scheme word (bearer, basic, digest, negotiate; any
 - Sensitive extra keys MOETEN be replaced for any value type (dict, list, object) (red 0e5f660, fix 9963ce3).
 - Digest parameter lists with RFC 7616 `username*` MOETEN be redacted completely (red 3de3903, fix 4ef4314).
 - Quoted email local parts with escaped quotes MOETEN be redacted (PII; red 599de42, fix 94f3b5a).
+
+## Complete pass (Metis 12:21, 2026-10-16)
+- bytes and bytearray reprs (b'x', bytearray(b'x')) MOETEN be redacted as values in assignments, headers and tuple pairs (red d88b3e5).
+- Auth schemes MOETEN be redacted with any spacing, an '='/':' separator and quoted tokens; Digest/RFC 5987 parameters (k*=) with any spacing around '=' and ',' (red 7bd399a).
+- Extra fields and mapping args MOETEN be redacted at any depth of dict/list/tuple/set (bound 32 levels, fail-closed beyond); sensitive keys (also prefixed, e.g. x_api_key, and bytes keys) and (key, value) header pairs are replaced for any value type (red cdda703).
+- One combined red test for all forms: a0a9ea4.
