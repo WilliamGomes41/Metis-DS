@@ -155,3 +155,9 @@ def test_digest_username_star_parameter_list_is_fully_redacted():
     out = redact("Digest username*=UTF-8''Mufasa, nonce=\"abc123\", response=\"6629fae49393\"")
     for part in ('Mufasa', 'abc123', '6629fae49393'):
         assert part not in out
+
+
+def test_quoted_email_local_part_with_escaped_quote_is_redacted():
+    # 4292037282: RFC 5322 quoted-string with an escaped quote.
+    out = redact('from "john\\"doe"@example.org now')
+    assert 'john' not in out and 'example.org' not in out
