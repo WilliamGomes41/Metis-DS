@@ -161,8 +161,10 @@ def recorded_processing_tables(*, snapshot_id: str, revision: str, envelope: dic
 def _refusal_status(refusals, issues):
     """Manifest entry for publication_refusals; corrupt/unreadable records MOETEN be visible."""
     issues = list(issues or [])
-    base = ("Publication refusals from the separate append-only refusal store (temporary file store until a PostgreSQL table); "
-            "deduplicated per document, reasons and actor within 10 minutes. Observation only, not a gate verdict.")
+    base = ("Publication refusals from the separate append-only refusal store (PostgreSQL table "
+            "workflow.publication_refusals live; the JSONL file store only in the single-worker file topology); "
+            "deduplicated per document, reasons and actor (fixed 10-minute window in PostgreSQL). "
+            "Observation only, not a gate verdict.")
     corrupt = sum(1 for code in issues if code.startswith('corrupt_record:'))
     if refusals is None and issues:
         return ("unreadable", base + " Store unreadable: " + ", ".join(issues) + "; this table is incomplete.")
@@ -199,7 +201,7 @@ def processing_evidence_tables(
 
     for name, rows in recorded_processing_tables(snapshot_id=snapshot_id, revision=revision, envelope=envelope).items():
         tables[name].extend(rows)
-    # Refusal store (TIJDELIJK file store): only this document's records, NOOIT another's.
+    # Refusal store (PostgreSQL table, or file store off-live): only this document's records, NOOIT another's.
     for record in refusals or []:
         if isinstance(record, dict) and record.get("snapshot_id") == snapshot_id:
             add("publication_refusals", refusal_snapshot_id=record.get("snapshot_id"),
