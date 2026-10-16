@@ -27,3 +27,8 @@ Not touched: operations_console_v1.py, publish gate.
 - Swallowed except in `_refusal_records` removed: corrupt records → `corrupt_record:<Class>`, unreadable store → `store_unreadable:<Type>` (red c1407df, fix 0ba9288).
 - Manifest text matches the availability states above (red d5fdf96, fix 94ed33f).
 - OPENVRAAG-641-LEX (actor PII): open, see PR body. No code change until Lex decides.
+
+## Lex advice / Metis GO (2026-10-16)
+- `actor` / `actor_id` MAG NIET be in the publication_refusals, processing_attempts or processing_recovery exports; no plain account_id MAG appear anywhere in the export (red 0957352, 952afa2).
+- The refusal store keeps `actor` in plain text ONLY under Lex's conditions: account_id only, least-privilege access, retention in docs/RETENTION_MATRIX.md (red 300b180).
+- The HMAC pseudonym is NOT built here; separate PR.
