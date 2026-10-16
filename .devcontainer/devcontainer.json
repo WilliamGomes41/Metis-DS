@@ -1,17 +1,31 @@
 {
   "name": "Metis offline security sandbox",
   "dockerComposeFile": "compose.yml",
+  "initializeCommand": "set -e; mkdir -p output/runtime/sandbox-requests output/runtime/sandbox-artifacts output/runtime/security-sandbox output/runtime/sandbox-runner-diag output/runtime/sandbox-attest && chmod 1777 output/runtime/sandbox-requests output/runtime/sandbox-artifacts output/runtime/security-sandbox output/runtime/sandbox-runner-diag && (docker network inspect metis-sandbox >/dev/null 2>&1 || docker network create --internal --subnet 172.30.254.0/24 metis-sandbox) && docker network inspect metis-sandbox > output/runtime/sandbox-attest/network.json",
   "service": "workspace",
   "workspaceFolder": "/workspaces/metis",
   "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/devcontainers/features/sshd:1": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    }
+  },
   "shutdownAction": "stopCompose",
   "forwardPorts": [],
-  "otherPortsAttributes": {"onAutoForward": "ignore"},
-  "postCreateCommand": "python -c \"import pytest, psycopg; print('Preinstalled test dependencies available')\"",
+  "otherPortsAttributes": {
+    "onAutoForward": "ignore"
+  },
+  "postCreateCommand": "python -c \"import pytest, psycopg; print('Preinstalled test dependencies available; run tests via scripts/sandbox_test.sh (isolated runner)')\"",
   "customizations": {
     "vscode": {
-      "settings": {"python.defaultInterpreterPath": "/opt/metis-venv/bin/python", "remote.autoForwardPorts": false},
-      "extensions": ["ms-python.python"]
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/metis-venv/bin/python",
+        "remote.autoForwardPorts": false
+      },
+      "extensions": [
+        "ms-python.python"
+      ]
     }
   }
 }

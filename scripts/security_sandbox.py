@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import errno
 import ipaddress
+import json
 import os
 from pathlib import Path
 import socket
@@ -19,7 +20,21 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "output/runtime/security-sandbox"
 TEST_DSN = "postgresql://metis_sandbox:sandbox-only@sandbox-db:5432/metis_security_test"
+# Azurite (CON-03) blob endpoint on the internal sandbox network (account
+# devstoreaccount1; the public Azurite dev key is supplied by the test itself).
+AZURITE_BLOB_ENDPOINT = "http://172.30.254.30:10000/devstoreaccount1"
+# Build-time preloaded offline assets (runner image); passed through only if set.
+OFFLINE_ASSET_ENV = ("PLAYWRIGHT_BROWSERS_PATH", "HF_HOME", "METIS_DOCLING_PYTHON",
+                     "METIS_DOCLING_ARTIFACTS_PATH", "METIS_PI05_MODEL_PATH",
+                     "OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY")
 SANDBOX_NETWORK = ipaddress.ip_network("172.30.254.0/24")
+# Written on the host by devcontainer initializeCommand; mounted read-only in the runner.
+ATTEST_FILE = Path("/sandbox-attest/network.json")
+ATTEST_NETWORK = "metis-sandbox"
+PROBE_TIMEOUT = 2
+EGRESS_TARGETS = (("tcp", ("1.1.1.1", 443)), ("tcp", ("8.8.8.8", 53)), ("udp", ("8.8.8.8", 53)),
+                  ("tcp6", ("2606:4700:4700::1111", 443)))
+CONTROL_DIR = Path("/sandbox-control")
 LOCAL_TESTS = (
     "tests/test_security_sandbox.py",
     "tests/test_security_harden_wave3.py",
@@ -41,8 +56,13 @@ POSTGRES_TESTS = (
 def assert_isolated_network() -> None:
     """Reject default/external routes; then require an explicit unreachable result.
 
+    A default route is tolerated only when its gateway lies inside the internal
+    sandbox network AND a host attestation proves Internal=true for that subnet;
+    then DNS MOET falen and every egress target MOET unreachable or time out.
+    Without that route every target MOET report ENETUNREACH/EHOSTUNREACH.
     This verifies the expected container namespace, not arbitrary malware containment.
     """
+    internal_default = False
     for line in Path("/proc/net/route").read_text().splitlines()[1:]:
         fields = line.split()
         if not int(fields[3], 16) & 1:
@@ -50,8 +70,13 @@ def assert_isolated_network() -> None:
         destination = ipaddress.IPv4Address(bytes.fromhex(fields[1])[::-1])
         mask = str(ipaddress.IPv4Address(bytes.fromhex(fields[7])[::-1]))
         network = ipaddress.IPv4Network((str(destination), mask), strict=False)
-        if not (network.subnet_of(SANDBOX_NETWORK) or network.subnet_of(ipaddress.ip_network("127.0.0.0/8"))):
-            raise SystemExit("Network isolation unconfirmed: external/default IPv4 route.")
+        if network.subnet_of(SANDBOX_NETWORK) or network.subnet_of(ipaddress.ip_network("127.0.0.0/8")):
+            continue
+        gateway = ipaddress.IPv4Address(bytes.fromhex(fields[2])[::-1])
+        if network.prefixlen == 0 and gateway in SANDBOX_NETWORK:
+            internal_default = True
+            continue
+        raise SystemExit("Network isolation unconfirmed: external/default IPv4 route.")
     for line in Path("/proc/net/ipv6_route").read_text().splitlines():
         fields = line.split()
         flags = int(fields[8], 16)
@@ -60,25 +85,104 @@ def assert_isolated_network() -> None:
         network = ipaddress.IPv6Network((ipaddress.IPv6Address(int(fields[0], 16)), int(fields[1], 16)), strict=False)
         if not (network.subnet_of(ipaddress.ip_network("::1/128")) or network.subnet_of(ipaddress.ip_network("fe80::/10"))):
             raise SystemExit("Network isolation unconfirmed: external/default IPv6 route.")
-    try:
-        with socket.create_connection(("1.1.1.1", 443), timeout=2):
+    if internal_default:
+        # A timeout is only acceptable on a host-attested internal network (#653 T10).
+        load_network_attestation()
+        try:
+            socket.getaddrinfo("example.com", 443)
+        except OSError:
             pass
-    except OSError as exc:
-        if exc.errno in {errno.ENETUNREACH, errno.EHOSTUNREACH}:
-            return
-        raise SystemExit("Network isolation unconfirmed: probe did not report unreachable.") from exc
-    raise SystemExit("External network reachable; refusing security execution.")
+        else:
+            raise SystemExit("External DNS resolves; refusing security execution.")
+    outcomes = []
+    for kind, address in EGRESS_TARGETS:
+        target = f"{kind} {address[0]}:{address[1]}"
+        try:
+            if kind == "udp":
+                _udp_reach(address)
+            else:
+                with socket.create_connection(address, timeout=PROBE_TIMEOUT):
+                    pass
+        except OSError as exc:
+            # Per-target errno MOET in de gelogde uitkomst staan (Lex review 0d070ba).
+            reason = "timeout" if isinstance(exc, TimeoutError) else errno.errorcode.get(exc.errno, str(exc.errno))
+            outcomes.append(f"{target} errno={reason}")
+            if exc.errno in {errno.ENETUNREACH, errno.EHOSTUNREACH} and not isinstance(exc, TimeoutError):
+                continue
+            if kind == "tcp6" and exc.errno in {errno.EAFNOSUPPORT, errno.EADDRNOTAVAIL}:
+                continue  # No IPv6 stack in the namespace: the IPv6 target is unreachable.
+            if internal_default and isinstance(exc, TimeoutError):
+                continue
+            raise SystemExit(f"Network isolation unconfirmed: probe {kind} {address} did not report unreachable.") from exc
+        raise SystemExit(f"External network reachable ({kind} {address}); refusing security execution.")
+    for outcome in outcomes:
+        print(f"egress probe: {outcome}", flush=True)
+    if internal_default:
+        print("isolated_by_internal_network_attested: " + "; ".join(outcomes), flush=True)
+
+
+def _udp_reach(address: tuple[str, int]) -> bytes:
+    """Send one DNS query; any answer means egress. Errors propagate to the caller."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
+        udp.settimeout(PROBE_TIMEOUT)
+        udp.connect(address)
+        udp.send(bytes.fromhex("abcd01000001000000000000076578616d706c6503636f6d0000010001"))
+        return udp.recv(512)
+
+
+def load_network_attestation() -> dict:
+    """Host-side `docker network inspect` result (read-only mount); missing/invalid MOET weigeren."""
+    try:
+        data = json.loads(ATTEST_FILE.read_text())
+        network = data[0] if isinstance(data, list) else data
+        subnets = {entry.get("Subnet") for entry in network["IPAM"]["Config"]}
+        valid = (network.get("Name") == ATTEST_NETWORK and network.get("Internal") is True
+                 and str(SANDBOX_NETWORK) in subnets)
+    except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError) as exc:
+        raise SystemExit("Network attestation missing or unreadable; refusing security execution.") from exc
+    if not valid:
+        raise SystemExit("Network attestation does not prove an internal sandbox network; refusing.")
+    return network
+
+
+def egress_error_is_explicit(exc: BaseException) -> bool:
+    """True only for DNS failure or ENETUNREACH/EHOSTUNREACH; timeout/TLS/refused MAG NIET gelden."""
+    reason = getattr(exc, "reason", None)
+    if isinstance(reason, BaseException):
+        exc = reason
+    if isinstance(exc, socket.gaierror):
+        return True
+    return (isinstance(exc, OSError) and not isinstance(exc, TimeoutError)
+            and exc.errno in {errno.ENETUNREACH, errno.EHOSTUNREACH})
+
+
+def mount_is_readonly(mountinfo: str, mount_point: str) -> bool:
+    """Read the per-mount 'ro' flag from /proc/self/mountinfo (last entry wins)."""
+    readonly = False
+    found = False
+    for line in mountinfo.splitlines():
+        fields = line.split()
+        if len(fields) > 5 and fields[4] == mount_point:
+            found = True
+            readonly = "ro" in fields[5].split(",")
+    return found and readonly
 
 
 def sandbox_environment(*, postgres: bool = False) -> dict[str, str]:
     supplied = os.environ.get("METIS_TEST_POSTGRES_DSN", "")
     if supplied and supplied != TEST_DSN:
         raise SystemExit("Refusing non-sandbox METIS_TEST_POSTGRES_DSN; unset it first.")
-    env = {key: os.environ[key] for key in ("PATH", "HOME", "LANG", "LC_ALL", "TERM") if key in os.environ}
+    supplied_blob = os.environ.get("METIS_TEST_AZURITE_BLOB_ENDPOINT", "")
+    if supplied_blob and supplied_blob != AZURITE_BLOB_ENDPOINT:
+        raise SystemExit("Refusing non-sandbox METIS_TEST_AZURITE_BLOB_ENDPOINT; unset it first.")
+    env = {key: os.environ[key] for key in ("PATH", "HOME", "LANG", "LC_ALL", "TERM") + OFFLINE_ASSET_ENV
+           if key in os.environ}
     env.update(PYTHONPATH=str(ROOT), PYTHONDONTWRITEBYTECODE="1",
                METIS_CONSOLE_AUTH="local", CONSOLE_DATA_ROOT=str(RUNTIME),
                CONSOLE_RUNTIME=str(RUNTIME / "console"), CONSOLE_SOURCE_STORE=str(RUNTIME / "sources"),
-               SEMGREP_SEND_METRICS="off", SEMGREP_ENABLE_VERSION_CHECK="0")
+               SEMGREP_SEND_METRICS="off", SEMGREP_ENABLE_VERSION_CHECK="0",
+               HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1",
+               METIS_TEST_AZURITE_BLOB_ENDPOINT=AZURITE_BLOB_ENDPOINT)
     if postgres:
         env["METIS_TEST_POSTGRES_DSN"] = TEST_DSN
     return env
@@ -117,11 +221,21 @@ def run_scans() -> int:
     return max(results)
 
 
+def run_redteam(rt_dir: Path) -> int:
+    """Red-team pytest on the job dir; same env allowlist and isolation gate as run_tests."""
+    env = sandbox_environment(postgres=True)
+    env["PYTEST_ADDOPTS"] = "-p no:cacheprovider"
+    assert_isolated_network()
+    return subprocess.call([sys.executable, "-m", "pytest", "-q", "--rootdir", str(rt_dir), str(rt_dir)],
+                           cwd=ROOT, env=env)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("check")
     commands.add_parser("scan")
+    commands.add_parser("rt", help="Red-team pytest on /sandbox-control/rt (read-only; isolation gate first).")
     tests = commands.add_parser("test")
     tests.add_argument("--local", action="store_true", help="Skip PostgreSQL only; network checks still apply.")
     args = parser.parse_args()
@@ -132,6 +246,8 @@ def main() -> int:
         return 0
     if args.command == "scan":
         return run_scans()
+    if args.command == "rt":
+        return run_redteam(CONTROL_DIR / "rt")
     return run_tests(local=args.local)
 
 
