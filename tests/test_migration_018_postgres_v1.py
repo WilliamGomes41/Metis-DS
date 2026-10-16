@@ -138,12 +138,14 @@ class _Res:
 
 
 class _SchemaCon:
-    def __init__(self, *, drop_column=None, constraint=True):
+    def __init__(self, *, drop_column=None, constraint=True, constraint_row=None):
         from src.workflows.workflow_postgres_migration_v1 import REQUIRED_COLUMNS, REQUIRED_TABLES
         self.tables = [{'table_name': t} for t in REQUIRED_TABLES]
         self.columns = [{'table_name': t, 'column_name': c} for t, c in REQUIRED_COLUMNS
                         if (t, c) != drop_column]
         self.constraint = constraint
+        self.constraint_row = constraint_row or {'conname': CONSTRAINT, 'table_name': 'publication_refusals',
+                                                 'contype': 'u', 'columns': ['dedup_key']}
 
     def execute(self, sql, params=None):
         if 'current_database' in sql:
@@ -153,7 +155,7 @@ class _SchemaCon:
         if 'information_schema.columns' in sql:
             return _Res(self.columns)
         if 'pg_constraint' in sql:
-            return _Res([{'conname': CONSTRAINT}] if self.constraint else [])
+            return _Res([self.constraint_row] if self.constraint else [])
         return _Res([{'count': 0}])
 
 
@@ -174,3 +176,17 @@ def test_runbooks_grant_runtime_access_to_the_refusal_table_and_sequence():
         text = (ROOT / 'docs' / name).read_text()
         assert 'GRANT SELECT, INSERT, DELETE ON workflow.publication_refusals TO' in text, name
         assert 'GRANT USAGE, SELECT ON SEQUENCE workflow.publication_refusals_refusal_id_seq TO' in text, name
+
+
+@pytest.mark.parametrize('row', [
+    {'conname': CONSTRAINT, 'table_name': 'documents', 'contype': 'u', 'columns': ['dedup_key']},
+    {'conname': CONSTRAINT, 'table_name': 'publication_refusals', 'contype': 'c', 'columns': ['dedup_key']},
+    {'conname': CONSTRAINT, 'table_name': 'publication_refusals', 'contype': 'u', 'columns': ['snapshot_id']},
+    {'conname': CONSTRAINT, 'table_name': 'publication_refusals', 'contype': 'u', 'columns': ['dedup_key', 'actor']},
+])
+def test_schema_verify_checks_constraint_table_type_and_column(row):
+    # 4291505169: a same-named constraint on another table, a non-unique one, or one on other
+    # columns MAG NIET pass: ON CONFLICT (dedup_key) needs UNIQUE(dedup_key) on publication_refusals.
+    from src.workflows.workflow_postgres_migration_v1 import observe_schema
+    result = observe_schema(_SchemaCon(constraint_row=row))
+    assert result['status'] == 'BLOCKED' and result['missing_constraints'] == [CONSTRAINT]
