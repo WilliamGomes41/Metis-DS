@@ -66,18 +66,34 @@ def test_complete_formation_still_succeeds():
     assert finish(envelope, attempt['attempt_id'], state='succeeded', budget_aware=True)['state'] == 'succeeded'
 
 
-def test_incomplete_budget_never_counts_against_retry_cap():
+@pytest.mark.parametrize('kind', ['retry', 'resume'])
+def test_budget_stops_without_progress_reach_the_retry_cap(kind):
+    # F2 (Sherlock retro-audit, Metis A3-1 intent): an incomplete_budget attempt
+    # WITHOUT formation_progress_made MOET count toward the retry cap.
     envelope = _envelope()
     limits = ModelCallLimits(max_attempts=2)
-    for index in range(5):
+    for index in range(limits.max_attempts):
         attempt, fresh = reserve(envelope, command_id=f'b{index}', actor_id='a', revision='r',
-                                 clock=now(), limits=limits, kind='resume')
+                                 clock=now(), limits=limits, kind=kind)
         assert fresh
-        attempt['formation_progress_made'] = False  # even without progress
-        finish(envelope, attempt['attempt_id'], state='succeeded', budget_aware=True)
+        attempt['formation_progress_made'] = False
+        assert finish(envelope, attempt['attempt_id'], state='succeeded', budget_aware=True)['state'] == 'incomplete_budget'
     current = status(envelope, policy=limits)
-    assert current['retry_attempts_used'] == 0
-    assert current['reason_code'] != 'processing_attempt_limit_reached'
+    assert current['retry_attempts_used'] == limits.max_attempts, 'NO_PROGRESS_BUDGET_STOP_FREE'
+    assert current['reason_code'] == 'processing_attempt_limit_reached'
+    assert current['retry_allowed'] is False
+    with pytest.raises(ConsoleError) as refused:
+        reserve(envelope, command_id='over', actor_id='a', revision='r', clock=now(), limits=limits, kind=kind)
+    assert refused.value.code == 'processing_attempt_limit_reached'
+
+
+def test_budget_stop_without_recorded_progress_counts_fail_closed():
+    # Missing formation_progress_made MOET be treated as no progress.
+    envelope = _envelope()
+    limits = ModelCallLimits(max_attempts=1)
+    attempt, _ = reserve(envelope, command_id='m', actor_id='a', revision='r', clock=now(), limits=limits, kind='resume')
+    finish(envelope, attempt['attempt_id'], state='succeeded', budget_aware=True)
+    assert status(envelope, policy=limits)['reason_code'] == 'processing_attempt_limit_reached'
 
 
 def test_budget_exhausted_resume_with_progress_does_not_consume_retry_budget():
@@ -90,7 +106,9 @@ def test_budget_exhausted_resume_with_progress_does_not_consume_retry_budget():
         assert fresh
         attempt['formation_progress_made'] = True
         finish(envelope, attempt['attempt_id'], state='succeeded', budget_aware=True)
-    assert status(envelope, policy=limits)['reason_code'] != 'processing_attempt_limit_reached'
+    current = status(envelope, policy=limits)
+    assert current['retry_attempts_used'] == 0
+    assert current['reason_code'] != 'processing_attempt_limit_reached'
 
 
 # --- defect 2: 'Hervatten' offered after a contract-version change ----------

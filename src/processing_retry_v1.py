@@ -19,15 +19,27 @@ def now() -> datetime:
 def _retry_budget_attempts(attempts):
     """Attempts that consume the failure/retry cap.
 
-    A successful formation resume with proven source-range progress is normal
-    continuation work, not a failed retry. Failed, interrupted, or no-progress
-    resumes still consume the cap.
+    Only an attempt with proven source-range progress (formation_progress_made
+    is True) is free: a successful resume or a budget stop (incomplete_budget).
+    A budget stop without recorded progress MOET count toward the cap (A3-1 F2);
+    failed, interrupted and no-progress attempts consume the cap.
     """
-    return [attempt for attempt in attempts
-            if attempt.get("state") != "incomplete_budget"
-            and (attempt.get("kind") != "resume"
-            or attempt.get("state") != "succeeded"
-            or not attempt.get("formation_progress_made"))]
+    def free(attempt):
+        if attempt.get("formation_progress_made") is not True:
+            return False
+        return attempt.get("state") == "incomplete_budget" or (
+            attempt.get("kind") == "resume" and attempt.get("state") == "succeeded")
+    return [attempt for attempt in attempts if not free(attempt)]
+
+
+ADMISSION_ENV = "METIS_PROCESSING_ADMISSION"
+
+
+def admission_closed(environ=None) -> bool:
+    """C3: rollback/maintenance switch; only unset, empty or 'open' admits new attempts."""
+    import os
+    value = (environ if environ is not None else os.environ).get(ADMISSION_ENV, "").strip().lower()
+    return value not in {"", "open"}
 
 
 def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, clock: datetime, limits=None, kind="retry") -> tuple[dict, bool]:
@@ -42,6 +54,9 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
             if attempt["actor_id"] != actor_id or attempt["source_hash"] != envelope["sha256"] or attempt.get("source_version", envelope["version"]) != envelope["version"]:
                 raise ConsoleError("processing_command_conflict")
             return attempt, False
+    # C3 (#639): METIS_PROCESSING_ADMISSION other than unset/empty/'open' MOET refuse new work (fail-closed).
+    if admission_closed():
+        raise ConsoleError("processing_admission_closed")
     if any(attempt["state"] == "running" for attempt in attempts):
         raise ConsoleError("processing_attempt_in_progress")
     grant = envelope.get("processing_recovery") or {}

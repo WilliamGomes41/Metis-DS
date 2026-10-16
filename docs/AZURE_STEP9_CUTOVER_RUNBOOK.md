@@ -135,6 +135,14 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public, workflow TO
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public, workflow TO "vvn-metis-console";
 ```
 
+Is de database al ingericht vóór migratie 018, dan MOET de beheerder na 018 ook deze rechten toekennen (DELETE alleen voor het expliciete retentiecommando; geen UPDATE, de tabel is append-only):
+
+```sql
+-- Na migratie 018 (#636): GRANT ... ON ALL TABLES dekt geen later aangemaakte tabellen.
+GRANT SELECT, INSERT, DELETE ON workflow.publication_refusals TO "vvn-metis-console";
+GRANT USAGE, SELECT ON SEQUENCE workflow.publication_refusals_refusal_id_seq TO "vvn-metis-console";
+```
+
 Vervang `metis` alleen door de reeds bevestigde bestaande databasenaam. Geef geen eigenaarschap, DDL-recht of brede serverrol aan de runtime-identity.
 
 ## 4. Bestaande `/home/data` exact migreren
