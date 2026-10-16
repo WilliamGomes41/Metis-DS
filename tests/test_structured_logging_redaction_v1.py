@@ -233,3 +233,16 @@ def test_contract_attributes_f2_acceptance_to_metis():
     from pathlib import Path
     text = (Path(__file__).resolve().parents[1] / 'docs' / 'change-contracts' / 'a2-log-redaction.md').read_text()
     assert 'accepted by Sherlock' not in text and 'accepted by Metis' in text
+
+
+@pytest.mark.parametrize('path', ['/a?cookie=s3cr3t', '/a?Authorization: Bearer s3cr3tvalue', '/a?password=s3cr3t'])
+def test_uvicorn_access_redacts_each_arg_and_keeps_five_args(path):
+    # Sherlock 02:55: uvicorn.access MOET keep its 5 positional args, each redacted.
+    from uvicorn.logging import AccessFormatter
+    from src.structured_logging_v1 import RedactingFilter
+    record = logging.LogRecord('uvicorn.access', logging.INFO, __file__, 1, '%s - "%s %s HTTP/%s" %d',
+                               ('10.0.0.1:5000', 'GET', path, '1.1', 200), None)
+    RedactingFilter().filter(record)
+    assert isinstance(record.args, tuple) and len(record.args) == 5
+    out = AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s', use_colors=False).format(record)
+    assert 's3cr3t' not in out and '200' in out and 'HTTP/1.1' in out
