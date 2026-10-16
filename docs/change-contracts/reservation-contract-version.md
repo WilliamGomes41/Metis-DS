@@ -2,7 +2,7 @@
 
 Change class: B
 Promise: Every attempt reserved by processing_retry_v1.reserve MOET record `reserved_semantic_contract_version`, derived from the envelope's processing configuration, and keep it whatever the outcome (succeeded, failed, interrupted). On the retry path (`retry_pre_review`, RESV-2) the configuration in force MOET be written to the envelope before a fresh reservation; when it is unreadable the retry MOET be refused with `processing_configuration_unavailable` and no attempt MAG NIET be reserved. `processing_retry_v1.reserve()` itself MAG NIET write the configuration. The surrounding reservation paths keep writing it as before: `source_selection_v1.reserve_selection` (Bronselectie start and resume) and `OperationsConsole.ingest` MOETEN store the configuration before they reserve (correction after Codex P2 on #639). Resume, verdicts and replay identities MAG NIET change.
-Proof: tests/test_reservation_contract_version.py (8 red on 8db82cb, 9 green after; the 2 RESV-2 tests red on a3c5d58, green after; 11 total), including identical helper output versus the replay identity built at pre_review_semantic_v1:585 and a real resume reservation; existing suites unchanged.
+Proof: tests/test_c2_pinned_configuration_fence.py, tests/test_c3_processing_admission.py and tests/test_reservation_contract_version.py (8 red on 8db82cb, 9 green after; the 2 RESV-2 tests red on a3c5d58, green after; 11 total), including identical helper output versus the replay identity built at pre_review_semantic_v1:585 and a real resume reservation; existing suites unchanged.
 Touches lifecycle invariants: no
 Rewrite risk: none
 
@@ -21,16 +21,8 @@ Taalregel: B18. Rules use MOET / MAG NIET / NOOIT only; open items are marked OP
 - `src/operations_console_v1.py` lines 2353-2358 only (RESV-2). Not touched: `OperationsConsole.ingest`, upload form,
   `review_participation_ui_v1.py`, review_configuration paths, publication gate.
 
-## Limits
+## RESV-2 decision
 
-Attempts are reserved after the caller set `processing_configuration` on the Bronselectie
-start (`source_selection_v1.reserve_selection`) and resume (`resume_formation`) paths, so
-their value is exact. The ingest reservation (`operations_console_v1.py` line 1896, inside
-`OperationsConsole.ingest`, Forge #626 region) and the re-extract reservation (line 2410)
-run without a stored configuration on a first ingest and then record `None`.
-
-OPENVRAAG-RESV-1: MOETEN the ingest (line 1896) and re-extract (line 2410) reservations pass
-the active configuration? That change lies in operations_console_v1.py (ingest is Forge #626).
 DECIDED RESV-2 (Metis, Forge cleared): `retry_pre_review` (`operations_console_v1.py` lines 2353-2358)
 MOET refresh `processing_configuration` from `source_selection_v1.configuration` before a fresh
 reservation and MOET fail closed with `processing_configuration_unavailable` (no attempt reserved)
@@ -62,10 +54,10 @@ Documented outcome: the command MOET be refused with `processing_configuration_c
 separates the configuration check from the identity check. Tests: tests/test_resv1_reservation_configuration.py,
 red at 3dbff26 (ingest), green at 07c55dc.
 
-## Codex findings on 97c458b (fixed in this PR)
+## Codex findings on 97c458b and Sherlock 02:55 (fixed in this PR)
 
-- P1 fence on reused extraction: `src/source_preparation_context_v1.py` `retain()` MOET check the attempt's pinned configuration before the reuse return; a changed configuration MOET give `processing_configuration_changed` before provider work. Proof: `tests/test_resv1_reservation_configuration.py::test_reused_extraction_with_changed_configuration_is_refused_before_provider` (red on 97c458b: PROVIDER_WORK_STARTED_BEFORE_FENCE; green after).
-- P2 strict retry fence test: `test_retry_fails_with_configuration_changed_after_mid_flight_deploy` MOET assert that the processing strategy is not called. Mutation proof: with the early fences removed the test is red.
-- P2 doc: the promise above is narrowed to `reserve()` itself.
-- P1 rollback: `a3-incomplete-budget-rollback.md` MOET stop admission and drain before the count.
-- `operations_console_v1.py` is not touched.
+- C2 / Codex P1, one fence: `src/source_preparation_context_v1.py` `build_formation_context` MOET compare the attempt's pinned configuration with `active_configuration` as its first step, before every early return (non-HTML/PDF, beslisboom, resume checkpoint) and before extraction. A difference MOET give `processing_configuration_changed`. An attempt without a pinned configuration (absent or empty) MOET be refused with `processing_configuration_unpinned`; there is NOOIT an exemption. The separate check before the reuse return in `retain()` (6cb2953) is removed; the in-transaction check in `retain()` (#628 F3) stays. Proof: `tests/test_c2_pinned_configuration_fence.py`, 7 red at 78f05ed, green at bcd953f; extractor sentinel count MOET be 0 on refusal.
+- C3, admission: `METIS_PROCESSING_ADMISSION` with a value other than unset, empty or `open` MOET refuse every new reservation in `processing_retry_v1.reserve()` with `processing_admission_closed` (fail-closed). The ingest reservation goes through `reserve()` and MOET be refused the same way, with no envelope stored. A repeated command_id MOET return its existing attempt. `scripts/processing_rollback_precheck.py` is read-only (PostgreSQL `BEGIN READ ONLY` + rollback, or a file read) and MOET exit 2 while any attempt is `running` or `incomplete_budget`, 1 when the store is unreadable, 0 only when clean. Proof: `tests/test_c3_processing_admission.py`, 12 red at 95c4f36, green at 98bac0c.
+- C6 / Codex P2, exact counters: the fence tests MOETEN count each stage on its own call (`console._extract`, `strategy.prepare`, provider HTTP). Proof: with the 97c458b version of `source_preparation_context_v1.py` the reuse test is red with `extract: 1`.
+- Codex P2 doc: the promise above is narrowed to `reserve()` itself.
+- `operations_console_v1.py` and the publication gate are not touched.
