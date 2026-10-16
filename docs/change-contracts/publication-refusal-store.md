@@ -42,3 +42,7 @@ Taalregel: B18. Rules use MOET / MAG NIET / NOOIT only; open items are marked OP
 - **F2 (runbook):** docs/TEST_AND_RELEASE_RUNBOOK.md: 018 MOET be applied before the code, only with William's GO; proof `test_runbook_orders_018_before_code_with_williams_go_and_lists_retention` (red locally before the runbook text).
 - **F3 (retention bounds):** `scripts/publication_refusal_retention.py` refuses `--max-rows <= 0` and `--retention-days <= 0` (exit 2, nothing deleted); `apply_retention` raises ValueError. Proof: `test_retention_script_refuses_non_positive_max_rows`, `test_apply_retention_refuses_non_positive_max_rows`. Red d180002.
 - Retention scheduling is a deploy-checklist item only (runbook); it is NOT built.
+
+## Sherlock audit 02:55 (2026-10-16)
+- The 018 duplicate error lists at most 20 dedup_keys (`count=N more=M keys=…`); count is exact. Proof: `test_018_duplicate_error_lists_a_capped_number_of_keys`, `test_018_caps_the_key_list_in_sql`; red f52b58a.
+- METIS_TEST_POSTGRES_DSN MOET only point at a disposable database (the fixtures DROP SCHEMA workflow); documented in the test docstring and the runbook. Proof: `test_disposable_database_rule_is_documented`; red e787851.

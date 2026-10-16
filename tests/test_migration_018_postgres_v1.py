@@ -6,7 +6,8 @@
 
 The named UNIQUE constraint is added in a DO block guarded by pg_constraint (conname +
 conrelid). The repository MAG NIET rely on 018 never having reached a persistent database.
-Runs only with METIS_TEST_POSTGRES_DSN (CI postgres:16 service).
+Runs only with METIS_TEST_POSTGRES_DSN (CI postgres:16 service). The fixture runs DROP SCHEMA
+workflow CASCADE: METIS_TEST_POSTGRES_DSN MOET only point at a disposable database.
 """
 from __future__ import annotations
 
@@ -97,3 +98,27 @@ def test_runbook_orders_018_before_code_with_williams_go_and_lists_retention():
     assert '018_publication_refusal_audit.sql' in text and 'vóór de code' in text and 'GO van William' in text
     assert 'scripts/publication_refusal_retention.py' in text and 'Deploy-checklist' in text
     assert 'publication_refusals_duplicate_dedup_keys' in text and 'Een mens beslist' in text
+
+
+def test_018_duplicate_error_lists_a_capped_number_of_keys(pg):
+    # Sherlock 02:55: the error message MOET stay bounded; count is exact, the key list is capped.
+    import psycopg
+    pg.execute(OLD.read_text())
+    for n in range(25):
+        _insert(pg, f'dup{n:02d}', 2)
+    with pytest.raises(psycopg.errors.RaiseException) as error:
+        pg.execute(NEW.read_text())
+    message = str(error.value)
+    assert 'count=25' in message and 'more=5' in message
+    assert sum(1 for n in range(25) if f'dup{n:02d}' in message) == 20
+
+
+def test_018_caps_the_key_list_in_sql():
+    assert 'LIMIT 20' in NEW.read_text()
+
+
+def test_disposable_database_rule_is_documented():
+    # Sherlock 02:55: these tests DROP SCHEMA workflow; the DSN MOET only point at a disposable database.
+    rule = 'METIS_TEST_POSTGRES_DSN MOET only point at a disposable database'
+    assert rule in (__doc__ or '')
+    assert rule in (ROOT / 'docs' / 'TEST_AND_RELEASE_RUNBOOK.md').read_text()

@@ -28,12 +28,15 @@ BEGIN
         WHERE conname = 'publication_refusals_dedup_key_uniq'
           AND conrelid = 'workflow.publication_refusals'::regclass
     ) THEN
-        SELECT count(*), string_agg(dedup_key, ', ' ORDER BY dedup_key)
-          INTO dup_count, dup_keys
+        SELECT count(*) INTO dup_count
           FROM (SELECT dedup_key FROM workflow.publication_refusals
                 GROUP BY dedup_key HAVING count(*) > 1) AS d;
+        -- Bounded message (Sherlock 02:55): exact count, at most 20 keys listed.
+        SELECT string_agg(dedup_key, ', ' ORDER BY dedup_key) INTO dup_keys
+          FROM (SELECT dedup_key FROM workflow.publication_refusals
+                GROUP BY dedup_key HAVING count(*) > 1 ORDER BY dedup_key LIMIT 20) AS k;
         IF dup_count > 0 THEN
-            RAISE EXCEPTION 'publication_refusals_duplicate_dedup_keys count=% keys=%', dup_count, dup_keys
+            RAISE EXCEPTION 'publication_refusals_duplicate_dedup_keys count=% more=% keys=%', dup_count, greatest(dup_count - 20, 0), dup_keys
                 USING HINT = 'See docs/TEST_AND_RELEASE_RUNBOOK.md, Migratie 018: a human decides; 018 changes no rows.';
         END IF;
         ALTER TABLE workflow.publication_refusals
