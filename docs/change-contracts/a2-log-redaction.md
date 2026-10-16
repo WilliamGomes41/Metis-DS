@@ -65,3 +65,12 @@ Any word that follows an auth scheme word (bearer, basic, digest, negotiate; any
 - Mailboxes with a dotless domain (user@localhost) MOETEN be redacted (PII; red a858fa9, fix 5321c84). Over-redaction of other 'x@y' tokens is accepted fail-closed.
 - A dangling escape at the end of an unterminated quoted secret MOET be consumed (red 1552aaa, fix a0e8300).
 - Email local parts MOETEN cover the full dot-atom set (' / = ! # $ % & * + ? ^ ` { | } ~ -) (PII; red 6dd86a0, fix 665c066).
+
+## Round 2026-10-16 15:00 (threads on 548070a)
+Red commits 82f5b76, 2d0e6ab, c077a20, 7b117fc, 4fa2595, e995356; fix in one commit.
+- Non-dict Mapping args (UserDict) MOETEN go through sensitive-key redaction (4294352255).
+- When interpolation fails after redaction, the filter MOET fail closed: it renders the template, and MAG NIET render the original args (4294352269).
+- Combining marks in SMTPUTF8 local parts MOETEN NIET split the address (4294352280).
+- Header keys written as identifiers (x_functions_key, ocp_apim_subscription_key) MOETEN count as sensitive (4294629096).
+- Nested mapping keys MOETEN be redacted, for example PII keys (4294629108).
+- Positional container args MOETEN be deep-redacted. A container repr after a credential key MOET be redacted to line end (4294629122).

@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Mapping
 from datetime import datetime, timezone
 
 EXTRA_FIELDS = ('request_id', 'event', 'attempt_id', 'snapshot_id', 'phase', 'reason_code')
@@ -36,7 +37,7 @@ _SECRET_PATTERNS = (
     re.compile(r'(?i)(\(\s*b?["\'](?:' + _HEADER_KEYS + r'|' + _ASSIGNMENT_KEYS + r')["\'])(\s*,\s*)'
                r'(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[^\s)\]]+)'),
     # credential assignments, quoted or unquoted values (password="x", {"password":"x"})
-    re.compile(r'(?i)(["\']?\b(?:' + _ASSIGNMENT_KEYS + r')\b["\']?)(\s*[=:]\s*)(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[^\s;,&"\'}]+)'),
+    re.compile(r'(?i)(["\']?\b(?:' + _ASSIGNMENT_KEYS + r')\b["\']?)(\s*[=:]\s*)(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[\{\[\(][^\r\n]*|[^\s;,&"\'}]+)'),  # container reprs: to line end (4294629122)
     # Standalone scheme credentials. Digest-style parameter lists (k="v", k=v) are consumed
     # completely (Sherlock P1). Any-case scheme + any token MOET be redacted; casing MAG NIET
     # decide (Metis 2026-10-16, fail-closed: 'basic flow' is redacted too).
@@ -52,7 +53,8 @@ _SECRET_PATTERNS = (
     # Quoted local parts ("john..doe"@example.org) MOETEN be redacted too (Sherlock P2).
     re.compile(r'"(?:\\.|[^"\\\r\n])*"@[\w-]+(?:\.[\w-]+)*\b'),  # zero-dot domains (localhost) too, 4293592622
     # Unicode-aware: SMTPUTF8 addresses (josé@example.com) MOETEN be redacted too (Sherlock P2).
-    re.compile(r'(?<![\w.!#$%&\'*+/=?^`{|}~-])[\w.!#$%&\'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)*\b'),  # zero-dot domains (localhost) too, 4293592622
+    # Combining marks (jos\u0301e) MOETEN NIET split the local part (4294352280).
+    re.compile(r'(?<![\w.!#$%&\'*+/=?^`{|}~\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f-])[\w.!#$%&\'*+/=?^`{|}~\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f-]+@[\w-]+(?:\.[\w-]+)*\b'),  # zero-dot domains (localhost) too, 4293592622
 )
 # Third-party loggers MOETEN stay at WARNING: their INFO/DEBUG output (HTTP headers,
 # request bodies, connection strings) MAG NIET reach the root JSON handler.
@@ -102,7 +104,7 @@ class JsonLogFormatter(logging.Formatter):
 
 
 # A sensitive key MAG a prefix (x_api_key, http_authorization).
-_SENSITIVE_KEY = re.compile(r'(?i)(?:[a-z0-9]+[_-])*(?:' + _ASSIGNMENT_KEYS + r'|' + _HEADER_KEYS + r')')
+_SENSITIVE_KEY = re.compile(r'(?i)(?:[a-z0-9]+[_-])*(?:' + _ASSIGNMENT_KEYS + r'|' + _HEADER_KEYS.replace('-', '[-_]') + r')')  # x_functions_key (4294629096)
 _MAX_DEPTH = 32
 
 
@@ -119,7 +121,9 @@ def _deep_redact(value, depth=0):
     if isinstance(value, (str, bytes, bytearray)):
         return redact(value)
     if isinstance(value, dict):
-        return {key: '[REDACTED]' if _is_sensitive_key(key) else _deep_redact(item, depth + 1)
+        # Keys MOETEN be redacted too (PII keys, 4294629108).
+        return {(redact(key) if isinstance(key, (str, bytes, bytearray)) else key):
+                '[REDACTED]' if _is_sensitive_key(key) else _deep_redact(item, depth + 1)
                 for key, item in value.items()}
     if isinstance(value, (list, tuple)) and len(value) == 2 and _is_sensitive_key(value[0]):
         return type(value)((value[0], '[REDACTED]')) if not hasattr(value, '_fields') else value._replace(**{value._fields[1]: '[REDACTED]'})  # header pair
@@ -137,7 +141,7 @@ def _redact_mapping_value(key, value):
 
 
 def _redact_arg(value):
-    return redact(value) if isinstance(value, (str, bytes)) else value
+    return _deep_redact(value)  # containers too (4294629122)
 
 
 _STANDARD_ATTRS = frozenset(logging.LogRecord('', 0, '', 0, '', (), None).__dict__) | {'message', 'asctime'}
@@ -151,7 +155,7 @@ class RedactingFilter(logging.Filter):
     """
     def filter(self, record):
         args = record.args
-        if isinstance(args, dict):
+        if isinstance(args, Mapping):  # UserDict etc. too (4294352255)
             redacted_args = {key: _redact_mapping_value(key, value) for key, value in args.items()}
         else:
             redacted_args = tuple(_redact_arg(value) for value in (args or ()))
@@ -160,16 +164,15 @@ class RedactingFilter(logging.Filter):
             candidate = msg % redacted_args if redacted_args else msg
         except Exception:
             candidate = None
-        if record.name in PER_ARG_LOGGERS and not isinstance(args, dict):
+        if record.name in PER_ARG_LOGGERS and not isinstance(args, Mapping):
             # uvicorn.access: AccessFormatter reads 5 positional args; each arg is redacted on its own.
             record.msg, record.args = redact(msg), redacted_args
         elif candidate is not None and redact(candidate) == candidate:
             record.msg, record.args = msg, redacted_args  # positional args kept for foreign formatters
         else:
-            try:
-                rendered = record.getMessage()
-            except Exception:
-                rendered = msg
+            # Render from the redacted args only; on interpolation failure fall back to the
+            # template, NOOIT to the original args (fail-closed, 4294352269).
+            rendered = candidate if candidate is not None else msg
             # The secret spans template and args: render, redact, keep an empty tuple (NOOIT None).
             record.msg, record.args = redact(rendered), ()
         if record.exc_info and record.exc_info[0] is not None:
