@@ -63,3 +63,5 @@ Any word that follows an auth scheme word (bearer, basic, digest, negotiate; any
 - Extra fields and mapping args MOETEN be redacted at any depth of dict/list/tuple/set (bound 32 levels, fail-closed beyond); sensitive keys (also prefixed, e.g. x_api_key, and bytes keys) and (key, value) header pairs are replaced for any value type (red cdda703).
 - One combined red test for all forms: a0a9ea4.
 - Mailboxes with a dotless domain (user@localhost) MOETEN be redacted (PII; red a858fa9, fix 5321c84). Over-redaction of other 'x@y' tokens is accepted fail-closed.
+- A dangling escape at the end of an unterminated quoted secret MOET be consumed (red 1552aaa, fix a0e8300).
+- Email local parts MOETEN cover the full dot-atom set (' / = ! # $ % & * + ? ^ ` { | } ~ -) (PII; red 6dd86a0, fix 665c066).
