@@ -14,3 +14,10 @@ def test_refusal_store_is_in_the_retention_matrix_with_lex_conditions():
     assert '400' in row and '200000' in row and 'publication_refusal_retention.py' in row
     for condition in ('account_id', 'least-privilege', 'retention'):
         assert condition in text
+
+
+def test_refusal_bounds_are_marked_as_script_default_not_policy():
+    # Metis 2026-10-16: 400 days / 200000 rows are the script default, open question for Lex + Metis.
+    text = DOC.read_text(encoding='utf-8')
+    row = next(line for line in text.splitlines() if 'workflow.publication_refusals' in line and line.startswith('|'))
+    assert 'script default' in row and 'OPENVRAAG-RET-1' in row
