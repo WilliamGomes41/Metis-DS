@@ -53,3 +53,6 @@ Proof: tests/test_structured_logging_sherlock_p1p2_v1.py.
 Any word that follows an auth scheme word (bearer, basic, digest, negotiate; any casing) is redacted, fail-closed. Ordinary prose is redacted too: 'use the basic flow' becomes 'use the [REDACTED]'. This MAG NIET be relaxed without a new Metis decision; a log reader MOET read '[REDACTED]' after a scheme word as possibly prose.
 - Tuple-shaped header/credential pairs ((b'authorization', b'x'), ASGI scope headers) MOETEN be redacted (red 2475f3c, fix d1d9e40).
 - Emails with a domain literal (user@[127.0.0.1], user@[IPv6:...]) MOETEN be redacted (red 15b224c, fix 40ddb68).
+- Sensitive extra keys MOETEN be replaced for any value type (dict, list, object) (red 0e5f660, fix 9963ce3).
+- Digest parameter lists with RFC 7616 `username*` MOETEN be redacted completely (red 3de3903, fix 4ef4314).
+- Quoted email local parts with escaped quotes MOETEN be redacted (PII; red 599de42, fix 94f3b5a).
