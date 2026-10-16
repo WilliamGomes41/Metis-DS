@@ -507,3 +507,15 @@ def test_partial_postgres_topology_is_fail_closed_and_reported(tmp_path, monkeyp
     assert [(w['stage'], w['error_class']) for w in warnings if w.get('event') == 'publication_refusal_audit_failed'] \
         == [('durable_store', 'RefusalStoreUnavailable')]
     assert not store.store_path(console).exists()
+
+
+# --- Sherlock #637 P2s ---
+
+def test_corrupt_record_diagnostic_keeps_the_error_class(tmp_path, events, warnings_):
+    console, sid, actor = _blocked_base(tmp_path)
+    path = store.store_path(console)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{not json\n')
+    console.publish(actor_id=actor, snapshot_id=sid)
+    [failure] = _failures(warnings_)
+    assert (failure['stage'], failure['error_class']) == ('corrupt_record', 'JSONDecodeError')
