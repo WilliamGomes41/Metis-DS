@@ -122,3 +122,9 @@ def test_hashable_mapping_key_never_raises():
     record = _record('x', context={_FrozenMap({'owner': 'anne@example.com'}): 'admin'})
     assert RedactingFilter().filter(record) is True
     assert 'anne@example.com' not in logging.Formatter('%(context)s').format(record)
+
+
+@pytest.mark.parametrize('addr', ['\U0001F600@[127.0.0.1]', '\u2603x@[IPv6:2001:db8::1]'])
+def test_smtputf8_local_part_with_domain_literal_is_redacted(addr):
+    # 4297911904 (PII)
+    assert addr.split('@')[0] not in redact('mail ' + addr)
