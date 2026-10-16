@@ -83,3 +83,9 @@ def test_non_ascii_email_is_redacted():
 @pytest.mark.parametrize('text', ['bearer abcdefghijk', 'BeArEr abcdefghijk', 'basic YWJj', 'digest abcdef'])
 def test_any_case_scheme_redacts_alphabetic_token(text):
     assert text.split()[-1] not in redact(text)
+
+
+def test_quoted_secret_with_line_break_is_redacted():
+    out = redact('password="hunter\nsecond-half"')
+    assert 'hunter' not in out and 'second-half' not in out
+    assert 'second' not in redact("Authorization: 'ab\r\nsecond'")
