@@ -104,6 +104,9 @@ def _redact_arg(value):
     return redact(value) if isinstance(value, (str, bytes)) else value
 
 
+_STANDARD_ATTRS = frozenset(logging.LogRecord('', 0, '', 0, '', (), None).__dict__) | {'message', 'asctime'}
+
+
 class RedactingFilter(logging.Filter):
     """Redacts msg and every string arg in place, so handlers we do not own MAG NIET emit secrets.
 
@@ -139,6 +142,11 @@ class RedactingFilter(logging.Filter):
             suffix = redact(f' [{exc_type.__name__}: {exc_value}]')
             record.msg += suffix.replace('%', '%%') if record.args else suffix
         record.exc_info, record.exc_text, record.stack_info = None, None, None
+        # Custom `extra` fields reach foreign formatters (%(authorization)s): sensitive keys MOETEN
+        # be replaced, other string fields redacted (Sherlock P1 4289472643).
+        for key, value in list(record.__dict__.items()):
+            if key not in _STANDARD_ATTRS and isinstance(value, (str, bytes)):
+                setattr(record, key, _redact_mapping_value(key, value))
         return True
 
 
