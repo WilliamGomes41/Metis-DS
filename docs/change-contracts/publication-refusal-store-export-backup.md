@@ -1,7 +1,7 @@
 # Refusal store in the evidence export and the runtime backup
 
 Change class: B
-Promise: The per-document processing-evidence export MOET contain publication_refusals.csv with only that document's refusal records (NOOIT another document's; manifest 'not_recorded' when the store is unreadable); the runtime backup/restore MOET include the refusal store file byte-identical; the deploy package MAG NIET ship it.
+Promise: The per-document processing-evidence export MOET contain publication_refusals.csv with only that document's refusal records (NOOIT another document's; manifest availability 'unreadable' when the store is unreadable, 'recorded_with_skipped_records' when corrupt records were skipped, 'not_recorded' only when no refusal store is configured; a read error MAG NOOIT be swallowed: it MOET be reported as an export issue and a warning event publication_refusal_export_issue); the runtime backup/restore MOET include the refusal store file byte-identical; the deploy package MAG NIET ship it.
 Proof: tests/test_publication_refusal_store_export_backup.py: 3 tests red at 16110a6, green after; existing export, inventory and chain-recovery suites unchanged (51 passed locally).
 Touches lifecycle invariants: no
 Rewrite risk: none
@@ -22,3 +22,8 @@ Not touched: operations_console_v1.py, publish gate.
 ## After restack on #636 (PostgreSQL table)
 - Live export reads `workflow.publication_refusals` for that document only (max 500 newest); local topology reads the file. Red 3af3d56, green fe904dc.
 - Runtime backup includes the file store and its rotated generation `.jsonl.1`. In the PostgreSQL topology the table is covered by the database backup, not by this runtime archive (OPENVRAAG-EXP-2: Metis confirms that the PostgreSQL backup scope includes workflow.publication_refusals).
+
+## Sherlock FAIL #641 (2026-10-16)
+- Swallowed except in `_refusal_records` removed: corrupt records → `corrupt_record:<Class>`, unreadable store → `store_unreadable:<Type>` (red c1407df, fix 0ba9288).
+- Manifest text matches the availability states above (red d5fdf96, fix 94ed33f).
+- OPENVRAAG-641-LEX (actor PII): open, see PR body. No code change until Lex decides.
