@@ -32,3 +32,24 @@ def test_version_6_backup_with_refusals_key_is_a_conflict():
     state = {'workflow_recovery_version': 6, 'workflow_tables': {'publication_refusals': [{'refusal_id': 1}]}}
     with pytest.raises(recovery.PublicationChainRecoveryError, match='refusal_version_conflict'):
         recovery._upgrade_workflow_state(state)
+
+
+def test_version_6_restore_roundtrip_compares_against_the_upgraded_archive(monkeypatch, tmp_path):
+    # 4291505161: after a successful v6 restore the export is v7 (with publication_refusals);
+    # the round-trip check MOET compare against the same upgraded state, NOOIT the raw v6 JSON.
+    import io, json, zipfile
+    v6 = {'workflow_recovery_version': 6, 'workflow_tables': {'documents': []}, 'api_access_tables': {}}
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as zipf:
+        zipf.writestr('database.json', json.dumps(v6))
+    buf.seek(0)
+    restored = recovery._upgrade_workflow_state(v6)
+
+    class DB:
+        def export_state(self):
+            return restored
+    monkeypatch.setattr(recovery, 'verify_workflow_chain_backup', lambda archive: {'ok': True, 'errors': []})
+    monkeypatch.setattr(recovery, '_guarded_restore', lambda archive, **kw: {'restored': True})
+    monkeypatch.setattr(recovery, 'check_workflow_integrity', lambda state: {'ok': True, 'errors': []})
+    monkeypatch.setattr(recovery, 'check_chain_integrity', lambda state, **kw: {'ok': True, 'errors': []})
+    recovery.restore_workflow_chain(buf, database=DB(), source_store=None)
