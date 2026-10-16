@@ -77,3 +77,43 @@ def test_export_route_reads_postgres_table_when_present(monkeypatch):
             return [{'snapshot_id': snapshot_id}]
     monkeypatch.setattr(store, 'postgres_store', lambda state: FakePg())
     assert app_module._refusal_records(object(), 'snap-a') == [{'snapshot_id': 'snap-a'}] and calls == ['snap-a']
+
+
+# --- Sherlock FAIL #641 (1): corrupt or unreadable refusal records MOETEN be reported, NOOIT silently dropped ---
+
+def test_corrupt_refusal_records_are_reported_in_the_export_manifest(tmp_path, monkeypatch, caplog):
+    import logging
+    from src import operations_console_app as app_module
+    path = _seed(tmp_path)
+    with path.open('a', encoding='utf-8') as handle:
+        handle.write('{not json\n')
+    monkeypatch.setattr(store, 'postgres_store', lambda state: None)
+    monkeypatch.setattr(store, 'store_path', lambda state: path)
+    issues = []
+    with caplog.at_level(logging.WARNING):
+        records = app_module._refusal_records(object(), 'snap-a', issues=issues)
+    assert len(records) == 2 and issues == ['corrupt_record:JSONDecodeError']
+    assert 'publication_refusal_export_issue' in caplog.text
+    tables, manifest = processing_evidence_tables(snapshot_id='snap-a', revision='rev', envelope={}, objects=[],
+                                                  refusals=records, refusal_issues=issues)
+    [entry] = [m for m in manifest if m['dataset'] == 'publication_refusals.csv']
+    assert entry['availability'] == 'recorded_with_skipped_records' and '1 corrupt' in entry['limitation']
+
+
+def test_unreadable_refusal_store_is_reported_not_swallowed(monkeypatch, caplog):
+    import logging
+    from src import operations_console_app as app_module
+
+    class Broken:
+        def records_for(self, snapshot_id):
+            raise OSError('database gone password=hunter2')
+    monkeypatch.setattr(store, 'postgres_store', lambda state: Broken())
+    issues = []
+    with caplog.at_level(logging.WARNING):
+        assert app_module._refusal_records(object(), 'snap-a', issues=issues) is None
+    assert issues == ['store_unreadable:OSError']
+    assert 'publication_refusal_export_issue' in caplog.text and 'hunter2' not in caplog.text
+    tables, manifest = processing_evidence_tables(snapshot_id='snap-a', revision='rev', envelope={}, objects=[],
+                                                  refusals=None, refusal_issues=issues)
+    [entry] = [m for m in manifest if m['dataset'] == 'publication_refusals.csv']
+    assert entry['availability'] == 'unreadable' and 'store_unreadable:OSError' in entry['limitation']
