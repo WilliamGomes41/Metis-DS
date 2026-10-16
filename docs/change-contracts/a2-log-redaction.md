@@ -51,3 +51,5 @@ Proof: tests/test_structured_logging_sherlock_p1p2_v1.py.
 
 ## Known limitation: over-redaction (accepted by Metis, 2026-10-16)
 Any word that follows an auth scheme word (bearer, basic, digest, negotiate; any casing) is redacted, fail-closed. Ordinary prose is redacted too: 'use the basic flow' becomes 'use the [REDACTED]'. This MAG NIET be relaxed without a new Metis decision; a log reader MOET read '[REDACTED]' after a scheme word as possibly prose.
+- Tuple-shaped header/credential pairs ((b'authorization', b'x'), ASGI scope headers) MOETEN be redacted (red 2475f3c, fix d1d9e40).
+- Emails with a domain literal (user@[127.0.0.1], user@[IPv6:...]) MOETEN be redacted (red 15b224c, fix see git log '4291899714').
