@@ -17,8 +17,8 @@ from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v14"
-PROJECTOR_VERSION = "processing-evidence-export-v14"
+VERSION = "processing-evidence-export-v15"
+PROJECTOR_VERSION = "processing-evidence-export-v15"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
     "blockage_report": ("report",),

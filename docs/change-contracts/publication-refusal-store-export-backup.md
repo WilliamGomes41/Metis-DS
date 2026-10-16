@@ -16,7 +16,7 @@ Taalregel: B18. Rules use MOET / MAG NIET / NOOIT only; open items are marked OP
 Not touched: operations_console_v1.py, publish gate.
 
 ## Limits
-- OPENVRAAG-EXP-1: export schema version stays processing-evidence-export-v14 (additive dataset); Metis decides whether it MOET become v15.
+- OPENVRAAG-EXP-1: CLOSED (Metis 2026-10-16): export schema MOET be processing-evidence-export-v15 (actor/actor_id removed).
 - MCP export path (metis_mcp_queries_v1) does not pass refusals; its manifest says not_recorded.
 
 ## After restack on #636 (PostgreSQL table)
