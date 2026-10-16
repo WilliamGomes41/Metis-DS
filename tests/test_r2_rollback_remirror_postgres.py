@@ -5,6 +5,8 @@ T4: after the rollback no write reaches workflow.* from the review mixin's error
     path (including remirror/refresh_*), and disk mirrors are written under the lock.
 T5: two threads on one console object (sync route + threadpool): B's concurrent
     approve survives A's failed review.
+T7: the review path NOOIT enters the inherited documents_cutover compensating
+    context (blind write_bundle + ledger truncation, documents_cutover:774-790).
 T6: a remirror failure logs codes, ids and error types only.
 
 # release-control-evidence: scope/belofte
@@ -12,9 +14,7 @@ T6: a remirror failure logs codes, ids and error types only.
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
-import inspect
 import threading
-import traceback
 
 import pytest
 
@@ -29,46 +29,9 @@ from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
 
 REVIEW_WRITES = ("append_event", "replace_snapshot_bindings", "replace_bindings")
 DOCUMENT_WRITES = ("write_bundle", "create_document_bundle")
-# documents_cutover:778-783 compensates under the lock; out of scope (#665).
-# Only frames inside that compensating block are exempt, never the whole function.
-OUT_OF_SCOPE_FILE = "workflow_documents_cutover_v1.py"
-OUT_OF_SCOPE_FUNC = "_atomic_snapshot_mutation"
-
-
-def _compensation_line_range():
-    """Line range of the blind write_bundle compensation in documents_cutover (#665).
-
-    Located from the source via markers, not hardcoded: from the
-    `with suppress(Exception):` line up to (not including) the
-    `self._bindings = before_bindings` line in the non-conflict except branch.
-    """
-    func = documents_cutover._PostgresWorkflowDocumentsMixin._atomic_snapshot_mutation
-    func = getattr(func, "__wrapped__", func)
-    lines, first = inspect.getsourcelines(func)
-    start = end = None
-    for offset, line in enumerate(lines):
-        text = line.strip()
-        if start is None and text == "with suppress(Exception):":
-            start = first + offset
-        elif start is not None and text == "self._bindings = before_bindings":
-            end = first + offset
-            break
-    assert start is not None and end is not None, "compensation markers MOET exist in documents_cutover"
-    body = "".join(lines[start - first:end - first])
-    assert "workflow_document_store.write_bundle(" in body, "compensation block MOET be the write_bundle call"
-    return range(start, end)
-
-
-COMPENSATION_LINES = _compensation_line_range()
-
-
-def _is_out_of_scope(frames):
-    return any(
-        f.filename.rsplit("/", 1)[-1] == OUT_OF_SCOPE_FILE
-        and f.name == OUT_OF_SCOPE_FUNC
-        and f.lineno in COMPENSATION_LINES
-        for f in frames
-    )
+# No exemption: on the review path neither the inherited compensating block in
+# documents_cutover (blind write_bundle, ledger truncation) nor anything else
+# MAG write workflow.* after the native rollback (Route 1).
 
 
 def _console(root, config):
@@ -143,8 +106,7 @@ def _spy_writes(monkeypatch, console, flag, writes):
 
             def spy(*args, __name=name, __original=original, **kwargs):
                 if flag.is_set():
-                    if not _is_out_of_scope(traceback.extract_stack()):
-                        writes.append(__name)
+                    writes.append(__name)
                 return __original(*args, **kwargs)
 
             monkeypatch.setattr(store, name, spy)
@@ -348,3 +310,27 @@ def test_t6_remirror_failure_warning_carries_only_allowed_fields(workflow_postgr
         for forbidden in (secret_text, username, rid, "r2_injected_fault"):
             assert forbidden not in message
         assert record.exc_info is None
+
+
+def test_t7_review_path_bypasses_inherited_documents_compensation(workflow_postgres, tmp_path, monkeypatch):
+    """Route 1: the review path MOET NOOIT run documents_cutover's compensating context."""
+    from contextlib import contextmanager
+    console, rid, sid, (obj_a, _obj_b) = _setup(tmp_path, workflow_postgres)
+    before = _state(console, sid)
+    entered = []
+    inherited = documents_cutover._PostgresWorkflowDocumentsMixin._atomic_snapshot_mutation
+
+    @contextmanager
+    def recording(self, snapshot_id):
+        entered.append(snapshot_id)
+        with inherited(self, snapshot_id):
+            yield
+
+    monkeypatch.setattr(documents_cutover._PostgresWorkflowDocumentsMixin, "_atomic_snapshot_mutation", recording)
+    flag = threading.Event()
+    _inject_fault(monkeypatch, flag)
+    with pytest.raises(RuntimeError, match="r2_injected_fault"):
+        _approve(console, rid, sid, obj_a)
+    print("R2_T7", {"inherited_compensating_context_entered": entered})
+    assert entered == [], f"review path entered inherited compensation: {entered}"
+    assert _state(_console(tmp_path, workflow_postgres), sid) == before
