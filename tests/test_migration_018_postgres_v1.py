@@ -97,3 +97,20 @@ def test_runbook_orders_018_before_code_with_williams_go_and_lists_retention():
     assert '018_publication_refusal_audit.sql' in text and 'vóór de code' in text and 'GO van William' in text
     assert 'scripts/publication_refusal_retention.py' in text and 'Deploy-checklist' in text
     assert 'publication_refusals_duplicate_dedup_keys' in text and 'Een mens beslist' in text
+
+
+def test_018_duplicate_error_lists_a_capped_number_of_keys(pg):
+    # Sherlock 02:55: the error message MOET stay bounded; count is exact, the key list is capped.
+    import psycopg
+    pg.execute(OLD.read_text())
+    for n in range(25):
+        _insert(pg, f'dup{n:02d}', 2)
+    with pytest.raises(psycopg.errors.RaiseException) as error:
+        pg.execute(NEW.read_text())
+    message = str(error.value)
+    assert 'count=25' in message and 'more=5' in message
+    assert sum(1 for n in range(25) if f'dup{n:02d}' in message) == 20
+
+
+def test_018_caps_the_key_list_in_sql():
+    assert 'LIMIT 20' in NEW.read_text()
