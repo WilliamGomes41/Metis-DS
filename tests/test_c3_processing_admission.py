@@ -168,3 +168,40 @@ def test_precheck_postgres_connection_refuses_insert(workflow_postgres):
         connection.rollback()
     with psycopg.connect(workflow_postgres.dsn) as check:
         assert check.execute("SELECT count(*) FROM workflow.documents WHERE snapshot_id='precheck-write-probe'").fetchone()[0] == 0
+
+
+# --- Sherlock FAIL on 91c16c3, point 2: workflow.documents MOET be read through the workflow-store connection ---
+
+def test_precheck_reads_through_workflow_store_connection(monkeypatch, capsys):
+    import contextlib
+    import scripts.processing_rollback_precheck as precheck
+    import src.workflows.workflow_documents_postgres_v1 as workflow_store
+    import src.canonical_publication_postgres_v1 as canonical
+    used = []
+
+    class Rows:
+        def fetchall(self):
+            return []
+
+    class Connection:
+        read_only = False
+
+        def execute(self, sql, *_):
+            return Rows()
+
+        def rollback(self):
+            pass
+
+    class WorkflowStore:
+        def _connect(self):
+            used.append('workflow')
+            return contextlib.nullcontext(Connection())
+
+    class CanonicalStore:
+        def __init__(self, *a, **k):
+            used.append('canonical')
+            raise AssertionError('CANONICAL_CONNECTION_USED')
+    monkeypatch.setattr(workflow_store, 'PostgresWorkflowDocumentStore', WorkflowStore)
+    monkeypatch.setattr(canonical, 'PostgresCanonicalPublicationStore', CanonicalStore)
+    assert precheck.main(['--postgres']) == 0
+    assert used == ['workflow']
