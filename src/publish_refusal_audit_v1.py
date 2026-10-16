@@ -33,6 +33,24 @@ def actor_hmac(actor_id):
     return hmac.new(key.encode(), actor_id.encode(), hashlib.sha256).hexdigest()
 
 
+_ERROR_CLASS = re.compile(r'[A-Za-z_][A-Za-z0-9_]{0,63}')
+
+
+def _audit_failed(stage, *, error=None, snapshot_id=None):
+    """Bounded failure diagnostic (fixed fields, error class only, NOOIT the message)."""
+    try:
+        from src.request_diagnostics_v1 import _LOGGER, current_request_id
+        name = type(error).__name__ if error is not None else None
+        _LOGGER.warning('metis_diagnostic %s', json.dumps({
+            'event': 'publication_refusal_audit_failed', 'stage': stage,
+            'error_class': name if name and _ERROR_CLASS.fullmatch(name) else 'unrecognized_error',
+            'snapshot_id': snapshot_id if isinstance(snapshot_id, str) and _SNAPSHOT.fullmatch(snapshot_id) else None,
+            'request_id': current_request_id(), 'authority': 'non_authoritative_gate_observation',
+        }, separators=(',', ':')))
+    except Exception:  # noqa: BLE001 - last-resort observer; the verdict MOET stand
+        return
+
+
 def _append_durable(console, *, actor_id, snapshot_id, reason_codes, revision):
     # #629 F1: separate append-only store; MAG NIET use the review ledger chain.
     try:
@@ -43,8 +61,8 @@ def _append_durable(console, *, actor_id, snapshot_id, reason_codes, revision):
             version = ''
         store.append(console, snapshot_id=str(snapshot_id), object_version=version,
                      actor=str(actor_id), reason_codes=reason_codes, revision=revision)
-    except Exception:
-        pass
+    except Exception as exc:
+        _audit_failed('durable_store', error=exc, snapshot_id=snapshot_id)
 
 
 def record_publish_refusal(console, *, actor_id, snapshot_id, verdict, revision=None):

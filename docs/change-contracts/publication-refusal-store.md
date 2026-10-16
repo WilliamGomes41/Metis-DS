@@ -60,3 +60,4 @@ Taalregel: B18. Rules use MOET / MAG NIET / NOOIT only; open items are marked OP
 
 ## Sherlock P1 (2026-10-16): Rewrite risk high
 - Reclassified to `Rewrite risk: high` with all high-risk fields. Proof: `tests/test_publication_refusal_store_contract.py`; red 3a3e605.
+- **Sherlock P2 (durable write failure):** `_append_durable` emits the bounded `publication_refusal_audit_failed` (stage durable_store, error class only) instead of a silent except. Proof: `test_durable_store_failure_emits_audit_failed_diagnostic`; red 7fe15f8. #637 adds the per-process cap and the `_suppressed` marker on top.
