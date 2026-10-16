@@ -132,4 +132,6 @@ niet-productieve ingest op test uit en verifieer:
 
 - Een poging die vóór een deploy is gereserveerd en na de deploy onder een andere verwerkingsconfiguratie zou draaien, MOET stoppen met `processing_configuration_changed`; er MAG NIET werk onder de nieuwe configuratie starten. De gebruiker start daarna een nieuwe poging.
 - Ingest-, Bronselectie-, hervat- en re-extract-pogingen pinnen de configuratie al op de poging. Sinds #639 pint ook de retry-route (`retry_pre_review`) de configuratie op een nieuwe poging. Zolang #639 niet gemerged is MOET een deploy die `METIS_*`-verwerkingsinstellingen wijzigt pas gebeuren als er geen retry-poging `running` is.
+- Ook bij hergebruik van een opgeslagen `prepared_source_extraction` (zelfde bron) MOET de configuratiecontrole vóór het providerwerk gebeuren; hergebruik MAG NIET de controle overslaan (#639, Codex P1).
+- Rollback voorbij #628: eerst admissie stoppen en lopende pogingen laten uitlopen, dan pas tellen; zie `docs/change-contracts/a3-incomplete-budget-rollback.md`.
 - Is de configuratie bij een retry niet leesbaar, dan MOET de retry geweigerd worden met `processing_configuration_unavailable` zonder nieuwe poging.

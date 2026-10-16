@@ -12,7 +12,11 @@ status/retry cap (processing_retry_v1), source_selection_v1 (Hervatten/onderbrok
 ## Rollback rules
 - Rollback MOET be a code revert to a commit that still reads 'incomplete_budget' (any main from #628 on). A deploy of code older than #628 MAG NIET happen while any stored attempt has state 'incomplete_budget': older code treats it as unknown (not running, not succeeded), so the retry cap and status would differ.
 - Stored records MAG NIET be rewritten during rollback; NOOIT convert 'incomplete_budget' to 'succeeded' (that is the A3 defect).
-- Pre-rollback check (read-only): count attempts with state 'incomplete_budget' in workflow.documents envelope_payload (PostgreSQL) or the runtime store (file). Zero: rollback past #628 is safe. Non-zero: roll back only to a #628+ commit.
+- Pre-rollback check, in this order (Codex P1 on #639): a zero count is only a point-in-time observation, so attempt writers MOETEN be stopped first.
+  1. Stop admission: the console MOET be stopped or put in maintenance so that no ingest, Bronselectie, hervat-, re-extract- or retry-command is accepted.
+  2. Drain: wait until no attempt has state 'running' (or until `expire_running` has marked it 'interrupted'). The check MAG NIET start while any attempt is 'running'.
+  3. Count (read-only) attempts with state 'incomplete_budget' in workflow.documents envelope_payload (PostgreSQL) or the runtime store (file). Zero: rollback past #628 is safe. Non-zero: roll back only to a #628+ commit.
+  4. Admission MOET stay closed until the rollback target is deployed and running. Reopening admission between the count and the cutover voids the count; the check MOET then start again at step 1.
 - Forward fix is preferred over rollback.
 
 ## Cutover

@@ -1,7 +1,7 @@
 # Semantic contract version at reservation
 
 Change class: B
-Promise: Every attempt reserved by processing_retry_v1.reserve MOET record `reserved_semantic_contract_version`, derived from the envelope's processing configuration, and keep it whatever the outcome (succeeded, failed, interrupted). On the retry path (`retry_pre_review`, RESV-2) the configuration in force MOET be written to the envelope before a fresh reservation; when it is unreadable the retry MOET be refused with `processing_configuration_unavailable` and no attempt MAG NIET be reserved. Other reservation paths MAG NIET write the configuration. Resume, verdicts and replay identities MAG NIET change.
+Promise: Every attempt reserved by processing_retry_v1.reserve MOET record `reserved_semantic_contract_version`, derived from the envelope's processing configuration, and keep it whatever the outcome (succeeded, failed, interrupted). On the retry path (`retry_pre_review`, RESV-2) the configuration in force MOET be written to the envelope before a fresh reservation; when it is unreadable the retry MOET be refused with `processing_configuration_unavailable` and no attempt MAG NIET be reserved. `processing_retry_v1.reserve()` itself MAG NIET write the configuration. The surrounding reservation paths keep writing it as before: `source_selection_v1.reserve_selection` (Bronselectie start and resume) and `OperationsConsole.ingest` MOETEN store the configuration before they reserve (correction after Codex P2 on #639). Resume, verdicts and replay identities MAG NIET change.
 Proof: tests/test_reservation_contract_version.py (8 red on 8db82cb, 9 green after; the 2 RESV-2 tests red on a3c5d58, green after; 11 total), including identical helper output versus the replay identity built at pre_review_semantic_v1:585 and a real resume reservation; existing suites unchanged.
 Touches lifecycle invariants: no
 Rewrite risk: none
@@ -16,7 +16,8 @@ Taalregel: B18. Rules use MOET / MAG NIET / NOOIT only; open items are marked OP
   v3 / v2 / v1 semantic modes; every other mode MOET map to `None`.
 - `src/processing_retry_v1.py` `reserve()`: reads `envelope["processing_configuration"]["mode"]`
   and stores `reserved_semantic_contract_version` on the new attempt; `reserve()` itself
-  MAG NIET write the configuration (only `retry_pre_review` writes it, RESV-2). Legacy attempts are NOT backfilled.
+  MAG NIET write the configuration. Writers around reserve(): `retry_pre_review` (RESV-2),
+  `source_selection_v1.reserve_selection` and `OperationsConsole.ingest`. Legacy attempts are NOT backfilled.
 - `src/operations_console_v1.py` lines 2353-2358 only (RESV-2). Not touched: `OperationsConsole.ingest`, upload form,
   `review_participation_ui_v1.py`, review_configuration paths, publication gate.
 
@@ -60,3 +61,11 @@ Documented outcome: the command MOET be refused with `processing_configuration_c
 (passing test). Ingest returned `processing_command_conflict`: `source_preparation_context_v1.retain` now
 separates the configuration check from the identity check. Tests: tests/test_resv1_reservation_configuration.py,
 red at 3dbff26 (ingest), green at 07c55dc.
+
+## Codex findings on 97c458b (fixed in this PR)
+
+- P1 fence on reused extraction: `src/source_preparation_context_v1.py` `retain()` MOET check the attempt's pinned configuration before the reuse return; a changed configuration MOET give `processing_configuration_changed` before provider work. Proof: `tests/test_resv1_reservation_configuration.py::test_reused_extraction_with_changed_configuration_is_refused_before_provider` (red on 97c458b: PROVIDER_WORK_STARTED_BEFORE_FENCE; green after).
+- P2 strict retry fence test: `test_retry_fails_with_configuration_changed_after_mid_flight_deploy` MOET assert that the processing strategy is not called. Mutation proof: with the early fences removed the test is red.
+- P2 doc: the promise above is narrowed to `reserve()` itself.
+- P1 rollback: `a3-incomplete-budget-rollback.md` MOET stop admission and drain before the count.
+- `operations_console_v1.py` is not touched.

@@ -146,6 +146,11 @@ def build_formation_context(console, *, envelope, actor_id, expected_revision,
     def retain(fragments):
         record = extraction_record(envelope, fragments, contract)
         summary = {key: record[key] for key in ('record_hash', 'fragments_hash')}
+        # Codex P1 (#639): the reuse return MAG NIET skip the configuration fence; it MOET run before provider work.
+        if attempt is not None and attempt.get('processing_configuration'):
+            from src.source_selection_v1 import configuration
+            if attempt['processing_configuration'] != configuration(console):
+                raise _error('processing_configuration_changed')
         if envelope.get(KEY) == record:
             if context['diagnostic_checkpoint']:
                 context['diagnostic_checkpoint']('extraction_reused', {'extraction_checkpoint': summary})

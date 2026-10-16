@@ -175,3 +175,60 @@ def test_ingest_config_change_mid_flight_gives_configuration_changed(tmp_path):
     attempt = _attempts(console, sid, 'ingest')[-1]
     assert (attempt['state'], attempt['error_code']) == ('failed', 'processing_configuration_changed')
     assert console.snapshot_objects(sid) == []
+
+
+# --- Codex P1 on #639 @97c458b: retain()'s reuse return MAG NIET skip the configuration fence ---
+
+def _counting_provider(console):
+    """Rebind the semantic provider with a call counter; the counter MOET stay 0 when the fence refuses."""
+    from tests.test_attempt_diagnostics_postgres import (
+        bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV, SEMANTIC_MODE,
+        LLM_API_KEY_ENV, LLM_MODEL_ENV, _full_span_proposal, _response)
+    calls = {'n': 0}
+
+    def provider(_url, _headers, payload, _timeout):
+        calls['n'] += 1
+        return _response(_full_span_proposal(payload, proposed_type='definition'))
+    bind_pre_review_semantic_processing(console, environ={PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
+        LLM_API_KEY_ENV: 'DO_NOT_STORE_SECRET', LLM_MODEL_ENV: 'test'}, post_json=provider)
+    return calls
+
+
+def test_reused_extraction_with_changed_configuration_is_refused_before_provider(tmp_path):
+    # Same source: the re-extract produces the stored prepared_source_extraction (reuse return in retain()).
+    # A deploy after the initial check in the re-extract wrapper and before the extraction checkpoint
+    # MOET give processing_configuration_changed; the provider MAG NIET be called.
+    console, sid, actor = _reextract_ready(tmp_path)
+    stored = console._envelope(sid).get('prepared_source_extraction')
+    assert stored, 'fixture MOET have a stored prepared_source_extraction (reuse path)'
+    calls = _counting_provider(console)
+    # Provider work starts in the source processing strategy, right after the extraction checkpoint.
+    strategy = console._source_processing_strategy
+    started = {'n': 0}
+
+    class CountedStrategy:
+        def __getattr__(self, name):
+            started['n'] += 1
+            return getattr(strategy, name)
+    console.configure_source_processing(CountedStrategy())
+    real = console._processing_configuration_reader
+    reads = {'n': 0}
+
+    def reader():
+        # read 1: reservation; read 2: initial check before reextract_unpublished; later reads: after deploy
+        reads['n'] += 1
+        current = dict(real())
+        if reads['n'] > 2:
+            current['mode'] = 'deployed-mid-flight'
+        return current
+    console._processing_configuration_reader = reader
+    before = console.snapshot_objects(sid)
+    with pytest.raises(ConsoleError, match='processing_configuration_changed'):
+        console.reextract_unpublished(actor_id=actor, snapshot_id=sid)
+    assert reads['n'] > 2, 'the fence MOET re-read the configuration at the extraction checkpoint'
+    assert started['n'] == 0, 'PROVIDER_WORK_STARTED_BEFORE_FENCE'
+    assert calls['n'] == 0, 'PROVIDER_CALLED_BEFORE_FENCE'
+    attempt = _attempts(console, sid, 'reextract')[-1]
+    assert (attempt['state'], attempt['error_code']) == ('failed', 'processing_configuration_changed')
+    assert console._envelope(sid).get('prepared_source_extraction') == stored
+    assert console.snapshot_objects(sid) == before

@@ -166,8 +166,18 @@ def test_retry_fails_with_configuration_changed_after_mid_flight_deploy(blocked,
         current = real(target)
         return current if calls['n'] == 1 else {**current, 'mode': 'deployed-mid-flight'}
     monkeypatch.setattr(selection, 'configuration', deploy_after_reservation)
+    # Codex P2 (#639): strict order proof. Provider work MAG NIET start before the fence refuses.
+    strategy = console._source_processing_strategy
+    started = {'n': 0}
+
+    class CountedStrategy:
+        def __getattr__(self, name):
+            started['n'] += 1
+            return getattr(strategy, name)
+    console.configure_source_processing(CountedStrategy())
     with pytest.raises(ConsoleError, match='processing_configuration_changed'):
         console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id='retry-deploy')
+    assert started['n'] == 0, 'PROVIDER_WORK_STARTED_BEFORE_FENCE'
     attempt = next(a for a in console._envelope(sid)['processing_attempts'] if a['command_id'] == 'retry-deploy')
     assert attempt['processing_configuration']['mode'] != 'deployed-mid-flight', 'RETRY_ATTEMPT_NOT_PINNED'
     assert attempt['state'] == 'failed' and attempt['error_code'] == 'processing_configuration_changed'
