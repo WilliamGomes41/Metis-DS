@@ -193,3 +193,64 @@ def test_nested_values_in_non_string_extras_are_redacted(value):
         logger.removeHandler(handler)
     out = stream.getvalue()
     assert 'opaque-secret' not in out and 'anne@example.nl' not in out
+
+
+# --- Metis 12:21: one complete pass over header and extra forms ---
+
+@pytest.mark.parametrize('text', [
+    "password=bytearray(b'hunter2')",
+    "Authorization: bytearray(b'hunter2')",
+    "(b'authorization', bytearray(b'hunter2'))",
+    'Bearer\t\thunter2',
+    'Basic    hunter2',
+    "Bearer 'hunter2'",
+    'Bearer "hunter2"',
+    'BEARER=hunter2',
+    'authorization : Bearer   hunter2',
+    'Digest\tusername="u"\t,\tresponse="hunter2"',
+    "Digest realm*=UTF-8''x, username*=UTF-8'en'hunter2, response=hunter2",
+    "Digest username='u', response='hunter2'",
+    'Digest username=u,response=hunter2',
+    "{b'password': b'hunter2'}",
+    "{'Authorization': b'Bearer hunter2'}",
+])
+def test_complete_header_forms_are_redacted(text):
+    assert 'hunter2' not in redact(text), redact(text)
+
+
+def _render_extra(value, key='payload'):
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(logging.Formatter('%(message)s|%(' + key + ')s'))
+    handler.addFilter(RedactingFilter())
+    logger = logging.getLogger('test.extra.complete')
+    logger.addHandler(handler)
+    logger.propagate = False
+    try:
+        logger.warning('x', extra={key: value})
+    finally:
+        logger.removeHandler(handler)
+    return stream.getvalue()
+
+
+@pytest.mark.parametrize('value', [
+    {'a': {'b': {'c': {'password': 'hunter2'}}}},
+    [[[('token', 'hunter2')]]],
+    {'list': [{'Authorization': 'hunter2'}]},
+    {'deep': [({'x': 'Bearer hunter2'},)]},
+    b'password=hunter2',
+    bytearray(b'Bearer hunter2'),
+    {'k': b'Bearer hunter2'},
+    {b'password': 'hunter2'},
+    {'s': {'mail anne@example.nl'}},
+])
+def test_extra_values_at_any_depth_are_redacted(value):
+    out = _render_extra(value)
+    assert 'hunter2' not in out and 'anne@example.nl' not in out, out
+
+
+@pytest.mark.parametrize('key', ['password', 'Authorization', 'x_api_key'])
+@pytest.mark.parametrize('value', [b'hunter2', bytearray(b'hunter2'), 12345678, {'v': 'hunter2'}])
+def test_sensitive_extra_keys_replace_any_value(key, value):
+    out = _render_extra(value, key=key)
+    assert 'hunter2' not in out and '12345678' not in out, out
