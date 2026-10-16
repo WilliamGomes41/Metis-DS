@@ -43,7 +43,7 @@ def actor_hmac(actor_id):
     return hmac.new(key.encode(), actor_id.encode(), hashlib.sha256).hexdigest()
 
 
-def _audit_failed(stage, *, error=None, outcome=None, snapshot_id=None):
+def _audit_failed(stage, *, error=None, outcome=None, snapshot_id=None, error_class=None):
     """Bounded failure diagnostic: fixed fields, class name only, capped per process.
 
     This is the last-resort observer: if the logger itself raises, nothing more can be
@@ -60,10 +60,11 @@ def _audit_failed(stage, *, error=None, outcome=None, snapshot_id=None):
                     separators=(',', ':')))
             return
         _FAILURE_COUNT[0] += 1
-        name = type(error).__name__ if error is not None else None
+        name = type(error).__name__ if error is not None else error_class
         payload = {
             'event': 'publication_refusal_audit_failed', 'stage': stage,
-            'error_class': (name if name and _ERROR_CLASS.fullmatch(name) else 'unrecognized_error') if error is not None else None,
+            'error_class': (name if isinstance(name, str) and _ERROR_CLASS.fullmatch(name) else 'unrecognized_error')
+                           if (error is not None or error_class is not None) else None,
             'outcome': outcome,
             'snapshot_id': snapshot_id if isinstance(snapshot_id, str) and _SNAPSHOT.fullmatch(snapshot_id) else None,
             'request_id': current_request_id(),
@@ -85,7 +86,8 @@ def _append_durable(console, *, actor_id, snapshot_id, reason_codes, revision):
             _audit_failed('envelope_read', error=exc, snapshot_id=snapshot_id)
         store.append(console, snapshot_id=str(snapshot_id), object_version=version,
                      actor=str(actor_id), reason_codes=reason_codes, revision=revision,
-                     on_corrupt=lambda name: _audit_failed('corrupt_record', outcome='skipped', snapshot_id=snapshot_id))
+                     on_corrupt=lambda name: _audit_failed('corrupt_record', outcome='skipped', snapshot_id=snapshot_id,
+                                                             error_class=name))
     except Exception as exc:
         _audit_failed('durable_store', error=exc, snapshot_id=snapshot_id)
 
