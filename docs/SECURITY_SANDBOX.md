@@ -9,21 +9,42 @@ Metis. Gebruik alleen synthetische fixtures en zelfgemaakte testdocumenten.
    Heb je al een oudere sandbox gestart, kies dan **Rebuild Container** of maak
    een nieuwe Codespace: alleen bestanden bijwerken verandert het netwerk niet.
 2. Wacht op de containerbuild. De build downloadt de Python-dependencies, Bandit
-   en Semgrep. Na het bouwen heeft de testcontainer alleen het interne netwerk.
-3. Controleer eerst de grens:
+   en Semgrep. De editor draait in de `workspace`-container (met internet, nodig
+   voor de Codespaces-agent). Tests en scans draaien in de aparte
+   `runner`-container, die alleen het interne netwerk heeft. Vanuit de editor
+   geef je opdrachten door met `scripts/sandbox_test.sh`; dat script legt een
+   opdracht in `output/runtime/sandbox-requests/`. De `control`-container (geen
+   netwerk) zet die in het control-volume `/sandbox-control`; de runner leest dat
+   volume alleen-lezen, voert uit en schrijft alleen naar
+   `output/runtime/sandbox-artifacts/`. Control kopieert het resultaat naar het
+   control-volume; het oordeel (`ready`, `.exit`, `.log`) MOET uitsluitend daar
+   vandaan komen. Er is geen Docker-socket en geen docker-in-docker.
+3. Controleer eerst de grens (in de runner):
 
    ```bash
-   python scripts/security_sandbox.py check
+   scripts/sandbox_test.sh check
+   scripts/sandbox_test.sh probe   # DNS/HTTP naar buiten faalt, sandbox-db bereikbaar
    ```
 
-   Het commando weigert externe/default IPv4- of IPv6-routes. Daarna moet een
-   TCP-probe naar een publiek adres expliciet `network/host unreachable` melden.
-   Een time-out is onvoldoende bewijs. Bij een fout: niet testen; controleer
+   Het commando weigert externe/default IPv4- of IPv6-routes. Daarna MOETEN alle
+   doelen (`1.1.1.1:443` tcp, `8.8.8.8:53` tcp en udp, `[2606:4700:4700::1111]:443`)
+   expliciet `network/host unreachable` melden. Eén bereikbaar doel betekent
+   weigeren.
+
+   Een time-out alleen is NOOIT voldoende bewijs. Een time-out telt uitsluitend
+   als de default route via een gateway binnen `172.30.254.0/24` loopt, externe
+   DNS faalt, alle doelen falen, én de host-attestatie geldig is:
+   `initializeCommand` maakt op de host het netwerk `metis-sandbox` aan met
+   `--internal` en schrijft `docker network inspect` naar
+   `output/runtime/sandbox-attest/network.json`, die de runner alleen-lezen
+   ziet. Ontbreekt die, is die onleesbaar of staat er niet `Internal=true` voor
+   dit subnet, dan weigert de runner. Een geslaagde controle logt
+   `isolated_by_internal_network_attested`. Bij een fout: niet testen; controleer
    of de juiste containerconfiguratie daadwerkelijk draait.
 4. Voer de beveiligingstests uit:
 
    ```bash
-   python scripts/security_sandbox.py test
+   scripts/sandbox_test.sh test
    ```
 
    De testdatabase moet bereikbaar zijn en de verwachte databasenaam hebben.
@@ -32,7 +53,7 @@ Metis. Gebruik alleen synthetische fixtures en zelfgemaakte testdocumenten.
 5. Voer de lokale scans uit:
 
    ```bash
-   python scripts/security_sandbox.py scan
+   scripts/sandbox_test.sh scan
    ```
 
    Bandit en Semgrep schrijven JSON-rapporten in dezelfde runtime-map. Semgrep
@@ -62,9 +83,31 @@ Installatie in de repository betekent niet automatisch installatie in ChatGPT.
 
 ## Grens en beperkingen
 
-Beide containers zijn uitsluitend aangesloten op één intern Docker-netwerk
-(`172.30.254.0/24`), zonder gepubliceerde poorten. De werkcontainer heeft geen
-Docker-socket, laat geen nieuwe privileges toe en krijgt geen Linux-capabilities.
+De `runner` en `sandbox-db` zijn uitsluitend aangesloten op één intern
+Docker-netwerk (`172.30.254.0/24`), zonder gepubliceerde poorten. De runner heeft
+geen Docker-socket, laat geen nieuwe privileges toe, krijgt geen
+Linux-capabilities en heeft een alleen-lezen rootbestandssysteem. De repository
+en het control-volume zijn in de runner alleen-lezen. Schrijfbaar zijn uitsluitend
+`/workspaces/metis/output/runtime/sandbox-artifacts`,
+`/workspaces/metis/output/runtime/security-sandbox`,
+`/workspaces/metis/output/runtime/sandbox-runner-diag` en de tmpfs-mounts
+`/tmp` en `/home/vscode`. De `workspace`-container (editor) heeft wél internet
+en MAG NIET op het interne netwerk: opdrachten lopen via bestanden, zodat
+onvertrouwde `rt`-code NOOIT een container met internet bereikt. Voer in de
+workspace geen dynamische tests uit: `security_sandbox.py check` weigert daar
+terecht.
+De runner voert alleen `check`, `probe`, `test`, `test --local`, `scan` en `rt` uit.
+`rt` voert willekeurige pytest-bestanden uit die de workspace in
+`output/runtime/sandbox-requests/rt/` zet (control kopieert ze naar
+`/sandbox-control/rt`, alleen-lezen in de runner): dit is onvertrouwde code. `rt`
+MOET eerst `assert_isolated_network()` in dezelfde job passeren en draait met
+dezelfde env-allowlist als `test` (sandbox-DSN, geen geërfde secrets).
+Geteste code MAG NIET `ready`, `.exit` of `.log` in het control-volume schrijven:
+dat volume is in de runner alleen-lezen (EROFS), en de probe controleert dat.
+Een onleesbare uitslag telt als gefaald. Restrisico: geteste code schrijft als
+dezelfde gebruiker in de artifact-map, dus de ruwe uitslag die control kopieert
+komt uit de runner zelf; een `rt`-uitslag MAG NIET als onvervalsbaar bewijs
+gelden.
 PostgreSQL is bereikbaar binnen dit netwerk. Zijn testgebruiker heeft ruime
 rechten voor de bestaande schema-/triggertests; dit bewijst geen minimale
 productiedatabaserechten. Een afwijkende `METIS_TEST_POSTGRES_DSN` wordt geweigerd.
@@ -86,8 +129,8 @@ Semgrep-regels zijn een beperkte aanvulling op Bandit en handmatig codeonderzoek
 De sandbox bootst Azure-opslag, managed identity, echte Microsoft OAuth en
 productie-TLS/proxyconfiguratie niet na. Docker/Codespaces-start en de echte
 netwerkblokkade moeten op de Codespace worden geverifieerd; alleen configuratie-
-inspectie of unit tests bewijzen dat niet. Als de Codespaces-editor met dit interne
-netwerk niet opstart, voeg dan geen extern netwerk toe om alsnog PoC's te draaien.
+inspectie of unit tests bewijzen dat niet. Voeg nooit een extern netwerk toe aan
+de runner om alsnog PoC's te draaien.
 
 Stop de Codespace via GitHub als je klaar bent. Een nieuwe Codespace geeft een
 schone testomgeving. Het gebruik valt onder je GitHub-tegoed en eventuele
