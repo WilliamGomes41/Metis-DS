@@ -348,18 +348,6 @@ def _attach_formation(span: dict[str, Any], tasks: list[dict[str, Any]], task_po
     })
 
 
-def _objects_for_span(span: dict[str, Any], objects: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    block = (span.get("reconstruction") or {}).get("semantic_block_id")
-    start, end = span.get("start"), span.get("end")
-    found = []
-    for obj in objects:
-        semantic = ((obj.get("metadata") or {}).get("semantic_passage") or {})
-        spans = semantic.get("spans") or []
-        if any(_exact_span(item, block, start, end) for item in spans):
-            found.append(obj)
-    return found
-
-
 def _safe_source_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     safe = []
     for fragment in fragments or []:
@@ -748,20 +736,6 @@ def rejection_key(row: Mapping[str, Any]) -> str:
         "reason_code": row.get("reason_code"),
         "spans": row.get("spans") or [],
     }, ensure_ascii=False, sort_keys=True, default=str)
-
-
-def pending_rejection_keys(provider: Mapping[str, Any], proposal: Any) -> set[str] | None:
-    """Current open rejections. None means the call chain is not complete enough to decide."""
-    recorded = provider.get("pending_rejections") if isinstance(provider, Mapping) else None
-    if not isinstance(recorded, list):
-        if not isinstance(provider, Mapping) or not isinstance(proposal, dict):
-            return None
-        try:
-            from src.recoverable_formation_v1 import pending_rejections
-            recorded = pending_rejections(provider, proposal)
-        except (KeyError, TypeError, AttributeError, ValueError):
-            return None
-    return {rejection_key(row) for row in recorded if isinstance(row, dict)}
 
 
 def _provider_calls(provider: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -2237,12 +2211,6 @@ def independent_source_lineage_acceptance(
         "selected_remainder_cross_contamination": contaminated,
         "lineage_conflicts": conflicts,
     }
-
-
-def source_lineage_acceptance(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
-    """Deprecated wrapper. A trace row cannot certify its own lineage."""
-    return independent_source_lineage_acceptance(
-        trace_rows=rows, coverage_rows=[], lineage_rows=[], stage_rows=[])
 
 
 def rows_for_export(*, snapshot_id: str, revision: str, envelope: Mapping[str, Any],
