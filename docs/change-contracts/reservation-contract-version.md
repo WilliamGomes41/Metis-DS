@@ -61,3 +61,12 @@ red at 3dbff26 (ingest), green at 07c55dc.
 - C6 / Codex P2, exact counters: the fence tests MOETEN count each stage on its own call (`console._extract`, `strategy.prepare`, provider HTTP). Proof: with the 97c458b version of `source_preparation_context_v1.py` the reuse test is red with `extract: 1`.
 - Codex P2 doc: the promise above is narrowed to `reserve()` itself.
 - `operations_console_v1.py` and the publication gate are not touched.
+
+## Sherlock FAIL on 91c16c3 (fixed in this PR)
+
+- (1) Read-only: `scripts/processing_rollback_precheck.py` MOET set `connection.read_only = True` before the first statement. The earlier `BEGIN READ ONLY` inside psycopg's implicit transaction did not make the session read-only; an INSERT reached the constraint check. Proof: `test_precheck_postgres_connection_refuses_insert` (PostgreSQL, `ReadOnlySqlTransaction`) and `test_precheck_sets_connection_read_only_before_any_statement`, red at 9b1d695, green at 12b6151.
+- (2) Connection: the pre-check MOET read `workflow.documents` through `PostgresWorkflowDocumentStore`; the canonical publication connection MAG NIET be used. Proof: `test_precheck_reads_through_workflow_store_connection`, red at 8a06648, green at dd3079d.
+- (3) Scope of the switch: `METIS_PROCESSING_ADMISSION=closed` MOET close attempt admission only (`processing_retry_v1.reserve()`). A deterministic re-extract and a non-LLM ingest reserve no attempt and MOETEN still run while the switch is closed. A rollback plan that needs every write stopped MOET stop the console itself.
+- (4) End to end: `tests/test_c3_processing_admission.py` `test_e2e_*`. An LLM ingest with the switch closed MOET be refused with extractor and provider counters at 0 and no envelope stored; with the switch open it MOET extract exactly once; a non-LLM ingest and a deterministic re-extract MOETEN run with the switch closed and reserve no attempt. Red with the 95c4f36 `processing_retry_v1.py`, green at the commit that adds it.
+- (5) Deploy note: see `docs/TEST_AND_RELEASE_RUNBOOK.md`. An attempt that is in flight from before the deploy and has no pinned configuration MOET fail with `processing_configuration_unpinned`.
+- `operations_console_v1.py` and the publication gate are not touched.
