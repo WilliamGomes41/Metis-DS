@@ -166,3 +166,11 @@ def test_schema_verify_requires_refusal_columns_and_named_constraint():
     missing_constraint = observe_schema(_SchemaCon(constraint=False))
     assert missing_constraint['status'] == 'BLOCKED' and missing_constraint['missing_constraints'] == [CONSTRAINT]
     assert observe_schema(_SchemaCon(drop_column=('publication_refusals', 'dedup_key')))['status'] == 'BLOCKED'
+
+
+def test_runbooks_grant_runtime_access_to_the_refusal_table_and_sequence():
+    # Sherlock #636 P2: GRANT ... ON ALL TABLES does not cover tables created later (018).
+    for name in ('AZURE_STEP9_CUTOVER_RUNBOOK.md', 'TEST_AND_RELEASE_RUNBOOK.md'):
+        text = (ROOT / 'docs' / name).read_text()
+        assert 'GRANT SELECT, INSERT, DELETE ON workflow.publication_refusals TO' in text, name
+        assert 'GRANT USAGE, SELECT ON SEQUENCE workflow.publication_refusals_refusal_id_seq TO' in text, name
