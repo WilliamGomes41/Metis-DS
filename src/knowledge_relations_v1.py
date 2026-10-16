@@ -462,15 +462,6 @@ def confirmed_semantic_relations_for_serving(
     ]
 
 
-def legacy_confirmed_semantic_relations_exist(obj: dict[str, Any]) -> bool:
-    """Whether legacy confirmed semantic edges exist without implying authority."""
-
-    return any(
-        str(row.get("relation_kind") or "") == "semantic"
-        for row in legacy_knowledge_relations_view(obj, confirmed=True)
-    )
-
-
 def legacy_knowledge_relations_view(
     obj: dict[str, Any],
     *,
