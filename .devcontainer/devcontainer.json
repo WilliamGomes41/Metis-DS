@@ -1,7 +1,7 @@
 {
   "name": "Metis offline security sandbox",
   "dockerComposeFile": "compose.yml",
-  "initializeCommand": "mkdir -p output/runtime/sandbox-runner output/runtime/security-sandbox output/runtime/sandbox-runner-diag && chmod 1777 output/runtime/sandbox-runner output/runtime/security-sandbox output/runtime/sandbox-runner-diag",
+  "initializeCommand": "set -e; mkdir -p output/runtime/sandbox-requests output/runtime/sandbox-artifacts output/runtime/security-sandbox output/runtime/sandbox-runner-diag output/runtime/sandbox-attest && chmod 1777 output/runtime/sandbox-requests output/runtime/sandbox-artifacts output/runtime/security-sandbox output/runtime/sandbox-runner-diag && (docker network inspect metis-sandbox >/dev/null 2>&1 || docker network create --internal --subnet 172.30.254.0/24 metis-sandbox) && docker network inspect metis-sandbox > output/runtime/sandbox-attest/network.json",
   "service": "workspace",
   "workspaceFolder": "/workspaces/metis",
   "remoteUser": "vscode",

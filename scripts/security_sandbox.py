@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import errno
 import ipaddress
+import json
 import os
 from pathlib import Path
 import socket
@@ -27,6 +28,13 @@ OFFLINE_ASSET_ENV = ("PLAYWRIGHT_BROWSERS_PATH", "HF_HOME", "METIS_DOCLING_PYTHO
                      "METIS_DOCLING_ARTIFACTS_PATH", "METIS_PI05_MODEL_PATH",
                      "OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY")
 SANDBOX_NETWORK = ipaddress.ip_network("172.30.254.0/24")
+# Written on the host by devcontainer initializeCommand; mounted read-only in the runner.
+ATTEST_FILE = Path("/sandbox-attest/network.json")
+ATTEST_NETWORK = "metis-sandbox"
+PROBE_TIMEOUT = 2
+EGRESS_TARGETS = (("tcp", ("1.1.1.1", 443)), ("tcp", ("8.8.8.8", 53)), ("udp", ("8.8.8.8", 53)),
+                  ("tcp6", ("2606:4700:4700::1111", 443)))
+CONTROL_DIR = Path("/sandbox-control")
 LOCAL_TESTS = (
     "tests/test_security_sandbox.py",
     "tests/test_security_harden_wave3.py",
@@ -49,8 +57,9 @@ def assert_isolated_network() -> None:
     """Reject default/external routes; then require an explicit unreachable result.
 
     A default route is tolerated only when its gateway lies inside the internal
-    sandbox network (Docker internal-network gateway); in that case the external
-    probe must fail (unreachable or timeout) AND external DNS must fail.
+    sandbox network AND a host attestation proves Internal=true for that subnet;
+    then DNS MOET falen and every egress target MOET unreachable or time out.
+    Without that route every target MOET report ENETUNREACH/EHOSTUNREACH.
     This verifies the expected container namespace, not arbitrary malware containment.
     """
     internal_default = False
@@ -77,22 +86,56 @@ def assert_isolated_network() -> None:
         if not (network.subnet_of(ipaddress.ip_network("::1/128")) or network.subnet_of(ipaddress.ip_network("fe80::/10"))):
             raise SystemExit("Network isolation unconfirmed: external/default IPv6 route.")
     if internal_default:
+        # A timeout is only acceptable on a host-attested internal network (#653 T10).
+        load_network_attestation()
         try:
             socket.getaddrinfo("example.com", 443)
         except OSError:
             pass
         else:
             raise SystemExit("External DNS resolves; refusing security execution.")
+    for kind, address in EGRESS_TARGETS:
+        try:
+            if kind == "udp":
+                _udp_reach(address)
+            else:
+                with socket.create_connection(address, timeout=PROBE_TIMEOUT):
+                    pass
+        except OSError as exc:
+            if exc.errno in {errno.ENETUNREACH, errno.EHOSTUNREACH} and not isinstance(exc, TimeoutError):
+                continue
+            if kind == "tcp6" and exc.errno in {errno.EAFNOSUPPORT, errno.EADDRNOTAVAIL}:
+                continue  # No IPv6 stack in the namespace: the IPv6 target is unreachable.
+            if internal_default and isinstance(exc, TimeoutError):
+                continue
+            raise SystemExit(f"Network isolation unconfirmed: probe {kind} {address} did not report unreachable.") from exc
+        raise SystemExit(f"External network reachable ({kind} {address}); refusing security execution.")
+    if internal_default:
+        print("isolated_by_internal_network_attested", flush=True)
+
+
+def _udp_reach(address: tuple[str, int]) -> bytes:
+    """Send one DNS query; any answer means egress. Errors propagate to the caller."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
+        udp.settimeout(PROBE_TIMEOUT)
+        udp.connect(address)
+        udp.send(bytes.fromhex("abcd01000001000000000000076578616d706c6503636f6d0000010001"))
+        return udp.recv(512)
+
+
+def load_network_attestation() -> dict:
+    """Host-side `docker network inspect` result (read-only mount); missing/invalid MOET weigeren."""
     try:
-        with socket.create_connection(("1.1.1.1", 443), timeout=2):
-            pass
-    except OSError as exc:
-        if exc.errno in {errno.ENETUNREACH, errno.EHOSTUNREACH}:
-            return
-        if internal_default and isinstance(exc, TimeoutError):
-            return
-        raise SystemExit("Network isolation unconfirmed: probe did not report unreachable.") from exc
-    raise SystemExit("External network reachable; refusing security execution.")
+        data = json.loads(ATTEST_FILE.read_text())
+        network = data[0] if isinstance(data, list) else data
+        subnets = {entry.get("Subnet") for entry in network["IPAM"]["Config"]}
+        valid = (network.get("Name") == ATTEST_NETWORK and network.get("Internal") is True
+                 and str(SANDBOX_NETWORK) in subnets)
+    except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError) as exc:
+        raise SystemExit("Network attestation missing or unreadable; refusing security execution.") from exc
+    if not valid:
+        raise SystemExit("Network attestation does not prove an internal sandbox network; refusing.")
+    return network
 
 
 def egress_error_is_explicit(exc: BaseException) -> bool:
@@ -185,7 +228,7 @@ def main() -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("check")
     commands.add_parser("scan")
-    commands.add_parser("rt", help="Red-team pytest on output/runtime/sandbox-runner/rt (isolation gate first).")
+    commands.add_parser("rt", help="Red-team pytest on /sandbox-control/rt (read-only; isolation gate first).")
     tests = commands.add_parser("test")
     tests.add_argument("--local", action="store_true", help="Skip PostgreSQL only; network checks still apply.")
     args = parser.parse_args()
@@ -197,7 +240,7 @@ def main() -> int:
     if args.command == "scan":
         return run_scans()
     if args.command == "rt":
-        return run_redteam(ROOT / "output/runtime/sandbox-runner/rt")
+        return run_redteam(CONTROL_DIR / "rt")
     return run_tests(local=args.local)
 
 

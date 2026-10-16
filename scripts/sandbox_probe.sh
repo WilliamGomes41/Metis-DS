@@ -16,5 +16,15 @@ echo "== HTTP 1.1.1.1:443 by IP (same gate as test/scan/rt)"; if python -c "impo
 echo "== sandbox-db"; if python -c "import psycopg;c=psycopg.connect('postgresql://metis_sandbox:sandbox-only@sandbox-db:5432/metis_security_test',connect_timeout=5);print('db:',c.execute('select current_database()').fetchone()[0])"; then echo "PASS: db reachable"; else echo "FAIL: db unreachable"; ok=1; fi
 echo "== read-only root (mount flag)"; if python -c "import sys; sys.path.insert(0, 'scripts'); import security_sandbox as s; sys.exit(0 if s.mount_is_readonly(open('/proc/self/mountinfo').read(), '/') else 1)" 2>&1; then echo "PASS: / mounted ro"; else echo "FAIL: / not mounted ro"; ok=1; fi
 echo "== read-only repo"; if touch /workspaces/metis/.ro-probe 2>&1; then echo "FAIL: repo writable"; ok=1; else echo "PASS: repo read-only"; fi
+echo "== control volume tamper (ready/.exit/.log)"; if python -c "
+import errno, sys
+bad = []
+for name in ('/sandbox-control/ready', '/sandbox-control/jobs/probe-tamper.exit', '/sandbox-control/jobs/probe-tamper.log'):
+    try: open(name, 'w').write('0')
+    except OSError as e:
+        if e.errno not in (errno.EROFS, errno.EACCES): bad.append((name, e.errno))
+    else: bad.append((name, 'written'))
+print(bad); sys.exit(1 if bad else 0)" 2>&1; then echo "PASS: control volume not writable"; else echo "FAIL: control volume writable"; ok=1; fi
+echo "== network attestation"; if python -c "import sys; sys.path.insert(0, 'scripts'); import security_sandbox as s; print(s.load_network_attestation()['Name'])" 2>&1; then echo "PASS: internal network attested"; else echo "FAIL: attestation missing/invalid"; ok=1; fi
 echo "== no docker socket"; if test ! -S /var/run/docker.sock; then echo "PASS: no docker socket"; else echo "FAIL: docker socket present"; ok=1; fi
 exit $ok

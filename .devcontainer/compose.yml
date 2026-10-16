@@ -4,8 +4,11 @@
 #   the internal sandbox network only to hand jobs to the runner.
 # - runner: executes tests/scans. Internal network ONLY (no egress), no
 #   capabilities, no new privileges, read-only root filesystem, no docker socket.
-# Jobs pass through a shared directory (scripts/sandbox_test.sh); no
-# docker-in-docker and no docker socket in either container.
+# - control: no network at all; sole writer of the control volume (requests,
+#   ready, .exit, .log). Runner and workspace mount it read-only, so tested code
+#   MAG NIET a verdict forge or overwrite (#653 T5). The runner writes only to
+#   its artifact dir; control copies results into the control volume.
+# No docker-in-docker and no docker socket in any container.
 services:
   workspace:
     build:
@@ -15,11 +18,12 @@ services:
     command: sleep infinity
     volumes:
       - ..:/workspaces/metis:cached
+      - sandbox_control:/sandbox-control:ro
     networks:
       - egress
       - sandbox
     depends_on:
-      runner:
+      control:
         condition: service_healthy
   runner:
     build:
@@ -34,10 +38,14 @@ services:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTEST_ADDOPTS: "-p no:cacheprovider"
     # Repo is READ-ONLY in the runner so a test cannot modify code that the
-    # egress-capable workspace could then push. Only the job directory is writable.
+    # egress-capable workspace could then push. Only the artifact dirs are writable;
+    # the control volume (requests in, verdicts out) is read-only here.
     volumes:
       - ..:/workspaces/metis:ro
-      - ../output/runtime/sandbox-runner:/workspaces/metis/output/runtime/sandbox-runner:rw
+      - sandbox_control:/sandbox-control:ro
+      - ../output/runtime/sandbox-artifacts:/workspaces/metis/output/runtime/sandbox-artifacts:rw
+      # Host-side `docker network inspect` attestation (#653 T10); read-only.
+      - ../output/runtime/sandbox-attest:/sandbox-attest:ro
       # security_sandbox.py writes reports here (RUNTIME); everything else stays read-only.
       - ../output/runtime/security-sandbox:/workspaces/metis/output/runtime/security-sandbox:rw
       # Host-visible startup diagnostics (readable from a recovery container).
@@ -45,7 +53,7 @@ services:
     healthcheck:
       # Build fails hard (workspace waits on service_healthy) if the runner never
       # becomes ready, instead of a silent "runner not ready" later.
-      test: ["CMD", "test", "-f", "/workspaces/metis/output/runtime/sandbox-runner/ready"]
+      test: ["CMD", "test", "-f", "/workspaces/metis/output/runtime/sandbox-artifacts/heartbeat"]
       interval: 3s
       timeout: 3s
       retries: 40
@@ -74,6 +82,36 @@ services:
         condition: service_healthy
       sandbox-azurite:
         condition: service_started
+  control:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+      target: runner
+    command: ["python", "/workspaces/metis/scripts/sandbox_control.py"]
+    user: vscode
+    working_dir: /workspaces/metis
+    network_mode: none
+    volumes:
+      - ..:/workspaces/metis:ro
+      - sandbox_control:/sandbox-control:rw
+      - ../output/runtime/sandbox-requests:/workspaces/metis/output/runtime/sandbox-requests:rw
+      - ../output/runtime/sandbox-artifacts:/workspaces/metis/output/runtime/sandbox-artifacts:ro
+    healthcheck:
+      test: ["CMD", "test", "-f", "/sandbox-control/ready"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      runner:
+        condition: service_healthy
   # Blob emulator for CON-03. Internal network only (no egress), in-memory, fixed IP.
   sandbox-azurite:
     image: mcr.microsoft.com/azure-storage/azurite:3.37.0
@@ -104,10 +142,11 @@ services:
       retries: 20
 networks:
   egress: {}
+  # Created --internal by initializeCommand on the host, which also writes the
+  # `docker network inspect` attestation the runner verifies (#653 T10).
   sandbox:
-    internal: true
-    ipam:
-      config:
-        - subnet: 172.30.254.0/24
+    external: true
+    name: metis-sandbox
 volumes:
   sandbox_database:
+  sandbox_control:

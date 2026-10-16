@@ -9,7 +9,8 @@ import os
 import socket
 import subprocess
 from pathlib import Path
-from unittest.mock import patch
+import json
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -45,6 +46,8 @@ def routes(monkeypatch, *, ipv4="", ipv6=""):
             return ipv6
         return original_read(path, *args, **kwargs)
     monkeypatch.setattr(Path, "read_text", read)
+    # UDP-probe volgt dezelfde gepatchte create_connection als de TCP-doelen.
+    monkeypatch.setattr(sandbox, "_udp_reach", lambda address: socket.create_connection(address, timeout=2))
 
 
 @pytest.mark.parametrize("mode", ["ipv4", "ipv6"])
@@ -68,15 +71,17 @@ INTERNAL_DEFAULT = "eth0 00000000 01FE1EAC 0003 0 0 0 00000000 0 0 0\n"
 
 
 @pytest.mark.parametrize("probe", [OSError(errno.EHOSTUNREACH, "unreachable"), TimeoutError("timeout")])
-def test_internal_gateway_default_route_passes_when_egress_and_dns_fail(monkeypatch, probe):
+def test_internal_gateway_default_route_passes_when_egress_and_dns_fail(monkeypatch, tmp_path, probe):
     routes(monkeypatch, ipv4=INTERNAL_DEFAULT)
+    attest(monkeypatch, tmp_path, ATTEST_OK)  # #653: gateway-route alleen met attestatie
     with patch.object(socket, "getaddrinfo", side_effect=socket.gaierror("no dns")), \
          patch.object(socket, "create_connection", side_effect=probe):
         sandbox.assert_isolated_network()
 
 
-def test_internal_gateway_default_route_rejected_when_dns_resolves(monkeypatch):
+def test_internal_gateway_default_route_rejected_when_dns_resolves(monkeypatch, tmp_path):
     routes(monkeypatch, ipv4=INTERNAL_DEFAULT)
+    attest(monkeypatch, tmp_path, ATTEST_OK)  # #653: gateway-route alleen met attestatie
     with patch.object(socket, "getaddrinfo", return_value=[("ok",)]), \
          patch.object(socket, "create_connection") as connection:
         with pytest.raises(SystemExit, match="DNS"):
@@ -84,8 +89,9 @@ def test_internal_gateway_default_route_rejected_when_dns_resolves(monkeypatch):
     connection.assert_not_called()
 
 
-def test_internal_gateway_default_route_rejected_when_egress_connects(monkeypatch):
+def test_internal_gateway_default_route_rejected_when_egress_connects(monkeypatch, tmp_path):
     routes(monkeypatch, ipv4=INTERNAL_DEFAULT)
+    attest(monkeypatch, tmp_path, ATTEST_OK)  # #653: gateway-route alleen met attestatie
     with patch.object(socket, "getaddrinfo", side_effect=socket.gaierror("no dns")), \
          patch.object(socket, "create_connection"):
         with pytest.raises(SystemExit, match="reachable"):
@@ -197,3 +203,168 @@ def test_probe_uses_mount_flags_and_explicit_egress_errors():
     probe = (sandbox.ROOT / "scripts/sandbox_probe.sh").read_text()
     assert "touch /.ro-probe" not in probe
     assert "mount_is_readonly" in probe and "egress_error_is_explicit" in probe
+
+
+# --- #653 T10: timeout alleen met host-attestatie van een intern netwerk -------------
+
+ATTEST_OK = [{"Name": "metis-sandbox", "Internal": True,
+              "IPAM": {"Config": [{"Subnet": "172.30.254.0/24", "Gateway": "172.30.254.1"}]}}]
+
+
+def attest(monkeypatch, tmp_path, payload):
+    path = tmp_path / "network.json"
+    if payload is not None:
+        path.write_text(payload if isinstance(payload, str) else json.dumps(payload))
+    monkeypatch.setattr(sandbox, "ATTEST_FILE", path)
+
+
+def test_attested_internal_network_with_all_targets_timing_out_passes(monkeypatch, tmp_path, capsys):
+    routes(monkeypatch, ipv4=INTERNAL_DEFAULT)
+    attest(monkeypatch, tmp_path, ATTEST_OK)
+    with patch.object(socket, "getaddrinfo", side_effect=socket.gaierror("no dns")), \
+         patch.object(socket, "create_connection", side_effect=TimeoutError("timeout")) as connection:
+        sandbox.assert_isolated_network()
+    targets = {call.args[0] for call in connection.call_args_list}
+    assert {("1.1.1.1", 443), ("8.8.8.8", 53), ("2606:4700:4700::1111", 443)} <= targets
+    assert "isolated_by_internal_network_attested" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("payload", [None, "not json", [{**ATTEST_OK[0], "Internal": False}],
+                                     [{**ATTEST_OK[0], "IPAM": {"Config": [{"Subnet": "10.0.0.0/8"}]}}],
+                                     [{**ATTEST_OK[0], "Name": "bridge"}]])
+def test_timeout_without_valid_internal_attestation_is_refused(monkeypatch, tmp_path, payload):
+    # Niet-intern netwerk met geblokkeerde route: timeout alleen MAG NOOIT volstaan.
+    routes(monkeypatch, ipv4=INTERNAL_DEFAULT)
+    attest(monkeypatch, tmp_path, payload)
+    with patch.object(socket, "getaddrinfo", side_effect=socket.gaierror("no dns")), \
+         patch.object(socket, "create_connection", side_effect=TimeoutError("timeout")):
+        with pytest.raises(SystemExit, match="attest"):
+            sandbox.assert_isolated_network()
+
+
+def test_any_reachable_target_refuses_even_when_attested(monkeypatch, tmp_path):
+    routes(monkeypatch, ipv4=INTERNAL_DEFAULT)
+    attest(monkeypatch, tmp_path, ATTEST_OK)
+
+    def connect(address, timeout=None):
+        if address == ("8.8.8.8", 53):
+            return MagicMock()
+        raise TimeoutError("timeout")
+    with patch.object(socket, "getaddrinfo", side_effect=socket.gaierror("no dns")), \
+         patch.object(socket, "create_connection", side_effect=connect):
+        with pytest.raises(SystemExit, match="reachable"):
+            sandbox.assert_isolated_network()
+
+
+def test_udp_target_is_probed(monkeypatch, tmp_path):
+    routes(monkeypatch, ipv4=INTERNAL_DEFAULT)
+    attest(monkeypatch, tmp_path, ATTEST_OK)
+    monkeypatch.setattr(sandbox, "_udp_reach", lambda address: b"answer")
+    with patch.object(socket, "getaddrinfo", side_effect=socket.gaierror("no dns")), \
+         patch.object(socket, "create_connection", side_effect=TimeoutError("timeout")):
+        with pytest.raises(SystemExit, match="reachable"):
+            sandbox.assert_isolated_network()
+
+
+def test_initialize_command_attests_internal_network_on_host():
+    config = json.loads((sandbox.ROOT / ".devcontainer/devcontainer.json").read_text())
+    command = config["initializeCommand"]
+    assert "docker network create --internal --subnet 172.30.254.0/24 metis-sandbox" in command
+    assert "docker network inspect metis-sandbox > output/runtime/sandbox-attest/network.json" in command
+    compose = (sandbox.ROOT / ".devcontainer/compose.yml").read_text()
+    assert "../output/runtime/sandbox-attest:/sandbox-attest:ro" in compose
+    assert "name: metis-sandbox" in compose and "external: true" in compose
+
+
+# --- #653 T5: verdict alleen uit het control-volume -----------------------------------
+
+def test_runner_and_workspace_mount_control_volume_read_only():
+    compose = (sandbox.ROOT / ".devcontainer/compose.yml").read_text()
+    assert compose.count("sandbox_control:/sandbox-control:ro") == 2  # runner + workspace
+    assert compose.count("sandbox_control:/sandbox-control:rw") == 1  # control only
+    control = compose.split("  control:\n", 1)[1].split("\n  sandbox-", 1)[0]
+    assert "network_mode: none" in control and "read_only: true" in control
+    runner = compose.split("  runner:\n", 1)[1].split("\n  control:", 1)[0]
+    assert "sandbox-requests" not in runner
+
+
+def test_tested_code_cannot_overwrite_control_files(tmp_path):
+    from scripts import sandbox_control as control
+    jobs = tmp_path / "control" / "jobs"
+    jobs.mkdir(parents=True)
+    for name in ("ready", "jobs/1.exit", "jobs/1.log"):
+        (tmp_path / "control" / name).write_text("x")
+    control.seal_for_tests(tmp_path / "control")  # simuleert de :ro-mount in de runner
+    try:
+        for name in ("ready", "jobs/1.exit", "jobs/1.log", "jobs/2.exit"):
+            with pytest.raises(OSError) as raised:
+                (tmp_path / "control" / name).write_text("0")
+            assert raised.value.errno in {errno.EROFS, errno.EACCES}
+    finally:
+        control.unseal_for_tests(tmp_path / "control")
+
+
+@pytest.mark.parametrize("rc", ["", "0 forged", "abc", "-1x"])
+def test_unparseable_runner_result_counts_as_failed(tmp_path, rc):
+    from scripts import sandbox_control as control
+    ctl, art = tmp_path / "control", tmp_path / "artifacts"
+    (ctl / "jobs").mkdir(parents=True); art.mkdir()
+    (ctl / "jobs" / "7.request").write_text("test")
+    (art / "7.rc").write_text(rc); (art / "7.log").write_text("log")
+    assert control.publish(ctl, art, "7") is True
+    assert (ctl / "jobs" / "7.exit").read_text().strip() == "1"
+    assert not (ctl / "jobs" / "7.request").exists()
+
+
+def test_valid_runner_result_is_copied_and_pending_job_has_no_verdict(tmp_path):
+    from scripts import sandbox_control as control
+    ctl, art = tmp_path / "control", tmp_path / "artifacts"
+    (ctl / "jobs").mkdir(parents=True); art.mkdir()
+    assert control.publish(ctl, art, "8") is False and not (ctl / "jobs" / "8.exit").exists()
+    (art / "8.rc").write_text("3\n"); (art / "8.log").write_text("hello")
+    assert control.publish(ctl, art, "8") is True
+    assert (ctl / "jobs" / "8.exit").read_text().strip() == "3"
+    assert (ctl / "jobs" / "8.log").read_text() == "hello"
+
+
+def test_ready_only_with_fresh_runner_heartbeat(tmp_path):
+    from scripts import sandbox_control as control
+    ctl, art = tmp_path / "control", tmp_path / "artifacts"
+    ctl.mkdir(); art.mkdir()
+    control.refresh_ready(ctl, art, now=1000.0)
+    assert not (ctl / "ready").exists()
+    (art / "heartbeat").write_text("995")
+    control.refresh_ready(ctl, art, now=1000.0)
+    assert (ctl / "ready").exists()
+    control.refresh_ready(ctl, art, now=1100.0)
+    assert not (ctl / "ready").exists()
+
+
+def test_dispatch_moves_requests_and_rt_into_control_volume(tmp_path):
+    from scripts import sandbox_control as control
+    req, ctl = tmp_path / "requests", tmp_path / "control"
+    (req / "rt").mkdir(parents=True); ctl.mkdir()
+    (req / "rt" / "test_x.py").write_text("def test_x(): pass\n")
+    (req / "9.request").write_text("rt")
+    control.dispatch(req, ctl)
+    assert (ctl / "jobs" / "9.request").read_text() == "rt"
+    assert (ctl / "rt" / "test_x.py").exists() and not (req / "9.request").exists()
+
+
+@pytest.mark.parametrize("code", [errno.EAFNOSUPPORT, errno.EADDRNOTAVAIL])
+def test_ipv6_target_without_ipv6_stack_counts_as_unreachable(monkeypatch, code):
+    routes(monkeypatch)
+
+    def connect(address, timeout=None):
+        if ":" in address[0]:
+            raise OSError(code, "no ipv6")
+        raise OSError(errno.ENETUNREACH, "unreachable")
+    with patch.object(socket, "create_connection", side_effect=connect):
+        sandbox.assert_isolated_network()
+
+
+def test_ipv4_target_with_address_family_error_is_refused(monkeypatch):
+    routes(monkeypatch)
+    with patch.object(socket, "create_connection", side_effect=OSError(errno.EAFNOSUPPORT, "x")):
+        with pytest.raises(SystemExit, match="unconfirmed"):
+            sandbox.assert_isolated_network()

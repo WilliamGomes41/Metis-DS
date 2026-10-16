@@ -21,6 +21,9 @@ ENV PATH="/opt/metis-venv/bin:/opt/security-venv/bin:${PATH}" \
     PYTHONDONTWRITEBYTECODE=1 \
     SEMGREP_SEND_METRICS=off \
     SEMGREP_ENABLE_VERSION_CHECK=0
+# Control-volume mountpoint owned by vscode: a fresh named volume inherits this
+# ownership, so only the control container (rw mount) writes verdicts (#653 T5).
+RUN mkdir -p /sandbox-control && chown vscode:vscode /sandbox-control
 
 FROM workspace AS runner
 ARG PLAYWRIGHT_VERSION=1.63.0

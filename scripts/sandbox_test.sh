@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
-# Run from the workspace (editor) container: hands a job to the isolated runner
-# and streams its result. Usage: scripts/sandbox_test.sh [check|probe|test|test --local|scan|rt]  (rt = pytest on output/runtime/sandbox-runner/rt/)
+# Run from the workspace (editor) container: drops a request for the control
+# container and reads the verdict ONLY from the read-only control volume.
+# Usage: scripts/sandbox_test.sh [check|probe|test|test --local|scan|rt]
+#   (rt = pytest on output/runtime/sandbox-requests/rt/, copied by control)
 set -eu
-JOBS="$(cd "$(dirname "$0")/.." && pwd)/output/runtime/sandbox-runner"
+REQ="$(cd "$(dirname "$0")/.." && pwd)/output/runtime/sandbox-requests"
+CTL=/sandbox-control
 cmd="${*:-test}"
-[ -e "$JOBS/ready" ] || { echo "runner not ready ($JOBS/ready missing)"; exit 3; }
+[ -e "$CTL/ready" ] || { echo "runner not ready ($CTL/ready missing or runner heartbeat stale)"; exit 3; }
 id="$(date +%s)-$$"
-printf '%s' "$cmd" > "$JOBS/$id.tmp" && mv "$JOBS/$id.tmp" "$JOBS/$id.request"
+printf '%s' "$cmd" > "$REQ/$id.tmp" && mv "$REQ/$id.tmp" "$REQ/$id.request"
 for _ in $(seq 1 3600); do
-  [ -e "$JOBS/$id.exit" ] && break; sleep 1
+  [ -e "$CTL/jobs/$id.exit" ] && break; sleep 1
 done
-[ -e "$JOBS/$id.exit" ] || { echo "timeout waiting for runner"; exit 4; }
-cat "$JOBS/$id.log"; exit "$(cat "$JOBS/$id.exit")"
+[ -e "$CTL/jobs/$id.exit" ] || { echo "timeout waiting for runner"; exit 4; }
+cat "$CTL/jobs/$id.log"
+code="$(tr -d '[:space:]' < "$CTL/jobs/$id.exit")"
+case "$code" in ''|*[!0-9]*) echo "invalid verdict; counted as failed"; exit 1 ;; esac
+exit "$code"
