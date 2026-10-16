@@ -199,17 +199,23 @@ class _PostgresWorkflowReviewMixin:
             yield
             return
         try:
-            # The document context takes the process-shared store lock and
-            # refreshes documents plus bindings. The native transaction is the
-            # only rollback; afterwards only PostgreSQL-backed remirror runs.
-            with super()._atomic_snapshot_mutation(snapshot_id):
+            # Route 1: take the process-shared store lock and reload directly,
+            # NOOIT via the inherited documents context, whose except branch
+            # compensates with a blind write_bundle and a ledger truncation
+            # (#665 keeps that for non-review paths). The native transaction
+            # is the only rollback; afterwards only PostgreSQL-backed remirror.
+            with self._store_write_lock():
+                self._reload_store_locked()
                 with workflow_transaction(self.workflow_review_store):
                     with buffer_events(self._ledger_path):
                         yield
         except Exception as exc:
             if isinstance(exc, ConsoleError) and exc.code == "snapshot_object_write_conflict":
-                self._remirror_review_runtime()
-                self._bindings_baseline = deepcopy(self._bindings)
+                with self._store_write_lock():
+                    self.refresh_workflow_documents()
+                    self.refresh_objects_expected_revision(snapshot_id)
+                    self._remirror_review_runtime()
+                    self._bindings_baseline = deepcopy(self._bindings)
                 raise
             self._remirror_after_rollback(snapshot_id, exc)
             raise
