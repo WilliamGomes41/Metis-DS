@@ -34,3 +34,5 @@ Not touched: operations_console_v1.py, publish gate.
 - The HMAC pseudonym is NOT built here; separate PR.
 
 - OPENVRAAG-RET-1: CLOSED (Lex via Metis, 2026-10-16): 400 days / 200000 rows, purpose GDPR art. 5(1)(e)/5(2), exports and backups same or shorter; follow-up #647.
+
+- Concurrent/stale (opslag gate after #636 merged into main): refusal-store files MOETEN be hashed and archived from ONE byte snapshot under the store lock (red b6efdd7, closes 4288477439).

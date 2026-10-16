@@ -149,6 +149,12 @@ def inventory_runtime_data(data_root: Path | None = None) -> dict[str, Any]:
     return {"data_root": str(root), "categories": categories}
 
 
+def _snapshot_bytes(path: Path) -> bytes:
+    from src.publication_refusal_store_v1 import _LOCK
+    with _LOCK:
+        return path.read_bytes()
+
+
 def export_runtime_data(data_root: Path, archive: Path) -> dict[str, Any]:
     root = Path(data_root)
     archive = Path(archive)
@@ -160,9 +166,15 @@ def export_runtime_data(data_root: Path, archive: Path) -> dict[str, Any]:
             for relative in category["files"]:
                 member = safe_backup_member(relative)
                 path = root.joinpath(*member.split("/"))
-                digest = _sha256_file(path)
-                files[member] = digest
-                zipf.write(path, member)
+                # Hash and archive ONE byte snapshot; refusal-store files are read under the store
+                # lock so a concurrent append MAG NIET split digest and bytes (4288477439).
+                if path.name.startswith("publication_refusal_audit.jsonl"):
+                    data = _snapshot_bytes(path)
+                    files[member] = hashlib.sha256(data).hexdigest()
+                    zipf.writestr(member, data)
+                else:  # unchanged streaming path for the other runtime files
+                    files[member] = _sha256_file(path)
+                    zipf.write(path, member)
         manifest = {
             "ok": True,
             "categories": [item["category"] for item in report["categories"]],
