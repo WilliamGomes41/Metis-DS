@@ -29,13 +29,15 @@ _HEADER_KEYS = (r'authorization|proxy-authorization|cookie|set-cookie|x-api-key|
 _QUOTED = r'"(?:\\[\s\S]?|[^"\\])*(?:"|\Z)|\'(?:\\[\s\S]?|[^\'\\])*(?:\'|\Z)'
 # bytes / bytearray reprs (b'x', bytearray(b'x')) MOETEN be treated as quoted values (Sherlock P1 4293501888).
 _VALUE_PREFIX = r'(?:bytearray\(\s*)?b?'
+# Header keys in every form: hyphen or underscore, any prefix (HTTP_AUTHORIZATION, x-custom-api-key).
+_HEADER_KEY_ANY = r'(?:[A-Za-z0-9]+[-_])*(?:' + _HEADER_KEYS.replace('-', '[-_]') + r')'
 _SECRET_PATTERNS = (
     # header keys (optionally quoted, as in dict/JSON reprs): value to quote or line end
-    re.compile(r'(?i)(?<![A-Za-z0-9_-])(["\']?(?:' + _HEADER_KEYS + r')["\']?)(\s*[=:]\s*)(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[^\r\n]+)'),
+    re.compile(r'(?i)(?<![A-Za-z0-9_-])(["\']?' + _HEADER_KEY_ANY + r'["\']?)(\s*[=:]\s*)(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[^\r\n]+)'),
     # tuple-shaped header/credential pairs, (b'authorization', b'x') as in ASGI scopes and HTTP
     # clients: the comma separator and b-prefixes MOETEN be recognised (Sherlock P1 4291899701).
-    re.compile(r'(?i)(\(\s*b?["\'](?:' + _HEADER_KEYS + r'|' + _ASSIGNMENT_KEYS + r')["\'])(\s*,\s*)'
-               r'(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[^\s)\]]+)'),
+    re.compile(r'(?i)([\(\[]\s*b?["\'](?:' + _HEADER_KEY_ANY + r'|' + _ASSIGNMENT_KEYS + r')["\'])(\s*,\s*)'
+               r'(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[^\s)\]]+)'),  # [ pairs too (4295084753)
     # credential assignments, quoted or unquoted values (password="x", {"password":"x"})
     re.compile(r'(?i)(["\']?\b(?:' + _ASSIGNMENT_KEYS + r')\b["\']?)(\s*[=:]\s*)(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[\{\[\(][^\r\n]*|[^\s;,&"\'}]+)'),  # container reprs: to line end (4294629122)
     # Standalone scheme credentials. Digest-style parameter lists (k="v", k=v) are consumed
@@ -120,7 +122,7 @@ def _deep_redact(value, depth=0):
         return '[REDACTED]'  # fail-closed beyond the depth bound
     if isinstance(value, (str, bytes, bytearray)):
         return redact(value)
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):  # UserDict too (4295084759)
         # Keys MOETEN be redacted too (PII keys, 4294629108).
         return {(redact(key) if isinstance(key, (str, bytes, bytearray)) else key):
                 '[REDACTED]' if _is_sensitive_key(key) else _deep_redact(item, depth + 1)
@@ -130,7 +132,13 @@ def _deep_redact(value, depth=0):
     if isinstance(value, (list, tuple, set, frozenset)):
         return type(value)(_deep_redact(item, depth + 1) for item in value) if not hasattr(value, '_fields') \
             else type(value)(*(_deep_redact(item, depth + 1) for item in value))
-    return value
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    # Unknown printable leaves (exceptions, custom objects) are rendered and redacted (4295216361).
+    try:
+        return redact(str(value))
+    except Exception:
+        return '[REDACTED]'
 
 
 def _redact_mapping_value(key, value):
@@ -156,7 +164,7 @@ class RedactingFilter(logging.Filter):
     def filter(self, record):
         args = record.args
         if isinstance(args, Mapping):  # UserDict etc. too (4294352255)
-            redacted_args = {key: _redact_mapping_value(key, value) for key, value in args.items()}
+            redacted_args = {(redact(key) if isinstance(key, (str, bytes, bytearray)) else key): _redact_mapping_value(key, value) for key, value in args.items()}
         else:
             redacted_args = tuple(_redact_arg(value) for value in (args or ()))
         msg = record.msg if isinstance(record.msg, str) else str(record.msg)

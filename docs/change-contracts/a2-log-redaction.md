@@ -79,3 +79,12 @@ Red commits 82f5b76, 2d0e6ab, c077a20, 7b117fc, 4fa2595, e995356; fix in one com
 Red commits e1f26a1 and 12dbcdc; fix in one commit.
 - A root handler named metis-structured-json MOET only be trusted when its formatter is our JsonLogFormatter. Any other handler MOET get the RedactingFilter (4294985552).
 - String-valued standard LogRecord attributes (name, threadName, processName, ...) MOETEN be redacted. msg/args go through the existing path (4294985557, treated as secrets/PII).
+
+## Final sweep (Metis 15:37, 2026-10-16): the LAST #638 fix round
+Red e75ca2d (one bundled sweep: 199 failed); fix in one commit.
+- Header keys MOETEN be recognised in every form: any case, hyphen or underscore, any prefix (HTTP_AUTHORIZATION, x-custom-api-key), any spacing, quotes and separators, and as `(`- or `[`-pairs, str or bytes (4295084753).
+- Digest: every parameter (response, cnonce, nonce, opaque, username, realm, uri, nc, qop, k*=) MOET be redacted. The sweep confirms this.
+- Escaped quotes MOETEN NIET end a quoted value. The sweep confirms this.
+- Nested extras: non-dict Mappings MOETEN be traversed (4295084759). Unknown printable leaves (exceptions, custom objects) MOETEN be rendered and redacted (4295216361).
+- Top-level mapping args: keys MOETEN be redacted (4295216355).
+- **Any further new leak class MOET go to a follow-up PR. #638 takes no more fix rounds (Metis 15:37).**
