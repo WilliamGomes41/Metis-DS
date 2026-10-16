@@ -87,6 +87,16 @@ class JsonLogFormatter(logging.Formatter):
         return json.dumps(row, separators=(',', ':'), ensure_ascii=False)
 
 
+_SENSITIVE_KEY = re.compile(r'(?i)(?:' + _ASSIGNMENT_KEYS + r'|' + _HEADER_KEYS + r')')
+
+
+def _redact_mapping_value(key, value):
+    # A value selected by a sensitive mapping key MOET be replaced whatever its shape (Sherlock P1).
+    if isinstance(key, str) and _SENSITIVE_KEY.fullmatch(key):
+        return '[REDACTED]'
+    return _redact_arg(value)
+
+
 def _redact_arg(value):
     return redact(value) if isinstance(value, (str, bytes)) else value
 
@@ -100,7 +110,7 @@ class RedactingFilter(logging.Filter):
     def filter(self, record):
         args = record.args
         if isinstance(args, dict):
-            redacted_args = {key: _redact_arg(value) for key, value in args.items()}
+            redacted_args = {key: _redact_mapping_value(key, value) for key, value in args.items()}
         else:
             redacted_args = tuple(_redact_arg(value) for value in (args or ()))
         msg = record.msg if isinstance(record.msg, str) else str(record.msg)
