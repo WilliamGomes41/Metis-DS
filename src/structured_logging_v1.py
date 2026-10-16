@@ -39,7 +39,7 @@ _SECRET_PATTERNS = (
     re.compile(r'(?i)([\(\[]\s*b?["\'](?:' + _HEADER_KEY_ANY + r'|' + _ASSIGNMENT_KEYS + r')["\'])(\s*,\s*)'
                r'(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[^\s)\]]+)'),  # [ pairs too (4295084753)
     # credential assignments, quoted or unquoted values (password="x", {"password":"x"})
-    re.compile(r'(?i)(["\']?\b(?:' + _ASSIGNMENT_KEYS + r')\b["\']?)(\s*[=:]\s*)(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[\{\[\(][^\r\n]*|[^\s;,&"\'}]+)'),  # container reprs: to line end (4294629122)
+    re.compile(r'(?i)(["\']?\b(?:' + _ASSIGNMENT_KEYS + r')\b["\']?)(\s*[=:]\s*)(?:' + _VALUE_PREFIX + r'(?:' + _QUOTED + r')|[\{\[\(][^\r\n]*|[^\s;,&"\'}]+(?:[ \t]+(?![\w.-]+\s*[=:])[^\s;,&"\'}]+)*)'),  # spaces: to end of value, stop at the next key= (#661)  # container reprs: to line end (4294629122)
     # Standalone scheme credentials. Digest-style parameter lists (k="v", k=v) are consumed
     # completely (Sherlock P1). Any-case scheme + any token MOET be redacted; casing MAG NIET
     # decide (Metis 2026-10-16, fail-closed: 'basic flow' is redacted too).
@@ -51,12 +51,13 @@ _SECRET_PATTERNS = (
     re.compile(r'(?i)\b([a-z][a-z0-9+.-]*://)[^\s/:@]+:[^\s/@]+@'),
     re.compile(r'\bsk-[A-Za-z0-9_-]{8,}'),
     # Domain literals (user@[127.0.0.1], user@[IPv6:...]) MOETEN be redacted (Sherlock P2 4291899714).
-    re.compile(r'(?:"(?:\\.|[^"\\\r\n])*"|(?<![\w.!#$%&\'*+/=?^`{|}~-])[\w.!#$%&\'*+/=?^`{|}~-]+)@\[[^\]\s]+\]'),
+    re.compile(r'(?:"(?:\\.|[^"\\\r\n])*"|(?<![\w.!#$%&\'*+/=?^`{|}~\u0080-\U0010ffff-])[\w.!#$%&\'*+/=?^`{|}~\u0080-\U0010ffff-]+)@\[[^\]\s]+\]'),
     # Quoted local parts ("john..doe"@example.org) MOETEN be redacted too (Sherlock P2).
     re.compile(r'"(?:\\.|[^"\\\r\n])*"@[\w-]+(?:\.[\w-]+)*\b'),  # zero-dot domains (localhost) too, 4293592622
     # Unicode-aware: SMTPUTF8 addresses (josé@example.com) MOETEN be redacted too (Sherlock P2).
-    # Combining marks (jos\u0301e) MOETEN NIET split the local part (4294352280).
-    re.compile(r'(?<![\w.!#$%&\'*+/=?^`{|}~\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f-])[\w.!#$%&\'*+/=?^`{|}~\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f-]+@[\w-]+(?:\.[\w-]+)*\b'),  # zero-dot domains (localhost) too, 4293592622
+    # Combining marks (jos\u0301e) MOETEN NIET split the local part (4294352280); any UTF-8
+    # non-ASCII is atext under RFC 6531 (\U0001F600@example.com, 4296203827).
+    re.compile(r'(?<![\w.!#$%&\'*+/=?^`{|}~\u0080-\U0010ffff-])[\w.!#$%&\'*+/=?^`{|}~\u0080-\U0010ffff-]+@[\w-]+(?:\.[\w-]+)*\b'),  # zero-dot domains (localhost) too, 4293592622
 )
 # Third-party loggers MOETEN stay at WARNING: their INFO/DEBUG output (HTTP headers,
 # request bodies, connection strings) MAG NIET reach the root JSON handler.
@@ -94,12 +95,12 @@ class JsonLogFormatter(logging.Formatter):
             message = str(record.msg)
         row = {'timestamp': datetime.fromtimestamp(record.created, timezone.utc)
                    .isoformat(timespec='milliseconds').replace('+00:00', 'Z'),
-               'level': record.levelname, 'logger': record.name, 'message': redact(message),
+               'level': record.levelname, 'logger': redact(record.name), 'message': redact(message),  # #661
                'commit': deployment_identity()}
         for name in EXTRA_FIELDS:
             value = getattr(record, name, None)
             if isinstance(value, str) and _SAFE.fullmatch(value):
-                row[name] = value
+                row[name] = value if redact(value) == value else '[REDACTED]'  # whitelisted extras too (#661)
         if record.exc_info and record.exc_info[0] is not None:
             row['exc_type'] = record.exc_info[0].__name__
         return json.dumps(row, separators=(',', ':'), ensure_ascii=False)
@@ -116,6 +117,53 @@ def _is_sensitive_key(key):
     return isinstance(key, str) and bool(_SENSITIVE_KEY.fullmatch(key))
 
 
+def _rebuild(value, items):
+    # Rebuild a container from redacted items. Subclasses with a custom constructor MOETEN fall back
+    # to the plain base type; redaction MAG NOOIT raise (4296870561).
+    try:
+        if hasattr(value, '_fields'):
+            return type(value)(*items)
+        return type(value)(items)
+    except Exception:
+        pass
+    for base in (frozenset, set, tuple, list):
+        if isinstance(value, base):
+            break
+    else:
+        base = tuple
+    try:
+        return base(items)
+    except Exception:
+        # Unhashable redacted items in a set/frozenset become their redacted text (4297911915).
+        return base(_hashable(item) for item in items)
+
+
+def _hashable(item):
+    try:
+        hash(item)
+        return item
+    except Exception:
+        try:
+            return redact(str(item))
+        except Exception:
+            return '[REDACTED]'
+
+
+def _redact_key(key, depth):
+    # A redacted key MOET stay hashable; otherwise it becomes its redacted text (4297499491).
+    if isinstance(key, (str, bytes, bytearray)):
+        return redact(key)
+    redacted = _deep_redact(key, depth)
+    try:
+        hash(redacted)
+        return redacted
+    except Exception:
+        try:
+            return redact(str(redacted))
+        except Exception:
+            return '[REDACTED]'
+
+
 def _deep_redact(value, depth=0):
     """Redact str/bytes/bytearray at any depth of dict/list/tuple/set; sensitive keys are replaced."""
     if depth > _MAX_DEPTH:
@@ -124,14 +172,14 @@ def _deep_redact(value, depth=0):
         return redact(value)
     if isinstance(value, Mapping):  # UserDict too (4295084759)
         # Keys MOETEN be redacted too (PII keys, 4294629108).
-        return {(redact(key) if isinstance(key, (str, bytes, bytearray)) else key):
+        # Composite keys (tuples, frozensets) are redacted too (4296203813).
+        return {_redact_key(key, depth + 1):
                 '[REDACTED]' if _is_sensitive_key(key) else _deep_redact(item, depth + 1)
                 for key, item in value.items()}
     if isinstance(value, (list, tuple)) and len(value) == 2 and _is_sensitive_key(value[0]):
-        return type(value)((value[0], '[REDACTED]')) if not hasattr(value, '_fields') else value._replace(**{value._fields[1]: '[REDACTED]'})  # header pair
+        return _rebuild(value, [value[0], '[REDACTED]'])  # header pair
     if isinstance(value, (list, tuple, set, frozenset)):
-        return type(value)(_deep_redact(item, depth + 1) for item in value) if not hasattr(value, '_fields') \
-            else type(value)(*(_deep_redact(item, depth + 1) for item in value))
+        return _rebuild(value, [_deep_redact(item, depth + 1) for item in value])
     if value is None or isinstance(value, (bool, int, float)):
         return value
     # Unknown printable leaves (exceptions, custom objects) are rendered and redacted (4295216361).
@@ -211,7 +259,7 @@ _REDACTING_FILTER = RedactingFilter()
 
 def _is_owned(handler):
     # The name alone MAG NIET be trusted: only our JsonLogFormatter handler counts (4294985552).
-    return getattr(handler, 'name', None) == _HANDLER_NAME and isinstance(handler.formatter, JsonLogFormatter)
+    return getattr(handler, 'name', None) == _HANDLER_NAME and type(handler.formatter) is JsonLogFormatter  # subclasses MAG NIET be trusted (4296203798)
 
 
 def install_structured_logging(level=logging.INFO):
