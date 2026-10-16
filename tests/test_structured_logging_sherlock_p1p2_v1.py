@@ -311,3 +311,9 @@ def test_identifier_normalized_header_extra_keys_are_sensitive(key):
 def test_nested_mapping_keys_are_redacted():
     # 4294629108
     assert 'anne@example.com' not in _render_extra({'context': {'anne@example.com': 'owner'}})
+
+
+@pytest.mark.parametrize('arg', [{'value': 'opaque-secret'}, ['opaque-secret'], ('opaque-secret', 1)])
+def test_positional_container_after_sensitive_placeholder_is_redacted(arg):
+    # 4294629122
+    assert 'opaque-secret' not in _filtered_message('password=%s', (arg,))
