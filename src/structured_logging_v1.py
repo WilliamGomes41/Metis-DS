@@ -38,7 +38,7 @@ _SECRET_PATTERNS = (
     # completely (Sherlock P1). Any-case scheme + any token MOET be redacted; casing MAG NIET
     # decide (Metis 2026-10-16, fail-closed: 'basic flow' is redacted too).
     re.compile(r'(?i)\b(?:bearer|basic|digest|negotiate)\s+'
-               r'[A-Za-z0-9_-]+=(?:' + _QUOTED + r'|[^\s,]*)(?:\s*,\s*[A-Za-z0-9_-]+=(?:' + _QUOTED + r'|[^\s,]*))*'),
+               r'[A-Za-z0-9_-]+\*?=(?:' + _QUOTED + r'|[^\s,]*)(?:\s*,\s*[A-Za-z0-9_-]+\*?=(?:' + _QUOTED + r'|[^\s,]*))*'),  # k*= RFC 7616
     re.compile(r'(?i)\b(?:bearer|basic|digest|negotiate)\s+[A-Za-z0-9._~+/=-]+'),
     re.compile(r'(?i)\b([a-z][a-z0-9+.-]*://)[^\s/:@]+:[^\s/@]+@'),
     re.compile(r'\bsk-[A-Za-z0-9_-]{8,}'),
