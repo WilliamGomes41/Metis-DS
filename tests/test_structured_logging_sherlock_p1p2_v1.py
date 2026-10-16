@@ -161,3 +161,9 @@ def test_quoted_email_local_part_with_escaped_quote_is_redacted():
     # 4292037282: RFC 5322 quoted-string with an escaped quote.
     out = redact('from "john\\"doe"@example.org now')
     assert 'john' not in out and 'example.org' not in out
+
+
+@pytest.mark.parametrize('text', ["password=b'hunter2'", 'token=b"hunter2"', "{'password': b'hunter2'}", "Authorization: b'hunter2'"])
+def test_bytes_shaped_credentials_are_redacted(text):
+    # 4293501888
+    assert 'hunter2' not in redact(text)
