@@ -146,18 +146,6 @@ def _has_false_admit(passages: Iterable[dict[str, Any]]) -> bool:
     )
 
 
-def _source_count(gold: dict[str, Any]) -> int:
-    sources = gold.get("sources")
-    if isinstance(sources, list) and sources:
-        return len(sources)
-    fixtures = gold.get("source_fixtures")
-    if isinstance(fixtures, list) and fixtures:
-        return len(fixtures)
-    if str(gold.get("source_fixture") or "").strip():
-        return 1
-    return 0
-
-
 def _is_development_regression_gold(gold: dict[str, Any] | None) -> bool:
     if not isinstance(gold, dict):
         return True
@@ -428,28 +416,6 @@ def _match_object(objects: list[dict[str, Any]], source_text: str) -> dict[str, 
     if not containing:
         return None
     return min(containing, key=lambda obj: len(_text_of(obj)))
-
-
-def _match_gold_row(rows: list[dict[str, Any]], text: str) -> dict[str, Any] | None:
-    needle = (text or "").strip()
-    if not needle:
-        return None
-    exact = [row for row in rows if str(row.get("source_text") or "").strip() == needle]
-    if exact:
-        return exact[0]
-    containing = [row for row in rows if needle in str(row.get("source_text") or "")]
-    if containing:
-        return min(containing, key=lambda row: len(str(row.get("source_text") or "")))
-    contained = [row for row in rows if str(row.get("source_text") or "").strip() in needle]
-    if not contained:
-        return None
-    return min(contained, key=lambda row: len(str(row.get("source_text") or "")))
-
-
-def _status_ok(live: str, expected: str, allowed: list[str] | None) -> bool:
-    if allowed:
-        return live in allowed
-    return live == expected
 
 
 def _type_of(obj: dict[str, Any]) -> str:
