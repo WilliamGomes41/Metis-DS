@@ -32,3 +32,5 @@ Not touched: operations_console_v1.py, publish gate.
 - `actor` / `actor_id` MAG NIET be in the publication_refusals, processing_attempts or processing_recovery exports; no plain account_id MAG appear anywhere in the export (red 0957352, 952afa2).
 - The refusal store keeps `actor` in plain text ONLY under Lex's conditions: account_id only, least-privilege access, retention in docs/RETENTION_MATRIX.md (red 300b180).
 - The HMAC pseudonym is NOT built here; separate PR.
+
+- OPENVRAAG-RET-1: CLOSED (Lex via Metis, 2026-10-16): 400 days / 200000 rows, purpose GDPR art. 5(1)(e)/5(2), exports and backups same or shorter; follow-up #647.
