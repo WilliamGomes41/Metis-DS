@@ -31,8 +31,8 @@ SCHEMAS = {
                            "policy_version"),
     "formation_findings": ("call_id", "kind", "index", "reason_code", "spans", "requires_review", "finding", "proposed_object_type", "source_assessment_role", "evidence_span", "state", "evidence_kind"),
     "attempt_diagnostics": ("attempt_id", "state", "diagnostic", "evidence_kind"),
-    "processing_recovery": ("authorization_id", "actor_id", "reason", "authorized_at", "source_hash", "source_version", "revision", "consumed_by", "consumed_at"),
-    "processing_attempts": ("attempt_id", "command_id", "actor_id", "source_hash", "state", "started_at", "expires_at", "finished_at", "phase", "error_code", "validation_code", "processing_reference", "source_version", "kind", "retry_of", "limits", "transport", "retry_not_before", "replayed_call_id", "formation_progress_made"),
+    "processing_recovery": ("authorization_id", "reason", "authorized_at", "source_hash", "source_version", "revision", "consumed_by", "consumed_at"),
+    "processing_attempts": ("attempt_id", "command_id", "source_hash", "state", "started_at", "expires_at", "finished_at", "phase", "error_code", "validation_code", "processing_reference", "source_version", "kind", "retry_of", "limits", "transport", "retry_not_before", "replayed_call_id", "formation_progress_made"),
     "source_views": ("run_id", "fragment_id", "fragment_hash", "section_path", "heading", "source_page", "bbox", "source_locator", "raw_text", "clean_text", "source_text_view", "source_layout_findings"),
     "runs": ("run_id", "source_hash", "started_at", "finished_at", "outcome", "reason", "extractor_versions", "execution", "semantic_identity", "attempt_id", "production_commit_status"),
     "run_candidates": ("run_id", "object_id", "object_version", "canonical_hash", "origin", "structural"),
@@ -51,7 +51,7 @@ SCHEMAS = {
     "object_events": ("run_id", "object_id", "event_id", "timestamp", "event", "reason"),
     "reference_review": ("object_id", "source_range", "expected_type", "expected_context", "reviewer", "judgment"),
     "forensic_trace": CSV_FIELDS,
-    "publication_refusals": ("refusal_snapshot_id", "recorded_at", "object_version", "actor", "verdict", "reason_codes", "revision_sha256", "store_status", "schema"),
+    "publication_refusals": ("refusal_snapshot_id", "recorded_at", "object_version", "verdict", "reason_codes", "revision_sha256", "store_status", "schema"),
 }
 FIELDS = (
     "proposed_type", "type_evidence_spans", "actor_of_scope", "recommended_action",
