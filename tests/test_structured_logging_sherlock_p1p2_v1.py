@@ -167,3 +167,10 @@ def test_quoted_email_local_part_with_escaped_quote_is_redacted():
 def test_bytes_shaped_credentials_are_redacted(text):
     # 4293501888
     assert 'hunter2' not in redact(text)
+
+
+def test_digest_params_with_spaces_around_equals_are_redacted():
+    # 4293501898
+    out = redact('Digest username = "Mufasa" , nonce = "abc123", response = "6629fae49393"')
+    for part in ('Mufasa', 'abc123', '6629fae49393'):
+        assert part not in out
