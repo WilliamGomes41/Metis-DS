@@ -972,53 +972,6 @@ def _type_options(confirmed: str, *, review_path: str = "richtlijn", proposed: s
     return "".join(options)
 
 
-def _relation_checkboxes(obj: dict[str, Any], objects: list[dict[str, Any]]) -> str:
-    by_id = {row.get("object_id"): row for row in objects}
-    confirmed = {
-        (row.get("relation_type"), row.get("target_object_id"))
-        for row in (obj.get("confirmed_relations") or [])
-        if row.get("relation_type") in CLOSED_RELATION_TYPES
-    }
-    proposed = [
-        row
-        for row in proposed_relations(obj)
-        if row.get("relation_type") in CLOSED_RELATION_TYPES
-    ]
-    if not proposed:
-        return ""
-    boxes = []
-    for row in proposed:
-        rel = row["relation_type"]
-        target_id = row["target_object_id"]
-        target = by_id.get(target_id) or {}
-        target_text = (
-            (target.get("content") or {}).get("heading")
-            or (target.get("content") or {}).get("clean_text")
-            or target_id
-        )
-        checked = " checked" if (rel, target_id) in confirmed else ""
-        if rel in {"child", "parent"} and is_heading_object(obj) and is_heading_object(target):
-            child, parent = (obj, target) if rel == "child" else (target, obj)
-            if not parent_proposal_may_bind(child, parent, objects):
-                checked = ""
-        label = RELATION_LABELS.get(rel, rel)
-        boxes.append(
-            f'<div class="relation-choice"><p class="relation-copy">Dit kennisobject is '
-            f'<b>{_esc(label)}</b> aan:</p><label class="check">'
-            f'<input type="checkbox" name="relation" value="{_esc(rel)}:{_esc(target_id)}"{checked}>'
-            f'<span>{_esc(target_text)}</span></label></div>'
-        )
-    return (
-        '<fieldset class="relations">'
-        "<legend>Voorgestelde relatie</legend>"
-        '<p class="field-help">Klopt deze voorgestelde relatie? Vink hem aan om deze te bevestigen.</p>'
-        f"{''.join(boxes)}"
-        '<button class="btn-secondary" type="submit" form="relations-'
-        f'{_esc(obj["object_id"])}">Relatie bevestigen</button>'
-        "</fieldset>"
-    )
-
-
 def _context_resolution_copy(endpoint: dict[str, Any]) -> str:
     resolution = str(endpoint.get("resolution") or "")
     expected = str(endpoint.get("expected_version") or "")
