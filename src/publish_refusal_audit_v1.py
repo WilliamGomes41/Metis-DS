@@ -20,6 +20,7 @@ import hmac
 import json
 import os
 import re
+import sys
 import threading
 from datetime import datetime, timezone
 
@@ -43,6 +44,44 @@ def actor_hmac(actor_id):
     if not key or not isinstance(actor_id, str):
         return None
     return hmac.new(key.encode(), actor_id.encode(), hashlib.sha256).hexdigest()
+
+
+_HANDLER_STATE = threading.local()
+_FALLBACK_STREAM = None  # None -> sys.__stderr__; the independent sink when the logger is broken
+
+
+def _track(handler):
+    """Make a handler's swallowed write error observable (StreamHandler.emit -> handleError)."""
+    if getattr(handler, '_metis_refusal_tracked', False):
+        return
+    original = handler.handleError
+
+    def handle_error(record, _original=original):
+        _HANDLER_STATE.failed = True
+        return _original(record)
+    handler.handleError = handle_error
+    handler._metis_refusal_tracked = True
+
+
+def _emit_checked(logger, method, fmt, text) -> bool:
+    """Log through `method` ('info'/'warning'); False when any handler failed to write."""
+    current = logger
+    while current is not None:
+        for handler in list(getattr(current, 'handlers', [])):
+            _track(handler)
+        current = current.parent if getattr(current, 'propagate', False) else None
+    _HANDLER_STATE.failed = False
+    getattr(logger, method)(fmt, text)
+    return not getattr(_HANDLER_STATE, 'failed', False)
+
+
+def _fallback(payload):
+    try:
+        stream = _FALLBACK_STREAM if _FALLBACK_STREAM is not None else sys.__stderr__
+        stream.write(json.dumps(payload, separators=(',', ':')) + '\n')
+        stream.flush()
+    except Exception:  # noqa: BLE001 - nothing further can report; the verdict stands
+        return
 
 
 def _audit_failed(stage, *, error=None, outcome=None, snapshot_id=None, error_class=None):
@@ -78,7 +117,12 @@ def _audit_failed(stage, *, error=None, outcome=None, snapshot_id=None, error_cl
             'request_id': current_request_id(),
             'authority': 'non_authoritative_gate_observation',
         }
-        _LOGGER.warning('metis_diagnostic %s', json.dumps(payload, separators=(',', ':')))
+        try:
+            delivered = _emit_checked(_LOGGER, 'warning', 'metis_diagnostic %s', json.dumps(payload, separators=(',', ':')))
+        except Exception:  # noqa: BLE001 - the logger itself raised: use the independent sink
+            delivered = False
+        if not delivered:
+            _fallback(payload)
     except Exception:  # noqa: BLE001 - see docstring; bounded, verdict unaffected
         return
 
@@ -126,7 +170,8 @@ def record_publish_refusal(console, *, actor_id, snapshot_id, verdict, revision=
             'authority': 'non_authoritative_gate_observation',
         }
         try:
-            _LOGGER.info('metis_diagnostic %s', json.dumps(payload, separators=(',', ':')))
+            if not _emit_checked(_LOGGER, 'info', 'metis_diagnostic %s', json.dumps(payload, separators=(',', ':'))):
+                _audit_failed('log', outcome='handler_write_failed', snapshot_id=payload['snapshot_id'])
         except Exception as exc:
             _audit_failed('log', error=exc, snapshot_id=snapshot_id)
         if console is not None:

@@ -561,13 +561,15 @@ def test_real_handler_write_failure_is_detected_and_reported_out_of_band(tmp_pat
     monkeypatch.setattr(audit, '_FALLBACK_STREAM', fallback, raising=False)
     monkeypatch.setattr(logging, 'raiseExceptions', False)
     handler = logging.StreamHandler(BrokenStream())
-    saved = list(_LOGGER.handlers)
-    _LOGGER.handlers = [handler]
+    saved = (list(_LOGGER.handlers), _LOGGER.level, _LOGGER.propagate)
+    _LOGGER.handlers, _LOGGER.propagate = [handler], False
+    _LOGGER.setLevel(logging.INFO)  # as installed by request_diagnostics_v1
     try:
         console, sid, actor = _blocked_base(tmp_path)
         assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
     finally:
-        _LOGGER.handlers = saved
+        _LOGGER.handlers, _LOGGER.propagate = saved[0], saved[2]
+        _LOGGER.setLevel(saved[1])
     rows = [json.loads(line) for line in fallback.getvalue().splitlines() if line.strip()]
     assert any(r.get('event') == 'publication_refusal_audit_failed' and r.get('stage') == 'log'
                and r.get('outcome') == 'handler_write_failed' for r in rows), rows
