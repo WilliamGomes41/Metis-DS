@@ -82,11 +82,14 @@ def _parse(lines, on_corrupt=None):
 
 
 def read_records(path: Path, on_corrupt=None) -> list[dict]:
-    """Export/backup read (not the write path)."""
-    if not path.exists():
-        return []
-    with path.open('r', encoding='utf-8', errors='replace') as handle:
-        return _parse(handle, on_corrupt)
+    """Export/backup read (not the write path): rotated generation first, then the active file."""
+    rows: list[dict] = []
+    with _LOCK:  # same process lock as rotation, so a rotation MAG NIET split this read in-process
+        for part in (rotated_path(path), path):
+            if part.exists():
+                with part.open('r', encoding='utf-8', errors='replace') as handle:
+                    rows.extend(_parse(handle, on_corrupt))
+    return rows
 
 
 def dedup_key(key, clock: datetime) -> str:

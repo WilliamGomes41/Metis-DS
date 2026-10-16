@@ -391,3 +391,46 @@ def test_apply_retention_refuses_non_positive_max_rows():
     with pytest.raises(ValueError):
         store.apply_retention(_FakeWorkflow(con), max_rows=0)
     assert con.sql == []
+
+
+# --- Sherlock #636 P2: a failing durable write MOET emit publication_refusal_audit_failed (NOOIT silent) ---
+
+def test_durable_store_failure_emits_audit_failed_diagnostic(tmp_path, monkeypatch):
+    warnings = []
+    monkeypatch.setattr(_LOGGER, 'warning', lambda fmt, msg: warnings.append(json.loads(msg)))
+
+    def failing(*args, **kwargs):
+        raise OSError('disk gone password=hunter2')
+    monkeypatch.setattr(store, 'append', failing)
+    console, sid, actor = _blocked_base(tmp_path)
+    audit._append_durable(console, actor_id=actor, snapshot_id=sid, reason_codes=['r'], revision=None)
+    failed = [w for w in warnings if w.get('event') == 'publication_refusal_audit_failed']
+    assert [(w['stage'], w['error_class']) for w in failed] == [('durable_store', 'OSError')]
+    assert 'hunter2' not in json.dumps(warnings)
+
+
+def test_read_records_includes_the_rotated_generation_first(tmp_path):
+    # Sherlock #636 P2: after rotation the export/backup reader MOET also read .jsonl.1 (oldest first).
+    from datetime import datetime, timezone
+    path = tmp_path / store.FILE_NAME
+    t0 = datetime(2026, 10, 16, tzinfo=timezone.utc)
+    store.append_refusal(store.rotated_path(path), snapshot_id='s', object_version='1', actor='old', reason_codes=['r'], revision=None, clock=t0)
+    store.append_refusal(path, snapshot_id='s', object_version='1', actor='new', reason_codes=['r'], revision=None, clock=t0)
+    assert [r['actor'] for r in store.read_records(path)] == ['old', 'new']
+
+
+@pytest.mark.parametrize('env', [{'METIS_WORKFLOW_STORE': 'postgres'}, {'METIS_CANONICAL_STORE': 'postgres'}])
+def test_partial_postgres_topology_is_fail_closed_and_reported(tmp_path, monkeypatch, env):
+    # Sherlock thread (partial PostgreSQL routing): no document store + postgres mode -> no file store;
+    # the refusal verdict MOET stand and the lost audit write MOET be reported, NOOIT silent.
+    warnings = []
+    monkeypatch.setattr(_LOGGER, 'warning', lambda fmt, msg: warnings.append(json.loads(msg)))
+    monkeypatch.delenv('WEBSITE_SITE_NAME', raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    console, sid, actor = _blocked_base(tmp_path)
+    assert store.postgres_store(console) is None and not store.file_store_allowed()
+    audit._append_durable(console, actor_id=actor, snapshot_id=sid, reason_codes=['r'], revision=None)
+    assert [(w['stage'], w['error_class']) for w in warnings if w.get('event') == 'publication_refusal_audit_failed'] \
+        == [('durable_store', 'RefusalStoreUnavailable')]
+    assert not store.store_path(console).exists()
