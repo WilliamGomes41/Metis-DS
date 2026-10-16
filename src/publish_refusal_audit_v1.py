@@ -20,6 +20,7 @@ import hmac
 import json
 import os
 import re
+import threading
 from datetime import datetime, timezone
 
 MAX_REASON_CODES = 128
@@ -29,6 +30,7 @@ HMAC_KEY_SETTING = 'METIS_AUDIT_HMAC_KEY'
 MAX_FAILURE_DIAGNOSTICS = 100  # per process; bounded so a failing store MAG NIET flood the logs
 _FAILURE_COUNT = [0]
 _SUPPRESSED_COUNT = [0]
+_CAP_LOCK = threading.Lock()  # check + increment of the cap MOETEN be one atomic step
 
 
 def suppressed_failure_count():
@@ -51,15 +53,21 @@ def _audit_failed(stage, *, error=None, outcome=None, snapshot_id=None, error_cl
     """
     try:
         from src.request_diagnostics_v1 import _LOGGER, current_request_id
-        if _FAILURE_COUNT[0] >= MAX_FAILURE_DIAGNOSTICS:
-            _SUPPRESSED_COUNT[0] += 1
-            if _SUPPRESSED_COUNT[0] == 1:  # ONE marker so the cap MAG NIET go silent
+        with _CAP_LOCK:
+            allowed = _FAILURE_COUNT[0] < MAX_FAILURE_DIAGNOSTICS
+            if allowed:
+                _FAILURE_COUNT[0] += 1
+            else:
+                _SUPPRESSED_COUNT[0] += 1
+            first_suppressed = not allowed and _SUPPRESSED_COUNT[0] == 1
+            suppressed_now = _SUPPRESSED_COUNT[0]
+        if not allowed:
+            if first_suppressed:  # ONE marker so the cap MAG NIET go silent
                 _LOGGER.warning('metis_diagnostic %s', json.dumps({
                     'event': 'publication_refusal_audit_failed_suppressed', 'cap': MAX_FAILURE_DIAGNOSTICS,
-                    'suppressed_count': _SUPPRESSED_COUNT[0], 'authority': 'non_authoritative_gate_observation'},
+                    'suppressed_count': suppressed_now, 'authority': 'non_authoritative_gate_observation'},
                     separators=(',', ':')))
             return
-        _FAILURE_COUNT[0] += 1
         name = type(error).__name__ if error is not None else error_class
         payload = {
             'event': 'publication_refusal_audit_failed', 'stage': stage,
