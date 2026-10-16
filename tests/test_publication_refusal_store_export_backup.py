@@ -1,7 +1,7 @@
 """Refusal store (TIJDELIJK file store) is part of the evidence export and the runtime backup.
 
 # release-control-evidence: scope/belofte
-# release-control-evidence: opslag durable recovery
+# release-control-evidence: opslag durable recovery concurrent stale
 # release-control-evidence: releasebewijs
 
 Rules (B18): the per-document evidence export MOET contain that document's refusal records and
@@ -157,3 +157,42 @@ def test_export_schema_is_v15_without_actor_columns():
     from src.processing_evidence_export_v1 import PROJECTOR_VERSION, SCHEMAS, VERSION
     assert VERSION == PROJECTOR_VERSION == 'processing-evidence-export-v15'
     assert not any({'actor', 'actor_id'} & set(fields) for fields in SCHEMAS.values())
+
+
+# --- concurrent / stale: backup bytes and manifest digest MOETEN come from one snapshot ---
+
+def _member_digests_match(archive):
+    import hashlib, zipfile
+    with zipfile.ZipFile(archive) as zipf:
+        manifest = json.loads(zipf.read('inventory_manifest.json'))
+        return {m: hashlib.sha256(zipf.read(m)).hexdigest() == d for m, d in manifest['files'].items()}
+
+
+def test_concurrent_append_between_hash_and_archive_keeps_backup_consistent(tmp_path, monkeypatch):
+    # 4288477439: a refusal appended while export_runtime_data runs MAG NIET make the archive
+    # bytes differ from the manifest digest (restore would raise backup_member_hash_mismatch).
+    import src.runtime_data_inventory_v1 as inventory
+    path = _seed(tmp_path)
+    real = inventory._sha256_file
+
+    def hash_then_concurrent_append(target):
+        digest = real(target)
+        if Path(target).name == store.FILE_NAME:
+            store.append_refusal(path, snapshot_id='snap-c', object_version='1', actor='acc-3',
+                                 reason_codes=['late'], revision='rev')
+        return digest
+    monkeypatch.setattr(inventory, '_sha256_file', hash_then_concurrent_append)
+    archive = tmp_path / 'backup.zip'
+    inventory.export_runtime_data(tmp_path, archive)
+    assert all(_member_digests_match(archive).values())
+
+
+def test_stale_rotated_generation_is_archived_byte_identical(tmp_path):
+    import src.runtime_data_inventory_v1 as inventory
+    path = _seed(tmp_path)
+    rotated = path.with_name(path.name + '.1')
+    rotated.write_bytes(path.read_bytes())
+    archive = tmp_path / 'backup.zip'
+    inventory.export_runtime_data(tmp_path, archive)
+    digests = _member_digests_match(archive)
+    assert any(m.endswith('.jsonl.1') for m in digests) and all(digests.values())
