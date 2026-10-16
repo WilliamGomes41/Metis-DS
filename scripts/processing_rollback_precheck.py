@@ -3,7 +3,7 @@
 
 Exit codes: 0 = no attempt is 'running' or 'incomplete_budget'; 2 = at least one is;
 1 = the store is unreadable (fail-closed). The script MAG NIET write: PostgreSQL runs in an
-explicit READ ONLY transaction that is rolled back; the file store is only read.
+read-only session (connection.read_only=True) and every transaction is rolled back; the file store is only read.
 
 Run it only after METIS_PROCESSING_ADMISSION=closed is active (see
 docs/change-contracts/a3-incomplete-budget-rollback.md).
@@ -44,7 +44,8 @@ def scan_file(path: Path) -> dict[str, Any]:
 
 
 def scan_postgres(connection: Any) -> dict[str, Any]:
-    connection.execute("BEGIN READ ONLY")
+    # The session MOET be read-only before the first statement; a write MOET fail in PostgreSQL itself.
+    connection.read_only = True
     try:
         rows = connection.execute(
             "SELECT snapshot_id, envelope_payload FROM workflow.documents ORDER BY snapshot_id").fetchall()

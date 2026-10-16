@@ -117,14 +117,17 @@ def test_precheck_postgres_uses_read_only_transaction():
             return [{'snapshot_id': 's0', 'envelope_payload': {'processing_attempts': [{'attempt_id': 'pa', 'state': 'running'}]}}]
 
     class Connection:
+        read_only = False
+
         def execute(self, sql, *_):
             executed.append(' '.join(sql.split()))
             return Rows()
 
         def rollback(self):
             executed.append('ROLLBACK')
-    report = scan_postgres(Connection())
-    assert executed[0] == 'BEGIN READ ONLY' and executed[-1] == 'ROLLBACK'
+    connection = Connection()
+    report = scan_postgres(connection)
+    assert connection.read_only is True and executed[-1] == 'ROLLBACK'
     assert not any(word in sql.upper() for sql in executed for word in ('INSERT', 'UPDATE', 'DELETE'))
     assert report['counts'] == {'running': 1, 'incomplete_budget': 0}
 
