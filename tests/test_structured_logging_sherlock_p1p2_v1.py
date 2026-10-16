@@ -54,6 +54,9 @@ def test_existing_performance_handler_gets_redaction():
         class App:
             def middleware(self, _kind):
                 return lambda fn: fn
+
+            def add_middleware(self, *_a, **_k):
+                pass
         perf.install_console_performance(App())
         perf._LOGGER.info('login anne@example.nl')
         assert 'anne@example.nl' not in stream.getvalue()
