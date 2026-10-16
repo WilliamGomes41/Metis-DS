@@ -407,3 +407,13 @@ def test_durable_store_failure_emits_audit_failed_diagnostic(tmp_path, monkeypat
     failed = [w for w in warnings if w.get('event') == 'publication_refusal_audit_failed']
     assert [(w['stage'], w['error_class']) for w in failed] == [('durable_store', 'OSError')]
     assert 'hunter2' not in json.dumps(warnings)
+
+
+def test_read_records_includes_the_rotated_generation_first(tmp_path):
+    # Sherlock #636 P2: after rotation the export/backup reader MOET also read .jsonl.1 (oldest first).
+    from datetime import datetime, timezone
+    path = tmp_path / store.FILE_NAME
+    t0 = datetime(2026, 10, 16, tzinfo=timezone.utc)
+    store.append_refusal(store.rotated_path(path), snapshot_id='s', object_version='1', actor='old', reason_codes=['r'], revision=None, clock=t0)
+    store.append_refusal(path, snapshot_id='s', object_version='1', actor='new', reason_codes=['r'], revision=None, clock=t0)
+    assert [r['actor'] for r in store.read_records(path)] == ['old', 'new']
