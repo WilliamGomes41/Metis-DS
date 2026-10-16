@@ -20,3 +20,7 @@ Red commits d9c0465, f8d0280 and e52806a (6 failed); fix in one commit.
 - The reserved handler MOET only be trusted when its formatter is exactly JsonLogFormatter. A subclass that overrides format() MAG NIET count as owned, and that handler gets the RedactingFilter (4296203798).
 - Composite keys (tuples, frozensets) in nested extra mappings MOETEN be deep-redacted (4296203813).
 - SMTPUTF8: every UTF-8 non-ASCII character in a local part MOET count as atext (RFC 6531), for example \U0001F600@example.com (4296203827).
+
+## Regression 4296870561 (hard rule 'no new errors', 2026-10-16 19:26)
+Red b3a7963 (3 failed); fix in one commit.
+- Redaction MAG NOOIT raise. A container subclass whose constructor does not take one iterable (a tuple subclass with `__new__(cls, a, b)`) MOET be rebuilt as its plain base type (tuple/list/set/frozenset). Composite keys stay redacted.

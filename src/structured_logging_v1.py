@@ -117,6 +117,20 @@ def _is_sensitive_key(key):
     return isinstance(key, str) and bool(_SENSITIVE_KEY.fullmatch(key))
 
 
+def _rebuild(value, items):
+    # Rebuild a container from redacted items. Subclasses with a custom constructor MOETEN fall back
+    # to the plain base type; redaction MAG NOOIT raise (4296870561).
+    try:
+        if hasattr(value, '_fields'):
+            return type(value)(*items)
+        return type(value)(items)
+    except Exception:
+        for base in (frozenset, set, tuple, list):
+            if isinstance(value, base):
+                return base(items)
+        return tuple(items)
+
+
 def _deep_redact(value, depth=0):
     """Redact str/bytes/bytearray at any depth of dict/list/tuple/set; sensitive keys are replaced."""
     if depth > _MAX_DEPTH:
@@ -130,10 +144,9 @@ def _deep_redact(value, depth=0):
                 '[REDACTED]' if _is_sensitive_key(key) else _deep_redact(item, depth + 1)
                 for key, item in value.items()}
     if isinstance(value, (list, tuple)) and len(value) == 2 and _is_sensitive_key(value[0]):
-        return type(value)((value[0], '[REDACTED]')) if not hasattr(value, '_fields') else value._replace(**{value._fields[1]: '[REDACTED]'})  # header pair
+        return _rebuild(value, [value[0], '[REDACTED]'])  # header pair
     if isinstance(value, (list, tuple, set, frozenset)):
-        return type(value)(_deep_redact(item, depth + 1) for item in value) if not hasattr(value, '_fields') \
-            else type(value)(*(_deep_redact(item, depth + 1) for item in value))
+        return _rebuild(value, [_deep_redact(item, depth + 1) for item in value])
     if value is None or isinstance(value, (bool, int, float)):
         return value
     # Unknown printable leaves (exceptions, custom objects) are rendered and redacted (4295216361).
