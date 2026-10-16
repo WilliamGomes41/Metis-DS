@@ -254,3 +254,11 @@ def test_extra_values_at_any_depth_are_redacted(value):
 def test_sensitive_extra_keys_replace_any_value(key, value):
     out = _render_extra(value, key=key)
     assert 'hunter2' not in out and '12345678' not in out, out
+
+
+@pytest.mark.parametrize('text', ['mail admin@localhost now', 'to anne@intranet', 'josé@mailhost', '"a b"@localhost'])
+def test_mailbox_with_dotless_domain_is_redacted(text):
+    # 4293592622 (PII): RFC 5321 permits dotless domains such as localhost.
+    out = redact(text)
+    for part in ('admin@', 'anne@', 'josé', '"a b"@'):
+        assert part not in out, out
