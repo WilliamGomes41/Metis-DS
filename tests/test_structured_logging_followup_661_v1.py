@@ -90,3 +90,22 @@ def test_smtputf8_local_part_outside_word_class_is_redacted(addr):
     # 4296203827 (RFC 6531: UTF-8 non-ASCII is atext)
     assert addr.split('@')[0] not in redact('mail ' + addr)
     assert addr.split('@')[0] not in _json(_record('mail %s', (addr,)))
+
+
+class _Pair(tuple):
+    """Tuple subclass whose constructor takes two arguments, not one iterable."""
+    def __new__(cls, a, b):
+        return super().__new__(cls, (a, b))
+
+
+@pytest.mark.parametrize('extra', [
+    {'context': {_Pair('owner', 'anne@example.com'): 'admin'}},
+    {'context': [_Pair('owner', 'anne@example.com')]},
+    {'context': {_Pair('authorization', 'opaque-secret'): 'x'}},
+])
+def test_tuple_subclass_with_custom_constructor_never_raises(extra):
+    # 4296870561: redaction MAG NOOIT raise; composite keys are still redacted.
+    record = _record('x', **extra)
+    assert RedactingFilter().filter(record) is True
+    out = logging.Formatter('%(context)s').format(record)
+    assert 'anne@example.com' not in out and 'opaque-secret' not in out
