@@ -58,14 +58,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--envelopes-file", type=Path, help="file backend: runtime envelopes.json")
-    group.add_argument("--postgres", action="store_true", help="PostgreSQL backend (METIS_CANONICAL_DB_* env)")
+    group.add_argument("--postgres", action="store_true", help="PostgreSQL backend via the workflow document store connection")
     args = parser.parse_args(argv)
     try:
         if args.envelopes_file is not None:
             report = scan_file(args.envelopes_file)
         else:
-            from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
-            with PostgresCanonicalPublicationStore()._connect() as connection:
+            # workflow.documents belongs to the workflow document store; NOOIT the canonical connection.
+            from src.workflows.workflow_documents_postgres_v1 import PostgresWorkflowDocumentStore
+            with PostgresWorkflowDocumentStore()._connect() as connection:
                 report = scan_postgres(connection)
     except Exception as exc:
         print(json.dumps({"precheck": "processing_rollback", "status": "error", "error": type(exc).__name__}))
