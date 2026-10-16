@@ -70,10 +70,16 @@ def test_short_standalone_scheme_credentials_are_redacted(text):
     assert secret not in redact(text)
 
 
-def test_prose_after_scheme_word_is_kept():
-    assert redact('use the basic flow') == 'use the basic flow'
+def test_scheme_word_followed_by_word_fails_closed():
+    # Metis 2026-10-16: casing MAG NIET decide; prose after a scheme word is redacted (fail-closed).
+    assert 'flow' not in redact('use the basic flow')
 
 
 def test_non_ascii_email_is_redacted():
     assert 'josé' not in redact('mail from josé@example.com')
     assert 'ünïcode' not in redact('to ünïcode.user@exämple.de')
+
+
+@pytest.mark.parametrize('text', ['bearer abcdefghijk', 'BeArEr abcdefghijk', 'basic YWJj', 'digest abcdef'])
+def test_any_case_scheme_redacts_alphabetic_token(text):
+    assert text.split()[-1] not in redact(text)
