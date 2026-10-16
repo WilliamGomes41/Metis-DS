@@ -262,3 +262,9 @@ def test_mailbox_with_dotless_domain_is_redacted(text):
     out = redact(text)
     for part in ('admin@', 'anne@', 'josé', '"a b"@'):
         assert part not in out, out
+
+
+@pytest.mark.parametrize('text', ['password="hunter2\\', "token='hunter2\\", 'Authorization: "hunter2\\'])
+def test_unterminated_quoted_secret_with_dangling_escape_is_redacted(text):
+    # 4293913967
+    assert 'hunter2' not in redact(text)
