@@ -28,6 +28,10 @@ _QUOTED = r'"(?:\\.|[^"\\])*(?:"|\Z)|\'(?:\\.|[^\'\\])*(?:\'|\Z)'
 _SECRET_PATTERNS = (
     # header keys (optionally quoted, as in dict/JSON reprs): value to quote or line end
     re.compile(r'(?i)(?<![A-Za-z0-9_-])(["\']?(?:' + _HEADER_KEYS + r')["\']?)(\s*[=:]\s*)(?:' + _QUOTED + r'|[^\r\n]+)'),
+    # tuple-shaped header/credential pairs, (b'authorization', b'x') as in ASGI scopes and HTTP
+    # clients: the comma separator and b-prefixes MOETEN be recognised (Sherlock P1 4291899701).
+    re.compile(r'(?i)(\(\s*b?["\'](?:' + _HEADER_KEYS + r'|' + _ASSIGNMENT_KEYS + r')["\'])(\s*,\s*)'
+               r'(?:b?(?:' + _QUOTED + r')|[^\s)\]]+)'),
     # credential assignments, quoted or unquoted values (password="x", {"password":"x"})
     re.compile(r'(?i)(["\']?\b(?:' + _ASSIGNMENT_KEYS + r')\b["\']?)(\s*[=:]\s*)(?:' + _QUOTED + r'|[^\s;,&"\'}]+)'),
     # Standalone scheme credentials. Digest-style parameter lists (k="v", k=v) are consumed
