@@ -96,3 +96,4 @@ def test_runbook_orders_018_before_code_with_williams_go_and_lists_retention():
     text = (ROOT / 'docs' / 'TEST_AND_RELEASE_RUNBOOK.md').read_text()
     assert '018_publication_refusal_audit.sql' in text and 'vóór de code' in text and 'GO van William' in text
     assert 'scripts/publication_refusal_retention.py' in text and 'Deploy-checklist' in text
+    assert 'publication_refusals_duplicate_dedup_keys' in text and 'Een mens beslist' in text
