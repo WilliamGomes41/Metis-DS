@@ -317,3 +317,22 @@ def test_nested_mapping_keys_are_redacted():
 def test_positional_container_after_sensitive_placeholder_is_redacted(arg):
     # 4294629122
     assert 'opaque-secret' not in _filtered_message('password=%s', (arg,))
+
+
+def test_reserved_handler_name_alone_is_not_trusted():
+    # 4294985552: a host handler named metis-structured-json with a plain formatter MOET be filtered.
+    import io
+    from src.structured_logging_v1 import install_structured_logging, _HANDLER_NAME
+    root = logging.getLogger()
+    saved, level = list(root.handlers), root.level
+    stream = io.StringIO()
+    impostor = logging.StreamHandler(stream)
+    impostor.set_name(_HANDLER_NAME)
+    impostor.setFormatter(logging.Formatter('%(message)s'))
+    try:
+        root.handlers = [impostor]
+        install_structured_logging()
+        logging.getLogger('impostor.test').warning('Authorization: Bearer opaque-secret')
+    finally:
+        root.handlers, root.level = saved, level
+    assert 'opaque-secret' not in stream.getvalue()
