@@ -94,3 +94,19 @@ def test_quoted_secret_with_line_break_is_redacted():
 def test_email_with_quoted_local_part_is_redacted():
     out = redact('from "john..doe"@example.org today')
     assert 'john..doe' not in out and 'example.org' not in out
+
+
+def test_sensitive_extra_fields_are_redacted_for_foreign_formatters():
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(logging.Formatter('%(message)s|%(authorization)s|%(note)s'))
+    handler.addFilter(RedactingFilter())
+    logger = logging.getLogger('test.extra.redaction')
+    logger.addHandler(handler)
+    logger.propagate = False
+    try:
+        logger.warning('x', extra={'authorization': 'opaque-secret-1', 'note': 'mail anne@example.nl'})
+    finally:
+        logger.removeHandler(handler)
+    out = stream.getvalue()
+    assert 'opaque-secret-1' not in out and 'anne@example.nl' not in out
