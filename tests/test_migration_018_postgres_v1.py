@@ -122,3 +122,47 @@ def test_disposable_database_rule_is_documented():
     rule = 'METIS_TEST_POSTGRES_DSN MOET only point at a disposable database'
     assert rule in (__doc__ or '')
     assert rule in (ROOT / 'docs' / 'TEST_AND_RELEASE_RUNBOOK.md').read_text()
+
+
+# --- Sherlock #636 P2: schema verify MOET check the refusal columns and the named constraint ---
+
+class _Res:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    def fetchall(self):
+        return self._rows
+
+
+class _SchemaCon:
+    def __init__(self, *, drop_column=None, constraint=True):
+        from src.workflows.workflow_postgres_migration_v1 import REQUIRED_COLUMNS, REQUIRED_TABLES
+        self.tables = [{'table_name': t} for t in REQUIRED_TABLES]
+        self.columns = [{'table_name': t, 'column_name': c} for t, c in REQUIRED_COLUMNS
+                        if (t, c) != drop_column]
+        self.constraint = constraint
+
+    def execute(self, sql, params=None):
+        if 'current_database' in sql:
+            return _Res([{'database': 'd', 'user': 'u'}])
+        if 'information_schema.tables' in sql:
+            return _Res(self.tables)
+        if 'information_schema.columns' in sql:
+            return _Res(self.columns)
+        if 'pg_constraint' in sql:
+            return _Res([{'conname': CONSTRAINT}] if self.constraint else [])
+        return _Res([{'count': 0}])
+
+
+def test_schema_verify_requires_refusal_columns_and_named_constraint():
+    from src.workflows.workflow_postgres_migration_v1 import REQUIRED_COLUMNS, observe_schema
+    for column in ('refusal_id', 'recorded_at', 'snapshot_id', 'object_version', 'actor', 'verdict',
+                   'reason_codes', 'revision_sha256', 'dedup_key', 'schema_version'):
+        assert ('publication_refusals', column) in REQUIRED_COLUMNS
+    assert observe_schema(_SchemaCon())['status'] == 'PASS'
+    missing_constraint = observe_schema(_SchemaCon(constraint=False))
+    assert missing_constraint['status'] == 'BLOCKED' and missing_constraint['missing_constraints'] == [CONSTRAINT]
+    assert observe_schema(_SchemaCon(drop_column=('publication_refusals', 'dedup_key')))['status'] == 'BLOCKED'
