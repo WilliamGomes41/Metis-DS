@@ -131,3 +131,69 @@ def test_external_blob_store_is_rejected(monkeypatch):
     monkeypatch.setenv("METIS_TEST_AZURITE_BLOB_ENDPOINT", "https://prod.blob.core.windows.net/")
     with pytest.raises(SystemExit, match="Refusing non-sandbox METIS_TEST_AZURITE"):
         sandbox.sandbox_environment()
+
+
+def test_redteam_job_asserts_isolation_before_pytest(monkeypatch, tmp_path):
+    # Thread T6: rt MOET dezelfde netwerkpoort passeren als test/scan, in dezelfde job.
+    monkeypatch.delenv("METIS_TEST_POSTGRES_DSN", raising=False)
+    monkeypatch.delenv("METIS_TEST_AZURITE_BLOB_ENDPOINT", raising=False)
+    with patch.object(sandbox, "assert_isolated_network", side_effect=SystemExit("egress")), \
+         patch.object(subprocess, "call") as tests:
+        with pytest.raises(SystemExit, match="egress"):
+            sandbox.run_redteam(tmp_path)
+    tests.assert_not_called()
+
+
+def test_redteam_job_runs_pytest_with_allowlisted_env_after_isolation(monkeypatch, tmp_path):
+    monkeypatch.delenv("METIS_TEST_POSTGRES_DSN", raising=False)
+    monkeypatch.delenv("METIS_TEST_AZURITE_BLOB_ENDPOINT", raising=False)
+    monkeypatch.setenv("GH_TOKEN", "synthetic-secret")
+    with patch.object(sandbox, "assert_isolated_network") as gate, \
+         patch.object(subprocess, "call", return_value=0) as tests:
+        assert sandbox.run_redteam(tmp_path) == 0
+    gate.assert_called_once()
+    command, env = tests.call_args.args[0], tests.call_args.kwargs["env"]
+    assert command[-1] == str(tmp_path) and "--rootdir" in command
+    assert env["METIS_TEST_POSTGRES_DSN"] == sandbox.TEST_DSN and "GH_TOKEN" not in env
+
+
+@pytest.mark.parametrize("error", [socket.gaierror("no dns"), OSError(errno.ENETUNREACH, "x"),
+                                   OSError(errno.EHOSTUNREACH, "x")])
+def test_probe_accepts_only_explicit_unreachable_errors(error):
+    # Thread T4: een timeout of TLS-fout MAG NIET als isolatiebewijs gelden.
+    import urllib.error
+    assert sandbox.egress_error_is_explicit(error)
+    assert sandbox.egress_error_is_explicit(urllib.error.URLError(error))
+
+
+@pytest.mark.parametrize("error", [TimeoutError("timeout"), OSError(errno.ECONNREFUSED, "x"),
+                                   ConnectionResetError("tls")])
+def test_probe_rejects_timeouts_and_other_failures(error):
+    import ssl
+    import urllib.error
+    assert not sandbox.egress_error_is_explicit(error)
+    assert not sandbox.egress_error_is_explicit(urllib.error.URLError(error))
+    assert not sandbox.egress_error_is_explicit(urllib.error.URLError(ssl.SSLError("cert")))
+
+
+MOUNTINFO_RO = "1 0 0:1 / / ro,relatime - overlay overlay rw,lowerdir=x\n22 1 0:2 / /tmp rw - tmpfs tmpfs rw\n"
+MOUNTINFO_RW = "1 0 0:1 / / rw,relatime - overlay overlay rw,lowerdir=x\n22 1 0:2 / /tmp rw - tmpfs tmpfs rw\n"
+
+
+def test_root_readonly_check_uses_mount_flags_not_permissions():
+    # Thread T11: EACCES als niet-root bewijst niets; de mountvlag MOET 'ro' zijn.
+    assert sandbox.mount_is_readonly(MOUNTINFO_RO, "/")
+    assert not sandbox.mount_is_readonly(MOUNTINFO_RW, "/")
+    assert not sandbox.mount_is_readonly(MOUNTINFO_RO, "/missing")
+
+
+def test_runner_routes_rt_through_security_sandbox_gate():
+    runner = (sandbox.ROOT / "scripts/sandbox_runner.sh").read_text()
+    assert "python scripts/security_sandbox.py $cmd" in runner
+    assert "subprocess.call" not in runner
+
+
+def test_probe_uses_mount_flags_and_explicit_egress_errors():
+    probe = (sandbox.ROOT / "scripts/sandbox_probe.sh").read_text()
+    assert "touch /.ro-probe" not in probe
+    assert "mount_is_readonly" in probe and "egress_error_is_explicit" in probe

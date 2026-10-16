@@ -20,11 +20,8 @@ while true; do
     esac
     if [ "$cmd" = probe ]; then
       bash /workspaces/metis/scripts/sandbox_probe.sh > "$JOBS/$id.log" 2>&1
-    elif [ "$cmd" = rt ]; then
-      # Red-team tests dropped by the workspace into the job dir (repo stays read-only).
-      # Same env allowlist as security_sandbox.py (no inherited runner env).
-      RT="$JOBS/rt" python -c 'import os,subprocess,sys; sys.path.insert(0,"scripts"); import security_sandbox as s; rt=os.environ["RT"]; env=s.sandbox_environment(postgres=True); env["PYTEST_ADDOPTS"]="-p no:cacheprovider"; sys.exit(subprocess.call([sys.executable,"-m","pytest","-q","--rootdir",rt,rt],env=env))' > "$JOBS/$id.log" 2>&1
     else
+      # rt included: security_sandbox.py runs assert_isolated_network() in this job before pytest.
       # shellcheck disable=SC2086
       python scripts/security_sandbox.py $cmd > "$JOBS/$id.log" 2>&1
     fi

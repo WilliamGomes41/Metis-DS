@@ -75,7 +75,14 @@ Linux-capabilities en heeft een alleen-lezen rootbestandssysteem (alleen de
 repository-mount en tmpfs zijn schrijfbaar). De `workspace`-container (editor)
 heeft wél internet en zit ook op het interne netwerk; voer daar geen
 dynamische tests uit: `security_sandbox.py check` weigert daar terecht.
-De runner voert alleen `check`, `probe`, `test`, `test --local` en `scan` uit.
+De runner voert alleen `check`, `probe`, `test`, `test --local`, `scan` en `rt` uit.
+`rt` voert willekeurige pytest-bestanden uit die de workspace in
+`output/runtime/sandbox-runner/rt/` zet: dit is onvertrouwde code. `rt` MOET
+eerst `assert_isolated_network()` in dezelfde job passeren en draait met dezelfde
+env-allowlist als `test` (sandbox-DSN, geen geërfde secrets). De jobmap is
+schrijfbaar voor de geteste code zelf; de uitkomst (`.log`/`.exit`) van een
+`rt`-job MAG NIET als onvervalsbaar bewijs gelden (zie open vraag over
+control-bestanden in PR #605).
 PostgreSQL is bereikbaar binnen dit netwerk. Zijn testgebruiker heeft ruime
 rechten voor de bestaande schema-/triggertests; dit bewijst geen minimale
 productiedatabaserechten. Een afwijkende `METIS_TEST_POSTGRES_DSN` wordt geweigerd.

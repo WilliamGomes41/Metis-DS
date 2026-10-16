@@ -95,6 +95,29 @@ def assert_isolated_network() -> None:
     raise SystemExit("External network reachable; refusing security execution.")
 
 
+def egress_error_is_explicit(exc: BaseException) -> bool:
+    """True only for DNS failure or ENETUNREACH/EHOSTUNREACH; timeout/TLS/refused MAG NIET gelden."""
+    reason = getattr(exc, "reason", None)
+    if isinstance(reason, BaseException):
+        exc = reason
+    if isinstance(exc, socket.gaierror):
+        return True
+    return (isinstance(exc, OSError) and not isinstance(exc, TimeoutError)
+            and exc.errno in {errno.ENETUNREACH, errno.EHOSTUNREACH})
+
+
+def mount_is_readonly(mountinfo: str, mount_point: str) -> bool:
+    """Read the per-mount 'ro' flag from /proc/self/mountinfo (last entry wins)."""
+    readonly = False
+    found = False
+    for line in mountinfo.splitlines():
+        fields = line.split()
+        if len(fields) > 5 and fields[4] == mount_point:
+            found = True
+            readonly = "ro" in fields[5].split(",")
+    return found and readonly
+
+
 def sandbox_environment(*, postgres: bool = False) -> dict[str, str]:
     supplied = os.environ.get("METIS_TEST_POSTGRES_DSN", "")
     if supplied and supplied != TEST_DSN:
@@ -148,11 +171,21 @@ def run_scans() -> int:
     return max(results)
 
 
+def run_redteam(rt_dir: Path) -> int:
+    """Red-team pytest on the job dir; same env allowlist and isolation gate as run_tests."""
+    env = sandbox_environment(postgres=True)
+    env["PYTEST_ADDOPTS"] = "-p no:cacheprovider"
+    assert_isolated_network()
+    return subprocess.call([sys.executable, "-m", "pytest", "-q", "--rootdir", str(rt_dir), str(rt_dir)],
+                           cwd=ROOT, env=env)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("check")
     commands.add_parser("scan")
+    commands.add_parser("rt", help="Red-team pytest on output/runtime/sandbox-runner/rt (isolation gate first).")
     tests = commands.add_parser("test")
     tests.add_argument("--local", action="store_true", help="Skip PostgreSQL only; network checks still apply.")
     args = parser.parse_args()
@@ -163,6 +196,8 @@ def main() -> int:
         return 0
     if args.command == "scan":
         return run_scans()
+    if args.command == "rt":
+        return run_redteam(ROOT / "output/runtime/sandbox-runner/rt")
     return run_tests(local=args.local)
 
 
