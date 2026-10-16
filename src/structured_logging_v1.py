@@ -24,7 +24,8 @@ _HEADER_KEYS = (r'authorization|proxy-authorization|cookie|set-cookie|x-api-key|
 # an unterminated quoted value is redacted to line end (fail-closed).
 # Line breaks inside a quoted value MOETEN NIET end it (multiline secrets, Sherlock P1);
 # without a closing quote the rest of the text is redacted.
-_QUOTED = r'"(?:\\.|[^"\\])*(?:"|\Z)|\'(?:\\.|[^\'\\])*(?:\'|\Z)'
+# A dangling escape at end of input MOET be consumed too (4293913967).
+_QUOTED = r'"(?:\\[\s\S]?|[^"\\])*(?:"|\Z)|\'(?:\\[\s\S]?|[^\'\\])*(?:\'|\Z)'
 # bytes / bytearray reprs (b'x', bytearray(b'x')) MOETEN be treated as quoted values (Sherlock P1 4293501888).
 _VALUE_PREFIX = r'(?:bytearray\(\s*)?b?'
 _SECRET_PATTERNS = (
