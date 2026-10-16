@@ -289,3 +289,8 @@ def test_non_dict_mapping_args_use_sensitive_key_redaction():
     # 4294352255
     from collections import UserDict
     assert 'opaque-secret' not in _filtered_message('%(authorization)s', UserDict({'authorization': 'opaque-secret'}))
+
+
+def test_interpolation_failure_after_redaction_fails_closed():
+    # 4294352269
+    assert '12345678' not in _filtered_message('%(token)d', {'token': 12345678})
