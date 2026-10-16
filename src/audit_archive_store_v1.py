@@ -60,21 +60,6 @@ def _load_azure_blob_sdk() -> tuple[Any, Any]:
     return DefaultAzureCredential, BlobServiceClient
 
 
-def _archive_coordinates(environ: Mapping[str, str] | None = None) -> tuple[str, str]:
-    env = environ if environ is not None else os.environ
-    account = str(
-        env.get(ACCOUNT_ENV, "")
-        or env.get("G2_STORAGE_ACCOUNT", "")
-        or ""
-    ).strip()
-    container = str(env.get(CONTAINER_ENV, "") or DEFAULT_CONTAINER).strip()
-    if ACCOUNT_RE.fullmatch(account) is None:
-        raise AuditArchiveStoreError("audit_archive_account_invalid")
-    if CONTAINER_RE.fullmatch(container) is None:
-        raise AuditArchiveStoreError("audit_archive_container_invalid")
-    return account, container
-
-
 def build_audit_archive_locator(
     *,
     account: str,
