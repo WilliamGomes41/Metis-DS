@@ -148,3 +148,10 @@ def test_non_string_sensitive_extra_values_are_replaced(value):
     finally:
         logger.removeHandler(handler)
     assert 'opaque-secret' not in stream.getvalue()
+
+
+def test_digest_username_star_parameter_list_is_fully_redacted():
+    # 4292037272: RFC 7616 username* parameter.
+    out = redact("Digest username*=UTF-8''Mufasa, nonce=\"abc123\", response=\"6629fae49393\"")
+    for part in ('Mufasa', 'abc123', '6629fae49393'):
+        assert part not in out
