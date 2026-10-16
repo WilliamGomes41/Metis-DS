@@ -110,3 +110,15 @@ def test_sensitive_extra_fields_are_redacted_for_foreign_formatters():
         logger.removeHandler(handler)
     out = stream.getvalue()
     assert 'opaque-secret-1' not in out and 'anne@example.nl' not in out
+
+
+@pytest.mark.parametrize('text', [
+    "headers=[(b'authorization', b'opaque-secret')]",
+    "scope headers [(b'cookie', b'opaque-secret'), (b'accept', b'*/*')]",
+    "('Authorization', 'opaque-secret')",
+    '("x-api-key", "opaque-secret")',
+])
+def test_tuple_shaped_header_pairs_are_redacted(text):
+    # 4291899701: ASGI/HTTP-client header pairs use a comma, not = or :.
+    out = redact(text)
+    assert 'opaque-secret' not in out
