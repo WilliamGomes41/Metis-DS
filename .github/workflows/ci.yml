@@ -95,6 +95,20 @@ jobs:
           assert not list(root.iter("failure")) and not list(root.iter("error")), "Blockage diagnostics proof failed"
           print(f"Blockage diagnostics: {len(cases)} executed, zero skipped, zero failures/errors")
           PYCODE
+      - name: Verify publication refusal store against native PostgreSQL (#637, PASSED proof)
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail; mkdir -p output
+          pytest -rA -q tests/test_publish_refusal_audit_postgres_v1.py tests/test_migration_018_postgres_v1.py --junitxml=output/refusal-postgres.xml | tee output/refusal-postgres.txt
+          python - <<'PYCODE'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("output/refusal-postgres.xml").getroot()
+          cases = list(root.iter("testcase"))
+          assert cases, "Refusal PostgreSQL evidence is empty"
+          assert not list(root.iter("skipped")), "Refusal PostgreSQL tests MAG NIET skip"
+          assert not list(root.iter("failure")) and not list(root.iter("error")), "Refusal PostgreSQL tests failed"
+          print(f"Refusal PostgreSQL: {len(cases)} PASSED, zero skipped, zero failures/errors")
+          PYCODE
       - name: Verify A10 source repair against native PostgreSQL
         if: ${{ !cancelled() }}
         run: pytest -q tests/test_a10_source_cache_repair.py --junitxml=output/a10-native.xml

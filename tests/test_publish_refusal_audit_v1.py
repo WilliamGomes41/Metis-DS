@@ -23,6 +23,8 @@ from tests.test_recoverable_formation_v1 import system
 @pytest.fixture(autouse=True)
 def audit_key(monkeypatch):
     monkeypatch.setenv('METIS_AUDIT_HMAC_KEY', 'test-audit-key')
+    monkeypatch.setattr(audit, '_FAILURE_COUNT', [0])
+    monkeypatch.setattr(audit, '_SUPPRESSED_COUNT', [0], raising=False)
 
 
 @pytest.fixture
@@ -208,6 +210,77 @@ def test_refusal_store_rotates_instead_of_refusing_at_capacity(tmp_path, monkeyp
     assert all(len(r['reason_codes']) == store.MAX_REASON_CODES for r in store.read_records(path))
 
 
+# --- #629 F2: bounded publication_refusal_audit_failed diagnostic, no silent except-pass ---
+
+@pytest.fixture
+def warnings_(monkeypatch):
+    rows = []
+    monkeypatch.setattr(_LOGGER, 'warning', lambda fmt, msg: rows.append(json.loads(msg)))
+    return rows
+
+
+def _failures(rows):
+    return [r for r in rows if r.get('event') == 'publication_refusal_audit_failed']
+
+
+@pytest.mark.parametrize('build', [_blocked_base, _durable_blocked], ids=['file', 'durable'])
+def test_store_failure_emits_bounded_audit_failed_diagnostic(tmp_path, events, warnings_, monkeypatch, build):
+    def failing_store(*args, **kwargs):
+        raise OSError('private /secret/path failure hunter2')
+    monkeypatch.setattr(store, 'append_refusal', failing_store)
+    console, sid, actor = build(tmp_path)
+    assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
+    [failure] = _failures(warnings_)
+    assert failure['stage'] == 'durable_store' and failure['error_class'] == 'OSError'
+    assert failure['snapshot_id'] == sid
+    text = json.dumps(warnings_)
+    assert 'hunter2' not in text and '/secret/path' not in text and actor not in text
+    assert set(failure) <= {'event', 'stage', 'error_class', 'outcome', 'snapshot_id', 'request_id', 'authority'}
+
+
+def test_log_failure_emits_audit_failed_diagnostic(tmp_path, warnings_, monkeypatch):
+    def broken(*args, **kwargs):
+        raise OSError('private logging failure')
+    monkeypatch.setattr(_LOGGER, 'info', broken)
+    console, sid, actor = _blocked_base(tmp_path)
+    assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
+    assert [f['stage'] for f in _failures(warnings_)] == ['log']
+
+
+def test_corrupt_record_emits_audit_failed_diagnostic_and_still_records(tmp_path, events, warnings_):
+    console, sid, actor = _blocked_base(tmp_path)
+    path = store.store_path(console)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{not json\n')
+    assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
+    [failure] = _failures(warnings_)
+    assert failure['stage'] == 'corrupt_record' and failure['outcome'] == 'skipped'
+    assert [r['actor'] for r in store.read_records(path)] == [actor]
+
+def test_audit_failed_diagnostic_is_bounded_per_process(warnings_, monkeypatch):
+    monkeypatch.setattr(audit, '_FAILURE_COUNT', [0])
+    monkeypatch.setattr(audit, '_SUPPRESSED_COUNT', [0])
+    for _ in range(audit.MAX_FAILURE_DIAGNOSTICS + 50):
+        audit._audit_failed('durable_store', error=OSError('x'), snapshot_id='s')
+    assert len(_failures(warnings_)) == audit.MAX_FAILURE_DIAGNOSTICS
+    # After the cap: exactly ONE suppression event with a counter; MAG NIET go silent.
+    [suppressed] = [w for w in warnings_ if w.get('event') == 'publication_refusal_audit_failed_suppressed']
+    assert suppressed['cap'] == audit.MAX_FAILURE_DIAGNOSTICS and suppressed['suppressed_count'] == 1
+    assert audit.suppressed_failure_count() == 50
+
+
+def test_hostile_error_class_and_snapshot_are_bounded(warnings_, monkeypatch):
+    monkeypatch.setattr(audit, '_FAILURE_COUNT', [0])
+    Hostile = type('Hostile Error <script>', (Exception,), {})
+    audit._audit_failed('durable_store', error=Hostile(), snapshot_id='bad id with spaces' * 20)
+    [failure] = _failures(warnings_)
+    assert failure['error_class'] == 'unrecognized_error' and failure['snapshot_id'] is None
+
+
+def test_no_silent_except_pass_in_refusal_audit():
+    import inspect
+    source = inspect.getsource(audit)
+    assert 'except Exception:\n        pass' not in source and 'except Exception:\n            pass' not in source
 def test_dedup_reads_only_the_tail_not_the_full_file(tmp_path, monkeypatch):
     from datetime import datetime, timezone
     path = tmp_path / store.FILE_NAME
@@ -434,3 +507,69 @@ def test_partial_postgres_topology_is_fail_closed_and_reported(tmp_path, monkeyp
     assert [(w['stage'], w['error_class']) for w in warnings if w.get('event') == 'publication_refusal_audit_failed'] \
         == [('durable_store', 'RefusalStoreUnavailable')]
     assert not store.store_path(console).exists()
+
+
+# --- Sherlock #637 P2s ---
+
+def test_corrupt_record_diagnostic_keeps_the_error_class(tmp_path, events, warnings_):
+    console, sid, actor = _blocked_base(tmp_path)
+    path = store.store_path(console)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{not json\n')
+    console.publish(actor_id=actor, snapshot_id=sid)
+    [failure] = _failures(warnings_)
+    assert (failure['stage'], failure['error_class']) == ('corrupt_record', 'JSONDecodeError')
+
+
+def test_diagnostic_cap_is_atomic_under_concurrency(warnings_, monkeypatch):
+    import threading
+    import time
+
+    class SlowCounter(list):  # widens the check-then-increment window deterministically
+        def __getitem__(self, index):
+            value = list.__getitem__(self, index)
+            time.sleep(0.002)
+            return value
+    monkeypatch.setattr(audit, '_FAILURE_COUNT', SlowCounter([audit.MAX_FAILURE_DIAGNOSTICS - 1]))
+    monkeypatch.setattr(audit, '_SUPPRESSED_COUNT', [0])
+    barrier = threading.Barrier(16)
+
+    def burst():
+        barrier.wait()
+        for _ in range(20):
+            audit._audit_failed('durable_store', error=OSError('x'), snapshot_id='s')
+    threads = [threading.Thread(target=burst) for _ in range(16)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(_failures(warnings_)) == 1  # one slot left: exactly one diagnostic
+    assert len([w for w in warnings_ if w.get('event') == 'publication_refusal_audit_failed_suppressed']) == 1
+    assert audit.suppressed_failure_count() == 16 * 20 - 1
+
+
+def test_real_handler_write_failure_is_detected_and_reported_out_of_band(tmp_path, monkeypatch):
+    # A real StreamHandler swallows write errors in handleError; the failure MOET still be reported,
+    # through an independently observable sink (the logger itself is broken).
+    import io
+    import logging
+
+    class BrokenStream(io.StringIO):
+        def write(self, text):
+            raise OSError('sink full')
+    fallback = io.StringIO()
+    monkeypatch.setattr(audit, '_FALLBACK_STREAM', fallback, raising=False)
+    monkeypatch.setattr(logging, 'raiseExceptions', False)
+    handler = logging.StreamHandler(BrokenStream())
+    saved = (list(_LOGGER.handlers), _LOGGER.level, _LOGGER.propagate)
+    _LOGGER.handlers, _LOGGER.propagate = [handler], False
+    _LOGGER.setLevel(logging.INFO)  # as installed by request_diagnostics_v1
+    try:
+        console, sid, actor = _blocked_base(tmp_path)
+        assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
+    finally:
+        _LOGGER.handlers, _LOGGER.propagate = saved[0], saved[2]
+        _LOGGER.setLevel(saved[1])
+    rows = [json.loads(line) for line in fallback.getvalue().splitlines() if line.strip()]
+    assert any(r.get('event') == 'publication_refusal_audit_failed' and r.get('stage') == 'log'
+               and r.get('outcome') == 'handler_write_failed' for r in rows), rows
