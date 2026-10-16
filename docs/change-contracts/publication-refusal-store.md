@@ -45,3 +45,4 @@ Taalregel: B18. Rules use MOET / MAG NIET / NOOIT only; open items are marked OP
 
 ## Sherlock audit 02:55 (2026-10-16)
 - The 018 duplicate error lists at most 20 dedup_keys (`count=N more=M keys=…`); count is exact. Proof: `test_018_duplicate_error_lists_a_capped_number_of_keys`, `test_018_caps_the_key_list_in_sql`; red f52b58a.
+- METIS_TEST_POSTGRES_DSN MOET only point at a disposable database (the fixtures DROP SCHEMA workflow); documented in the test docstring and the runbook. Proof: `test_disposable_database_rule_is_documented`; red e787851.

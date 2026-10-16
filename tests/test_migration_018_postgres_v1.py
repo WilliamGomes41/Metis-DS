@@ -6,7 +6,8 @@
 
 The named UNIQUE constraint is added in a DO block guarded by pg_constraint (conname +
 conrelid). The repository MAG NIET rely on 018 never having reached a persistent database.
-Runs only with METIS_TEST_POSTGRES_DSN (CI postgres:16 service).
+Runs only with METIS_TEST_POSTGRES_DSN (CI postgres:16 service). The fixture runs DROP SCHEMA
+workflow CASCADE: METIS_TEST_POSTGRES_DSN MOET only point at a disposable database.
 """
 from __future__ import annotations
 
