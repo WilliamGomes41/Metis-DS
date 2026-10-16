@@ -336,3 +336,16 @@ def test_reserved_handler_name_alone_is_not_trusted():
     finally:
         root.handlers, root.level = saved, level
     assert 'opaque-secret' not in stream.getvalue()
+
+
+@pytest.mark.parametrize('attr,value,secret', [
+    ('name', 'tenant.anne@example.com', 'anne@example.com'),
+    ('threadName', 'Bearer opaque-secret', 'opaque-secret'),
+    ('processName', 'password=opaque-secret', 'opaque-secret'),
+])
+def test_string_standard_record_attributes_are_redacted(attr, value, secret):
+    # 4294985557 (secrets/PII)
+    record = logging.LogRecord('x', logging.WARNING, __file__, 1, 'hello', None, None)
+    setattr(record, attr, value)
+    RedactingFilter().filter(record)
+    assert secret not in logging.Formatter('%(' + attr + ')s').format(record)
