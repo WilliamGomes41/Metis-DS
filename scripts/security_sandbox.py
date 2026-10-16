@@ -94,7 +94,9 @@ def assert_isolated_network() -> None:
             pass
         else:
             raise SystemExit("External DNS resolves; refusing security execution.")
+    outcomes = []
     for kind, address in EGRESS_TARGETS:
+        target = f"{kind} {address[0]}:{address[1]}"
         try:
             if kind == "udp":
                 _udp_reach(address)
@@ -102,6 +104,9 @@ def assert_isolated_network() -> None:
                 with socket.create_connection(address, timeout=PROBE_TIMEOUT):
                     pass
         except OSError as exc:
+            # Per-target errno MOET in de gelogde uitkomst staan (Lex review 0d070ba).
+            reason = "timeout" if isinstance(exc, TimeoutError) else errno.errorcode.get(exc.errno, str(exc.errno))
+            outcomes.append(f"{target} errno={reason}")
             if exc.errno in {errno.ENETUNREACH, errno.EHOSTUNREACH} and not isinstance(exc, TimeoutError):
                 continue
             if kind == "tcp6" and exc.errno in {errno.EAFNOSUPPORT, errno.EADDRNOTAVAIL}:
@@ -110,8 +115,10 @@ def assert_isolated_network() -> None:
                 continue
             raise SystemExit(f"Network isolation unconfirmed: probe {kind} {address} did not report unreachable.") from exc
         raise SystemExit(f"External network reachable ({kind} {address}); refusing security execution.")
+    for outcome in outcomes:
+        print(f"egress probe: {outcome}", flush=True)
     if internal_default:
-        print("isolated_by_internal_network_attested", flush=True)
+        print("isolated_by_internal_network_attested: " + "; ".join(outcomes), flush=True)
 
 
 def _udp_reach(address: tuple[str, int]) -> bytes:

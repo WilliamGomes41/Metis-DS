@@ -368,3 +368,25 @@ def test_ipv4_target_with_address_family_error_is_refused(monkeypatch):
     with patch.object(socket, "create_connection", side_effect=OSError(errno.EAFNOSUPPORT, "x")):
         with pytest.raises(SystemExit, match="unconfirmed"):
             sandbox.assert_isolated_network()
+
+
+def test_attested_outcome_logs_errno_per_target(monkeypatch, tmp_path, capsys):
+    # Lex review 0d070ba: per doel MOET de errno in de gelogde uitkomst staan.
+    routes(monkeypatch, ipv4=INTERNAL_DEFAULT)
+    attest(monkeypatch, tmp_path, ATTEST_OK)
+
+    def connect(address, timeout=None):
+        if ":" in address[0]:
+            raise OSError(errno.EAFNOSUPPORT, "no ipv6")
+        if address == ("8.8.8.8", 53):
+            raise OSError(errno.EHOSTUNREACH, "unreachable")
+        raise TimeoutError("timeout")
+    with patch.object(socket, "getaddrinfo", side_effect=socket.gaierror("no dns")), \
+         patch.object(socket, "create_connection", side_effect=connect):
+        sandbox.assert_isolated_network()
+    out = capsys.readouterr().out
+    assert "isolated_by_internal_network_attested" in out
+    assert "tcp6 2606:4700:4700::1111:443 errno=EAFNOSUPPORT" in out
+    assert "tcp 8.8.8.8:53 errno=EHOSTUNREACH" in out
+    assert "tcp 1.1.1.1:443 errno=timeout" in out
+    assert "udp 8.8.8.8:53 errno=" in out
