@@ -24,3 +24,4 @@ Red commits d9c0465, f8d0280 and e52806a (6 failed); fix in one commit.
 ## Regression 4296870561 (hard rule 'no new errors', 2026-10-16 19:26)
 Red b3a7963 (3 failed); fix in one commit.
 - Redaction MAG NOOIT raise. A container subclass whose constructor does not take one iterable (a tuple subclass with `__new__(cls, a, b)`) MOET be rebuilt as its plain base type (tuple/list/set/frozenset). Composite keys stay redacted.
+- A redacted key MOET stay hashable. A hashable Mapping key that becomes a dict falls back to its redacted text. Redaction MAG NOOIT raise (4297499491; red 2a0999a).

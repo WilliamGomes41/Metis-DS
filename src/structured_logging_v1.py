@@ -131,6 +131,21 @@ def _rebuild(value, items):
         return tuple(items)
 
 
+def _redact_key(key, depth):
+    # A redacted key MOET stay hashable; otherwise it becomes its redacted text (4297499491).
+    if isinstance(key, (str, bytes, bytearray)):
+        return redact(key)
+    redacted = _deep_redact(key, depth)
+    try:
+        hash(redacted)
+        return redacted
+    except Exception:
+        try:
+            return redact(str(redacted))
+        except Exception:
+            return '[REDACTED]'
+
+
 def _deep_redact(value, depth=0):
     """Redact str/bytes/bytearray at any depth of dict/list/tuple/set; sensitive keys are replaced."""
     if depth > _MAX_DEPTH:
@@ -140,7 +155,7 @@ def _deep_redact(value, depth=0):
     if isinstance(value, Mapping):  # UserDict too (4295084759)
         # Keys MOETEN be redacted too (PII keys, 4294629108).
         # Composite keys (tuples, frozensets) are redacted too (4296203813).
-        return {(redact(key) if isinstance(key, (str, bytes, bytearray)) else _deep_redact(key, depth + 1)):
+        return {_redact_key(key, depth + 1):
                 '[REDACTED]' if _is_sensitive_key(key) else _deep_redact(item, depth + 1)
                 for key, item in value.items()}
     if isinstance(value, (list, tuple)) and len(value) == 2 and _is_sensitive_key(value[0]):
