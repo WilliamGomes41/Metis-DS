@@ -27,4 +27,4 @@ Not touched: operations_console_v1.py, publish gate, metis_diagnostic logger.
 
 ## Sherlock audit 02:10 (2026-10-16)
 - **F1 (record.args):** RedactingFilter keeps `record.args` as a tuple (or mapping) of redacted values; it is NOOIT None, because formatters such as uvicorn's AccessFormatter read it positionally. When a secret spans the template and the args, the filter renders, redacts and sets `args = ()` (an empty tuple, NOOIT None). Proof: `test_uvicorn_access_formatter_works_and_redacts_after_filter` (real `uvicorn.logging.AccessFormatter`) and `test_redacting_filter_never_sets_args_to_none`; red 1751722 (2 failed).
-- **F2:** accepted by Sherlock as the documented limitation above (handlers added after application startup are NOT covered).
+- **F2:** accepted by Metis (correction, Sherlock 02:55: earlier text named Sherlock) as the documented limitation above (handlers added after application startup are NOT covered).
