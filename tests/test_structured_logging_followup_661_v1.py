@@ -39,3 +39,16 @@ def test_unquoted_value_with_spaces_is_redacted_to_end_of_value(key):
 def test_unquoted_value_stops_at_next_assignment():
     out = redact('password=hunter two words user=bob')
     assert 'two' not in out and 'user=bob' in out
+
+
+def test_owned_handler_redacts_logger_name():
+    # 4295299116
+    row = json.loads(_json(_record('hello', name='tenant.anne@example.com')))
+    assert 'anne@example.com' not in json.dumps(row)
+
+
+@pytest.mark.parametrize('field', ['request_id', 'event', 'attempt_id', 'snapshot_id', 'phase', 'reason_code'])
+def test_owned_handler_redacts_whitelisted_extras(field):
+    # 4295299116
+    row = json.loads(_json(_record('hello', **{field: 'sk-abcdefghijk'})))
+    assert 'sk-abcdefghijk' not in json.dumps(row)
