@@ -99,7 +99,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           set -o pipefail; mkdir -p output
-          pytest -rA -q tests/test_publish_refusal_audit_postgres_v1.py --junitxml=output/refusal-postgres.xml | tee output/refusal-postgres.txt
+          pytest -rA -q tests/test_publish_refusal_audit_postgres_v1.py tests/test_migration_018_postgres_v1.py --junitxml=output/refusal-postgres.xml | tee output/refusal-postgres.txt
           python - <<'PYCODE'
           import xml.etree.ElementTree as ET
           root = ET.parse("output/refusal-postgres.xml").getroot()

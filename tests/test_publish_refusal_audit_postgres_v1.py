@@ -31,8 +31,7 @@ def refusal_postgres(workflow_postgres):  # noqa: F811 - adds migration 018 to t
     from pathlib import Path
     sql = (Path(__file__).resolve().parents[1] / 'db' / 'migrations' / '018_publication_refusal_audit.sql').read_text()
     with psycopg.connect(workflow_postgres.dsn, autocommit=True) as con:
-        for statement in [p.strip() for p in '\n'.join(l for l in sql.splitlines() if not l.lstrip().startswith('--')).split(';') if p.strip()]:
-            con.execute(statement)
+        con.execute(sql)  # whole file: 018 has a DO $$ block (Sherlock 02:10 F1)
     return workflow_postgres
 
 
