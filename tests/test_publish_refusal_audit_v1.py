@@ -546,3 +546,28 @@ def test_diagnostic_cap_is_atomic_under_concurrency(warnings_, monkeypatch):
     assert len(_failures(warnings_)) == 1  # one slot left: exactly one diagnostic
     assert len([w for w in warnings_ if w.get('event') == 'publication_refusal_audit_failed_suppressed']) == 1
     assert audit.suppressed_failure_count() == 16 * 20 - 1
+
+
+def test_real_handler_write_failure_is_detected_and_reported_out_of_band(tmp_path, monkeypatch):
+    # A real StreamHandler swallows write errors in handleError; the failure MOET still be reported,
+    # through an independently observable sink (the logger itself is broken).
+    import io
+    import logging
+
+    class BrokenStream(io.StringIO):
+        def write(self, text):
+            raise OSError('sink full')
+    fallback = io.StringIO()
+    monkeypatch.setattr(audit, '_FALLBACK_STREAM', fallback, raising=False)
+    monkeypatch.setattr(logging, 'raiseExceptions', False)
+    handler = logging.StreamHandler(BrokenStream())
+    saved = list(_LOGGER.handlers)
+    _LOGGER.handlers = [handler]
+    try:
+        console, sid, actor = _blocked_base(tmp_path)
+        assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
+    finally:
+        _LOGGER.handlers = saved
+    rows = [json.loads(line) for line in fallback.getvalue().splitlines() if line.strip()]
+    assert any(r.get('event') == 'publication_refusal_audit_failed' and r.get('stage') == 'log'
+               and r.get('outcome') == 'handler_write_failed' for r in rows), rows
