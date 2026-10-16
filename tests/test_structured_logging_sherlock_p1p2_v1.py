@@ -174,3 +174,22 @@ def test_digest_params_with_spaces_around_equals_are_redacted():
     out = redact('Digest username = "Mufasa" , nonce = "abc123", response = "6629fae49393"')
     for part in ('Mufasa', 'abc123', '6629fae49393'):
         assert part not in out
+
+
+@pytest.mark.parametrize('value', [{'auth': {'password': 'opaque-secret'}}, [{'token': 'opaque-secret'}],
+                                   {'note': 'mail anne@example.nl'}, ('Bearer opaque-secret',)])
+def test_nested_values_in_non_string_extras_are_redacted(value):
+    # 4293501908
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(logging.Formatter('%(message)s|%(payload)s'))
+    handler.addFilter(RedactingFilter())
+    logger = logging.getLogger('test.extra.nested')
+    logger.addHandler(handler)
+    logger.propagate = False
+    try:
+        logger.warning('x', extra={'payload': value})
+    finally:
+        logger.removeHandler(handler)
+    out = stream.getvalue()
+    assert 'opaque-secret' not in out and 'anne@example.nl' not in out
