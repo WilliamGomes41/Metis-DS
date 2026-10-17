@@ -6,7 +6,7 @@ Proof: Afzonderlijke rg-zoekopdrachten vóór verwijdering, inspectie dynamische
 Touches lifecycle invariants: no
 Rewrite risk: none
 
-Basis: `e5573878a5bed4a885c6896f88fcb515f964a9d7` (`main` bij checkout op 16 oktober 2026).
+Basis: `e5573878a5bed4a885c6896f88fcb515f964a9d7` (`main` bij checkout op 16 oktober 2026). Op 17 oktober 2026 gerebased op `main` `3f9389df54b13b9ccdfc79375d7b7f9efae96a9b` en per functie opnieuw bewezen; zie *Herbevestiging na rebase (#689)* onderaan.
 Code na verwijdering: `a1d2d470f3b42cc151d2f98ce522f27954f1c1cc`. Branch: `chore/remove-proven-dead-code`.
 De directe gebruikersopdracht bepaalt de scope en autoriseert uitsluitend het pushen van deze branch. Er wordt geen PR geopend en niets gedeployd.
 
@@ -116,3 +116,14 @@ De 17 verwijderingen en hun repo-lokale bewijs zijn vastgelegd in 13 afzonderlij
 **Lokale suite niet groen.** Aanvankelijk is de push geblokkeerd vanwege de eis dat alle lokale tests groen moesten zijn. Op 17 oktober 2026 heeft de gebruiker expliciet opdracht gegeven `chore/remove-proven-dead-code` alsnog naar origin te pushen: de vier fouten zijn op de basis aangetoond en omgevingsgebonden; CI is de beslissende run. Deze instructie heft uitsluitend de blokkade voor het publiceren van de branch op. Native PostgreSQL/Docling/browserbewijs en de release-control-preflight blijven open. Er wordt geen PR geopend en niets gedeployd.
 
 De lokale Git-push kon geen GitHub-inloggegevens ophalen. Daarom wordt de branch gepubliceerd via de gekoppelde GitHub-verbinding. De modulecommits houden dezelfde afzonderlijke wijzigingen en exact dezelfde bestands- en treehashes; alleen de commitmetadata en commit-IDs veranderen door het transport. Dit verslag is uitsluitend bijgewerkt om de nieuwe gebruikersinstructie en transportkeuze vast te leggen. Er zijn geen gedragswijzigingen, refactors, hernoemingen of aanpassingen aan beschermde bestanden uitgevoerd om de verificatiebeperkingen te omzeilen. CI bepaalt het vervolg; er is geen merge- of deployopdracht gegeven.
+
+## Herbevestiging na rebase (#689)
+
+Issue #689 vraagt een rebase op de actuele `main` en per functie opnieuw bewijs dat hij dood is. Nieuwe basis: `3f9389df54b13b9ccdfc79375d7b7f9efae96a9b`, 29 commits na `e5573878`. De 14 commits zijn zonder conflict op die basis gezet; `src/operations_console_app.py` en `src/review_workboard_v1.py` zijn tussentijds op `main` gewijzigd en zijn automatisch samengevoegd.
+
+- **rg per functie op de nieuwe basis.** Dezelfde 17 opdrachten als hierboven zijn uitgevoerd in een schone worktree van `3f9389d`. Elke opdracht gaf exitcode 0 en precies één match, op dezelfde definitieregel als in de tabel. Dat is 0 aanroepen of andere verwijzingen.
+- **Open PR's.** Op de tips van #731 (`e4ede35`) en #732 (`2d1d8a2`) komt elke naam ook precies één keer voor. Geen van beide PR's raakt een van de 14 bestanden van deze wijziging.
+- **Dynamische routes.** In de 29 nieuwe commits zijn alle toegevoegde regels met `getattr`, `setattr`, `__getattr__`, `globals`, `locals`, `vars`, `import_module`, `__import__`, wildcard-imports, `eval`, `exec` en `dir` nagelopen. Het gaat om een vaste attribuutnaam in de #667-remirror, `getattr(original, "code", None)` en `monkeypatch.setattr` op expliciet benoemde attributen in tests. Geen daarvan kan een van de 17 kandidaten selecteren.
+- **AST-vergelijking.** Voor alle 13 gewijzigde modules is het AST van `3f9389d` zonder de 17 definities gelijk aan het AST na verwijdering.
+- **Bewijstest.** `tests/test_dead_code_removal_v1.py` controleert dat de 17 definities weg zijn, dat de 13 modules importeren en dat `src`, `scripts`, `tests`, `config`, `db`, `docs` en `.github` geen verwijzing bevatten. Op `3f9389d` faalt hij (14 gefaald, 1 geslaagd); na verwijdering slaagt hij. Hij draagt de release-control-markers. De punten opslag (concurrent/stale) en metrics (teller/noemer/score-must-drop) verwijzen naar de ongewijzigde suites die dat gedrag bewijzen; een verwijderde functie zonder aanroeper kan dat gedrag niet veranderen. Daarmee is het eerder geblokkeerde punt 4 (*Release-control-preflight*) opgelost zonder de checker te wijzigen.
+- `storage_prepare` en `src/docling_worker_v1.py` blijven ongewijzigd (OPENVRAAG-S3).
