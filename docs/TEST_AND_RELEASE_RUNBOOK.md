@@ -111,6 +111,13 @@ in de repository.
 4. `--clean true` wist `wwwroot` en MUST NOT `/home/data` wissen.
 5. Production is handmatig: `deploy-production` met een volledige SHA die al
    op `main` ligt, na protection/approval, met de production-identiteit.
+6. Beide workflows en de handmatige ZIP-route gebruiken
+   `scripts/verify_console_deployment.py`: `status=ok`,
+   `service=operations-console` en `deployed_commit` gelijk aan de volledige
+   verwachte SHA zijn verplicht. HTTP 200 alleen is onvoldoende.
+   De controle herhaalt maximaal 13 keer met vijf seconden tussenruimte,
+   tien seconden per HTTP-call en maximaal 64 KiB antwoord. De afzonderlijke
+   geautoriseerde database-/ketenproef blijft nodig.
 
 ## Herstel
 

@@ -84,7 +84,10 @@ jobs:
           --clean true
           --async false
       - name: Verify production health
+        env:
+          APP_URL: ${{ vars.AZURE_PRODUCTION_APP_URL }}
+          REQUESTED_SHA: ${{ inputs.commit_sha }}
         run: >-
-          curl --fail --show-error --silent
-          --retry 12 --retry-delay 5 --retry-connrefused
-          "${{ vars.AZURE_PRODUCTION_APP_URL }}/health"
+          python scripts/verify_console_deployment.py
+          --health-url "${APP_URL}/health"
+          --expected-commit "$REQUESTED_SHA"
