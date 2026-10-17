@@ -7,7 +7,7 @@ import time
 from typing import Any, Callable
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from src.telemetry.analysis import request_detail, summarize
 from src.telemetry.hub import HUB
@@ -66,8 +66,10 @@ def install_telemetry_routes(app: FastAPI, *, require_account: Callable[[Request
     def telemetry_export(request: Request) -> Response:
         require_account(request)
         _key, seconds = _window(request)
+        since = time.time() - seconds
+        # Streamed one event at a time: memory stays bounded however large the window is.
         lines = (json.dumps({k: v for k, v in event.items() if not k.startswith("_")},
-                            separators=(",", ":"), ensure_ascii=False)
-                 for event in HUB.events(time.time() - seconds))
-        return Response("\n".join(lines) + "\n", media_type="application/x-ndjson",
-                        headers={**_HEADERS, "Content-Disposition": 'attachment; filename="metis-telemetry.jsonl"'})
+                            separators=(",", ":"), ensure_ascii=False) + "\n"
+                 for event in HUB.events(since))
+        return StreamingResponse(lines, media_type="application/x-ndjson",
+                                 headers={**_HEADERS, "Content-Disposition": 'attachment; filename="metis-telemetry.jsonl"'})

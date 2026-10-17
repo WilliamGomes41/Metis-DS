@@ -98,6 +98,15 @@ def test_prune_keeps_other_workers_current_files_and_unusable_storage_falls_back
     sink.write('{"event":"x"}')
     sink.prune(force=True)
     assert other.exists() and not rotated.exists()
+    import os
+    stale = tmp_path / f'events-{today}-88888-cccccccc.jsonl'
+    stale.write_text('{}\n')
+    os.utime(stale, (time.time() - 3600, time.time() - 3600))
+    sink.prune(force=True)
+    assert other.exists() and not stale.exists()
+    sink._path.unlink()  # another worker pruned this worker's quiet file
+    sink.write('{"event":"y"}')
+    assert sink._path.exists() and sink._path.read_text() == '{"event":"y"}\n'
     vanished = tmp_path / f'events-{today}-99999-bbbbbbbb-2.jsonl'
     monkeypatch.setattr(sink, 'files', lambda: [vanished, *JsonlSink.files(sink)])
     sink.prune(force=True)  # another worker already removed it: no error

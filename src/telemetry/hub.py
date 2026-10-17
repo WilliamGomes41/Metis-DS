@@ -23,6 +23,8 @@ RING_SIZE = 5000
 FILE_MAX_BYTES = 8 * 1024 * 1024
 TOTAL_MAX_BYTES = 64 * 1024 * 1024
 RETENTION_SECONDS = 7 * 24 * 3600
+# A current file written to within this period counts as a live worker's file.
+ACTIVE_SECONDS = 600
 MAX_STRING = 240
 MAX_KEYS = 48
 MAX_LIST = 32
@@ -125,6 +127,9 @@ class JsonlSink:
 
     def write(self, line: str) -> None:
         target = self._target()
+        if self._handle is not None and os.fstat(self._handle.fileno()).st_nlink == 0:
+            # Another worker pruned this quiet file: continue in a fresh one.
+            self.close()
         if self._path != target or self._handle is None:
             self.close()
             self._path, self._handle = target, open(target, "a", encoding="utf-8")
@@ -150,11 +155,11 @@ class JsonlSink:
         stats.sort(key=lambda item: item[0])
         cutoff = time.time() - RETENTION_SECONDS
         total = sum(size for _mtime, size, _path in stats)
-        today = datetime.now(timezone.utc).strftime("%Y%m%d")
+        active_after = time.time() - ACTIVE_SECONDS
         for mtime, size, path in stats:
-            # Another worker may still append to its current file (today's name,
-            # not rotated): unlinking it would silently lose that worker's events.
-            if path == self._path or (_is_current_name(path) and path.name.split("-")[1] == today):
+            # A live worker's current file stays; a quiet or dead worker's file may go
+            # (a quiet worker reopens a fresh file on its next write).
+            if path == self._path or (_is_current_name(path) and mtime >= active_after):
                 continue
             if mtime < cutoff or total > TOTAL_MAX_BYTES:
                 total -= size
