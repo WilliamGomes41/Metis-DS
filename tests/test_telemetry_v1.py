@@ -135,7 +135,9 @@ def test_serve_console_uses_the_same_observability_composition(tmp_path, monkeyp
     cli.cmd_serve_console(argparse.Namespace(source_store=tmp_path / 'sources', runtime=tmp_path / 'runtime',
                                              host='127.0.0.1', port=0))
     assert any(m.cls is RequestDiagnostics for m in served['app'].user_middleware)
-    assert install_logging_bridge in served['app'].router.on_startup
+    from src.structured_logging_v1 import install_structured_logging
+    startup = served['app'].router.on_startup
+    assert startup.index(install_structured_logging) < startup.index(install_logging_bridge)
     assert any(_is_owned(handler) for handler in logging.getLogger().handlers)  # stderr process log kept
     assert served['dir'] == tmp_path / 'runtime' / 'telemetry'
 
@@ -341,13 +343,16 @@ def test_form_backed_document_commands_carry_doc_ref(events):
 
 
 def test_analysis_holds_only_the_newest_events_in_memory(hub, monkeypatch):
-    from src.telemetry import routes
-    monkeypatch.setattr(routes, 'MAX_ANALYZED_EVENTS', 3)
+    from src.telemetry import hub as hub_module
+    monkeypatch.setattr(hub_module, 'MAX_ANALYZED_EVENTS', 3)
     for i in range(5):
         hub.record({'event': f'e{i}', 'ts': f'2026-10-17T10:00:0{i}.000Z'})
-    events, truncated = routes._recent_events(0)
+    events, truncated = hub_module.recent_events(0)
     assert [e['event'] for e in events] == ['e2', 'e3', 'e4'] and truncated
-    assert routes._recent_events(0)[1] is True and len(routes._recent_events(0)[0]) == 3
+    from src.insight_v1 import _telemetry_by_document
+    calls = []
+    monkeypatch.setattr(hub_module, 'recent_events', lambda since: calls.append(since) or ([], False))
+    assert _telemetry_by_document(5.0) == {} and calls == [5.0]  # documents tab reads through the same bound
 
 
 def _event(t, name, rid, **fields):

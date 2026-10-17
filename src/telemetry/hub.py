@@ -8,6 +8,7 @@ outcome of the work it observes.
 from __future__ import annotations
 
 import hashlib
+import heapq
 import json
 import os
 import re
@@ -280,3 +281,21 @@ HUB = TelemetryHub()
 def record_event(event: str, *, kind: str = "event", **fields: Any) -> None:
     """Record one bounded event; a no-op on any failure."""
     HUB.record({"event": event, "kind": kind, **fields})
+
+
+# Upper bound on events one analysis holds in memory; the most recent ones are kept.
+MAX_ANALYZED_EVENTS = 50_000
+
+
+def recent_events(since: float) -> tuple[list[dict[str, Any]], bool]:
+    """The newest MAX_ANALYZED_EVENTS events since ``since`` (streamed, bounded memory), oldest first."""
+    seen = 0
+
+    def counted():
+        nonlocal seen
+        for event in HUB.events(since):
+            seen += 1
+            yield event
+    newest = heapq.nlargest(MAX_ANALYZED_EVENTS, counted(), key=lambda event: str(event.get("ts") or ""))
+    newest.reverse()
+    return newest, seen > len(newest)

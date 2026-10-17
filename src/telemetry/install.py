@@ -33,7 +33,8 @@ def install_console_observability(app, runtime: Path) -> None:
     install_structured_logging()
     install_console_performance(app)
     install_telemetry(telemetry_directory(runtime))
-    # The server configures its own loggers after composition; join them once it has.
+    # The server configures its own loggers after composition: redact them, then join them.
+    app.add_event_handler("startup", install_structured_logging)
     app.add_event_handler("startup", install_logging_bridge)
 
 

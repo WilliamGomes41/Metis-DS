@@ -62,8 +62,8 @@ def _matches_document(envelope: dict[str, Any], query: str) -> bool:
 
 def _telemetry_by_document(since: float) -> dict[str, dict[str, int]]:
     from src.telemetry.analysis import build_requests
-    from src.telemetry.hub import HUB
-    requests, _other = build_requests(list(HUB.events(since)))
+    from src.telemetry.hub import recent_events
+    requests, _other = build_requests(recent_events(since)[0])
     now = time.time()
     counts: dict[str, dict[str, int]] = {}
     for request in requests.values():
