@@ -824,17 +824,3 @@ def restore_publication_chain(
         "restored_runtime_files": restored_runtime_files,
         "integrity": integrity,
     }
-
-
-def live_publication_chain_integrity(
-    *,
-    database: DatabaseBackupAdapter,
-    source_store: ImmutableBackupSourceStore,
-    runtime_root: Path | None = None,
-) -> dict[str, Any]:
-    """Read all current authorities and produce a release-control integrity report."""
-    return check_chain_integrity(
-        database.export_state(),
-        source_store=source_store,
-        runtime_root=runtime_root,
-    )

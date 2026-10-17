@@ -81,10 +81,6 @@ def _assigned_to_reviewer(envelope: dict[str, Any], account_id: str) -> bool:
     return account_id in set(envelope.get("named_reviewers") or [])
 
 
-def _pending_count(rows: list[dict[str, Any]]) -> int:
-    return sum(not _review_is_final(row) for row in rows)
-
-
 def _fallback_lifecycle_status() -> dict[str, str]:
     return {
         "workflow_status": "processing",

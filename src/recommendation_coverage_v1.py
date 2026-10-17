@@ -73,11 +73,6 @@ def assess(blocks, proposal):
     return {"version": VERSION, "detection_completeness": "not_proven", "entries": rows}
 
 
-def supplementary_blocks(blocks, report):
-    open_ids = {r["span"]["block_id"] for r in report["entries"] if r["status"] == "open"}
-    return [b for b in blocks if b["block_id"] in open_ids]
-
-
 def merge_proposals(primary, supplement):
     """Deduplicate identical source selections; reject conflicting overlap.
 
