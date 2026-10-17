@@ -98,6 +98,13 @@ def cmd_serve_api(a: argparse.Namespace) -> dict:
     return {"status": "PASS"}
 
 
+def _require_local_console_configuration() -> None:
+    from src.console_asgi import _validate_workflow_store_configuration
+
+    if _validate_workflow_store_configuration():
+        raise RuntimeError("local_console_command_requires_file_harness")
+
+
 def cmd_serve_console(a: argparse.Namespace) -> dict:
     import uvicorn
     from src.operations_console_app import create_console_app
@@ -105,11 +112,8 @@ def cmd_serve_console(a: argparse.Namespace) -> dict:
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
     from src.topology_bound_v1 import assert_supported_topology
 
-    from src.console_asgi import _validate_workflow_store_configuration
-
-    # This documented local harness must never ignore configured PG authorities.
-    if _validate_workflow_store_configuration():
-        raise RuntimeError("serve_console_is_local_only_use_console_asgi")
+    # These local commands must never ignore configured PG authorities.
+    _require_local_console_configuration()
     assert_supported_topology()
     console = OperationsConsole(
         root=ROOT,
@@ -123,6 +127,8 @@ def cmd_serve_console(a: argparse.Namespace) -> dict:
 
 def cmd_console_account(a: argparse.Namespace) -> dict:
     from src.operations_console_v1 import OperationsConsole
+
+    _require_local_console_configuration()
 
     console = OperationsConsole(root=ROOT, source_store=a.source_store, runtime=a.runtime)
     account = console.create_account(a.username, a.password, roles=[item.strip() for item in a.roles.split(",") if item.strip()], display_name=a.display_name)
