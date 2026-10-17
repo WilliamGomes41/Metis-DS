@@ -16,7 +16,7 @@ GitHub-issues blijven de voortgangsbron; dit is alleen een overdrachtsoverzicht 
 **Gemergd op 17-10 (geen deploy):**
 - #667 R2-fix (remirror onder de storelock) → `59208f02`.
 - #683 `_lane_total` (sluit #672 en #700) → `3f9389df`.
-- #731 tier D fail-closed (sluit #665, Class A) → `e228aa90`. Opvolging: [#733](https://github.com/WilliamGomes41/Metis-DS/issues/733) (conninfo zichtbaar via `pytest -l`/`--showlocals`, L-2-restrisico) en [#734](https://github.com/WilliamGomes41/Metis-DS/issues/734) (tests voor hoofdlettervarianten van de detailwaarde).
+- #731 tier D fail-closed (sluit #665, Class A) → `e228aa90`. Opvolging: zie [#733](https://github.com/WilliamGomes41/Metis-DS/issues/733) en [#734](https://github.com/WilliamGomes41/Metis-DS/issues/734) (tests voor hoofdlettervarianten van de detailwaarde).
 - #732 deploy-SHA-check (sluit #684, Class B), inclusief de fix voor de afsluitende `/` in `AZURE_*_APP_URL` → `4991cc60`. Nog niet bewezen in een echte deploy.
 
 **Open:**
