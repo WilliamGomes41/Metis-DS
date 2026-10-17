@@ -58,7 +58,13 @@ kandidaten AS (
 SELECT redencategorie, count(*) AS versies, count(DISTINCT snapshot_id) AS snapshots
 FROM kandidaten WHERE redencategorie IS NOT NULL
 GROUP BY redencategorie ORDER BY redencategorie;
+-- Detail alleen bij een expliciete -v detail=1 of detail=true; al het andere blijft aggregaat.
 \if :{?detail}
+  SELECT :'detail' IN ('1', 'true') AS detail_aan \gset
+\else
+  \set detail_aan false
+\endif
+\if :detail_aan
 WITH v AS (
   SELECT snapshot_id, object_id, object_version,
          object_version ~ '^[0-9]+(\.[0-9]+)*$' AS numeriek

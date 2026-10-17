@@ -578,10 +578,16 @@ def _psql() -> str:
 
 def _run_check(conninfo: str, *, detail: str | None = None) -> subprocess.CompletedProcess:
     assert CHECK_SQL.is_file(), "db/checks/tier_d_damage_counts_v1.sql is missing"
-    args = [_psql(), "-X", "-q", "-A", "-F", "|", "-P", "footer=off", "-d", conninfo, "-f", str(CHECK_SQL)]
+    from psycopg.conninfo import conninfo_to_dict
+    # L-2: connection and password via env, NOOIT via argv (pytest prints argv on failure).
+    keys = {"host": "PGHOST", "port": "PGPORT", "user": "PGUSER", "dbname": "PGDATABASE", "password": "PGPASSWORD"}
+    params = conninfo_to_dict(conninfo)
+    assert set(params) <= set(keys), "unsupported conninfo keyword for T13"
+    env = dict(os.environ, **{keys[k]: str(v) for k, v in params.items()})
+    args = [_psql(), "-X", "-q", "-A", "-F", "|", "-P", "footer=off", "-f", str(CHECK_SQL)]
     if detail is not None:
         args[1:1] = ["-v", f"detail={detail}"]
-    return subprocess.run(args, capture_output=True, text=True, timeout=60)
+    return subprocess.run(args, capture_output=True, text=True, timeout=60, env=env)
 
 
 @contextmanager
