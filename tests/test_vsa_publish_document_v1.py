@@ -31,7 +31,7 @@ from src.workflows.workflow_remaining_cutover_v1 import (
     PostgresCompleteWorkflowDurablePublicationConsole,
     _PostgresRemainingWorkflowMixin,
 )
-from src.workflows.workflow_review_cutover_v1 import PostgresReviewWorkflowDurablePublicationConsole
+from src.workflows.workflow_badge_counts_postgres_v1 import FastBadgePostgresCompleteWorkflowDurablePublicationConsole as PostgresReviewWorkflowDurablePublicationConsole
 from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 from src.workflows.workflow_transaction_v1 import bind_workflow_stores
 
@@ -188,6 +188,9 @@ def _console(
     runtime_name: str,
 ) -> PostgresReviewWorkflowDurablePublicationConsole:
     identity, documents, reviews = _stores(config)
+    from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
+    remaining = PostgresWorkflowRemainingStore(config)
+    bind_workflow_stores(identity, documents, reviews, remaining)
     return PostgresReviewWorkflowDurablePublicationConsole(
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
@@ -196,7 +199,7 @@ def _console(
         canonical_publication_store=durable,  # type: ignore[arg-type]
         workflow_identity_store=identity,
         workflow_document_store=documents,
-        workflow_review_store=reviews,
+        workflow_review_store=reviews, workflow_remaining_store=remaining,
     )
 
 
