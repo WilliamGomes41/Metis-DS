@@ -1750,3 +1750,56 @@ html[data-theme="dark"] .metis-mark-frame { background: #fff; }
 .context-literal { display: block; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 400; }
 .passage-context textarea { width: 100%; min-height: 90px; }
 .passage-context a { overflow-wrap: anywhere; }
+
+/* Review overview per kind (presentation only) */
+.review-count-scope {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: .9rem;
+}
+.review-layer {
+  margin: 0 0 16px;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--line);
+}
+.review-layer > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.review-group {
+  margin: 0 0 12px;
+}
+.review-group-lead,
+.review-group-count {
+  color: var(--muted);
+}
+.review-open-work-ratio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.review-open-work-ratio progress,
+.review-layer progress {
+  flex: 1 1 auto;
+  max-width: 320px;
+}
+.source-category-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.source-category-tiles li {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.review-filter {
+  margin: 8px 0 12px;
+}
+.review-filter a[aria-current="page"] {
+  font-weight: 600;
+  text-decoration: none;
+}
