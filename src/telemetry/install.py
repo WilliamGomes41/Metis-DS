@@ -30,6 +30,8 @@ def install_console_observability(app, runtime: Path) -> None:
     from src.console_performance_v1 import install_console_performance
     install_console_performance(app)
     install_telemetry(telemetry_directory(runtime))
+    # The server configures its own loggers after composition; join them once it has.
+    app.add_event_handler("startup", install_logging_bridge)
 
 
 def install_telemetry(directory: Path | None) -> None:

@@ -751,26 +751,25 @@ $('#q-form').addEventListener('submit', (event) => {
 });
 
 // ---- Documenten -------------------------------------------------------
-// Pages of at most 200 authorized documents; search runs on the server over all of them.
+// Pages of at most 200 authorized documents; search and state filter run on the server over all of them.
 async function loadDocuments(more) {
   $('#d-status').textContent = 'Laden…';
-  const offset = more ? (state.docs || []).length : 0;
-  const q = new URLSearchParams({ q: $('#d-q').value.trim(), offset: String(offset) });
+  const offset = more ? (state.docNext || 0) : 0;
+  const q = new URLSearchParams({ q: $('#d-q').value.trim(), state: $('#d-state').value, offset: String(offset) });
   try {
     const response = await fetch('/inzicht/api/documents?' + q, { credentials: 'same-origin' });
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const page = await response.json();
     state.docs = more ? (state.docs || []).concat(page.documents) : page.documents;
-    state.docTotal = page.total; state.loaded.documenten = true; renderDocuments();
+    state.docTotal = page.total; state.docNext = page.next_offset; state.loaded.documenten = true; renderDocuments();
   } catch (error) { $('#d-status').textContent = 'Kon documenten niet laden (' + error.message + ').'; }
 }
 function renderDocuments() {
-  const query = $('#d-q').value.trim().toLowerCase(), filter = $('#d-state').value;
-  const rows = (state.docs || []).filter((d) => (!query || [d.title, d.snapshot_id, d.doc_ref].some((v) => String(v || '').toLowerCase().includes(query)))
-    && (!filter || (filter === 'blocked' && d.blocked) || (filter === 'errors' && d.telemetry.errors) || (filter === 'retry' && d.retry_allowed)));
-  const loaded = (state.docs || []).length, total = state.docTotal ?? loaded;
-  $('#d-status').textContent = `${rows.length} getoond · ${loaded} van ${total} documenten geladen`;
-  $('#d-more').hidden = loaded >= total;
+  const rows = state.docs || [];
+  const more = state.docNext !== null && state.docNext !== undefined;
+  $('#d-status').textContent = state.docTotal === null
+    ? `${rows.length} gevonden${more ? ' tot nu toe' : ''}` : `${rows.length} van ${state.docTotal} documenten geladen`;
+  $('#d-more').hidden = !more;
   const maxBlocked = Math.max(1, ...rows.map((d) => d.blocked || 0));
   sortable($('#d-table'), [['Document'], ['Verwerking'], ['Geblokkeerd', 1], ['Belangrijkste redenen'], ['Systeem 24 u', 1], ['Ga naar']],
     rows.map((d) => ({ sort: [d.title, d.state || '', d.blocked || 0, (d.reasons[0] || {}).code || '', d.telemetry.errors * 1000 + d.telemetry.requests, ''],
@@ -788,7 +787,7 @@ function renderDocuments() {
 }
 let docTyping; $('#d-q').addEventListener('input', () => { clearTimeout(docTyping); docTyping = setTimeout(() => loadDocuments(false), 250); });
 $('#d-more').addEventListener('click', () => loadDocuments(true));
-$('#d-state').addEventListener('change', renderDocuments);
+$('#d-state').addEventListener('change', () => loadDocuments(false));
 
 renderControls(); activate(state.tab);
 })();

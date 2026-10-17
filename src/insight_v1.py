@@ -20,6 +20,9 @@ TABS = (("systeem", "Systeem"), ("kwaliteit", "Kwaliteit & werkproces"),
         ("documenten", "Documenten"), ("controles", "Controles"))
 _HEADERS = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
 MAX_DOCUMENTS = 200
+# Documents examined per request when a state filter is active; the cursor continues the scan.
+MAX_SCAN = 1000
+DOCUMENT_STATES = ("blocked", "errors", "retry")
 
 
 def insight_tabs(current: str) -> str:
@@ -71,42 +74,61 @@ def _telemetry_by_document(since: float) -> dict[str, dict[str, int]]:
     return counts
 
 
-def documents_projection(state, account, *, query: str = "", offset: int = 0,
+def _state_matches(row: dict[str, Any], state_filter: str) -> bool:
+    return (not state_filter or (state_filter == "blocked" and bool(row["blocked"]))
+            or (state_filter == "errors" and bool(row["telemetry"]["errors"]))
+            or (state_filter == "retry" and row["retry_allowed"]))
+
+
+def documents_projection(state, account, *, query: str = "", state_filter: str = "", offset: int = 0,
                          limit: int = MAX_DOCUMENTS) -> dict[str, Any]:
-    """One page of authorized documents; search runs over the whole authorized list."""
-    from src.processing_diagnostics_v1 import processing_diagnostics
-    from src.request_diagnostics_v1 import doc_ref
+    """One page of authorized documents; search and state filter run over the whole authorized list.
+
+    ``offset`` and ``next_offset`` index the searched authorized list. Without a state
+    filter ``total`` is exact; with one it is unknown until the scan reaches the end.
+    """
     query = query.strip().lower()
+    state_filter = state_filter if state_filter in DOCUMENT_STATES else ""
     authorized = [envelope for envelope in _authorized_documents(state, account)
                   if not query or _matches_document(envelope, query)]
     offset, limit = max(0, offset), max(1, min(limit, MAX_DOCUMENTS))
-    page = authorized[offset:offset + limit]
-    telemetry = _telemetry_by_document(time.time() - 86400) if page else {}
-    rows = []
-    for envelope in page:
-        sid = envelope["snapshot_id"]
-        try:
-            status = state.processing_status(sid, actor_id=account["account_id"], deep=False)
-        except Exception:
-            status = {}
-        try:
-            diagnostics = processing_diagnostics(state.snapshot_objects(sid))
-        except Exception:
-            diagnostics = {"blocked_candidate_count": None, "by_reason_code": {}}
-        ref = doc_ref(sid)
-        reasons = list((diagnostics.get("by_reason_code") or {}).items())[:3]
-        rows.append({
-            "snapshot_id": sid, "doc_ref": ref, "title": envelope.get("title") or sid,
-            "version": envelope.get("version"), "class": envelope.get("class"),
-            "state": status.get("state") or envelope.get("state"),
-            "code": status.get("error_code") or status.get("reason_code"),
-            "retry_allowed": bool(status.get("retry_allowed")),
-            "blocked": diagnostics.get("blocked_candidate_count"),
-            "reasons": [{"code": code, "count": values.get("candidate_count")} for code, values in reasons],
-            "telemetry": telemetry.get(ref or "", {"requests": 0, "errors": 0}),
-            "named_reviewer": account["account_id"] in (envelope.get("named_reviewers") or []),
-        })
-    return {"documents": rows, "total": len(authorized), "offset": offset, "limit": limit}
+    telemetry = _telemetry_by_document(time.time() - 86400) if offset < len(authorized) else {}
+    rows, position = [], offset
+    scan_end = min(len(authorized), offset + (MAX_SCAN if state_filter else limit))
+    while position < scan_end and len(rows) < limit:
+        row = _document_row(state, account, authorized[position], telemetry)
+        position += 1
+        if _state_matches(row, state_filter):
+            rows.append(row)
+    return {"documents": rows, "total": None if state_filter else len(authorized), "offset": offset,
+            "limit": limit, "next_offset": position if position < len(authorized) else None}
+
+
+def _document_row(state, account, envelope: dict[str, Any], telemetry: dict[str, dict[str, int]]) -> dict[str, Any]:
+    from src.processing_diagnostics_v1 import processing_diagnostics
+    from src.request_diagnostics_v1 import doc_ref
+    sid = envelope["snapshot_id"]
+    try:
+        status = state.processing_status(sid, actor_id=account["account_id"], deep=False)
+    except Exception:
+        status = {}
+    try:
+        diagnostics = processing_diagnostics(state.snapshot_objects(sid))
+    except Exception:
+        diagnostics = {"blocked_candidate_count": None, "by_reason_code": {}}
+    ref = doc_ref(sid)
+    reasons = list((diagnostics.get("by_reason_code") or {}).items())[:3]
+    return {
+        "snapshot_id": sid, "doc_ref": ref, "title": envelope.get("title") or sid,
+        "version": envelope.get("version"), "class": envelope.get("class"),
+        "state": status.get("state") or envelope.get("state"),
+        "code": status.get("error_code") or status.get("reason_code"),
+        "retry_allowed": bool(status.get("retry_allowed")),
+        "blocked": diagnostics.get("blocked_candidate_count"),
+        "reasons": [{"code": code, "count": values.get("candidate_count")} for code, values in reasons],
+        "telemetry": telemetry.get(ref or "", {"requests": 0, "errors": 0}),
+        "named_reviewer": account["account_id"] in (envelope.get("named_reviewers") or []),
+    }
 
 
 def quality_projection(view: dict[str, Any]) -> dict[str, Any]:
@@ -184,5 +206,6 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
             offset, limit = int(params.get("offset") or 0), int(params.get("limit") or MAX_DOCUMENTS)
         except ValueError:
             return JSONResponse({"error": "Ongeldige pagina"}, status_code=400, headers=_HEADERS)
-        page = documents_projection(state, account, query=(params.get("q") or "")[:120], offset=offset, limit=limit)
+        page = documents_projection(state, account, query=(params.get("q") or "")[:120],
+                                    state_filter=params.get("state") or "", offset=offset, limit=limit)
         return JSONResponse(page, headers=_HEADERS)

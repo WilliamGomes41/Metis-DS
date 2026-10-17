@@ -98,6 +98,9 @@ def test_prune_keeps_other_workers_current_files_and_unusable_storage_falls_back
     sink.write('{"event":"x"}')
     sink.prune(force=True)
     assert other.exists() and not rotated.exists()
+    vanished = tmp_path / f'events-{today}-99999-bbbbbbbb-2.jsonl'
+    monkeypatch.setattr(sink, 'files', lambda: [vanished, *JsonlSink.files(sink)])
+    sink.prune(force=True)  # another worker already removed it: no error
     blocked = tmp_path / 'not-a-directory'
     blocked.write_text('')
     fresh = TelemetryHub()
@@ -121,6 +124,7 @@ def test_serve_console_uses_the_same_observability_composition(tmp_path, monkeyp
     cli.cmd_serve_console(argparse.Namespace(source_store=tmp_path / 'sources', runtime=tmp_path / 'runtime',
                                              host='127.0.0.1', port=0))
     assert any(m.cls is RequestDiagnostics for m in served['app'].user_middleware)
+    assert install_logging_bridge in served['app'].router.on_startup
     assert served['dir'] == tmp_path / 'runtime' / 'telemetry'
 
 

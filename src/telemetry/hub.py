@@ -139,17 +139,25 @@ class JsonlSink:
 
     def prune(self, *, force: bool = False) -> None:
         self._last_prune = time.monotonic()
-        files = sorted(self.files(), key=lambda path: path.stat().st_mtime)
+        # Workers prune the same directory: a file may vanish between listing and stat.
+        stats = []
+        for path in self.files():
+            try:
+                stat = path.stat()
+            except FileNotFoundError:
+                continue
+            stats.append((stat.st_mtime, stat.st_size, path))
+        stats.sort(key=lambda item: item[0])
         cutoff = time.time() - RETENTION_SECONDS
-        total = sum(path.stat().st_size for path in files)
+        total = sum(size for _mtime, size, _path in stats)
         today = datetime.now(timezone.utc).strftime("%Y%m%d")
-        for path in files:
+        for mtime, size, path in stats:
             # Another worker may still append to its current file (today's name,
             # not rotated): unlinking it would silently lose that worker's events.
             if path == self._path or (_is_current_name(path) and path.name.split("-")[1] == today):
                 continue
-            if path.stat().st_mtime < cutoff or total > TOTAL_MAX_BYTES:
-                total -= path.stat().st_size
+            if mtime < cutoff or total > TOTAL_MAX_BYTES:
+                total -= size
                 path.unlink(missing_ok=True)
 
     def files(self) -> list[Path]:

@@ -117,3 +117,7 @@ def test_documents_are_paged_and_searched_over_the_whole_authorized_list():
     assert [d['title'] for d in last['documents']] == ['Richtlijn 4']
     found = documents_projection(State(), account, query='richtlijn 4', limit=2)
     assert found['total'] == 1 and found['documents'][0]['title'] == 'Richtlijn 4'
+    State.processing_status = lambda self, sid, **_kwargs: {'state': 'failed', 'retry_allowed': sid.endswith('4')}
+    retry = documents_projection(State(), account, state_filter='retry', limit=2)
+    assert [d['title'] for d in retry['documents']] == ['Richtlijn 4']
+    assert retry['total'] is None and retry['next_offset'] is None
