@@ -11,9 +11,11 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
+from contextlib import contextmanager
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, Iterator
 
 import pytest
 
@@ -23,15 +25,20 @@ from src.operations_console_v1 import (
     _objects_jsonl_bytes,
 )
 from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
+from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.workflows.workflow_documents_cutover_v1 import (
     PostgresWorkflowDocumentRuntimeStore,
     _PostgresWorkflowDocumentsMixin,
 )
+from src.workflows.workflow_review_cutover_v1 import _PostgresWorkflowReviewMixin
+from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class _SharedDocumentStore:
+    config = SimpleNamespace(dsn="test-double")
+
     def __init__(self) -> None:
         self.envelopes = {
             "snap-a": {"snapshot_id": "snap-a", "family": "old-a"},
@@ -89,8 +96,52 @@ class _SharedDocumentStore:
                 self.objects[snapshot_id] = deepcopy(objects)
             return self._revision(self.objects[snapshot_id])
 
+    @contextmanager
+    def _connect(self) -> Iterator["_SharedDocumentStore"]:
+        yield self
 
-class _DocumentConsole(_PostgresWorkflowDocumentsMixin, OperationsConsole):
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        yield
+
+
+class _ReviewStoreDouble(PostgresWorkflowReviewStore):
+    """#665 (besluit 10c): a real PostgresWorkflowReviewStore on the document
+    double's config, with in-memory review state; it shares the document
+    double's connection, so one workflow transaction spans both."""
+
+    def __init__(self, documents: _SharedDocumentStore) -> None:
+        super().__init__(PostgresCanonicalConfig(dsn="test-double"))
+        self.config = documents.config
+        self.documents = documents
+        self.events: list[dict[str, Any]] = []
+        self.bindings: dict[str, list[dict[str, Any]]] = {}
+
+    def _connect(self) -> Any:
+        return self.documents._connect()
+
+    def verify_review_schema(self) -> None:
+        return None
+
+    def read_events(self) -> list[dict[str, Any]]:
+        return deepcopy(self.events)
+
+    def append_event(self, **event: Any) -> dict[str, Any]:
+        self.events.append(deepcopy(event))
+        return deepcopy(event)
+
+    @contextmanager
+    def buffered(self) -> Iterator[None]:
+        yield
+
+    def read_bindings(self, snapshot_ids: list[str] | None = None) -> dict[str, list[dict[str, Any]]]:
+        return deepcopy(self.bindings)
+
+    def replace_snapshot_bindings(self, snapshot_id: str, rows: list[dict[str, Any]]) -> None:
+        self.bindings[snapshot_id] = deepcopy(rows)
+
+
+class _DocumentConsole(_PostgresWorkflowReviewMixin, _PostgresWorkflowDocumentsMixin, OperationsConsole):
     pass
 
 
@@ -102,6 +153,7 @@ def _document_console(
         runtime=tmp_path / "runtime",
         source_store=tmp_path / "sources",
         workflow_document_store=store,  # type: ignore[arg-type]
+        workflow_review_store=_ReviewStoreDouble(store),
     )
 
 
@@ -346,7 +398,8 @@ def test_delete_source_cleanup_follows_transaction_commit_and_restart(tmp_path, 
     store.objects = {sid: deepcopy(local._load_objects(sid))}
     def restart():
         return _DocumentConsole(root=tmp_path, runtime=tmp_path/'runtime', source_store=tmp_path/'sources',
-                                immutable_source_store=source, workflow_document_store=store)
+                                immutable_source_store=source, workflow_document_store=store,
+                                workflow_review_store=_ReviewStoreDouble(store))
     console = restart()
     locator = console._envelope(sid)['immutable_storage_locator']
     original = source.load_verified(locator)

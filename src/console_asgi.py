@@ -40,11 +40,7 @@ from src.workflows.workflow_badge_counts_postgres_v1 import (
     FastBadgePostgresCompleteWorkflowDurablePublicationConsole,
 )
 from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-from src.workflows.workflow_documents_cutover_v1 import (
-    PostgresWorkflowAzureAuthoritativePublicationConsole,
-    PostgresWorkflowDocumentRuntimeStore,
-    PostgresWorkflowDurablePublicationConsole,
-)
+from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
 from src.workflows.workflow_identity_cutover_v1 import CutoverPostgresWorkflowIdentityStore
 from src.workflows.workflow_identity_postgres_v1 import (
     PostgresIdentityAzureAuthoritativePublicationConsole,
@@ -130,6 +126,14 @@ def _workflow_identity_store(*, credential: Any | None = None) -> PostgresWorkfl
         store = CutoverPostgresWorkflowIdentityStore(credential=credential)
     store.verify_schema()
     return store
+
+
+def _refuse_unsupported_document_topology() -> None:
+    """#665: refuse PG documents without PG review; env only, before any credential or PG read."""
+    documents = os.environ.get("METIS_WORKFLOW_DOCUMENT_STORE", "").strip().lower()
+    review = os.environ.get("METIS_WORKFLOW_REVIEW_STORE", "").strip().lower()
+    if documents == "postgres" and review != "postgres":
+        raise RuntimeError("workflow_review_store_required_for_document_store")
 
 
 def _workflow_document_store(*, credential: Any | None = None) -> PostgresWorkflowDocumentRuntimeStore | None:
@@ -243,6 +247,7 @@ def _require_azure_workflow_authorities(*stores) -> None:
 
 def build_app() -> object:
     install_structured_logging()
+    _refuse_unsupported_document_topology()
     topology = assert_supported_topology()
     data_root = _env_path("CONSOLE_DATA_ROOT", _default_data_root())
     immutable_store = _immutable_source_store()
@@ -304,19 +309,6 @@ def build_app() -> object:
             workflow_identity_store=workflow_identity_store,
             workflow_document_store=workflow_document_store,
             workflow_review_store=workflow_review_store,
-        )
-    elif workflow_document_store is not None:
-        if workflow_identity_store is None:
-            raise RuntimeError("workflow_identity_store_required_for_document_store")
-        console_cls = (
-            PostgresWorkflowAzureAuthoritativePublicationConsole
-            if running_in_azure
-            else PostgresWorkflowDurablePublicationConsole
-        )
-        console = console_cls(
-            **common,
-            workflow_identity_store=workflow_identity_store,
-            workflow_document_store=workflow_document_store,
         )
     elif workflow_identity_store is not None:
         console_cls = (

@@ -25,13 +25,15 @@ from src.passage_register_v1 import passage_register_of
 from src.publish_readiness_ui_v1 import install_publish_readiness_ui
 from src.review_disposition_v1 import definitive_review_disposition
 from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
+from src.workflows.workflow_documents_cutover_v1 import _PostgresWorkflowDocumentsMixin
 from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
 from src.workflows.workflow_remaining_cutover_v1 import (
     PostgresCompleteWorkflowDurablePublicationConsole,
     _PostgresRemainingWorkflowMixin,
 )
 from src.workflows.workflow_review_cutover_v1 import PostgresReviewWorkflowDurablePublicationConsole
+from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+from src.workflows.workflow_transaction_v1 import bind_workflow_stores
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
@@ -166,11 +168,15 @@ class MemoryCanonicalStore:
 
 def _stores(
     config: PostgresCanonicalConfig,
-) -> tuple[PostgresWorkflowIdentityStore, PostgresConcurrentWorkflowDocumentStore]:
-    return (
+) -> tuple[PostgresWorkflowIdentityStore, PostgresConcurrentWorkflowDocumentStore, PostgresWorkflowReviewStore]:
+    # #665: PG documents require PG review authority on the same config.
+    stores = (
         PostgresWorkflowIdentityStore(config),
         PostgresConcurrentWorkflowDocumentStore(config),
+        PostgresWorkflowReviewStore(config),
     )
+    bind_workflow_stores(*stores)
+    return stores
 
 
 def _console(
@@ -180,9 +186,9 @@ def _console(
     source: MemorySourceStore,
     *,
     runtime_name: str,
-) -> PostgresWorkflowDurablePublicationConsole:
-    identity, documents = _stores(config)
-    return PostgresWorkflowDurablePublicationConsole(
+) -> PostgresReviewWorkflowDurablePublicationConsole:
+    identity, documents, reviews = _stores(config)
+    return PostgresReviewWorkflowDurablePublicationConsole(
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / runtime_name,
@@ -190,6 +196,7 @@ def _console(
         canonical_publication_store=durable,  # type: ignore[arg-type]
         workflow_identity_store=identity,
         workflow_document_store=documents,
+        workflow_review_store=reviews,
     )
 
 
@@ -198,7 +205,7 @@ def _ready_console(
     config: PostgresCanonicalConfig,
     durable: MemoryCanonicalStore,
     source: MemorySourceStore,
-) -> tuple[PostgresWorkflowDurablePublicationConsole, dict[str, dict], dict]:
+) -> tuple[PostgresReviewWorkflowDurablePublicationConsole, dict[str, dict], dict]:
     console = _console(
         tmp_path,
         config,
@@ -452,7 +459,9 @@ def test_postcanonical_workflow_failure_retries_same_release_and_converges(
 
 
 def test_all_postgres_document_workflow_modes_share_one_publication_followup() -> None:
-    document_impl = PostgresWorkflowDurablePublicationConsole._apply_local_release_copy
+    # #665 (besluit 10b): the tier D console is refused at construction and
+    # is no longer a workflow mode; the shared implementation is the mixin's.
+    document_impl = _PostgresWorkflowDocumentsMixin._apply_local_release_copy
     assert PostgresReviewWorkflowDurablePublicationConsole._apply_local_release_copy is document_impl
     assert PostgresCompleteWorkflowDurablePublicationConsole._apply_local_release_copy is document_impl
     assert "_apply_local_release_copy" not in _PostgresRemainingWorkflowMixin.__dict__

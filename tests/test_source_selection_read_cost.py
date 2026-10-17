@@ -20,9 +20,12 @@ import time
 import pytest
 from tests.test_review_render_source_reuse import review_client
 from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
+from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.workflows.workflow_documents_cutover_v1 import (
     _PostgresWorkflowDocumentsMixin, PostgresWorkflowDocumentRuntimeStore,
 )
+from src.workflows.workflow_review_cutover_v1 import _PostgresWorkflowReviewMixin
+from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 
 
 @pytest.fixture
@@ -66,10 +69,20 @@ def postgres_selection(review_client, request):
                   else PostgresConcurrentWorkflowDocumentStore)
     store = store_type.__new__(store_type)
     store._connect = connect
+    # #665 (besluit 10d): documents only under PG review authority, a real
+    # PostgresWorkflowReviewStore on the same config. Review reads return the
+    # fixture's bindings, so the counted SQL transport stays documents-only.
+    review = PostgresWorkflowReviewStore.__new__(PostgresWorkflowReviewStore)
+    store.config = review.config = PostgresCanonicalConfig(dsn='host=read-cost-double')
+    bindings = deepcopy(console._bindings)
+    review.read_bindings = lambda snapshot_ids=None: deepcopy(bindings)
     # Same PostgreSQL mixin methods and actual HTTP application as production;
     # only the SQL transport and already-created account store are local.
-    console.__class__ = type('SelectionPostgresConsole', (_PostgresWorkflowDocumentsMixin, console.__class__), {})
+    console.__class__ = type('SelectionPostgresConsole', (
+        _PostgresWorkflowReviewMixin, _PostgresWorkflowDocumentsMixin, console.__class__), {})
     console.workflow_document_store = store
+    console.workflow_review_store = review
+    console._bindings_baseline = deepcopy(bindings)
     return console, client, sid, durable, calls
 
 
