@@ -1,0 +1,39 @@
+{
+  "envelopes": {},
+  "files": {
+    "runtime/accounts.json": {
+      "author": {
+        "account_id": "author",
+        "display_name": "Author",
+        "roles": [
+          "researcher",
+          "reviewer"
+        ],
+        "username": "author"
+      },
+      "other": {
+        "account_id": "other",
+        "display_name": "Other",
+        "roles": [
+          "reviewer"
+        ],
+        "username": "other"
+      },
+      "reviewer": {
+        "account_id": "reviewer",
+        "display_name": "Reviewer",
+        "roles": [
+          "reviewer"
+        ],
+        "username": "reviewer"
+      }
+    },
+    "sources/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html": {
+      "bytes": 101,
+      "sha256": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2"
+    }
+  },
+  "outcome": {
+    "error": "fixture_registration_refused"
+  }
+}

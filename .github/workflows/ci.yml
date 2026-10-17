@@ -28,6 +28,46 @@ jobs:
       - name: Check domain contract import boundaries
         run: python scripts/check_architecture_boundaries.py
 
+  characterization-evidence:
+    needs: [change-contract, architecture-boundaries]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements-dev.lock
+      - run: pip install --no-deps --no-build-isolation -e .
+      - name: Characterization mutation ingest (expected exit code 1)
+        run: |
+          set +e
+          python -m pytest -q tests/characterization/test_ingest.py tests/characterization/test_ingest_boundaries.py --characterization-mutation=ingest --junitxml=output/char-mutation-ingest.xml
+          code=$?
+          set -e
+          python tests/characterization/check_evidence.py mutation ingest "$code" output/char-mutation-ingest.xml
+      - name: Characterization mutation review (expected exit code 1)
+        if: ${{ !cancelled() }}
+        run: |
+          set +e
+          python -m pytest -q tests/characterization/test_review_room.py --characterization-mutation=review --junitxml=output/char-mutation-review.xml
+          code=$?
+          set -e
+          python tests/characterization/check_evidence.py mutation review "$code" output/char-mutation-review.xml
+      - name: Characterization coverage against baseline (green after restore)
+        if: ${{ !cancelled() }}
+        run: |
+          python -m coverage run --branch --source=src.operations_console_v1,src.operations_console_app -m pytest -q tests/characterization
+          python -m coverage json -o output/characterization-coverage.json
+          python tests/characterization/check_evidence.py coverage output/characterization-coverage.json
+      - name: Upload characterization evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: characterization-evidence
+          path: output/char*
+          if-no-files-found: warn
+
   test:
     needs: [change-contract, architecture-boundaries]
     runs-on: ubuntu-latest
