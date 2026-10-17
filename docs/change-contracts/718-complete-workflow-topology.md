@@ -35,3 +35,8 @@ Separate review checks: all 32 presence/absence combinations; normalized casing;
 - Repository preflight, release-control preflight, compilation, architecture boundaries and six architecture invariant tests passed.
 - Separate pass found the `console-account` local writer also ignored PG/Azure settings. It now shares the local-command guard with `serve-console`; six refusal cases cover both commands. The existing local commands remain supported.
 - CI and mandatory Sherlock/Argos review are still required. No merge, deployment or issue closure is claimed by this evidence record.
+
+
+## First native run and test-fixture correction
+
+GitHub run 39066411438: 322 passed, 3 failed, zero skipped. Both complete startup variants reached the login page; the new restart assertion incorrectly read `_accounts`, which the PostgreSQL identity implementation does not populate. Replace it with real authentication after restart and compare the durable account ID. The migrated A08 published rejection scenario only marked the envelope as published; R+ correctly asks the canonical store. Seed the existing canonical release/audit fixture as well, retaining the rejection and zero-write assertions. No production behavior is changed to accommodate these tests. A fresh native run is required before acceptance.
