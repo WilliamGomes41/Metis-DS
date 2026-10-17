@@ -256,10 +256,13 @@ def test_t5_two_threads_same_console_concurrent_approve_survives(workflow_postgr
             # the fix) when A no longer owns the store lock. _store_lock_depth
             # and the flock are shared by both threads, so ownership MOET be
             # checked per thread on the re-entrant thread lock.
-            if threading.get_ident() == a_thread.get("id") and not console._store_thread_lock._is_owned():
-                order.append(f"a_released:{name}")
-                b_done.wait(timeout=10)
-                order.append(f"a_post_rollback:{name}")
+            if threading.get_ident() == a_thread.get("id"):
+                if console._store_thread_lock._is_owned():
+                    order.append(f"a_post_rollback_locked:{name}")
+                else:
+                    order.append(f"a_released:{name}")
+                    b_done.wait(timeout=10)
+                    order.append(f"a_post_rollback:{name}")
             return original(*args, **kwargs)
 
         monkeypatch.setattr(console, name, wrapped)
@@ -293,13 +296,14 @@ def test_t5_two_threads_same_console_concurrent_approve_survives(workflow_postgr
     assert not ta.is_alive() and not tb.is_alive()
     assert errors == ["r2_injected_fault"]
     print("R2_T5_ORDER", order)
-    # Intended interleaving (MOET): A faults under the lock, releases it, then
-    # B commits, and only then A's post-rollback step (restore pre-fix,
-    # remirror post-fix) runs.
+    # #678 (B1): the Storeopdracht owner remirrors after its rollback while it
+    # still holds the store lock, so the pre-#678 window (A releases, B commits,
+    # A remirrors stale) MAG NIET exist. B commits only after A's remirror.
     released = [i for i, m in enumerate(order) if m.startswith("a_released:")]
-    resumed = [i for i, m in enumerate(order) if m.startswith("a_post_rollback:")]
-    assert released and resumed, f"window MOET be exercised: {order}"
-    assert order.index("a_fault") < released[0] < order.index("b_committed") < resumed[0], order
+    locked = [i for i, m in enumerate(order) if m.startswith("a_post_rollback_locked:")]
+    assert released == [], f"A MAG NIET remirror after releasing the store lock: {order}"
+    assert locked, f"A's post-rollback remirror MOET run: {order}"
+    assert order.index("a_fault") < locked[0] < order.index("b_committed"), order
     fresh = _console(tmp_path, workflow_postgres)
     b_bindings = [x for x in fresh.workflow_review_store.read_bindings().get(sid, [])
                   if x["object_id"] == obj_b["object_id"] and x["decision"] == "approve"]
@@ -500,8 +504,8 @@ def _failing_remirror_warnings(monkeypatch, console, caplog):
 
 
 def test_optc_ordinary_fault_through_commit_prepared_store_logs_one_warning(workflow_postgres, tmp_path, monkeypatch, caplog):
-    """Option C: the fault fires in _commit_prepared_store below two nested review
-    mutations; every level remirrors, the warning MOET appear exactly once."""
+    """B1 (#678): the fault fires in _commit_prepared_store below two nested review
+    mutations; only the Storeopdracht owner remirrors, the warning MOET appear exactly once."""
     console, rid, sid, (obj_a, _obj_b) = _setup(tmp_path, workflow_postgres)
     before = _state(console, sid)
     flag = threading.Event()
@@ -519,7 +523,7 @@ def test_optc_ordinary_fault_through_commit_prepared_store_logs_one_warning(work
         _approve(console, rid, sid, obj_a)
     records = collected()
     print("OPTC_COMMIT_WARNINGS", records, "REMIRROR_CALLS", remirror_calls)
-    assert len(remirror_calls) >= 2, f"remirror MOET run on every level: {remirror_calls}"
+    assert len(remirror_calls) == 1, f"only the command owner MAG remirror: {remirror_calls}"
     assert _state(_console(tmp_path, workflow_postgres), sid) == before
     assert len(records) == 1, f"exactly one remirror warning MOET be logged: {records}"
 
@@ -550,7 +554,8 @@ def _caught_nested(console, rid, sid, obj):
 
 
 def test_optc_caught_nested_fault_mirrors_equal_pg(workflow_postgres, tmp_path, monkeypatch):
-    """A caller catches the inner fault and continues: mirrors MOET equal PG after."""
+    """A caller catches the inner fault and continues: mirrors MOET equal PG after.
+    B1 (#678): the participant MAG NIET remirror; the owner commits and rebuilds."""
     console, rid, sid, (obj_a, _obj_b) = _setup(tmp_path, workflow_postgres)
     calls = []
     original = rc._PostgresWorkflowReviewMixin._remirror_after_rollback
@@ -565,19 +570,21 @@ def test_optc_caught_nested_fault_mirrors_equal_pg(workflow_postgres, tmp_path, 
     _caught_nested(console, rid, sid, obj_a)
     print("OPTC_CAUGHT_REMIRRORS", calls)
     _assert_i2_events_match_bindings(console, events_before, bindings_before)
-    assert calls == ["optc_caught_inner"], f"inner level MOET remirror: {calls}"
+    assert calls == [], f"a participant MAG NIET remirror inside the open command: {calls}"
     _assert_disk_mirrors_equal_pg(console)
     fresh = _console(tmp_path, workflow_postgres)
     assert _state(fresh, sid) == _state(console, sid)
 
 
-def test_optc_caught_nested_fault_with_remirror_failure_logs_one_warning(workflow_postgres, tmp_path, monkeypatch, caplog):
+def test_optc_caught_nested_fault_does_not_run_rollback_remirror(workflow_postgres, tmp_path, monkeypatch, caplog):
+    """B1 (#678): a caught participant fault is no command rollback, so the
+    rollback remirror MAG NIET run and no rollback warning is logged."""
     console, rid, sid, (obj_a, _obj_b) = _setup(tmp_path, workflow_postgres)
     collected = _failing_remirror_warnings(monkeypatch, console, caplog)
     _caught_nested(console, rid, sid, obj_a)
     records = collected()
     print("OPTC_CAUGHT_WARNINGS", records)
-    assert len(records) == 1, f"exactly one remirror warning MOET be logged: {records}"
+    assert records == [], f"no rollback remirror MAG run for a caught participant fault: {records}"
 
 
 def test_optc_dedupe_survives_exception_rejecting_attributes(workflow_postgres, tmp_path, monkeypatch, caplog):

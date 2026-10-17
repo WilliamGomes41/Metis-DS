@@ -38,6 +38,7 @@ from src.workflows.workflow_identity_postgres_v1 import (
 )
 from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 from src.workflows.workflow_transaction_v1 import bind_workflow_stores, workflow_transaction, workflow_transaction_active
+from src.workflows.store_command_v1 import owned_store_command
 from src.workflows.workflow_transaction_v1 import WorkflowTransactionError, _config_identity
 
 REVIEW_STORE_REQUIRED_FOR_DOCUMENT_STORE = "workflow_review_store_required_for_document_store"
@@ -500,10 +501,19 @@ class _PostgresWorkflowDocumentsMixin:
         return current
 
     def _mirror_objects(self, snapshot_id: str, rows: list[dict[str, Any]]) -> None:
+        command = owned_store_command(self)
+        if command is not None:
+            # #678 U3: rebuilt from PostgreSQL after the commit.
+            command.objects.add(snapshot_id)
+            return
         with suppress(OSError):
             _atomic_replace_bytes(self._objects_path(snapshot_id), _objects_jsonl_bytes(rows))
 
     def _mirror_envelopes(self) -> None:
+        command = owned_store_command(self)
+        if command is not None:
+            command.envelopes = True
+            return
         with suppress(OSError):
             _atomic_write(self._envelopes_path, self._envelopes)
 
