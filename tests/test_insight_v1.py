@@ -2,7 +2,7 @@
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: toegang
-# release-control-evidence: metrics
+# release-control-evidence: metrics teller noemer score-must-drop
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
@@ -72,3 +72,26 @@ def test_settings_hub_channels_inzicht_beheer_and_uitleg(tmp_path):
     assert 'href="/settings/quality"' not in settings and 'href="/telemetry"' not in settings
     technical = client.get('/settings/technical').text
     assert 'href="/inzicht?tab=documenten"' in technical
+
+
+def test_quality_projection_keeps_teller_noemer_and_shows_a_score_drop():
+    """metrics: the chart projection passes the measured teller (direct) and noemer
+    (first decisions) unchanged, and a later lower score MUST show as a drop."""
+    from src.insight_v1 import quality_projection
+
+    def report(as_of, direct, first):
+        rate = direct / first if first else None
+        return {"as_of": as_of, "definition_version": "v", "filters": {}, "cohort_size": 1, "open_passages": 3,
+                "oldest_unfinished_source_days": 1.0, "publication_duration_seconds": {"samples": 0, "median": None, "p90": None},
+                "burden": {"review_interactions": 1, "object_decisions": 1},
+                "routes": {"semantic": {"direct": direct, "first_decisions": first, "known_comparisons": first,
+                                        "direct_rate": rate, "changed_fields": {"text": 1}}},
+                "documents": [], "processing_runs": {}, "definitions": {}, "limitations": [],
+                "readiness_duration": {"reason": "r"}, "clinical_errors": {"reason": "c"}}
+    earlier = {"calculation_id": "a", "report": report("2026-10-16T08:00:00Z", 4, 5)}
+    later = {"calculation_id": "b", "report": report("2026-10-17T08:00:00Z", 4, 8)}
+    data = quality_projection({"record": later, "report": later["report"], "history": [later, earlier]})
+    semantic = data["routes"]["semantic"]
+    assert (semantic["direct"], semantic["first_decisions"]) == (4, 8)
+    rates = [point["direct_rate"]["semantic"] for point in data["trend"]]
+    assert rates == [0.8, 0.5] and rates[-1] < rates[0], "score-must-drop: the drop MUST stay visible"

@@ -2,6 +2,7 @@
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: metrics
+# release-control-evidence: opslag concurrent stale
 # release-control-evidence: beschikbaarheid
 # release-control-evidence: toegang
 # release-control-evidence: slop
@@ -287,3 +288,41 @@ def test_every_http_middleware_is_excluded_from_error_frames():
     for path in Path('src').rglob('*.py'):
         names.update(re.findall(r'@app\.middleware\("http"\)\s*\n\s*async def (\w+)', path.read_text(encoding='utf-8')))
     assert names and names <= MIDDLEWARE_FUNCTIONS, names - MIDDLEWARE_FUNCTIONS
+
+
+def test_concurrent_store_lock_wait_is_measured_and_stale_request_is_aborted(tmp_path, events):
+    """opslag: a concurrent writer waits on the store lock and the wait is visible;
+    a request whose heartbeats went stale is reported as aborted, not as running."""
+    import threading
+    from src.operations_console_v1 import OperationsConsole
+    console = OperationsConsole(root=tmp_path, runtime=tmp_path / 'runtime')
+    holding, release = threading.Event(), threading.Event()
+
+    def holder():
+        with console._store_write_lock():
+            holding.set()
+            release.wait(5)
+
+    thread = threading.Thread(target=holder)
+    thread.start()
+    holding.wait(5)
+    app = FastAPI()
+
+    @app.post('/write')
+    def write():
+        with console._store_write_lock():
+            return {'ok': True}
+
+    app.add_middleware(RequestDiagnostics)
+    with TestClient(app) as client:
+        timer = threading.Timer(0.15, release.set)
+        timer.start()
+        assert client.post('/write').status_code == 200
+    thread.join(5)
+    wait = [e for e in events if e['event'] == 'request_finished'][-1]['phases']['store_lock_wait']
+    assert wait['calls'] == 1 and wait['inclusive_ms'] >= 100
+    now = time.time()
+    stale = [_event(now - 120, 'request_started', 'stale', route='/review', commit='c'),
+             _event(now - 100, 'request_running', 'stale', route='/review', phase='store_lock_wait')]
+    detail = analysis.request_detail(stale, 'stale', now=now)
+    assert detail['request']['state'] == 'aborted' and detail['request']['last_phase'] == 'store_lock_wait'
