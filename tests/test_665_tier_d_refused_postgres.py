@@ -576,11 +576,11 @@ def _psql() -> str:
     return found
 
 
-def _run_check(conninfo: str, *, detail: bool = False) -> subprocess.CompletedProcess:
+def _run_check(conninfo: str, *, detail: str | None = None) -> subprocess.CompletedProcess:
     assert CHECK_SQL.is_file(), "db/checks/tier_d_damage_counts_v1.sql is missing"
     args = [_psql(), "-X", "-q", "-A", "-F", "|", "-P", "footer=off", "-d", conninfo, "-f", str(CHECK_SQL)]
-    if detail:
-        args[1:1] = ["-v", "detail=1"]
+    if detail is not None:
+        args[1:1] = ["-v", f"detail={detail}"]
     return subprocess.run(args, capture_output=True, text=True, timeout=60)
 
 
@@ -766,7 +766,7 @@ def test_t13_default_output_is_aggregate_only_and_detail_needs_flag(workflow_pos
     _insert_version(workflow_postgres, sid, queue[0]["object_id"], "1.0.7")
     with _role(workflow_postgres) as conninfo:
         default = _run_check(conninfo)
-        detail = _run_check(conninfo, detail=True)
+        detail = _run_check(conninfo, detail="1")
     assert default.returncode == 0
     assert sid not in default.stdout
     assert queue[0]["object_id"] not in default.stdout
@@ -775,6 +775,54 @@ def test_t13_default_output_is_aggregate_only_and_detail_needs_flag(workflow_pos
     lines = [line for line in detail.stdout.splitlines() if line.strip()]
     header = lines.index("snapshot_id|object_id|object_version|redencategorie")
     assert lines[header + 1:] == [f"{sid}|{queue[0]['object_id']}|1.0.7|{CANDIDATE}"]
+
+
+DETAIL_HEADER = "snapshot_id|object_id|object_version|redencategorie"
+
+
+@pytest.mark.parametrize("value", ["0", "false", "", "nee", None])
+def test_t13_detail_only_on_explicit_1_or_true_otherwise_aggregate(workflow_postgres, tmp_path, value):
+    console = _review_tier(tmp_path, workflow_postgres)
+    sid, _rid, queue = _ingest(console)
+    _insert_version(workflow_postgres, sid, queue[0]["object_id"], "1.0.7")
+    with _role(workflow_postgres) as conninfo:
+        result = _run_check(conninfo, detail=value)
+    assert result.returncode == 0, "detection SQL failed under the read-only role"
+    assert DETAIL_HEADER not in result.stdout
+    assert sid not in result.stdout
+    assert queue[0]["object_id"] not in result.stdout
+
+
+@pytest.mark.parametrize("value", ["1", "true"])
+def test_t13_detail_on_for_explicit_1_or_true(workflow_postgres, tmp_path, value):
+    console = _review_tier(tmp_path, workflow_postgres)
+    sid, _rid, queue = _ingest(console)
+    _insert_version(workflow_postgres, sid, queue[0]["object_id"], "1.0.7")
+    with _role(workflow_postgres) as conninfo:
+        result = _run_check(conninfo, detail=value)
+    assert result.returncode == 0, "detection SQL failed under the read-only role"
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    assert lines[lines.index(DETAIL_HEADER) + 1:] == [f"{sid}|{queue[0]['object_id']}|1.0.7|{CANDIDATE}"]
+
+
+def test_t13_l2_psql_argv_carries_no_password(monkeypatch):
+    # L-2: pytest prints CompletedProcess/argv on failure, so the password MOET NOOIT in argv staan.
+    # Synthetic secret; only booleans reach assert text.
+    secret = "l2" + secrets.token_hex(12)
+    seen = {}
+
+    def spy(args, **kwargs):
+        seen["args"], seen["env"] = list(args), dict(kwargs.get("env") or {})
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", spy)
+    _run_check(f"host=/tmp/l2-sock port=1 user=l2user dbname=l2db password={secret}", detail="1")
+    argv_leak = any(secret in arg or "password" in arg.lower() for arg in seen["args"])
+    assert not argv_leak, "psql argv carries a password"
+    env_has_password = seen["env"].get("PGPASSWORD") == secret
+    assert env_has_password, "PGPASSWORD is not passed via env"
+    routed = [seen["env"].get(k) for k in ("PGHOST", "PGPORT", "PGUSER", "PGDATABASE")]
+    assert routed == ["/tmp/l2-sock", "1", "l2user", "l2db"]
 
 
 @pytest.mark.parametrize("privileges", [None, ("SELECT", "INSERT"), ("SELECT", "TRUNCATE")])
