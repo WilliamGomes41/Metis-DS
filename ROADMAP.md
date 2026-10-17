@@ -85,7 +85,7 @@ Een proof-slice wordt pas een nieuwe repair bij een reproduceerbare invariantbre
 
 ## R4.5 Resterende auditbevindingen en productieacceptatie
 
-**Status:** voor A01, A02, A04, A05, A09, A15 en A26 zijn reparaties gemergd. De overige twintig staan nog open: A03, A06, A07, A08 en A10 als losse issues (#553, #556, #557, #558, #560), A11–A27 gebundeld in [#688](https://github.com/WilliamGomes41/Metis-DS/issues/688). Registratie alleen start geen implementatie.
+**Status:** voor A01, A02, A04, A05, A09, A15 en A26 zijn reparaties gemergd. De overige twintig staan nog open: A03, A06, A07, A08 en A10 als losse issues (#553, #556, #557, #558, #560), A11–A27 (zonder A15/A26) gebundeld in [#688](https://github.com/WilliamGomes41/Metis-DS/issues/688). Registratie alleen start geen implementatie.
 
 - Volg de bestaande ID-koppelingen in [het auditoverzicht](docs/audit/README.md). GitHub is de voortgangsbron; de HTML is een gedateerde momentopname.
 - Verifieer de gemergde beschikbaarheids-, bronhergebruik- en contextnavigatiereparaties via de oorspronkelijke gebruikershandeling op de werkelijk draaiende commit. Gesloten codeissues zijn geen productieacceptatie.
