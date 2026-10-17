@@ -3,7 +3,7 @@
 **Status:** actief  
 **Peildatum:** 2026-10-17
 
-**Gecontroleerde main:** [`4991cc6067d90bd3e839c9943c2d7cfac043e776`](https://github.com/WilliamGomes41/Metis-DS/commit/4991cc6067d90bd3e839c9943c2d7cfac043e776) (merge van #732).
+**Gecontroleerde main:** [`8f0e2692216ad44afa13e2e357c05f32e66fb3db`](https://github.com/WilliamGomes41/Metis-DS/commit/8f0e2692216ad44afa13e2e357c05f32e66fb3db) (merge van #735).
 
 **Functie:** actieve veranderopgaven en bewijspoorten. Uitgevoerde geschiedenis hoort in changelog of `docs/history/`.
 
@@ -18,10 +18,11 @@ GitHub-issues blijven de voortgangsbron; dit is alleen een overdrachtsoverzicht 
 - #683 `_lane_total` (sluit #672 en #700) → `3f9389df`.
 - #731 tier D fail-closed (sluit #665, Class A) → `e228aa90`. Opvolging: zie [#733](https://github.com/WilliamGomes41/Metis-DS/issues/733) en [#734](https://github.com/WilliamGomes41/Metis-DS/issues/734) (tests voor hoofdlettervarianten van de detailwaarde).
 - #732 deploy-SHA-check (sluit #684, Class B), inclusief de fix voor de afsluitende `/` in `AZURE_*_APP_URL` → `4991cc60`. Nog niet bewezen in een echte deploy.
+- #735 dode code verwijderd (sluit #689) → `8f0e2692`. Opvolging: [#740](https://github.com/WilliamGomes41/Metis-DS/issues/740).
 
 **Open:**
 - [#695](https://github.com/WilliamGomes41/Metis-DS/issues/695) deployvoorwaarden (`critical-path`): Azure-info van William, backup met bewezen herstel, read-only schadecheck tier D, #684-check, GRANTs migratie 018. Er MAG NIETS live voordat #695 is afgevinkt. Geen deploydatum.
-- Kernissues: #730 (PG als enige bron van waarheid), #689 (dode code; PR #735 in uitvoering), #737 (flaky peiltijd-test in `test_availability_repair`), #738 (omgevingsafhankelijke tests: SSRF met proxyvariabelen, sandbox als root), #690–#699, #701–#729 (inventaris). Smetten-branch `diag/smetten-coverage-remainder` is gepauzeerd (#515).
+- Kernissues: #730 (PG als enige bron van waarheid), #740 (opvolging #735: ongebruikte imports, dode-codecheck), #737 (flaky peiltijd-test in `test_availability_repair`), #738 (omgevingsafhankelijke tests: SSRF met proxyvariabelen, sandbox als root), #690–#699, #701–#729 (inventaris). Smetten-branch `diag/smetten-coverage-remainder` is gepauzeerd (#515).
 
 **Besluiten William 2026-10-17:**
 - Tier D wordt fail-closed geweigerd.
