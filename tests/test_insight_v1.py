@@ -95,3 +95,25 @@ def test_quality_projection_keeps_teller_noemer_and_shows_a_score_drop():
     assert (semantic["direct"], semantic["first_decisions"]) == (4, 8)
     rates = [point["direct_rate"]["semantic"] for point in data["trend"]]
     assert rates == [0.8, 0.5] and rates[-1] < rates[0], "score-must-drop: the drop MUST stay visible"
+
+
+def test_documents_are_paged_and_searched_over_the_whole_authorized_list():
+    from src.insight_v1 import documents_projection
+
+    class State:
+        def list_envelopes(self):
+            return [{'snapshot_id': f'snap-{i:016x}-0000000{i}', 'title': f'Richtlijn {i}'} for i in range(5)]
+
+        def processing_status(self, *_args, **_kwargs):
+            return {'state': 'ready'}
+
+        def snapshot_objects(self, _sid):
+            return []
+
+    account = {'account_id': 'a', 'roles': ['researcher']}
+    first = documents_projection(State(), account, offset=0, limit=2)
+    assert first['total'] == 5 and [d['title'] for d in first['documents']] == ['Richtlijn 0', 'Richtlijn 1']
+    last = documents_projection(State(), account, offset=4, limit=2)
+    assert [d['title'] for d in last['documents']] == ['Richtlijn 4']
+    found = documents_projection(State(), account, query='richtlijn 4', limit=2)
+    assert found['total'] == 1 and found['documents'][0]['title'] == 'Richtlijn 4'

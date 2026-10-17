@@ -104,6 +104,11 @@ def test_prune_keeps_other_workers_current_files_and_unusable_storage_falls_back
     assert fresh.configure(blocked / 'telemetry') is False and fresh.directory is None
     fresh.record({'event': 'still_recorded'})
     assert [e['event'] for e in fresh.events()] == ['still_recorded']
+    failing = TelemetryHub()
+    assert failing.configure(tmp_path / 'runtime-store')
+    monkeypatch.setattr(failing._sink, 'write', lambda line: (_ for _ in ()).throw(OSError('disk full')))
+    failing.record({'event': 'after_disk_full'})
+    assert failing.directory is None and [e['event'] for e in failing.events()] == ['after_disk_full']
 
 
 def test_serve_console_uses_the_same_observability_composition(tmp_path, monkeypatch):

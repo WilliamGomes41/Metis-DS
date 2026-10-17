@@ -203,7 +203,14 @@ class TelemetryHub:
             with self._lock:
                 self._ring.append(event)
                 if self._sink is not None:
-                    self._sink.write(line)
+                    try:
+                        self._sink.write(line)
+                    except Exception:
+                        # Storage failed at runtime: fall back to the ring, which
+                        # events() reads only while no sink is configured.
+                        self._sink.close()
+                        self._sink = None
+                        self.dropped += 1
             return event
         except Exception:
             self.dropped += 1

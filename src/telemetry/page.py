@@ -231,7 +231,7 @@ _BODY = r"""
       <label class="sr" for="d-state">Toestand</label><select id="d-state"><option value="">Alle documenten</option><option value="blocked">Met geblokkeerde kandidaten</option><option value="errors">Met fouten in het systeem (24 uur)</option><option value="retry">Nieuwe poging mogelijk</option></select>
       <span class="tm-sub" id="d-status" style="margin:0"></span>
     </div>
-    <div class="tm-card"><h2>Verwerking en diagnostiek per document</h2><p class="tm-sub">Verwerkingsstatus, geblokkeerde kandidaten met hun belangrijkste redenen en systeemfouten in de laatste 24 uur. Alleen documenten waarvoor je bevoegd bent.</p><div class="tm-scroll" id="d-table" style="max-height:none"></div></div>
+    <div class="tm-card"><h2>Verwerking en diagnostiek per document</h2><p class="tm-sub">Verwerkingsstatus, geblokkeerde kandidaten met hun belangrijkste redenen en systeemfouten in de laatste 24 uur. Alleen documenten waarvoor je bevoegd bent.</p><div class="tm-scroll" id="d-table" style="max-height:none"></div><p><button type="button" class="linkbtn" id="d-more" hidden>Meer documenten laden</button></p></div>
   </div>
 
   <div class="tm-panel" data-panel="controles" role="tabpanel" hidden>
@@ -650,7 +650,7 @@ document.addEventListener('click', (event) => {
   event.preventDefault(); activate(link.dataset.tab);
 });
 function openSystem(docRef) { state.filters = docRef ? { q: docRef } : {}; activate('systeem'); renderControls(); }
-function openDocuments(search) { $('#d-q').value = search || ''; activate('documenten'); if (state.docs) renderDocuments(); }
+function openDocuments(search) { $('#d-q').value = search || ''; activate('documenten'); if (state.loaded.documenten) loadDocuments(false); }
 
 // ---- Kwaliteit & werkproces ------------------------------------------
 const ROUTE_NL = { deterministic: 'Deterministisch', semantic: 'Semantisch', remainder: 'Resterende bronpassages', unknown: 'Onbekend', mixed: 'Gemengd' };
@@ -751,19 +751,26 @@ $('#q-form').addEventListener('submit', (event) => {
 });
 
 // ---- Documenten -------------------------------------------------------
-async function loadDocuments() {
+// Pages of at most 200 authorized documents; search runs on the server over all of them.
+async function loadDocuments(more) {
   $('#d-status').textContent = 'Laden…';
+  const offset = more ? (state.docs || []).length : 0;
+  const q = new URLSearchParams({ q: $('#d-q').value.trim(), offset: String(offset) });
   try {
-    const response = await fetch('/inzicht/api/documents', { credentials: 'same-origin' });
+    const response = await fetch('/inzicht/api/documents?' + q, { credentials: 'same-origin' });
     if (!response.ok) throw new Error('HTTP ' + response.status);
-    state.docs = (await response.json()).documents; state.loaded.documenten = true; renderDocuments();
+    const page = await response.json();
+    state.docs = more ? (state.docs || []).concat(page.documents) : page.documents;
+    state.docTotal = page.total; state.loaded.documenten = true; renderDocuments();
   } catch (error) { $('#d-status').textContent = 'Kon documenten niet laden (' + error.message + ').'; }
 }
 function renderDocuments() {
   const query = $('#d-q').value.trim().toLowerCase(), filter = $('#d-state').value;
   const rows = (state.docs || []).filter((d) => (!query || [d.title, d.snapshot_id, d.doc_ref].some((v) => String(v || '').toLowerCase().includes(query)))
     && (!filter || (filter === 'blocked' && d.blocked) || (filter === 'errors' && d.telemetry.errors) || (filter === 'retry' && d.retry_allowed)));
-  $('#d-status').textContent = `${rows.length} van ${(state.docs || []).length} documenten`;
+  const loaded = (state.docs || []).length, total = state.docTotal ?? loaded;
+  $('#d-status').textContent = `${rows.length} getoond · ${loaded} van ${total} documenten geladen`;
+  $('#d-more').hidden = loaded >= total;
   const maxBlocked = Math.max(1, ...rows.map((d) => d.blocked || 0));
   sortable($('#d-table'), [['Document'], ['Verwerking'], ['Geblokkeerd', 1], ['Belangrijkste redenen'], ['Systeem 24 u', 1], ['Ga naar']],
     rows.map((d) => ({ sort: [d.title, d.state || '', d.blocked || 0, (d.reasons[0] || {}).code || '', d.telemetry.errors * 1000 + d.telemetry.requests, ''],
@@ -779,7 +786,8 @@ function renderDocuments() {
           d.named_reviewer ? el('a', { href: '/review?document=' + encodeURIComponent(d.snapshot_id) + '&task=repair' }, 'Passages corrigeren') : null)] })),
     'documents', null, renderDocuments);
 }
-let docTyping; $('#d-q').addEventListener('input', () => { clearTimeout(docTyping); docTyping = setTimeout(renderDocuments, 200); });
+let docTyping; $('#d-q').addEventListener('input', () => { clearTimeout(docTyping); docTyping = setTimeout(() => loadDocuments(false), 250); });
+$('#d-more').addEventListener('click', () => loadDocuments(true));
 $('#d-state').addEventListener('change', renderDocuments);
 
 renderControls(); activate(state.tab);

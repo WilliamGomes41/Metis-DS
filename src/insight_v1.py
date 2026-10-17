@@ -48,7 +48,13 @@ def _authorized_documents(state, account) -> list[dict[str, Any]]:
     for envelope in state.list_envelopes():
         if "researcher" in roles or ("reviewer" in roles and account["account_id"] in (envelope.get("named_reviewers") or [])):
             rows.append(envelope)
-    return rows[:MAX_DOCUMENTS]
+    return rows
+
+
+def _matches_document(envelope: dict[str, Any], query: str) -> bool:
+    from src.request_diagnostics_v1 import doc_ref
+    sid = envelope["snapshot_id"]
+    return any(query in str(value or "").lower() for value in (envelope.get("title"), sid, doc_ref(sid)))
 
 
 def _telemetry_by_document(since: float) -> dict[str, dict[str, int]]:
@@ -65,12 +71,19 @@ def _telemetry_by_document(since: float) -> dict[str, dict[str, int]]:
     return counts
 
 
-def documents_projection(state, account) -> list[dict[str, Any]]:
+def documents_projection(state, account, *, query: str = "", offset: int = 0,
+                         limit: int = MAX_DOCUMENTS) -> dict[str, Any]:
+    """One page of authorized documents; search runs over the whole authorized list."""
     from src.processing_diagnostics_v1 import processing_diagnostics
     from src.request_diagnostics_v1 import doc_ref
-    telemetry = _telemetry_by_document(time.time() - 86400)
+    query = query.strip().lower()
+    authorized = [envelope for envelope in _authorized_documents(state, account)
+                  if not query or _matches_document(envelope, query)]
+    offset, limit = max(0, offset), max(1, min(limit, MAX_DOCUMENTS))
+    page = authorized[offset:offset + limit]
+    telemetry = _telemetry_by_document(time.time() - 86400) if page else {}
     rows = []
-    for envelope in _authorized_documents(state, account):
+    for envelope in page:
         sid = envelope["snapshot_id"]
         try:
             status = state.processing_status(sid, actor_id=account["account_id"], deep=False)
@@ -93,7 +106,7 @@ def documents_projection(state, account) -> list[dict[str, Any]]:
             "telemetry": telemetry.get(ref or "", {"requests": 0, "errors": 0}),
             "named_reviewer": account["account_id"] in (envelope.get("named_reviewers") or []),
         })
-    return rows
+    return {"documents": rows, "total": len(authorized), "offset": offset, "limit": limit}
 
 
 def quality_projection(view: dict[str, Any]) -> dict[str, Any]:
@@ -162,4 +175,10 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
     @app.get("/inzicht/api/documents")
     def insight_documents(request: Request) -> JSONResponse:
         account = require_account(request)
-        return JSONResponse({"documents": documents_projection(state, account)}, headers=_HEADERS)
+        params = request.query_params
+        try:
+            offset, limit = int(params.get("offset") or 0), int(params.get("limit") or MAX_DOCUMENTS)
+        except ValueError:
+            return JSONResponse({"error": "Ongeldige pagina"}, status_code=400, headers=_HEADERS)
+        page = documents_projection(state, account, query=(params.get("q") or "")[:120], offset=offset, limit=limit)
+        return JSONResponse(page, headers=_HEADERS)
