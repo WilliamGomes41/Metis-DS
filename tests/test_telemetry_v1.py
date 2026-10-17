@@ -127,13 +127,16 @@ def test_serve_console_uses_the_same_observability_composition(tmp_path, monkeyp
     import argparse
     import uvicorn
     from src import cli
+    from src.structured_logging_v1 import _is_owned
     served = {}
+    monkeypatch.setattr(logging.getLogger(), 'handlers', [])
     monkeypatch.setattr(uvicorn, 'run', lambda app, **kwargs: served.setdefault('app', app))
     monkeypatch.setattr('src.telemetry.install.install_telemetry', lambda directory: served.setdefault('dir', directory))
     cli.cmd_serve_console(argparse.Namespace(source_store=tmp_path / 'sources', runtime=tmp_path / 'runtime',
                                              host='127.0.0.1', port=0))
     assert any(m.cls is RequestDiagnostics for m in served['app'].user_middleware)
     assert install_logging_bridge in served['app'].router.on_startup
+    assert any(_is_owned(handler) for handler in logging.getLogger().handlers)  # stderr process log kept
     assert served['dir'] == tmp_path / 'runtime' / 'telemetry'
 
 
@@ -317,6 +320,23 @@ def test_quality_trend_uses_only_comparable_reports():
                {'calculation_id': 'd', 'report': current}]
     view = {'record': {'calculation_id': 'd'}, 'report': current, 'history': history}
     assert [row['calculation_id'] for row in quality_projection(view)['trend']] == ['a', 'd']
+
+
+
+def test_form_backed_document_commands_carry_doc_ref(events):
+    from fastapi import Form
+    app = FastAPI()
+
+    @app.post('/publish')
+    def publish(snapshot_id: str = Form(...)):
+        return {'ok': snapshot_id.startswith('snap-')}
+
+    app.add_middleware(RequestDiagnostics)
+    sid = 'snap-8e5d062cf95bfe2f-6a00cd1d'
+    with TestClient(app) as client:
+        assert client.post('/publish', data={'snapshot_id': sid}).json() == {'ok': True}
+    finished = next(e for e in events if e['event'] == 'request_finished')
+    assert finished['doc_ref'] == doc_ref(sid) and sid not in json.dumps(events)
 
 
 def _event(t, name, rid, **fields):

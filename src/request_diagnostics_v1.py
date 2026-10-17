@@ -204,6 +204,37 @@ def _snapshot_from(scope):
     return None
 
 
+FORM_SNIFF_BYTES = 16 * 1024
+
+
+def _form_snapshot_receive(scope, receive, evidence):
+    """Pass the body through unchanged; take the document id from a small urlencoded form.
+
+    Document commands (review, publish, delete) send the snapshot id as a form
+    field. Only the first FORM_SNIFF_BYTES of urlencoded bodies are examined.
+    """
+    content_type = next((value for key, value in scope.get('headers', []) if key.lower() == b'content-type'), b'')
+    if evidence.doc_ref or scope.get('method') != 'POST' or not content_type.startswith(b'application/x-www-form-urlencoded'):
+        return receive
+    seen = bytearray()
+
+    async def observed_receive():
+        message = await receive()
+        if message.get('type') == 'http.request' and evidence.doc_ref is None:
+            if len(seen) < FORM_SNIFF_BYTES:
+                seen.extend(message.get('body', b'')[:FORM_SNIFF_BYTES - len(seen)])
+            if not message.get('more_body', False):
+                try:
+                    from urllib.parse import parse_qsl
+                    fields = parse_qsl(bytes(seen).decode('latin-1'))
+                except Exception:
+                    fields = []
+                values = [value for key, value in fields if key in ('document', 'snapshot_id')]
+                evidence.doc_ref = next((doc_ref(value) for value in values if _SNAPSHOT_RE.fullmatch(value)), None)
+        return message
+    return observed_receive
+
+
 def _traceparent(scope):
     """The caller's valid W3C traceparent header, else None."""
     for key, value in scope.get('headers', []):
@@ -427,7 +458,7 @@ class RequestDiagnostics:
             evidence.report('request_started', trace_id=evidence.trace_id, doc_ref=evidence.doc_ref)
             task = asyncio.create_task(self.heartbeat(evidence))
             try:
-                await self.app(scope, receive, observed_send)
+                await self.app(scope, _form_snapshot_receive(scope, receive, evidence), observed_send)
                 outcome = 'completed' if completed else 'incomplete'
             except asyncio.CancelledError:
                 outcome = 'cancelled'

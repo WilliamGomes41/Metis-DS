@@ -28,6 +28,9 @@ def telemetry_directory(runtime: Path) -> Path:
 def install_console_observability(app, runtime: Path) -> None:
     """Request diagnostics and the hub for a console app; one composition for every host."""
     from src.console_performance_v1 import install_console_performance
+    from src.structured_logging_v1 import install_structured_logging
+    # The hub on root disables Python's stderr fallback: keep a process log on every host.
+    install_structured_logging()
     install_console_performance(app)
     install_telemetry(telemetry_directory(runtime))
     # The server configures its own loggers after composition; join them once it has.
