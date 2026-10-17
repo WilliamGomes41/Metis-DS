@@ -17,6 +17,13 @@ MAX_FRAMES = 12
 _REPO_SRC = Path(__file__).resolve().parents[1]
 _CODE = re.compile(r"[a-z][a-z0-9_]{1,80}")
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_.<>]{0,120}")
+# HTTP middleware wrappers sit above every route frame; they say nothing about
+# where a defect is. Guarded by tests/test_telemetry_v1.py against new middleware.
+MIDDLEWARE_FUNCTIONS = frozenset({
+    "console_performance", "document_status_context", "document_status_calculation",
+    "renew_on_navigation", "request_id_middleware", "require_same_origin",
+    "simplify_duplicate_doors", "source_read_calculation",
+})
 
 
 def _frame(entry: traceback.FrameSummary) -> str | None:
@@ -28,6 +35,8 @@ def _frame(entry: traceback.FrameSummary) -> str | None:
     if relative.parts[:1] != ("src",):
         return None
     function = entry.name if _NAME.fullmatch(entry.name or "") else "?"
+    if function in MIDDLEWARE_FUNCTIONS or (function == "__call__" and relative.name == "request_diagnostics_v1.py"):
+        return None
     return f"{relative.as_posix()}:{function}:{int(entry.lineno or 0)}"
 
 

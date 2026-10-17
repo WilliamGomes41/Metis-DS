@@ -234,10 +234,12 @@ def test_page_and_api_require_login_and_render(hub):
     app.add_middleware(RequestDiagnostics)
     with TestClient(app, base_url='https://testserver') as client:
         assert client.get('/telemetry/api/summary').status_code == 401
-        assert client.get('/telemetry', follow_redirects=False).status_code in (303, 401)
+        assert client.get('/telemetry', follow_redirects=False).status_code == 401
         client.post('/login', data={'username': 'beheer', 'password': 'fixture-only'}, follow_redirects=False)
-        page = client.get('/telemetry')
-        assert page.status_code == 200 and 'id="tm-insights"' in page.text and 'Telemetrie' in page.text
+        alias = client.get('/telemetry', follow_redirects=False)
+        assert alias.status_code == 303 and alias.headers['location'] == '/inzicht?tab=systeem'
+        page = client.get('/inzicht?tab=systeem')
+        assert page.status_code == 200 and 'id="tm-insights"' in page.text and 'data-initial-tab="systeem"' in page.text
         summary = client.get('/telemetry/api/summary', params={'window': '1h', 'q': 'snap-8e5d062cf95bfe2f-6a00cd1d'})
         body = summary.json()
         assert summary.status_code == 200 and summary.headers['cache-control'] == 'no-store'
@@ -275,3 +277,13 @@ def test_json_log_lines_carry_request_and_trace_id_without_a_filter():
         _CURRENT.reset(token)
     assert row['request_id'] == 'c' * 32 and row['trace_id'] == 'd' * 32
     assert 'request_id' not in json.loads(JsonLogFormatter().format(record))
+
+
+def test_every_http_middleware_is_excluded_from_error_frames():
+    import re
+    from pathlib import Path
+    from src.telemetry.errors import MIDDLEWARE_FUNCTIONS
+    names = set()
+    for path in Path('src').rglob('*.py'):
+        names.update(re.findall(r'@app\.middleware\("http"\)\s*\n\s*async def (\w+)', path.read_text(encoding='utf-8')))
+    assert names and names <= MIDDLEWARE_FUNCTIONS, names - MIDDLEWARE_FUNCTIONS

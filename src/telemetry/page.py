@@ -12,13 +12,17 @@ _STYLE = r"""
 <style>
 .tm { --surface-1:#ffffff; --plane:#f6f9fb; --ink:#1f2430; --ink-2:#4b5568; --muted:#6b7385;
   --grid:#e4ecf0; --axis:#c3ccd4; --ring:rgba(11,11,11,.10); --wash:rgba(42,120,214,.08);
-  --series-1:#2a78d6; --series-2:#eb6834; --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+  --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a; --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
   --seq-100:#cde2fb; --seq-400:#3987e5; color:var(--ink); font-variant-numeric:normal; }
 html[data-theme="dark"] .tm { --surface-1:#172232; --plane:#101a27; --ink:#f0f4f9; --ink-2:#bdcad9; --muted:#8d99a8;
   --grid:#25384a; --axis:#3c5163; --ring:rgba(255,255,255,.10); --wash:rgba(57,135,229,.14);
-  --series-1:#3987e5; --series-2:#d95926; --seq-100:#1c3552; --seq-400:#3987e5; }
+  --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --seq-100:#1c3552; --seq-400:#3987e5; }
 .tm * { box-sizing:border-box; }
-.tm .tm-head { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.tm .tm-head { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.tm .tm-filters label { display:inline-flex; gap:6px; align-items:center; font-size:14px; color:var(--ink-2); }
+.tm .tm-filters input[type=date] { font:inherit; font-size:14px; padding:6px 8px; border-radius:9px; border:1px solid var(--ring); background:var(--surface-1); color:var(--ink); }
+.tm .q-cov { font-size:12px; color:var(--ink-2); }
+.tm .hatch { background:repeating-linear-gradient(45deg, var(--grid) 0 4px, transparent 4px 8px); border:1px dashed var(--axis); }
 .tm .tm-live { display:flex; align-items:center; gap:10px; color:var(--ink-2); font-size:14px; }
 .tm .tm-dot { width:8px; height:8px; border-radius:50%; background:var(--good); box-shadow:0 0 0 3px rgba(12,163,12,.18); }
 .tm .tm-dot.off { background:var(--muted); box-shadow:none; }
@@ -86,7 +90,7 @@ html[data-theme="dark"] .tm .sev.warning { color:var(--warning); }
 .tm .frames { margin:6px 0 0; padding-left:18px; } .tm .frames li { font-family:ui-monospace, Menlo, monospace; font-size:12px; color:var(--ink-2); }
 .tm .frames li:last-child { color:var(--ink); font-weight:600; }
 .tm .steps { margin:6px 0 0; padding-left:18px; font-size:13px; }
-.tm .linkbtn { border:0; background:none; color:var(--series-1); cursor:pointer; padding:0; font:inherit; font-size:13px; text-decoration:underline; }
+.tm .linkbtn { border:0; background:none; color:var(--paars, #5D3297); cursor:pointer; padding:0; font:inherit; font-size:13px; text-decoration:underline; }
 .tm .tm-empty { color:var(--muted); font-size:14px; padding:14px 0; }
 .tm .tm-loading { opacity:.55; transition:opacity .2s; }
 .tm dialog.tm-drawer { margin:0 0 0 auto; height:100vh; max-height:100vh; width:min(760px,100vw); border:0; padding:0; background:var(--plane); color:var(--ink);
@@ -107,13 +111,14 @@ html[data-theme="dark"] .tm .sev.warning { color:var(--warning); }
 """
 
 _BODY = r"""
-<section class="room tm" id="tm">
+<section class="room tm" id="tm" data-initial-tab="__TAB__">
+  <p class="eyebrow">Instellingen</p>
+  <h1>Inzicht</h1>
+  <p class="lead">Eén plek om te begrijpen wat Metis doet en hoe het werk verloopt: het systeem tot op de milliseconde, de kwaliteit van voorstellen en review, de verwerking per document en de controles. Klik door van het ene naar het andere.</p>
+  __TABS__
+  <div class="tm-panel" data-panel="systeem" role="tabpanel">
   <div class="tm-head">
-    <div>
-      <p class="eyebrow">Technisch beheer</p>
-      <h1>Telemetrie</h1>
-      <p class="lead">Wat Metis doet, waar het misgaat en waarom: elk verzoek met fasen in milliseconden, fouten gegroepeerd per oorzaak, samenhang over routes, fasen en deploys.</p>
-    </div>
+    <p class="tm-sub" style="margin:0">Elk verzoek met fasen in milliseconden, fouten gegroepeerd per oorzaak, samenhang over routes, fasen en deploys. Ververst elke 30 seconden zolang dit tabblad open is.</p>
     <div class="tm-live">
       <span class="tm-dot" id="tm-dot" aria-hidden="true"></span>
       <span id="tm-updated">Laden…</span>
@@ -190,6 +195,57 @@ _BODY = r"""
       </div>
     </div>
   </div>
+  </div>
+
+  <div class="tm-panel" data-panel="kwaliteit" role="tabpanel" hidden>
+    <form class="tm-filters" id="q-form" aria-label="Ingestcohort">
+      <label>Vanaf <input type="date" name="from"></label>
+      <label>Tot en met <input type="date" name="to"></label>
+      <label>Inhoudstype <input type="search" name="kind" style="min-width:120px"></label>
+      <label>Ingesttype <input type="search" name="ingest" style="min-width:120px"></label>
+      <label>Route <select name="route"><option value="">Alle routes</option><option value="deterministic">Deterministisch</option>
+        <option value="semantic">Semantisch</option><option value="mixed">Gemengd</option><option value="remainder">Resterende bronpassages</option><option value="unknown">Onbekend</option></select></label>
+      <button class="tm-btn" type="submit">Toon meting</button>
+      <a class="tm-btn" id="q-table" href="/settings/quality">Tabelweergave en rapporthistorie</a>
+    </form>
+    <p class="tm-sub" id="q-status">Nog niet geladen.</p>
+    <div id="q-body">
+      <div class="tm-kpis" id="q-kpis"></div>
+      <div class="tm-grid">
+        <div class="tm-card half"><h2>Hoe vaak is een voorstel direct bruikbaar?</h2><p class="tm-sub">Eerste inhoudelijke besluiten per route; onvolledig meetbaar is gemarkeerd, nooit als succes geteld</p><div id="q-direct"></div></div>
+        <div class="tm-card half"><h2>Herstel, correcties en afwijzingen</h2><p class="tm-sub">Aantallen per route van het voorstel</p>
+          <div class="tm-legend"><span><i class="box" style="background:var(--series-1)"></i>Herstelverzoeken</span><span><i class="box" style="background:var(--series-2)"></i>Correcties</span><span><i class="box" style="background:var(--series-3)"></i>Afwijzingen</span></div>
+          <div id="q-repairs"></div></div>
+        <div class="tm-card"><h2>Waar blijft werk liggen?</h2><p class="tm-sub">Open passages per bron, met leeftijd van de onafgeronde bron. Klik voor de documentdiagnose of de verzoeken op dit document.</p><div class="tm-scroll" id="q-open"></div></div>
+        <div class="tm-card half"><h2>Open werk over tijd</h2><p class="tm-sub">Open passages per bewaarde meting (rapporthistorie)</p><div class="tm-chart" id="q-trend"></div></div>
+        <div class="tm-card half"><h2>Wat wordt er aangepast?</h2><p class="tm-sub">Gewijzigde inhoud bij besluiten en correcties</p><div id="q-fields"></div></div>
+        <div class="tm-card half"><h2>Verwerkingsruns</h2><p class="tm-sub">Uitkomst van de verwerkingsruns in het cohort</p><div id="q-runs"></div></div>
+        <div class="tm-card half"><h2>Meetdefinities en beperkingen</h2><div id="q-defs" class="help"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tm-panel" data-panel="documenten" role="tabpanel" hidden>
+    <div class="tm-filters" aria-label="Documenten filteren">
+      <label class="sr" for="d-q">Zoek document</label><input type="search" id="d-q" placeholder="Zoek op titel of document-id">
+      <label class="sr" for="d-state">Toestand</label><select id="d-state"><option value="">Alle documenten</option><option value="blocked">Met geblokkeerde kandidaten</option><option value="errors">Met fouten in het systeem (24 uur)</option><option value="retry">Nieuwe poging mogelijk</option></select>
+      <span class="tm-sub" id="d-status" style="margin:0"></span>
+    </div>
+    <div class="tm-card"><h2>Verwerking en diagnostiek per document</h2><p class="tm-sub">Verwerkingsstatus, geblokkeerde kandidaten met hun belangrijkste redenen en systeemfouten in de laatste 24 uur. Alleen documenten waarvoor je bevoegd bent.</p><div class="tm-scroll" id="d-table" style="max-height:none"></div></div>
+  </div>
+
+  <div class="tm-panel" data-panel="controles" role="tabpanel" hidden>
+    <p class="tm-sub">Controles en experimenten die je bewust start. Hun resultaten blijven bewaard en zijn geen inhoudelijke beoordeling van documenten.</p>
+    <div class="doc-list">
+      <a class="doc-card" style="text-decoration:none;" href="/audit"><p class="doc-title">Audit &amp; diagnostiek</p><p>Open controles, experimenten en bewaarde resultaten.</p></a>
+      <a class="doc-card" style="text-decoration:none;" href="/audit/semantic-safety"><p class="doc-title">Semantische veiligheidstests</p><p>Vaste testgevallen voor weglatingen, voorwaarden, uitzonderingen en ontkenningen.</p></a>
+      <a class="doc-card" style="text-decoration:none;" href="/settings/quality/compare"><p class="doc-title">Routevergelijking</p><p>Vergelijk verwerkingsroutes op dezelfde bron.</p></a>
+      <a class="doc-card" style="text-decoration:none;" href="/audit/review-signals"><p class="doc-title">Reviewsignalen</p><p>Signalen uit review die op structurele problemen wijzen.</p></a>
+      <a class="doc-card" style="text-decoration:none;" href="/audit/archive"><p class="doc-title">Archief</p><p>Gearchiveerde audits terugzetten of definitief verwijderen.</p></a>
+      <a class="doc-card" style="text-decoration:none;" href="/settings/technical/exports"><p class="doc-title">Exports</p><p>Passages, verwerkingsbewijs en diagnostiek als bestand.</p></a>
+    </div>
+  </div>
+
   <div class="tm-tip" id="tm-tip" role="status"></div>
   <dialog class="tm-drawer" id="tm-drawer" aria-label="Verzoekdetail"><div class="drawer-in" id="tm-drawer-in"></div></dialog>
 </section>
@@ -201,7 +257,8 @@ _SCRIPT = r"""
 const root = document.getElementById('tm');
 const $ = (sel, scope = root) => scope.querySelector(sel);
 const params = new URLSearchParams(location.search);
-const state = { window: params.get('window') || '24h', filters: {}, mode: 'recent', data: null, timer: null, live: true, sort: {} };
+const state = { window: params.get('window') || '24h', filters: {}, mode: 'recent', data: null, timer: null, live: true, sort: {},
+  tab: root.dataset.initialTab || 'systeem', loaded: {}, qparams: '', docs: null };
 for (const key of ['route', 'state', 'status', 'commit', 'q', 'error']) if (params.get(key)) state.filters[key] = params.get(key);
 
 const LABELS = { route: 'Route', state: 'Uitkomst', status: 'Status', commit: 'Deploy', q: 'Zoek', error: 'Foutgroep' };
@@ -245,7 +302,11 @@ function query() {
   const q = new URLSearchParams({ window: state.window, ...state.filters });
   return q.toString();
 }
-function syncUrl() { history.replaceState(null, '', location.pathname + '?' + query()); $('#tm-export').href = '/telemetry/api/export?window=' + state.window; }
+function syncUrl() {
+  const extra = state.tab === 'systeem' ? '&' + query() : state.tab === 'kwaliteit' && state.qparams ? '&' + state.qparams : '';
+  history.replaceState(null, '', location.pathname + '?tab=' + state.tab + extra);
+  $('#tm-export').href = '/telemetry/api/export?window=' + state.window;
+}
 
 async function load() {
   const body = $('#tm-body');
@@ -262,7 +323,7 @@ async function load() {
     $('#tm-dot').classList.add('off');
   } finally { body.classList.remove('tm-loading'); }
 }
-function schedule() { clearInterval(state.timer); if (state.live) state.timer = setInterval(() => { if (!document.hidden && !$('#tm-drawer').open) load(); }, 30000); }
+function schedule() { clearInterval(state.timer); if (state.live) state.timer = setInterval(() => { if (!document.hidden && !$('#tm-drawer').open && state.tab === 'systeem') load(); }, 30000); }
 function setFilter(key, value) { if (value) state.filters[key] = value; else delete state.filters[key]; syncUrl(); renderControls(); load(); }
 function applyFilters(filters) { for (const [key, value] of Object.entries(filters || {})) state.filters[key] = value; syncUrl(); renderControls(); load(); window.scrollTo({ top: root.offsetTop, behavior: 'smooth' }); }
 
@@ -448,11 +509,11 @@ function renderErrors(groups) {
   }));
 }
 
-function sortable(box, head, rows, key, onRow) {
+function sortable(box, head, rows, key, onRow, rerender) {
   const sort = state.sort[key] || { i: -1, dir: 1 };
   if (sort.i >= 0) rows = [...rows].sort((a, b) => { const x = a.sort[sort.i], y = b.sort[sort.i]; return (x > y ? 1 : x < y ? -1 : 0) * sort.dir; });
   const table = el('table', {}, el('thead', {}, el('tr', {}, head.map(([label, num], i) => el('th', { class: num ? 'num' : '', scope: 'col', 'aria-sort': sort.i === i ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none',
-    onclick: () => { state.sort[key] = { i, dir: sort.i === i ? -sort.dir : (num ? -1 : 1) }; render(); } }, label + (sort.i === i ? (sort.dir > 0 ? ' ↑' : ' ↓') : ''))))),
+    onclick: () => { state.sort[key] = { i, dir: sort.i === i ? -sort.dir : (num ? -1 : 1) }; (rerender || render)(); } }, label + (sort.i === i ? (sort.dir > 0 ? ' ↑' : ' ↓') : ''))))),
     el('tbody', {}, rows.map((row) => el('tr', onRow ? { tabindex: 0, onclick: () => onRow(row), onkeydown: (e) => { if (e.key === 'Enter') onRow(row); } } : {},
       row.cells.map((cell, i) => el('td', { class: head[i][1] ? 'num' : '' }, cell))))));
   box.replaceChildren(rows.length ? table : el('p', { class: 'tm-empty', text: 'Geen gegevens.' }));
@@ -538,7 +599,8 @@ async function openRequest(id) {
         el('span', { style: 'text-align:right;font-variant-numeric:tabular-nums', text: ms(n.inclusive_ms) })))) : el('p', { class: 'tm-empty', text: 'Geen fasen gemeten voor dit verzoek.' })),
     el('div', { class: 'tm-card', style: 'padding:14px' }, el('h2', { text: 'Correlatie' }), el('dl', { class: 'kv' },
       el('dt', { text: 'Request-id' }), el('dd', {}, copy(r.request_id)), el('dt', { text: 'Trace-id' }), el('dd', {}, copy(r.trace_id)),
-      el('dt', { text: 'Poging' }), el('dd', {}, copy(r.attempt_id)), el('dt', { text: 'Document (pseudoniem)' }), el('dd', {}, r.doc_ref ? el('span', {}, copy(r.doc_ref), ' · ', el('button', { type: 'button', class: 'linkbtn', onclick: () => { drawer.close(); setFilter('q', r.doc_ref); } }, 'alle verzoeken op dit document')) : '—'),
+      el('dt', { text: 'Poging' }), el('dd', {}, copy(r.attempt_id)), el('dt', { text: 'Document (pseudoniem)' }), el('dd', {}, r.doc_ref ? el('span', {}, copy(r.doc_ref), ' · ', el('button', { type: 'button', class: 'linkbtn', onclick: () => { drawer.close(); setFilter('q', r.doc_ref); } }, 'alle verzoeken op dit document'), ' · ',
+        el('button', { type: 'button', class: 'linkbtn', onclick: () => { drawer.close(); openDocuments(r.doc_ref); } }, 'documentdiagnose')) : '—'),
       el('dt', { text: 'Deploy' }), el('dd', { class: 'mono', text: r.commit }),
       el('dt', { text: 'Database' }), el('dd', { text: d.db && d.db.db_queries !== undefined ? `${d.db.db_queries} queries · ${ms(d.db.db_query_ms)} query · ${d.db.db_connections} verbindingen · ${ms(d.db.db_connect_ms)} verbinden` : '—' }))),
     el('div', { class: 'tm-card', style: 'padding:14px' }, el('h2', { text: 'Tijdlijn' }), el('table', {}, el('tbody', {}, d.timeline.map((t) => el('tr', {},
@@ -560,11 +622,164 @@ let typing; $('#tm-q').addEventListener('input', (e) => { clearTimeout(typing); 
 $('#tm-reset').addEventListener('click', () => { state.filters = {}; syncUrl(); renderControls(); load(); });
 $('#tm-auto').addEventListener('click', (e) => { state.live = !state.live; e.target.setAttribute('aria-pressed', String(state.live)); e.target.textContent = 'Live: ' + (state.live ? 'aan' : 'uit'); $('#tm-dot').classList.toggle('off', !state.live); schedule(); });
 $('#tm-drawer').addEventListener('click', (e) => { if (e.target.id === 'tm-drawer') e.target.close(); });
-syncUrl(); renderControls(); load(); schedule();
+
+// ---- Tabs -------------------------------------------------------------
+function activate(tab, push) {
+  state.tab = tab;
+  for (const link of document.querySelectorAll('.insight-tabs a[data-tab]')) {
+    const on = link.dataset.tab === tab;
+    link.setAttribute('aria-selected', String(on));
+    if (on) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
+  }
+  for (const panel of root.querySelectorAll('[data-panel]')) panel.hidden = panel.dataset.panel !== tab;
+  syncUrl();
+  if (tab === 'systeem') { load(); schedule(); }
+  if (tab === 'kwaliteit' && !state.loaded.kwaliteit) loadQuality();
+  if (tab === 'documenten' && !state.loaded.documenten) loadDocuments();
+}
+document.addEventListener('click', (event) => {
+  const link = event.target.closest('.insight-tabs a[data-tab]');
+  if (!link || event.metaKey || event.ctrlKey) return;
+  event.preventDefault(); activate(link.dataset.tab);
+});
+function openSystem(docRef) { state.filters = docRef ? { q: docRef } : {}; activate('systeem'); renderControls(); }
+function openDocuments(search) { $('#d-q').value = search || ''; activate('documenten'); if (state.docs) renderDocuments(); }
+
+// ---- Kwaliteit & werkproces ------------------------------------------
+const ROUTE_NL = { deterministic: 'Deterministisch', semantic: 'Semantisch', remainder: 'Resterende bronpassages', unknown: 'Onbekend', mixed: 'Gemengd' };
+const FIELD_NL = { text: 'tekst', type: 'type', relations: 'relaties', semantics: 'aanbevelingsbetekenis' };
+const PROC_NL = { succeeded: 'Geslaagd', failed: 'Mislukt', running: 'Bezig', reserved: 'Gereserveerd', pending: 'In wachtrij', stopped: 'Gestopt', blocked: 'Geblokkeerd', none: 'Nog niet gestart', cancelled: 'Geannuleerd' };
+const RUN_NL = { succeeded: 'Geslaagd', failed: 'Mislukt', running: 'Lopend', unknown: 'Onbekend', stopped: 'Gestopt' };
+async function loadQuality(qs) {
+  if (qs !== undefined) state.qparams = qs;
+  const body = $('#q-body'); body.classList.add('tm-loading');
+  $('#q-status').textContent = 'Meting berekenen…';
+  try {
+    const response = await fetch('/inzicht/api/quality' + (state.qparams ? '?' + state.qparams : ''), { credentials: 'same-origin' });
+    const data = await response.json();
+    if (!response.ok) { $('#q-status').textContent = data.error || ('Niet beschikbaar (HTTP ' + response.status + ')'); return; }
+    state.loaded.kwaliteit = true; renderQuality(data); syncUrl();
+  } catch (error) { $('#q-status').textContent = 'De meting is niet beschikbaar (' + error.message + ').'; }
+  finally { body.classList.remove('tm-loading'); }
+}
+function hbars(box, rows, opts = {}) {
+  if (!rows.length) { box.replaceChildren(el('p', { class: 'tm-empty', text: opts.empty || 'Geen gegevens.' })); return; }
+  const max = Math.max(1, ...rows.map((r) => r.value || 0));
+  box.replaceChildren(...rows.map((r) => el('div', { class: 'tree-row', style: 'grid-template-columns:minmax(150px,36%) 1fr 150px', tabindex: 0,
+    onpointermove: (e) => showTip(e, r.label, r.tip || [[r.text, '', opts.color || 'var(--series-1)']]), onpointerleave: hideTip },
+    el('span', { class: 'tree-name', style: 'font-family:inherit', text: r.label }),
+    el('div', { class: 'tree-track', style: 'background:transparent' }, r.unmeasured ? el('div', { class: 'tree-exc hatch', style: 'width:100%;background-color:transparent' })
+      : el('div', { class: 'tree-exc', style: `width:${((r.value || 0) / max) * 100}%;background:${opts.color || 'var(--series-1)'}` })),
+    el('span', { style: 'text-align:right;font-variant-numeric:tabular-nums', text: r.text }))));
+}
+function renderQuality(d) {
+  const f = d.filters || {};
+  for (const input of $('#q-form').elements) if (input.name) input.value = f[input.name] || '';
+  $('#q-table').href = '/settings/quality' + (state.qparams ? '?' + state.qparams : '');
+  $('#q-status').textContent = `Gegevensgrens ${new Date(d.as_of).toLocaleString('nl-NL')} · definitie ${d.definition_version} · ${d.cohort_size} bronnen in het cohort`;
+  const pub = d.publication || {};
+  const days = (s) => s === null || s === undefined ? '—' : (s / 86400).toLocaleString('nl-NL', { maximumFractionDigits: 1 }) + ' dagen';
+  const tiles = [
+    ['Bronnen in cohort', nf.format(d.cohort_size), 'jouw bronnen als uploader of reviewer'],
+    ['Open passages', nf.format(d.open_passages), 'onafgehandeld, momentopname'],
+    ['Oudste onafgeronde bron', d.oldest_unfinished_source_days === null ? '—' : days(d.oldest_unfinished_source_days * 86400), 'leeftijd van de bron, niet van de taak'],
+    ['Ingest tot publicatie (mediaan)', days(pub.median), `${pub.samples || 0} waarnemingen · p90 ${days(pub.p90)}`],
+    ['Beslisinteracties', nf.format(d.burden.review_interactions || 0), `${nf.format(d.burden.object_decisions || 0)} objectbesluiten`],
+  ];
+  $('#q-kpis').replaceChildren(...tiles.map(([label, value, hint]) => el('div', { class: 'tm-tile' }, el('div', { class: 'label', text: label }), el('div', { class: 'value', text: value }), el('div', { class: 'hint', text: hint }))));
+  const routes = Object.entries(d.routes || {});
+  hbars($('#q-direct'), routes.map(([route, row]) => ({ label: ROUTE_NL[route] || route, value: row.direct_rate === null ? 0 : row.direct_rate * 100,
+    unmeasured: row.direct_rate === null && row.first_decisions > 0,
+    text: row.first_decisions ? (row.direct_rate === null ? `niet volledig meetbaar (${row.known_comparisons}/${row.first_decisions})` : `${pct(row.direct_rate)} · ${row.direct}/${row.first_decisions}`) : 'geen besluiten',
+    tip: [[row.direct_rate === null ? 'niet volledig meetbaar' : pct(row.direct_rate), 'direct bruikbaar', 'var(--series-1)'], [`${row.direct} / ${row.first_decisions}`, 'direct / eerste besluiten'], [`${row.known_comparisons} / ${row.first_decisions}`, 'vergelijkbaar']] })));
+  const series = [['repair_requests', 'Herstelverzoeken', 'var(--series-1)'], ['corrections', 'Correcties', 'var(--series-2)'], ['rejections', 'Afwijzingen', 'var(--series-3)']];
+  const maxRepair = Math.max(1, ...routes.flatMap(([, row]) => series.map(([k]) => row[k] || 0)));
+  $('#q-repairs').replaceChildren(el('table', {}, el('thead', {}, el('tr', {}, el('th', { text: 'Route' }), series.map(([, label]) => el('th', { class: 'num', text: label })))),
+    el('tbody', {}, routes.map(([route, row]) => el('tr', {}, el('td', { text: ROUTE_NL[route] || route }),
+      series.map(([key, label, color]) => el('td', { class: 'num' }, el('div', { class: 'barcell', style: 'justify-content:flex-end' },
+        el('span', { class: 'bar', style: `width:${Math.max(2, (row[key] || 0) / maxRepair * 60)}px;background:${color}` }), nf.format(row[key] || 0)))))))));
+  const docs = [...(d.documents || [])].sort((a, b) => (b.open_passages || 0) - (a.open_passages || 0) || (b.source_age_days || 0) - (a.source_age_days || 0));
+  const maxOpen = Math.max(1, ...docs.map((x) => x.open_passages || 0));
+  $('#q-open').replaceChildren(docs.length ? el('table', {}, el('thead', {}, el('tr', {}, ['Bron', 'Route', 'Open passages', 'Leeftijd', 'Blokkade', ''].map((h, i) => el('th', { class: i === 2 || i === 3 ? 'num' : '', text: h })))),
+    el('tbody', {}, docs.map((x) => el('tr', {}, el('td', { text: x.title }), el('td', { text: ROUTE_NL[x.route] || x.route || '—' }),
+      el('td', { class: 'num' }, el('div', { class: 'barcell', style: 'justify-content:flex-end' }, el('span', { class: 'bar', style: `width:${Math.max(2, (x.open_passages || 0) / maxOpen * 90)}px` }), nf.format(x.open_passages || 0))),
+      el('td', { class: 'num', text: x.source_age_days === null || x.source_age_days === undefined ? '—' : x.source_age_days.toLocaleString('nl-NL', { maximumFractionDigits: 1 }) + ' d' }),
+      el('td', { class: 'mono', text: x.processing_blocker || '—' }),
+      el('td', {}, el('button', { type: 'button', class: 'linkbtn', onclick: () => openDocuments(x.snapshot_id) }, 'Diagnose'), ' · ',
+        el('button', { type: 'button', class: 'linkbtn', onclick: () => openSystem(x.doc_ref) }, 'Verzoeken'))))))
+    : el('p', { class: 'tm-empty', text: 'Geen bronnen in dit cohort.' }));
+  qualityTrend($('#q-trend'), d.trend || []);
+  const fields = Object.entries(d.changed_fields || {}).sort((a, b) => b[1] - a[1]);
+  hbars($('#q-fields'), fields.map(([k, v]) => ({ label: FIELD_NL[k] || k, value: v, text: nf.format(v) })), { empty: 'Geen vastgelegde inhoudswijzigingen.' });
+  const runs = Object.entries(d.processing_runs || {}).sort((a, b) => b[1] - a[1]);
+  hbars($('#q-runs'), runs.map(([k, v]) => ({ label: RUN_NL[k] || k, value: v, text: nf.format(v) })), { empty: 'Geen verwerkingsruns in dit cohort.' });
+  $('#q-defs').replaceChildren(el('ul', {}, [...Object.values(d.definitions || {}), ...(d.limitations || []), d.readiness_reason, d.clinical_reason].filter(Boolean).map((t) => el('li', { text: t }))));
+}
+function qualityTrend(box, trend) {
+  box.replaceChildren();
+  if (trend.length < 2) { box.append(el('p', { class: 'tm-empty', text: 'Nog te weinig bewaarde metingen voor een trend. Elke nieuwe meting wordt bewaard.' })); return; }
+  const W = 640, H = 170, L = 44, R = 30;
+  const max = niceMax(Math.max(...trend.map((t) => t.open_passages || 0)));
+  const x = (i) => L + (i / (trend.length - 1)) * (W - L - R), y = (v) => H - (v / max) * H;
+  const svg = svgEl('svg', { viewBox: `0 -14 ${W} ${H + 38}`, class: 'chart', role: 'img', 'aria-label': 'Open passages per meting' });
+  gridY(svg, max, W - R, H, L, (v) => compact(Math.round(v)));
+  trend.forEach((t, i) => { if (i % Math.max(1, Math.ceil(trend.length / 6)) === 0) { const label = svgEl('text', { x: x(i), y: H + 16, 'text-anchor': 'middle' }); label.textContent = new Date(t.as_of).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }); svg.append(label); } });
+  svg.append(svgEl('path', { d: trend.map((t, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(t.open_passages || 0).toFixed(1)).join(''), fill: 'none', stroke: 'var(--series-1)', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+  const last = trend[trend.length - 1];
+  svg.append(svgEl('circle', { cx: x(trend.length - 1), cy: y(last.open_passages || 0), r: 4, fill: 'var(--series-1)', stroke: 'var(--surface-1)', 'stroke-width': 2 }));
+  const cross = svgEl('line', { y1: 0, y2: H, stroke: 'var(--axis)', 'stroke-width': 1, visibility: 'hidden' }); svg.append(cross);
+  const hit = svgEl('rect', { x: L, y: 0, width: W - L - R, height: H, fill: 'transparent' });
+  hit.addEventListener('pointermove', (event) => { const b = svg.getBoundingClientRect(); const px = (event.clientX - b.left) / b.width * W;
+    const i = Math.max(0, Math.min(trend.length - 1, Math.round(((px - L) / (W - L - R)) * (trend.length - 1))));
+    cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
+    showTip(event, new Date(trend[i].as_of).toLocaleString('nl-NL'), [['open passages', nf.format(trend[i].open_passages || 0), 'var(--series-1)'], ['bronnen', nf.format(trend[i].cohort_size || 0)]]); });
+  hit.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); hideTip(); });
+  svg.append(hit); box.append(svg);
+}
+$('#q-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const data = new URLSearchParams(); for (const [k, v] of new FormData(event.target)) if (String(v).trim()) data.set(k, String(v).trim());
+  loadQuality(data.toString());
+});
+
+// ---- Documenten -------------------------------------------------------
+async function loadDocuments() {
+  $('#d-status').textContent = 'Laden…';
+  try {
+    const response = await fetch('/inzicht/api/documents', { credentials: 'same-origin' });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    state.docs = (await response.json()).documents; state.loaded.documenten = true; renderDocuments();
+  } catch (error) { $('#d-status').textContent = 'Kon documenten niet laden (' + error.message + ').'; }
+}
+function renderDocuments() {
+  const query = $('#d-q').value.trim().toLowerCase(), filter = $('#d-state').value;
+  const rows = (state.docs || []).filter((d) => (!query || [d.title, d.snapshot_id, d.doc_ref].some((v) => String(v || '').toLowerCase().includes(query)))
+    && (!filter || (filter === 'blocked' && d.blocked) || (filter === 'errors' && d.telemetry.errors) || (filter === 'retry' && d.retry_allowed)));
+  $('#d-status').textContent = `${rows.length} van ${(state.docs || []).length} documenten`;
+  const maxBlocked = Math.max(1, ...rows.map((d) => d.blocked || 0));
+  sortable($('#d-table'), [['Document'], ['Verwerking'], ['Geblokkeerd', 1], ['Belangrijkste redenen'], ['Systeem 24 u', 1], ['Ga naar']],
+    rows.map((d) => ({ sort: [d.title, d.state || '', d.blocked || 0, (d.reasons[0] || {}).code || '', d.telemetry.errors * 1000 + d.telemetry.requests, ''],
+      cells: [el('div', {}, el('strong', { text: d.title }), el('div', { class: 'help', text: [d.version, d.class].filter(Boolean).join(' · ') })),
+        el('div', {}, el('span', { text: PROC_NL[d.state] || d.state || '—' }), d.code ? el('div', { class: 'mono help', text: d.code }) : null),
+        d.blocked === null ? '—' : el('div', { class: 'barcell', style: 'justify-content:flex-end' }, el('span', { class: 'bar', style: `width:${Math.max(2, (d.blocked || 0) / maxBlocked * 70)}px` }), nf.format(d.blocked || 0)),
+        el('div', {}, d.reasons.length ? d.reasons.map((r) => el('div', { class: 'mono', text: `${r.code} (${r.count})` })) : '—'),
+        el('span', { class: d.telemetry.errors ? 'st-error' : '' }, d.telemetry.errors ? icon('critical') : null, ` ${d.telemetry.errors} / ${d.telemetry.requests}`),
+        el('div', { style: 'display:flex;flex-direction:column;gap:2px' },
+          el('button', { type: 'button', class: 'linkbtn', onclick: () => openSystem(d.doc_ref) }, 'Verzoeken en fouten'),
+          el('a', { href: '/settings/technical/processing?document=' + encodeURIComponent(d.snapshot_id) }, 'Verwerkingsbeheer'),
+          d.named_reviewer ? el('a', { href: '/settings/technical?document=' + encodeURIComponent(d.snapshot_id) }, 'Diagnostiek en brondekking') : null,
+          d.named_reviewer ? el('a', { href: '/review?document=' + encodeURIComponent(d.snapshot_id) + '&task=repair' }, 'Passages corrigeren') : null)] })),
+    'documents', null, renderDocuments);
+}
+let docTyping; $('#d-q').addEventListener('input', () => { clearTimeout(docTyping); docTyping = setTimeout(renderDocuments, 200); });
+$('#d-state').addEventListener('change', renderDocuments);
+
+renderControls(); activate(state.tab);
 })();
 </script>
 """
 
 
-def telemetry_body() -> str:
-    return _STYLE + _BODY + _SCRIPT
+def insight_body(tabs_html: str, tab: str) -> str:
+    """The /inzicht page body: shared header, tab bar and the four panels."""
+    return _STYLE + _BODY.replace("__TABS__", tabs_html).replace("__TAB__", tab) + _SCRIPT

@@ -1,4 +1,4 @@
-"""The /telemetry page and its JSON API (authenticated, read-only)."""
+"""Telemetry JSON API (authenticated, read-only); the page lives in Inzicht."""
 from __future__ import annotations
 
 import json
@@ -7,7 +7,7 @@ import time
 from typing import Any, Callable
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import JSONResponse, Response
 
 from src.telemetry.analysis import request_detail, summarize
 from src.telemetry.hub import HUB
@@ -38,16 +38,8 @@ def _window(request: Request) -> tuple[str, int]:
     return (key, WINDOWS[key]) if key in WINDOWS else ("24h", WINDOWS["24h"])
 
 
-def install_telemetry_routes(app: FastAPI, *, require_account: Callable[[Request], dict],
-                             render_page: Callable[..., str], nav: Callable[..., str]) -> None:
-    from src.telemetry.page import telemetry_body
-
-    @app.get("/telemetry", response_class=HTMLResponse)
-    def telemetry_page(request: Request) -> HTMLResponse:
-        account = require_account(request)
-        html = render_page(nav(account, "settings") + telemetry_body(), title="Telemetrie — Metis")
-        return HTMLResponse(html, headers=_HEADERS)
-
+def install_telemetry_routes(app: FastAPI, *, require_account: Callable[[Request], dict]) -> None:
+    """JSON API for the Systeem tab of /inzicht (page: ``src/insight_v1.py``)."""
     @app.get("/telemetry/api/summary")
     def telemetry_summary(request: Request) -> JSONResponse:
         require_account(request)

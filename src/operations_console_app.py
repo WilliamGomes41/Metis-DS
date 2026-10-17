@@ -3916,7 +3916,9 @@ def create_console_app(
     from src.metis_mcp_v1 import install_mcp
     install_mcp(app, state, entra, expected_origin, require_account=_require, render_page=_page, nav=_nav)
     from src.telemetry.routes import install_telemetry_routes
-    install_telemetry_routes(app, require_account=_require, render_page=_page, nav=_nav)
+    install_telemetry_routes(app, require_account=_require)
+    from src.insight_v1 import install_insight_routes
+    install_insight_routes(app, state, require_account=_require, render_page=_page, nav=_nav)
 
     @app.exception_handler(ConsoleError)
     async def console_errors(_request: Request, exc: ConsoleError) -> HTMLResponse:
@@ -4141,21 +4143,30 @@ def create_console_app(
     def settings_home(request: Request) -> str:
         account = _require(request)
         cards = """
+          <h2>Inzicht</h2>
+          <p class="field-help">Eén plek met vier tabbladen: wat er gebeurt, waar werk blijft liggen en wat de volgende stap is.</p>
           <div class="doc-list">
-            <a class="doc-card" href="/settings/quality"><p class="doc-title">Kwaliteit &amp; werkproces</p><p>Bekijk bruikbaarheid, herstelwerk en open werk op basis van bestaande handelingen.</p></a>
+            <a class="doc-card" href="/inzicht?tab=systeem" style="text-decoration:none;"><p class="doc-title">Systeem</p><p>Verzoeken, fouten, fasen en deploys, tot op de milliseconde.</p></a>
+            <a class="doc-card" href="/inzicht?tab=kwaliteit" style="text-decoration:none;"><p class="doc-title">Kwaliteit &amp; werkproces</p><p>Bruikbaarheid van voorstellen, herstelwerk en open werk.</p></a>
+            <a class="doc-card" href="/inzicht?tab=documenten" style="text-decoration:none;"><p class="doc-title">Documenten</p><p>Verwerking, blokkades en systeemfouten per document.</p></a>
+            <a class="doc-card" href="/inzicht?tab=controles" style="text-decoration:none;"><p class="doc-title">Controles</p><p>Audits, veiligheidstests, routevergelijking en exports.</p></a>
+          </div>
+          <div style="height:18px" aria-hidden="true"></div>
+          <h2>Beheer</h2>
+          <div class="doc-list">
             <a class="doc-card" href="/accounts" style="text-decoration:none;">
               <p class="doc-title">Accounts</p>
               <p>Beheer interne gebruikers en rollen.</p>
             </a>
-            <a class="doc-card" href="/telemetry">
-              <p class="doc-title">Telemetrie</p>
-              <p>Live inzicht in verzoeken, fouten, fasen en deploys, met oorzaken en volgende stappen.</p>
-            </a>
-            <a class="doc-card" href="/settings/technical">
+            <a class="doc-card" href="/settings/technical" style="text-decoration:none;">
               <p class="doc-title">Technisch beheer</p>
-              <p>Modelconfiguratie, API-toegang, veiligheidstests, experimenten en documentdiagnostiek.</p>
+              <p>Modelconfiguratie, API-toegang, verwerkingsproblemen herstellen en exports.</p>
             </a>
-            <a class="doc-card" href="/settings/chatgpt"><p class="doc-title">ChatGPT-koppeling</p><p>Verbindingsstatus en toegang tot alleen-lezen onderzoek vanuit ChatGPT.</p></a>
+            <a class="doc-card" href="/settings/chatgpt" style="text-decoration:none;"><p class="doc-title">ChatGPT-koppeling</p><p>Verbindingsstatus en toegang tot alleen-lezen onderzoek vanuit ChatGPT.</p></a>
+          </div>
+          <div style="height:18px" aria-hidden="true"></div>
+          <h2>Uitleg</h2>
+          <div class="doc-list">
             <a class="doc-card" href="/over-console" style="text-decoration:none;">
               <p class="doc-title">Over Metis</p>
               <p>Lees hoe Metis werkt, welke begrippen het gebruikt en waar de grenzen liggen.</p>
@@ -4168,7 +4179,7 @@ def create_console_app(
             <section class="room">
               <p class="eyebrow">Beheer</p>
               <h1>Instellingen</h1>
-              <p class="lead">Accounts, werkproces, technisch beheer en informatie over Metis.</p>
+              <p class="lead">Inzicht in systeem en werk, beheer van accounts en techniek, en uitleg over Metis.</p>
               {cards}
             </section>
             """,
@@ -4189,7 +4200,8 @@ def create_console_app(
             burden = review_burden_projection(read_events(state._ledger_path), snapshot_id=document)
             document_panel = f'''
               <h2>Verwerkingsproblemen herstellen: {_esc(envelope.get("title"))}</h2>
-              <p><a href="/review?document={_esc(document)}">Naar inhoudelijke review</a>
+              <p><a href="/inzicht?tab=documenten">Inzicht › Documenten</a> ·
+              <a href="/review?document={_esc(document)}">Naar inhoudelijke review</a>
               · <a href="/settings/technical/exports?document={_esc(document)}">Exports</a></p>
               <p><a href="/review?document={_esc(document)}&amp;task=repair">Passages corrigeren</a></p>
               <details><summary>Diagnostiek en brondekking</summary>
@@ -4221,6 +4233,7 @@ def create_console_app(
             <h1>Technisch beheer</h1>
             {_passage_formation_status_html(state)}
             <p class="lead">Configuratie, technische controles en experimenten op één plek. Testresultaten zijn geen inhoudelijke beoordeling van documenten.</p>
+            <p class="field-help">Diagnostiek, kwaliteit, telemetrie en controles staan samen in <a href="/inzicht">Inzicht</a>; per document vind je ze onder <a href="/inzicht?tab=documenten">Inzicht › Documenten</a>.</p>
             <h2>Configuratie en koppelingen</h2>
             <div class="doc-list">
               <a class="doc-card" href="/settings/llm"><p class="doc-title">Modelconfiguratie</p><p>Bekijk de ingestelde provider en het model.</p></a>
@@ -6301,7 +6314,8 @@ def create_console_app(
         }
 
     from src.quality_metrics_app_v1 import install_quality_routes
-    install_quality_routes(app, state, _require, _page)
+    from src.insight_v1 import insight_tabs
+    install_quality_routes(app, state, _require, _page, tabs=insight_tabs)
     from src.route_comparison_app_v1 import install_route_comparison_routes
     install_route_comparison_routes(app, state, _require, _page)
     from src.decision_review_ui_v1 import install_decision_review_routes

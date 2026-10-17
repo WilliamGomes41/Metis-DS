@@ -1,6 +1,6 @@
 # Metis telemetrie
 
-Eén plek voor alle operationele signalen van Metis: `src/telemetry/`. Dit document is de naslag. Het beschrijft wat er wordt gemeten, hoe signalen aan elkaar worden gekoppeld, wat er nooit wordt vastgelegd en hoe je de pagina en Azure gebruikt om een fout te vinden en op te lossen.
+Eén plek voor alle operationele signalen van Metis: `src/telemetry/`, getoond in **Inzicht** (`/inzicht`). Dit document is de naslag. Het beschrijft wat er wordt gemeten, hoe signalen aan elkaar worden gekoppeld, wat er nooit wordt vastgelegd en hoe je de pagina en Azure gebruikt om een fout te vinden en op te lossen.
 
 Telemetrie is operationeel bewijs. Het is nooit domeinstaat, nooit een authority en mag nooit de uitkomst van een verzoek veranderen.
 
@@ -52,14 +52,38 @@ Document-id's, gebruikers-id's, querystrings, SQL, broninhoud en foutteksten wor
 
 Een verzoek zonder `request_finished` waarvan de heartbeats zijn gestopt, telt als **afgebroken**: crash, time-out of herstart. Dat is de enige fout die geen enkel los event kan laten zien.
 
-## De pagina: `/telemetry` (Instellingen → Telemetrie)
+## Inzicht: één ruimte, vier tabbladen (`/inzicht`)
+
+Instellingen kanaliseert informatie in drie groepen: **Inzicht** (wat er gebeurt), **Beheer** (accounts, technisch beheer, ChatGPT-koppeling) en **Uitleg** (Over Metis). Inzicht is één pagina met vier tabbladen die naar elkaar doorklikken:
+
+| Tabblad | Bron (bestaande eigenaar) | Ververst | Doorklik |
+| --- | --- | --- | --- |
+| **Systeem** | `src/telemetry` (deze naslag) | live, elke 30 s, alleen zolang het tabblad open is | verzoek → documentdiagnose |
+| **Kwaliteit & werkproces** | `quality_metrics_app_v1.quality_view`: dezelfde meting, scope en bewaarde rapporten als de tabelpagina `/settings/quality` | op aanvraag (zware meting onder de store-lock) | bron → documentdiagnose of verzoeken op dit document |
+| **Documenten** | `processing_status(deep=False)`, `processing_diagnostics_v1`, telemetrie per `doc_ref` | bij openen | document → verzoeken en fouten, verwerkingsbeheer, diagnostiek en brondekking, passages corrigeren |
+| **Controles** | audit, semantische veiligheid, routevergelijking, reviewsignalen, archief, exports | — | naar de bestaande pagina's |
+
+- **Bevoegdheden blijven per bron gelijk.** Systeem bevat geen inhoud en is zichtbaar voor iedere aangemelde gebruiker. Kwaliteit toont alleen bronnen waarvan je uploader of aangewezen reviewer bent. Documenten volgt dezelfde regel als Technisch beheer.
+- **Oude adressen werken door.** `/telemetry` verwijst naar `/inzicht?tab=systeem`. `/settings/quality` blijft de tabelweergave met rapporthistorie en toont dezelfde tabbalk.
+
+### Systeem
 
 - **Filterrij** (geldt voor alles eronder): tijdvenster, route, uitkomst, status, deploy en vrij zoeken op request-, trace-, poging- of document-id. Filters staan in de URL, dus een link deelt precies jouw beeld.
 - **Inzichten**: gerangschikte bevindingen in gewone taal (afgebroken verzoeken, nieuwe foutgroepen, regressie na een deploy, dominante fase, lock-wachttijd, samenhang). Klik erop en de filter wordt gezet.
 - **Tegels en grafieken**: verzoeken, foutpercentage, p95, afgebroken verzoeken en lock-wachttijd; responstijd p50/p95 en volume met fouten. Bij hover zie je de waarden. De knop "Tabel" toont dezelfde data als tabel.
-- **Foutgroepen**: gegroepeerd per vingerafdruk (type, code en diepste Metis-functies). Per groep zie je eerst/laatst gezien, routes, deploys, codelocaties en de volgende stap uit `playbook.py`.
+- **Foutgroepen**: gegroepeerd per vingerafdruk (type, code en diepste Metis-functies, zonder middleware-wrappers). Per groep zie je eerst/laatst gezien, routes, deploys, codelocaties en de volgende stap uit `playbook.py`.
 - **Routes, fasen, samenhang, deploys**: waar de tijd heen gaat en wat oververtegenwoordigd is bij fouten en trage verzoeken (lift ≥ 1,5×).
 - **Verzoekdetail**: fasenboom (totale en eigen tijd), correlatie-id's, DB-metingen, tijdlijn, logregels van hetzelfde verzoek en andere verzoeken op hetzelfde document.
+
+### Kwaliteit & werkproces
+
+Grafieken over dezelfde meting als de tabelpagina:
+- direct bruikbare voorstellen per route (onvolledig meetbaar is gearceerd, nooit als succes geteld);
+- herstel, correcties en afwijzingen;
+- open werk per bron;
+- open werk over tijd (uit de bewaarde rapporthistorie);
+- gewijzigde inhoud en verwerkingsruns;
+- meetdefinities en beperkingen.
 
 ## Van signaal naar oplossing
 

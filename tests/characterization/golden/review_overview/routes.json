@@ -85,6 +85,24 @@
       ]
     ],
     [
+      "/inzicht",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/inzicht/api/documents",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/inzicht/api/quality",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/login",
       [
         "GET"
