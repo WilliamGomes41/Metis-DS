@@ -25,3 +25,13 @@ First commit contains rejection tests. On base `26a0901`, 28 failed and 9 passed
 The separate `workflow-topology-proof` CI job supplies native PostgreSQL 16. Local PostgreSQL installation was unavailable due filesystem permissions; skipped native tests are not acceptance evidence. Overall test count is recorded at final verification. No deployment or production data operations.
 
 Separate review checks: all 32 presence/absence combinations; normalized casing; unknown values; old tier-D error priority; canonical-only rejection; local CLI bypass; unchanged Azure Blob requirement; removed construction branches; no schema or writer changes; existing tests preserved. Direct construction, route fallback and global backend registration remain separately tracked, not claimed fixed.
+
+## Local verification, 17 October 2026
+
+- Base collection: 5,449. Final collection: 5,498 (49 added, none removed).
+- Final #718 tests: 47 passed; two native startup/restart cases skipped locally because no test PostgreSQL is available.
+- Broader local suite on the initial implementation, before the final account-CLI guard and native-case additions: 4,941 passed, 5 failed, 541 skipped, 6 xfailed (581.68 seconds).
+- All five failures reproduce on unchanged base `26a0901`: `test_t13_l2_psql_argv_carries_no_password`, `test_parent_process_death_terminates_transport_worker`, and the three pinned-HTTPS/redirect SSRF cases in `test_security_harden_wave3.py`. They do not establish a regression from #718. Native skips and these environment-dependent failures still prevent claiming a wholly green local suite.
+- Repository preflight, release-control preflight, compilation, architecture boundaries and six architecture invariant tests passed.
+- Separate pass found the `console-account` local writer also ignored PG/Azure settings. It now shares the local-command guard with `serve-console`; six refusal cases cover both commands. The existing local commands remain supported.
+- CI and mandatory Sherlock/Argos review are still required. No merge, deployment or issue closure is claimed by this evidence record.
