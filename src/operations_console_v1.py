@@ -12,7 +12,6 @@ from src.request_diagnostics_v1 import diagnostic_phase
 import fcntl
 import hashlib
 import json
-import logging
 import os
 import re
 import secrets
@@ -4544,6 +4543,7 @@ class OperationsConsole:
             if remirror is not None:
                 remirror()
         except Exception as recovery_exc:
+            import logging
             logging.getLogger(__name__).warning(
                 "correction_recovery_failed error_type=%s", type(recovery_exc).__name__)
 
