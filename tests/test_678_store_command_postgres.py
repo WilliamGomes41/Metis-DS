@@ -190,11 +190,15 @@ def test_u4_correct_object_original_error_survives_failing_recovery(workflow_pos
 
 def test_u4_mirror_rebuild_failure_after_commit_keeps_command_committed(workflow_postgres, tmp_path, monkeypatch, caplog):
     console, rid, sid, (obj_a, _obj_b) = _setup(tmp_path, workflow_postgres)
+    original = rc._atomic_write
+    bindings_path = console._bindings_path.resolve()
 
-    def failing_mirror():
-        raise RuntimeError("mirror_disk_down")
+    def failing_write(path, *args, **kwargs):
+        if pathlib.Path(path).resolve() == bindings_path:
+            raise RuntimeError("mirror_disk_down")
+        return original(path, *args, **kwargs)
 
-    monkeypatch.setattr(console, "_mirror_bindings", failing_mirror)
+    monkeypatch.setattr(rc, "_atomic_write", failing_write)
     caplog.set_level(logging.WARNING, logger="src.workflows.workflow_review_cutover_v1")
     rows = _approve(console, rid, sid, obj_a)
     assert any(row["object_id"] == obj_a["object_id"] for row in rows)

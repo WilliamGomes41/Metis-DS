@@ -12,6 +12,7 @@ from src.request_diagnostics_v1 import diagnostic_phase
 import fcntl
 import hashlib
 import json
+import logging
 import os
 import re
 import secrets
@@ -4531,12 +4532,20 @@ class OperationsConsole:
                         ledger_fn=record_correction,
                     )
             except Exception:
-                self._reload_store_locked()
-                remirror = getattr(self, "_remirror_review_runtime", None)
-                if remirror is not None:
-                    remirror()
+                self._recover_after_failed_correction()
                 raise
         return deepcopy(revised)
+
+    def _recover_after_failed_correction(self) -> None:
+        """Restore in-process maps after a failed correction; NOOIT replace the original error."""
+        try:
+            self._reload_store_locked()
+            remirror = getattr(self, "_remirror_review_runtime", None)
+            if remirror is not None:
+                remirror()
+        except Exception as recovery_exc:
+            logging.getLogger(__name__).warning(
+                "correction_recovery_failed error_type=%s", type(recovery_exc).__name__)
 
     def accept_source_continuation(
         self,

@@ -5,7 +5,7 @@ import json
 import logging
 import threading
 from collections import deque
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager, nullcontext, suppress
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Iterator
@@ -20,7 +20,14 @@ from src.workflows.workflow_review_postgres_v1 import (
     PostgresWorkflowReviewStore,
     WorkflowReviewStoreError,
 )
-from src.workflows.workflow_transaction_v1 import workflow_transaction
+from src.workflows.store_command_v1 import (
+    StoreCommand,
+    active_store_command,
+    close_store_command,
+    open_store_command,
+    owned_store_command,
+)
+from src.workflows.workflow_transaction_v1 import workflow_transaction, workflow_transaction_active
 
 
 _REMIRROR_WARNED_ATTR = "_metis_review_remirror_warned"
@@ -92,6 +99,11 @@ class _PostgresWorkflowReviewMixin:
         return bindings
 
     def _mirror_bindings(self) -> None:
+        command = owned_store_command(self)
+        if command is not None:
+            # #678 U3: rebuilt from PostgreSQL after the commit.
+            command.bindings = True
+            return
         with suppress(OSError):
             _atomic_write(self._bindings_path, self._bindings)
 
@@ -125,6 +137,11 @@ class _PostgresWorkflowReviewMixin:
         self._mirror_bindings()
 
     def _reload_store_locked(self) -> None:
+        command = owned_store_command(self)
+        if command is not None and command.fresh:
+            # #678 U1: the owner reloaded under the store lock; the command keeps
+            # the in-process maps current, participants MAG NIET reload.
+            return
         super()._reload_store_locked()
         try:
             self._bindings = self.workflow_review_store.read_bindings()
@@ -132,6 +149,8 @@ class _PostgresWorkflowReviewMixin:
             raise ConsoleError("workflow_review_unavailable", str(exc)) from exc
         self._bindings_baseline = deepcopy(self._bindings)
         self._mirror_bindings()
+        if command is not None:
+            command.fresh = True
 
     def object_review_bindings(self, snapshot_id: str, *, objects=None) -> list[dict[str, Any]]:
         """Refresh PostgreSQL authorizations before deriving the public view."""
@@ -170,6 +189,144 @@ class _PostgresWorkflowReviewMixin:
                 type(remirror_exc).__name__,
             )
 
+    def _store_command_applies(self) -> bool:
+        """Whether this boundary owns or joins a Storeopdracht (#678).
+
+        False only on the compatibility path: a raw ``workflow_transaction``
+        that no command owns (publish, heading batch, ...) keeps the pre-#678
+        nested behavior until that owner is migrated. A command of another
+        console is refused before any lock or write.
+        """
+        command = active_store_command()
+        if command is not None:
+            if command.owner is not self:
+                raise ConsoleError("store_command_foreign_owner")
+            return True
+        return not workflow_transaction_active()
+
+    def _lock_document_row(self, connection: Any, snapshot_id: str) -> None:
+        row = connection.execute(
+            "SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
+            (snapshot_id,),
+        ).fetchone()
+        if row is None:
+            raise ConsoleError("unknown_snapshot")
+
+    @contextmanager
+    def _store_command(
+        self, snapshot_id: str | None, *, lock_row: bool = False, buffered: bool = True,
+    ) -> Iterator[StoreCommand]:
+        """Own or join the Storeopdracht for one durable command.
+
+        Owner: store lock, one transaction, one reload, then after the commit
+        one mirror rebuild from PostgreSQL; after a rollback the existing full
+        remirror. Participant: a savepoint and an event-buffer level only.
+        """
+        command = owned_store_command(self)
+        if command is not None:
+            with self._join_store_command(command, snapshot_id, lock_row=lock_row, buffered=buffered):
+                yield command
+            return
+        with self._store_write_lock():
+            command, token = open_store_command(self)
+            if snapshot_id:
+                command.snapshot_ids.add(snapshot_id)
+            try:
+                with workflow_transaction(self.workflow_review_store) as connection:
+                    if lock_row and snapshot_id:
+                        self._lock_document_row(connection, snapshot_id)
+                    self._reload_store_locked()
+                    with buffer_events(self._ledger_path) if buffered else nullcontext():
+                        yield command
+            except BaseException as exc:
+                close_store_command(token)
+                self._remirror_after_rollback(snapshot_id, exc)
+                raise
+            close_store_command(token)
+            self._remirror_from_pg(command)
+
+    @contextmanager
+    def _join_store_command(
+        self, command: StoreCommand, snapshot_id: str | None, *, lock_row: bool, buffered: bool,
+    ) -> Iterator[None]:
+        if snapshot_id:
+            command.snapshot_ids.add(snapshot_id)
+        mark = len(command.events)
+        try:
+            with workflow_transaction(self.workflow_review_store) as connection:
+                if lock_row and snapshot_id:
+                    self._lock_document_row(connection, snapshot_id)
+                with buffer_events(self._ledger_path) if buffered else nullcontext():
+                    yield
+        except BaseException:
+            # The savepoint rolled this level back: drop its ledger lines and
+            # refresh process state from the transaction's own view (reads only).
+            del command.events[mark:]
+            self._refresh_runtime_in_command(snapshot_id)
+            raise
+
+    def _refresh_runtime_in_command(self, snapshot_id: str | None) -> None:
+        """Re-read in-process maps inside the open command. NOOIT a disk write; U4."""
+        try:
+            self._bindings = self.workflow_review_store.read_bindings()
+            self._bindings_baseline = deepcopy(self._bindings)
+            self.refresh_workflow_documents()
+            if snapshot_id:
+                self.refresh_objects_expected_revision(snapshot_id)
+        except Exception as refresh_exc:
+            logging.getLogger(__name__).warning(
+                "store_command_participant_refresh_failed snapshot_id=%s error_type=%s",
+                snapshot_id or "", type(refresh_exc).__name__,
+            )
+
+    def _remirror_from_pg(self, command: StoreCommand) -> None:
+        """B1: the single mirror writer, after a successful commit, under the store lock.
+
+        Writes only what the command deferred, read back from PostgreSQL. A
+        failure here MAG NIET fail the committed command; startup and the next
+        command rebuild the disposable mirrors.
+        """
+        try:
+            if command.events:
+                self.workflow_review_store._mirror_events(command.events)
+            if command.bindings:
+                self._bindings = self.workflow_review_store.read_bindings()
+                self._bindings_baseline = deepcopy(self._bindings)
+                self._mirror_bindings()
+            for snapshot_id in sorted(command.objects):
+                self._mirror_objects(snapshot_id, self.workflow_document_store.list_document_objects(snapshot_id))
+            if command.envelopes:
+                for snapshot_id in sorted(command.snapshot_ids):
+                    envelope = self.workflow_document_store.get_envelope(snapshot_id)
+                    if envelope is None:
+                        self._envelopes.pop(snapshot_id, None)
+                    else:
+                        self._envelopes[snapshot_id] = envelope
+                self._mirror_envelopes()
+        except Exception as remirror_exc:
+            logging.getLogger(__name__).warning(
+                "store_command_remirror_failed snapshot_ids=%s error_type=%s",
+                ",".join(sorted(command.snapshot_ids)), type(remirror_exc).__name__,
+            )
+
+    @contextmanager
+    def _reprocessing_transaction(self, snapshot_id: str) -> Iterator[None]:
+        """Own or join the command with the document row lock, without an event buffer."""
+        self._require_review_store_configured()
+        if not self._store_command_applies():
+            with super()._reprocessing_transaction(snapshot_id):
+                yield
+            return
+        with self._store_command(snapshot_id, lock_row=True, buffered=False):
+            yield
+
+    def _recover_after_failed_correction(self) -> None:
+        # The Storeopdracht owner already rolled back and remirrored (#678 U4).
+        # NOOIT raise here: this runs while the original error propagates.
+        if active_store_command() is not None or not workflow_transaction_active():
+            return
+        super()._recover_after_failed_correction()
+
     def _commit_prepared_store(
         self,
         *,
@@ -189,6 +346,23 @@ class _PostgresWorkflowReviewMixin:
                 expected_revision=expected_revision, ledger_fn=ledger_fn,
                 snapshot_id=snapshot_id,
             )
+        if self._store_command_applies():
+            try:
+                with self._store_command(sid):
+                    super()._commit_prepared_store(
+                        envelopes=envelopes, bindings=bindings, objects=objects,
+                        expected_revision=expected_revision, ledger_fn=ledger_fn,
+                        snapshot_id=snapshot_id,
+                    )
+                    if bindings is not None:
+                        current = self.workflow_review_store.read_bindings()
+                        self._bindings = current
+                        self._bindings_baseline = deepcopy(current)
+                        self._mirror_bindings()
+            except WorkflowReviewStoreError as exc:
+                # #665 V-b: codes only, NOOIT store text.
+                raise ConsoleError("workflow_review_write_failed") from exc
+            return
         with self._store_write_lock():
             self._reload_store_locked()
             try:
@@ -236,6 +410,12 @@ class _PostgresWorkflowReviewMixin:
     def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
         if getattr(self._objects_tls, "heading_batch_snapshot", None) == snapshot_id:
             yield
+            return
+        if self._store_command_applies():
+            # #678: own or join the Storeopdracht. Route 1 holds: native rollback
+            # only, never the inherited documents compensation.
+            with self._store_command(snapshot_id):
+                yield
             return
         try:
             # Route 1: take the process-shared store lock and reload directly,

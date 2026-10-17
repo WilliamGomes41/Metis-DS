@@ -86,7 +86,12 @@ Adversarial proof matrix: see "Adversarial review" below.
 
 ## Contract change versus #667 (Option C)
 
-#667 Option C required every nesting level to remirror. Decision B1 (later the same day) replaced it: only the outermost level remirrors after the commit. The tests `test_optc_ordinary_fault_through_commit_prepared_store_logs_one_warning` and `test_optc_caught_nested_fault_mirrors_equal_pg` are updated to B1: exactly one remirror per command fault, by the owner, and mirrors equal PostgreSQL afterwards.
+#667 Option C required every nesting level to remirror. Decision B1 (later the same day) replaced it: only the outermost level remirrors after the commit. In `tests/test_r2_rollback_remirror_postgres.py`:
+
+- `test_optc_ordinary_fault_through_commit_prepared_store_logs_one_warning`: exactly one remirror per command fault, by the owner (was: at least two).
+- `test_optc_caught_nested_fault_mirrors_equal_pg`: the participant MAG NIET remirror (was: the inner level remirrors); mirrors still equal PostgreSQL afterwards.
+- `test_optc_caught_nested_fault_with_remirror_failure_logs_one_warning` is renamed to `test_optc_caught_nested_fault_does_not_run_rollback_remirror`: a caught participant fault is no command rollback, so no rollback remirror and no rollback warning.
+- `test_t5_two_threads_same_console_concurrent_approve_survives`: the owner remirrors after its rollback while it still holds the store lock, so the pre-#678 window (A releases the lock, B commits, A remirrors) MAG NIET exist. The test now asserts that A remirrors under the lock before B commits. B's approve, binding and ledger line still survive, and the mirrors still equal PostgreSQL.
 
 ## Limits
 
