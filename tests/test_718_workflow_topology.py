@@ -94,10 +94,11 @@ def test_complete_configuration_reaches_storage(monkeypatch, azure, kind):
         asgi.build_app()
 
 
+@pytest.mark.parametrize("command", ["cmd_serve_console", "cmd_console_account"])
 @pytest.mark.parametrize("mode", ["azure", "postgres", "partial"])
-def test_local_cli_cannot_ignore_configured_authorities(monkeypatch, mode):
+def test_local_cli_cannot_ignore_configured_authorities(monkeypatch, mode, command):
     from argparse import Namespace
-    from src.cli import cmd_serve_console
+    from src import cli
     if mode == "azure":
         monkeypatch.setenv("WEBSITE_SITE_NAME", "test-app")
     elif mode == "postgres":
@@ -105,8 +106,8 @@ def test_local_cli_cannot_ignore_configured_authorities(monkeypatch, mode):
             monkeypatch.setenv(key, "postgres")
     else:
         monkeypatch.setenv(SETTINGS[0], "postgres")
-    with pytest.raises(RuntimeError, match="azure_workflow_authorities_required|serve_console_is_local_only|canonical_store_required"):
-        cmd_serve_console(Namespace())
+    with pytest.raises(RuntimeError, match="azure_workflow_authorities_required|local_console_command_requires_file_harness|canonical_store_required"):
+        getattr(cli, command)(Namespace())
 
 
 @pytest.mark.parametrize("azure", [False, True])
