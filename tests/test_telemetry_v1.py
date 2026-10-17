@@ -379,6 +379,24 @@ def test_install_keeps_booting_when_faulthandler_cannot_use_stderr(hub, monkeypa
     assert any(e['event'] == 'telemetry_crash_stacks_unavailable' for e in hub.events())
 
 
+
+def test_event_survives_a_prune_between_check_and_append(tmp_path):
+    sink = JsonlSink(tmp_path)
+    sink.write('{"event":"first"}')
+    real = sink._handle
+
+    class PrunedDuringWrite:
+        def __getattr__(self, name):
+            return getattr(real, name)
+
+        def write(self, text):
+            sink._path.unlink()  # another worker prunes right before this append
+            return real.write(text)
+    sink._handle = PrunedDuringWrite()
+    sink.write('{"event":"second"}')
+    assert sink._path.read_text() == '{"event":"second"}\n'
+
+
 def _event(t, name, rid, **fields):
     from datetime import datetime, timezone
     ts = datetime.fromtimestamp(t, timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')

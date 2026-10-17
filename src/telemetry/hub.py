@@ -138,6 +138,12 @@ class JsonlSink:
             self._path, self._handle = target, open(target, "a", encoding="utf-8")
         self._handle.write(line + "\n")
         self._handle.flush()
+        if os.fstat(self._handle.fileno()).st_nlink == 0:
+            # Pruned by another worker between the check and the append: replay once in a fresh file.
+            self.close()
+            self._path, self._handle = target, open(target, "a", encoding="utf-8")
+            self._handle.write(line + "\n")
+            self._handle.flush()
         if self._handle.tell() > FILE_MAX_BYTES:
             self.close()
             target.rename(target.with_name(f"{target.stem}-{int(time.time())}.jsonl"))
