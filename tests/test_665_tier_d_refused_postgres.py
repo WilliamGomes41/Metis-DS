@@ -59,7 +59,7 @@ from src.workflows.workflow_review_cutover_v1 import (
 from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore, WorkflowReviewStoreError
 from src.workflows.workflow_transaction_v1 import bind_workflow_stores
 from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: F401
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.test_workflow_chain_recovery_v1 import recovery_postgres as workflow_postgres  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[1]
 CODE = "workflow_review_store_required_for_document_store"
@@ -82,16 +82,7 @@ def _docs_only(root, config):
     )
 
 
-def _review_tier(root, config):
-    identity = PostgresWorkflowIdentityStore(config)
-    documents = PostgresConcurrentWorkflowDocumentStore(config)
-    reviews = PostgresWorkflowReviewStore(config)
-    bind_workflow_stores(identity, documents, reviews)
-    return PostgresReviewWorkflowDurablePublicationConsole(
-        root=root, source_store=root / "sources", runtime=root / "runtime",
-        workflow_identity_store=identity, workflow_document_store=documents,
-        workflow_review_store=reviews,
-    )
+from tests.complete_workflow_support import complete_console as _review_tier
 
 
 def _accounts(console):
