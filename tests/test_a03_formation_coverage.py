@@ -67,19 +67,8 @@ def split_system(tmp_path, *, recovery=False, postgres=None):
                       immutable_source_store=immutable, canonical_publication_store=canonical)
         if postgres is None:
             return DurablePublicationConsole(**kwargs)
-        from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
-        from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-        from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
-        from src.workflows.workflow_badge_counts_postgres_v1 import FastBadgePostgresCompleteWorkflowDurablePublicationConsole as PostgresReviewWorkflowDurablePublicationConsole
-        from src.workflows.workflow_transaction_v1 import bind_workflow_stores
-        identity = PostgresWorkflowIdentityStore(postgres)
-        documents = PostgresConcurrentWorkflowDocumentStore(postgres)
-        reviews = PostgresWorkflowReviewStore(postgres)
-        from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
-        remaining = PostgresWorkflowRemainingStore(postgres)
-        bind_workflow_stores(identity, documents, reviews, remaining)
-        return PostgresReviewWorkflowDurablePublicationConsole(**kwargs, workflow_identity_store=identity,
-            workflow_document_store=documents, workflow_review_store=reviews, workflow_remaining_store=remaining)
+        from tests.complete_workflow_support import complete_console
+        return complete_console(tmp_path, postgres, **{k: v for k, v in kwargs.items() if k != "root"})
     calls, mode = [], {"broken": recovery}
     extra = "Bespreek de voorkeuren."
     combined = FIRST + " " + SECOND

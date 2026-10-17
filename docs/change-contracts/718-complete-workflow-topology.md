@@ -24,7 +24,7 @@ First commit contains rejection tests. On base `26a0901`, 28 failed and 9 passed
 
 The separate `workflow-topology-proof` CI job supplies native PostgreSQL 16. Local PostgreSQL installation was unavailable due filesystem permissions; skipped native tests are not acceptance evidence. Overall test count is recorded at final verification. No deployment or production data operations.
 
-Separate review checks: all 32 presence/absence combinations; normalized casing; unknown values; old tier-D error priority; canonical-only rejection; local CLI bypass; unchanged Azure Blob requirement; removed construction branches; no schema or writer changes; existing tests preserved. Direct construction, route fallback and global backend registration remain separately tracked, not claimed fixed.
+Separate review checks: all 32 presence/absence combinations; normalized casing; unknown values; unknown-value precedence followed by the tier-D error; canonical-only rejection; local CLI bypass; unchanged Azure Blob requirement; removed construction branches; no schema or writer changes; existing tests preserved. Direct construction, route fallback and global backend registration remain separately tracked, not claimed fixed.
 
 ## Local verification, 17 October 2026
 
@@ -40,3 +40,15 @@ Separate review checks: all 32 presence/absence combinations; normalized casing;
 ## First native run and test-fixture correction
 
 GitHub run 39066411438: 322 passed, 3 failed, zero skipped. Both complete startup variants reached the login page; the new restart assertion incorrectly read `_accounts`, which the PostgreSQL identity implementation does not populate. Replace it with real authentication after restart and compare the durable account ID. The migrated A08 published rejection scenario only marked the envelope as published; R+ correctly asks the canonical store. Seed the existing canonical release/audit fixture as well, retaining the rejection and zero-write assertions. No production behavior is changed to accommodate these tests. A fresh native run is required before acceptance.
+
+
+## PR #744 review corrections
+
+- Both direct `OperationsConsole` CLI commands already had a guard at head `6195270`; retain their six rejection cases. Move their validator into `workflow_store_configuration`, with a subprocess proof that ASGI can be unavailable.
+- Unknown settings now produce their exact `unsupported_*` code before checking prerequisites. The #665 explicit `file` case expects that exact error; missing review still has its original tier-D error.
+- Share the five authority names across admission, credential selection, worker topology, refusal storage and the test matrix. Remove unreachable factory prerequisite checks and the Azure file branch.
+- Restore the original seven-migration `workflow_postgres` fixture. Only full-composition cases use `complete_postgres`, which creates and finally drops its own UUID-named database. It never drops schemas in the supplied database and passes the isolated DSN to subprocesses. Test-server CREATEDB rights are required; creation failure is not converted to a skip.
+- Restore actual Azure `build_app()` path assertions with native PG, including runtime/source paths outside a simulated wwwroot. Restart authentication uses a new empty data root. Explicit teardown restores the rebound AuditRegistry global.
+- Use `complete_console` consistently, bind four stores once, and name the actual R+ class in introspection/type assertions. Publication unit tests explicitly retain their MemoryCanonicalStore double; native composition/restart uses real canonical PG storage.
+- Local review verification: 118 passed / 25 native skips, plus 53 passed / 89 native skips. The previously baseline-reproduced psql-availability test is excluded from the second run (psql is absent). Collection succeeds: 5,499 tests. Native CI on the updated head remains required; these skips do not prove PostgreSQL behavior.
+- Additional ASGI/navigation/logging coverage: 83 passed. Final admission-only rerun: 48 passed, two native skips. Repository/release preflights, compilation and architecture checks pass.

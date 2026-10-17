@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
-from tests.test_workflow_chain_recovery_v1 import recovery_postgres as workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 from src.operations_console_app import create_console_app
 from src.review_ledger import read_events
 from src.review_workboard_v1 import install_review_workboard

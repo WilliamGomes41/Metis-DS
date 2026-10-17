@@ -6,19 +6,39 @@ import src.console_asgi as console_asgi
 from src.console_asgi import build_app
 
 
-def test_azure_build_defaults_to_persistent_data_outside_wwwroot(
-    tmp_path: Path, monkeypatch
-) -> None:
-    azure_data = tmp_path / "home" / "data" / "metis-console"
-    monkeypatch.setattr(console_asgi, "AZURE_DATA_ROOT", azure_data)
-    # Path placement is independent of composition; actual Azure composition is
-    # covered with a complete native PG configuration in the #718 tests.
-    monkeypatch.setenv("WEBSITE_SITE_NAME", "vvn-metis-console")
-    monkeypatch.delenv("CONSOLE_DATA_ROOT", raising=False)
-    assert console_asgi._default_data_root() == azure_data
-    assert console_asgi._env_path("CONSOLE_DATA_ROOT", console_asgi._default_data_root()) == azure_data
-    assert azure_data != tmp_path / "site" / "wwwroot"
+from tests.complete_workflow_support import complete_postgres  # noqa: F401
+from tests.test_718_workflow_topology import restore_audit_registry  # noqa: F401
+from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
 
+
+def test_azure_build_defaults_to_persistent_data_outside_wwwroot(
+    tmp_path: Path, monkeypatch, complete_postgres, restore_audit_registry
+) -> None:
+    from tests.test_publication_chain_recovery_v1 import FakeBlobStore
+    azure_data = tmp_path / "home" / "data" / "metis-console"
+    wwwroot = tmp_path / "site" / "wwwroot"
+    wwwroot.mkdir(parents=True)
+    monkeypatch.setattr(console_asgi, "ROOT", wwwroot)
+    monkeypatch.setattr(console_asgi, "AZURE_DATA_ROOT", azure_data)
+    for key in POSTGRES_STORE_SETTINGS:
+        monkeypatch.setenv(key, "postgres")
+    monkeypatch.setenv("METIS_CANONICAL_DB_DSN", complete_postgres.dsn)
+    monkeypatch.setattr(console_asgi, "_postgres_credential", lambda: None)
+    monkeypatch.setattr(console_asgi, "_immutable_source_store", lambda: FakeBlobStore({}))
+    monkeypatch.setattr(console_asgi, "_audit_archive_store", lambda: None)
+    monkeypatch.setenv("WEBSITE_SITE_NAME", "test-app")
+    monkeypatch.setenv("CONSOLE_PUBLIC_ORIGIN", "https://console.example.test")
+    for key in ("CONSOLE_DATA_ROOT", "CONSOLE_SOURCE_STORE", "CONSOLE_RUNTIME",
+                "CONSOLE_BOOTSTRAP_USERNAME", "CONSOLE_BOOTSTRAP_PASSWORD"):
+        monkeypatch.delenv(key, raising=False)
+
+    kernel = build_app().state.operations_kernel
+
+    assert kernel.source_store == azure_data / "sources" / "private"
+    assert kernel.runtime == azure_data / "output" / "runtime" / "operations-console"
+    assert (kernel.runtime / "objects").is_dir()
+    assert not (wwwroot / "output" / "runtime").exists()
+    assert not (wwwroot / "sources").exists()
 
 
 def test_azure_startup_script_requires_production_authorities() -> None:

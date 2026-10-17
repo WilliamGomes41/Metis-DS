@@ -10,7 +10,7 @@ its audit event MOET survive A's restore.
 import fcntl
 
 from src.proportionate_review_v1 import normal_risk_batch_queue
-from tests.test_workflow_chain_recovery_v1 import recovery_postgres as workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 from tests.complete_workflow_support import complete_console as _console

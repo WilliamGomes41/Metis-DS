@@ -99,9 +99,9 @@ def cmd_serve_api(a: argparse.Namespace) -> dict:
 
 
 def _require_local_console_configuration() -> None:
-    from src.console_asgi import _validate_workflow_store_configuration
+    from src.workflow_store_configuration import validate_workflow_store_configuration
 
-    if _validate_workflow_store_configuration():
+    if validate_workflow_store_configuration():
         raise RuntimeError("local_console_command_requires_file_harness")
 
 

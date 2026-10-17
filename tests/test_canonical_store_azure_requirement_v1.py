@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.console_asgi import _canonical_store, _immutable_source_store
+from src.console_asgi import _immutable_source_store
+from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS, validate_workflow_store_configuration
 
 pytestmark = [
     pytest.mark.release_control_opslag,
@@ -23,10 +24,11 @@ pytestmark = [
 
 def test_azure_runtime_refuses_missing_canonical_store(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("WEBSITE_SITE_NAME", "vvn-metis-console")
-    monkeypatch.delenv("METIS_CANONICAL_STORE", raising=False)
+    for key in POSTGRES_STORE_SETTINGS:
+        monkeypatch.delenv(key, raising=False)
 
-    with pytest.raises(RuntimeError, match="canonical_store_required_in_azure"):
-        _canonical_store()
+    with pytest.raises(RuntimeError, match="azure_workflow_authorities_required"):
+        validate_workflow_store_configuration()
 
 
 def test_azure_runtime_refuses_missing_blob_source_authority(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -47,8 +49,9 @@ def test_azure_runtime_refuses_non_azure_source_authority(monkeypatch: pytest.Mo
 
 def test_local_runtime_may_run_without_durable_authorities(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("WEBSITE_SITE_NAME", raising=False)
-    monkeypatch.delenv("METIS_CANONICAL_STORE", raising=False)
+    for key in POSTGRES_STORE_SETTINGS:
+        monkeypatch.delenv(key, raising=False)
     monkeypatch.delenv("CONSOLE_IMMUTABLE_SOURCE_STORE", raising=False)
 
-    assert _canonical_store() is None
+    assert validate_workflow_store_configuration() is False
     assert _immutable_source_store() is None

@@ -11,22 +11,19 @@ import pytest
 
 from src import console_asgi as asgi
 
-SETTINGS = (
-    "METIS_WORKFLOW_STORE", "METIS_WORKFLOW_DOCUMENT_STORE",
-    "METIS_WORKFLOW_REVIEW_STORE", "METIS_WORKFLOW_REMAINING_STORE",
-    "METIS_CANONICAL_STORE",
-)
+from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS as SETTINGS
 
 
 @pytest.fixture(autouse=True)
 def clean_environment(monkeypatch, tmp_path):
     for key in (*SETTINGS, "WEBSITE_SITE_NAME", "CONSOLE_IMMUTABLE_SOURCE_STORE",
-                "CONSOLE_BOOTSTRAP_USERNAME", "CONSOLE_BOOTSTRAP_PASSWORD"):
+                "CONSOLE_BOOTSTRAP_USERNAME", "CONSOLE_BOOTSTRAP_PASSWORD",
+                "CONSOLE_SOURCE_STORE", "CONSOLE_RUNTIME"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("CONSOLE_DATA_ROOT", str(tmp_path / "untouched"))
 
 
-PARTIAL = [bits for bits in product((False, True), repeat=5) if any(bits) and not all(bits)]
+PARTIAL = [bits for bits in product((False, True), repeat=len(SETTINGS)) if any(bits) and not all(bits)]
 
 
 @pytest.mark.parametrize("bits", PARTIAL)
@@ -61,7 +58,7 @@ def test_unknown_store_kind_refused_before_credentials(key, monkeypatch):
         monkeypatch.setenv(setting, "postgres")
     monkeypatch.setenv(key, "postgress")
     monkeypatch.setattr(asgi, "_postgres_credential", lambda: pytest.fail("credentials opened"))
-    with pytest.raises(RuntimeError, match="unsupported_.*store|workflow_review_store_required_for_document_store"):
+    with pytest.raises(RuntimeError, match="^unsupported_" + key.removeprefix("METIS_").lower() + "$"):
         asgi.build_app()
 
 
@@ -110,11 +107,19 @@ def test_local_cli_cannot_ignore_configured_authorities(monkeypatch, mode, comma
         getattr(cli, command)(Namespace())
 
 
-@pytest.mark.parametrize("azure", [False, True])
-def test_native_complete_build_login_and_restart(azure, tmp_path, monkeypatch, recovery_postgres):
-    from fastapi.testclient import TestClient
+@pytest.fixture
+def restore_audit_registry():
     from src import audit_room_v1
-    monkeypatch.setattr(audit_room_v1, "AuditRegistry", audit_room_v1.AuditRegistry)
+    original = audit_room_v1.AuditRegistry
+    try:
+        yield
+    finally:
+        audit_room_v1.AuditRegistry = original
+
+
+@pytest.mark.parametrize("azure", [False, True])
+def test_native_complete_build_login_and_restart(azure, tmp_path, monkeypatch, recovery_postgres, restore_audit_registry):
+    from fastapi.testclient import TestClient
     for key in SETTINGS:
         monkeypatch.setenv(key, "postgres")
     monkeypatch.setenv("METIS_CANONICAL_DB_DSN", recovery_postgres.dsn)
@@ -133,9 +138,28 @@ def test_native_complete_build_login_and_restart(azure, tmp_path, monkeypatch, r
     created = kernel.create_account("topology.reviewer", "topology-test-secret", roles=["reviewer"])
     with TestClient(app) as client:
         assert client.get("/login").status_code == 200
+    fresh_root = tmp_path / "fresh-worker"
+    assert not fresh_root.exists()
+    monkeypatch.setenv("CONSOLE_DATA_ROOT", str(fresh_root))
     restarted = asgi.build_app().state.operations_kernel
     authenticated = restarted.authenticate("topology.reviewer", "topology-test-secret")
     assert authenticated["account_id"] == created["account_id"]
 
 
-from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: F401,E402
+from tests.complete_workflow_support import complete_postgres as recovery_postgres  # noqa: F401,E402
+
+
+def test_local_cli_configuration_does_not_import_asgi():
+    import subprocess
+    import sys
+    result = subprocess.run([sys.executable, "-c", """
+import sys
+from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
+import os
+for key in (*POSTGRES_STORE_SETTINGS, 'WEBSITE_SITE_NAME'):
+    os.environ.pop(key, None)
+sys.modules['src.console_asgi'] = None
+from src.cli import _require_local_console_configuration
+_require_local_console_configuration()
+"""], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr

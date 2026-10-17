@@ -23,7 +23,7 @@ import pytest
 from src.proportionate_review_v1 import _batch_type, normal_risk_batch_queue
 from src.workflows import workflow_documents_cutover_v1 as documents_cutover
 from src.workflows import workflow_review_cutover_v1 as rc
-from tests.test_workflow_chain_recovery_v1 import recovery_postgres as workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 REVIEW_WRITES = ("append_event", "replace_snapshot_bindings", "replace_bindings")
 DOCUMENT_WRITES = ("write_bundle", "create_document_bundle")
