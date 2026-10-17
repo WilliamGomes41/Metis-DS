@@ -2846,8 +2846,8 @@ def _lane_total(
 
     The task list only contains open work. The dashboard still reports how
     many objects of that lane are already afgerond. Only an approved or
-    rejected review decision counts (#672): an excluded source record is
-    source handling and a superseded candidate is replaced, not reviewed.
+    rejected review decision counts (#672/#700): source records and source-role
+    decisions (label/context/excluded) are source handling; superseded is replaced.
     """
     from src.source_accountability_v1 import is_source_record
     open_ids = {str(obj.get("object_id") or "") for obj in open_rows}
@@ -2856,7 +2856,7 @@ def _lane_total(
         object_id = str(obj.get("object_id") or "")
         if not object_id or object_id in open_ids:
             continue
-        if str(obj.get("object_type") or "") == "document" or is_source_record(obj):
+        if str(obj.get("object_type") or "") == "document" or is_source_record(obj) or role_of(obj).get("role") in {"label", "context", "excluded"}:
             continue
         if (obj.get("governance") or {}).get("validation_status") not in {"approved", "rejected"}:
             continue
