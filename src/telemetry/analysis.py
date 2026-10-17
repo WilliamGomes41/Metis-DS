@@ -48,6 +48,10 @@ class Request:
             return "ok"
         return "aborted" if now - self.last_seen > ABORTED_AFTER_SECONDS else "running"
 
+    def responded(self) -> bool:
+        """A response was completed: only these durations are response times."""
+        return self.finished is not None and (self.finished.get("outcome") or "completed") == "completed"
+
     def duration_ms(self) -> float:
         if self.finished is not None and isinstance(self.finished.get("elapsed_ms"), (int, float)):
             return float(self.finished["elapsed_ms"])
@@ -166,7 +170,7 @@ def summarize(events: list[dict], *, filters: dict[str, str] | None = None, now:
     requests_by_id, other = build_requests(events)
     all_requests = [r for r in requests_by_id.values() if r.started >= since]
     requests = [r for r in all_requests if matches(r, filters, now)]
-    durations = [r.duration_ms() for r in requests if r.state(now) not in ("running",)]
+    durations = [r.duration_ms() for r in requests if r.responded()]
     errored = [r for r in requests if r.state(now) in ("error", "aborted")]
     size = bucket_seconds(max(60.0, now - since))
     start_bucket = int(since // size) * size
@@ -177,7 +181,7 @@ def summarize(events: list[dict], *, filters: dict[str, str] | None = None, now:
     series = []
     for key in sorted(buckets):
         items = buckets[key]
-        times = [r.duration_ms() for r in items if r.state(now) != "running"]
+        times = [r.duration_ms() for r in items if r.responded()]
         series.append({"t": key, "count": len(items),
                        "errors": sum(r.state(now) in ("error", "aborted") for r in items),
                        "p50": percentile(times, 50), "p95": percentile(times, 95)})
@@ -251,7 +255,7 @@ def _routes(requests: list[Request], now: float) -> list[dict[str, Any]]:
         by_route[request.route].append(request)
     rows = []
     for route, items in by_route.items():
-        times = [r.duration_ms() for r in items if r.state(now) != "running"]
+        times = [r.duration_ms() for r in items if r.responded()]
         exclusive: Counter = Counter()
         for request in items:
             for name, values in request.phases().items():
@@ -377,7 +381,7 @@ def _commits(requests: list[Request], now: float) -> list[dict[str, Any]]:
         by_commit[request.commit or "unknown"].append(request)
     rows = []
     for commit, items in by_commit.items():
-        times = [r.duration_ms() for r in items if r.state(now) != "running"]
+        times = [r.duration_ms() for r in items if r.responded()]
         errors = sum(r.state(now) in ("error", "aborted") for r in items)
         rows.append({"commit": commit, "requests": len(items), "errors": errors,
                      "error_rate": round(errors / len(items), 4), "p95_ms": percentile(times, 95),

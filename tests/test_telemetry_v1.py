@@ -402,6 +402,23 @@ def test_event_survives_a_prune_between_check_and_append(tmp_path):
     assert sink._path.read_text() == '{"event":"second"}\n'
 
 
+
+def test_cut_lists_report_omissions_and_latency_counts_only_completed_responses():
+    fresh = TelemetryHub()
+    stored = fresh.record({'event': 'publication_boundary', 'omitted_item_count': 0,
+                           'items': [{'content_hash': 'a' * 64}] * 40, 'blockers': ['x'] * 35})
+    assert len(stored['items']) == 32 and stored['omitted_item_count'] == 8 and stored['blockers_omitted'] == 3
+    now = time.time()
+    rows = [_event(now - 100, 'request_started', 'ok1', route='/review'),
+            _event(now - 99.9, 'request_finished', 'ok1', route='/review', status=200, outcome='completed', elapsed_ms=100.0),
+            _event(now - 400, 'request_started', 'dead', route='/review'),
+            _event(now - 100, 'request_running', 'dead', route='/review'),
+            _event(now - 50, 'request_started', 'boom', route='/review'),
+            _event(now - 40, 'request_finished', 'boom', route='/review', status=None, outcome='exception', elapsed_ms=10000.0)]
+    kpis = analysis.summarize(rows, now=now, since=now - 600)['kpis']
+    assert kpis['p95_ms'] == 100.0 and kpis['aborted'] == 1
+
+
 def _event(t, name, rid, **fields):
     from datetime import datetime, timezone
     ts = datetime.fromtimestamp(t, timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')

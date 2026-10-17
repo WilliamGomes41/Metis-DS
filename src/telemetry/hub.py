@@ -65,7 +65,7 @@ def _clean(value: Any, depth: int = 0) -> Any:
     if depth >= 4:
         return None
     if isinstance(value, dict):
-        cleaned = {}
+        cleaned, omitted = {}, {}
         for key, item in list(value.items())[:MAX_KEYS]:
             if not isinstance(key, str) or not _KEY.fullmatch(key) or key in _IDENTIFIER_KEYS:
                 continue
@@ -73,6 +73,13 @@ def _clean(value: Any, depth: int = 0) -> Any:
                 cleaned.setdefault("doc_ref", doc_ref(item))
                 continue
             cleaned[key] = _clean(item, depth + 1)
+            if isinstance(item, (list, tuple)) and len(item) > MAX_LIST:
+                # A list cut here MAG NIET read as complete: count what was left out.
+                count_key = "omitted_item_count" if key == "items" else f"{key}_omitted"
+                omitted[count_key] = omitted.get(count_key, 0) + len(item) - MAX_LIST
+        for count_key, extra in omitted.items():
+            base = cleaned.get(count_key)
+            cleaned[count_key] = (base if isinstance(base, int) else 0) + extra
         return cleaned
     if isinstance(value, (list, tuple)):
         return [_clean(item, depth + 1) for item in list(value)[:MAX_LIST]]
