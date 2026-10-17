@@ -43,16 +43,10 @@ from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWor
 from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
 from src.workflows.workflow_identity_cutover_v1 import CutoverPostgresWorkflowIdentityStore
 from src.workflows.workflow_identity_postgres_v1 import (
-    PostgresIdentityAzureAuthoritativePublicationConsole,
-    PostgresIdentityDurablePublicationConsole,
     PostgresWorkflowIdentityStore,
 )
 from src.workflows.workflow_remaining_cutover_v1 import bind_remaining_route_backends
 from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
-from src.workflows.workflow_review_cutover_v1 import (
-    PostgresReviewWorkflowAzureAuthoritativePublicationConsole,
-    PostgresReviewWorkflowDurablePublicationConsole,
-)
 from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 from src.workflows.workflow_transaction_v1 import bind_workflow_stores
 
@@ -128,12 +122,33 @@ def _workflow_identity_store(*, credential: Any | None = None) -> PostgresWorkfl
     return store
 
 
-def _refuse_unsupported_document_topology() -> None:
-    """#665: refuse PG documents without PG review; env only, before any credential or PG read."""
-    documents = os.environ.get("METIS_WORKFLOW_DOCUMENT_STORE", "").strip().lower()
-    review = os.environ.get("METIS_WORKFLOW_REVIEW_STORE", "").strip().lower()
+def _validate_workflow_store_configuration() -> bool:
+    """Validate the entire authority configuration without opening any store.
+
+    Return True for complete PostgreSQL, False for the local file harness.
+    Preserve #665's tier-D refusal; #718 removes every other partial variant.
+    """
+    names = (
+        "METIS_WORKFLOW_STORE", "METIS_WORKFLOW_DOCUMENT_STORE",
+        "METIS_WORKFLOW_REVIEW_STORE", "METIS_WORKFLOW_REMAINING_STORE",
+        "METIS_CANONICAL_STORE",
+    )
+    kinds = tuple(os.environ.get(name, "").strip().lower() for name in names)
+    identity, documents, review, remaining, canonical = kinds
     if documents == "postgres" and review != "postgres":
         raise RuntimeError("workflow_review_store_required_for_document_store")
+    for name, kind in zip(names, kinds):
+        if kind and kind != "postgres":
+            raise RuntimeError("unsupported_" + name.removeprefix("METIS_").lower())
+    if not any(kinds):
+        if _running_in_azure():
+            raise RuntimeError("azure_workflow_authorities_required")
+        return False
+    if any((identity, documents, review, remaining)) and not canonical:
+        raise RuntimeError("canonical_store_required_for_postgres_workflow")
+    if not all(kinds):
+        raise RuntimeError("complete_postgres_workflow_required")
+    return True
 
 
 def _workflow_document_store(*, credential: Any | None = None) -> PostgresWorkflowDocumentRuntimeStore | None:
@@ -247,7 +262,7 @@ def _require_azure_workflow_authorities(*stores) -> None:
 
 def build_app() -> object:
     install_structured_logging()
-    _refuse_unsupported_document_topology()
+    _validate_workflow_store_configuration()
     topology = assert_supported_topology()
     data_root = _env_path("CONSOLE_DATA_ROOT", _default_data_root())
     immutable_store = _immutable_source_store()
@@ -291,32 +306,6 @@ def build_app() -> object:
             workflow_remaining_store=workflow_remaining_store,
         )
         bind_remaining_route_backends(workflow_remaining_store)
-    elif workflow_review_store is not None:
-        if workflow_identity_store is None or workflow_document_store is None:
-            raise RuntimeError("workflow_prerequisites_required_for_review_store")
-        bind_workflow_stores(
-            workflow_identity_store,
-            workflow_document_store,
-            workflow_review_store,
-        )
-        console_cls = (
-            PostgresReviewWorkflowAzureAuthoritativePublicationConsole
-            if running_in_azure
-            else PostgresReviewWorkflowDurablePublicationConsole
-        )
-        console = console_cls(
-            **common,
-            workflow_identity_store=workflow_identity_store,
-            workflow_document_store=workflow_document_store,
-            workflow_review_store=workflow_review_store,
-        )
-    elif workflow_identity_store is not None:
-        console_cls = (
-            PostgresIdentityAzureAuthoritativePublicationConsole
-            if running_in_azure
-            else PostgresIdentityDurablePublicationConsole
-        )
-        console = console_cls(**common, workflow_identity_store=workflow_identity_store)
     else:
         console_cls = AzureAuthoritativePublicationConsole if running_in_azure else DurablePublicationConsole
         console = console_cls(**common)
