@@ -56,6 +56,8 @@ def _remirror_warning_already_logged(original: BaseException) -> bool:
 
 class _PostgresWorkflowReviewMixin:
     workflow_review_store: PostgresWorkflowReviewStore
+    # #665 naad B: the documents mixin only constructs under review authority.
+    _metis_workflow_review_authority = True
 
     def __init__(
         self,
@@ -117,7 +119,7 @@ class _PostgresWorkflowReviewMixin:
             self._persist_binding_changes(baseline, source)
             current = self.workflow_review_store.read_bindings()
         except WorkflowReviewStoreError as exc:
-            raise ConsoleError("workflow_review_write_failed", str(exc)) from exc
+            raise ConsoleError("workflow_review_write_failed") from exc
         self._bindings = current
         self._bindings_baseline = deepcopy(current)
         self._mirror_bindings()
@@ -207,7 +209,7 @@ class _PostgresWorkflowReviewMixin:
                             self._mirror_bindings()
             except WorkflowReviewStoreError as exc:
                 self._remirror_after_rollback(sid, exc)
-                raise ConsoleError("workflow_review_write_failed", str(exc)) from exc
+                raise ConsoleError("workflow_review_write_failed") from exc
             except Exception as exc:
                 if isinstance(exc, ConsoleError) and exc.code == "snapshot_object_write_conflict":
                     self._remirror_review_runtime()

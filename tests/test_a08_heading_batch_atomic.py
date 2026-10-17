@@ -65,17 +65,9 @@ root, sid, mode = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 if mode != "local":
     from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
     config = PostgresCanonicalConfig(dsn=os.environ["METIS_TEST_POSTGRES_DSN"])
-    if mode == "postgres":
-        from tests.test_review_batch_atomic_postgres import _console as native
-        console = native(root, config)
-    else:
-        from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
-        from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-        from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
-        console = PostgresWorkflowDurablePublicationConsole(
-            root=root, source_store=root / "sources", runtime=root / "runtime",
-            workflow_identity_store=PostgresWorkflowIdentityStore(config),
-            workflow_document_store=PostgresConcurrentWorkflowDocumentStore(config))
+    assert mode == "postgres", mode
+    from tests.test_review_batch_atomic_postgres import _console as native
+    console = native(root, config)
 else:
     console = _console(root)
 print(json.dumps(_state(console, sid)))
@@ -110,25 +102,33 @@ def test_http_later_binding_failure_is_atomic_after_restart(tmp_path, monkeypatc
     assert after == before, f"HTTP {response.status_code}; durable statuses after restart: {statuses}"
 
 
-@pytest.fixture(params=["local", "postgres", "postgres-local-review"])
+@pytest.fixture(params=["local", "postgres"])
 def storage(request):
     if request.param == "local":
         return _console
     config = request.getfixturevalue("workflow_postgres")
-    if request.param == "postgres":
-        from tests.test_review_batch_atomic_postgres import _console as native
-        return lambda root: native(root, config)
+    from tests.test_review_batch_atomic_postgres import _console as native
+    return lambda root: native(root, config)
+
+
+def _assert_tier_d_refused(config, root):
+    # #665: PG documents without PG review authority (former storage
+    # "postgres-local-review" and review_authority=False) is refused at
+    # construction, before any write.
     from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
     from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
     from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
-
-    def mixed(root):
-        return PostgresWorkflowDurablePublicationConsole(
+    with pytest.raises(RuntimeError) as refused:
+        PostgresWorkflowDurablePublicationConsole(
             root=root, source_store=root / "sources", runtime=root / "runtime",
             workflow_identity_store=PostgresWorkflowIdentityStore(config),
             workflow_document_store=PostgresConcurrentWorkflowDocumentStore(config),
         )
-    return mixed
+    assert str(refused.value) == "workflow_review_store_required_for_document_store"
+
+
+def test_postgres_local_review_storage_is_refused(workflow_postgres, tmp_path):
+    _assert_tier_d_refused(workflow_postgres, tmp_path)
 
 
 def _post(client, sid, ids, revision):
@@ -303,23 +303,16 @@ def test_concurrent_same_revision_preserves_winner(storage, tmp_path, monkeypatc
     assert _state(storage(second_root), sid) == committed
 
 
-@pytest.mark.parametrize("review_authority", [True, False])
+def test_native_final_commit_failure_without_review_authority_is_refused(workflow_postgres, tmp_path):
+    _assert_tier_d_refused(workflow_postgres, tmp_path)
+
+
 @pytest.mark.parametrize("refresh_failure", [False, True])
-def test_native_final_commit_failure_preserves_fresh_state(workflow_postgres, tmp_path, monkeypatch, review_authority, refresh_failure):
+def test_native_final_commit_failure_preserves_fresh_state(workflow_postgres, tmp_path, monkeypatch, refresh_failure):
     import psycopg
     from tests.test_review_batch_atomic_postgres import _console as native
 
-    if review_authority:
-        factory = lambda root: native(root, workflow_postgres)
-    else:
-        from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
-        from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-        from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
-        factory = lambda root: PostgresWorkflowDurablePublicationConsole(
-            root=root, source_store=root / "sources", runtime=root / "runtime",
-            workflow_identity_store=PostgresWorkflowIdentityStore(workflow_postgres),
-            workflow_document_store=PostgresConcurrentWorkflowDocumentStore(workflow_postgres),
-        )
+    factory = lambda root: native(root, workflow_postgres)
     console, accounts, sid, ids = _setup(tmp_path, factory)
     client = _client(console)
     before = _state(console, sid)
@@ -442,29 +435,23 @@ def test_batch_and_single_review_overlap_preserves_winner(storage, tmp_path, mon
     assert _state(storage(tmp_path), sid) == after
 
 
-@pytest.mark.parametrize("review_authority,refresh", [
-    (False, "_reload_store_locked"), (False, "refresh_objects_expected_revision"),
-    (True, "_reload_store_locked"), (True, "refresh_objects_expected_revision"),
-    (True, "_remirror_review_runtime"),
+def test_native_post_commit_refresh_failure_without_review_authority_is_refused(workflow_postgres, tmp_path):
+    _assert_tier_d_refused(workflow_postgres, tmp_path)
+
+
+@pytest.mark.parametrize("refresh", [
+    "_reload_store_locked", "refresh_objects_expected_revision", "_remirror_review_runtime",
 ])
 @pytest.mark.parametrize("entry", ["http", "direct"])
 def test_native_post_commit_refresh_failure_preserves_success(
-    workflow_postgres, tmp_path, monkeypatch, review_authority, refresh, entry,
+    workflow_postgres, tmp_path, monkeypatch, refresh, entry,
 ):
     from contextlib import contextmanager
     from src.workflows import workflow_documents_cutover_v1 as documents
     from tests.test_review_batch_atomic_postgres import _console as native
-    from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-    from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
 
     def factory(root):
-        if review_authority:
-            return native(root, workflow_postgres)
-        return documents.PostgresWorkflowDurablePublicationConsole(
-            root=root, source_store=root / "sources", runtime=root / "runtime",
-            workflow_identity_store=PostgresWorkflowIdentityStore(workflow_postgres),
-            workflow_document_store=PostgresConcurrentWorkflowDocumentStore(workflow_postgres),
-        )
+        return native(root, workflow_postgres)
 
     console, accounts, sid, ids = _setup(tmp_path, factory)
     client = _client(console)
@@ -512,8 +499,7 @@ def test_native_post_commit_refresh_failure_preserves_success(
     assert after[3] != before[3] and after[5] > before[5]
     if entry == "http":
         import json
-        mode = "postgres" if review_authority else "postgres-local-review"
-        assert _new_process_state(tmp_path, sid, mode) == json.loads(json.dumps(after))
+        assert _new_process_state(tmp_path, sid, "postgres") == json.loads(json.dumps(after))
     assert outcome == (303 if entry == "http" else ids), f"Committed batch reported failure: {outcome}"
     # The same instance must recover via its existing authoritative readers.
     assert _post(client, sid, ids, before[3]).status_code == 409
@@ -673,9 +659,7 @@ def test_new_process_restart_preserves_failed_and_committed_batch(storage, tmp_p
     import json
 
     console, accounts, sid, ids = _setup(tmp_path, storage)
-    native = hasattr(console, "workflow_document_store")
-    review_native = hasattr(console, "workflow_review_store")
-    mode = "postgres" if review_native else "postgres-local-review" if native else "local"
+    mode = "postgres" if hasattr(console, "workflow_review_store") else "local"
     before = _state(console, sid)
     original = console.review_object
 
