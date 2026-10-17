@@ -52,7 +52,12 @@ def test_guideline_dashboard_has_three_layers_and_counts_duties_not_partition(tm
     for layer in ("beoordelen", "bronwerk", "inzage"):
         assert f'data-review-layer="{layer}"' in html
     assert _count(html, "kennis") == routes["actionable_contextual_duties"] + routes["actionable_batch_duties"] == 1
-    assert "Bronafhandeling open" in html and _count(html, "bronafhandeling") == 2
+    from src.publication_readiness_v1 import review_followup_queues
+    open_source = len(review_followup_queues(rows, review_path="richtlijn", bindings=console.object_review_bindings(sid),
+                                             fragments=console.review_source_fragments(sid))["disposition"])
+    # The deterministic rest row is source handling too, so the label is not "bronpassages".
+    assert open_source == 3
+    assert "Bronafhandeling open" in html and _count(html, "bronafhandeling") == open_source
     assert 'data-open-work-ratio' in html and f'task=history' in html
 
 
