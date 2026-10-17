@@ -7,7 +7,7 @@ local ``sources/private/`` remains the G0 stand-in for local development.
 """
 from __future__ import annotations
 
-from src.request_diagnostics_v1 import diagnostic_phase
+from src.request_diagnostics_v1 import diagnostic_clock, diagnostic_phase, diagnostic_since
 
 import fcntl
 import hashlib
@@ -809,6 +809,7 @@ class OperationsConsole:
         """
         lock_path = self.runtime / "store.lock"
         lock_path.parent.mkdir(parents=True, exist_ok=True)
+        waited = diagnostic_clock()
         with self._store_thread_lock:
             first = self._store_lock_depth == 0
             if first:
@@ -819,12 +820,14 @@ class OperationsConsole:
                     handle.close()
                     raise
                 self._store_lock_handle = handle
+                waited = diagnostic_since("store_lock_wait", waited)
             self._store_lock_depth += 1
             try:
                 yield
             finally:
                 self._store_lock_depth -= 1
                 if first:
+                    diagnostic_since("store_lock_hold", waited, overlapping=True)
                     handle = self._store_lock_handle
                     self._store_lock_handle = None
                     if handle is not None:

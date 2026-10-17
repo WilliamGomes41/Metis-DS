@@ -3915,10 +3915,14 @@ def create_console_app(
 
     from src.metis_mcp_v1 import install_mcp
     install_mcp(app, state, entra, expected_origin, require_account=_require, render_page=_page, nav=_nav)
+    from src.telemetry.routes import install_telemetry_routes
+    install_telemetry_routes(app, require_account=_require, render_page=_page, nav=_nav)
 
     @app.exception_handler(ConsoleError)
     async def console_errors(_request: Request, exc: ConsoleError) -> HTMLResponse:
         from src.console_entra_routes_v1 import identity_unavailable_response
+        from src.request_diagnostics_v1 import note_handled_error
+        note_handled_error(exc.code)
         if exc.code == "workflow_identity_unavailable":
             return identity_unavailable_response(_page)
         try:
@@ -4142,6 +4146,10 @@ def create_console_app(
             <a class="doc-card" href="/accounts" style="text-decoration:none;">
               <p class="doc-title">Accounts</p>
               <p>Beheer interne gebruikers en rollen.</p>
+            </a>
+            <a class="doc-card" href="/telemetry">
+              <p class="doc-title">Telemetrie</p>
+              <p>Live inzicht in verzoeken, fouten, fasen en deploys, met oorzaken en volgende stappen.</p>
             </a>
             <a class="doc-card" href="/settings/technical">
               <p class="doc-title">Technisch beheer</p>

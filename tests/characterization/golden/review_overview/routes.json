@@ -467,6 +467,30 @@
       ]
     ],
     [
+      "/telemetry",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/telemetry/api/export",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/telemetry/api/request/{request_id}",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/telemetry/api/summary",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/tree",
       [
         "GET"

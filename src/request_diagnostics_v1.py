@@ -24,10 +24,13 @@ _LOGGER = logging.getLogger('metis.console.diagnostics')
 _CURRENT = ContextVar('metis_request_diagnostics', default=None)
 ROUTES = frozenset({'/login', '/ingest', '/tree', '/source-selection', '/review', '/publish'})
 COMMAND_ROUTES = frozenset({'/source-selection/start', '/publish'})
+# Every other route is observed too (telemetry hub), except polling and static assets.
+EXCLUDED_PREFIXES = ('/session/status', '/brand/', '/favicon', '/telemetry/api/', '/health')
 PHASES = frozenset({'authorization', 'document_list', 'document_store_read', 'document_load',
     'selection_projection', 'processing_status', 'objects_read', 'source_read',
     'source_reconstruction', 'source_verify', 'review_bindings', 'review_render', 'review_index',
-    'db_connect', 'db_execute', 'db_fetch', 'document_summary', 'review_work_items'})
+    'db_connect', 'db_execute', 'db_fetch', 'document_summary', 'review_work_items',
+    'store_lock_wait', 'store_lock_hold', 'store_transaction', 'store_remirror'})
 COUNTERS = frozenset({'source_reconstruction_built', 'source_reconstruction_reused',
     'source_reconstruction_unscoped', 'source_input_compared', 'source_input_hashed'})
 HEARTBEAT_SECONDS = 15
@@ -35,6 +38,9 @@ MAX_PHASE_EVENTS = 40
 MAX_TREE_NODES = 64
 DEPLOYED_COMMIT_MARKER = Path(__file__).resolve().parents[1] / 'config' / 'deployed_commit.txt'
 _COMMIT_RE = re.compile(r'[0-9a-f]{40}')
+_TRACEPARENT_RE = re.compile(rb'00-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}')
+_SNAPSHOT_RE = re.compile(r'snap-[0-9a-f]{8,32}-[0-9a-f]{4,32}')
+_ID_SEGMENT_RE = re.compile(r'(?:snap-[0-9a-f-]+|pa_[0-9a-f]+|[0-9a-f]{12,}|[0-9a-f-]{32,36}|\d+)')
 
 
 def deployed_commit():
@@ -60,6 +66,10 @@ class RequestEvidence:
     tree_truncated: bool = False
     counters: dict = field(default_factory=dict)
     phase_events: int = 0
+    trace_id: str | None = None
+    doc_ref: str | None = None
+    error: dict | None = None
+    db: dict | None = None
 
     def report(self, event, **fields):
         payload = {'event': event, 'request_id': self.request_id,
@@ -95,6 +105,99 @@ def diagnostic_count(name, amount=1):
     if evidence is None or name not in COUNTERS:
         return
     evidence.counters[name] = evidence.counters.get(name, 0) + amount
+
+
+def note_handled_error(code):
+    """Attach a handled ConsoleError code to the request in progress (no text)."""
+    evidence = _CURRENT.get()
+    if evidence is not None and isinstance(code, str) and re.fullmatch(r'[a-z][a-z0-9_]{1,80}', code):
+        evidence.error = {'type': 'ConsoleError', 'code': code, 'handled': True}
+
+
+def note_request_metrics(**values):
+    """Attach bounded numeric request metrics (database counts and times)."""
+    evidence = _CURRENT.get()
+    if evidence is not None:
+        evidence.db = {k: round(v, 3) if isinstance(v, float) else v for k, v in values.items()
+                       if isinstance(v, (int, float))}
+
+
+def diagnostic_record(name, elapsed_ms, *, overlapping=False):
+    """Record a measured phase without a with-block.
+
+    A leaf (a wait) counts as its parent's child time. An ``overlapping`` span
+    (a lock hold that contains other phases) reports inclusive time only, so
+    exclusive totals are not counted twice.
+    """
+    evidence = _CURRENT.get()
+    if evidence is None or name not in PHASES:
+        return
+    previous = evidence.stack
+    exclusive = 0.0 if overlapping else elapsed_ms
+    _add_phase_time(evidence.totals, name, elapsed_ms, exclusive)
+    path = '/'.join([entry[0] for entry in previous] + [name])
+    if path in evidence.tree or len(evidence.tree) < MAX_TREE_NODES:
+        _add_phase_time(evidence.tree, path, elapsed_ms, exclusive)
+    else:
+        evidence.tree_truncated = True
+    if previous and not overlapping:
+        previous[-1][2][0] += elapsed_ms
+
+
+def diagnostic_clock():
+    """Monotonic start mark for ``diagnostic_since`` (keeps callers free of timing code)."""
+    return time.perf_counter()
+
+
+def diagnostic_since(name, started, *, overlapping=False):
+    """Record ``name`` as the time since ``started`` (perf_counter) and return now."""
+    now = time.perf_counter()
+    diagnostic_record(name, (now - started) * 1000, overlapping=overlapping)
+    return now
+
+
+def route_label(path):
+    """Bounded route label: identifier-like path segments become {id}."""
+    parts = [('{id}' if _ID_SEGMENT_RE.fullmatch(part) else part[:40]) for part in str(path).split('/')]
+    return '/'.join(parts)[:120] or '/'
+
+
+def _observed(scope):
+    if scope['type'] != 'http':
+        return False
+    path = scope.get('path') or ''
+    return not any(path.startswith(prefix) for prefix in EXCLUDED_PREFIXES)
+
+
+def doc_ref(snapshot_id):
+    """Pseudonymous document reference: correlates requests without the document id."""
+    import hashlib
+    if not isinstance(snapshot_id, str) or not _SNAPSHOT_RE.fullmatch(snapshot_id):
+        return None
+    return 'd_' + hashlib.sha256(snapshot_id.encode('ascii')).hexdigest()[:16]
+
+
+def _snapshot_from(scope):
+    from urllib.parse import parse_qsl
+    try:
+        query = parse_qsl((scope.get('query_string') or b'').decode('latin-1'))
+    except Exception:
+        query = []
+    candidates = [value for key, value in query if key in ('document', 'snapshot_id')]
+    candidates += [part for part in (scope.get('path') or '').split('/') if part.startswith('snap-')]
+    for value in candidates:
+        if _SNAPSHOT_RE.fullmatch(value):
+            return value
+    return None
+
+
+def _trace_from(scope):
+    for key, value in scope.get('headers', []):
+        if key.lower() == b'traceparent':
+            match = _TRACEPARENT_RE.fullmatch(value.strip())
+            if match and match.group(1) != b'0' * 32:
+                return match.group(1).decode('ascii')
+    return uuid.uuid4().hex
 
 
 def _add_phase_time(table, key, inclusive, exclusive):
@@ -192,7 +295,7 @@ class RequestDiagnostics:
         self.identity = identity or {'version': (os.getenv('METIS_BUILD_COMMIT')
                                                  or deployed_commit() or 'unknown')[:64],
             'instance': os.getenv('WEBSITE_INSTANCE_ID', 'local')[:128], 'pid': os.getpid()}
-        if not _LOGGER.handlers:
+        if not any(isinstance(h, logging.StreamHandler) for h in _LOGGER.handlers):
             handler = logging.StreamHandler()
             handler.setFormatter(logging.Formatter('%(message)s'))
             _LOGGER.addHandler(handler)
@@ -260,9 +363,7 @@ class RequestDiagnostics:
                     except Exception:
                         pass
             return
-        if scope['type'] != 'http' or not (
-                (scope.get('method') == 'GET' and scope.get('path') in ROUTES) or
-                (scope.get('method') == 'POST' and scope.get('path') in COMMAND_ROUTES)):
+        if not _observed(scope):
             await self.app(scope, receive, send)
             return
         # Caller-controlled correlation only; never an identity or access credential.
@@ -270,7 +371,9 @@ class RequestDiagnostics:
                       if key.lower() == b'x-metis-attempt-id']
         attempt = (candidates[0].decode('ascii') if len(candidates) == 1
                    and re.fullmatch(rb'[0-9a-f]{32}', candidates[0]) else None)
-        evidence = RequestEvidence(uuid.uuid4().hex, scope['path'], self.emit, method=scope['method'], attempt_id=attempt)
+        evidence = RequestEvidence(uuid.uuid4().hex, route_label(scope['path']), self.emit,
+                                   method=scope['method'], attempt_id=attempt,
+                                   trace_id=_trace_from(scope), doc_ref=doc_ref(_snapshot_from(scope)))
         token = _CURRENT.set(evidence)
         status = None
         completed = False
@@ -280,7 +383,8 @@ class RequestDiagnostics:
             if message['type'] == 'http.response.start':
                 status = message['status']
                 message = {**message, 'headers': [*message.get('headers', []),
-                    (b'x-metis-request-id', evidence.request_id.encode('ascii'))]}
+                    (b'x-metis-request-id', evidence.request_id.encode('ascii')),
+                    (b'x-metis-trace-id', evidence.trace_id.encode('ascii'))]}
             await send(message)
             if message['type'] == 'http.response.start':
                 evidence.report('response_started', status=status)
@@ -289,14 +393,27 @@ class RequestDiagnostics:
                 evidence.report('response_completed', status=status)
         # Export initialization is outside the request path. The SDK uses bounded
         # asynchronous queues; request processing never waits for network export.
-        with self.request_span(scope['path'], scope['method']) as span:
-            evidence.report('request_started')
+        with self.request_span(evidence.route, scope['method']) as span:
+            try:
+                if span is not None and span.get_span_context().trace_id:
+                    # One id from the browser to Azure Monitor: adopt the span's trace.
+                    evidence.trace_id = format(span.get_span_context().trace_id, '032x')
+            except Exception:
+                pass
+            evidence.report('request_started', trace_id=evidence.trace_id, doc_ref=evidence.doc_ref)
             task = asyncio.create_task(self.heartbeat(evidence))
             try:
                 await self.app(scope, receive, observed_send)
                 outcome = 'completed' if completed else 'incomplete'
             except asyncio.CancelledError:
                 outcome = 'cancelled'
+                raise
+            except Exception as exc:
+                try:
+                    from src.telemetry.errors import exception_evidence
+                    evidence.error = exception_evidence(exc)
+                except Exception:
+                    pass
                 raise
             finally:
                 task.cancel()
@@ -306,6 +423,13 @@ class RequestDiagnostics:
                     return {k: {'calls': v['calls'], 'inclusive_ms': round(v['inclusive_ms'], 3),
                                 'exclusive_ms': round(v['exclusive_ms'], 3)} for k, v in table.items()}
                 extra = {'phase_tree_truncated': True} if evidence.tree_truncated else {}
+                template = getattr(scope.get('route'), 'path', None)
+                if isinstance(template, str) and template.startswith('/'):
+                    evidence.route = template[:120]
+                for key in ('error', 'db'):
+                    if getattr(evidence, key):
+                        extra[key] = getattr(evidence, key)
+                extra.update(trace_id=evidence.trace_id, doc_ref=evidence.doc_ref)
                 evidence.report('request_finished', status=status, outcome=outcome,
                     phases=rounded(evidence.totals), phase_tree=rounded(evidence.tree),
                     counters=dict(evidence.counters), **extra)
