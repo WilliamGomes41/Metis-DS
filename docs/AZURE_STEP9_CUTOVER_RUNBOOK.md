@@ -48,6 +48,7 @@ python scripts/verify_console_deployment.py \
 
 Dezelfde controle wordt door de deployworkflows gebruikt. Alleen `status=ok`,
 `service=operations-console` en exact de verwachte volledige SHA geven exit 0.
+Een afsluitende slash in de app-origin wordt naar één `/health` genormaliseerd.
 Een oude SHA, `not_recorded`, ontbrekende velden of een onleesbaar antwoord
 geven na maximaal 13 pogingen exit 1. Tussen pogingen zit vijf seconden;
 iedere HTTP-call heeft maximaal tien seconden en 64 KiB antwoordruimte.

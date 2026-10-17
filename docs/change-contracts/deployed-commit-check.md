@@ -33,6 +33,22 @@ accepted on each route) and 3 passes (expected SHA). This deterministic trace
 directly establishes the defect; no speculative hypothesis/instrumentation phase
 or production replay is necessary.
 
+## Trailing origin slash (PR review F2)
+
+The three callers append `/health` to the configured app origin. A trailing
+slash therefore produced `//health`, which the checker rejected before HTTP.
+Six route-level regressions (three callers, old and expected SHA) were red on
+774ad08. Normalize surrounding slashes only when the path still names exactly
+`health`; other paths, credentials, queries and fragments remain rejected.
+The public `--health-url` interface and the HTTP identity/SHA checks are unchanged.
+
+Retain the bounded curl subprocess. A proposed thread-based replacement was
+probed with a real trickling peer and scaled 100 ms deadline: three calls
+reported timeout while all three HTTP threads remained alive. `join(timeout)`
+limits waiting but does not cancel the request; socket idle timeouts alone do
+not establish the full-call bound. The existing actual HTTP-timeout regression
+remains required; no thread-based transport is introduced.
+
 ## Validation and remaining release gates
 
 Run the route probe, CLI failure/retry cases, existing deploy/packaging/step9

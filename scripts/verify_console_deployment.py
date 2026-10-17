@@ -16,16 +16,17 @@ from urllib.parse import urlsplit
 
 
 def health_url(value: str) -> str:
+    """Normalize the health path when an app origin ends with a slash."""
     try:
         parsed = urlsplit(value)
         valid = (parsed.scheme in {"http", "https"} and parsed.hostname
                  and parsed.port != 0 and parsed.username is None and parsed.password is None
-                 and not parsed.query and not parsed.fragment and parsed.path == "/health")
+                 and not parsed.query and not parsed.fragment and parsed.path.strip("/") == "health")
     except ValueError:
         valid = False
     if not valid:
         raise argparse.ArgumentTypeError("deployment_health_url_invalid")
-    return value
+    return f"{parsed.scheme}://{parsed.netloc}/health"
 
 
 def expected_commit(value: str) -> str:
