@@ -16,6 +16,7 @@ from typing import Any, Iterator, Mapping
 
 from src.integrity_kernel import stable_hash
 from src.review_ledger import verify_ledger
+from src.workflows.store_command_v1 import defer_mirror_events
 from src.workflows.workflow_documents_postgres_v1 import (
     PostgresWorkflowDocumentStore,
     WorkflowDocumentStoreError,
@@ -283,6 +284,9 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
 
     def _mirror_events(self, events: list[dict[str, Any]]) -> None:
         if self._mirror_path is None or not events:
+            return
+        # #678 U3: inside an open Storeopdracht the line waits for the commit.
+        if defer_mirror_events(self, events):
             return
         with suppress(OSError):
             self._mirror_path.parent.mkdir(parents=True, exist_ok=True)
