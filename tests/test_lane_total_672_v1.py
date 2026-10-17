@@ -5,6 +5,8 @@
 """
 from copy import deepcopy
 
+import pytest
+
 from src.knowledge_path_v1 import content_reviewable
 from src.operations_console_app import _lane_total
 from src.review_workboard_v1 import review_work_item
@@ -65,3 +67,25 @@ def test_finished_heading_still_counts_in_structure_lane(tmp_path):
     heading = next(row for row in rows if row.get("object_type") == "heading")
     variant = [row for row in rows if row is not heading] + [_with_status(heading, "approved")]
     assert _lane_total(variant, review_path="richtlijn", lane="structure", open_rows=[]) == 1
+
+
+LANES = ("structure", "contextual", "batch")
+
+
+@pytest.mark.parametrize("role", ["excluded", "label", "context"])
+def test_candidate_reclassified_as_source_role_is_not_finished(tmp_path, role):
+    """#700: confirm_source_context stamps rejected, but it is source handling, not a review decision."""
+    console, sid, _ = guideline_document(tmp_path)
+    rows = console.snapshot_objects(sid)
+    before = {lane: _lane_total(rows, review_path="richtlijn", lane=lane, open_rows=[]) for lane in LANES}
+    candidate = next(row for row in rows if content_reviewable(row))
+    targets = [] if role == "excluded" else [next(row["object_id"] for row in rows if is_source_record(row))]
+    console.confirm_source_context(actor_id=REVIEWER, snapshot_id=sid, source_object_id=candidate["object_id"],
+                                   role=role, target_object_ids=targets, reason="Bronafhandeling, geen kennis.",
+                                   command_id=f"lane-total-700-{role}", expected_revision=console.objects_revision(sid))
+    rows = console.snapshot_objects(sid)
+    stamped = next(row for row in rows if row["object_id"] == candidate["object_id"])
+    assert stamped["governance"]["validation_status"] == "rejected"
+    assert stamped["metadata"]["source_role_review"]["role"] == role
+    after = {lane: _lane_total(rows, review_path="richtlijn", lane=lane, open_rows=[]) for lane in LANES}
+    assert after == before
