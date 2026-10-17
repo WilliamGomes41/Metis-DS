@@ -153,7 +153,8 @@ class JsonlSink:
             self._handle.flush()
         if self._handle.tell() > FILE_MAX_BYTES:
             self.close()
-            target.rename(target.with_name(f"{target.stem}-{int(time.time())}.jsonl"))
+            # Nanoseconds: two rotations within one second MAG NIET overwrite each other.
+            target.rename(target.with_name(f"{target.stem}-{time.time_ns()}.jsonl"))
             self.prune(force=True)
         elif time.monotonic() - self._last_prune > 60:
             self.prune()

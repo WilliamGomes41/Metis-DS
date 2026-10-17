@@ -437,6 +437,18 @@ def test_counts_and_truncation_refer_to_the_requested_window(hub, monkeypatch):
     assert summary['telemetry']['events'] == 2
 
 
+
+def test_rotations_within_one_second_keep_every_file(tmp_path, monkeypatch):
+    from src.telemetry import hub as hub_module
+    monkeypatch.setattr(hub_module, 'FILE_MAX_BYTES', 10)
+    monkeypatch.setattr(hub_module.time, 'time', lambda: 1792270000.0)  # same second for every rotation
+    sink = JsonlSink(tmp_path)
+    for i in range(3):
+        sink.write('{"event":"burst-%d"}' % i)
+    rotated = [p for p in sink.files() if len(p.stem.split('-')) == 5]
+    assert len(rotated) == 3
+
+
 def _event(t, name, rid, **fields):
     from datetime import datetime, timezone
     ts = datetime.fromtimestamp(t, timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
