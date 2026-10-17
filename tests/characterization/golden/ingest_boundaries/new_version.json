@@ -1,0 +1,990 @@
+{
+  "envelopes": {
+    "snap-f9cfbd741781c763-00000000": {
+      "acquired_at": "2026-10-17T08:00:00+00:00",
+      "binary_path": "<TMP>/sources/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html",
+      "class": "richtlijn",
+      "clinical_rereview_required": false,
+      "console_version": "operations-console-v1.0.0",
+      "content_kind": "html",
+      "date": "2026-10-17",
+      "document_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74",
+      "family": "fixture",
+      "immutable_storage_locator": null,
+      "ingest_kind": "new_version",
+      "is_live_capture": false,
+      "live_url": "",
+      "locator": "g0-local:sources/private/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html",
+      "named_reviewers": [
+        "reviewer"
+      ],
+      "object_diff": {
+        "added": [],
+        "changed": [
+          "Een waarneming is een beschrijving.",
+          "Voorbeeld"
+        ],
+        "removed": [],
+        "unchanged": []
+      },
+      "prepared_source_extraction": {
+        "extractor_contract": "html-visible-text-v1.1.0",
+        "fragments": [
+          {
+            "bbox": null,
+            "clean_text": "Voorbeeld",
+            "document_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74",
+            "fragment_hash": "22e0b53714e06f9f1c28f759e7e48b0c820f5521fff779d181434966c5b9187a",
+            "fragment_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0001",
+            "heading": "Voorbeeld",
+            "parser_version": "html-visible-text-v1.1.0",
+            "raw_text": "Voorbeeld",
+            "section_path": [
+              "Voorbeeld"
+            ],
+            "sequence": 1,
+            "source_id": "src-f9cfbd741781c763",
+            "source_locator": {
+              "locator_type": "web_line_range",
+              "locator_value": "lines:1-1;h1:1"
+            },
+            "source_page": null
+          },
+          {
+            "bbox": null,
+            "clean_text": "Een waarneming is een beschrijving.",
+            "document_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74",
+            "fragment_hash": "c3e138c21fe0231ad656ffb711887bfd8cf7627c35d49558f730c241a9c6fbd3",
+            "fragment_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0002",
+            "heading": "Voorbeeld",
+            "parser_version": "html-visible-text-v1.1.0",
+            "raw_text": "Een waarneming is een beschrijving.",
+            "section_path": [
+              "Voorbeeld"
+            ],
+            "sequence": 2,
+            "source_id": "src-f9cfbd741781c763",
+            "source_locator": {
+              "locator_type": "web_line_range",
+              "locator_value": "lines:1-1;p:1"
+            },
+            "source_page": null
+          }
+        ],
+        "fragments_hash": "9f326e556e0643c11246f125ab24782392b029bd1012c707f45fa9cf6003da12",
+        "record_hash": "be93d6110a77fa0275ffdec3138cdbab7c4ddbf0abdfa12d7b9667961d442a21",
+        "source": {
+          "content_kind": "html",
+          "document_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74",
+          "sha256": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+          "snapshot_id": "snap-f9cfbd741781c763-00000000",
+          "source_id": "src-f9cfbd741781c763",
+          "version": "2.0"
+        },
+        "version": "prepared-source-extraction-v1"
+      },
+      "publication_eligibility": "blocked_pending_immutable_storage",
+      "quality_processing_runs": [
+        {
+          "candidates": [
+            {
+              "canonical_hash": "763c4093772ad74ef1aeb31c97ff6ecfb50b7789b2e7622c27fc4eacf92b5ade",
+              "fingerprint": {
+                "complex_semantics": false,
+                "relations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "semantics": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "text": "d04f4f81b86cebb5857af171842760ac66b3829f60defb632710a1082aad302a",
+                "type": "heading"
+              },
+              "object_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0001",
+              "object_version": "1.0",
+              "origin": {
+                "model": null,
+                "policy_version": null,
+                "route": "unknown",
+                "selection_origin": "unknown",
+                "strategy": "unknown"
+              },
+              "structural": true
+            },
+            {
+              "canonical_hash": "5d6c24362bee0287af41d5a2a7ae1f0a334731235386ecec1645d6835bbac8c8",
+              "fingerprint": {
+                "complex_semantics": true,
+                "relations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "semantics": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "text": "4a6b1b150229532e8542230ebdf5a94b78ca96a7c84d5c7b65f17d4581d4b4bf",
+                "type": "definition"
+              },
+              "object_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0002",
+              "object_version": "1.0",
+              "origin": {
+                "model": null,
+                "policy_version": null,
+                "route": "unknown",
+                "selection_origin": "unknown",
+                "strategy": "unknown"
+              },
+              "structural": false
+            }
+          ],
+          "execution": null,
+          "extractor_versions": [
+            "html-visible-text-v1.1.0"
+          ],
+          "finished_at": "2026-10-17T08:00:00+00:00",
+          "outcome": "succeeded",
+          "reason": "",
+          "run_id": "qp_00000000000000000000000000000002",
+          "semantic_identity": null,
+          "source_fragments": [
+            {
+              "bbox": null,
+              "clean_text": "Voorbeeld",
+              "fragment_hash": "22e0b53714e06f9f1c28f759e7e48b0c820f5521fff779d181434966c5b9187a",
+              "fragment_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0001",
+              "heading": "Voorbeeld",
+              "raw_text": "Voorbeeld",
+              "section_path": [
+                "Voorbeeld"
+              ],
+              "source_locator": {
+                "locator_type": "web_line_range",
+                "locator_value": "lines:1-1;h1:1"
+              },
+              "source_page": null
+            },
+            {
+              "bbox": null,
+              "clean_text": "Een waarneming is een beschrijving.",
+              "fragment_hash": "c3e138c21fe0231ad656ffb711887bfd8cf7627c35d49558f730c241a9c6fbd3",
+              "fragment_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0002",
+              "heading": "Voorbeeld",
+              "raw_text": "Een waarneming is een beschrijving.",
+              "section_path": [
+                "Voorbeeld"
+              ],
+              "source_locator": {
+                "locator_type": "web_line_range",
+                "locator_value": "lines:1-1;p:1"
+              },
+              "source_page": null
+            }
+          ],
+          "source_hash": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+          "started_at": "2026-10-17T08:00:00+00:00",
+          "version": "quality-evidence-v1"
+        }
+      ],
+      "replaces_snapshot_id": "snap-f9cfbd741781c763-00000000",
+      "review_configuration": {
+        "contract": "review-configuration-v1",
+        "four_eyes_required": false,
+        "locked_at": null,
+        "option": "one_other",
+        "readers": [],
+        "reviewers": [
+          "reviewer"
+        ],
+        "revision": 0,
+        "source": "legacy_default"
+      },
+      "review_passes": {},
+      "revision_reason": "Synthetic revision",
+      "sha256": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+      "snapshot_id": "snap-f9cfbd741781c763-00000000",
+      "source_declaration": {
+        "declared_at": "2026-10-17T08:00:00+00:00",
+        "declared_by": "author",
+        "status": "unknown"
+      },
+      "source_id": "src-f9cfbd741781c763",
+      "state": "captured_not_published",
+      "title": "Voorbeeld & bron",
+      "uploader_account_id": "author",
+      "version": "2.0"
+    }
+  },
+  "files": {
+    "runtime/accounts.json": {
+      "author": {
+        "account_id": "author",
+        "display_name": "Author",
+        "roles": [
+          "researcher",
+          "reviewer"
+        ],
+        "username": "author"
+      },
+      "other": {
+        "account_id": "other",
+        "display_name": "Other",
+        "roles": [
+          "reviewer"
+        ],
+        "username": "other"
+      },
+      "reviewer": {
+        "account_id": "reviewer",
+        "display_name": "Reviewer",
+        "roles": [
+          "reviewer"
+        ],
+        "username": "reviewer"
+      }
+    },
+    "runtime/envelopes.json": {
+      "snap-f9cfbd741781c763-00000000": {
+        "acquired_at": "2026-10-17T08:00:00+00:00",
+        "binary_path": "<TMP>/sources/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html",
+        "class": "richtlijn",
+        "clinical_rereview_required": false,
+        "console_version": "operations-console-v1.0.0",
+        "content_kind": "html",
+        "date": "2026-10-17",
+        "document_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74",
+        "family": "fixture",
+        "immutable_storage_locator": null,
+        "ingest_kind": "new_version",
+        "is_live_capture": false,
+        "live_url": "",
+        "locator": "g0-local:sources/private/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html",
+        "named_reviewers": [
+          "reviewer"
+        ],
+        "object_diff": {
+          "added": [],
+          "changed": [
+            "Een waarneming is een beschrijving.",
+            "Voorbeeld"
+          ],
+          "removed": [],
+          "unchanged": []
+        },
+        "prepared_source_extraction": {
+          "extractor_contract": "html-visible-text-v1.1.0",
+          "fragments": [
+            {
+              "bbox": null,
+              "clean_text": "Voorbeeld",
+              "document_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74",
+              "fragment_hash": "22e0b53714e06f9f1c28f759e7e48b0c820f5521fff779d181434966c5b9187a",
+              "fragment_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0001",
+              "heading": "Voorbeeld",
+              "parser_version": "html-visible-text-v1.1.0",
+              "raw_text": "Voorbeeld",
+              "section_path": [
+                "Voorbeeld"
+              ],
+              "sequence": 1,
+              "source_id": "src-f9cfbd741781c763",
+              "source_locator": {
+                "locator_type": "web_line_range",
+                "locator_value": "lines:1-1;h1:1"
+              },
+              "source_page": null
+            },
+            {
+              "bbox": null,
+              "clean_text": "Een waarneming is een beschrijving.",
+              "document_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74",
+              "fragment_hash": "c3e138c21fe0231ad656ffb711887bfd8cf7627c35d49558f730c241a9c6fbd3",
+              "fragment_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0002",
+              "heading": "Voorbeeld",
+              "parser_version": "html-visible-text-v1.1.0",
+              "raw_text": "Een waarneming is een beschrijving.",
+              "section_path": [
+                "Voorbeeld"
+              ],
+              "sequence": 2,
+              "source_id": "src-f9cfbd741781c763",
+              "source_locator": {
+                "locator_type": "web_line_range",
+                "locator_value": "lines:1-1;p:1"
+              },
+              "source_page": null
+            }
+          ],
+          "fragments_hash": "9f326e556e0643c11246f125ab24782392b029bd1012c707f45fa9cf6003da12",
+          "record_hash": "be93d6110a77fa0275ffdec3138cdbab7c4ddbf0abdfa12d7b9667961d442a21",
+          "source": {
+            "content_kind": "html",
+            "document_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74",
+            "sha256": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+            "snapshot_id": "snap-f9cfbd741781c763-00000000",
+            "source_id": "src-f9cfbd741781c763",
+            "version": "2.0"
+          },
+          "version": "prepared-source-extraction-v1"
+        },
+        "publication_eligibility": "blocked_pending_immutable_storage",
+        "quality_processing_runs": [
+          {
+            "candidates": [
+              {
+                "canonical_hash": "763c4093772ad74ef1aeb31c97ff6ecfb50b7789b2e7622c27fc4eacf92b5ade",
+                "fingerprint": {
+                  "complex_semantics": false,
+                  "relations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                  "semantics": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                  "text": "d04f4f81b86cebb5857af171842760ac66b3829f60defb632710a1082aad302a",
+                  "type": "heading"
+                },
+                "object_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0001",
+                "object_version": "1.0",
+                "origin": {
+                  "model": null,
+                  "policy_version": null,
+                  "route": "unknown",
+                  "selection_origin": "unknown",
+                  "strategy": "unknown"
+                },
+                "structural": true
+              },
+              {
+                "canonical_hash": "5d6c24362bee0287af41d5a2a7ae1f0a334731235386ecec1645d6835bbac8c8",
+                "fingerprint": {
+                  "complex_semantics": true,
+                  "relations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                  "semantics": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                  "text": "4a6b1b150229532e8542230ebdf5a94b78ca96a7c84d5c7b65f17d4581d4b4bf",
+                  "type": "definition"
+                },
+                "object_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0002",
+                "object_version": "1.0",
+                "origin": {
+                  "model": null,
+                  "policy_version": null,
+                  "route": "unknown",
+                  "selection_origin": "unknown",
+                  "strategy": "unknown"
+                },
+                "structural": false
+              }
+            ],
+            "execution": null,
+            "extractor_versions": [
+              "html-visible-text-v1.1.0"
+            ],
+            "finished_at": "2026-10-17T08:00:00+00:00",
+            "outcome": "succeeded",
+            "reason": "",
+            "run_id": "qp_00000000000000000000000000000002",
+            "semantic_identity": null,
+            "source_fragments": [
+              {
+                "bbox": null,
+                "clean_text": "Voorbeeld",
+                "fragment_hash": "22e0b53714e06f9f1c28f759e7e48b0c820f5521fff779d181434966c5b9187a",
+                "fragment_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0001",
+                "heading": "Voorbeeld",
+                "raw_text": "Voorbeeld",
+                "section_path": [
+                  "Voorbeeld"
+                ],
+                "source_locator": {
+                  "locator_type": "web_line_range",
+                  "locator_value": "lines:1-1;h1:1"
+                },
+                "source_page": null
+              },
+              {
+                "bbox": null,
+                "clean_text": "Een waarneming is een beschrijving.",
+                "fragment_hash": "c3e138c21fe0231ad656ffb711887bfd8cf7627c35d49558f730c241a9c6fbd3",
+                "fragment_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0002",
+                "heading": "Voorbeeld",
+                "raw_text": "Een waarneming is een beschrijving.",
+                "section_path": [
+                  "Voorbeeld"
+                ],
+                "source_locator": {
+                  "locator_type": "web_line_range",
+                  "locator_value": "lines:1-1;p:1"
+                },
+                "source_page": null
+              }
+            ],
+            "source_hash": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+            "started_at": "2026-10-17T08:00:00+00:00",
+            "version": "quality-evidence-v1"
+          }
+        ],
+        "replaces_snapshot_id": "snap-f9cfbd741781c763-00000000",
+        "review_configuration": {
+          "contract": "review-configuration-v1",
+          "four_eyes_required": false,
+          "locked_at": null,
+          "option": "one_other",
+          "readers": [],
+          "reviewers": [
+            "reviewer"
+          ],
+          "revision": 0,
+          "source": "legacy_default"
+        },
+        "review_passes": {},
+        "revision_reason": "Synthetic revision",
+        "sha256": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+        "snapshot_id": "snap-f9cfbd741781c763-00000000",
+        "source_declaration": {
+          "declared_at": "2026-10-17T08:00:00+00:00",
+          "declared_by": "author",
+          "status": "unknown"
+        },
+        "source_id": "src-f9cfbd741781c763",
+        "state": "captured_not_published",
+        "title": "Voorbeeld & bron",
+        "uploader_account_id": "author",
+        "version": "2.0"
+      }
+    },
+    "runtime/objects/snap-f9cfbd741781c763-00000000.jsonl": [
+      {
+        "confirmed_relations": [],
+        "content": {
+          "care_setting": [],
+          "clean_text": "Voorbeeld & bron",
+          "context_text": null,
+          "raw_text": "Voorbeeld & bron",
+          "target_group": [],
+          "topic": [
+            "fixture",
+            "class:richtlijn",
+            "source-kind:html"
+          ]
+        },
+        "decision_graph": null,
+        "document_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74",
+        "governance": {
+          "publication_status": "unpublished",
+          "release_date": null,
+          "release_owner": null,
+          "review_snapshot_hash": null,
+          "review_track": "technical",
+          "second_review": {
+            "required": false,
+            "review_date": null,
+            "reviewer": null,
+            "snapshot_hash": null,
+            "status": "not_required"
+          },
+          "superseded_by": null,
+          "validated_by": null,
+          "validation_date": null,
+          "validation_status": "needs_review"
+        },
+        "logic": null,
+        "metadata": {
+          "candidate_eligibility": {
+            "eligible": false,
+            "reason": "structural_object",
+            "source": "structure",
+            "version": "candidate-eligibility-v1.0.0"
+          }
+        },
+        "object_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-document",
+        "object_type": "document",
+        "object_version": "1.0",
+        "parent_object_id": null,
+        "provenance": {
+          "canonical_object_hash": "79214ce85b3d18eb2f9fd41994c753ecffa662da01537345dbb02dfb5763372a",
+          "content_hash": "79214ce85b3d18eb2f9fd41994c753ecffa662da01537345dbb02dfb5763372a",
+          "created_by": "system:semantic-generic-v1.0.0",
+          "previous_object_version": null,
+          "proposal_id": null,
+          "revision_patch_hash": null,
+          "revision_reason": null,
+          "semantic_spec_hash": "e678f6b1d04e6cf5321d4ffcbecd5ec9dd93e27a4f9800547f837ab4e00f0c47",
+          "semantic_spec_version": "console-ingest-1.0",
+          "source_extract_hash": "9172192e3eea8cc4435a1df1597f4ef2e503e272bb4cf6e3950d7a24d6af7d73",
+          "source_fragments": [],
+          "transform_version": "semantic-generic-v1.0.0",
+          "transformation_mode": "deterministic"
+        },
+        "relations": [],
+        "risk": {
+          "requires_second_review": false,
+          "risk_fields": [],
+          "risk_level": "standard"
+        },
+        "source": {
+          "canonicality": "canonical",
+          "checksum_algorithm": "sha256",
+          "integrity_status": "verified",
+          "publication_date": "2026-10-17",
+          "publisher": "V&VN",
+          "source_checksum": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+          "source_id": "src-f9cfbd741781c763",
+          "source_level": 1,
+          "source_page": null,
+          "source_type": "html",
+          "source_url": "urn:vvn:freeze:f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+          "title": "Voorbeeld & bron",
+          "version": "2.0"
+        },
+        "structure": {
+          "heading": null,
+          "section_path": [],
+          "sequence": 1
+        },
+        "uncertainty": {
+          "has_uncertainty": false,
+          "items": []
+        }
+      },
+      {
+        "confirmed_relations": [],
+        "content": {
+          "care_setting": [],
+          "clean_text": "Voorbeeld",
+          "context_text": null,
+          "raw_text": "Voorbeeld",
+          "target_group": [],
+          "topic": [
+            "fixture",
+            "class:richtlijn",
+            "source-kind:html"
+          ]
+        },
+        "decision_graph": null,
+        "document_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74",
+        "governance": {
+          "publication_status": "unpublished",
+          "release_date": null,
+          "release_owner": null,
+          "review_snapshot_hash": null,
+          "review_track": "clinical",
+          "second_review": {
+            "required": false,
+            "review_date": null,
+            "reviewer": null,
+            "snapshot_hash": null,
+            "status": "not_required"
+          },
+          "superseded_by": null,
+          "validated_by": null,
+          "validation_date": null,
+          "validation_status": "needs_review"
+        },
+        "logic": null,
+        "metadata": {
+          "candidate_eligibility": {
+            "eligible": false,
+            "reason": "structural_object",
+            "source": "structure",
+            "version": "candidate-eligibility-v1.0.0"
+          },
+          "passage_register": {
+            "linked_object_id": "",
+            "reason_codes": [],
+            "section_path": [
+              "Voorbeeld"
+            ],
+            "source": "extract",
+            "status": "not_yet_assessed",
+            "suitability": ""
+          }
+        },
+        "object_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0001",
+        "object_type": "heading",
+        "object_version": "1.0",
+        "parent_object_id": null,
+        "proposed_object_type": "heading",
+        "provenance": {
+          "canonical_object_hash": "763c4093772ad74ef1aeb31c97ff6ecfb50b7789b2e7622c27fc4eacf92b5ade",
+          "content_hash": "763c4093772ad74ef1aeb31c97ff6ecfb50b7789b2e7622c27fc4eacf92b5ade",
+          "created_by": "system:semantic-generic-v1.0.0",
+          "previous_object_version": null,
+          "proposal_id": null,
+          "revision_patch_hash": null,
+          "revision_reason": null,
+          "semantic_spec_hash": "e678f6b1d04e6cf5321d4ffcbecd5ec9dd93e27a4f9800547f837ab4e00f0c47",
+          "semantic_spec_version": "console-ingest-1.0",
+          "source_extract_hash": "9172192e3eea8cc4435a1df1597f4ef2e503e272bb4cf6e3950d7a24d6af7d73",
+          "source_fragments": [
+            {
+              "bbox": null,
+              "coordinate_status": "not_applicable",
+              "page": null,
+              "raw_content_hash": "22e0b53714e06f9f1c28f759e7e48b0c820f5521fff779d181434966c5b9187a",
+              "raw_object_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0001",
+              "source_locator": {
+                "locator_type": "web_line_range",
+                "locator_value": "lines:1-1;h1:1"
+              }
+            }
+          ],
+          "transform_version": "semantic-generic-v1.0.0",
+          "transformation_mode": "deterministic"
+        },
+        "relations": [],
+        "risk": {
+          "requires_second_review": false,
+          "risk_fields": [],
+          "risk_level": "standard"
+        },
+        "source": {
+          "canonicality": "canonical",
+          "checksum_algorithm": "sha256",
+          "integrity_status": "verified",
+          "publication_date": "2026-10-17",
+          "publisher": "V&VN",
+          "source_checksum": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+          "source_id": "src-f9cfbd741781c763",
+          "source_level": 1,
+          "source_page": null,
+          "source_type": "html",
+          "source_url": "urn:vvn:freeze:f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+          "title": "Voorbeeld & bron",
+          "version": "2.0"
+        },
+        "structure": {
+          "heading": "Voorbeeld",
+          "section_path": [
+            "Voorbeeld"
+          ],
+          "sequence": 2
+        },
+        "uncertainty": {
+          "has_uncertainty": false,
+          "items": []
+        }
+      },
+      {
+        "confirmed_relations": [],
+        "content": {
+          "care_setting": [],
+          "clean_text": "Een waarneming is een beschrijving.",
+          "context_text": null,
+          "raw_text": "Een waarneming is een beschrijving.",
+          "target_group": [],
+          "topic": [
+            "fixture",
+            "class:richtlijn",
+            "source-kind:html"
+          ]
+        },
+        "decision_graph": null,
+        "document_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74",
+        "governance": {
+          "publication_status": "unpublished",
+          "release_date": null,
+          "release_owner": null,
+          "review_snapshot_hash": null,
+          "review_track": "clinical",
+          "second_review": {
+            "required": false,
+            "review_date": null,
+            "reviewer": null,
+            "snapshot_hash": null,
+            "status": "not_required"
+          },
+          "superseded_by": null,
+          "validated_by": null,
+          "validation_date": null,
+          "validation_status": "needs_review"
+        },
+        "logic": null,
+        "metadata": {
+          "candidate_eligibility": {
+            "eligible": false,
+            "reason": "explicit_type_proposal",
+            "source": "deterministic",
+            "version": "candidate-eligibility-v1.0.0"
+          },
+          "passage_register": {
+            "linked_object_id": "",
+            "reason_codes": [],
+            "section_path": [
+              "Voorbeeld"
+            ],
+            "source": "extract",
+            "status": "not_yet_assessed",
+            "suitability": ""
+          }
+        },
+        "object_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0002",
+        "object_type": "unclassified",
+        "object_version": "1.0",
+        "parent_object_id": null,
+        "proposed_object_type": "definition",
+        "provenance": {
+          "canonical_object_hash": "5d6c24362bee0287af41d5a2a7ae1f0a334731235386ecec1645d6835bbac8c8",
+          "content_hash": "5d6c24362bee0287af41d5a2a7ae1f0a334731235386ecec1645d6835bbac8c8",
+          "created_by": "system:semantic-generic-v1.0.0",
+          "previous_object_version": null,
+          "proposal_id": null,
+          "revision_patch_hash": null,
+          "revision_reason": null,
+          "semantic_spec_hash": "e678f6b1d04e6cf5321d4ffcbecd5ec9dd93e27a4f9800547f837ab4e00f0c47",
+          "semantic_spec_version": "console-ingest-1.0",
+          "source_extract_hash": "9172192e3eea8cc4435a1df1597f4ef2e503e272bb4cf6e3950d7a24d6af7d73",
+          "source_fragments": [
+            {
+              "bbox": null,
+              "coordinate_status": "not_applicable",
+              "page": null,
+              "raw_content_hash": "c3e138c21fe0231ad656ffb711887bfd8cf7627c35d49558f730c241a9c6fbd3",
+              "raw_object_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0002",
+              "source_locator": {
+                "locator_type": "web_line_range",
+                "locator_value": "lines:1-1;p:1"
+              }
+            }
+          ],
+          "transform_version": "semantic-generic-v1.0.0",
+          "transformation_mode": "deterministic"
+        },
+        "relations": [
+          {
+            "confirmed": false,
+            "relation_type": "child",
+            "target_object_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0001"
+          }
+        ],
+        "risk": {
+          "requires_second_review": false,
+          "risk_fields": [],
+          "risk_level": "standard"
+        },
+        "source": {
+          "canonicality": "canonical",
+          "checksum_algorithm": "sha256",
+          "integrity_status": "verified",
+          "publication_date": "2026-10-17",
+          "publisher": "V&VN",
+          "source_checksum": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+          "source_id": "src-f9cfbd741781c763",
+          "source_level": 1,
+          "source_page": null,
+          "source_type": "html",
+          "source_url": "urn:vvn:freeze:f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+          "title": "Voorbeeld & bron",
+          "version": "2.0"
+        },
+        "structure": {
+          "heading": "Voorbeeld",
+          "section_path": [
+            "Voorbeeld"
+          ],
+          "sequence": 3
+        },
+        "uncertainty": {
+          "has_uncertainty": false,
+          "items": []
+        }
+      }
+    ],
+    "sources/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html": {
+      "bytes": 101,
+      "sha256": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2"
+    }
+  },
+  "outcome": {
+    "return": {
+      "acquired_at": "2026-10-17T08:00:00+00:00",
+      "binary_path": "<TMP>/sources/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html",
+      "class": "richtlijn",
+      "clinical_rereview_required": false,
+      "console_version": "operations-console-v1.0.0",
+      "content_kind": "html",
+      "date": "2026-10-17",
+      "document_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74",
+      "family": "fixture",
+      "immutable_storage_locator": null,
+      "ingest_kind": "new_version",
+      "is_live_capture": false,
+      "live_url": "",
+      "locator": "g0-local:sources/private/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html",
+      "named_reviewers": [
+        "reviewer"
+      ],
+      "object_diff": {
+        "added": [],
+        "changed": [
+          "Een waarneming is een beschrijving.",
+          "Voorbeeld"
+        ],
+        "removed": [],
+        "unchanged": []
+      },
+      "prepared_source_extraction": {
+        "extractor_contract": "html-visible-text-v1.1.0",
+        "fragments": [
+          {
+            "bbox": null,
+            "clean_text": "Voorbeeld",
+            "document_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74",
+            "fragment_hash": "22e0b53714e06f9f1c28f759e7e48b0c820f5521fff779d181434966c5b9187a",
+            "fragment_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0001",
+            "heading": "Voorbeeld",
+            "parser_version": "html-visible-text-v1.1.0",
+            "raw_text": "Voorbeeld",
+            "section_path": [
+              "Voorbeeld"
+            ],
+            "sequence": 1,
+            "source_id": "src-f9cfbd741781c763",
+            "source_locator": {
+              "locator_type": "web_line_range",
+              "locator_value": "lines:1-1;h1:1"
+            },
+            "source_page": null
+          },
+          {
+            "bbox": null,
+            "clean_text": "Een waarneming is een beschrijving.",
+            "document_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74",
+            "fragment_hash": "c3e138c21fe0231ad656ffb711887bfd8cf7627c35d49558f730c241a9c6fbd3",
+            "fragment_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0002",
+            "heading": "Voorbeeld",
+            "parser_version": "html-visible-text-v1.1.0",
+            "raw_text": "Een waarneming is een beschrijving.",
+            "section_path": [
+              "Voorbeeld"
+            ],
+            "sequence": 2,
+            "source_id": "src-f9cfbd741781c763",
+            "source_locator": {
+              "locator_type": "web_line_range",
+              "locator_value": "lines:1-1;p:1"
+            },
+            "source_page": null
+          }
+        ],
+        "fragments_hash": "9f326e556e0643c11246f125ab24782392b029bd1012c707f45fa9cf6003da12",
+        "record_hash": "be93d6110a77fa0275ffdec3138cdbab7c4ddbf0abdfa12d7b9667961d442a21",
+        "source": {
+          "content_kind": "html",
+          "document_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74",
+          "sha256": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+          "snapshot_id": "snap-f9cfbd741781c763-00000000",
+          "source_id": "src-f9cfbd741781c763",
+          "version": "2.0"
+        },
+        "version": "prepared-source-extraction-v1"
+      },
+      "publication_eligibility": "blocked_pending_immutable_storage",
+      "quality_processing_runs": [
+        {
+          "candidates": [
+            {
+              "canonical_hash": "763c4093772ad74ef1aeb31c97ff6ecfb50b7789b2e7622c27fc4eacf92b5ade",
+              "fingerprint": {
+                "complex_semantics": false,
+                "relations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "semantics": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "text": "d04f4f81b86cebb5857af171842760ac66b3829f60defb632710a1082aad302a",
+                "type": "heading"
+              },
+              "object_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0001",
+              "object_version": "1.0",
+              "origin": {
+                "model": null,
+                "policy_version": null,
+                "route": "unknown",
+                "selection_origin": "unknown",
+                "strategy": "unknown"
+              },
+              "structural": true
+            },
+            {
+              "canonical_hash": "5d6c24362bee0287af41d5a2a7ae1f0a334731235386ecec1645d6835bbac8c8",
+              "fingerprint": {
+                "complex_semantics": true,
+                "relations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "semantics": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "text": "4a6b1b150229532e8542230ebdf5a94b78ca96a7c84d5c7b65f17d4581d4b4bf",
+                "type": "definition"
+              },
+              "object_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0002",
+              "object_version": "1.0",
+              "origin": {
+                "model": null,
+                "policy_version": null,
+                "route": "unknown",
+                "selection_origin": "unknown",
+                "strategy": "unknown"
+              },
+              "structural": false
+            }
+          ],
+          "execution": null,
+          "extractor_versions": [
+            "html-visible-text-v1.1.0"
+          ],
+          "finished_at": "2026-10-17T08:00:00+00:00",
+          "outcome": "succeeded",
+          "reason": "",
+          "run_id": "qp_00000000000000000000000000000002",
+          "semantic_identity": null,
+          "source_fragments": [
+            {
+              "bbox": null,
+              "clean_text": "Voorbeeld",
+              "fragment_hash": "22e0b53714e06f9f1c28f759e7e48b0c820f5521fff779d181434966c5b9187a",
+              "fragment_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0001",
+              "heading": "Voorbeeld",
+              "raw_text": "Voorbeeld",
+              "section_path": [
+                "Voorbeeld"
+              ],
+              "source_locator": {
+                "locator_type": "web_line_range",
+                "locator_value": "lines:1-1;h1:1"
+              },
+              "source_page": null
+            },
+            {
+              "bbox": null,
+              "clean_text": "Een waarneming is een beschrijving.",
+              "fragment_hash": "c3e138c21fe0231ad656ffb711887bfd8cf7627c35d49558f730c241a9c6fbd3",
+              "fragment_id": "console-fixture-voorbeeld-bron-2-0-f9cfbd74-html-f0002",
+              "heading": "Voorbeeld",
+              "raw_text": "Een waarneming is een beschrijving.",
+              "section_path": [
+                "Voorbeeld"
+              ],
+              "source_locator": {
+                "locator_type": "web_line_range",
+                "locator_value": "lines:1-1;p:1"
+              },
+              "source_page": null
+            }
+          ],
+          "source_hash": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+          "started_at": "2026-10-17T08:00:00+00:00",
+          "version": "quality-evidence-v1"
+        }
+      ],
+      "replaces_snapshot_id": "snap-f9cfbd741781c763-00000000",
+      "review_configuration": {
+        "contract": "review-configuration-v1",
+        "four_eyes_required": false,
+        "locked_at": null,
+        "option": "one_other",
+        "readers": [],
+        "reviewers": [
+          "reviewer"
+        ],
+        "revision": 0,
+        "source": "legacy_default"
+      },
+      "review_passes": {},
+      "revision_reason": "Synthetic revision",
+      "sha256": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+      "snapshot_id": "snap-f9cfbd741781c763-00000000",
+      "source_declaration": {
+        "declared_at": "2026-10-17T08:00:00+00:00",
+        "declared_by": "author",
+        "status": "unknown"
+      },
+      "source_id": "src-f9cfbd741781c763",
+      "state": "captured_not_published",
+      "title": "Voorbeeld & bron",
+      "uploader_account_id": "author",
+      "version": "2.0"
+    }
+  }
+}

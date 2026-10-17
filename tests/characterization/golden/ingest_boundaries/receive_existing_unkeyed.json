@@ -1,0 +1,149 @@
+{
+  "envelopes": {
+    "snap-f9cfbd741781c763-00000000": {
+      "acquired_at": "2026-10-17T08:00:00+00:00",
+      "binary_path": "<TMP>/sources/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html",
+      "class": "richtlijn",
+      "clinical_rereview_required": false,
+      "console_version": "operations-console-v1.0.0",
+      "content_kind": "html",
+      "date": "2026-10-17",
+      "document_id": "console-fixture-voorbeeld-bron-1-0-f9cfbd74",
+      "family": "fixture",
+      "immutable_storage_locator": null,
+      "ingest_kind": "new",
+      "is_live_capture": true,
+      "live_url": "",
+      "locator": "g0-local:sources/private/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html",
+      "named_reviewers": [
+        "reviewer"
+      ],
+      "object_diff": null,
+      "processing_blocker": "source_selection_not_started",
+      "publication_eligibility": "blocked_pending_pre_review",
+      "received_source": {
+        "bytes": 101,
+        "filename": "source.html"
+      },
+      "replaces_snapshot_id": null,
+      "review_configuration": {
+        "contract": "review-configuration-v1",
+        "four_eyes_required": false,
+        "locked_at": null,
+        "option": "one_other",
+        "readers": [],
+        "reviewers": [
+          "reviewer"
+        ],
+        "revision": 0,
+        "source": "legacy_default"
+      },
+      "review_passes": {},
+      "revision_reason": "",
+      "sha256": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+      "snapshot_id": "snap-f9cfbd741781c763-00000000",
+      "source_declaration": {
+        "declared_at": "2026-10-17T08:00:00+00:00",
+        "declared_by": "author",
+        "status": "unknown"
+      },
+      "source_id": "src-f9cfbd741781c763",
+      "state": "captured_not_published",
+      "title": "Voorbeeld & bron",
+      "uploader_account_id": "author",
+      "version": "1.0"
+    }
+  },
+  "files": {
+    "runtime/accounts.json": {
+      "author": {
+        "account_id": "author",
+        "display_name": "Author",
+        "roles": [
+          "researcher",
+          "reviewer"
+        ],
+        "username": "author"
+      },
+      "other": {
+        "account_id": "other",
+        "display_name": "Other",
+        "roles": [
+          "reviewer"
+        ],
+        "username": "other"
+      },
+      "reviewer": {
+        "account_id": "reviewer",
+        "display_name": "Reviewer",
+        "roles": [
+          "reviewer"
+        ],
+        "username": "reviewer"
+      }
+    },
+    "runtime/envelopes.json": {
+      "snap-f9cfbd741781c763-00000000": {
+        "acquired_at": "2026-10-17T08:00:00+00:00",
+        "binary_path": "<TMP>/sources/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html",
+        "class": "richtlijn",
+        "clinical_rereview_required": false,
+        "console_version": "operations-console-v1.0.0",
+        "content_kind": "html",
+        "date": "2026-10-17",
+        "document_id": "console-fixture-voorbeeld-bron-1-0-f9cfbd74",
+        "family": "fixture",
+        "immutable_storage_locator": null,
+        "ingest_kind": "new",
+        "is_live_capture": true,
+        "live_url": "",
+        "locator": "g0-local:sources/private/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html",
+        "named_reviewers": [
+          "reviewer"
+        ],
+        "object_diff": null,
+        "processing_blocker": "source_selection_not_started",
+        "publication_eligibility": "blocked_pending_pre_review",
+        "received_source": {
+          "bytes": 101,
+          "filename": "source.html"
+        },
+        "replaces_snapshot_id": null,
+        "review_configuration": {
+          "contract": "review-configuration-v1",
+          "four_eyes_required": false,
+          "locked_at": null,
+          "option": "one_other",
+          "readers": [],
+          "reviewers": [
+            "reviewer"
+          ],
+          "revision": 0,
+          "source": "legacy_default"
+        },
+        "review_passes": {},
+        "revision_reason": "",
+        "sha256": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+        "snapshot_id": "snap-f9cfbd741781c763-00000000",
+        "source_declaration": {
+          "declared_at": "2026-10-17T08:00:00+00:00",
+          "declared_by": "author",
+          "status": "unknown"
+        },
+        "source_id": "src-f9cfbd741781c763",
+        "state": "captured_not_published",
+        "title": "Voorbeeld & bron",
+        "uploader_account_id": "author",
+        "version": "1.0"
+      }
+    },
+    "runtime/objects/snap-f9cfbd741781c763-00000000.jsonl": [],
+    "sources/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html": {
+      "bytes": 101,
+      "sha256": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2"
+    }
+  },
+  "outcome": {
+    "error": "ingest_command_conflict"
+  }
+}
