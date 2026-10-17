@@ -300,6 +300,11 @@ def test_server_logger_warnings_reach_the_hub_once(hub, monkeypatch):
     own = logging.NullHandler()
     monkeypatch.setattr(server, 'handlers', [own])
     monkeypatch.setattr(server, 'propagate', False)
+    # Other suites (a real server, dictConfig) may leave this logger disabled or above WARNING.
+    monkeypatch.setattr(server, 'disabled', False)
+    monkeypatch.setattr(server, 'level', logging.INFO)
+    monkeypatch.setattr(server, '_cache', {})
+    monkeypatch.setattr(logging.root.manager, 'disable', 0)
     install_logging_bridge()
     install_logging_bridge()
     assert server.handlers == [HUB_HANDLER, own]
