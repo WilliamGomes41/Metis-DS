@@ -109,6 +109,16 @@ def test_actual_deploy_route_checks_running_commit(route, commit, accepted, tmp_
     )
 
 
+@pytest.mark.parametrize("route", ["production", "test", "manual"])
+@pytest.mark.parametrize("commit,accepted", [(OLD, False), (EXPECTED, True)])
+def test_deploy_route_normalizes_trailing_origin_slash(route, commit, accepted, tmp_path):
+    payload = {"status": "ok", "service": "operations-console", "deployed_commit": commit}
+    with health_server([(200, payload)]) as (origin, calls):
+        result = run_route(route, origin + "/", tmp_path)
+    assert calls == ["/health"], result.stderr
+    assert (result.returncode == 0) is accepted, result.stdout + result.stderr
+
+
 def run_checker(origin, *, commit=EXPECTED, attempts=1, delay=0):
     return subprocess.run(
         [sys.executable, str(ROOT / "scripts/verify_console_deployment.py"),
