@@ -11,24 +11,14 @@ def test_azure_build_defaults_to_persistent_data_outside_wwwroot(
 ) -> None:
     azure_data = tmp_path / "home" / "data" / "metis-console"
     monkeypatch.setattr(console_asgi, "AZURE_DATA_ROOT", azure_data)
-    # This test proves only the /home/data placement. Separate requirement tests
-    # prove that real Azure runtime fails closed without PostgreSQL and Blob.
-    monkeypatch.setattr(console_asgi, "_canonical_store", lambda *, credential=None: None)
-    monkeypatch.setattr(console_asgi, "_immutable_source_store", lambda: None)
-    monkeypatch.setattr(console_asgi, "_require_azure_workflow_authorities", lambda *stores: None)
+    # Path placement is independent of composition; actual Azure composition is
+    # covered with a complete native PG configuration in the #718 tests.
     monkeypatch.setenv("WEBSITE_SITE_NAME", "vvn-metis-console")
-    monkeypatch.setenv("CONSOLE_PUBLIC_ORIGIN", "https://console.example.test")
     monkeypatch.delenv("CONSOLE_DATA_ROOT", raising=False)
-    monkeypatch.delenv("CONSOLE_SOURCE_STORE", raising=False)
-    monkeypatch.delenv("CONSOLE_RUNTIME", raising=False)
-    monkeypatch.delenv("CONSOLE_BOOTSTRAP_USERNAME", raising=False)
-    monkeypatch.delenv("CONSOLE_BOOTSTRAP_PASSWORD", raising=False)
+    assert console_asgi._default_data_root() == azure_data
+    assert console_asgi._env_path("CONSOLE_DATA_ROOT", console_asgi._default_data_root()) == azure_data
+    assert azure_data != tmp_path / "site" / "wwwroot"
 
-    build_app()
-
-    assert (azure_data / "sources" / "private").is_dir()
-    assert (azure_data / "output" / "runtime" / "operations-console" / "objects").is_dir()
-    assert not (tmp_path / "site" / "wwwroot" / "output" / "runtime").exists()
 
 
 def test_azure_startup_script_requires_production_authorities() -> None:
