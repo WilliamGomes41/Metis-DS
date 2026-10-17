@@ -16,11 +16,12 @@ from typing import Any
 
 import pytest
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig, PostgresCanonicalPublicationStore
+from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
 from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
 from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
 from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
-from src.workflows.workflow_review_cutover_v1 import PostgresReviewWorkflowDurablePublicationConsole
+from src.workflows.workflow_badge_counts_postgres_v1 import FastBadgePostgresCompleteWorkflowDurablePublicationConsole as PostgresReviewWorkflowDurablePublicationConsole
 from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 from src.workflows.workflow_transaction_v1 import bind_workflow_stores, workflow_transaction
 
@@ -51,12 +52,8 @@ def workflow_postgres() -> PostgresCanonicalConfig:
 
     import psycopg
 
-    with psycopg.connect(dsn, autocommit=True) as con:
-        con.execute("DROP SCHEMA IF EXISTS workflow CASCADE")
-        for migration in MIGRATIONS:
-            text = (ROOT / "db" / "migrations" / migration).read_text(encoding="utf-8")
-            for statement in _migration_statements(text):
-                con.execute(statement)
+    from tests.test_workflow_chain_recovery_v1 import _install_schema
+    _install_schema(dsn)
 
     config = PostgresCanonicalConfig(dsn=dsn)
     yield config
@@ -251,14 +248,16 @@ def test_reject_stale_conflict_leaves_no_durable_event_or_authorization(
     identity = PostgresWorkflowIdentityStore(workflow_postgres)
     documents = PostgresConcurrentWorkflowDocumentStore(workflow_postgres)
     reviews = PostgresWorkflowReviewStore(workflow_postgres)
-    bind_workflow_stores(identity, documents, reviews)
+    remaining = PostgresWorkflowRemainingStore(workflow_postgres)
+    bind_workflow_stores(identity, documents, reviews, remaining)
     console = PostgresReviewWorkflowDurablePublicationConsole(
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "runtime-review-atomicity",
         workflow_identity_store=identity,
         workflow_document_store=documents,
-        workflow_review_store=reviews,
+        workflow_review_store=reviews, workflow_remaining_store=remaining,
+        canonical_publication_store=PostgresCanonicalPublicationStore(workflow_postgres),
     )
     researcher = console.create_account(
         username="researcher.atomic",
@@ -335,14 +334,16 @@ def test_successful_approve_persists_authorization_and_survives_restart(
     identity = PostgresWorkflowIdentityStore(workflow_postgres)
     documents = PostgresConcurrentWorkflowDocumentStore(workflow_postgres)
     reviews = PostgresWorkflowReviewStore(workflow_postgres)
-    bind_workflow_stores(identity, documents, reviews)
+    remaining = PostgresWorkflowRemainingStore(workflow_postgres)
+    bind_workflow_stores(identity, documents, reviews, remaining)
     console = PostgresReviewWorkflowDurablePublicationConsole(
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "runtime-approve-authority-a",
         workflow_identity_store=identity,
         workflow_document_store=documents,
-        workflow_review_store=reviews,
+        workflow_review_store=reviews, workflow_remaining_store=remaining,
+        canonical_publication_store=PostgresCanonicalPublicationStore(workflow_postgres),
     )
     researcher = console.create_account(
         username="researcher.approve",
@@ -428,14 +429,16 @@ def test_successful_approve_persists_authorization_and_survives_restart(
     restarted_identity = PostgresWorkflowIdentityStore(workflow_postgres)
     restarted_documents = PostgresConcurrentWorkflowDocumentStore(workflow_postgres)
     restarted_reviews = PostgresWorkflowReviewStore(workflow_postgres)
-    bind_workflow_stores(restarted_identity, restarted_documents, restarted_reviews)
+    restarted_remaining = PostgresWorkflowRemainingStore(workflow_postgres)
+    bind_workflow_stores(restarted_identity, restarted_documents, restarted_reviews, restarted_remaining)
     restarted = PostgresReviewWorkflowDurablePublicationConsole(
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "runtime-approve-authority-b",
         workflow_identity_store=restarted_identity,
         workflow_document_store=restarted_documents,
-        workflow_review_store=restarted_reviews,
+        workflow_review_store=restarted_reviews, workflow_remaining_store=restarted_remaining,
+        canonical_publication_store=PostgresCanonicalPublicationStore(workflow_postgres),
     )
     assert restarted.object_review_bindings(snapshot_id) == bindings[snapshot_id]
 
@@ -447,14 +450,16 @@ def test_approve_stale_conflict_leaves_no_durable_event_or_authorization(
     identity = PostgresWorkflowIdentityStore(workflow_postgres)
     documents = PostgresConcurrentWorkflowDocumentStore(workflow_postgres)
     reviews = PostgresWorkflowReviewStore(workflow_postgres)
-    bind_workflow_stores(identity, documents, reviews)
+    remaining = PostgresWorkflowRemainingStore(workflow_postgres)
+    bind_workflow_stores(identity, documents, reviews, remaining)
     console = PostgresReviewWorkflowDurablePublicationConsole(
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "runtime-stale-approve",
         workflow_identity_store=identity,
         workflow_document_store=documents,
-        workflow_review_store=reviews,
+        workflow_review_store=reviews, workflow_remaining_store=remaining,
+        canonical_publication_store=PostgresCanonicalPublicationStore(workflow_postgres),
     )
     researcher = console.create_account(
         username="researcher.stale-approve",
