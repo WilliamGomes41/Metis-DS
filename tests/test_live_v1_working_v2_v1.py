@@ -26,6 +26,9 @@ from src.review_disposition_v1 import definitive_review_disposition
 from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
 from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
 from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
+from src.workflows.workflow_review_cutover_v1 import PostgresReviewWorkflowDurablePublicationConsole
+from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+from src.workflows.workflow_transaction_v1 import bind_workflow_stores
 from src.workflows.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -85,14 +88,20 @@ def _console(
     *,
     runtime_name: str,
 ) -> PostgresWorkflowDurablePublicationConsole:
-    return PostgresWorkflowDurablePublicationConsole(
+    # #665: PG documents require PG review authority on the same config.
+    identity = PostgresWorkflowIdentityStore(config)
+    documents = PostgresConcurrentWorkflowDocumentStore(config)
+    reviews = PostgresWorkflowReviewStore(config)
+    bind_workflow_stores(identity, documents, reviews)
+    return PostgresReviewWorkflowDurablePublicationConsole(
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / runtime_name,
         immutable_source_store=source,
         canonical_publication_store=PostgresCanonicalPublicationStore(config),
-        workflow_identity_store=PostgresWorkflowIdentityStore(config),
-        workflow_document_store=PostgresConcurrentWorkflowDocumentStore(config),
+        workflow_identity_store=identity,
+        workflow_document_store=documents,
+        workflow_review_store=reviews,
     )
 
 
@@ -201,6 +210,9 @@ def _cleanup(
             con.execute("DELETE FROM workflow.documents WHERE snapshot_id=%s", (snapshot_id,))
             con.execute("DELETE FROM source_snapshots WHERE snapshot_id=%s", (snapshot_id,))
         for account_id in account_ids:
+            # PG review authority (#665) references the test accounts.
+            con.execute("DELETE FROM workflow.review_events WHERE actor_account_id=%s", (account_id,))
+            con.execute("DELETE FROM workflow.publish_authorizations WHERE reviewer_account_id=%s", (account_id,))
             con.execute("DELETE FROM workflow.accounts WHERE account_id=%s", (account_id,))
 
 

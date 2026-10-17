@@ -36,7 +36,11 @@ from src.workflows.workflow_identity_postgres_v1 import (
     PostgresIdentityAzureAuthoritativePublicationConsole,
     PostgresIdentityDurablePublicationConsole,
 )
+from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 from src.workflows.workflow_transaction_v1 import bind_workflow_stores, workflow_transaction, workflow_transaction_active
+from src.workflows.workflow_transaction_v1 import WorkflowTransactionError, _config_identity
+
+REVIEW_STORE_REQUIRED_FOR_DOCUMENT_STORE = "workflow_review_store_required_for_document_store"
 
 
 class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
@@ -372,11 +376,28 @@ class _PostgresWorkflowDocumentsMixin:
         workflow_document_store: PostgresWorkflowDocumentRuntimeStore,
         **kwargs: Any,
     ) -> None:
+        self._require_review_authority()
         super().__init__(*args, **kwargs)
         self.workflow_document_store = workflow_document_store
         self.workflow_document_store.verify_cutover_schema()
         self.refresh_workflow_documents()
         self._mirror_envelopes()
+
+    def _require_review_authority(self) -> None:
+        """Naad B: only classes that carry the PostgreSQL review mixin may construct."""
+        if not getattr(type(self), "_metis_workflow_review_authority", False):
+            raise RuntimeError(REVIEW_STORE_REQUIRED_FOR_DOCUMENT_STORE)
+
+    def _require_review_store_configured(self) -> None:
+        """Naad C (#665): documents writes need a PG review store on the same database (compared only, NOOIT logged)."""
+        review_store = getattr(self, "workflow_review_store", None)
+        try:
+            same_database = isinstance(review_store, PostgresWorkflowReviewStore) and _config_identity(
+                review_store) == _config_identity(getattr(self, "workflow_document_store", None))
+        except WorkflowTransactionError:
+            same_database = False
+        if not same_database:
+            raise RuntimeError(REVIEW_STORE_REQUIRED_FOR_DOCUMENT_STORE)
 
     def _startup_local_mirror_is_authority(self, path: Path) -> bool:
         if path.name == "envelopes.json":
@@ -493,6 +514,7 @@ class _PostgresWorkflowDocumentsMixin:
         *,
         expected_revision: str | None = None,
     ) -> None:
+        self._require_review_store_configured()
         pinned = expected_revision if expected_revision is not None else self._objects_expected_revs().get(snapshot_id)
         envelope = self._envelope(snapshot_id)
         try:
@@ -509,6 +531,7 @@ class _PostgresWorkflowDocumentsMixin:
         self._mirror_objects(snapshot_id, rows)
 
     def _delete_unpublished_snapshot_authority(self, snapshot_id: str) -> None:
+        self._require_review_store_configured()
         try:
             self.workflow_document_store.delete_document(snapshot_id)
         except WorkflowDocumentStoreError as exc:
@@ -527,6 +550,7 @@ class _PostgresWorkflowDocumentsMixin:
         account: dict[str, Any],
         confirm_title: str,
     ) -> dict[str, Any]:
+        self._require_review_store_configured()
         if workflow_transaction_active():
             # A released savepoint is not a committed deletion; the public command
             # performs external source cleanup only after an independent commit.
@@ -603,6 +627,7 @@ class _PostgresWorkflowDocumentsMixin:
             raise
 
     def _save_envelopes(self) -> None:
+        self._require_review_store_configured()
         payload = getattr(self, "_prepared_envelopes", None)
         source = self._envelopes if payload is None else payload
         try:
@@ -620,6 +645,7 @@ class _PostgresWorkflowDocumentsMixin:
 
     def _apply_local_release_copy(self, release: dict[str, Any], projection: list[dict[str, Any]]) -> None:
         """Maintain local copies, then persist the envelope in PostgreSQL authority."""
+        self._require_review_store_configured()
         super()._apply_local_release_copy(release, projection)
         snapshot_id = str(release["snapshot_id"])
         current = deepcopy(self._envelopes[snapshot_id])
@@ -639,6 +665,7 @@ class _PostgresWorkflowDocumentsMixin:
         ledger_fn: Any | None = None,
         snapshot_id: str | None = None,
     ) -> None:
+        self._require_review_store_configured()
         if envelopes is None and objects is None:
             return super()._commit_prepared_store(
                 bindings=bindings,
@@ -660,47 +687,39 @@ class _PostgresWorkflowDocumentsMixin:
                 target_bindings = self._rebase_snapshot_map(self._bindings, bindings, sid)
             self._guard_prepared_working_revision_mutation(
                 envelopes=target_envelopes, bindings=target_bindings, objects=objects, snapshot_id=sid)
-            prior_bindings = deepcopy(self._bindings)
-            prior_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
-            try:
-                if bindings is not None:
-                    self._prepared_bindings = target_bindings
-                    try:
-                        self._save_bindings()
-                    finally:
-                        self._prepared_bindings = None
-                if ledger_fn is not None:
-                    ledger_fn()
-                envelope = target_envelopes.get(sid)
-                if envelope is None:
-                    raise ConsoleError("unknown_snapshot")
+            # #665: no copy-write or ledger truncation; the native transaction rolls
+            # PostgreSQL back and the review mixin remirrors (#667 _remirror_after_rollback).
+            if bindings is not None:
+                self._prepared_bindings = target_bindings
                 try:
-                    pinned_revision = expected_revision
-                    if objects is not None and pinned_revision is None:
-                        pinned_revision = self._objects_expected_revs().get(sid)
-                    revision = self.workflow_document_store.write_bundle(
-                        envelope=envelope,
-                        objects=objects[1] if objects is not None else None,
-                        expected_revision=pinned_revision if objects is not None else None,
-                    )
-                    canonical_envelope = self.workflow_document_store.get_envelope(sid)
-                    if canonical_envelope is None:
-                        raise ConsoleError("workflow_document_write_failed")
-                    target_envelopes[sid] = canonical_envelope
-                except WorkflowDocumentStoreError as exc:
-                    if str(exc) == SNAPSHOT_OBJECT_WRITE_CONFLICT:
-                        raise ConsoleError(
-                            SNAPSHOT_OBJECT_WRITE_CONFLICT,
-                            current_revision=self.objects_revision(sid),
-                        ) from exc
-                    raise ConsoleError("workflow_document_write_failed", str(exc)) from exc
-            except Exception:
-                if bindings is not None:
-                    _atomic_write(self._bindings_path, prior_bindings)
-                if self._ledger_path.exists() and self._ledger_path.stat().st_size > prior_ledger:
-                    with self._ledger_path.open("r+b") as handle:
-                        handle.truncate(prior_ledger)
-                raise
+                    self._save_bindings()
+                finally:
+                    self._prepared_bindings = None
+            if ledger_fn is not None:
+                ledger_fn()
+            envelope = target_envelopes.get(sid)
+            if envelope is None:
+                raise ConsoleError("unknown_snapshot")
+            try:
+                pinned_revision = expected_revision
+                if objects is not None and pinned_revision is None:
+                    pinned_revision = self._objects_expected_revs().get(sid)
+                revision = self.workflow_document_store.write_bundle(
+                    envelope=envelope,
+                    objects=objects[1] if objects is not None else None,
+                    expected_revision=pinned_revision if objects is not None else None,
+                )
+                canonical_envelope = self.workflow_document_store.get_envelope(sid)
+                if canonical_envelope is None:
+                    raise ConsoleError("workflow_document_write_failed")
+                target_envelopes[sid] = canonical_envelope
+            except WorkflowDocumentStoreError as exc:
+                if str(exc) == SNAPSHOT_OBJECT_WRITE_CONFLICT:
+                    raise ConsoleError(
+                        SNAPSHOT_OBJECT_WRITE_CONFLICT,
+                        current_revision=self.objects_revision(sid),
+                    ) from exc
+                raise ConsoleError("workflow_document_write_failed", str(exc)) from exc
             self._bindings = target_bindings
             self._envelopes = target_envelopes
             if objects is not None:
@@ -711,6 +730,7 @@ class _PostgresWorkflowDocumentsMixin:
     @contextmanager
     def _reprocessing_transaction(self, snapshot_id: str) -> Iterator[None]:
         """Serialize retry reservation/activation against every document writer."""
+        self._require_review_store_configured()
         with self._store_write_lock():
             with workflow_transaction(self.workflow_document_store) as connection:
                 row = connection.execute(
@@ -725,6 +745,7 @@ class _PostgresWorkflowDocumentsMixin:
     @contextmanager
     def _heading_batch_mutation(self, snapshot_id: str) -> Iterator[None]:
         """Lock and validate before the batch; rollback only through PostgreSQL."""
+        self._require_review_store_configured()
         with self._store_write_lock():
             bind_workflow_stores(
                 self.workflow_document_store,
@@ -758,36 +779,9 @@ class _PostgresWorkflowDocumentsMixin:
 
     @contextmanager
     def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
-        """Preserve current rollback behavior while documents/objects are PostgreSQL-backed."""
-        if getattr(self._objects_tls, "heading_batch_snapshot", None) == snapshot_id:
-            yield
-            return
-        with self._store_write_lock():
-            self._reload_store_locked()
-            before_envelope = deepcopy(self._envelope(snapshot_id))
-            before_objects = deepcopy(self._load_objects(snapshot_id, remember=False))
-            before_bindings = deepcopy(self._bindings)
-            before_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
-            try:
-                yield
-            except Exception as exc:
-                if isinstance(exc, ConsoleError) and exc.code == "snapshot_object_write_conflict":
-                    self.refresh_workflow_documents()
-                    self.refresh_objects_expected_revision(snapshot_id)
-                    raise
-                with suppress(Exception):
-                    self.workflow_document_store.write_bundle(
-                        envelope=before_envelope,
-                        objects=before_objects,
-                    )
-                self._bindings = before_bindings
-                _atomic_write(self._bindings_path, before_bindings)
-                if self._ledger_path.exists() and self._ledger_path.stat().st_size > before_ledger:
-                    with self._ledger_path.open("r+b") as handle:
-                        handle.truncate(before_ledger)
-                self.refresh_workflow_documents()
-                self.refresh_objects_expected_revision(snapshot_id)
-                raise
+        """#665 (I7): the review mixin owns this context; NOOIT a rollback path here, refused before yield."""
+        raise RuntimeError(REVIEW_STORE_REQUIRED_FOR_DOCUMENT_STORE)
+        yield  # pragma: no cover - keeps this a generator-based context manager
 
 
 class PostgresWorkflowDurablePublicationConsole(
