@@ -91,7 +91,10 @@ jobs:
           --clean true
           --async false
       - name: Verify test health
+        env:
+          APP_URL: ${{ vars.AZURE_TEST_APP_URL }}
+          REQUESTED_SHA: ${{ github.sha }}
         run: >-
-          curl --fail --show-error --silent
-          --retry 12 --retry-delay 5 --retry-connrefused
-          "${{ vars.AZURE_TEST_APP_URL }}/health"
+          python scripts/verify_console_deployment.py
+          --health-url "${APP_URL}/health"
+          --expected-commit "$REQUESTED_SHA"
