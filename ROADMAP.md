@@ -1,13 +1,37 @@
 # Metis — Roadmap v4
 
 **Status:** actief  
-**Peildatum:** 2026-10-10
+**Peildatum:** 2026-10-17
 
-**Gecontroleerde main:** [`07e1120d31c5fde0c36a4661b713c99c51d452c4`](https://github.com/WilliamGomes41/Metis-DS/commit/07e1120d31c5fde0c36a4661b713c99c51d452c4), inclusief de bijgewerkte README en protocolbeschrijving.
+**Gecontroleerde main:** [`e228aa902977963d6238da90ee3996de51b8768b`](https://github.com/WilliamGomes41/Metis-DS/commit/e228aa902977963d6238da90ee3996de51b8768b) (merge van #731).
 
 **Functie:** actieve veranderopgaven en bewijspoorten. Uitgevoerde geschiedenis hoort in changelog of `docs/history/`.
 
 Deze roadmap beschrijft het resterende werk op die main-stand. [Protocol v4](PROTOCOL.md) is de norm; GitHub-issues bevatten de actuele voortgang. Gemergde code en geslaagde CI bewijzen geen activatie in Azure of inhoudelijke productieacceptatie.
+
+## Actuele stand (momentopname 2026-10-17)
+
+GitHub-issues blijven de voortgangsbron; dit is alleen een overdrachtsoverzicht en geen tweede statusadministratie.
+
+**Gemergd op 17-10 (geen deploy):**
+- #667 R2-fix (remirror onder de storelock) → `59208f02`.
+- #683 `_lane_total` (sluit #672 en #700) → `3f9389df`.
+- #731 tier D fail-closed (sluit #665, Class A) → `e228aa90`. Opvolging: [#733](https://github.com/WilliamGomes41/Metis-DS/issues/733) (conninfo zichtbaar via `pytest -l`/`--showlocals`, L-2-restrisico) en [#734](https://github.com/WilliamGomes41/Metis-DS/issues/734) (tests voor hoofdlettervarianten van de detailwaarde).
+
+**Open:**
+- PR #732 (#684, deploy-SHA-check, Class B): nog niet gemergd. Bevat de fix voor de afsluitende `/` in `AZURE_*_APP_URL`. Merge MOET wachten op een nieuwe Sherlock-PASS op de actuele tip, de Argos-gate en Williams GO.
+- [#695](https://github.com/WilliamGomes41/Metis-DS/issues/695) deployvoorwaarden (`critical-path`): Azure-info van William, backup met bewezen herstel, read-only schadecheck tier D, #684-check, GRANTs migratie 018. Er MAG NIETS live voordat #695 is afgevinkt. Geen deploydatum.
+- Kernissues: #730 (PG als enige bron van waarheid), #689 (dode code, na #665), #690–#699, #701–#729 (inventaris). Smetten-branch `diag/smetten-coverage-remainder` is gepauzeerd (#515).
+
+**Besluiten William 2026-10-17:**
+- Tier D wordt fail-closed geweigerd.
+- De drie structurele problemen (twee bronnen van waarheid, te veel topologieën, nesting/N+1) MOETEN in V1 gefixt en getest zijn vóór V2 start.
+- B1: PostgreSQL is de enige bron van waarheid. Spiegels worden alleen na een geslaagde commit uit PG herbouwd, door één writer. Geen herstel uit kopieën, geen write vóór commit.
+- Al het werk staat in GitHub-issues; het kritieke pad krijgt het label `critical-path`.
+- Eén PR tegelijk.
+- Per Class A-PR doet Lex alleen de aanvalsronde en Sherlock de begrensde review. Alleen bewezen blockers houden een merge tegen; de rest wordt een opvolgissue.
+- Geen merge-GO-verzoek zonder gate-rapport van Argos. Merge of deploy alleen op Williams eigen GO in de chat van de uitvoerende agent.
+- Scout is gepauzeerd, de war room is buiten gebruik (agents direct benaderen), Cartograph draait wekelijks of op verzoek.
 
 ## R4.1 Huidige en historische code scheiden
 
@@ -53,14 +77,15 @@ Een proof-slice wordt pas een nieuwe repair bij een reproduceerbare invariantbre
 
 - Controleer tenant, appregistratie, app-rollen, callback, secret en bestaande accountbindingen volgens [de Entra-instructies](docs/ENTRA_SIGN_IN.md). Test toegelaten en geweigerde aanmelding, rolwijziging, blokkering, sessieverloop en terugkeer naar de gevraagde pagina op test.
 - De aanwezige [testworkflow](.github/workflows/deploy-test.yml) en [productieworkflow](.github/workflows/deploy-production.yml) gebruiken OIDC en een console-ZIP en starten handmatig. De testworkflow is begrensd door `METIS_TEST_APP_READY`; main-merges deployen niet automatisch. Verifieer doelomgeving, identiteit en artifact en bewijs de exacte commit op test vóór productie.
-- [Dockerfile.docling](Dockerfile.docling) en de [Docling-acceptatieworkflow](.github/workflows/docling-acceptance.yml) leveren afzonderlijk image-/containerbewijs. Een console-ZIP levert niet de volledige Docling-runtime. Controleer onder [#531](https://github.com/WilliamGomes41/Metis-DS/issues/531) de werkelijk actieve interpreter, modellen, dependencies, hostcapaciteit en herstelketen, en leg de passende deploy- en rollbackroute vast. Een Kudu-ZIP is geen vervanging voor dit bewijs.
+- [Dockerfile.docling](Dockerfile.docling) en de [Docling-acceptatieworkflow](.github/workflows/docling-acceptance.yml) leveren afzonderlijk image-/containerbewijs. Een console-ZIP levert niet de volledige Docling-runtime. [#531](https://github.com/WilliamGomes41/Metis-DS/issues/531) is op 12-10 gesloten; of er een Docling-restant open blijft (interpreter, modellen, dependencies, hostcapaciteit, herstelketen, deploy- en rollbackroute) is een OPENVRAAG onder [#696](https://github.com/WilliamGomes41/Metis-DS/issues/696). Een Kudu-ZIP is geen vervanging voor dit bewijs.
 - [azure-pipelines.yml](azure-pipelines.yml) spiegelt GitHub-branches en tags naar Azure Repos. Verifieer een echte pipeline-uitvoering en rechten; dit is geen DevOps → productie-deployroute.
+- De volgende productiedeploy is geblokkeerd door [#695](https://github.com/WilliamGomes41/Metis-DS/issues/695) en de deploy-SHA-check [#684](https://github.com/WilliamGomes41/Metis-DS/issues/684) (PR #732, open). De live draaiende commit is niet vastgesteld; gemergd op main is niet gedeployed.
 - Bewijs dat deployment runtime-data intact laat en niet impliciet G2-publicatie of Product API-toegang activeert.
 - Verifieer de echte pilotbron, bronhash en immutable G2-bronopslag vóór publicatie van die snapshot. Bronbewijs voor één snapshot ontgrendelt publicatie niet algemeen.
 
 ## R4.5 Resterende auditbevindingen en productieacceptatie
 
-**Status:** voor A01, A02, A04, A05, A09, A15 en A26 zijn reparaties gemergd. De overige twintig bevindingen staan nog open; registratie alleen start geen implementatie.
+**Status:** voor A01, A02, A04, A05, A09, A15 en A26 zijn reparaties gemergd. De overige twintig staan nog open: A03, A06, A07, A08 en A10 als losse issues (#553, #556, #557, #558, #560), A11–A27 gebundeld in [#688](https://github.com/WilliamGomes41/Metis-DS/issues/688). Registratie alleen start geen implementatie.
 
 - Volg de bestaande ID-koppelingen in [het auditoverzicht](docs/audit/README.md). GitHub is de voortgangsbron; de HTML is een gedateerde momentopname.
 - Verifieer de gemergde beschikbaarheids-, bronhergebruik- en contextnavigatiereparaties via de oorspronkelijke gebruikershandeling op de werkelijk draaiende commit. Gesloten codeissues zijn geen productieacceptatie.
