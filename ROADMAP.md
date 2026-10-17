@@ -21,7 +21,7 @@ GitHub-issues blijven de voortgangsbron; dit is alleen een overdrachtsoverzicht 
 
 **Open:**
 - [#695](https://github.com/WilliamGomes41/Metis-DS/issues/695) deployvoorwaarden (`critical-path`): Azure-info van William, backup met bewezen herstel, read-only schadecheck tier D, #684-check, GRANTs migratie 018. Er MAG NIETS live voordat #695 is afgevinkt. Geen deploydatum.
-- Kernissues: #730 (PG als enige bron van waarheid), #689 (dode code; PR #735 open), #690–#699, #701–#729 (inventaris). Smetten-branch `diag/smetten-coverage-remainder` is gepauzeerd (#515).
+- Kernissues: #730 (PG als enige bron van waarheid), #689 (dode code; PR #735 in uitvoering), #737 (flaky peiltijd-test in `test_availability_repair`), #738 (omgevingsafhankelijke tests: SSRF met proxyvariabelen, sandbox als root), #690–#699, #701–#729 (inventaris). Smetten-branch `diag/smetten-coverage-remainder` is gepauzeerd (#515).
 
 **Besluiten William 2026-10-17:**
 - Tier D wordt fail-closed geweigerd.
