@@ -27,7 +27,9 @@ RETENTION_SECONDS = 7 * 24 * 3600
 # A current file written to within this period counts as a live worker's file.
 ACTIVE_SECONDS = 600
 MAX_STRING = 240
-MAX_KEYS = 48
+# At least the producers' own bounds (request_diagnostics_v1: MAX_TREE_NODES = 64 and the
+# phase totals), so a bounded phase tree is never cut short again here.
+MAX_KEYS = 96
 MAX_LIST = 32
 # Per-phase starts are request-local detail; the finished event carries the tree.
 TRANSIENT_EVENTS = frozenset({"phase_started", "response_started", "response_completed"})

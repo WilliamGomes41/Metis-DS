@@ -355,6 +355,17 @@ def test_analysis_holds_only_the_newest_events_in_memory(hub, monkeypatch):
     assert _telemetry_by_document(5.0) == {} and calls == [5.0]  # documents tab reads through the same bound
 
 
+
+def test_hub_keeps_every_node_of_a_bounded_phase_tree():
+    from src.request_diagnostics_v1 import MAX_TREE_NODES, PHASES
+    from src.telemetry import hub as hub_module
+    assert hub_module.MAX_KEYS >= max(MAX_TREE_NODES, len(PHASES))
+    fresh = TelemetryHub()
+    tree = {f'review_render/db_execute/{i}': {'calls': 1} for i in range(MAX_TREE_NODES)}
+    stored = fresh.record({'event': 'request_finished', 'phase_tree': tree})
+    assert len(stored['phase_tree']) == MAX_TREE_NODES
+
+
 def _event(t, name, rid, **fields):
     from datetime import datetime, timezone
     ts = datetime.fromtimestamp(t, timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
