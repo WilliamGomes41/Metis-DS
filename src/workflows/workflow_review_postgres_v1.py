@@ -27,6 +27,23 @@ class WorkflowReviewStoreError(RuntimeError):
     """Fail-closed shared review-state error."""
 
 
+class _EventBuffer(list):
+    """Events buffered by one ``buffered()`` nesting level."""
+
+    def __init__(self, parent: "_EventBuffer | None") -> None:
+        super().__init__()
+        self.parent = parent
+
+    def last_hash(self) -> str | None:
+        """Hash of the newest buffered event on this level or any parent."""
+        level: _EventBuffer | None = self
+        while level is not None:
+            if level:
+                return str(level[-1]["event_hash"])
+            level = level.parent
+        return None
+
+
 class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
     """Shared authority for hash-chained review evidence and authorizations."""
 
@@ -35,7 +52,7 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._buffer: ContextVar[list[dict[str, Any]] | None] = ContextVar(
+        self._buffer: ContextVar[_EventBuffer | None] = ContextVar(
             "workflow_review_event_buffer", default=None
         )
         self._mirror_path: Path | None = None
@@ -141,7 +158,9 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
     ) -> dict[str, Any]:
         buffered = self._buffer.get()
         if buffered is not None:
-            previous = buffered[-1]["event_hash"] if buffered else self._last_hash()
+            previous = buffered.last_hash()
+            if previous is None:
+                previous = self._last_hash()
             event = self._new_event(
                 event_type=event_type,
                 object_id=object_id,
@@ -218,15 +237,18 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
 
     @contextmanager
     def buffered(self) -> Iterator[None]:
-        existing = self._buffer.get()
-        if existing is not None:
-            yield
-            return
-        token = self._buffer.set([])
+        # I2: every nesting level owns its events. On an exception the level
+        # discards them (its savepoint rolled the bindings back); on success
+        # they merge into the parent level. Only the outermost level flushes.
+        parent = self._buffer.get()
+        level = _EventBuffer(parent)
+        token = self._buffer.set(level)
         try:
             yield
-            events = list(self._buffer.get() or [])
-            if events:
+            events = list(level)
+            if parent is not None:
+                parent.extend(events)
+            elif events:
                 self._flush_buffer(events)
         finally:
             self._buffer.reset(token)

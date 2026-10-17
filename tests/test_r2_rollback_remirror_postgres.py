@@ -560,8 +560,11 @@ def test_optc_caught_nested_fault_mirrors_equal_pg(workflow_postgres, tmp_path, 
         return original(self, snapshot_id, exc)
 
     monkeypatch.setattr(rc._PostgresWorkflowReviewMixin, "_remirror_after_rollback", counting)
+    events_before = console.workflow_review_store.read_events()
+    bindings_before = console.workflow_review_store.read_bindings()
     _caught_nested(console, rid, sid, obj_a)
     print("OPTC_CAUGHT_REMIRRORS", calls)
+    _assert_i2_events_match_bindings(console, events_before, bindings_before)
     assert calls == ["optc_caught_inner"], f"inner level MOET remirror: {calls}"
     _assert_disk_mirrors_equal_pg(console)
     fresh = _console(tmp_path, workflow_postgres)
@@ -595,3 +598,31 @@ def test_optc_dedupe_survives_exception_rejecting_attributes(workflow_postgres, 
     records = collected()
     print("OPTC_SLOTTED_WARNINGS", records)
     assert len(records) == 1, f"exactly one remirror warning MOET be logged: {records}"
+
+
+def _binding_rows(bindings):
+    return sum(len(rows) for rows in bindings.values())
+
+
+def _assert_i2_events_match_bindings(console, events_before, bindings_before):
+    """I2: new approve events count MOET equal new binding rows count."""
+    events = console.workflow_review_store.read_events()[len(events_before):]
+    approves = [e for e in events if e.get("event_type") == "clinical_review_approve"]
+    new_rows = _binding_rows(console.workflow_review_store.read_bindings()) - _binding_rows(bindings_before)
+    assert len(approves) == new_rows, {"approve_events": len(approves), "new_binding_rows": new_rows}
+
+
+def test_i2_successful_nested_approve_merges_event_into_parent_buffer(workflow_postgres, tmp_path):
+    """Per-level buffers: a nested level that succeeds MOET merge its events
+    into the parent, so the outer commit flushes exactly the approve event."""
+    console, rid, sid, (obj_a, _obj_b) = _setup(tmp_path, workflow_postgres)
+    events_before = console.workflow_review_store.read_events()
+    bindings_before = console.workflow_review_store.read_bindings()
+    with console._atomic_snapshot_mutation(sid):
+        with console._atomic_snapshot_mutation(sid):
+            _approve(console, rid, sid, obj_a)
+    events = console.workflow_review_store.read_events()[len(events_before):]
+    print("I2_NESTED_OK", [e.get("event_type") for e in events])
+    assert [e.get("event_type") for e in events].count("clinical_review_approve") == 1
+    _assert_i2_events_match_bindings(console, events_before, bindings_before)
+    _assert_disk_mirrors_equal_pg(console)
