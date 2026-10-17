@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+from collections import deque
 from contextlib import contextmanager, suppress
 from copy import deepcopy
 from pathlib import Path
@@ -19,6 +21,37 @@ from src.workflows.workflow_review_postgres_v1 import (
     WorkflowReviewStoreError,
 )
 from src.workflows.workflow_transaction_v1 import workflow_transaction
+
+
+_REMIRROR_WARNED_ATTR = "_metis_review_remirror_warned"
+# Fallback for exceptions that reject attributes: identity match against the
+# most recent ones; holding the objects keeps their id() from being reused.
+_remirror_warned_fallback: deque[BaseException] = deque(maxlen=32)
+_remirror_warned_fallback_lock = threading.Lock()
+
+
+def _remirror_warning_already_logged(original: BaseException) -> bool:
+    """Return True when a remirror warning was already logged for this fault.
+
+    Follows explicit wrapping (``raise ... from``) so a wrapped original counts
+    as the same fault. Marks ``original`` otherwise; NOOIT raises.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = original
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if getattr(current, _REMIRROR_WARNED_ATTR, False):
+            return True
+        with _remirror_warned_fallback_lock:
+            if any(item is current for item in _remirror_warned_fallback):
+                return True
+        current = current.__cause__
+    try:
+        setattr(original, _REMIRROR_WARNED_ATTR, True)
+    except Exception:
+        with _remirror_warned_fallback_lock:
+            _remirror_warned_fallback.append(original)
+    return False
 
 
 class _PostgresWorkflowReviewMixin:
@@ -108,29 +141,32 @@ class _PostgresWorkflowReviewMixin:
         self._bindings_baseline = deepcopy(current)
         return super().object_review_bindings(snapshot_id, objects=objects)
 
-    def _restore_review_state(
-        self,
-        *,
-        bindings: dict[str, Any],
-        snapshot_id: str | None,
-        envelope: dict[str, Any] | None,
-        objects: list[dict[str, Any]] | None,
-    ) -> None:
-        if snapshot_id is not None:
-            with suppress(Exception):
-                self.workflow_review_store.replace_snapshot_bindings(
-                    snapshot_id,
-                    list(bindings.get(snapshot_id, [])),
-                )
-        current = self.workflow_review_store.read_bindings()
-        self._bindings = current
-        self._bindings_baseline = deepcopy(current)
-        self._mirror_bindings()
-        if envelope is not None and objects is not None:
-            with suppress(Exception):
-                self.workflow_document_store.write_bundle(envelope=envelope, objects=objects)
-            self.refresh_workflow_documents()
-            self.refresh_objects_expected_revision(str(envelope["snapshot_id"]))
+    def _remirror_after_rollback(self, snapshot_id: str | None, original: BaseException) -> None:
+        """Rebuild disposable mirrors from PostgreSQL after a native rollback.
+
+        Reads only PostgreSQL, writes only disk mirrors and process state, and
+        runs under the re-entrant store lock so a stale read never replaces a
+        concurrent writer's mirror. NOOIT write workflow.* here.
+        """
+        try:
+            with self._store_write_lock():
+                self._remirror_review_runtime()
+                self._bindings_baseline = deepcopy(self._bindings)
+                if snapshot_id:
+                    self.refresh_workflow_documents()
+                    self.refresh_objects_expected_revision(snapshot_id)
+        except Exception as remirror_exc:
+            # Option C: every nesting level remirrors, but the warning MOET
+            # appear exactly once per original exception.
+            if _remirror_warning_already_logged(original):
+                return
+            # Codes, ids and error types only: no text, corrections or actors.
+            logging.getLogger(__name__).warning(
+                "review_rollback_remirror_failed snapshot_id=%s error_code=%s remirror_error_type=%s",
+                snapshot_id or "",
+                getattr(original, "code", None) or type(original).__name__,
+                type(remirror_exc).__name__,
+            )
 
     def _commit_prepared_store(
         self,
@@ -153,13 +189,6 @@ class _PostgresWorkflowReviewMixin:
             )
         with self._store_write_lock():
             self._reload_store_locked()
-            prior_bindings = deepcopy(self._bindings)
-            prior_envelope: dict[str, Any] | None = None
-            prior_objects: list[dict[str, Any]] | None = None
-            if sid:
-                with suppress(ConsoleError):
-                    prior_envelope = deepcopy(self._envelope(sid))
-                    prior_objects = deepcopy(self._load_objects(sid, remember=False))
             try:
                 with workflow_transaction(self.workflow_review_store):
                     with buffer_events(self._ledger_path):
@@ -177,24 +206,14 @@ class _PostgresWorkflowReviewMixin:
                             self._bindings_baseline = deepcopy(current)
                             self._mirror_bindings()
             except WorkflowReviewStoreError as exc:
-                self._restore_review_state(
-                    bindings=prior_bindings,
-                    snapshot_id=sid,
-                    envelope=prior_envelope,
-                    objects=prior_objects,
-                )
+                self._remirror_after_rollback(sid, exc)
                 raise ConsoleError("workflow_review_write_failed", str(exc)) from exc
             except Exception as exc:
                 if isinstance(exc, ConsoleError) and exc.code == "snapshot_object_write_conflict":
                     self._remirror_review_runtime()
                     self._bindings_baseline = deepcopy(self._bindings)
                     raise
-                self._restore_review_state(
-                    bindings=prior_bindings,
-                    snapshot_id=sid,
-                    envelope=prior_envelope,
-                    objects=prior_objects,
-                )
+                self._remirror_after_rollback(sid, exc)
                 raise
 
     @contextmanager
@@ -216,33 +235,26 @@ class _PostgresWorkflowReviewMixin:
         if getattr(self._objects_tls, "heading_batch_snapshot", None) == snapshot_id:
             yield
             return
-        prior_bindings: dict[str, Any] = {}
-        prior_envelope: dict[str, Any] | None = None
-        prior_objects: list[dict[str, Any]] | None = None
-        restore_snapshot_id: str | None = None
         try:
-            # The document context takes the process-shared store lock and
-            # refreshes documents plus bindings before these rollback values
-            # are captured. That ordering is required for a second worker.
-            with super()._atomic_snapshot_mutation(snapshot_id):
-                prior_bindings = deepcopy(self.workflow_review_store.read_bindings())
-                prior_envelope = deepcopy(self._envelope(snapshot_id))
-                prior_objects = deepcopy(self._load_objects(snapshot_id, remember=False))
-                restore_snapshot_id = snapshot_id
+            # Route 1: take the process-shared store lock and reload directly,
+            # NOOIT via the inherited documents context, whose except branch
+            # compensates with a blind write_bundle and a ledger truncation
+            # (#665 keeps that for non-review paths). The native transaction
+            # is the only rollback; afterwards only PostgreSQL-backed remirror.
+            with self._store_write_lock():
+                self._reload_store_locked()
                 with workflow_transaction(self.workflow_review_store):
                     with buffer_events(self._ledger_path):
                         yield
         except Exception as exc:
             if isinstance(exc, ConsoleError) and exc.code == "snapshot_object_write_conflict":
-                self._remirror_review_runtime()
-                self._bindings_baseline = deepcopy(self._bindings)
+                with self._store_write_lock():
+                    self.refresh_workflow_documents()
+                    self.refresh_objects_expected_revision(snapshot_id)
+                    self._remirror_review_runtime()
+                    self._bindings_baseline = deepcopy(self._bindings)
                 raise
-            self._restore_review_state(
-                bindings=prior_bindings,
-                snapshot_id=restore_snapshot_id,
-                envelope=prior_envelope,
-                objects=prior_objects,
-            )
+            self._remirror_after_rollback(snapshot_id, exc)
             raise
 
 
