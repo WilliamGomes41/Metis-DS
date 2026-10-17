@@ -227,6 +227,10 @@ def test_direct_rejections_make_no_writes(storage, tmp_path, rejection):
         envelope["state"] = "published"
         if hasattr(console, "workflow_document_store"):
             console.workflow_document_store.write_bundle(envelope=envelope)
+            # R+ publication truth is the canonical release history, not the
+            # envelope flag. Seed that same authority before testing refusal.
+            from tests.test_published_working_revision_immutable_v1 import _seed_durable_release
+            _seed_durable_release(console.workflow_document_store, snapshot_id=sid, token="a08-" + sid)
         else:
             console._envelopes[sid] = envelope
             console._save_envelopes()
