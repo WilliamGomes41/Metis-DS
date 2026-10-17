@@ -117,7 +117,11 @@ def quality_projection(view: dict[str, Any]) -> dict[str, Any]:
     for row in report["routes"].values():
         changed.update(row.get("changed_fields") or {})
     trend = []
-    for record in sorted(view["history"], key=lambda r: r["report"]["as_of"])[-40:]:
+    # Only reports over the same cohort filters and measurement definition form one series.
+    comparable = [record for record in view["history"]
+                  if record["report"].get("filters") == report["filters"]
+                  and record["report"].get("definition_version") == report["definition_version"]]
+    for record in sorted(comparable, key=lambda r: r["report"]["as_of"])[-40:]:
         old = record["report"]
         routes = old.get("routes") or {}
         trend.append({"as_of": old["as_of"], "open_passages": old.get("open_passages"),

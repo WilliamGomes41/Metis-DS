@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 
 from src.telemetry.hub import HUB, correlation
 
@@ -35,11 +36,16 @@ CORRELATION_FILTER = CorrelationFilter()
 class HubHandler(logging.Handler):
     def __init__(self) -> None:
         super().__init__(level=logging.INFO)
+        self._seen = threading.local()
 
     def handle(self, record: logging.LogRecord) -> bool:
         # Metis-owned sink: emit() keeps only redacted, bounded fields and a
         # frame-only fingerprint. The in-place RedactingFilter for foreign
         # handlers would clear exc_info first, so handler filters are skipped.
+        # Attached to several loggers: one record propagating past two of them is emitted once.
+        if getattr(self._seen, "record", None) is record:
+            return True
+        self._seen.record = record
         self.emit(record)
         return True
 
@@ -98,11 +104,18 @@ def install_logging_bridge() -> None:
     root = logging.getLogger()
     if HUB_HANDLER not in diagnostics.handlers:
         diagnostics.addHandler(HUB_HANDLER)
-    # First on root, so no foreign handler's filter has mutated the record yet.
-    if root.handlers[:1] != [HUB_HANDLER]:
-        if HUB_HANDLER in root.handlers:
-            root.removeHandler(HUB_HANDLER)
-        root.handlers.insert(0, HUB_HANDLER)
+    from src.structured_logging_v1 import NON_PROPAGATING_LOGGERS
+    # First on root and on the server loggers that do not propagate to root, so no
+    # foreign handler's filter has mutated the record yet.
+    # A server logger without handlers of its own falls back to stderr (lastResort);
+    # adding ours there would silence that, so only loggers the server configured are joined.
+    servers = [logger for logger in map(logging.getLogger, NON_PROPAGATING_LOGGERS)
+               if not logger.propagate and [h for h in logger.handlers if h is not HUB_HANDLER]]
+    for logger in (root, *servers):
+        if logger.handlers[:1] != [HUB_HANDLER]:
+            if HUB_HANDLER in logger.handlers:
+                logger.removeHandler(HUB_HANDLER)
+            logger.handlers.insert(0, HUB_HANDLER)
     for name in ("", "metis.console.performance", "uvicorn.error", "gunicorn.error"):
         for handler in logging.getLogger(name).handlers:
             if CORRELATION_FILTER not in handler.filters:

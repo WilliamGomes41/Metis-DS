@@ -276,6 +276,36 @@ def test_standalone_errors_follow_the_window_and_request_filters():
     assert sum(row['requests'] for row in tree['commits']) == 1
 
 
+
+def test_server_logger_warnings_reach_the_hub_once(hub, monkeypatch):
+    server = logging.getLogger('uvicorn.error')
+    own = logging.NullHandler()
+    monkeypatch.setattr(server, 'handlers', [own])
+    monkeypatch.setattr(server, 'propagate', False)
+    install_logging_bridge()
+    install_logging_bridge()
+    assert server.handlers == [HUB_HANDLER, own]
+    server.warning('worker_timeout pid=%s', 7)
+    assert [e['message'] for e in hub.events() if e.get('kind') == 'log'] == ['worker_timeout pid=7']
+
+
+def test_quality_trend_uses_only_comparable_reports():
+    from src.insight_v1 import quality_projection
+
+    def report(as_of, filters, version='v1'):
+        return {'as_of': as_of, 'filters': filters, 'definition_version': version, 'open_passages': 1,
+                'cohort_size': 1, 'routes': {}}
+    current = {**report('2026-10-03', {'route': 'semantic'}), 'publication_duration_seconds': {}, 'burden': {},
+               'documents': [], 'definitions': {}, 'limitations': [], 'readiness_duration': {'reason': ''},
+               'clinical_errors': {'reason': ''}}
+    history = [{'calculation_id': 'a', 'report': report('2026-10-01', {'route': 'semantic'})},
+               {'calculation_id': 'b', 'report': report('2026-10-02', {'route': 'deterministic'})},
+               {'calculation_id': 'c', 'report': report('2026-10-02', {'route': 'semantic'}, 'v2')},
+               {'calculation_id': 'd', 'report': current}]
+    view = {'record': {'calculation_id': 'd'}, 'report': current, 'history': history}
+    assert [row['calculation_id'] for row in quality_projection(view)['trend']] == ['a', 'd']
+
+
 def _event(t, name, rid, **fields):
     from datetime import datetime, timezone
     ts = datetime.fromtimestamp(t, timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
