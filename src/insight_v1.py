@@ -60,10 +60,12 @@ def _matches_document(envelope: dict[str, Any], query: str) -> bool:
     return any(query in str(value or "").lower() for value in (envelope.get("title"), sid, doc_ref(sid)))
 
 
-def _telemetry_by_document(since: float) -> dict[str, dict[str, int]]:
+def _telemetry_by_document(since: float) -> tuple[dict[str, dict[str, int]], bool]:
+    """Requests and errors per doc_ref since ``since``, and whether the bounded read was partial."""
     from src.telemetry.analysis import build_requests
     from src.telemetry.hub import recent_events
-    requests, _other = build_requests(recent_events(since)[0])
+    events, partial = recent_events(since)
+    requests, _other = build_requests(events)
     now = time.time()
     counts: dict[str, dict[str, int]] = {}
     for request in requests.values():
@@ -71,7 +73,7 @@ def _telemetry_by_document(since: float) -> dict[str, dict[str, int]]:
             row = counts.setdefault(request.doc_ref, {"requests": 0, "errors": 0})
             row["requests"] += 1
             row["errors"] += int(request.state(now) in ("error", "aborted"))
-    return counts
+    return counts, partial
 
 
 def _state_matches(row: dict[str, Any], state_filter: str) -> bool:
@@ -92,7 +94,7 @@ def documents_projection(state, account, *, query: str = "", state_filter: str =
     authorized = [envelope for envelope in _authorized_documents(state, account)
                   if not query or _matches_document(envelope, query)]
     offset, limit = max(0, offset), max(1, min(limit, MAX_DOCUMENTS))
-    telemetry = _telemetry_by_document(time.time() - 86400) if offset < len(authorized) else {}
+    telemetry, partial = _telemetry_by_document(time.time() - 86400) if offset < len(authorized) else ({}, False)
     rows, position = [], offset
     scan_end = min(len(authorized), offset + (MAX_SCAN if state_filter else limit))
     while position < scan_end and len(rows) < limit:
@@ -101,7 +103,8 @@ def documents_projection(state, account, *, query: str = "", state_filter: str =
         if _state_matches(row, state_filter):
             rows.append(row)
     return {"documents": rows, "total": None if state_filter else len(authorized), "offset": offset,
-            "limit": limit, "next_offset": position if position < len(authorized) else None}
+            "limit": limit, "next_offset": position if position < len(authorized) else None,
+            "telemetry_partial": partial}
 
 
 def _document_row(state, account, envelope: dict[str, Any], telemetry: dict[str, dict[str, int]]) -> dict[str, Any]:

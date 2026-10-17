@@ -356,8 +356,8 @@ def test_analysis_holds_only_the_newest_events_in_memory(hub, monkeypatch):
     assert [e['event'] for e in events] == ['e2', 'e3', 'e4'] and truncated
     from src.insight_v1 import _telemetry_by_document
     calls = []
-    monkeypatch.setattr(hub_module, 'recent_events', lambda since: calls.append(since) or ([], False))
-    assert _telemetry_by_document(5.0) == {} and calls == [5.0]  # documents tab reads through the same bound
+    monkeypatch.setattr(hub_module, 'recent_events', lambda since: calls.append(since) or ([], True))
+    assert _telemetry_by_document(5.0) == ({}, True) and calls == [5.0]  # same bound, partiality surfaced
 
 
 
@@ -417,6 +417,24 @@ def test_cut_lists_report_omissions_and_latency_counts_only_completed_responses(
             _event(now - 40, 'request_finished', 'boom', route='/review', status=None, outcome='exception', elapsed_ms=10000.0)]
     kpis = analysis.summarize(rows, now=now, since=now - 600)['kpis']
     assert kpis['p95_ms'] == 100.0 and kpis['aborted'] == 1
+
+
+
+def test_counts_and_truncation_refer_to_the_requested_window(hub, monkeypatch):
+    from src.telemetry import hub as hub_module
+    now = time.time()
+    stamp = lambda t: _event(t, 'x', 'x')['ts']
+    for i in range(4):  # lookback hour, before the window
+        hub.record({'event': f'old{i}', 'ts': stamp(now - 3000 + i)})
+    for i in range(2):  # inside a 15-minute window
+        hub.record({'event': f'new{i}', 'ts': stamp(now - 60 + i)})
+    monkeypatch.setattr(hub_module, 'MAX_ANALYZED_EVENTS', 3)
+    events, truncated = hub_module.recent_events(now - 3600 - 900, window_start=now - 900)
+    assert len(events) == 3 and truncated is False  # only lookback events were left out
+    monkeypatch.setattr(hub_module, 'MAX_ANALYZED_EVENTS', 1)  # now a window event is dropped too
+    assert hub_module.recent_events(now - 3600 - 900, window_start=now - 900)[1] is True
+    summary = analysis.summarize(list(hub.events()), now=now, since=now - 900)
+    assert summary['telemetry']['events'] == 2
 
 
 def _event(t, name, rid, **fields):

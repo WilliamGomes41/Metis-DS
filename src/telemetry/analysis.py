@@ -232,7 +232,7 @@ def summarize(events: list[dict], *, filters: dict[str, str] | None = None, now:
         "slowest": [_request_row(r, now) for r in
                     sorted(requests, key=lambda r: r.duration_ms(), reverse=True)[:10]],
         "process": _process_events(other, since),
-        "telemetry": {"events": len(events)},
+        "telemetry": {"events": sum(1 for event in events if event.get("_t", 0) >= since)},
     }
     summary["insights"] = insights(summary)
     return summary

@@ -302,8 +302,12 @@ def record_event(event: str, *, kind: str = "event", **fields: Any) -> None:
 MAX_ANALYZED_EVENTS = 50_000
 
 
-def recent_events(since: float) -> tuple[list[dict[str, Any]], bool]:
-    """The newest MAX_ANALYZED_EVENTS events since ``since`` (streamed, bounded memory), oldest first."""
+def recent_events(since: float, *, window_start: float | None = None) -> tuple[list[dict[str, Any]], bool]:
+    """The newest MAX_ANALYZED_EVENTS events since ``since`` (streamed, bounded memory), oldest first.
+
+    The flag says whether events at or after ``window_start`` (default ``since``) were left out;
+    a reconstruction lookback before the window does not count.
+    """
     seen = 0
 
     def counted():
@@ -313,4 +317,7 @@ def recent_events(since: float) -> tuple[list[dict[str, Any]], bool]:
             yield event
     newest = heapq.nlargest(MAX_ANALYZED_EVENTS, counted(), key=lambda event: str(event.get("ts") or ""))
     newest.reverse()
-    return newest, seen > len(newest)
+    if seen <= len(newest):
+        return newest, False
+    oldest_kept = parse_ts(newest[0].get("ts")) if newest else None
+    return newest, oldest_kept is None or oldest_kept > (since if window_start is None else window_start)
