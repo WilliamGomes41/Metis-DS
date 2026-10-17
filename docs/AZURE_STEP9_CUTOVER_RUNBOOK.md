@@ -41,9 +41,19 @@ az webapp deploy \
   --clean true \
   --async false
 
-curl --fail --show-error --silent --retry 12 --retry-delay 5 \
-  "https://${METIS_WEBAPP}.azurewebsites.net/health"
+python scripts/verify_console_deployment.py \
+  --health-url "https://${METIS_WEBAPP}.azurewebsites.net/health" \
+  --expected-commit "$METIS_MAIN_SHA"
 ```
+
+Dezelfde controle wordt door de deployworkflows gebruikt. Alleen `status=ok`,
+`service=operations-console` en exact de verwachte volledige SHA geven exit 0.
+Een afsluitende slash in de app-origin wordt naar één `/health` genormaliseerd.
+Een oude SHA, `not_recorded`, ontbrekende velden of een onleesbaar antwoord
+geven na maximaal 13 pogingen exit 1. Tussen pogingen zit vijf seconden;
+iedere HTTP-call heeft maximaal tien seconden en 64 KiB antwoordruimte.
+Dit bewijst de gedeployde versie; een geautoriseerde database-/ketenproef
+blijft een afzonderlijke vrijgavevoorwaarde.
 
 ZIP-clean geldt alleen voor de App Service deploymentdirectory. `/home/data`, Blob, PostgreSQL-inhoud en App Settings vallen buiten deze stap en mogen hier niet worden gewijzigd.
 
