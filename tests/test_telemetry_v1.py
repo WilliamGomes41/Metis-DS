@@ -84,6 +84,41 @@ def test_sink_prunes_by_retention(tmp_path, monkeypatch):
     assert not old.exists() and sink.files()
 
 
+
+def test_prune_keeps_other_workers_current_files_and_unusable_storage_falls_back(tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+    from src.telemetry import hub as hub_module
+    today = datetime.now(timezone.utc).strftime('%Y%m%d')
+    other = tmp_path / f'events-{today}-99999-bbbbbbbb.jsonl'
+    rotated = tmp_path / f'events-{today}-99999-bbbbbbbb-1.jsonl'
+    other.write_text('{}\n')
+    rotated.write_text('{}\n')
+    monkeypatch.setattr(hub_module, 'TOTAL_MAX_BYTES', 0)
+    sink = JsonlSink(tmp_path)
+    sink.write('{"event":"x"}')
+    sink.prune(force=True)
+    assert other.exists() and not rotated.exists()
+    blocked = tmp_path / 'not-a-directory'
+    blocked.write_text('')
+    fresh = TelemetryHub()
+    assert fresh.configure(blocked / 'telemetry') is False and fresh.directory is None
+    fresh.record({'event': 'still_recorded'})
+    assert [e['event'] for e in fresh.events()] == ['still_recorded']
+
+
+def test_serve_console_uses_the_same_observability_composition(tmp_path, monkeypatch):
+    import argparse
+    import uvicorn
+    from src import cli
+    served = {}
+    monkeypatch.setattr(uvicorn, 'run', lambda app, **kwargs: served.setdefault('app', app))
+    monkeypatch.setattr('src.telemetry.install.install_telemetry', lambda directory: served.setdefault('dir', directory))
+    cli.cmd_serve_console(argparse.Namespace(source_store=tmp_path / 'sources', runtime=tmp_path / 'runtime',
+                                             host='127.0.0.1', port=0))
+    assert any(m.cls is RequestDiagnostics for m in served['app'].user_middleware)
+    assert served['dir'] == tmp_path / 'runtime' / 'telemetry'
+
+
 def _app():
     app = FastAPI()
 
@@ -232,6 +267,8 @@ def test_standalone_errors_follow_the_window_and_request_filters():
     assert 'Log ERROR: before_window' not in labels(window) and 'Log ERROR: other_route' in labels(window)
     filtered = analysis.summarize(rows, filters={'route': '/review'}, now=now, since=now - 600)
     assert 'Log ERROR: other_route' not in labels(filtered)
+    tree = analysis.summarize(rows, filters={'route': '/tree'}, now=now, since=now - 600)
+    assert sum(row['requests'] for row in tree['commits']) == 1
 
 
 def _event(t, name, rid, **fields):

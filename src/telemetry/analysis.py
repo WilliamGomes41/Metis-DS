@@ -197,7 +197,7 @@ def summarize(events: list[dict], *, filters: dict[str, str] | None = None, now:
         group["guidance"] = guidance_for_group(group)
     routes = _routes(requests, now)
     phases = _phases(requests)
-    commits = _commits(all_requests, now)
+    commits = _commits(requests, now)
     correlations = _correlations(requests, now, slow_threshold)
     summary = {
         "window": {"since": since, "until": now, "bucket_seconds": size},

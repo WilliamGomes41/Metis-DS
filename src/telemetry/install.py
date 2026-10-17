@@ -25,9 +25,18 @@ def telemetry_directory(runtime: Path) -> Path:
     return Path(override) if override else Path(runtime) / "telemetry"
 
 
+def install_console_observability(app, runtime: Path) -> None:
+    """Request diagnostics and the hub for a console app; one composition for every host."""
+    from src.console_performance_v1 import install_console_performance
+    install_console_performance(app)
+    install_telemetry(telemetry_directory(runtime))
+
+
 def install_telemetry(directory: Path | None) -> None:
-    HUB.configure(directory)
+    stored = HUB.configure(directory)
     install_logging_bridge()
+    if not stored:
+        record_event("telemetry_storage_unavailable", kind="telemetry")
     if _INSTALLED.get(str(os.getpid())):
         return
     _INSTALLED[str(os.getpid())] = True

@@ -104,6 +104,11 @@ def correlation() -> dict[str, Any]:
     ) if value}
 
 
+def _is_current_name(path: Path) -> bool:
+    """events-<day>-<pid>-<runtime>.jsonl; a rotated file carries one more -<epoch> part."""
+    return len(path.stem.split("-")) == 4
+
+
 class JsonlSink:
     """Per-process append-only files with rotation, size cap and retention."""
 
@@ -137,8 +142,11 @@ class JsonlSink:
         files = sorted(self.files(), key=lambda path: path.stat().st_mtime)
         cutoff = time.time() - RETENTION_SECONDS
         total = sum(path.stat().st_size for path in files)
+        today = datetime.now(timezone.utc).strftime("%Y%m%d")
         for path in files:
-            if path == self._path:
+            # Another worker may still append to its current file (today's name,
+            # not rotated): unlinking it would silently lose that worker's events.
+            if path == self._path or (_is_current_name(path) and path.name.split("-")[1] == today):
                 continue
             if path.stat().st_mtime < cutoff or total > TOTAL_MAX_BYTES:
                 total -= path.stat().st_size
@@ -166,11 +174,21 @@ class TelemetryHub:
     def directory(self) -> Path | None:
         return self._sink.directory if self._sink is not None else None
 
-    def configure(self, directory: Path | None) -> None:
+    def configure(self, directory: Path | None) -> bool:
+        """Use ``directory`` for the store; on any I/O failure keep the in-memory ring only.
+
+        Telemetry is observational: an unusable directory MAG NIET stop a worker from booting.
+        """
         with self._lock:
             if self._sink is not None:
                 self._sink.close()
-            self._sink = JsonlSink(directory) if directory is not None else None
+            try:
+                self._sink = JsonlSink(directory) if directory is not None else None
+            except Exception:
+                self._sink = None
+                self.dropped += 1
+                return False
+            return True
 
     def record(self, payload: dict[str, Any]) -> dict[str, Any] | None:
         try:

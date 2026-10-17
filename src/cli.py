@@ -112,7 +112,10 @@ def cmd_serve_console(a: argparse.Namespace) -> dict:
         runtime=a.runtime,
     )
     bind_pre_review_semantic_processing(console)
-    uvicorn.run(create_console_app(console), host=a.host, port=a.port)
+    from src.telemetry.install import install_console_observability
+    app = create_console_app(console)
+    install_console_observability(app, console.runtime)
+    uvicorn.run(app, host=a.host, port=a.port)
     return {"status": "PASS"}
 
 
