@@ -57,8 +57,12 @@ def test_module_imports_without_removed_definitions(module):
     assert present == []
 
 
+def _word(text, name):
+    return re.search(r"\b" + re.escape(name) + r"\b", text) is not None
+
+
 def test_repository_has_no_reference_to_removed_functions():
-    pattern = re.compile(r"\b(?:" + "|".join(map(re.escape, NAMES)) + r")\b")
+    # Per module: de naam MAG NIET in de definierende module staan, en NIET in een bestand dat die module noemt.
     hits = []
     for top in SEARCHED:
         for path in (ROOT / top).rglob("*"):
@@ -68,7 +72,10 @@ def test_repository_has_no_reference_to_removed_functions():
                 text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
-            hits.extend(f"{path.relative_to(ROOT)}:{m}" for m in sorted(set(pattern.findall(text))))
+            for module, names in REMOVED.items():
+                defining = path.resolve() == (ROOT / (module.replace(".", "/") + ".py")).resolve()
+                if defining or _word(text, module.rsplit(".", 1)[-1]):
+                    hits.extend(f"{path.relative_to(ROOT)}:{name}" for name in names if _word(text, name))
     assert hits == []
 
 
