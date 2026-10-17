@@ -69,7 +69,7 @@ def test_counters_are_bound_to_the_rendered_revision(tmp_path):
     assert scope and f"versie 1.0 · revisie {revision[:12]}" in scope.group(1)
 
 
-def test_knowledge_progress_excludes_excluded_source_record_and_keeps_lane_total(tmp_path):
+def test_knowledge_progress_and_lane_total_exclude_excluded_source_record(tmp_path):
     from src.operations_console_app import _lane_total
     from src.source_context_review_v1 import confirm_source_exclusions
     console, sid, account = guideline_document(tmp_path)
@@ -81,8 +81,8 @@ def test_knowledge_progress_excludes_excluded_source_record_and_keeps_lane_total
     html = _room(console, account, sid)
     progress = re.search(r'<progress data-knowledge-progress[^>]*value="(\d+)" max="(\d+)"', html)
     assert progress and progress.groups() == ("0", "1")
-    # OPENVRAAG-T1: the existing lane total still counts the excluded source record; unchanged here.
-    assert _lane_total(rows, review_path="richtlijn", lane="contextual", open_rows=[]) == 1
+    # #672: an excluded source record is source handling, never a finished knowledge review.
+    assert _lane_total(rows, review_path="richtlijn", lane="contextual", open_rows=[]) == 0
 
 
 def test_bulk_exclusion_only_for_v1_metadata_and_category_tiles(tmp_path):
