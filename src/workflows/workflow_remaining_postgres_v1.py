@@ -247,11 +247,3 @@ class PostgresWorkflowRemainingStore(PostgresWorkflowDocumentStore):
                     )
         except Exception as exc:
             raise WorkflowRemainingStoreError("workflow_audit_secret_write_failed") from exc
-
-    def delete_secret(self, name: str) -> None:
-        try:
-            with self._connect() as con:
-                with con.transaction():
-                    con.execute("DELETE FROM workflow.audit_secrets WHERE secret_name=%s", (name,))
-        except Exception as exc:
-            raise WorkflowRemainingStoreError("workflow_audit_secret_write_failed") from exc

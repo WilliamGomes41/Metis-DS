@@ -3149,13 +3149,6 @@ class OperationsConsole:
             governance["review_snapshot_hash"] = None
             governance["publication_status"] = "unpublished"
 
-    def _invalidate_all_bindings(self, snapshot_id: str) -> None:
-        self._bindings[snapshot_id] = invalidate_for_object(self._bindings.get(snapshot_id, []), "")
-        self._bindings[snapshot_id] = [
-            {**row, "valid": False} for row in self._bindings.get(snapshot_id, [])
-        ]
-        self._save_bindings()
-
     def _record_class_change_event(
         self,
         *,
