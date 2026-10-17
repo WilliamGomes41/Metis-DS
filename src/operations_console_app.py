@@ -2258,6 +2258,10 @@ def _review_task_dashboard(
     waiting_pending: int = 0,
     heading_done_override: int | None = None,
     individual_done_override: int | None = None,
+    review_path: str = "richtlijn",
+    knowledge_open: int | None = None,
+    knowledge_progress: dict[str, int] | None = None,
+    count_scope: str = "",
 ) -> str:
     heading_pending = (
         int(heading_pending_override)
@@ -2323,6 +2327,27 @@ def _review_task_dashboard(
         f'{waiting_pending} wachten op een andere beoordelaar</a>. Jij kunt deze tweede beoordeling niet overnemen.</p>'
         if waiting_pending else ''
     )
+    scope_html = (f'<p class="review-count-scope" data-count-scope>{_esc(count_scope)}</p>'
+                  if count_scope else '')
+    if review_path == "boom" or knowledge_open is None:
+        # Beslisboom: no knowledge counter; the existing task list stays as is.
+        work_html = f'<div class="review-task-grid">{rows}</div>\n        {waiting}'
+    else:
+        cards = {
+            task: _review_task_card(
+                snapshot_id, task=task, title=title, description="", status=statuses[task],
+                recommended=False,
+            )
+            for task, title, description, count in available
+            if recommended is None or task != recommended[0]
+        }
+        work_html = _review_layers_html(
+            snapshot_id, cards=cards, waiting_html=waiting,
+            knowledge_open=int(knowledge_open), knowledge_progress=knowledge_progress,
+            second_review_pending=second_review_pending, heading_pending=heading_pending,
+            heading_done=heading_done, blocked_count=blocked_count,
+            disposition_pending=disposition_pending,
+        )
     repair_notice = (
         f'<p class="review-blocked-notice">{blocked_count} '
         f'{"passage is" if blocked_count == 1 else "passages zijn"} nog niet beschikbaar voor goedkeuring. '
@@ -2340,8 +2365,8 @@ def _review_task_dashboard(
           </div>
           <a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a>
         </div>
-        <div class="review-task-grid">{rows}</div>
-        {waiting}
+        {scope_html}
+        {work_html}
         </div>
         <aside class="review-sidebar" aria-label="Reviewvoortgang">
         {_review_progress_overview(snapshot_id, progress)}
@@ -2350,6 +2375,145 @@ def _review_task_dashboard(
         </div>
       </section>
     '''
+
+
+def _review_count(name: str, value: int) -> str:
+    return f'<p class="review-group-count" data-count="{_esc(name)}">{int(value)}</p>'
+
+
+def _review_layers_html(
+    snapshot_id: str,
+    *,
+    cards: dict[str, str],
+    waiting_html: str,
+    knowledge_open: int,
+    knowledge_progress: dict[str, int] | None,
+    second_review_pending: int,
+    heading_pending: int,
+    heading_done: int,
+    blocked_count: int,
+    disposition_pending: int,
+) -> str:
+    """Three presentation layers over existing task counts; no own selection or policy."""
+    doc = _esc(snapshot_id)
+    progress_html = ""
+    if knowledge_progress is not None:
+        total = int(knowledge_progress.get("total") or 0)
+        done = int(knowledge_progress.get("done") or 0)
+        superseded = int(knowledge_progress.get("superseded") or 0)
+        progress_html = (
+            f'<p class="review-knowledge-progress-text">{done} van {total} inhoudelijk beoordeelbare '
+            f'kennisvoorstellen afgehandeld</p>'
+            f'<progress data-knowledge-progress aria-label="Afgehandelde kennisvoorstellen" value="{done}" max="{total}">'
+            f'{done}/{total}</progress>'
+            + (f'<p class="muted">{superseded} vervangen door een opvolger; niet als afgehandeld geteld.</p>'
+               if superseded else '')
+        )
+    ratio_total = knowledge_open + disposition_pending
+    return f'''
+        <section class="review-layer review-layer-assess" data-review-layer="beoordelen" aria-label="Beoordelen">
+          <h3>Beoordelen</h3>
+          <div class="review-group" data-review-group="kennis">
+            <h4>Kennisvoorstellen</h4>
+            {_review_count("kennis", knowledge_open)}
+            <p class="review-group-lead">Open inhoudelijke beoordelingen voor jou. Wat beslist u hier: klopt dit voorstel inhoudelijk met de bron?</p>
+            {progress_html}
+            <div class="review-task-grid">{cards.get("contextual", "")}{cards.get("batch", "")}</div>
+          </div>
+          <div class="review-group" data-review-group="tweede">
+            <h4>Tweede review</h4>
+            {_review_count("tweede", second_review_pending)}
+            <p class="review-group-lead">Onafhankelijk dezelfde versie beoordelen.</p>
+            <div class="review-task-grid">{cards.get("second_review", "")}</div>
+            {waiting_html}
+          </div>
+          <div class="review-group" data-review-group="koppen">
+            <h4>Koppen</h4>
+            {_review_count("koppen", heading_pending)}
+            <p class="review-group-lead">Documentstructuur controleren; geen inhoudelijke goedkeuring. {heading_done} afgerond.</p>
+            <div class="review-task-grid">{cards.get("structure", "")}</div>
+          </div>
+        </section>
+        <details class="review-layer review-layer-source" data-review-layer="bronwerk">
+          <summary>Bronwerk en afhandeling · herstel {blocked_count} · bronafhandeling open {disposition_pending}</summary>
+          <div class="review-group" data-review-group="herstel">
+            <h4>Herstel</h4>
+            {_review_count("herstel", blocked_count)}
+            <p class="review-group-lead">Bron of verwerking herstellen; goedkeuren kan pas daarna.</p>
+            <p class="muted">{"Zie de herstelmelding bij de voortgang." if blocked_count else "Geen herstel open."}</p>
+          </div>
+          <div class="review-group" data-review-group="bronafhandeling">
+            <h4>Bronafhandeling open</h4>
+            {_review_count("bronafhandeling", disposition_pending)}
+            <p class="review-group-lead">Gebruik van bronregels bepalen. Beoordelingswerk en bronafhandeling zijn afzonderlijke controles; de aantallen mogen overlappen.</p>
+            <div class="review-task-grid">{cards.get("disposition", "")}</div>
+            <p class="review-filter-links"><a href="/review?document={doc}&amp;task=disposition">Onbeslist</a> · <a href="/review?document={doc}&amp;task=inventory">Alles</a></p>
+          </div>
+          <div class="review-open-work-ratio" data-open-work-ratio>
+            <p>Verhouding open werk: {knowledge_open} kennisvoorstellen · {disposition_pending} bronafhandeling open</p>
+            <progress aria-label="Aandeel kennisvoorstellen in open werk" value="{knowledge_open}" max="{ratio_total}">{knowledge_open}/{ratio_total}</progress>
+          </div>
+        </details>
+        <details class="review-layer review-layer-history" data-review-layer="inzage">
+          <summary>Ter inzage</summary>
+          <p><a href="/review?document={doc}&amp;task=history">Besluiten en historie</a> (alleen lezen)</p>
+        </details>
+    '''
+
+
+def knowledge_open_count(
+    objects: list[dict[str, Any]],
+    *,
+    review_path: str,
+    bindings: list[dict[str, Any]] | None,
+    reviewer_id: str,
+    fragments=None,
+) -> int | None:
+    """Open ReviewDuties in the contextual and batch lanes; never partition()['knowledge']."""
+    if review_path == "boom":
+        return None
+    from src.review_duty_v1 import review_duty_counts, reviewer_route_counts
+    if bindings is None:
+        counts = review_duty_counts(objects, review_path=review_path, bindings=None, fragments=fragments)
+        return int(counts["contextual_review_duties"]) + int(counts["batch_review_duties"])
+    counts = reviewer_route_counts(objects, review_path=review_path, reviewer_id=reviewer_id,
+                                   bindings=bindings, fragments=fragments)
+    return int(counts["actionable_contextual_duties"]) + int(counts["actionable_batch_duties"])
+
+
+def knowledge_progress(objects: list[dict[str, Any]], *, review_path: str) -> dict[str, int] | None:
+    """Denominator: current content_reviewable objects; superseded is shown apart."""
+    if review_path == "boom":
+        return None
+    from src.knowledge_path_v1 import content_reviewable
+    counts = {"total": 0, "done": 0, "superseded": 0}
+    for obj in objects:
+        if not content_reviewable(obj):
+            continue
+        counts["total"] += 1
+        disposition = definitive_review_disposition(obj)
+        if not disposition["final"]:
+            continue
+        if "superseded" in {str(disposition.get("outcome") or ""), str(disposition.get("review_status") or "")}:
+            counts["superseded"] += 1
+        else:
+            counts["done"] += 1
+    return counts
+
+
+def count_scope_label(version: Any, *, revision: str = "", observed_at: str = "") -> str:
+    """Counters belong to one read: document version plus revision, or the render instant."""
+    parts = [f"Tellers voor versie {version}"] if str(version or "").strip() else ["Tellers"]
+    if revision:
+        parts.append(f"revisie {str(revision)[:12]}")
+    elif observed_at:
+        from datetime import datetime, timezone
+        try:
+            instant = datetime.fromisoformat(str(observed_at).replace("Z", "+00:00")).astimezone(timezone.utc)
+            parts.append("peiltijd " + instant.strftime("%Y-%m-%d %H:%M UTC"))
+        except ValueError:
+            pass
+    return " · ".join(parts) if len(parts) > 1 or revision or observed_at else ""
 
 
 def _review_task_header(snapshot_id: str, title: str, description: str) -> str:
@@ -2699,6 +2863,25 @@ def _lane_total(
     return len(open_rows) + finished
 
 
+_SOURCE_KIND_LABELS = {
+    "unresolved": "Brongebruik nog te bepalen", "invalid_evidence": "Bronbewijs herstellen",
+    "linked_context": "Gekoppelde context", "document_information": "Documentinformatie",
+    "reviewed": "Handmatig afgehandeld",
+}
+
+
+def _source_category_tiles(source_usage: dict[str, dict[str, Any]]) -> str:
+    """Counts per existing source-usage kind of the central projection; read-only."""
+    counts = {kind: 0 for kind in _SOURCE_KIND_LABELS}
+    for usage in source_usage.values():
+        if usage.get("kind") in counts:
+            counts[usage["kind"]] += 1
+    return ('<ul class="source-category-tiles" data-source-categories>'
+            + "".join(f'<li data-source-category="{kind}"><b>{count}</b> {_esc(_SOURCE_KIND_LABELS[kind])}</li>'
+                      for kind, count in counts.items())
+            + '</ul>')
+
+
 def _review_inventory(
     snapshot_id: str,
     objects: list[dict[str, Any]],
@@ -2762,9 +2945,7 @@ def _review_inventory(
         if is_source_record(obj) and (evidence_of(obj).get("version") == "source-accountability-v2" or projection[object_id]["human_action"] == "technical_repair"):
             usage = source_usage[object_id]
             kind = usage["kind"]
-            label = {"reviewed": "Handmatig afgehandeld", "document_information": "Documentinformatie",
-                     "linked_context": "Gekoppelde context", "unresolved": "Brongebruik nog te bepalen",
-                     "invalid_evidence": "Bronbewijs herstellen"}[kind]
+            label = _SOURCE_KIND_LABELS[kind]
             section = " / ".join((obj.get("structure") or {}).get("section_path") or
                                   (obj.get("metadata") or {}).get("section_path") or []) or "Document"
             group = source_groups.setdefault((label, section), [])
@@ -2844,7 +3025,8 @@ def _review_inventory(
     if metadata_items or source_items or source_groups:
         source_html = ('<section data-source-accountability><h3>Bronverantwoording</h3>'
             '<p>Deze bronregels zijn geen gevormde kennisobjecten. De bron blijft behouden. '
-            'Open inhoudelijke bronafhandeling blokkeert publicatie.</p>')
+            'Open inhoudelijke bronafhandeling blokkeert publicatie.</p>'
+            + _source_category_tiles(source_usage))
         for (label, section), group in source_groups.items():
             source_html += (f'<details data-source-group><summary>{_esc(label)} · {_esc(section)} ({len(group)} bronregels)</summary>'
                             + '<ol>' + "".join(group) + '</ol></details>')
@@ -2873,6 +3055,12 @@ def _review_inventory(
         + _review_task_header(snapshot_id, title, "Beoordelingswerk en bronafhandeling zijn afzonderlijke controles; de aantallen mogen overlappen")
         + f'<p>{len(items)} beoordelings- of historieregels; {len(metadata_items) + len(source_items) + sum(len(g) for g in source_groups.values())} bronregels.</p>'
         + f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p>'
+        + (f'<nav class="review-filter" data-review-filter aria-label="Filter bronafhandeling">'
+           f'<a{" aria-current=\"page\"" if task == "disposition" else ""} '
+           f'href="/review?document={_esc(snapshot_id)}&amp;task=disposition">Onbeslist</a> · '
+           f'<a{" aria-current=\"page\"" if task == "inventory" else ""} '
+           f'href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alles</a></nav>'
+           if task in {"inventory", "disposition"} else '')
         + '<ol data-knowledge-proposals class="object-index review-passage-inventory">' + "".join(items) + '</ol>' + source_html
         + ('<p class="review-task-empty">Deze lijst is leeg. Controleer het volledige passage-overzicht voor ander werk.</p>' if not items and not source_html else '')
         + '</section>'
@@ -3070,6 +3258,7 @@ def _render_review_index(
     bindings: list[dict[str, Any]] | None = None,
     reviewer_id: str = "",
     fragments=None,
+    document_version: object = "",
 ) -> str:
     task = normalize_review_task(task)
     bindings = list(bindings) if bindings is not None else None
@@ -3214,6 +3403,11 @@ def _render_review_index(
             for obj in snapshot_objects
             for route in [reviewer_route_for(obj, review_path=review_path, reviewer_id=reviewer_id, bindings=bindings, fragments=fragments)]
         ) if bindings is not None else 0,
+        review_path=review_path,
+        knowledge_open=knowledge_open_count(snapshot_objects, review_path=review_path, bindings=bindings,
+                                            reviewer_id=reviewer_id, fragments=fragments),
+        knowledge_progress=knowledge_progress(snapshot_objects, review_path=review_path),
+        count_scope=count_scope_label(str(document_version or ""), revision=snapshot_revision),
     )
 
 
@@ -3542,7 +3736,8 @@ def _render_review_room(
                 normal_review_enabled=isinstance(console, ProportionateReviewConsole),
                 audit_signals=audit_signals,
                 bindings=bindings,
-                reviewer_id=str(account.get("account_id") or ""), fragments=console.review_source_fragments(chosen)
+                reviewer_id=str(account.get("account_id") or ""), fragments=console.review_source_fragments(chosen),
+                document_version=chosen_row.get("version"),
             )
         else:
             obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)

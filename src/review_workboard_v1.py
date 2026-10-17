@@ -351,6 +351,7 @@ def review_work_item(
     item["individual_total"] = console_ui._lane_total(
         objects, review_path=review_path, lane="contextual", open_rows=individual)
     item["progress"] = console_ui._review_progress_summary(objects)
+    item["knowledge_progress"] = console_ui.knowledge_progress(objects, review_path=review_path)
     item["has_review_decision"] = any(
         str((obj.get("governance") or {}).get("validated_by") or "").strip()
         and not is_forbidden_reviewer(str(obj["governance"]["validated_by"]))
@@ -675,6 +676,12 @@ def _workboard_page(
                     second_review_pending=item["actionable_second_review_duties"],
                     disposition_pending=item["closure_gap_count"],
                     waiting_pending=item["waiting_for_reviewer_duties"],
+                    review_path=_review_path_of(envelope),
+                    knowledge_open=(None if _review_path_of(envelope) == "boom" else
+                                    int(item.get("actionable_contextual_duties") or 0)
+                                    + int(item.get("actionable_batch_duties") or 0)),
+                    knowledge_progress=item.get("knowledge_progress"),
+                    count_scope=console_ui.count_scope_label(envelope.get("version"), observed_at=_observed_at()),
                 )
         dashboard = roster(console, envelope, reviewer_names) + f'<a href="/review/trajectory?{_esc(urlencode({"document": chosen}))}">Traject en deelnemers</a>' + dashboard
         # IDs must remain unique when several workspaces share one page.
@@ -693,6 +700,18 @@ def _workboard_page(
                  + console_ui._task_links("review") + controls + '<div class="doc-list">' + ''.join(cards)
                  + (('<p>Geen documenten gevonden.</p>' if q else '<p>Geen aan jou toegewezen reviewdocumenten.</p>') if not cards else '')
                  + '</div></section>', title="Review — Metis")
+
+
+def _review_path_of(envelope: dict[str, Any]) -> str:
+    try:
+        return review_path_for_klasse(str(envelope.get("class") or ""))
+    except ValueError:
+        return "richtlijn"
+
+
+def _observed_at() -> str:
+    import src.operations_console_v1 as console_kernel
+    return console_kernel.utc_now()
 
 
 def _projected_document_dashboard(
@@ -769,6 +788,11 @@ def _projected_document_dashboard(
         second_review_pending=actionable_second,
         disposition_pending=int(summary.get("closure_gap_count") or 0),
         waiting_pending=int(summary.get("waiting_for_reviewer_duties") or 0),
+        review_path=_review_path_of(envelope),
+        # Native summaries carry no content_reviewable denominator: open counter only (OPENVRAAG-T2).
+        knowledge_open=None if _review_path_of(envelope) == "boom" else actionable_contextual + actionable_batch,
+        knowledge_progress=None,
+        count_scope=console_ui.count_scope_label(envelope.get("version"), observed_at=_observed_at()),
     )
     if content_only:
         return dashboard
