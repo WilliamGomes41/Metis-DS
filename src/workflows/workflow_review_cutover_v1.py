@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+from collections import deque
 from contextlib import contextmanager, suppress
 from copy import deepcopy
 from pathlib import Path
@@ -19,6 +21,37 @@ from src.workflows.workflow_review_postgres_v1 import (
     WorkflowReviewStoreError,
 )
 from src.workflows.workflow_transaction_v1 import workflow_transaction
+
+
+_REMIRROR_WARNED_ATTR = "_metis_review_remirror_warned"
+# Fallback for exceptions that reject attributes: identity match against the
+# most recent ones; holding the objects keeps their id() from being reused.
+_remirror_warned_fallback: deque[BaseException] = deque(maxlen=32)
+_remirror_warned_fallback_lock = threading.Lock()
+
+
+def _remirror_warning_already_logged(original: BaseException) -> bool:
+    """Return True when a remirror warning was already logged for this fault.
+
+    Follows explicit wrapping (``raise ... from``) so a wrapped original counts
+    as the same fault. Marks ``original`` otherwise; NOOIT raises.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = original
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if getattr(current, _REMIRROR_WARNED_ATTR, False):
+            return True
+        with _remirror_warned_fallback_lock:
+            if any(item is current for item in _remirror_warned_fallback):
+                return True
+        current = current.__cause__
+    try:
+        setattr(original, _REMIRROR_WARNED_ATTR, True)
+    except Exception:
+        with _remirror_warned_fallback_lock:
+            _remirror_warned_fallback.append(original)
+    return False
 
 
 class _PostgresWorkflowReviewMixin:
@@ -123,6 +156,10 @@ class _PostgresWorkflowReviewMixin:
                     self.refresh_workflow_documents()
                     self.refresh_objects_expected_revision(snapshot_id)
         except Exception as remirror_exc:
+            # Option C: every nesting level remirrors, but the warning MOET
+            # appear exactly once per original exception.
+            if _remirror_warning_already_logged(original):
+                return
             # Codes, ids and error types only: no text, corrections or actors.
             logging.getLogger(__name__).warning(
                 "review_rollback_remirror_failed snapshot_id=%s error_code=%s remirror_error_type=%s",
