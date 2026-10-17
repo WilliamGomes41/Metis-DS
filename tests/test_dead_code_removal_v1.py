@@ -17,6 +17,7 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 import re
+import sys
 
 import pytest
 
@@ -69,3 +70,30 @@ def test_repository_has_no_reference_to_removed_functions():
                 continue
             hits.extend(f"{path.relative_to(ROOT)}:{m}" for m in sorted(set(pattern.findall(text))))
     assert hits == []
+
+
+def _plant(root, rel, text):
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def test_unrelated_same_name_elsewhere_is_not_a_reference(tmp_path, monkeypatch):
+    # Codex P2 op #735: een ongerelateerde helper met dezelfde kale naam MAG CI NIET breken.
+    _plant(tmp_path, "src/other_v1.py", "def _status_ok(row):\n    return True\n\n\ndef delete_secret(name):\n    return name\n")
+    _plant(tmp_path, "docs/notes.md", "`_pending_count` telt iets anders in een andere module.\n")
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+    test_repository_has_no_reference_to_removed_functions()
+
+
+@pytest.mark.parametrize("rel,text", [
+    ("src/caller_v1.py", "from src.extract_metrics_v1 import _status_ok\n"),
+    ("src/caller_v1.py", "import src.extract_metrics_v1 as metrics\nmetrics._status_ok({})\n"),
+    ("tests/test_caller.py", "getattr(importlib.import_module('src.workflows.workflow_remaining_postgres_v1'), 'delete_secret')\n"),
+    ("src/extract_metrics_v1.py", "def _status_ok(row):\n    return True\n"),
+])
+def test_reference_through_defining_module_is_still_caught(tmp_path, monkeypatch, rel, text):
+    _plant(tmp_path, rel, text)
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+    with pytest.raises(AssertionError):
+        test_repository_has_no_reference_to_removed_functions()
