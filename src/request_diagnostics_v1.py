@@ -40,7 +40,6 @@ DEPLOYED_COMMIT_MARKER = Path(__file__).resolve().parents[1] / 'config' / 'deplo
 _COMMIT_RE = re.compile(r'[0-9a-f]{40}')
 _TRACEPARENT_RE = re.compile(rb'00-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}')
 _SNAPSHOT_RE = re.compile(r'snap-[0-9a-f]{8,32}-[0-9a-f]{4,32}')
-_ID_SEGMENT_RE = re.compile(r'(?:snap-[0-9a-f-]+|pa_[0-9a-f]+|[0-9a-f]{12,}|[0-9a-f-]{32,36}|\d+)')
 
 
 def deployed_commit():
@@ -156,10 +155,26 @@ def diagnostic_since(name, started, *, overlapping=False):
     return now
 
 
-def route_label(path):
-    """Bounded route label: identifier-like path segments become {id}."""
-    parts = [('{id}' if _ID_SEGMENT_RE.fullmatch(part) else part[:40]) for part in str(path).split('/')]
-    return '/'.join(parts)[:120] or '/'
+UNMATCHED_ROUTE = '<unmatched>'
+
+
+def route_label(scope):
+    """The app's route template for this request, else a fixed label.
+
+    Raw paths MAG NIET be stored: an unmatched path can carry names or
+    clinical terms, and every signed-in account reads telemetry.
+    """
+    from starlette.routing import Match
+    app = scope.get('app')
+    for route in getattr(getattr(app, 'router', None), 'routes', None) or ():
+        try:
+            match, _child = route.matches(scope)
+        except Exception:
+            continue
+        template = getattr(route, 'path', None)
+        if match != Match.NONE and isinstance(template, str) and template.startswith('/'):
+            return template[:120]
+    return UNMATCHED_ROUTE
 
 
 def _observed(scope):
@@ -189,13 +204,19 @@ def _snapshot_from(scope):
     return None
 
 
-def _trace_from(scope):
+def _traceparent(scope):
+    """The caller's valid W3C traceparent header, else None."""
     for key, value in scope.get('headers', []):
         if key.lower() == b'traceparent':
             match = _TRACEPARENT_RE.fullmatch(value.strip())
             if match and match.group(1) != b'0' * 32:
-                return match.group(1).decode('ascii')
-    return uuid.uuid4().hex
+                return value.strip().decode('ascii')
+    return None
+
+
+def _trace_from(scope):
+    parent = _traceparent(scope)
+    return parent[3:35] if parent else uuid.uuid4().hex
 
 
 def _add_phase_time(table, key, inclusive, exclusive):
@@ -272,9 +293,12 @@ class AzureTelemetry:
         self.handler.handle(record)
 
     @contextlib.contextmanager
-    def request(self, route, method='GET'):
+    def request(self, route, method='GET', traceparent=None):
         from opentelemetry.trace import SpanKind
-        with self.tracer.start_as_current_span(method+' '+route, kind=SpanKind.SERVER,
+        from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+        # Continue the caller's W3C trace instead of starting an unrelated root span.
+        parent = TraceContextTextMapPropagator().extract({'traceparent': traceparent}) if traceparent else None
+        with self.tracer.start_as_current_span(method+' '+route, context=parent, kind=SpanKind.SERVER,
                 attributes={'http.request.method': method, 'http.route': route},
                 record_exception=False, set_status_on_exception=False) as span:
             yield span
@@ -323,13 +347,15 @@ class RequestDiagnostics:
                 pass
 
     @contextlib.contextmanager
-    def request_span(self, route, method='GET'):
+    def request_span(self, route, method='GET', traceparent=None):
         context = None
         span = None
         if self.telemetry:
             try:
-                context = (self.telemetry.request(route) if method == 'GET'
-                           else self.telemetry.request(route, method=method))
+                kwargs = {} if method == 'GET' else {'method': method}
+                if traceparent:
+                    kwargs['traceparent'] = traceparent
+                context = self.telemetry.request(route, **kwargs)
                 span = context.__enter__()
             except Exception:
                 context = None
@@ -369,7 +395,7 @@ class RequestDiagnostics:
                       if key.lower() == b'x-metis-attempt-id']
         attempt = (candidates[0].decode('ascii') if len(candidates) == 1
                    and re.fullmatch(rb'[0-9a-f]{32}', candidates[0]) else None)
-        evidence = RequestEvidence(uuid.uuid4().hex, route_label(scope['path']), self.emit,
+        evidence = RequestEvidence(uuid.uuid4().hex, route_label(scope), self.emit,
                                    method=scope['method'], attempt_id=attempt,
                                    trace_id=_trace_from(scope), doc_ref=doc_ref(_snapshot_from(scope)))
         token = _CURRENT.set(evidence)
@@ -391,7 +417,7 @@ class RequestDiagnostics:
                 evidence.report('response_completed', status=status)
         # Export initialization is outside the request path. The SDK uses bounded
         # asynchronous queues; request processing never waits for network export.
-        with self.request_span(evidence.route, scope['method']) as span:
+        with self.request_span(evidence.route, scope['method'], _traceparent(scope)) as span:
             try:
                 if span is not None and span.get_span_context().trace_id:
                     # One id from the browser to Azure Monitor: adopt the span's trace.

@@ -205,6 +205,35 @@ def test_logged_exception_keeps_fingerprint_after_structured_logging_redaction(h
     assert 'patient secret' not in json.dumps(event)
 
 
+
+def test_unmatched_paths_get_a_fixed_label_and_inbound_trace_reaches_the_span(events):
+    with TestClient(_app(), raise_server_exceptions=False) as client:
+        assert client.get('/missing/Jane-Doe/diagnosis').status_code == 404
+    started = next(e for e in events if e['event'] == 'request_started')
+    assert started['route'] == '<unmatched>' and 'Jane' not in json.dumps(events)
+    from opentelemetry.sdk.trace import TracerProvider
+    from src.request_diagnostics_v1 import AzureTelemetry
+    telemetry = AzureTelemetry.__new__(AzureTelemetry)
+    telemetry.tracer = TracerProvider().get_tracer('test')
+    trace = '0af7651916cd43dd8448eb211c80319c'
+    with telemetry.request('/review', traceparent=f'00-{trace}-b7ad6b7169203331-01') as span:
+        assert format(span.get_span_context().trace_id, '032x') == trace
+
+
+def test_standalone_errors_follow_the_window_and_request_filters():
+    now = time.time()
+    rows = _history(now)
+    rows.append({'ts': _event(now - 3500, 'x', 'x')['ts'], 'kind': 'log', 'event': 'log_record',
+                 'level': 'ERROR', 'logger': 'old', 'message': 'before_window'})
+    rows.append({'ts': _event(now - 60, 'x', 'x')['ts'], 'kind': 'log', 'event': 'log_record',
+                 'level': 'ERROR', 'logger': 'tree', 'message': 'other_route', 'request_id': 'running'})
+    labels = lambda summary: {g['label'] for g in summary['errors']}
+    window = analysis.summarize(rows, now=now, since=now - 600)
+    assert 'Log ERROR: before_window' not in labels(window) and 'Log ERROR: other_route' in labels(window)
+    filtered = analysis.summarize(rows, filters={'route': '/review'}, now=now, since=now - 600)
+    assert 'Log ERROR: other_route' not in labels(filtered)
+
+
 def _event(t, name, rid, **fields):
     from datetime import datetime, timezone
     ts = datetime.fromtimestamp(t, timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')

@@ -184,7 +184,15 @@ def summarize(events: list[dict], *, filters: dict[str, str] | None = None, now:
     slow_threshold = percentile(durations, SLOW_PERCENTILE)
     lock_waits = [float(r.phases().get("store_lock_wait", {}).get("inclusive_ms", 0))
                   for r in requests if "store_lock_wait" in r.phases()]
-    groups = _error_groups(requests, other, now, size, start_bucket, len(series))
+    # Standalone logs and crashes follow the same window, and under request filters only
+    # those of the matched requests remain (a fingerprint filter also keeps its own group).
+    standalone = [event for event in other if event["_t"] >= since]
+    active = {key: value for key, value in filters.items() if value}
+    if active:
+        matched = {request.request_id for request in requests}
+        standalone = [event for event in standalone if event.get("request_id") in matched
+                      or (set(active) == {"error"} and _standalone_key(event) == active["error"])]
+    groups = _error_groups(requests, standalone, now, size, start_bucket, len(series))
     for group in groups:
         group["guidance"] = guidance_for_group(group)
     routes = _routes(requests, now)
@@ -280,6 +288,18 @@ def _phases(requests: list[Request]) -> list[dict[str, Any]]:
     return sorted(rows, key=lambda row: row["exclusive_ms"], reverse=True)
 
 
+def _standalone_key(event: dict) -> str | None:
+    """Group key of a WARNING+ log or an unhandled exception; None for other events."""
+    error = event.get("error") if isinstance(event.get("error"), dict) else None
+    if event.get("kind") == "log" and event.get("level") in ("ERROR", "CRITICAL", "WARNING"):
+        message = str(event.get("message") or "")[:80]
+        template = message.split(" ", 1)[0] if message else "log"
+        return (error or {}).get("fingerprint") or f"log:{event.get('logger')}:{template}"
+    if event.get("event") == "unhandled_exception" and error:
+        return error.get("fingerprint") or "unhandled"
+    return None
+
+
 def _error_groups(requests: list[Request], other: list[dict], now: float, size: int,
                   start_bucket: float, bucket_count: int) -> list[dict[str, Any]]:
     groups: dict[str, dict[str, Any]] = {}
@@ -328,15 +348,17 @@ def _error_groups(requests: list[Request], other: list[dict], now: float, size: 
         add(group(key, label=label, kind=kind, error=error), request.started, request.route,
             request.commit, request.request_id, (error or {}).get("frames"))
     for event in other:
+        key = _standalone_key(event)
+        if key is None:
+            continue
         error = event.get("error") if isinstance(event.get("error"), dict) else None
-        if event.get("kind") == "log" and event.get("level") in ("ERROR", "CRITICAL", "WARNING"):
+        if event.get("kind") == "log":
             message = str(event.get("message") or "")[:80]
             template = message.split(" ", 1)[0] if message else "log"
-            key = (error or {}).get("fingerprint") or f"log:{event.get('logger')}:{template}"
             item = group(key, label=f"Log {event.get('level')}: {template}", kind="log", error=error)
             add(item, event["_t"], None, event.get("commit"), event.get("request_id"), (error or {}).get("frames"))
-        elif event.get("event") == "unhandled_exception" and error:
-            item = group(error.get("fingerprint") or "unhandled", label=f"Onafgevangen ({event.get('origin')}): {error.get('type')}",
+        else:
+            item = group(key, label=f"Onafgevangen ({event.get('origin')}): {error.get('type')}",
                          kind="unhandled", error=error)
             add(item, event["_t"], None, event.get("commit"), None, error.get("frames"))
     rows = []
