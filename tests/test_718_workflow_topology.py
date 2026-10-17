@@ -134,7 +134,8 @@ def test_native_complete_build_login_and_restart(azure, tmp_path, monkeypatch, r
     with TestClient(app) as client:
         assert client.get("/login").status_code == 200
     restarted = asgi.build_app().state.operations_kernel
-    assert created["account_id"] in restarted._accounts
+    authenticated = restarted.authenticate("topology.reviewer", "topology-test-secret")
+    assert authenticated["account_id"] == created["account_id"]
 
 
 from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: F401,E402
