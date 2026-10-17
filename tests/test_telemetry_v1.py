@@ -339,6 +339,17 @@ def test_form_backed_document_commands_carry_doc_ref(events):
     assert finished['doc_ref'] == doc_ref(sid) and sid not in json.dumps(events)
 
 
+
+def test_analysis_holds_only_the_newest_events_in_memory(hub, monkeypatch):
+    from src.telemetry import routes
+    monkeypatch.setattr(routes, 'MAX_ANALYZED_EVENTS', 3)
+    for i in range(5):
+        hub.record({'event': f'e{i}', 'ts': f'2026-10-17T10:00:0{i}.000Z'})
+    events, truncated = routes._recent_events(0)
+    assert [e['event'] for e in events] == ['e2', 'e3', 'e4'] and truncated
+    assert routes._recent_events(0)[1] is True and len(routes._recent_events(0)[0]) == 3
+
+
 def _event(t, name, rid, **fields):
     from datetime import datetime, timezone
     ts = datetime.fromtimestamp(t, timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')

@@ -369,7 +369,8 @@ function render() {
   renderProcess(data.process);
   $('#tm-about').textContent = `${nf.format(data.telemetry.events)} events in dit venster, opgeslagen ${data.telemetry.store === 'disk' ? 'op schijf (alle workers, 7 dagen, max. 64 MB)' : 'alleen in het geheugen van deze worker'}. ` +
     'Alleen vaste velden: route-sjablonen, statussen, tijden, fasenamen, begrensde id’s, commit, exceptietype, foutcode en Metis-codelocaties. Documenten alleen als pseudoniem (doc_ref). Nooit inhoud, gebruikers, SQL of foutteksten.' +
-    (data.telemetry.dropped ? ` ${data.telemetry.dropped} events konden niet worden vastgelegd.` : '');
+    (data.telemetry.dropped ? ` ${data.telemetry.dropped} events konden niet worden vastgelegd.` : '') +
+    (data.telemetry.truncated ? ' Alleen de nieuwste 50.000 events zijn geanalyseerd; kies een korter venster voor het volledige beeld.' : '');
 }
 
 function renderInsights(items) {
