@@ -253,3 +253,30 @@ def test_successful_nested_approve_commits_once_and_mirrors_after(workflow_postg
     _assert_disk_mirrors_equal_pg(console)
     _assert_document_mirrors_equal_pg(console, sid)
     assert _batch_type(obj_a)
+
+
+def test_u2_failed_participant_refresh_poisons_the_command(workflow_postgres, tmp_path, monkeypatch):
+    """Codex P1 on #739: when the refresh after a caught participant fault fails,
+    the owner MAG NIET commit the stale in-process state; the command rolls back."""
+    console, rid, sid, (obj_a, obj_b) = _setup(tmp_path, workflow_postgres)
+    before = _state(console, sid)
+    original = console.workflow_review_store.read_bindings
+    armed = []
+
+    def failing_after_fault(*args, **kwargs):
+        if armed:
+            raise RuntimeError("read_bindings_down")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(console.workflow_review_store, "read_bindings", failing_after_fault)
+    with pytest.raises(ConsoleError, match="store_command_participant_refresh_failed"):
+        with console._atomic_snapshot_mutation(sid):
+            try:
+                with console._atomic_snapshot_mutation(sid):
+                    _approve(console, rid, sid, obj_a)
+                    armed.append(1)
+                    raise RuntimeError("u2_caught_inner")
+            except RuntimeError as exc:
+                assert str(exc) == "u2_caught_inner"
+            armed.clear()
+    assert _state(_console(tmp_path, workflow_postgres), sid) == before

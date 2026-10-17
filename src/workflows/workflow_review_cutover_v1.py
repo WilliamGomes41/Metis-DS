@@ -238,6 +238,9 @@ class _PostgresWorkflowReviewMixin:
                     self._reload_store_locked()
                     with buffer_events(self._ledger_path) if buffered else nullcontext():
                         yield command
+                    if command.poisoned:
+                        # A caught participant fault left unverified process state.
+                        raise ConsoleError("store_command_participant_refresh_failed")
             except BaseException as exc:
                 close_store_command(token)
                 self._remirror_after_rollback(snapshot_id, exc)
@@ -262,11 +265,15 @@ class _PostgresWorkflowReviewMixin:
             # The savepoint rolled this level back: drop its ledger lines and
             # refresh process state from the transaction's own view (reads only).
             del command.events[mark:]
-            self._refresh_runtime_in_command(snapshot_id)
+            if not self._refresh_runtime_in_command(snapshot_id):
+                command.poisoned = True
             raise
 
-    def _refresh_runtime_in_command(self, snapshot_id: str | None) -> None:
-        """Re-read in-process maps inside the open command. NOOIT a disk write; U4."""
+    def _refresh_runtime_in_command(self, snapshot_id: str | None) -> bool:
+        """Re-read in-process maps inside the open command. NOOIT a disk write; U4.
+
+        Returns False when the refresh failed; the owner then rolls back.
+        """
         try:
             self._bindings = self.workflow_review_store.read_bindings()
             self._bindings_baseline = deepcopy(self._bindings)
@@ -278,6 +285,8 @@ class _PostgresWorkflowReviewMixin:
                 "store_command_participant_refresh_failed snapshot_id=%s error_type=%s",
                 snapshot_id or "", type(refresh_exc).__name__,
             )
+            return False
+        return True
 
     def _remirror_from_pg(self, command: StoreCommand) -> None:
         """B1: the single mirror writer, after a successful commit, under the store lock.

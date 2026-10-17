@@ -73,6 +73,7 @@ Adversarial proof matrix: see "Adversarial review" below.
 | Attack | Result |
 | --- | --- |
 | Inner fault caught by the caller, outer continues (I2) | Savepoint + buffer level discard the inner work; deferred ledger lines of the participant are dropped; test `caught_nested_fault_*`. |
+| Caught participant fault whose state refresh also fails (Codex P1 on #739) | The command is poisoned; the owner refuses to commit (`store_command_participant_refresh_failed`), rolls back and remirrors; test `failed_participant_refresh_poisons_the_command`. |
 | Unbuffered `append_event` inside a participant that later fails | Its mirror line is deferred and dropped with the participant; no phantom ledger line; test `unbuffered_event_in_failed_participant_*`. |
 | Mirror read inside a command | No R+ reader inside a command reads a disk mirror (traced: `_envelope`, `_load_objects`, `objects_revision`, `object_review_bindings`, `read_events` all read PostgreSQL). |
 | Another console nests inside an open command | Refused with `store_command_foreign_owner` before any write. |

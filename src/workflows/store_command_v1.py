@@ -18,11 +18,13 @@ from typing import Any
 class StoreCommand:
     """Deferred mirror work of one open command. NOOIT a second authority."""
 
-    __slots__ = ("owner", "fresh", "snapshot_ids", "bindings", "envelopes", "objects", "events")
+    __slots__ = ("owner", "fresh", "poisoned", "snapshot_ids", "bindings", "envelopes", "objects", "events")
 
     def __init__(self, owner: Any) -> None:
         self.owner = owner
         self.fresh = False
+        # A participant whose state refresh failed: the owner MAG NIET commit.
+        self.poisoned = False
         self.snapshot_ids: set[str] = set()
         self.bindings = False
         self.envelopes = False
