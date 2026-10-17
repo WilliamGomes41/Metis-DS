@@ -13,25 +13,11 @@ pre-mutation copy MAG NIET overwrite them (see WilliamGomes41/Metis#33).
 """
 import fcntl
 
-from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
-from src.workflows.workflow_review_cutover_v1 import PostgresReviewWorkflowDurablePublicationConsole
-from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
-from src.workflows.workflow_transaction_v1 import bind_workflow_stores
 from src.proportionate_review_v1 import normal_risk_batch_queue
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.test_workflow_chain_recovery_v1 import recovery_postgres as workflow_postgres  # noqa: F401
 
 
-def _console(root, config):
-    identity = PostgresWorkflowIdentityStore(config)
-    documents = PostgresConcurrentWorkflowDocumentStore(config)
-    reviews = PostgresWorkflowReviewStore(config)
-    bind_workflow_stores(identity, documents, reviews)
-    return PostgresReviewWorkflowDurablePublicationConsole(
-        root=root, source_store=root / "sources", runtime=root / "runtime",
-        workflow_identity_store=identity, workflow_document_store=documents,
-        workflow_review_store=reviews,
-    )
+from tests.complete_workflow_support import complete_console as _console
 
 
 def _approve(console, actor, sid, object_id, obj_type):
