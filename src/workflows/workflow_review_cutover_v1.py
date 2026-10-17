@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from src.operations_console_v1 import ConsoleError, _atomic_replace_bytes, _atomic_write
+from src.request_diagnostics_v1 import diagnostic_phase
 from src.review_ledger import buffer_events, register_backend
 from src.workflows.workflow_documents_cutover_v1 import (
     PostgresWorkflowAzureAuthoritativePublicationConsole,
@@ -232,7 +233,8 @@ class _PostgresWorkflowReviewMixin:
             if snapshot_id:
                 command.snapshot_ids.add(snapshot_id)
             try:
-                with workflow_transaction(self.workflow_review_store) as connection:
+                with diagnostic_phase("store_transaction"), \
+                        workflow_transaction(self.workflow_review_store) as connection:
                     if lock_row and snapshot_id:
                         self._lock_document_row(connection, snapshot_id)
                     self._reload_store_locked()
@@ -243,10 +245,12 @@ class _PostgresWorkflowReviewMixin:
                         raise ConsoleError("store_command_participant_refresh_failed")
             except BaseException as exc:
                 close_store_command(token)
-                self._remirror_after_rollback(snapshot_id, exc)
+                with diagnostic_phase("store_remirror"):
+                    self._remirror_after_rollback(snapshot_id, exc)
                 raise
             close_store_command(token)
-            self._remirror_from_pg(command)
+            with diagnostic_phase("store_remirror"):
+                self._remirror_from_pg(command)
 
     @contextmanager
     def _join_store_command(

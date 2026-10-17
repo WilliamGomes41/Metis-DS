@@ -50,48 +50,84 @@ def capture(state, account):
             return {"documents": docs, "observed_at": instant()}
 
 
-def install_quality_routes(app, state, require, page):
+class QualityViewError(Exception):
+    """A quality view that cannot be shown; ``status`` and a Dutch reason only."""
+
+    def __init__(self, status: int, reason: str) -> None:
+        super().__init__(reason)
+        self.status = status
+        self.reason = reason
+
+
+def validate_filters(query) -> dict:
+    filters = {k: query[k] for k in ("from", "to", "kind", "ingest", "route") if query.get(k)}
+    try:
+        for k in ("from", "to"):
+            if k in filters:
+                date.fromisoformat(filters[k])
+        if filters.get("from", "") > filters.get("to", "9999-12-31"):
+            raise ValueError("date_order")
+    except ValueError as exc:
+        raise QualityViewError(400, "Ongeldige periode") from exc
+    return filters
+
+
+def quality_view(state, store, account, filters, requested_id=None):
+    """The one quality measurement for both the table page and Inzicht charts.
+
+    Same capture, authorization scope and immutable report store as before.
+    """
+    try:
+        inputs = capture(state, account)
+        inputs["filters"] = filters
+        inputs["observation_day"] = inputs["observed_at"][:10]
+        if requested_id:
+            scope = {d["envelope"]["snapshot_id"] for d in inputs["documents"]}
+            available = store.history(owner=account["account_id"], allowed_scope=scope)
+            record = next((r for r in available if r["calculation_id"] == requested_id), None)
+            if record is None:
+                raise QualityViewError(404, "Dit rapport is niet beschikbaar voor jou.")
+        else:
+            record = store.calculate(owner=account["account_id"], inputs=inputs,
+                build=lambda i: build_report(i["documents"], as_of=i["observed_at"], filters=i["filters"]))
+        current = capture(state, account)
+        allowed = {d["envelope"]["snapshot_id"] for d in current["documents"]}
+        if not set(record["report"]["scope"]) <= allowed:
+            raise QualityViewError(409, "Toegang is gewijzigd. Vernieuw de pagina.")
+        history = store.history(owner=account["account_id"], allowed_scope=allowed)
+    except QualityViewError:
+        raise
+    except Exception as exc:
+        LOG.exception("Quality report unavailable")
+        raise QualityViewError(503, "De meting is niet beschikbaar. Je werk blijft behouden. Vernieuw de pagina om opnieuw te proberen; eerdere rapporten blijven bewaard.") from exc
+    return {"record": record, "report": record["report"], "history": history}
+
+
+def quality_store(state):
     owner = getattr(state, "workflow_document_store", None)
     connect = getattr(owner, "_metis_workflow_original_connect", None) or (owner._connect if owner else None)
-    store = QualityReportStore(state.runtime / "quality_reports", connect=connect)
+    return QualityReportStore(state.runtime / "quality_reports", connect=connect)
+
+
+def install_quality_routes(app, state, require, page, *, tabs=lambda current: ""):
+    store = quality_store(state)
+    app.state.quality_store = store
 
     @app.get("/settings/quality", response_class=HTMLResponse)
     def quality(request: Request):
         account = require(request)
-        filters = {k: request.query_params[k] for k in ("from", "to", "kind", "ingest", "route") if request.query_params.get(k)}
+        body = (tabs("kwaliteit") + '<p><a href="/settings">← Instellingen</a> · <a href="/settings/technical">Technisch beheer</a></p><h1>Kwaliteit &amp; werkproces</h1>'
+                '<p>Automatisch afgeleid uit bestaande verwerking en review, voor bronnen waarvan je uploader of aangewezen reviewer bent.</p>'
+                '<p>Dit is de tabelweergave. <a href="/inzicht?tab=kwaliteit">Bekijk dezelfde meting als grafieken in Inzicht</a>.</p>')
         try:
-            for k in ("from", "to"):
-                if k in filters:
-                    date.fromisoformat(filters[k])
-            if filters.get("from", "") > filters.get("to", "9999-12-31"):
-                raise ValueError("date_order")
-        except ValueError:
-            return HTMLResponse(page('<h1>Ongeldige periode</h1><a href="/settings/quality">Terug</a>'), status_code=400)
-        body = '<p><a href="/settings">← Instellingen</a></p><h1>Kwaliteit &amp; werkproces</h1><p>Automatisch afgeleid uit bestaande verwerking en review, voor bronnen waarvan je uploader of aangewezen reviewer bent.</p><p><a href="/settings/technical">Experimenten en technische controles</a></p>'
-        try:
-            inputs = capture(state, account)
-            inputs["filters"] = filters
-            inputs["observation_day"] = inputs["observed_at"][:10]
-            requested_id = request.query_params.get("report")
-            if requested_id:
-                scope = {d["envelope"]["snapshot_id"] for d in inputs["documents"]}
-                available = store.history(owner=account["account_id"], allowed_scope=scope)
-                record = next((r for r in available if r["calculation_id"] == requested_id), None)
-                if record is None:
-                    return HTMLResponse(page(body + '<p>Dit rapport is niet beschikbaar voor jou.</p>'), status_code=404)
-            else:
-                record = store.calculate(owner=account["account_id"], inputs=inputs,
-                    build=lambda i: build_report(i["documents"], as_of=i["observed_at"], filters=i["filters"]))
-            report = record["report"]
-            filters = report["filters"]
-            current = capture(state, account)
-            allowed = {d["envelope"]["snapshot_id"] for d in current["documents"]}
-            if not set(report["scope"]) <= allowed:
-                return HTMLResponse(page(body + '<p>Toegang is gewijzigd. Vernieuw de pagina.</p>'), status_code=409)
-            history = store.history(owner=account["account_id"], allowed_scope=allowed)
-        except Exception:
-            LOG.exception("Quality report unavailable")
-            return HTMLResponse(page(body + '<p>De meting is niet beschikbaar. Je werk blijft behouden. Vernieuw de pagina om opnieuw te proberen; eerdere rapporten blijven bewaard.</p>'), status_code=503)
+            filters = validate_filters(request.query_params)
+            view = quality_view(state, store, account, filters, request.query_params.get("report"))
+        except QualityViewError as exc:
+            if exc.status == 400:
+                return HTMLResponse(page('<h1>Ongeldige periode</h1><a href="/settings/quality">Terug</a>'), status_code=400)
+            return HTMLResponse(page(body + f'<p>{escape(exc.reason)}</p>'), status_code=exc.status)
+        report, history = view["report"], view["history"]
+        filters = report["filters"]
         esc = lambda value: escape(str(value))
         body += '<form method="get"><p>Ingestcohort (UTC; activiteit tot gegevensgrens)</p>'
         for key, label, typ in (("from", "Vanaf", "date"), ("to", "Tot en met", "date"), ("kind", "Inhoudstype", "text"), ("ingest", "Ingesttype", "text")):

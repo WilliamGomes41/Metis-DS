@@ -85,6 +85,24 @@
       ]
     ],
     [
+      "/inzicht",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/inzicht/api/documents",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/inzicht/api/quality",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/login",
       [
         "GET"
@@ -464,6 +482,30 @@
       "/source-selection/start",
       [
         "POST"
+      ]
+    ],
+    [
+      "/telemetry",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/telemetry/api/export",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/telemetry/api/request/{request_id}",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/telemetry/api/summary",
+      [
+        "GET"
       ]
     ],
     [

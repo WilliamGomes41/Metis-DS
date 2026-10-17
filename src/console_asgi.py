@@ -349,8 +349,8 @@ def build_app() -> object:
     app.state.operations_kernel = console
     app.state.console_topology = topology
     # Register last so timings include status/auth middleware and all DB reads.
-    from src.console_performance_v1 import install_console_performance
-    install_console_performance(app)
+    from src.telemetry.install import install_console_observability
+    install_console_observability(app, console.runtime)
     install_startup_reinstall(app)  # Metis 638-1: after the server's own log setup
     return app
 

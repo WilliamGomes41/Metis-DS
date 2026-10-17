@@ -15,7 +15,7 @@ import re
 from collections.abc import Mapping
 from datetime import datetime, timezone
 
-EXTRA_FIELDS = ('request_id', 'event', 'attempt_id', 'snapshot_id', 'phase', 'reason_code')
+EXTRA_FIELDS = ('request_id', 'trace_id', 'event', 'attempt_id', 'snapshot_id', 'phase', 'reason_code')
 _ASSIGNMENT_KEYS = (r'password|passwd|pwd|secret|client_secret|token|access_token|refresh_token|id_token|'
                     r'api[_-]?key|accountkey|sharedaccesskey|sharedaccesssignature|instrumentationkey|sig')
 # Header-like keys: the whole value (to line end or closing quote) is secret, e.g. "Basic x", "a=b; c=d".
@@ -97,8 +97,16 @@ class JsonLogFormatter(logging.Formatter):
                    .isoformat(timespec='milliseconds').replace('+00:00', 'Z'),
                'level': record.levelname, 'logger': redact(record.name), 'message': redact(message),  # #661
                'commit': deployment_identity()}
+        try:
+            # Correlation ids of the request in progress, for handlers added after install.
+            from src.telemetry.hub import correlation
+            context = correlation()
+        except Exception:
+            context = {}
         for name in EXTRA_FIELDS:
             value = getattr(record, name, None)
+            if value is None and name in ('request_id', 'trace_id', 'attempt_id'):
+                value = context.get(name)
             if isinstance(value, str) and _SAFE.fullmatch(value):
                 row[name] = value if redact(value) == value else '[REDACTED]'  # whitelisted extras too (#661)
         if record.exc_info and record.exc_info[0] is not None:
