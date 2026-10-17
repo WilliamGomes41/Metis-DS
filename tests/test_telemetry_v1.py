@@ -366,6 +366,19 @@ def test_hub_keeps_every_node_of_a_bounded_phase_tree():
     assert len(stored['phase_tree']) == MAX_TREE_NODES
 
 
+
+def test_install_keeps_booting_when_faulthandler_cannot_use_stderr(hub, monkeypatch):
+    import faulthandler
+    from src.telemetry import install
+    monkeypatch.setattr(install, '_INSTALLED', {})
+    monkeypatch.setattr(faulthandler, 'is_enabled', lambda: False)
+    monkeypatch.setattr(faulthandler, 'enable', lambda *a, **k: (_ for _ in ()).throw(RuntimeError('sys.stderr is None')))
+    monkeypatch.setattr(install, '_install_exception_hooks', lambda: None)
+    monkeypatch.setattr(install.atexit, 'register', lambda fn: None)
+    install.install_telemetry(None)
+    assert any(e['event'] == 'telemetry_crash_stacks_unavailable' for e in hub.events())
+
+
 def _event(t, name, rid, **fields):
     from datetime import datetime, timezone
     ts = datetime.fromtimestamp(t, timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')

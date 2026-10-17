@@ -48,7 +48,11 @@ def install_telemetry(directory: Path | None) -> None:
     _INSTALLED[str(os.getpid())] = True
     if not faulthandler.is_enabled():
         # Fatal-signal stacks go to stderr (file, function and line only; no values).
-        faulthandler.enable()
+        # Optional evidence: an unusable stderr MAG NIET stop the console from booting.
+        try:
+            faulthandler.enable()
+        except Exception:
+            record_event("telemetry_crash_stacks_unavailable", kind="telemetry")
     _install_exception_hooks()
     record_event("process_started", kind="process", python=platform.python_version())
     atexit.register(_process_stopped)
