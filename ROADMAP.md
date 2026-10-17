@@ -3,7 +3,7 @@
 **Status:** actief  
 **Peildatum:** 2026-10-17
 
-**Gecontroleerde main:** [`e228aa902977963d6238da90ee3996de51b8768b`](https://github.com/WilliamGomes41/Metis-DS/commit/e228aa902977963d6238da90ee3996de51b8768b) (merge van #731).
+**Gecontroleerde main:** [`4991cc6067d90bd3e839c9943c2d7cfac043e776`](https://github.com/WilliamGomes41/Metis-DS/commit/4991cc6067d90bd3e839c9943c2d7cfac043e776) (merge van #732).
 
 **Functie:** actieve veranderopgaven en bewijspoorten. Uitgevoerde geschiedenis hoort in changelog of `docs/history/`.
 
@@ -17,11 +17,11 @@ GitHub-issues blijven de voortgangsbron; dit is alleen een overdrachtsoverzicht 
 - #667 R2-fix (remirror onder de storelock) → `59208f02`.
 - #683 `_lane_total` (sluit #672 en #700) → `3f9389df`.
 - #731 tier D fail-closed (sluit #665, Class A) → `e228aa90`. Opvolging: [#733](https://github.com/WilliamGomes41/Metis-DS/issues/733) (conninfo zichtbaar via `pytest -l`/`--showlocals`, L-2-restrisico) en [#734](https://github.com/WilliamGomes41/Metis-DS/issues/734) (tests voor hoofdlettervarianten van de detailwaarde).
+- #732 deploy-SHA-check (sluit #684, Class B), inclusief de fix voor de afsluitende `/` in `AZURE_*_APP_URL` → `4991cc60`. Nog niet bewezen in een echte deploy.
 
 **Open:**
-- PR #732 (#684, deploy-SHA-check, Class B): nog niet gemergd. Bevat de fix voor de afsluitende `/` in `AZURE_*_APP_URL`. Merge MOET wachten op een nieuwe Sherlock-PASS op de actuele tip, de Argos-gate en Williams GO.
 - [#695](https://github.com/WilliamGomes41/Metis-DS/issues/695) deployvoorwaarden (`critical-path`): Azure-info van William, backup met bewezen herstel, read-only schadecheck tier D, #684-check, GRANTs migratie 018. Er MAG NIETS live voordat #695 is afgevinkt. Geen deploydatum.
-- Kernissues: #730 (PG als enige bron van waarheid), #689 (dode code, na #665), #690–#699, #701–#729 (inventaris). Smetten-branch `diag/smetten-coverage-remainder` is gepauzeerd (#515).
+- Kernissues: #730 (PG als enige bron van waarheid), #689 (dode code; PR #735 open), #690–#699, #701–#729 (inventaris). Smetten-branch `diag/smetten-coverage-remainder` is gepauzeerd (#515).
 
 **Besluiten William 2026-10-17:**
 - Tier D wordt fail-closed geweigerd.
@@ -79,7 +79,7 @@ Een proof-slice wordt pas een nieuwe repair bij een reproduceerbare invariantbre
 - De aanwezige [testworkflow](.github/workflows/deploy-test.yml) en [productieworkflow](.github/workflows/deploy-production.yml) gebruiken OIDC en een console-ZIP en starten handmatig. De testworkflow is begrensd door `METIS_TEST_APP_READY`; main-merges deployen niet automatisch. Verifieer doelomgeving, identiteit en artifact en bewijs de exacte commit op test vóór productie.
 - [Dockerfile.docling](Dockerfile.docling) en de [Docling-acceptatieworkflow](.github/workflows/docling-acceptance.yml) leveren afzonderlijk image-/containerbewijs. Een console-ZIP levert niet de volledige Docling-runtime. [#531](https://github.com/WilliamGomes41/Metis-DS/issues/531) is op 12-10 gesloten; of er een Docling-restant open blijft (interpreter, modellen, dependencies, hostcapaciteit, herstelketen, deploy- en rollbackroute) is een OPENVRAAG onder [#696](https://github.com/WilliamGomes41/Metis-DS/issues/696). Een Kudu-ZIP is geen vervanging voor dit bewijs.
 - [azure-pipelines.yml](azure-pipelines.yml) spiegelt GitHub-branches en tags naar Azure Repos. Verifieer een echte pipeline-uitvoering en rechten; dit is geen DevOps → productie-deployroute.
-- De volgende productiedeploy is geblokkeerd door [#695](https://github.com/WilliamGomes41/Metis-DS/issues/695) en de deploy-SHA-check [#684](https://github.com/WilliamGomes41/Metis-DS/issues/684) (PR #732, open). De live draaiende commit is niet vastgesteld; gemergd op main is niet gedeployed.
+- De volgende productiedeploy is geblokkeerd door [#695](https://github.com/WilliamGomes41/Metis-DS/issues/695). De deploy-SHA-check uit [#684](https://github.com/WilliamGomes41/Metis-DS/issues/684) staat op main (PR #732), maar is nog niet in een echte deploy bewezen. De live draaiende commit is niet vastgesteld; gemergd op main is niet gedeployed.
 - Bewijs dat deployment runtime-data intact laat en niet impliciet G2-publicatie of Product API-toegang activeert.
 - Verifieer de echte pilotbron, bronhash en immutable G2-bronopslag vóór publicatie van die snapshot. Bronbewijs voor één snapshot ontgrendelt publicatie niet algemeen.
 
