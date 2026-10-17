@@ -235,13 +235,11 @@ _BODY = r"""
   </div>
 
   <div class="tm-panel" data-panel="controles" role="tabpanel" hidden>
-    <p class="tm-sub">Controles en experimenten die je bewust start. Hun resultaten blijven bewaard en zijn geen inhoudelijke beoordeling van documenten.</p>
+    <p class="tm-sub">Controles die je bewust start. Hun uitkomst is geen inhoudelijke beoordeling van documenten.</p>
     <div class="doc-list">
-      <a class="doc-card" style="text-decoration:none;" href="/audit"><p class="doc-title">Audit &amp; diagnostiek</p><p>Open controles, experimenten en bewaarde resultaten.</p></a>
-      <a class="doc-card" style="text-decoration:none;" href="/audit/semantic-safety"><p class="doc-title">Semantische veiligheidstests</p><p>Vaste testgevallen voor weglatingen, voorwaarden, uitzonderingen en ontkenningen.</p></a>
+      <a class="doc-card" style="text-decoration:none;" href="/inzicht/veiligheidstests"><p class="doc-title">Semantische veiligheidstests</p><p>Vaste testgevallen voor weglatingen, voorwaarden, uitzonderingen en ontkenningen. De uitkomst zie je direct.</p></a>
       <a class="doc-card" style="text-decoration:none;" href="/settings/quality/compare"><p class="doc-title">Routevergelijking</p><p>Vergelijk verwerkingsroutes op dezelfde bron.</p></a>
       <a class="doc-card" style="text-decoration:none;" href="/audit/review-signals"><p class="doc-title">Reviewsignalen</p><p>Signalen uit review die op structurele problemen wijzen.</p></a>
-      <a class="doc-card" style="text-decoration:none;" href="/audit/archive"><p class="doc-title">Archief</p><p>Gearchiveerde audits terugzetten of definitief verwijderen.</p></a>
       <a class="doc-card" style="text-decoration:none;" href="/settings/technical/exports"><p class="doc-title">Exports</p><p>Passages, verwerkingsbewijs en diagnostiek als bestand.</p></a>
     </div>
   </div>

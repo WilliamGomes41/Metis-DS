@@ -493,7 +493,7 @@ def test_technical_management_collects_tools_and_keeps_repair_actionable(tmp_pat
     assert 'href="/settings/llm"' not in settings.text
     hub = client.get("/settings/technical")
     assert hub.status_code == 200
-    for target in ["/settings/llm", "/settings/api-access", "/audit", "/audit/semantic-safety", "/settings/quality/compare"]:
+    for target in ["/settings/llm", "/settings/api-access", "/inzicht/veiligheidstests", "/settings/quality/compare"]:
         assert f'href="{target}"' in hub.text
     assert snapshot_id in hub.text
     repair = client.get(f"/review?document={snapshot_id}&task=repair")
