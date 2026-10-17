@@ -26,7 +26,7 @@ from src.review_disposition_v1 import definitive_review_disposition
 from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
 from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
 from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
-from src.workflows.workflow_review_cutover_v1 import PostgresReviewWorkflowDurablePublicationConsole
+from src.workflows.workflow_badge_counts_postgres_v1 import FastBadgePostgresCompleteWorkflowDurablePublicationConsole as PostgresReviewWorkflowDurablePublicationConsole
 from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 from src.workflows.workflow_transaction_v1 import bind_workflow_stores
 from src.workflows.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
@@ -92,7 +92,9 @@ def _console(
     identity = PostgresWorkflowIdentityStore(config)
     documents = PostgresConcurrentWorkflowDocumentStore(config)
     reviews = PostgresWorkflowReviewStore(config)
-    bind_workflow_stores(identity, documents, reviews)
+    from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
+    remaining = PostgresWorkflowRemainingStore(config)
+    bind_workflow_stores(identity, documents, reviews, remaining)
     return PostgresReviewWorkflowDurablePublicationConsole(
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
@@ -101,7 +103,7 @@ def _console(
         canonical_publication_store=PostgresCanonicalPublicationStore(config),
         workflow_identity_store=identity,
         workflow_document_store=documents,
-        workflow_review_store=reviews,
+        workflow_review_store=reviews, workflow_remaining_store=remaining,
     )
 
 
