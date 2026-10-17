@@ -61,7 +61,7 @@ def test_unknown_store_kind_refused_before_credentials(key, monkeypatch):
         monkeypatch.setenv(setting, "postgres")
     monkeypatch.setenv(key, "postgress")
     monkeypatch.setattr(asgi, "_postgres_credential", lambda: pytest.fail("credentials opened"))
-    with pytest.raises(RuntimeError, match="unsupported_.*store"):
+    with pytest.raises(RuntimeError, match="unsupported_.*store|workflow_review_store_required_for_document_store"):
         asgi.build_app()
 
 
@@ -76,3 +76,64 @@ def test_azure_file_harness_refused_before_storage(monkeypatch):
     monkeypatch.setattr(asgi, "_immutable_source_store", lambda: pytest.fail("storage opened"))
     with pytest.raises(RuntimeError, match="azure_workflow_authorities_required"):
         asgi.build_app()
+
+
+@pytest.mark.parametrize("azure", [False, True])
+@pytest.mark.parametrize("kind", ["postgres", " POSTGRES "])
+def test_complete_configuration_reaches_storage(monkeypatch, azure, kind):
+    for key in SETTINGS:
+        monkeypatch.setenv(key, kind)
+    if azure:
+        monkeypatch.setenv("WEBSITE_SITE_NAME", "test-app")
+    class ReachedStorage(Exception):
+        pass
+    def storage():
+        raise ReachedStorage
+    monkeypatch.setattr(asgi, "_immutable_source_store", storage)
+    with pytest.raises(ReachedStorage):
+        asgi.build_app()
+
+
+@pytest.mark.parametrize("mode", ["azure", "postgres", "partial"])
+def test_local_cli_cannot_ignore_configured_authorities(monkeypatch, mode):
+    from argparse import Namespace
+    from src.cli import cmd_serve_console
+    if mode == "azure":
+        monkeypatch.setenv("WEBSITE_SITE_NAME", "test-app")
+    elif mode == "postgres":
+        for key in SETTINGS:
+            monkeypatch.setenv(key, "postgres")
+    else:
+        monkeypatch.setenv(SETTINGS[0], "postgres")
+    with pytest.raises(RuntimeError, match="azure_workflow_authorities_required|serve_console_is_local_only|canonical_store_required"):
+        cmd_serve_console(Namespace())
+
+
+@pytest.mark.parametrize("azure", [False, True])
+def test_native_complete_build_login_and_restart(azure, tmp_path, monkeypatch, recovery_postgres):
+    from fastapi.testclient import TestClient
+    from src import audit_room_v1
+    monkeypatch.setattr(audit_room_v1, "AuditRegistry", audit_room_v1.AuditRegistry)
+    for key in SETTINGS:
+        monkeypatch.setenv(key, "postgres")
+    monkeypatch.setenv("METIS_CANONICAL_DB_DSN", recovery_postgres.dsn)
+    monkeypatch.setattr(asgi, "_postgres_credential", lambda: None)
+    if azure:
+        monkeypatch.setenv("WEBSITE_SITE_NAME", "test-app")
+        monkeypatch.setenv("CONSOLE_PUBLIC_ORIGIN", "https://console.example.test")
+        # Immutable bytes are outside this configuration/PG proof. No paid calls.
+        from tests.test_publication_chain_recovery_v1 import FakeBlobStore
+        monkeypatch.setattr(asgi, "_immutable_source_store", lambda: FakeBlobStore({}))
+        monkeypatch.setattr(asgi, "_audit_archive_store", lambda: None)
+    app = asgi.build_app()
+    kernel = app.state.operations_kernel
+    assert kernel.workflow_remaining_store is not None
+    assert kernel.canonical_publication_store is not None
+    created = kernel.create_account("topology.reviewer", "topology-test-secret", roles=["reviewer"])
+    with TestClient(app) as client:
+        assert client.get("/login").status_code == 200
+    restarted = asgi.build_app().state.operations_kernel
+    assert created["account_id"] in restarted._accounts
+
+
+from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: F401,E402
