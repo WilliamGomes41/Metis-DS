@@ -105,6 +105,11 @@ def cmd_serve_console(a: argparse.Namespace) -> dict:
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
     from src.topology_bound_v1 import assert_supported_topology
 
+    from src.console_asgi import _validate_workflow_store_configuration
+
+    # This documented local harness must never ignore configured PG authorities.
+    if _validate_workflow_store_configuration():
+        raise RuntimeError("serve_console_is_local_only_use_console_asgi")
     assert_supported_topology()
     console = OperationsConsole(
         root=ROOT,
