@@ -259,7 +259,14 @@ const $ = (sel, scope = root) => scope.querySelector(sel);
 const params = new URLSearchParams(location.search);
 const state = { window: params.get('window') || '24h', filters: {}, mode: 'recent', data: null, timer: null, live: true, sort: {},
   tab: root.dataset.initialTab || 'systeem', loaded: {}, qparams: '', docs: null };
-for (const key of ['route', 'state', 'status', 'commit', 'q', 'error']) if (params.get(key)) state.filters[key] = params.get(key);
+// The URL carries the filters of the open tab only: quality filters on Kwaliteit, telemetry filters elsewhere.
+if (state.tab === 'kwaliteit') {
+  const quality = new URLSearchParams();
+  for (const key of ['from', 'to', 'kind', 'ingest', 'route', 'report']) if (params.get(key)) quality.set(key, params.get(key));
+  state.qparams = quality.toString();
+} else {
+  for (const key of ['route', 'state', 'status', 'commit', 'q', 'error']) if (params.get(key)) state.filters[key] = params.get(key);
+}
 
 const LABELS = { route: 'Route', state: 'Uitkomst', status: 'Status', commit: 'Deploy', q: 'Zoek', error: 'Foutgroep' };
 const STATE_NL = { ok: 'Gelukt', error: 'Fout', aborted: 'Afgebroken', running: 'Lopend', cancelled: 'Geannuleerd', incomplete: 'Onvolledig' };
@@ -736,6 +743,7 @@ function qualityTrend(box, trend) {
   hit.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); hideTip(); });
   svg.append(hit); box.append(svg);
 }
+for (const [key, value] of new URLSearchParams(state.qparams)) { const field = $('#q-form').elements[key]; if (field) field.value = value; }
 $('#q-form').addEventListener('submit', (event) => {
   event.preventDefault();
   const data = new URLSearchParams(); for (const [k, v] of new FormData(event.target)) if (String(v).trim()) data.set(k, String(v).trim());

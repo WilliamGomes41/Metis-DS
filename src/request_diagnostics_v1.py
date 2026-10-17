@@ -171,10 +171,8 @@ def _observed(scope):
 
 def doc_ref(snapshot_id):
     """Pseudonymous document reference: correlates requests without the document id."""
-    import hashlib
-    if not isinstance(snapshot_id, str) or not _SNAPSHOT_RE.fullmatch(snapshot_id):
-        return None
-    return 'd_' + hashlib.sha256(snapshot_id.encode('ascii')).hexdigest()[:16]
+    from src.telemetry.hub import doc_ref as hub_doc_ref
+    return hub_doc_ref(snapshot_id)
 
 
 def _snapshot_from(scope):

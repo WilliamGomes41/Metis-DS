@@ -7,6 +7,7 @@ outcome of the work it observes.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -28,11 +29,23 @@ MAX_LIST = 32
 # Per-phase starts are request-local detail; the finished event carries the tree.
 TRANSIENT_EVENTS = frozenset({"phase_started", "response_started", "response_completed"})
 _KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_.:/<>{}-]{0,120}")
+_SNAPSHOT = re.compile(r"snap-[0-9a-f]{8,32}-[0-9a-f]{4,32}")
+# Every signed-in account reads telemetry: identifiers of documents, objects,
+# releases and people MAG NIET be stored. Document ids become ``doc_ref``.
+_IDENTIFIER_KEYS = frozenset({"object_id", "object_ids", "release_id", "actor", "actor_id", "actor_hmac",
+                              "account_id", "user_id", "uploader_account_id", "named_reviewers"})
 _RUNTIME_ID = uuid.uuid4().hex
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def doc_ref(snapshot_id: Any) -> str | None:
+    """Pseudonymous document reference: correlates events without the document id."""
+    if not isinstance(snapshot_id, str) or not _SNAPSHOT.fullmatch(snapshot_id):
+        return None
+    return "d_" + hashlib.sha256(snapshot_id.encode("ascii")).hexdigest()[:16]
 
 
 def _clean(value: Any, depth: int = 0) -> Any:
@@ -42,15 +55,19 @@ def _clean(value: Any, depth: int = 0) -> Any:
     if isinstance(value, (int, float)):
         return value if value == value and abs(value) < 1e15 else None
     if isinstance(value, str):
-        text = redact(value.replace("\r", " ").replace("\n", " "))
-        return text[:MAX_STRING]
+        text = _SNAPSHOT.sub(lambda match: doc_ref(match.group()) or "", value.replace("\r", " ").replace("\n", " "))
+        return redact(text)[:MAX_STRING]
     if depth >= 4:
         return None
     if isinstance(value, dict):
         cleaned = {}
         for key, item in list(value.items())[:MAX_KEYS]:
-            if isinstance(key, str) and _KEY.fullmatch(key):
-                cleaned[key] = _clean(item, depth + 1)
+            if not isinstance(key, str) or not _KEY.fullmatch(key) or key in _IDENTIFIER_KEYS:
+                continue
+            if key == "snapshot_id":
+                cleaned.setdefault("doc_ref", doc_ref(item))
+                continue
+            cleaned[key] = _clean(item, depth + 1)
         return cleaned
     if isinstance(value, (list, tuple)):
         return [_clean(item, depth + 1) for item in list(value)[:MAX_LIST]]

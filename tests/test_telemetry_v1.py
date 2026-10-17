@@ -174,6 +174,37 @@ def test_logging_bridge_forwards_diagnostics_and_warnings_with_request_id(hub, m
     assert HUB_HANDLER in logging.getLogger().handlers
 
 
+
+def test_diagnostic_identifiers_become_doc_ref_and_never_reach_the_hub(hub):
+    install_logging_bridge()
+    sid = 'snap-0123456789abcdef-01234567'
+    payload = {'event': 'publication_boundary', 'snapshot_id': sid, 'release_id': 'rel-1', 'actor_hmac': 'f' * 64,
+               'items': [{'object_id': 'obj-secret', 'object_version': '1', 'content_hash': 'a' * 64}]}
+    _LOGGER.handle(logging.LogRecord('metis.console.diagnostics', logging.INFO, '', 0, 'metis_diagnostic %s',
+                                     (json.dumps(payload),), None))
+    logging.getLogger('metis.test').warning('retry failed for %s', sid)
+    stored = json.dumps(list(hub.events()))
+    event = next(e for e in hub.events() if e.get('event') == 'publication_boundary')
+    assert event['doc_ref'] == doc_ref(sid) and event['items'][0]['content_hash'] == 'a' * 64
+    for secret in (sid, 'rel-1', 'f' * 64, 'obj-secret'):
+        assert secret not in stored
+    assert f'retry failed for {doc_ref(sid)}' in stored
+
+
+def test_logged_exception_keeps_fingerprint_after_structured_logging_redaction(hub):
+    from src.structured_logging_v1 import install_structured_logging
+    install_logging_bridge()
+    install_structured_logging()
+    assert logging.getLogger().handlers[0] is HUB_HANDLER
+    try:
+        raise KeyError('patient secret')
+    except KeyError:
+        logging.getLogger('metis.test').exception('background job failed')
+    event = next(e for e in hub.events() if e.get('kind') == 'log' and e['message'] == 'background job failed')
+    assert event['error']['type'] == 'KeyError' and event['error']['fingerprint']
+    assert 'patient secret' not in json.dumps(event)
+
+
 def _event(t, name, rid, **fields):
     from datetime import datetime, timezone
     ts = datetime.fromtimestamp(t, timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')

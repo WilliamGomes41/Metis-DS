@@ -36,6 +36,13 @@ class HubHandler(logging.Handler):
     def __init__(self) -> None:
         super().__init__(level=logging.INFO)
 
+    def handle(self, record: logging.LogRecord) -> bool:
+        # Metis-owned sink: emit() keeps only redacted, bounded fields and a
+        # frame-only fingerprint. The in-place RedactingFilter for foreign
+        # handlers would clear exc_info first, so handler filters are skipped.
+        self.emit(record)
+        return True
+
     def emit(self, record: logging.LogRecord) -> None:
         try:
             if record.name == DIAGNOSTIC_LOGGER:
@@ -89,9 +96,13 @@ def install_logging_bridge() -> None:
     """Idempotent: one hub handler and one correlation filter per logger."""
     diagnostics = logging.getLogger(DIAGNOSTIC_LOGGER)
     root = logging.getLogger()
-    for logger in (diagnostics, root):
-        if HUB_HANDLER not in logger.handlers:
-            logger.addHandler(HUB_HANDLER)
+    if HUB_HANDLER not in diagnostics.handlers:
+        diagnostics.addHandler(HUB_HANDLER)
+    # First on root, so no foreign handler's filter has mutated the record yet.
+    if root.handlers[:1] != [HUB_HANDLER]:
+        if HUB_HANDLER in root.handlers:
+            root.removeHandler(HUB_HANDLER)
+        root.handlers.insert(0, HUB_HANDLER)
     for name in ("", "metis.console.performance", "uvicorn.error", "gunicorn.error"):
         for handler in logging.getLogger(name).handlers:
             if CORRELATION_FILTER not in handler.filters:
