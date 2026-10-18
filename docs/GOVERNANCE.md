@@ -1,7 +1,8 @@
 # Metis governance
 
-**Status:** actief onder Protocol v4.1.0  
-**Datum:** 2026-09-27
+**Status:** actief onder Protocol v4.1.0 — enige vigerende protocolnorm
+
+**Datum:** 2026-10-18
 
 Dit bestand is het compacte operationele governance-register. Het is geen tweede protocol, geen geschiedenislog en geen vijfde stuurlaag.
 
@@ -31,7 +32,7 @@ Protocol-v2-delta's, oude roadmaps, approval-manifests en de pre-v3 governance b
 
 ## Auditgrens
 
-Historische approval-manifests en protocolbestanden blijven ongewijzigd op hun bestaande paden wanneer hun hashes of paden onderdeel zijn van de bewijsketen. Dat behoudt reproduceerbaarheid zonder ze opnieuw tot actuele stuurlaag te maken.
+Historische protocolbestanden staan met ongewijzigde bytes onder `docs/history/`. Relatieve compatibiliteitslinks op de oude V2-paden houden padgebonden approval-manifests en historische verwijzingen leesbaar. De approval-manifests blijven ongewijzigd. Dat behoudt reproduceerbaarheid zonder een aanvullende actuele stuurlaag te maken.
 
 Historische V2-regressietests mogen de bevroren pre-v3 rootdocumenten toetsen. V3-regressietests toetsen uitsluitend de actuele rootnorm en actuele roadmap.
 

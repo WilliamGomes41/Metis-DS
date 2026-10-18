@@ -1,6 +1,7 @@
-# V&VN Data Services — Protocol v4
+# V&VN Data Services — Protocol v4.1
 
-**Status:** Actief  
+**Status:** Vigerend — enige actuele protocolnorm
+
 **Versie:** 4.1.0  
 **Datum:** 2026-10-18 (v4.0.0: 2026-09-27)  
 **Wijziging 4.1.0:** vormingskader en bronsoortstrategieën (§5.4)
@@ -278,7 +279,7 @@ De normale deploymentroute en noodprocedure staan buiten het protocol in de actu
 
 Een technisch afdwingbare protocolinvariant wordt waar mogelijk met een gedrags-, integratie- of invarianttest bewezen.
 
-Tests bewijzen primair gedrag en veiligheidsgrenzen. Tests die uitsluitend historische formuleringen, deltatekst of supersessiezinnen in actuele stuurdocumenten afdwingen zijn geen geldige blijvende V3-governancevorm.
+Tests bewijzen primair gedrag en veiligheidsgrenzen. Tests die uitsluitend historische formuleringen, deltatekst of supersessiezinnen in actuele stuurdocumenten afdwingen zijn geen geldige blijvende governancevorm.
 
 Historische protocoltests mogen historische artefacten en approval-manifests blijven verifiëren, maar mogen niet vereisen dat V2-tekst in `PROTOCOL.md` of `ROADMAP.md` blijft staan.
 
@@ -300,7 +301,7 @@ Implementatiegeschiedenis, incidentdetails, tijdelijke volgordes en uitgevoerde 
 
 Protocol V4 bouwt voort op V3, waarin de blijvende product-, veiligheids- en governancegrenzen uit de V2-reeks zijn samengebracht. De V2-documenten en approval-manifests blijven onveranderbaar auditbewijs, maar vormen geen aanvullende actuele stuurlaag.
 
-De volledige pre-V3 rootstanden zijn bevroren onder `docs/history/protocol-v2/`. Oude V2-bestanden mogen op hun oorspronkelijke paden blijven wanneer approval-manifests of historische tests hun exacte bytes of paden nodig hebben. Dat maakt ze niet opnieuw normatief.
+De volledige pre-V3 rootstanden en de afzonderlijke V2-protocollen zijn bewaard onder `docs/history/protocol-v2/`. Op de oorspronkelijke `docs/PROTOCOL_V2_*`-paden staan uitsluitend relatieve compatibiliteitslinks naar dit archief, zodat bestaande approval-manifests en historische verwijzingen hun exacte bytes en paden behouden. Die links vormen geen actuele protocolnorm.
 
 Om te bepalen wat Metis nu moet doen, hoeft de V2-deltaketen niet meer te worden gelezen.
 
