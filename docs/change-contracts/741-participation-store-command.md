@@ -86,6 +86,10 @@ slice does not close the parent issues, merge a PR or deploy anything.
   missing local psql and the three proxy-sensitive HTTPS SNI / redirect
   rebinding / metadata tests in security_harden_wave3. No security guard was
   changed; this is not a wholly green local-suite claim.
+- Cleanup after merging main (#747): the fixture reuses `complete_console`
+  with the console class instead of a private constructor, and the one-off
+  SQL-count print is removed (the 48 -> 46 figure above was a one-time
+  observation; the test asserts one reload and one envelope list read).
 - Repository/release preflights, compilation, architecture boundary check and
   six architecture invariant tests passed. Exact-head CI and required external
   Sherlock/Argos/adversarial review and human GO remain pending.

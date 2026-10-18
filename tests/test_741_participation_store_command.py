@@ -12,19 +12,14 @@ from copy import deepcopy
 import psycopg
 import pytest
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 from src.operations_console_v1 import ConsoleError
 from src.review_policy_v1 import participants
 from src.workflows.workflow_badge_counts_postgres_v1 import (
     FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
     FastBadgePostgresCompleteWorkflowDurablePublicationConsole,
 )
-from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-from src.workflows.workflow_identity_cutover_v1 import CutoverPostgresWorkflowIdentityStore
-from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
-from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
-from src.workflows.workflow_transaction_v1 import bind_workflow_stores, workflow_transaction
-from tests.complete_workflow_support import complete_postgres
+from src.workflows.workflow_transaction_v1 import workflow_transaction
+from tests.complete_workflow_support import complete_console, complete_postgres  # noqa: F401
 from tests.test_678_store_command_postgres import (
     _assert_document_mirrors_equal_pg, _count_reloads,
     _spy_mirror_writes_inside_transaction,
@@ -40,18 +35,8 @@ from tests.test_review_participation_management import change
     FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
 ], ids=["local-r-plus", "azure-r-plus"])
 def prepared(request, tmp_path, complete_postgres):
-    stores = (CutoverPostgresWorkflowIdentityStore(complete_postgres),
-              PostgresConcurrentWorkflowDocumentStore(complete_postgres),
-              PostgresWorkflowReviewStore(complete_postgres),
-              PostgresWorkflowRemainingStore(complete_postgres))
-    bind_workflow_stores(*stores)
-    console = request.param(
-        root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime",
-        workflow_identity_store=stores[0], workflow_document_store=stores[1],
-        workflow_review_store=stores[2], workflow_remaining_store=stores[3],
-        canonical_publication_store=PostgresCanonicalPublicationStore(complete_postgres),
-        immutable_source_store=MemorySourceStore(),
-    )
+    console = complete_console(tmp_path, complete_postgres, request.param,
+                               immutable_source_store=MemorySourceStore())
     accounts = _accounts(console)
     sid = ingest(console, accounts)["snapshot_id"]
     return console, accounts, sid
@@ -86,7 +71,6 @@ def test_participation_has_one_reload_and_no_mirrors_before_commit(prepared, mon
            expected_revision=revision)
     list_reads = [query for query in statements if "FROM workflow.documents d " in query
                   and "ORDER BY d.acquired_at,d.snapshot_id" in query]
-    print("PARTICIPATION_SQL", len(statements), "RELOADS", len(reloads), "LIST_READS", len(list_reads))
     assert inside == [], f"mirror writes inside participation transaction: {inside}"
     assert len(reloads) == len(list_reads) == 1
     _mirrors(console, sid)
