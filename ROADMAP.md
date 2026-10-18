@@ -101,7 +101,7 @@ Een proof-slice wordt pas een nieuwe repair bij een reproduceerbare invariantbre
 - Bestaande snapshots: geen backfill. Hun route blijft de afgeleide, vastgelegde verwerkingsidentiteit.
 - Leg vast hoe de beslisboomconstructie (`decision_unit_construction_v1`) en `materialise_knowledge_candidates` zich verhouden tot de invariant van één deterministische kandidaatmaker vóór review. Een conflict wordt eerst als domeinontwerpkwestie voorgelegd.
 - De standaardroutes van strategie B en C wijzigen niet in deze slice. Een semantische route voor beslisbomen vereist eerst een experiment (§10) met een uitbreiding van de routevergelijking naar besliseenheden én verbindingen, en daarna een protocolwijziging.
-- Beslis apart of `PUBLICATION_PROTOCOL_VERSION` voor nieuwe releases naar 4.1.0 gaat. Dit document en de tests zijn bijgewerkt; de releaseconstante bewust nog niet.
+- Besluit William 2026-10-18: nieuwe releases registreren `PUBLICATION_PROTOCOL_VERSION` 4.1.0. Bestaande releases behouden hun vastgelegde versie.
 
 **Klaar wanneer:** een routewissel in de omgeving aantoonbaar geen invloed heeft op vastgelegde of lopende verwerking, retry en herstel de vastgelegde route gebruiken, en beide strategieën hun huidige standaardroute behouden.
 

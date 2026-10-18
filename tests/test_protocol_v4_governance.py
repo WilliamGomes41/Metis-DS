@@ -39,7 +39,7 @@ def test_v4_retains_safety_and_describes_actual_modes() -> None:
 
 def test_new_release_records_current_protocol() -> None:
     from src.operations_console_v1 import PUBLICATION_PROTOCOL_VERSION
-    assert PUBLICATION_PROTOCOL_VERSION == "4.0.0"
+    assert PUBLICATION_PROTOCOL_VERSION == "4.1.0"
 
 
 def test_documented_formation_roles_match_existing_policy() -> None:
