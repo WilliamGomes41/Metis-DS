@@ -83,7 +83,7 @@ jobs:
         run: |
           mkdir -p proof
           git worktree add "$RUNNER_TEMP/metis-a01-base" a29ed784484af4b4548c796fcbbc6d2c7e289389
-          cp tests/test_processing_authorization.py "$RUNNER_TEMP/metis-a01-base/tests/"
+          cp tests/test_processing_authorization.py tests/complete_workflow_support.py "$RUNNER_TEMP/metis-a01-base/tests/"
           set +e
           (cd "$RUNNER_TEMP/metis-a01-base" && pytest -q tests/test_processing_authorization.py -k denied_retry) > proof/a01-red.log 2>&1
           result=$?

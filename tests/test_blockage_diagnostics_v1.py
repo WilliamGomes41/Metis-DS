@@ -24,7 +24,7 @@ from src.blockage_diagnostics_v1 import blockage_report, collect_blockage, read_
 from src.operations_console_app import create_console_app
 from src.processing_evidence_export_v1 import _csv
 from tests.test_source_dispatch_hardening import console
-from tests.test_workflow_transaction_v1 import workflow_postgres
+from tests.complete_workflow_support import complete_postgres as workflow_postgres
 from tests.test_processing_trace_v1 import restart
 from tests.test_recoverable_formation_v1 import system
 
