@@ -90,6 +90,7 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
     record["selected_pages"] = sorted(selected)
     extraction_id = stable_hash(record)
     out, bindings, exclusions, stack = [], [], [], []
+    navigation_pages: set[int] = set()
 
     def emit(text: str, prov: dict, ref: str, *, heading=None, cell=None, text_field="text", origin_height=None):
         page = prov["page_no"]
@@ -133,6 +134,20 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
         label = item.get("label")
         if item.get("content_layer") == "furniture" or label in {"page_header", "page_footer"}:
             exclusions.append({"item_ref": ref, "reason": "docling_furniture", "provenance": provenance})
+            continue
+        if label == "document_index":
+            # A positively identified table of contents is navigation, not
+            # clinical source. Preserve it; it accounts only for its own single
+            # page and only when it carries text. Blank/scanned pages still fail.
+            cells = (item.get("data") or {}).get("table_cells") or []
+            if len(provenance) == 1 and any(isinstance(c, dict) and isinstance(c.get("text"), str)
+                                            and c["text"].strip() for c in cells):
+                page = provenance[0].get("page_no")
+                if type(page) is not int or str(page) not in page_data:
+                    raise DoclingError("docling_page_invalid")
+                navigation_pages.add(page)
+            exclusions.append({"item_ref": ref, "reason": "docling_document_index_navigation",
+                               "provenance": provenance})
             continue
         if label == "table":
             cells = item["data"]["table_cells"]
@@ -195,10 +210,11 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
         raise DoclingError("docling_no_source_text")
     # OCR is disabled. A missing page may be blank, scanned, or missed by the
     # model; none of those possibilities proves complete source extraction.
-    if selected - {row["source_page"] for row in out}:
+    if selected - {row["source_page"] for row in out} - navigation_pages:
         raise DoclingError("docling_page_text_unverified")
     record.update(extraction_id=extraction_id, bindings=bindings, exclusions=exclusions,
-                  selected_pages=sorted(selected), metrics=deepcopy(result.get("metrics", {})))
+                  selected_pages=sorted(selected), navigation_pages=sorted(navigation_pages & selected),
+                  metrics=deepcopy(result.get("metrics", {})))
     return ExtractedFragments(out, record)
 
 
