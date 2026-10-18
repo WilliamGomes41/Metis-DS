@@ -327,9 +327,8 @@ class _PostgresWorkflowReviewMixin:
         """Own or join the command with the document row lock, without an event buffer."""
         self._require_review_store_configured()
         if not self._store_command_applies():
-            with super()._reprocessing_transaction(snapshot_id):
-                yield
-            return
+            # A raw owner cannot defer mirrors or recover reprocessing safely.
+            raise ConsoleError("reprocessing_store_command_required")
         with self._store_command(snapshot_id, lock_row=True, buffered=False):
             yield
 

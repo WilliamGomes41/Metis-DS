@@ -19,7 +19,10 @@ import pytest
 
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig, PostgresCanonicalPublicationStore
 from src.operations_console_v1 import ConsoleError
-from src.workflows.workflow_badge_counts_postgres_v1 import FastBadgePostgresCompleteWorkflowDurablePublicationConsole
+from src.workflows.workflow_badge_counts_postgres_v1 import (
+    FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
+    FastBadgePostgresCompleteWorkflowDurablePublicationConsole,
+)
 from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
 from src.workflows.workflow_identity_cutover_v1 import CutoverPostgresWorkflowIdentityStore
 from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
@@ -29,6 +32,7 @@ from tests.test_678_store_command_postgres import (
     _assert_document_mirrors_equal_pg, _spy_mirror_writes_inside_transaction,
 )
 from tests.test_r2_rollback_remirror_postgres import _approve, _assert_disk_mirrors_equal_pg, _state
+from tests.test_durable_publication_console_v1 import MemorySourceStore
 
 
 @pytest.fixture
@@ -52,23 +56,27 @@ def isolated_postgres():
             admin.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database)))
 
 
-def _console(root, config):
+def _console(root, config, console_cls):
     identity = CutoverPostgresWorkflowIdentityStore(config)
     documents = PostgresConcurrentWorkflowDocumentStore(config)
     reviews = PostgresWorkflowReviewStore(config)
     remaining = PostgresWorkflowRemainingStore(config)
     bind_workflow_stores(identity, documents, reviews, remaining)
-    return FastBadgePostgresCompleteWorkflowDurablePublicationConsole(
+    return console_cls(
         root=root, source_store=root / "sources", runtime=root / "runtime",
         workflow_identity_store=identity, workflow_document_store=documents,
         workflow_review_store=reviews, workflow_remaining_store=remaining,
         canonical_publication_store=PostgresCanonicalPublicationStore(config),
+        immutable_source_store=MemorySourceStore(),
     )
 
 
-@pytest.fixture
-def prepared(tmp_path, isolated_postgres):
-    console = _console(tmp_path, isolated_postgres)
+@pytest.fixture(params=[
+    FastBadgePostgresCompleteWorkflowDurablePublicationConsole,
+    FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
+], ids=["local-r-plus", "azure-r-plus"])
+def prepared(request, tmp_path, isolated_postgres):
+    console = _console(tmp_path, isolated_postgres, request.param)
     from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
     author = console.create_account("anne", "anne-secret", roles=["researcher"])
@@ -138,7 +146,7 @@ def test_valid_reprocessing_commits_and_mirrors_afterward(prepared, monkeypatch,
 
 def test_foreign_reprocessing_is_refused(prepared, tmp_path, isolated_postgres, monkeypatch):
     console, _, sid, _ = prepared
-    other = _console(tmp_path / "other", isolated_postgres)
+    other = _console(tmp_path / "other", isolated_postgres, type(console))
     inside = _spy_mirror_writes_inside_transaction(monkeypatch, console)
     with console._reprocessing_transaction(sid):
         with pytest.raises(ConsoleError, match="^store_command_foreign_owner$"):

@@ -123,6 +123,16 @@ jobs:
       - run: python -m compileall -q src tests
       - name: Verify architecture invariants
         run: pytest -q tests/test_architecture_invariants.py
+      - name: Verify reprocessing owner guard and mirrors against native PostgreSQL (#708)
+        run: |
+          pytest -q tests/test_708_reprocessing_guard_postgres.py --junitxml=output/reprocessing-708.xml
+          python - <<'PYCODE'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("output/reprocessing-708.xml").getroot()
+          assert list(root.iter("testcase")), "No reprocessing evidence"
+          assert not list(root.iter("skipped")), "Reprocessing PostgreSQL proof skipped"
+          assert not list(root.iter("failure")) and not list(root.iter("error")), "Reprocessing PostgreSQL proof failed"
+          PYCODE
       - name: Verify blockage diagnostics and native read-only access
         run: |
           pytest -q tests/test_blockage_diagnostics_v1.py --junitxml=output/blockage-diagnostics.xml
