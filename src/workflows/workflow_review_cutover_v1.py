@@ -195,8 +195,8 @@ class _PostgresWorkflowReviewMixin:
 
         False only on the compatibility path: a raw ``workflow_transaction``
         that no command owns (publish, heading batch, ...) keeps the pre-#678
-        nested behavior until that owner is migrated. A command of another
-        console is refused before any lock or write.
+        nested behavior until that owner is migrated; reprocessing refuses it
+        (#708). A command of another console is refused before any lock or write.
         """
         command = active_store_command()
         if command is not None:

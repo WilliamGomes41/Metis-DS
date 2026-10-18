@@ -16,7 +16,7 @@ from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStor
 from src.workflows.workflow_transaction_v1 import bind_workflow_stores
 
 
-def complete_console(root, config, **overrides):
+def complete_console(root, config, console_cls=FastBadgePostgresCompleteWorkflowDurablePublicationConsole, **overrides):
     identity = CutoverPostgresWorkflowIdentityStore(config)
     documents = PostgresConcurrentWorkflowDocumentStore(config)
     reviews = PostgresWorkflowReviewStore(config)
@@ -29,7 +29,7 @@ def complete_console(root, config, **overrides):
         canonical_publication_store=PostgresCanonicalPublicationStore(config),
     )
     options.update(overrides)
-    return FastBadgePostgresCompleteWorkflowDurablePublicationConsole(**options)
+    return console_cls(**options)
 
 
 @pytest.fixture

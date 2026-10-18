@@ -35,23 +35,25 @@ the transaction and recovery. A rejected call changes no domain data or mirrors;
 valid calls retain their revision checks, idempotency and serialization.
 Code rollback is a revert; no data conversion is needed.
 
-The native tests create and finally drop their own UUID-named database. The
-supplied METIS_TEST_POSTGRES_DSN must identify a test server with CREATEDB rights;
-creation errors fail rather than becoming skips. The shared transaction fixture
-and supplied database schemas are not changed by these new tests.
+The native tests use the shared `complete_postgres` fixture: an owned
+UUID-named database, created and finally dropped; creation errors fail rather
+than becoming skips. The shared transaction fixture and supplied database
+schemas are not changed by these tests.
 
 ## Evidence and completion boundary
 
 First commit `b195ce5` contains the regression tests: 1 failed (missing refusal),
 6 passed, zero skips on PostgreSQL 16 against unmodified main `3b64ae2`.
-The accepted cases now cover both FastBadgePostgresCompleteWorkflowDurablePublicationConsole
+The cases cover both FastBadgePostgresCompleteWorkflowDurablePublicationConsole
 and FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole with
 real identity, documents, review, remaining and canonical stores. Immutable
 source bytes use an existing in-memory test adapter; Azure is not contacted.
 Rollback cases make real object/authorization/event/envelope changes and cover
-an outer exception, a caught participant exception, and a deferred foreign-key
-violation on the actual outer COMMIT. All four mirrors are compared with PG;
-spies prohibit mirror writes while the workflow transaction is active.
+an outer exception and a deferred foreign-key violation on the actual outer
+COMMIT. All four mirrors are compared with PG; spies prohibit mirror writes
+while the workflow transaction is active. Standalone/nested admission,
+foreign-owner refusal and caught participant faults are not repeated here:
+`tests/test_678_store_command_postgres.py` already proves them.
 
 The ledger's use of buffered committed events remains unchanged. The explicit
 B1 question in #708 must be resolved separately before claiming full issue
@@ -61,18 +63,10 @@ by these local results; the existing Sherlock/Argos and human GO gates remain.
 
 ## Final verification
 
-- Final 14-case local/Azure R+ matrix on unchanged main: 2 failed (missing guard),
-  12 passed. On the fix: 14 passed, zero skips, with the native CI XML check.
-- Existing #678/R2/A08/transaction cases: 109 passed (the initial combined run
-  with seven new cases reported 116 passed).
-- Source dispatch/resume, processing authorization, context preservation, Azure
-  source processing and pre-review failure diagnostics: 141 passed, zero skips.
-- Architecture invariants: 6 passed. Repository/release preflights, compilation,
-  architecture boundaries, diff hygiene and PR change-contract validation pass.
-- Broad local suite without a PG DSN: 4,932 passed, 4 failed, 555 skipped,
-  6 xfailed. All four failures reproduce on unchanged main `3b64ae2`: missing
-  `psql` in `test_t13_l2_psql_argv_carries_no_password`, plus the HTTPS SNI,
-  redirect-hop rebinding and redirect-to-metadata tests in security_harden_wave3
-  under this environment's inherited proxy. No security behavior was changed
-  to make these tests pass. These failures and skips are not green-suite proof.
+- Reduced 6-case local/Azure R+ matrix: 6 passed, zero skips, PostgreSQL 16.
+  With the guard reverted: 2 failed (the refusal cases), 4 passed.
+- Branch merged with current main; related #678/R2/#718/transaction, retry,
+  dispatch, resume, authorization, successor, decision review, participation,
+  source context and architecture invariant suites: see PR description.
+- Architecture boundaries check passes.
 - Exact-head remote CI and required reviews remain pending.
