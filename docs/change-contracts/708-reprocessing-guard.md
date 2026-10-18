@@ -58,3 +58,21 @@ B1 question in #708 must be resolved separately before claiming full issue
 closure. Delete recovery (#706), other raw owners (#741/#742), and performance
 issues are outside this patch. No merge, deployment or issue closure is authorized
 by these local results; the existing Sherlock/Argos and human GO gates remain.
+
+## Final verification
+
+- Final 14-case local/Azure R+ matrix on unchanged main: 2 failed (missing guard),
+  12 passed. On the fix: 14 passed, zero skips, with the native CI XML check.
+- Existing #678/R2/A08/transaction cases: 109 passed (the initial combined run
+  with seven new cases reported 116 passed).
+- Source dispatch/resume, processing authorization, context preservation, Azure
+  source processing and pre-review failure diagnostics: 141 passed, zero skips.
+- Architecture invariants: 6 passed. Repository/release preflights, compilation,
+  architecture boundaries, diff hygiene and PR change-contract validation pass.
+- Broad local suite without a PG DSN: 4,932 passed, 4 failed, 555 skipped,
+  6 xfailed. All four failures reproduce on unchanged main `3b64ae2`: missing
+  `psql` in `test_t13_l2_psql_argv_carries_no_password`, plus the HTTPS SNI,
+  redirect-hop rebinding and redirect-to-metadata tests in security_harden_wave3
+  under this environment's inherited proxy. No security behavior was changed
+  to make these tests pass. These failures and skips are not green-suite proof.
+- Exact-head remote CI and required reviews remain pending.
