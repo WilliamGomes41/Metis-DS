@@ -126,6 +126,12 @@ def test_review_points_to_resume_when_formation_left_no_candidate(tmp_path):
     page = client.get('/review', params={'document': sid}).text
     assert 'data-formation-incomplete' in page and 'Kennisvorming onvolledig' in page
     assert f'/source-selection?document={sid}' in page
+    # The current-state projection decides, not the stored flag alone.
+    real_status = state.processing_status
+    for change in ({'formation_incomplete': False}, {'resume_allowed': False}):
+        state.processing_status = lambda snapshot_id, change=change, **kwargs: {**real_status(snapshot_id, **kwargs), **change}
+        assert 'data-formation-incomplete' not in client.get('/review', params={'document': sid}).text
+    state.processing_status = real_status
 
     # A partial run with a validated candidate keeps its normal Review page.
     partial, partial_sid, *_ = system(tmp_path / 'partial')
