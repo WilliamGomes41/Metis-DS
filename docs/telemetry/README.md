@@ -61,10 +61,10 @@ Instellingen kanaliseert informatie in drie groepen: **Inzicht** (wat er gebeurt
 | **Systeem** | `src/telemetry` (deze naslag) | live, elke 30 s, alleen zolang het tabblad open is | verzoek → documentdiagnose |
 | **Kwaliteit & werkproces** | `quality_metrics_app_v1.quality_view`: dezelfde meting, scope en bewaarde rapporten als de tabelpagina `/settings/quality` | op aanvraag (zware meting onder de store-lock) | bron → documentdiagnose of verzoeken op dit document |
 | **Documenten** | `processing_status(deep=False)`, `processing_diagnostics_v1`, telemetrie per `doc_ref` | bij openen | document → verzoeken en fouten, verwerkingsbeheer, diagnostiek en brondekking, passages corrigeren |
-| **Controles** | audit, semantische veiligheid, routevergelijking, reviewsignalen, archief, exports | — | naar de bestaande pagina's |
+| **Controles** | semantische veiligheidstests (uitkomst direct, niets bewaard), routevergelijking, reviewsignalen, exports | — | naar de bestaande pagina's |
 
 - **Bevoegdheden blijven per bron gelijk.** Systeem bevat geen inhoud en is zichtbaar voor iedere aangemelde gebruiker. Kwaliteit toont alleen bronnen waarvan je uploader of aangewezen reviewer bent. Documenten volgt dezelfde regel als Technisch beheer.
-- **Oude adressen werken door.** `/telemetry` verwijst naar `/inzicht?tab=systeem`. `/settings/quality` blijft de tabelweergave met rapporthistorie en toont dezelfde tabbalk.
+- **Oude adressen werken door.** `/telemetry` verwijst naar `/inzicht?tab=systeem`. De Auditruimte is opgeheven: `/audit`, `/audit/new` en `/audit/archive` verwijzen naar Controles, `/audit/semantic-safety` naar `/inzicht/veiligheidstests`. `/settings/quality` blijft de tabelweergave met rapporthistorie en toont dezelfde tabbalk.
 
 ### Systeem
 

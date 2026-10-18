@@ -815,7 +815,7 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
             "<p class='lead'>Voorgestelde correcties worden hier pas expliciet uitgevoerd. "
             "Elk formulier is gebonden aan de getoonde snapshot-revisie.</p>"
             + ("".join(cards) or "<p class='muted'>Geen herstelwerk.</p>")
-            + "<p><a href='/audit/review-signals'>Bekijk signalen in Audit</a></p>",
+            + "<p><a href='/audit/review-signals'>Bekijk signalen uit Review</a></p>",
             "review",
         )
 
@@ -878,10 +878,10 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
             )
         return chrome(
             request,
-            "<p><a href='/audit'>← Terug naar Audit</a></p>"
+            "<p><a href='/inzicht?tab=controles'>← Inzicht · Controles</a></p>"
             "<h1>Signalen uit Review</h1>"
             "<p class='lead'>Append-only evidence van review en herstel. "
-            "Audit wijzigt geen kennisobjecten.</p>"
+            "Deze pagina wijzigt geen kennisobjecten.</p>"
             "<p><a class='btn-secondary' href='/review/repair'>Open herstelwerk in Review</a></p>"
             + ("".join(rows) or "<p class='muted'>Nog geen signalen.</p>"),
             "audit",

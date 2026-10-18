@@ -9,13 +9,15 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import threading
+import uuid
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, ContextManager, Protocol
 
 from src.audit_archive_store_v1 import AuditArchiveStore, AuditArchiveStoreError
-from src.operations_console_v1 import ConsoleError
+from src.operations_console_v1 import ConsoleError, _atomic_write
 
 
 AUDIT_ID_RE = re.compile(r"^audit-[0-9a-f]{16}$")
@@ -360,3 +362,210 @@ class AuditRetentionService:
                     pass
                 raise
             return reference
+
+
+# File-per-audit live store for the local topology. The Audit room is retired
+# (no runtime writer); this store and the retention service stay until the
+# audit data and recovery coupling are removed in one approved step.
+
+
+class AuditRegistry:
+    """File-per-audit storage with no knowledge of experiment or quality semantics."""
+
+    def __init__(self, runtime: Path) -> None:
+        self.root = Path(runtime) / "audits"
+        self.root.mkdir(parents=True, exist_ok=True)
+        self._write_lock = threading.RLock()
+        self._archive_index = AuditArchiveIndex(runtime)
+
+    def retention_lock(self, audit_id: str) -> Any:
+        return self._write_lock
+
+    def get_archived_reference(self, audit_id: str) -> dict[str, Any] | None:
+        return self._archive_index.get(audit_id)
+
+    def list_archived_references(self) -> list[dict[str, Any]]:
+        return self._archive_index.list()
+
+    def mark_purge(self, audit_id: str, reference: dict[str, Any], *, actor_id: str) -> dict[str, Any]:
+        with self._write_lock:
+            if not actor_id or self.get_archived_reference(audit_id) != reference:
+                raise ConsoleError("audit_archive_reference_changed")
+            if is_purging(reference):
+                return reference
+            pending = {**reference, "purge_requested_at": _now(), "purge_requested_by": actor_id}
+            _atomic_write(self.root / f"{audit_id}.json", pending)
+            return pending
+
+    def list_audits(self) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for path in self.root.glob("audit-*.json"):
+            try:
+                row = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ConsoleError("audit_record_corrupt") from exc
+            if row.get("record_kind") == ARCHIVE_REFERENCE_KIND:
+                if not is_archived_reference(row):
+                    raise ConsoleError("audit_archive_reference_corrupt")
+                continue
+            if not self._valid_record(row):
+                raise ConsoleError("audit_record_corrupt")
+            rows.append(row)
+        return sorted(rows, key=lambda row: str(row.get("created_at") or ""), reverse=True)
+
+    @staticmethod
+    def _valid_record(row: Any) -> bool:
+        return (
+            isinstance(row, dict)
+            and AUDIT_ID_RE.fullmatch(str(row.get("audit_id") or "")) is not None
+            and AUDIT_TYPE_RE.fullmatch(str(row.get("audit_type") or "")) is not None
+            and bool(str(row.get("title") or "").strip())
+            and bool(str(row.get("created_by") or "").strip())
+            and isinstance(row.get("payload"), dict)
+        )
+
+    def get_audit(self, audit_id: str) -> dict[str, Any] | None:
+        if not AUDIT_ID_RE.fullmatch(str(audit_id or "")):
+            return None
+        path = self.root / f"{audit_id}.json"
+        if not path.is_file():
+            return None
+        try:
+            row = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ConsoleError("audit_record_corrupt") from exc
+        if row.get("record_kind") == ARCHIVE_REFERENCE_KIND:
+            if not is_archived_reference(row):
+                raise ConsoleError("audit_archive_reference_corrupt")
+            return None
+        if not self._valid_record(row):
+            raise ConsoleError("audit_record_corrupt")
+        return row
+
+    def replace_with_archived_ref(
+        self,
+        audit_id: str,
+        reference: dict[str, Any],
+    ) -> None:
+        safe_id = str(audit_id or "").strip()
+        if not AUDIT_ID_RE.fullmatch(safe_id):
+            raise ConsoleError("audit_id_invalid")
+        if not is_archived_reference(reference):
+            raise ConsoleError("audit_archive_reference_invalid")
+        if str(reference.get("audit_id") or "") != safe_id:
+            raise ConsoleError("audit_archive_record_mismatch")
+        path = self.root / f"{safe_id}.json"
+        with self._write_lock:
+            if not path.is_file():
+                raise ConsoleError("unknown_audit")
+            try:
+                current = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ConsoleError("audit_record_corrupt") from exc
+            if not self._valid_record(current):
+                raise ConsoleError("audit_not_live")
+            validate_archived_record(reference, current)
+            if is_purging(reference):
+                raise ConsoleError("audit_purge_in_progress")
+            _atomic_write(path, reference)
+
+    def replace_archived_ref_with_live(
+        self,
+        audit_id: str,
+        reference: dict[str, Any],
+        record: dict[str, Any],
+    ) -> None:
+        safe_id = str(audit_id or "").strip()
+        if not AUDIT_ID_RE.fullmatch(safe_id):
+            raise ConsoleError("audit_id_invalid")
+        if not is_archived_reference(reference):
+            raise ConsoleError("audit_archive_reference_invalid")
+        if not self._valid_record(record):
+            raise ConsoleError("audit_record_corrupt")
+        if str(reference.get("audit_id") or "") != safe_id:
+            raise ConsoleError("audit_archive_record_mismatch")
+        if str(record.get("audit_id") or "") != safe_id:
+            raise ConsoleError("audit_archive_record_mismatch")
+        validate_archived_record(reference, record)
+        if is_purging(reference):
+            raise ConsoleError("audit_purge_in_progress")
+        path = self.root / f"{safe_id}.json"
+        with self._write_lock:
+            if not path.is_file():
+                raise ConsoleError("unknown_audit")
+            try:
+                current = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ConsoleError("audit_archive_reference_corrupt") from exc
+            if current != reference or not is_archived_reference(current):
+                raise ConsoleError("audit_archive_reference_changed")
+            _atomic_write(path, record)
+
+    def remove_archived_ref(
+        self,
+        audit_id: str,
+        reference: dict[str, Any],
+    ) -> bool:
+        safe_id = str(audit_id or "").strip()
+        if not AUDIT_ID_RE.fullmatch(safe_id):
+            raise ConsoleError("audit_id_invalid")
+        if not is_archived_reference(reference):
+            raise ConsoleError("audit_archive_reference_invalid")
+        if str(reference.get("audit_id") or "") != safe_id:
+            raise ConsoleError("audit_archive_record_mismatch")
+        if not is_purging(reference):
+            raise ConsoleError("audit_purge_intent_required")
+        path = self.root / f"{safe_id}.json"
+        with self._write_lock:
+            if not path.is_file():
+                return False
+            try:
+                current = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ConsoleError("audit_archive_reference_corrupt") from exc
+            if current != reference or not is_archived_reference(current):
+                raise ConsoleError("audit_archive_reference_changed")
+            try:
+                path.unlink()
+            except OSError as exc:
+                raise ConsoleError("audit_purge_local_delete_failed") from exc
+            return True
+
+    def create(
+        self,
+        *,
+        audit_type: str,
+        title: str,
+        actor_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        safe_type = str(audit_type or "").strip()
+        safe_title = " ".join(str(title or "").split())
+        safe_actor = str(actor_id or "").strip()
+        if not AUDIT_TYPE_RE.fullmatch(safe_type):
+            raise ConsoleError("unknown_audit_type")
+        if not safe_title:
+            raise ConsoleError("audit_title_required")
+        if not safe_actor:
+            raise ConsoleError("audit_actor_required")
+        if not isinstance(payload, dict):
+            raise ConsoleError("audit_payload_required")
+        with self._write_lock:
+            for _attempt in range(3):
+                audit_id = f"audit-{uuid.uuid4().hex[:16]}"
+                path = self.root / f"{audit_id}.json"
+                if path.exists():
+                    continue
+                now = _now()
+                record = {
+                    "audit_id": audit_id,
+                    "audit_type": safe_type,
+                    "title": safe_title,
+                    "created_by": safe_actor,
+                    "created_at": now,
+                    "updated_at": now,
+                    "payload": payload,
+                }
+                _atomic_write(path, record)
+                return record
+        raise RuntimeError("audit_id_collision")

@@ -5,14 +5,12 @@ from pathlib import Path
 import src.console_asgi as console_asgi
 from src.console_asgi import build_app
 
-
 from tests.complete_workflow_support import complete_postgres  # noqa: F401
-from tests.test_718_workflow_topology import restore_audit_registry  # noqa: F401
 from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
 
 
 def test_azure_build_defaults_to_persistent_data_outside_wwwroot(
-    tmp_path: Path, monkeypatch, complete_postgres, restore_audit_registry
+    tmp_path: Path, monkeypatch, complete_postgres
 ) -> None:
     from tests.test_publication_chain_recovery_v1 import FakeBlobStore
     azure_data = tmp_path / "home" / "data" / "metis-console"
@@ -25,7 +23,6 @@ def test_azure_build_defaults_to_persistent_data_outside_wwwroot(
     monkeypatch.setenv("METIS_CANONICAL_DB_DSN", complete_postgres.dsn)
     monkeypatch.setattr(console_asgi, "_postgres_credential", lambda: None)
     monkeypatch.setattr(console_asgi, "_immutable_source_store", lambda: FakeBlobStore({}))
-    monkeypatch.setattr(console_asgi, "_audit_archive_store", lambda: None)
     monkeypatch.setenv("WEBSITE_SITE_NAME", "test-app")
     monkeypatch.setenv("CONSOLE_PUBLIC_ORIGIN", "https://console.example.test")
     for key in ("CONSOLE_DATA_ROOT", "CONSOLE_SOURCE_STORE", "CONSOLE_RUNTIME",

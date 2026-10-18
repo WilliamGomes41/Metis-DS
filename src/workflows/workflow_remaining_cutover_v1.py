@@ -12,7 +12,7 @@ from copy import deepcopy
 from contextlib import contextmanager
 from typing import Any
 
-from src.audit_room_v1 import AUDIT_ID_RE, AUDIT_TYPE_RE
+from src.audit_retention_v1 import AUDIT_ID_RE, AUDIT_TYPE_RE
 from src.operations_console_v1 import ConsoleError
 from src.review_ledger import read_events
 from src.workflows.workflow_remaining_postgres_v1 import (
@@ -135,13 +135,6 @@ class PostgresAuditRegistry:
                     raise ConsoleError("audit_store_unavailable", str(exc)) from exc
         raise RuntimeError("audit_id_collision")
 
-
-
-def bind_remaining_route_backends(store: PostgresWorkflowRemainingStore) -> None:
-    """Keep existing route installers; replace only their persistence constructors."""
-    import src.audit_room_v1 as audit_room
-
-    audit_room.AuditRegistry = lambda _runtime: PostgresAuditRegistry(store)  # type: ignore[assignment]
 
 
 class _PostgresRemainingWorkflowMixin:

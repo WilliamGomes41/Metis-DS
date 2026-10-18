@@ -17,14 +17,11 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
 import pytest
-from fastapi.testclient import TestClient
 
 from scripts.migrate_workflow_remaining_postgres import _migrate_audits
-from src import audit_room_v1 as room
 from src.audit_archive_store_v1 import AuditArchiveStoreError
 from src.audit_retention_v1 import AuditRetentionService
 from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
 from src.publication_chain_recovery_v1 import backup_publication_chain, PublicationChainRecoveryError
 from src.publication_chain_recovery_guard_v1 import restore_publication_chain, verify_publication_chain_backup
@@ -55,14 +52,9 @@ def _system(tmp_path, config, monkeypatch, *, create=True, archive=None):
     store = PostgresWorkflowRemainingStore(config)
     store.verify_remaining_schema()
     registry = PostgresAuditRegistry(store)
-    monkeypatch.setattr(room, "AuditRegistry", lambda runtime: registry)
     archive = archive or Archive()
-    app = create_console_app(console)
-    room.install_audit_routes(app, console, archive_store=archive)
-    client = TestClient(app)
-    assert client.post("/login", data={"username": "researcher", "password": TEST_PASSWORD}, follow_redirects=False).status_code == 303
     service = AuditRetentionService(live_store=registry, archive_store=archive, runtime=console.runtime)
-    return store, registry, service, archive, client, account
+    return store, registry, service, archive, None, account
 
 
 def _create(registry, account, title="Duurzaam auditbewijs"):
@@ -70,23 +62,24 @@ def _create(registry, account, title="Duurzaam auditbewijs"):
                            payload={"state": "setup", "question": "Exacte bewijsinhoud"})
 
 
-def test_http_archive_fresh_runtime_restore_and_pending_purge(recovery_postgres, tmp_path, monkeypatch):
-    store, registry, service, archive, client, account = _system(tmp_path / "first", recovery_postgres, monkeypatch)
+def test_archive_fresh_runtime_restore_and_pending_purge(recovery_postgres, tmp_path, monkeypatch):
+    store, registry, service, archive, _, account = _system(tmp_path / "first", recovery_postgres, monkeypatch)
+    actor = account["account_id"]
     record = _create(registry, account)
     sid = record["audit_id"]
-    assert client.post(f"/audit/{sid}/archive", follow_redirects=False).status_code == 303
+    service.archive(sid, actor_id=actor)
     assert not list((tmp_path / "first" / "runtime").glob("audits/*.json"))
-    _, fresh, service, _, client, _ = _system(tmp_path / "fresh", recovery_postgres, monkeypatch, create=False, archive=archive)
-    assert record["title"] in client.get("/audit/archive").text
-    assert "Exacte bewijsinhoud" in client.get(f"/audit/archive/{sid}").text
+    _, fresh, service, _, _, _ = _system(tmp_path / "fresh", recovery_postgres, monkeypatch, create=False, archive=archive)
+    assert [row["audit_id"] for row in service.list_archived()] == [sid]
+    assert service.load_archived(sid) == record
     archive.fail_delete = True
-    restored = client.post(f"/audit/archive/{sid}/restore", follow_redirects=False)
-    assert restored.status_code == 503 and "Audit is hersteld" in restored.text
+    with pytest.raises(ConsoleError, match="audit_restore_cleanup_pending"):
+        service.restore(sid, actor_id=actor)
     assert fresh.get_audit(sid) == record
     archive.fail_delete = False
-    assert client.post(f"/audit/archive/{sid}/restore", follow_redirects=False).status_code == 303
+    assert service.restore(sid, actor_id=actor) == record
     assert archive.data == {}
-    assert client.post(f"/audit/{sid}/archive", follow_redirects=False).status_code == 303
+    service.archive(sid, actor_id=actor)
 
     def crash_after_blob(*args):
         raise ConsoleError("simulated_after_blob_delete")
@@ -94,13 +87,12 @@ def test_http_archive_fresh_runtime_restore_and_pending_purge(recovery_postgres,
     with pytest.raises(ConsoleError, match="simulated_after_blob_delete"):
         service.purge(sid, actor_id=account["account_id"], confirm_title=record["title"])
     assert archive.data == {}
-    _, fresh, _, _, client, _ = _system(tmp_path / "again", recovery_postgres, monkeypatch, create=False, archive=archive)
-    detail = client.get(f"/audit/archive/{sid}")
-    assert detail.status_code == 200 and "wacht op afronding" in detail.text
-    assert f'action="/audit/archive/{sid}/restore"' not in detail.text
-    assert client.post(f"/audit/archive/{sid}/restore", follow_redirects=False).status_code == 409
+    _, fresh, service, _, _, _ = _system(tmp_path / "again", recovery_postgres, monkeypatch, create=False, archive=archive)
+    assert service.get_archived_index(sid).get("purge_requested_by") == actor
+    with pytest.raises(ConsoleError):
+        service.restore(sid, actor_id=actor)
     for _ in range(2):
-        assert client.post(f"/audit/archive/{sid}/purge", data={"confirm_title": record["title"]}, follow_redirects=False).status_code == 303
+        service.purge(sid, actor_id=actor, confirm_title=record["title"])
     assert fresh.get_archived_reference(sid) is None
     assert fresh.get_audit(sid) is None
 
