@@ -108,6 +108,37 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
         except Exception as exc:
             raise WorkflowReviewStoreError("workflow_review_events_read_failed") from exc
 
+    def read_events_after(self, previous_event_hash: str | None, limit: int) -> list[dict[str, Any]]:
+        """Up to ``limit`` committed events chained directly after ``previous_event_hash``.
+
+        B1 (#708): the bounded read behind the post-commit ledger projection.
+        Fewer rows than requested means the anchor is not in PostgreSQL.
+        """
+        try:
+            with self._connect() as con:
+                rows = con.execute(
+                    "SELECT event_payload FROM workflow.review_events "
+                    + ("" if previous_event_hash is None else
+                       "WHERE event_id > (SELECT event_id FROM workflow.review_events WHERE event_hash=%s) ")
+                    + "ORDER BY event_id LIMIT %s",
+                    (limit,) if previous_event_hash is None else (previous_event_hash, limit),
+                ).fetchall()
+            if any(row["event_payload"] is None for row in rows):
+                raise WorkflowReviewStoreError("workflow_review_cutover_not_prepared")
+            events = [self._event_payload(row["event_payload"]) for row in rows]
+        except WorkflowReviewStoreError:
+            raise
+        except Exception as exc:
+            raise WorkflowReviewStoreError("workflow_review_events_read_failed") from exc
+        previous = previous_event_hash
+        for event in events:
+            body = dict(event)
+            got = body.pop("event_hash", None)
+            if body.get("previous_event_hash") != previous or stable_hash(body) != got:
+                raise WorkflowReviewStoreError("workflow_review_chain_conflict")
+            previous = str(got)
+        return events
+
     @staticmethod
     def _new_event(
         *,
