@@ -1,6 +1,7 @@
 """#750 follow-up: one Review GET reads each document envelope once.
 
 # release-control-evidence: scope/belofte
+# release-control-evidence: toegang
 # release-control-evidence: kwaliteit
 # release-control-evidence: releasebewijs
 """
@@ -39,3 +40,8 @@ def test_review_get_reuses_the_request_envelope_reads(workflow_postgres, tmp_pat
     unscoped = client.get("/review", params={"document": sid})
     assert _norm(response.text) == _norm(unscoped.text)
     assert len(single) == 3
+
+    # The read scope wraps the route; it never replaces its authentication.
+    client.cookies.clear()
+    anonymous = client.get("/review", params={"document": sid}, follow_redirects=False)
+    assert anonymous.status_code in {303, 401} and sid not in anonymous.text
