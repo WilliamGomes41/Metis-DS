@@ -91,6 +91,7 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
     extraction_id = stable_hash(record)
     out, bindings, exclusions, stack = [], [], [], []
     navigation_pages: set[int] = set()
+    unverified_body_pages: set = set()
 
     def emit(text: str, prov: dict, ref: str, *, heading=None, cell=None, text_field="text", origin_height=None):
         page = prov["page_no"]
@@ -166,6 +167,7 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
             continue
         if "text" not in item:
             exclusions.append({"item_ref": ref, "reason": "non_text_item_preserved_in_document", "provenance": provenance})
+            unverified_body_pages.update(p.get("page_no") for p in provenance if isinstance(p, dict))
             continue
         text = item["text"]
         if not isinstance(text, str) or (text.strip() and not provenance):
@@ -210,6 +212,8 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
         raise DoclingError("docling_no_source_text")
     # OCR is disabled. A missing page may be blank, scanned, or missed by the
     # model; none of those possibilities proves complete source extraction.
+    # Navigation accounts only for a page without other unverified body content.
+    navigation_pages -= unverified_body_pages
     if selected - {row["source_page"] for row in out} - navigation_pages:
         raise DoclingError("docling_page_text_unverified")
     record.update(extraction_id=extraction_id, bindings=bindings, exclusions=exclusions,

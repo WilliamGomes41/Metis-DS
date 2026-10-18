@@ -365,6 +365,12 @@ def test_table_of_contents_page_is_accounted_navigation_not_source_text():
     spanning["document"]["tables"][0]["prov"].append(deepcopy(spanning["document"]["texts"][0]["prov"][0]))
     with pytest.raises(DoclingError, match="page_text_unverified"):
         rows(spanning)
+    with_picture = deepcopy(payload)
+    with_picture["document"]["pictures"] = [{"self_ref": "#/pictures/0", "label": "picture",
+                                             "content_layer": "body", "prov": deepcopy(prov)}]
+    with_picture["reading_order"].append("#/pictures/0")
+    with pytest.raises(DoclingError, match="page_text_unverified"):
+        rows(with_picture)
     only_index = deepcopy(payload)
     only_index["document"]["texts"] = []
     only_index["reading_order"] = ["#/tables/0"]

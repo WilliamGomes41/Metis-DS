@@ -62,8 +62,9 @@ it and preparation failed with `docling_page_text_unverified`. A single-page
 preserved in the record with reason `docling_document_index_navigation`, and the
 accounted pages are listed in `navigation_pages`. It emits no fragments, so the
 source register and pre-review candidate creator are unchanged. An empty or
-multi-page index accounts for nothing; blank, scanned and furniture-only pages
-still fail. Stored extractions are read, never reconverted. With this change the
+multi-page index accounts for nothing, nor does an index sharing its page with
+other unverified body content such as a preserved picture; blank, scanned and
+furniture-only pages still fail. Stored extractions are read, never reconverted. With this change the
 pinned runtime converts the Smetten concept into 1,040 fragments over 45 pages
 plus navigation pages 3–4.
 
