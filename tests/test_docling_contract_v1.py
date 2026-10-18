@@ -334,6 +334,50 @@ def test_selected_page_without_usable_text_is_not_silently_accepted():
         rows(payload)
 
 
+def test_table_of_contents_page_is_accounted_navigation_not_source_text():
+    # Conceptrichtlijn Smetten: a second contents page holds only Docling's
+    # document_index. It is navigation; blank and furniture-only pages still fail.
+    payload = result()
+    payload["document"]["pages"]["2"] = {"size": {"width": 600, "height": 800}}
+    prov = deepcopy(payload["document"]["texts"][0]["prov"])
+    prov[0]["page_no"] = 2
+    cells = [{"text": "Rationale ........ ....", "row_span": 1, "col_span": 1,
+              "start_row_offset_idx": 0, "start_col_offset_idx": 1},
+             {"text": "25", "row_span": 1, "col_span": 1,
+              "start_row_offset_idx": 0, "start_col_offset_idx": 2}]
+    payload["document"]["tables"] = [{"self_ref": "#/tables/0", "label": "document_index", "prov": prov,
+                                      "data": {"num_rows": 1, "num_cols": 3, "table_cells": cells}}]
+    payload["reading_order"].append("#/tables/0")
+    fragments = rows(payload)
+    assert {f["source_page"] for f in fragments} == {1}
+    record = fragments.extraction_record
+    assert record["navigation_pages"] == [2]
+    assert record["exclusions"] == [{"item_ref": "#/tables/0", "reason": "docling_document_index_navigation",
+                                     "provenance": prov}]
+    assert record["document"]["tables"][0]["data"]["table_cells"] == cells
+
+    empty = deepcopy(payload)
+    for cell in empty["document"]["tables"][0]["data"]["table_cells"]:
+        cell["text"] = " "
+    with pytest.raises(DoclingError, match="page_text_unverified"):
+        rows(empty)
+    spanning = deepcopy(payload)
+    spanning["document"]["tables"][0]["prov"].append(deepcopy(spanning["document"]["texts"][0]["prov"][0]))
+    with pytest.raises(DoclingError, match="page_text_unverified"):
+        rows(spanning)
+    with_picture = deepcopy(payload)
+    with_picture["document"]["pictures"] = [{"self_ref": "#/pictures/0", "label": "picture",
+                                             "content_layer": "body", "prov": deepcopy(prov)}]
+    with_picture["reading_order"].append("#/pictures/0")
+    with pytest.raises(DoclingError, match="page_text_unverified"):
+        rows(with_picture)
+    only_index = deepcopy(payload)
+    only_index["document"]["texts"] = []
+    only_index["reading_order"] = ["#/tables/0"]
+    with pytest.raises(DoclingError, match="no_source_text"):
+        rows(only_index)
+
+
 @pytest.mark.parametrize("all_text_missing, expected_code", [
     (False, "docling_page_text_unverified"),
     (True, "docling_no_source_text"),

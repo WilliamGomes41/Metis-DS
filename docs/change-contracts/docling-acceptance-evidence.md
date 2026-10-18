@@ -44,6 +44,30 @@ never discard accepted extraction evidence or deploy an old native-only reader
 against Docling IDs. Production ZIP/runtime, Azure capacity and actual activation
 remain separate acceptance work.
 
+## Table-of-contents page follow-up (2026-10-18)
+
+Change class: B
+Promise: A selected page whose only content is a Docling `document_index`
+(table of contents) is accounted navigation, not an unverified page.
+Proof: `test_table_of_contents_page_is_accounted_navigation_not_source_text`;
+real Smetten concept conversion on the pinned runtime and models.
+Touches lifecycle invariants: no
+Rewrite risk: none
+
+The source-integrity follow-up above blocked the Smetten concept, which had
+previously converted completely: Docling labels both contents pages (3–4) as
+`document_index`, and page 4 holds nothing else, so no fragment was emitted for
+it and preparation failed with `docling_page_text_unverified`. A single-page
+`document_index` with cell text now accounts for its own page. The item stays
+preserved in the record with reason `docling_document_index_navigation`, and the
+accounted pages are listed in `navigation_pages`. It emits no fragments, so the
+source register and pre-review candidate creator are unchanged. An empty or
+multi-page index accounts for nothing, nor does an index sharing its page with
+other unverified body content such as a preserved picture; blank, scanned and
+furniture-only pages still fail. Stored extractions are read, never reconverted. With this change the
+pinned runtime converts the Smetten concept into 1,040 fragments over 45 pages
+plus navigation pages 3–4.
+
 ## Reproducible runtime
 
 Python 3.12, official `docling-slim==2.132.0`, `docling-core==2.99.0`,
