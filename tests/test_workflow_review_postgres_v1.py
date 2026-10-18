@@ -272,11 +272,10 @@ def test_review_schema_preserves_exact_payload_and_authorization_order() -> None
     assert "snapshot_id DROP NOT NULL" in sql
 
 
-def test_review_cutover_is_explicit_and_prerequisite_bound() -> None:
+def test_review_cutover_is_explicit_and_prerequisite_bound(monkeypatch) -> None:
+    from tests.test_workflow_remaining_cutover_v1 import _refused_partial_configurations
+    _refused_partial_configurations(monkeypatch, "METIS_WORKFLOW_REVIEW_STORE")
     asgi = (ROOT / "src" / "console_asgi.py").read_text(encoding="utf-8")
-    assert "METIS_WORKFLOW_REVIEW_STORE" in asgi
-    assert "workflow_identity_store_required_for_review_store" in asgi
-    assert "workflow_document_store_required_for_review_store" in asgi
     assert "migrate_legacy_runtime" not in asgi
 
 

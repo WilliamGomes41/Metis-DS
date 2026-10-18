@@ -3957,7 +3957,7 @@ def create_console_app(
                 back += f'<p><a href="/review/participants?{_esc(urlencode({"document": document}))}">Terug naar deelnemersbeheer</a></p>'
         technical_details = (
             f'<details><summary>Technische informatie voor de beheerder</summary><code>{_esc(exc.code)}</code>{processing_details}</details>'
-            if _request.url.path.startswith(("/settings", "/audit")) else ""
+            if _request.url.path.startswith(("/settings", "/audit", "/inzicht")) else ""
         )
         if not technical_details and (exc.code.startswith(("pre_review_", "processing_"))):
             message = "De verwerking is niet beschikbaar. Deze taak kan nu niet worden uitgevoerd."
@@ -4241,8 +4241,7 @@ def create_console_app(
             </div>
             <h2>Tests en experimenten</h2>
             <div class="doc-list">
-              <a class="doc-card" href="/audit/semantic-safety"><p class="doc-title">Semantische veiligheidstests</p><p>Controleer vaste testgevallen voor weglatingen, voorwaarden, uitzonderingen en ontkenningen.</p></a>
-              <a class="doc-card" href="/audit"><p class="doc-title">Audit &amp; diagnostiek</p><p>Open controles, experimenten en bewaarde resultaten.</p></a>
+              <a class="doc-card" href="/inzicht/veiligheidstests"><p class="doc-title">Semantische veiligheidstests</p><p>Controleer vaste testgevallen voor weglatingen, voorwaarden, uitzonderingen en ontkenningen.</p></a>
               <a class="doc-card" href="/settings/quality/compare"><p class="doc-title">Routevergelijking</p><p>Vergelijk verwerkingsroutes op dezelfde bron.</p></a>
             </div>
             <h2>Exports</h2>

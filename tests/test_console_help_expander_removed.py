@@ -13,7 +13,7 @@ pytestmark = [
 
 UI_FILES = (
     ROOT / "src" / "operations_console_app.py",
-    ROOT / "src" / "audit_room_v1.py",
+    ROOT / "src" / "semantic_safety_app_v1.py",
     ROOT / "src" / "publish_readiness_ui_v1.py",
     ROOT / "src" / "closed_review_loop_v1.py",
     ROOT / "src" / "review_workboard_v1.py",

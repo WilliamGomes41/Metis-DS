@@ -35,6 +35,8 @@ import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
+
 SCHEMA = 'publication-refusal-audit-v1'
 STORE_STATUS = 'temporary_file_store_pending_postgres_table'
 POSTGRES_STATUS = 'postgres_table'
@@ -47,8 +49,7 @@ RETENTION_DAYS = 400
 MAX_ROWS = 200_000
 RECORDS_LIMIT = 500
 _LOCK = threading.Lock()
-_POSTGRES_MODE_KEYS = ('METIS_CANONICAL_STORE', 'METIS_WORKFLOW_STORE', 'METIS_WORKFLOW_DOCUMENT_STORE',
-                       'METIS_WORKFLOW_REVIEW_STORE', 'METIS_WORKFLOW_REMAINING_STORE')
+
 
 
 class RefusalStoreUnavailable(RuntimeError):
@@ -213,7 +214,7 @@ def file_store_allowed(environ=None) -> bool:
         return False
     if topology['workers'] != 1 or topology['instances'] != 1:
         return False
-    return not any(str(env.get(name, '') or '').strip().lower() == 'postgres' for name in _POSTGRES_MODE_KEYS)
+    return not any(str(env.get(name, '') or '').strip().lower() == 'postgres' for name in POSTGRES_STORE_SETTINGS)
 
 
 def postgres_store(console):

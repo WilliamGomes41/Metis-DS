@@ -28,8 +28,9 @@ from src.operations_console_v1 import ConsoleError
 from src.review_ledger import read_events
 from src.review_policy_v1 import CONTRACT as REVIEW_POLICY_CONTRACT
 from src.source_preparation_context_v1 import KEY
+from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
 from tests.semantic_fixture_support import bind_fixture_selections, install_fixture_history
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 TEXT = "De verpleegkundige bespreekt passende ondersteuning. De keuze wordt samen geevalueerd."
@@ -59,24 +60,21 @@ class DiskBlobTransport:
 def installed(root, cache, backend, patch):
     """Use the real composition root; only inject isolated infrastructure factories."""
     from src import console_asgi as composition
-    from src import audit_room_v1
-    # build_app replaces this global constructor for native storage. Record it
-    # before composition so fixture teardown cannot leak a dropped test schema.
-    patch.setattr(audit_room_v1, "AuditRegistry", audit_room_v1.AuditRegistry)
     patch.delenv("WEBSITE_SITE_NAME", raising=False)
     patch.setenv("CONSOLE_DATA_ROOT", str(root))
     patch.setenv("CONSOLE_RUNTIME", str(root / "runtime"))
     patch.setenv("CONSOLE_SOURCE_STORE", str(cache))
     patch.setattr(composition, "_postgres_credential", lambda: None)
     patch.setattr(composition, "_canonical_store", lambda **kw: None)
-    patch.setattr(composition, "_audit_archive_store", lambda: None)
     patch.setattr(composition, "bootstrap_accounts", lambda console: None)
     patch.setattr(composition, "bind_pre_review_semantic_processing", bind_fixture_selections)
     source = AzureBlobSourceStore(blob_service_client=DiskBlobTransport(root / "immutable"))
     patch.setattr(composition, "_immutable_source_store", lambda: source)
     stores = [None] * 4
+    for name in POSTGRES_STORE_SETTINGS:
+        patch.delenv(name, raising=False)
     if backend == "postgres":
-        from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+        from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig, PostgresCanonicalPublicationStore
         from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
         from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
         from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
@@ -84,6 +82,11 @@ def installed(root, cache, backend, patch):
         config = PostgresCanonicalConfig(dsn=os.environ["METIS_TEST_POSTGRES_DSN"])
         stores = [PostgresWorkflowIdentityStore(config), PostgresConcurrentWorkflowDocumentStore(config),
                   PostgresWorkflowReviewStore(config), PostgresWorkflowRemainingStore(config)]
+        # #718: only a complete PostgreSQL configuration selects native authority.
+        for name in POSTGRES_STORE_SETTINGS:
+            patch.setenv(name, "postgres")
+        canonical = PostgresCanonicalPublicationStore(config)
+        patch.setattr(composition, "_canonical_store", lambda canonical=canonical, **kw: canonical)
     for name, store in zip(("_workflow_identity_store", "_workflow_document_store",
                             "_workflow_review_store", "_workflow_remaining_store"), stores):
         patch.setattr(composition, name, lambda store=store, **kw: store)

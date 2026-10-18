@@ -26,7 +26,7 @@ from src.pre_review_semantic_v1 import (
     semantic_spec_from_fragments,
 )
 from tests.test_review_batch_atomic_postgres import _console
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 def fixture_console(tmp_path, failure, config):

@@ -16,8 +16,7 @@ from pathlib import Path
 import pytest
 
 from src.audit_archive_store_v1 import AuditArchiveStoreError
-from src.audit_retention_v1 import AuditRetentionService, canonical_audit_bytes
-from src.audit_room_v1 import AuditRegistry
+from src.audit_retention_v1 import AuditRegistry, AuditRetentionService, canonical_audit_bytes
 from src.operations_console_v1 import ConsoleError
 
 
