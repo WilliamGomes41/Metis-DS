@@ -3593,6 +3593,29 @@ def _source_context_card(console: OperationsConsole, snapshot_id: str, obj: dict
     return ''.join(parts) + panel + '</section>'
 
 
+def _formation_incomplete_banner(console, snapshot_id: str, objects: list[dict[str, Any]]) -> str:
+    """Point to recovery when formation left no knowledge candidate at all.
+
+    Read-only projection of the recorded formation flag (#516): the rejected
+    work stays preserved; resuming, not source disposition, is the next step.
+    """
+    from src.recoverable_formation_v1 import incomplete
+    from src.source_accountability_v1 import is_source_record
+    if any(obj.get("object_type") not in {"document", "heading"} and not is_source_record(obj) for obj in objects):
+        return ""
+    try:
+        if not incomplete(console._envelope(snapshot_id)):
+            return ""
+    except ConsoleError:
+        return ""
+    link = f'/source-selection?{urlencode({"document": snapshot_id})}'
+    return ('<div class="banner warn" role="alert" data-formation-incomplete>'
+            '<p><strong>Kennisvorming onvolledig.</strong> Metis heeft voor dit document nog geen kennisvoorstellen '
+            'gevormd; de afgewezen voorstellen en de bron zijn bewaard. Hervat eerst de verwerking. '
+            'Handel bronregels pas af nadat de kennisvorming is hersteld.</p>'
+            f'<p><a class="btn-primary" href="{_esc(link)}">Naar Bronselectie om te hervatten</a></p></div>')
+
+
 @source_reconstruction_scope(reuse_existing=True)
 @diagnostic_phase("review_render")
 def _render_review_room(
@@ -3664,6 +3687,7 @@ def _render_review_room(
             )
             all_object_versions = []
         review_path = review_path_for_klasse(chosen_row["class"])
+        objects_html += _formation_incomplete_banner(console, chosen, snapshot_objects)
         audit_signals: list[dict[str, Any]] = []
         if history_enabled:
             audit_reader = getattr(console, "audit_review_signals", None)

@@ -19,7 +19,7 @@ from tests.test_recommendation_coverage_v1 import FIRST, SECOND
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
-def system(tmp_path, *, broken=True, make_console=None, containers=False):
+def system(tmp_path, *, broken=True, make_console=None, containers=False, broken_first=False):
     make_console = make_console or (lambda: ReviewClosureConsole(
         root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime'))
     state = make_console()
@@ -42,7 +42,7 @@ def system(tmp_path, *, broken=True, make_console=None, containers=False):
             context = next(b for b in data['source_blocks'] + data['evidence_blocks'] if b['text'] == 'Bij volwassenen.')
             proposal['objects'][0]['context_evidence'] = [{'role': 'scope', 'span': {
                 'block_id': context['block_id'], 'literal': context['text'], 'occurrence': 0}, 'unresolved_reason': None}]
-        if mode['broken'] and target == SECOND:
+        if mode['broken'] and target == SECOND or broken_first and target == FIRST:
             proposal['objects'][0]['field_evidence']['recommended_action']['span']['literal'] = 'invented'
         return {'id': f'call-{len(calls)}', 'status': 'completed', 'output': [
             {'type': 'message', 'content': [{'type': 'output_text', 'text': json.dumps(proposal)}]}]}
@@ -109,6 +109,29 @@ def partial_story(tmp_path, make_console=None):
                                 'expected_revision': final.objects_revision(sid)})
 
 
+
+
+def test_review_points_to_resume_when_formation_left_no_candidate(tmp_path):
+    # Smetten: every proposal was rejected. The preserved work is correct (#516),
+    # but Review offered hundreds of source dispositions instead of recovery.
+    from fastapi.testclient import TestClient
+    from src.operations_console_app import create_console_app, COOKIE
+    from src.source_accountability_v1 import is_source_record
+    state, sid, *_ = system(tmp_path, broken_first=True)
+    objects = state.snapshot_objects(sid)
+    assert objects and all(is_source_record(o) or o.get('object_type') in {'document', 'heading'} for o in objects)
+    assert incomplete(state._envelope(sid))
+    client = TestClient(create_console_app(state))
+    client.cookies.set(COOKIE, state.authenticate('reviewer', 'strong-test-password')['token'])
+    page = client.get('/review', params={'document': sid}).text
+    assert 'data-formation-incomplete' in page and 'Kennisvorming onvolledig' in page
+    assert f'/source-selection?document={sid}' in page
+
+    # A partial run with a validated candidate keeps its normal Review page.
+    partial, partial_sid, *_ = system(tmp_path / 'partial')
+    partial_client = TestClient(create_console_app(partial))
+    partial_client.cookies.set(COOKIE, partial.authenticate('reviewer', 'strong-test-password')['token'])
+    assert 'data-formation-incomplete' not in partial_client.get('/review', params={'document': partial_sid}).text
 
 
 def test_processing_status_projects_progress_for_pre_v10_bounded_evidence(tmp_path):

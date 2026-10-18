@@ -300,6 +300,17 @@ def test_recovery_preserves_binding_and_block_but_never_revives_entra_sessions(r
     assert fresh.sign_in(claims(ADMIN, ['Metis.Publisher']))['account_id'] == admin['account_id']
 
 
+def test_sign_in_client_opts_out_of_regional_endpoints(monkeypatch):
+    # INC-05: every login logged "Region configured (None) != region detected".
+    import msal
+    from src.console_entra_v1 import MicrosoftLogin
+    created = []
+    monkeypatch.setattr(msal, "ConfidentialClientApplication", lambda *args, **kwargs: created.append(kwargs))
+    MicrosoftLogin(config())._factory()
+    assert created[0]["azure_region"] is False
+    assert created[0]["exclude_scopes"] == ["offline_access"]
+
+
 def test_real_msal_code_exchange_binds_nonce_state_and_pkce():
     """Exercise MSAL itself; replace only Microsoft's HTTPS endpoints."""
     import jwt
