@@ -186,10 +186,10 @@ def test_cutover_schema_preserves_full_envelope_and_object_position() -> None:
     assert "position INTEGER" in sql
 
 
-def test_cutover_is_explicit_and_never_runs_legacy_migration_on_startup() -> None:
+def test_cutover_is_explicit_and_never_runs_legacy_migration_on_startup(monkeypatch) -> None:
+    from tests.test_workflow_remaining_cutover_v1 import _refused_partial_configurations
+    _refused_partial_configurations(monkeypatch, "METIS_WORKFLOW_DOCUMENT_STORE")
     asgi = (ROOT / "src" / "console_asgi.py").read_text(encoding="utf-8")
-    assert "METIS_WORKFLOW_DOCUMENT_STORE" in asgi
-    assert "workflow_identity_store_required_for_document_store" in asgi
     assert "migrate_legacy_runtime" not in asgi
     assert "prepare_legacy_cutover" not in asgi
 

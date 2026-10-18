@@ -15,7 +15,7 @@ from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASS
 from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
 from src.attempt_diagnostics_v1 import replay_diagnostic
 from tests.test_review_batch_atomic_postgres import _console, _client
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 from tests.test_pre_review_semantic_v1 import _response, _full_span_proposal
 
 

@@ -16,7 +16,7 @@ from src.operations_console_v1 import ConsoleError
 from src.processing_retry_v1 import now
 from tests.test_availability_repair import accounts, bind, provider, installed_app, login, drain, state
 from tests.test_review_batch_atomic_postgres import _console
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 class ImmutableBlobFixture:

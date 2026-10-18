@@ -11,12 +11,12 @@ import os
 import re
 from typing import Mapping
 
+from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
+
 DEFAULT_WORKERS = 1
 SUPPORTED_WORKERS = (1, 2)
 SUPPORTED_INSTANCE_COUNT = 1
 SUPPORTED_WRITE_MODE = "sequential"
-
-from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
 
 DURABLE_MULTI_WORKER_SETTINGS = {
     **dict.fromkeys(POSTGRES_STORE_SETTINGS, "postgres"),

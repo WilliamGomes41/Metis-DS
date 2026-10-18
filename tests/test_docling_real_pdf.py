@@ -213,7 +213,7 @@ def test_real_pdf_postgres_chain(tmp_path, workflow_postgres, monkeypatch):
     chain(tmp_path, lambda: _console(tmp_path, workflow_postgres))
 
 
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: E402, F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: E402, F401
 
 
 @pytest.mark.parametrize("field_contract", ["v2", "v3"])

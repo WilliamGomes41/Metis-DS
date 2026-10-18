@@ -21,7 +21,7 @@ from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 from src.processing_retry_v1 import now
 from tests.test_recommendation_context_v3 import response_for
 from tests.semantic_fixture_support import bind_fixture_selections
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 @pytest.fixture(params=["local", "postgres"])

@@ -35,6 +35,8 @@ import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
+
 SCHEMA = 'publication-refusal-audit-v1'
 STORE_STATUS = 'temporary_file_store_pending_postgres_table'
 POSTGRES_STATUS = 'postgres_table'
@@ -47,7 +49,6 @@ RETENTION_DAYS = 400
 MAX_ROWS = 200_000
 RECORDS_LIMIT = 500
 _LOCK = threading.Lock()
-from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
 
 
 

@@ -17,7 +17,7 @@ from src.source_preparation_context_v1 import KEY, stored_extraction, build_form
 from tests.test_recoverable_formation_v1 import system
 from tests.test_recommendation_coverage_v1 import FIRST
 from tests.test_availability_repair import accounts, state, bind, provider, installed_app, login, start, drain, upload
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 @pytest.fixture(params=['local', 'postgres'])
