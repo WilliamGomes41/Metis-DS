@@ -92,6 +92,19 @@ Een proof-slice wordt pas een nieuwe repair bij een reproduceerbare invariantbre
 - Verifieer de gemergde beschikbaarheids-, bronhergebruik- en contextnavigatiereparaties via de oorspronkelijke gebruikershandeling op de werkelijk draaiende commit. Gesloten codeissues zijn geen productieacceptatie.
 - Leg resterende afwijkingen en niet-gevoelig voortgangsbewijs vast in de bestaande issues. Volledige diagnostiek blijft intern; geen tweede statusadministratie of algemene herbouw.
 
+## R4.6 Vormingskader per bron invoeren (Protocol v4.1 §5.4)
+
+**Status:** norm vastgelegd; implementatie open. De huidige code kiest de prozaroute nog deploymentbreed via `METIS_PASSAGE_FORMATION_MODE` en legt de gekozen route niet vast als documenttoestand. Beslisbomen gaan vast via de structurele route.
+
+- Class A, `Rewrite risk: high`: de routekeuze raakt persistente verwerkingsidentiteit, retry en herstel. Volg de lifecycle-VSA met black-box-bewijs voor ingest, retry na routewissel in de omgeving, herstart en opvolger.
+- Leg bronsoort en route vast bij de start in Bronselectie. De omgevingsvariabele wordt alleen standaardroute en uitsluitingsschakelaar.
+- Bestaande snapshots: geen backfill. Hun route blijft de afgeleide, vastgelegde verwerkingsidentiteit.
+- Leg vast hoe de beslisboomconstructie (`decision_unit_construction_v1`) en `materialise_knowledge_candidates` zich verhouden tot de invariant van één deterministische kandidaatmaker vóór review. Een conflict wordt eerst als domeinontwerpkwestie voorgelegd.
+- De standaardroutes van strategie B en C wijzigen niet in deze slice. Een semantische route voor beslisbomen vereist eerst een experiment (§10) met een uitbreiding van de routevergelijking naar besliseenheden én verbindingen, en daarna een protocolwijziging.
+- Besluit William 2026-10-18: nieuwe releases registreren `PUBLICATION_PROTOCOL_VERSION` 4.1.0. Bestaande releases behouden hun vastgelegde versie.
+
+**Klaar wanneer:** een routewissel in de omgeving aantoonbaar geen invloed heeft op vastgelegde of lopende verwerking, retry en herstel de vastgelegde route gebruiken, en beide strategieën hun huidige standaardroute behouden.
+
 ## Stopregels
 
 - Geen huidige gedragsspecificatie uit historische V2-documenten afleiden.
