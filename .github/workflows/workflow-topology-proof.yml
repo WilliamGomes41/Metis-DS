@@ -40,11 +40,24 @@ jobs:
           tests/test_r2_write_bundle_object_loss_postgres.py
           tests/test_r2_i2_caught_nested_fault.py
           tests/test_678_store_command_postgres.py
+          tests/test_741_participation_store_command.py
+          tests/test_review_participation_management.py
           tests/test_workflow_transaction_v1.py
           tests/test_live_v1_working_v2_v1.py
           tests/test_vsa_publish_document_v1.py
           tests/test_a03_formation_coverage.py
           --junitxml=topology-proof.xml
+      - name: Require native participation evidence
+        run: |
+          python - <<'PYCODE'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("topology-proof.xml").getroot()
+          cases = [case for case in root.iter("testcase")
+                   if case.get("classname", "").endswith("test_741_participation_store_command")]
+          assert cases, "No native participation ownership evidence"
+          assert not any(case.find(tag) is not None for case in cases
+                         for tag in ("skipped", "failure", "error")), "Participation proof skipped or failed"
+          PYCODE
       - uses: actions/upload-artifact@v4
         if: always()
         with:
