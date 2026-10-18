@@ -23,7 +23,7 @@ from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
 from src.review_closure_v1 import ReviewClosureConsole, harden_legacy_repair_routes
 from src.review_ledger import read_events
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 @pytest.mark.parametrize("console_type", [DeterministicRepairReviewConsole, ReviewClosureConsole])

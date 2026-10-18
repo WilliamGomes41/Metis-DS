@@ -16,7 +16,7 @@ from src.review_closure_v1 import ReviewClosureConsole
 from src.source_accountability_v1 import evidence_of
 from tests.test_recommendation_context_v3 import response_for, source
 from tests.test_recommendation_coverage_v1 import FIRST, SECOND
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 def system(tmp_path, *, broken=True, make_console=None, containers=False):

@@ -363,7 +363,7 @@ def test_historical_binding_survives_changed_context_without_approval_carry(tmp_
     assert review_stage(current, review_path="richtlijn", bindings=console.object_review_bindings(sid),
                         fragments=console.review_source_fragments(sid)) == FIRST_REVIEW
 
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 def test_native_stale_review_does_not_attempt_a_restorative_write(workflow_postgres, tmp_path, monkeypatch):

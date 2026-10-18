@@ -21,7 +21,7 @@ from src.operations_console_v1 import OperationsConsole, ConsoleError
 from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 from src.source_bound_fields_v3 import MODE
 from tests.test_recommendation_context_v3 import response_for
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 TEXT = 'Bespreek de voorkeuren'
 OTHER = 'Controleer de ondersteuning'

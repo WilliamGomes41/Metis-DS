@@ -21,7 +21,7 @@ from src.source_processing_dispatch_v1 import SourceProcessingDispatcher, pendin
 from tests.test_availability_repair import accounts, bind, provider, state, installed_app, login, drain
 from tests.test_pre_review_semantic_v1 import _fragment
 from tests.test_review_batch_atomic_postgres import _console
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 @pytest.fixture(params=["local", "postgres"])
