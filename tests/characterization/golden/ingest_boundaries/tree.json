@@ -8,6 +8,29 @@
       "console_version": "operations-console-v1.0.0",
       "content_kind": "boom",
       "date": "2026-10-17",
+      "decision_tree_construction": {
+        "context_bindings": [],
+        "proposal_hash": "060b6aa73d66863094b72a72b6892cb1db0c15f5f7f401d93db407093ed3606f",
+        "references": {
+          "u1": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-cc4ee047b77c6d8d",
+          "u2": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-053df35084d7cf65",
+          "u3": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-8ca36cc9604cbac0"
+        },
+        "relation_findings": [],
+        "result_bundle_issues": [],
+        "result_bundles": [],
+        "unassigned_fragment_ids": []
+      },
+      "decision_tree_formation": {
+        "actor": "author",
+        "construction_contract": "decision-tree-construction-v1",
+        "model": "deterministic-export-v1",
+        "policy_version": "decision-tree-formation-policy-v1.0.0",
+        "proposal_contract": "decision-tree-proposal-v1",
+        "proposal_hash": "060b6aa73d66863094b72a72b6892cb1db0c15f5f7f401d93db407093ed3606f",
+        "reason": "only_admitted_route_for_decision_trees",
+        "route": "decision-tree-source-bound-v1"
+      },
       "document_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699",
       "family": "fixture",
       "immutable_storage_locator": null,
@@ -24,7 +47,7 @@
         {
           "candidates": [
             {
-              "canonical_hash": "4b657823102ffacdf2e71899c36cc5c48dee84982c5e797207ded3168cf546f0",
+              "canonical_hash": "018f61461ee7d7f2cede1b78d490859dd41b6a2549d7ecde2054ea0faa1e7467",
               "fingerprint": {
                 "complex_semantics": false,
                 "relations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -32,19 +55,19 @@
                 "text": "ef4424fe673d3fcd2c164cc017a3b1683f2059eec605b4317848484f774b2d02",
                 "type": "path"
               },
-              "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-p",
+              "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-cc4ee047b77c6d8d",
               "object_version": "1.0",
               "origin": {
-                "model": null,
+                "model": "deterministic-export-v1",
                 "policy_version": null,
                 "route": "unknown",
-                "selection_origin": "unknown",
+                "selection_origin": "proposal_selected",
                 "strategy": "unknown"
               },
               "structural": true
             },
             {
-              "canonical_hash": "20986efba9ac6a8b1d43ce1f02938194c51c565a1f10ac211b7d9bc638f97a42",
+              "canonical_hash": "ab1728e5a2d1449bce8b251da38ba2fb65198a730bb6dc821abe5b2a4450fa26",
               "fingerprint": {
                 "complex_semantics": false,
                 "relations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -52,19 +75,19 @@
                 "text": "fb895782a8d90c9de61739916ed24598aa3377d6609c6f1408f67673d143be13",
                 "type": "node"
               },
-              "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-n",
+              "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-053df35084d7cf65",
               "object_version": "1.0",
               "origin": {
-                "model": null,
+                "model": "deterministic-export-v1",
                 "policy_version": null,
                 "route": "unknown",
-                "selection_origin": "unknown",
+                "selection_origin": "proposal_selected",
                 "strategy": "unknown"
               },
               "structural": false
             },
             {
-              "canonical_hash": "2b6aad7c388179366fb70df91fa9c4f231445dbc33b4e5ed78f98d737e11372b",
+              "canonical_hash": "61acb322cc362c8aca07e3d2135017fbdc89cea1f41a0673eb67c8daa31172f8",
               "fingerprint": {
                 "complex_semantics": true,
                 "relations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -72,13 +95,13 @@
                 "text": "b90c6734d86a815a75586d0535f47d8e45913074ec47a31dec42149e9c7fe304",
                 "type": "outcome"
               },
-              "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-o",
+              "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-8ca36cc9604cbac0",
               "object_version": "1.0",
               "origin": {
-                "model": null,
+                "model": "deterministic-export-v1",
                 "policy_version": null,
                 "route": "unknown",
-                "selection_origin": "unknown",
+                "selection_origin": "proposal_selected",
                 "strategy": "unknown"
               },
               "structural": false
@@ -214,6 +237,29 @@
         "console_version": "operations-console-v1.0.0",
         "content_kind": "boom",
         "date": "2026-10-17",
+        "decision_tree_construction": {
+          "context_bindings": [],
+          "proposal_hash": "060b6aa73d66863094b72a72b6892cb1db0c15f5f7f401d93db407093ed3606f",
+          "references": {
+            "u1": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-cc4ee047b77c6d8d",
+            "u2": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-053df35084d7cf65",
+            "u3": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-8ca36cc9604cbac0"
+          },
+          "relation_findings": [],
+          "result_bundle_issues": [],
+          "result_bundles": [],
+          "unassigned_fragment_ids": []
+        },
+        "decision_tree_formation": {
+          "actor": "author",
+          "construction_contract": "decision-tree-construction-v1",
+          "model": "deterministic-export-v1",
+          "policy_version": "decision-tree-formation-policy-v1.0.0",
+          "proposal_contract": "decision-tree-proposal-v1",
+          "proposal_hash": "060b6aa73d66863094b72a72b6892cb1db0c15f5f7f401d93db407093ed3606f",
+          "reason": "only_admitted_route_for_decision_trees",
+          "route": "decision-tree-source-bound-v1"
+        },
         "document_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699",
         "family": "fixture",
         "immutable_storage_locator": null,
@@ -230,7 +276,7 @@
           {
             "candidates": [
               {
-                "canonical_hash": "4b657823102ffacdf2e71899c36cc5c48dee84982c5e797207ded3168cf546f0",
+                "canonical_hash": "018f61461ee7d7f2cede1b78d490859dd41b6a2549d7ecde2054ea0faa1e7467",
                 "fingerprint": {
                   "complex_semantics": false,
                   "relations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -238,19 +284,19 @@
                   "text": "ef4424fe673d3fcd2c164cc017a3b1683f2059eec605b4317848484f774b2d02",
                   "type": "path"
                 },
-                "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-p",
+                "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-cc4ee047b77c6d8d",
                 "object_version": "1.0",
                 "origin": {
-                  "model": null,
+                  "model": "deterministic-export-v1",
                   "policy_version": null,
                   "route": "unknown",
-                  "selection_origin": "unknown",
+                  "selection_origin": "proposal_selected",
                   "strategy": "unknown"
                 },
                 "structural": true
               },
               {
-                "canonical_hash": "20986efba9ac6a8b1d43ce1f02938194c51c565a1f10ac211b7d9bc638f97a42",
+                "canonical_hash": "ab1728e5a2d1449bce8b251da38ba2fb65198a730bb6dc821abe5b2a4450fa26",
                 "fingerprint": {
                   "complex_semantics": false,
                   "relations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -258,19 +304,19 @@
                   "text": "fb895782a8d90c9de61739916ed24598aa3377d6609c6f1408f67673d143be13",
                   "type": "node"
                 },
-                "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-n",
+                "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-053df35084d7cf65",
                 "object_version": "1.0",
                 "origin": {
-                  "model": null,
+                  "model": "deterministic-export-v1",
                   "policy_version": null,
                   "route": "unknown",
-                  "selection_origin": "unknown",
+                  "selection_origin": "proposal_selected",
                   "strategy": "unknown"
                 },
                 "structural": false
               },
               {
-                "canonical_hash": "2b6aad7c388179366fb70df91fa9c4f231445dbc33b4e5ed78f98d737e11372b",
+                "canonical_hash": "61acb322cc362c8aca07e3d2135017fbdc89cea1f41a0673eb67c8daa31172f8",
                 "fingerprint": {
                   "complex_semantics": true,
                   "relations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -278,13 +324,13 @@
                   "text": "b90c6734d86a815a75586d0535f47d8e45913074ec47a31dec42149e9c7fe304",
                   "type": "outcome"
                 },
-                "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-o",
+                "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-8ca36cc9604cbac0",
                 "object_version": "1.0",
                 "origin": {
-                  "model": null,
+                  "model": "deterministic-export-v1",
                   "policy_version": null,
                   "route": "unknown",
-                  "selection_origin": "unknown",
+                  "selection_origin": "proposal_selected",
                   "strategy": "unknown"
                 },
                 "structural": false
@@ -424,14 +470,14 @@
         "object_version": "1.0",
         "parent_object_id": null,
         "provenance": {
-          "canonical_object_hash": "06f8db71e949d2bae976cf487750c0e3d4a5a6c0acafa26af2bc33a9af63f9f1",
-          "content_hash": "06f8db71e949d2bae976cf487750c0e3d4a5a6c0acafa26af2bc33a9af63f9f1",
+          "canonical_object_hash": "271d5cd9c0978b3e2770561b68315eb3a8395c94ebab46a4b588dd589af42b5e",
+          "content_hash": "271d5cd9c0978b3e2770561b68315eb3a8395c94ebab46a4b588dd589af42b5e",
           "created_by": "system:semantic-generic-v1.0.0",
           "previous_object_version": null,
           "proposal_id": null,
           "revision_patch_hash": null,
           "revision_reason": null,
-          "semantic_spec_hash": "2eebf952deb68b867766015e90005e3ef8e98e9567c95de2e11531e79bc4feb1",
+          "semantic_spec_hash": "1226d81443a2b663da21345d1d7f49d7c2f2f6ef4b5b9245bb18a245b9761e6c",
           "semantic_spec_version": "console-ingest-1.0",
           "source_extract_hash": "fd7da3e853c2a68d6fd1e6995178369ec25c33de3ec8898cde3dc104b0962f29",
           "source_fragments": [],
@@ -508,26 +554,53 @@
           "passage_register": {
             "linked_object_id": "",
             "reason_codes": [],
-            "section_path": [],
+            "section_path": [
+              "path"
+            ],
             "source": "extract",
             "status": "selected_as_candidate",
             "suitability": ""
+          },
+          "semantic_passage": {
+            "formation_mode": "decision-tree-source-bound-v1",
+            "model": "deterministic-export-v1",
+            "proposal_hash": "060b6aa73d66863094b72a72b6892cb1db0c15f5f7f401d93db407093ed3606f",
+            "selection_origin": "proposal_selected",
+            "source_blocks_hash": "b839a2cc3f81649c1c4e614623fee40a0afaf7ea590e747efd1aaf9ea1740e96",
+            "source_bound": true,
+            "source_mapping": [
+              {
+                "bbox": null,
+                "fragment_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-boom-f0001",
+                "raw_end": 20,
+                "raw_start": 0,
+                "source_page": null
+              }
+            ],
+            "spans": [
+              {
+                "block_id": "semblock-d6722db33695d17015c8",
+                "end": 20,
+                "start": 0
+              }
+            ],
+            "version": "semantic-passage-v1.1.0"
           }
         },
-        "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-p",
+        "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-cc4ee047b77c6d8d",
         "object_type": "unclassified",
         "object_version": "1.0",
         "parent_object_id": null,
         "proposed_object_type": "path",
         "provenance": {
-          "canonical_object_hash": "4b657823102ffacdf2e71899c36cc5c48dee84982c5e797207ded3168cf546f0",
-          "content_hash": "4b657823102ffacdf2e71899c36cc5c48dee84982c5e797207ded3168cf546f0",
-          "created_by": "system:semantic-generic-v1.0.0",
+          "canonical_object_hash": "018f61461ee7d7f2cede1b78d490859dd41b6a2549d7ecde2054ea0faa1e7467",
+          "content_hash": "018f61461ee7d7f2cede1b78d490859dd41b6a2549d7ecde2054ea0faa1e7467",
+          "created_by": "system:semantic-generic-v1.1.0",
           "previous_object_version": null,
           "proposal_id": null,
           "revision_patch_hash": null,
           "revision_reason": null,
-          "semantic_spec_hash": "2eebf952deb68b867766015e90005e3ef8e98e9567c95de2e11531e79bc4feb1",
+          "semantic_spec_hash": "1226d81443a2b663da21345d1d7f49d7c2f2f6ef4b5b9245bb18a245b9761e6c",
           "semantic_spec_version": "console-ingest-1.0",
           "source_extract_hash": "fd7da3e853c2a68d6fd1e6995178369ec25c33de3ec8898cde3dc104b0962f29",
           "source_fragments": [
@@ -543,7 +616,7 @@
               }
             }
           ],
-          "transform_version": "semantic-generic-v1.0.0",
+          "transform_version": "semantic-generic-v1.1.0",
           "transformation_mode": "deterministic"
         },
         "relations": [],
@@ -569,7 +642,9 @@
         },
         "structure": {
           "heading": null,
-          "section_path": [],
+          "section_path": [
+            "path"
+          ],
           "sequence": 2
         },
         "uncertainty": {
@@ -616,26 +691,53 @@
           "passage_register": {
             "linked_object_id": "",
             "reason_codes": [],
-            "section_path": [],
+            "section_path": [
+              "node"
+            ],
             "source": "extract",
             "status": "selected_as_candidate",
             "suitability": ""
+          },
+          "semantic_passage": {
+            "formation_mode": "decision-tree-source-bound-v1",
+            "model": "deterministic-export-v1",
+            "proposal_hash": "060b6aa73d66863094b72a72b6892cb1db0c15f5f7f401d93db407093ed3606f",
+            "selection_origin": "proposal_selected",
+            "source_blocks_hash": "b839a2cc3f81649c1c4e614623fee40a0afaf7ea590e747efd1aaf9ea1740e96",
+            "source_bound": true,
+            "source_mapping": [
+              {
+                "bbox": null,
+                "fragment_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-boom-f0002",
+                "raw_end": 16,
+                "raw_start": 0,
+                "source_page": null
+              }
+            ],
+            "spans": [
+              {
+                "block_id": "semblock-3beff94ac7d0ce1de599",
+                "end": 16,
+                "start": 0
+              }
+            ],
+            "version": "semantic-passage-v1.1.0"
           }
         },
-        "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-n",
+        "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-053df35084d7cf65",
         "object_type": "unclassified",
         "object_version": "1.0",
         "parent_object_id": null,
         "proposed_object_type": "node",
         "provenance": {
-          "canonical_object_hash": "20986efba9ac6a8b1d43ce1f02938194c51c565a1f10ac211b7d9bc638f97a42",
-          "content_hash": "20986efba9ac6a8b1d43ce1f02938194c51c565a1f10ac211b7d9bc638f97a42",
-          "created_by": "system:semantic-generic-v1.0.0",
+          "canonical_object_hash": "ab1728e5a2d1449bce8b251da38ba2fb65198a730bb6dc821abe5b2a4450fa26",
+          "content_hash": "ab1728e5a2d1449bce8b251da38ba2fb65198a730bb6dc821abe5b2a4450fa26",
+          "created_by": "system:semantic-generic-v1.1.0",
           "previous_object_version": null,
           "proposal_id": null,
           "revision_patch_hash": null,
           "revision_reason": null,
-          "semantic_spec_hash": "2eebf952deb68b867766015e90005e3ef8e98e9567c95de2e11531e79bc4feb1",
+          "semantic_spec_hash": "1226d81443a2b663da21345d1d7f49d7c2f2f6ef4b5b9245bb18a245b9761e6c",
           "semantic_spec_version": "console-ingest-1.0",
           "source_extract_hash": "fd7da3e853c2a68d6fd1e6995178369ec25c33de3ec8898cde3dc104b0962f29",
           "source_fragments": [
@@ -651,7 +753,7 @@
               }
             }
           ],
-          "transform_version": "semantic-generic-v1.0.0",
+          "transform_version": "semantic-generic-v1.1.0",
           "transformation_mode": "deterministic"
         },
         "relations": [],
@@ -677,7 +779,9 @@
         },
         "structure": {
           "heading": null,
-          "section_path": [],
+          "section_path": [
+            "node"
+          ],
           "sequence": 3
         },
         "uncertainty": {
@@ -724,26 +828,53 @@
           "passage_register": {
             "linked_object_id": "",
             "reason_codes": [],
-            "section_path": [],
+            "section_path": [
+              "outcome"
+            ],
             "source": "extract",
             "status": "selected_as_candidate",
             "suitability": ""
+          },
+          "semantic_passage": {
+            "formation_mode": "decision-tree-source-bound-v1",
+            "model": "deterministic-export-v1",
+            "proposal_hash": "060b6aa73d66863094b72a72b6892cb1db0c15f5f7f401d93db407093ed3606f",
+            "selection_origin": "proposal_selected",
+            "source_blocks_hash": "b839a2cc3f81649c1c4e614623fee40a0afaf7ea590e747efd1aaf9ea1740e96",
+            "source_bound": true,
+            "source_mapping": [
+              {
+                "bbox": null,
+                "fragment_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-boom-f0003",
+                "raw_end": 18,
+                "raw_start": 0,
+                "source_page": null
+              }
+            ],
+            "spans": [
+              {
+                "block_id": "semblock-3eaeb6aa59f720666215",
+                "end": 18,
+                "start": 0
+              }
+            ],
+            "version": "semantic-passage-v1.1.0"
           }
         },
-        "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-o",
+        "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-8ca36cc9604cbac0",
         "object_type": "unclassified",
         "object_version": "1.0",
         "parent_object_id": null,
         "proposed_object_type": "outcome",
         "provenance": {
-          "canonical_object_hash": "2b6aad7c388179366fb70df91fa9c4f231445dbc33b4e5ed78f98d737e11372b",
-          "content_hash": "2b6aad7c388179366fb70df91fa9c4f231445dbc33b4e5ed78f98d737e11372b",
-          "created_by": "system:semantic-generic-v1.0.0",
+          "canonical_object_hash": "61acb322cc362c8aca07e3d2135017fbdc89cea1f41a0673eb67c8daa31172f8",
+          "content_hash": "61acb322cc362c8aca07e3d2135017fbdc89cea1f41a0673eb67c8daa31172f8",
+          "created_by": "system:semantic-generic-v1.1.0",
           "previous_object_version": null,
           "proposal_id": null,
           "revision_patch_hash": null,
           "revision_reason": null,
-          "semantic_spec_hash": "2eebf952deb68b867766015e90005e3ef8e98e9567c95de2e11531e79bc4feb1",
+          "semantic_spec_hash": "1226d81443a2b663da21345d1d7f49d7c2f2f6ef4b5b9245bb18a245b9761e6c",
           "semantic_spec_version": "console-ingest-1.0",
           "source_extract_hash": "fd7da3e853c2a68d6fd1e6995178369ec25c33de3ec8898cde3dc104b0962f29",
           "source_fragments": [
@@ -759,14 +890,14 @@
               }
             }
           ],
-          "transform_version": "semantic-generic-v1.0.0",
+          "transform_version": "semantic-generic-v1.1.0",
           "transformation_mode": "deterministic"
         },
         "relations": [
           {
             "confirmed": false,
             "relation_type": "applies_if",
-            "target_object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-n"
+            "target_object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-053df35084d7cf65"
           }
         ],
         "risk": {
@@ -791,7 +922,9 @@
         },
         "structure": {
           "heading": null,
-          "section_path": [],
+          "section_path": [
+            "outcome"
+          ],
           "sequence": 4
         },
         "uncertainty": {
@@ -834,6 +967,29 @@
       "console_version": "operations-console-v1.0.0",
       "content_kind": "boom",
       "date": "2026-10-17",
+      "decision_tree_construction": {
+        "context_bindings": [],
+        "proposal_hash": "060b6aa73d66863094b72a72b6892cb1db0c15f5f7f401d93db407093ed3606f",
+        "references": {
+          "u1": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-cc4ee047b77c6d8d",
+          "u2": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-053df35084d7cf65",
+          "u3": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-8ca36cc9604cbac0"
+        },
+        "relation_findings": [],
+        "result_bundle_issues": [],
+        "result_bundles": [],
+        "unassigned_fragment_ids": []
+      },
+      "decision_tree_formation": {
+        "actor": "author",
+        "construction_contract": "decision-tree-construction-v1",
+        "model": "deterministic-export-v1",
+        "policy_version": "decision-tree-formation-policy-v1.0.0",
+        "proposal_contract": "decision-tree-proposal-v1",
+        "proposal_hash": "060b6aa73d66863094b72a72b6892cb1db0c15f5f7f401d93db407093ed3606f",
+        "reason": "only_admitted_route_for_decision_trees",
+        "route": "decision-tree-source-bound-v1"
+      },
       "document_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699",
       "family": "fixture",
       "immutable_storage_locator": null,
@@ -850,7 +1006,7 @@
         {
           "candidates": [
             {
-              "canonical_hash": "4b657823102ffacdf2e71899c36cc5c48dee84982c5e797207ded3168cf546f0",
+              "canonical_hash": "018f61461ee7d7f2cede1b78d490859dd41b6a2549d7ecde2054ea0faa1e7467",
               "fingerprint": {
                 "complex_semantics": false,
                 "relations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -858,19 +1014,19 @@
                 "text": "ef4424fe673d3fcd2c164cc017a3b1683f2059eec605b4317848484f774b2d02",
                 "type": "path"
               },
-              "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-p",
+              "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-cc4ee047b77c6d8d",
               "object_version": "1.0",
               "origin": {
-                "model": null,
+                "model": "deterministic-export-v1",
                 "policy_version": null,
                 "route": "unknown",
-                "selection_origin": "unknown",
+                "selection_origin": "proposal_selected",
                 "strategy": "unknown"
               },
               "structural": true
             },
             {
-              "canonical_hash": "20986efba9ac6a8b1d43ce1f02938194c51c565a1f10ac211b7d9bc638f97a42",
+              "canonical_hash": "ab1728e5a2d1449bce8b251da38ba2fb65198a730bb6dc821abe5b2a4450fa26",
               "fingerprint": {
                 "complex_semantics": false,
                 "relations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -878,19 +1034,19 @@
                 "text": "fb895782a8d90c9de61739916ed24598aa3377d6609c6f1408f67673d143be13",
                 "type": "node"
               },
-              "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-n",
+              "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-053df35084d7cf65",
               "object_version": "1.0",
               "origin": {
-                "model": null,
+                "model": "deterministic-export-v1",
                 "policy_version": null,
                 "route": "unknown",
-                "selection_origin": "unknown",
+                "selection_origin": "proposal_selected",
                 "strategy": "unknown"
               },
               "structural": false
             },
             {
-              "canonical_hash": "2b6aad7c388179366fb70df91fa9c4f231445dbc33b4e5ed78f98d737e11372b",
+              "canonical_hash": "61acb322cc362c8aca07e3d2135017fbdc89cea1f41a0673eb67c8daa31172f8",
               "fingerprint": {
                 "complex_semantics": true,
                 "relations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -898,13 +1054,13 @@
                 "text": "b90c6734d86a815a75586d0535f47d8e45913074ec47a31dec42149e9c7fe304",
                 "type": "outcome"
               },
-              "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-o",
+              "object_id": "console-fixture-voorbeeld-bron-1-0-a1b8b699-sem-8ca36cc9604cbac0",
               "object_version": "1.0",
               "origin": {
-                "model": null,
+                "model": "deterministic-export-v1",
                 "policy_version": null,
                 "route": "unknown",
-                "selection_origin": "unknown",
+                "selection_origin": "proposal_selected",
                 "strategy": "unknown"
               },
               "structural": false

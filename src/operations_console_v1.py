@@ -53,7 +53,6 @@ from src.beslisboom_path_v1 import (
     CLOSED_BOOM_TYPES,
     CLOSED_KLASSEN,
     boom_freeze_errors,
-    boom_spec_from_fragments,
     extract_boom_fragments,
     is_confirmable_type_for_path,
     is_geen_actie_outcome,
@@ -139,7 +138,7 @@ PUBLISHED_ENVELOPE_STATES = frozenset({"published", "superseded", "withdrawn"})
 UNPUBLISHED_DELETE_EVENT = "unpublished_snapshot_deleted"
 CLASS_CHANGE_HISTORY_DIRNAME = "class_change_history"
 PUBLISHED_PROJECTION_FILENAME = "published_projection.jsonl"
-PUBLICATION_PROTOCOL_VERSION = "4.1.0"
+PUBLICATION_PROTOCOL_VERSION = "4.2.0"
 RELEASE_MANIFEST_DIRNAME = "release_manifests"
 ALLOWED_DELETE_NEXT = frozenset({"/ingest", "/review", "/tree"})
 ALLOWED_ROLES = frozenset({"researcher", "reviewer", "publisher"})
@@ -2009,6 +2008,8 @@ class OperationsConsole:
             replay_record = spec.pop(SEMANTIC_REPLAY_SPEC_KEY, None)
             if isinstance(replay_record, dict):
                 envelope["semantic_replay"] = deepcopy(replay_record)
+            from src.decision_tree_route_v1 import SPEC_KEY as DECISION_TREE_SPEC_KEY
+            decision_tree_record = spec.pop(DECISION_TREE_SPEC_KEY, None)
 
             manifest = {
                 "canonical_source": {
@@ -2041,9 +2042,10 @@ class OperationsConsole:
             if review_policy is not None:
                 from src.review_policy_v1 import project_policy
                 project_policy(objects, review_policy)
-            if review_path == "boom" and review_policy is not None:
-                from src.decision_graph_v1 import prepare_graph
-                envelope.update(prepare_graph(stored_path, data, kind, fragments, objects, digest))
+            if decision_tree_record is not None:
+                from src.decision_tree_route_v1 import finalize
+                envelope.update(finalize(decision_tree_record, objects, fragments, digest,
+                                         actor=actor_id, with_graph=review_policy is not None))
             if previous:
                 envelope["object_diff"] = self._diff_objects(
                     self.snapshot_objects(previous["snapshot_id"]),
@@ -2163,8 +2165,11 @@ class OperationsConsole:
         if kind == "pdf" and enabled():
             return True
         from src.passage_formation_policy_v1 import DETERMINISTIC_MODE
-        return (getattr(self, "_pre_review_semantic_bound", False) and kind in {"html", "pdf"}
-                and class_ != "beslisboom" and self._passage_formation_mode_reader() != DETERMINISTIC_MODE)
+        if not getattr(self, "_pre_review_semantic_bound", False):
+            return False
+        if class_ == "beslisboom":
+            return kind == "pdf"  # model proposal; the prose rollback mode does not apply
+        return kind in {"html", "pdf"} and self._passage_formation_mode_reader() != DETERMINISTIC_MODE
 
     @diagnostic_phase("processing_status")
     def processing_status(self, snapshot_id: str, *, actor_id: str | None = None,
@@ -2449,6 +2454,11 @@ class OperationsConsole:
             account = authorize(self, actor_id, envelope)
         if _attempt_id is None and envelope.get("publication_eligibility") == PRE_REVIEW_BLOCKED:
             return self.retry_pre_review(actor_id=actor_id, snapshot_id=snapshot_id, command_id=uuid.uuid4().hex)
+        if (envelope["class"] == "beslisboom" and not envelope.get("decision_tree_formation")
+                and (envelope.get("decision_unit_contract") or "decision_graph" in envelope
+                     or self.snapshot_objects(snapshot_id))):
+            # Formed under the retired route: re-forming needs an explicit successor revision.
+            raise ConsoleError("decision_tree_legacy_route_retired")
         _, expected_revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
         if _attempt_id is not None:
             from src.processing_retry_v1 import assert_active, now
@@ -2512,6 +2522,8 @@ class OperationsConsole:
                 attempt=attempt if _attempt_id else None, deadline=_attempt_deadline),
         )
         replay_record = spec.pop(SEMANTIC_REPLAY_SPEC_KEY, None)
+        from src.decision_tree_route_v1 import SPEC_KEY as DECISION_TREE_SPEC_KEY
+        decision_tree_record = spec.pop(DECISION_TREE_SPEC_KEY, None)
         manifest = {
             "canonical_source": {
                 "source_id": envelope["source_id"],
@@ -2550,9 +2562,10 @@ class OperationsConsole:
         if review_path_for_klasse(envelope["class"]) != "boom":
             objects = reprocessed_history(self._load_objects(snapshot_id, remember=False), objects,
                                           snapshot_id=snapshot_id, actor=account["username"])
-        if "decision_graph" in envelope or (envelope.get("review_policy") and envelope["class"] == "beslisboom"):
-            from src.decision_graph_v1 import prepare_graph
-            prepared_envelope.update(prepare_graph(freeze_path, freeze_bytes, envelope["content_kind"], fragments, objects, envelope["sha256"]))
+        if decision_tree_record is not None:
+            from src.decision_tree_route_v1 import finalize
+            prepared_envelope.update(finalize(decision_tree_record, objects, fragments, envelope["sha256"],
+                                              actor=actor_id, with_graph=bool(envelope.get("review_policy"))))
         if isinstance(replay_record, dict):
             prepared_envelope["semantic_replay"] = deepcopy(replay_record)
         prepared_envelope["review_passes"] = {}
@@ -2837,6 +2850,10 @@ class OperationsConsole:
         if reads is not None and reads.get('retained_only'):
             raise ConsoleError('retained_source_not_recorded')
         args = {"document_id": envelope["document_id"], "source_id": envelope["source_id"]}
+        if envelope.get("decision_tree_formation"):
+            # The recorded route owns its source representation.
+            from src.decision_tree_route_v1 import source_fragments
+            return source_fragments(envelope["content_kind"], path, path.read_bytes(), use_docling=False, **args)
         if envelope["content_kind"] == "pdf":
             # Historical compatibility is selected by persisted provenance,
             # never by a failed Docling conversion or the current config.
@@ -2916,43 +2933,26 @@ class OperationsConsole:
         class_: str,
         formation_context: dict[str, Any] | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        explicit_graph = bool((formation_context or {}).get("explicit_decision_graph"))
         retained_fragments = (formation_context or {}).get("retained_fragments")
-        if kind == "pdf" and class_ == "beslisboom":
-            from src.decision_graph_v1 import pdf_fragments
+        if class_ == "beslisboom" and kind in {"pdf", "boom"}:
+            from src.decision_tree_route_v1 import prepare
             try:
-                fragments = (retained_fragments if retained_fragments is not None else
-                             pdf_fragments(path, document_id=document_id, source_id=source_id,
-                                           deadline=(formation_context or {}).get("attempt_deadline")))
+                return prepare(kind, path, data=data, document_id=document_id, source_id=source_id,
+                               title=title, family=family, class_=class_, formation_context=formation_context,
+                               proposer=getattr(self, "_decision_tree_proposer", None))
             except Exception as exc:
                 from src.docling_contract_v1 import DoclingError
                 if isinstance(exc, DoclingError):
                     raise ConsoleError(exc.code) from exc
-                raise ConsoleError("invalid_decision_pdf") from exc
-            spec = boom_spec_from_fragments(document_id=document_id, title=title,
-                                           family=family, class_=class_, fragments=fragments)
-            from src.decision_unit_construction_v1 import construction_spec
-            return fragments, construction_spec(spec, fragments)
+                raise
         if kind == "boom":
             try:
                 fragments = extract_boom_fragments(data, document_id=document_id, source_id=source_id)
             except ValueError as exc:
                 raise ConsoleError("invalid_boom_freeze") from exc
-            if explicit_graph and class_ == "beslisboom":
-                from src.decision_bundles_v1 import split_bundles
-                fragments = split_bundles(fragments)
-            if class_ != "beslisboom":
-                fragments = [{k: v for k, v in f.items() if k != "boom_kind"} for f in fragments]
-                return fragments, _spec_from_fragments(document_id=document_id, title=title, family=family,
-                    class_=class_, fragments=fragments, content_kind=kind)
-            spec = boom_spec_from_fragments(
-                document_id=document_id,
-                title=title,
-                family=family,
-                class_=class_,
-                fragments=fragments,
-            )
-            return fragments, spec
+            fragments = [{k: v for k, v in f.items() if k != "boom_kind"} for f in fragments]
+            return fragments, _spec_from_fragments(document_id=document_id, title=title, family=family,
+                class_=class_, fragments=fragments, content_kind=kind)
         from src.docling_pdf_v1 import enabled
         kwargs = {"deadline": (formation_context or {}).get("attempt_deadline")} if kind == "pdf" and enabled() else {}
         fragments = (retained_fragments if retained_fragments is not None else
@@ -4401,7 +4401,12 @@ class OperationsConsole:
         revised.pop("confirmed_object_type", None)
         stamp_canonical_hashes(revised)
         envelope = self._envelope(snapshot_id)
-        if review_path_for_klasse(envelope["class"]) != "boom":
+        from src.decision_unit_construction_v1 import KEY as LEGACY_UNIT_KEY, _formed_by_route
+        decision_tree_unit = review_path_for_klasse(envelope["class"]) == "boom" and _formed_by_route(target)
+        if (target.get("metadata") or {}).get(LEGACY_UNIT_KEY):
+            # Formation logic of the retired route is gone; a new selection needs a successor revision.
+            raise ConsoleError("decision_unit_legacy_revision_retired")
+        if review_path_for_klasse(envelope["class"]) != "boom" or decision_tree_unit:
             source_path, _ = self._verified_source_bytes(envelope)
             fragments = self._read_source_fragments(envelope, source_path)
             if materialisation_decision is not None:
@@ -4439,28 +4444,25 @@ class OperationsConsole:
                 revised if row.get("object_id") == object_id else row
                 for row in current
             ]
-            gated = apply_admission_gate(
-                peers,
-                klasse=envelope["class"],
-                fragments=fragments,
-                document_version=envelope["version"],
-                source_hash=envelope["sha256"],
-            )
+            if decision_tree_unit:
+                from src.decision_unit_construction_v1 import apply_gate
+                gated = apply_gate(peers, source_hash=envelope["sha256"], graph=envelope.get("decision_graph"),
+                                   inventory=envelope.get("decision_graph_evidence"))
+            else:
+                gated = apply_admission_gate(
+                    peers,
+                    klasse=envelope["class"],
+                    fragments=fragments,
+                    document_version=envelope["version"],
+                    source_hash=envelope["sha256"],
+                )
             revised = next(row for row in gated if row["object_id"] == object_id)
-            if semantic.get("selection_origin") == "proposal_selected" and not admission_of(revised):
+            if (semantic.get("selection_origin") == "proposal_selected" and not decision_tree_unit
+                    and not admission_of(revised)):
                 raise ConsoleError("correction_admission_missing")
             revised = apply_passage_register([revised])[0]
         else:
-            from src.decision_unit_construction_v1 import KEY, apply_gate, rebuild_for_revision
-            if (target.get("metadata") or {}).get(KEY):
-                from src.decision_graph_v1 import pdf_fragments
-                source_path, _ = self._verified_source_bytes(envelope)
-                fragments = self._read_source_fragments(envelope, source_path)
-                try:
-                    rebuild_for_revision(target, revised, fragments)
-                except ValueError as exc:
-                    raise ConsoleError(str(exc)) from exc
-                stamp_canonical_hashes(revised)
+            from src.decision_unit_construction_v1 import apply_gate
             peers = [revised if row.get("object_id") == object_id else row for row in current]
             apply_gate(peers, source_hash=envelope["sha256"], graph=envelope.get("decision_graph"),
                        inventory=envelope.get("decision_graph_evidence"))

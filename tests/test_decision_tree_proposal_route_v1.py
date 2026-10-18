@@ -19,9 +19,9 @@ import pytest
 
 from src.decision_tree_construction_v1 import FORMATION_MODE, HUMAN_CONFIRMATION, construct, proposal_inputs
 from src.decision_tree_experiment_v1 import (
-    ROUTES, THRESHOLD_KEYS, baseline_arm, candidate_arm, compare_to_reference, decide,
-    frozen_input, request_proposal,
+    THRESHOLD_KEYS, compare_to_reference, decide, frozen_input, route_output as candidate_arm,
 )
+from src.decision_tree_route_v1 import request_proposal
 from src.decision_tree_proposal_v1 import DecisionTreeProposalError
 from src.knowledge_materialisation_v1 import MaterialisationError, materialise_knowledge_candidates
 
@@ -183,7 +183,7 @@ def test_unbound_or_unknown_relations_stay_unresolved(tmp_path):
     codes = {code for row in arm["construction"]["relation_findings"] for code in row["codes"]}
     # Without a second line the "Nee" relation has no graphic attached to its endpoints;
     # c4 has an unknown target that the proposer did not declare.
-    assert codes == {"graphic_not_bound_to_endpoints", "label_not_on_route", "target_unknown"}
+    assert codes == {"graphic_not_bound_to_endpoints", "target_unknown"}
     assert len(arm["graph"]["edges"]) == 1
     assert any(item.startswith("target_unknown:") for item in arm["graph"]["unresolved"])
     assert {"decision_graph_unresolved", "decision_graph_answers_incomplete"} <= set(arm["issues"])
@@ -247,13 +247,10 @@ def test_result_bundles_and_page_transitions_are_source_checked(tmp_path):
     assert construction["relation_findings"][0]["codes"] == ["page_transition_unverified"]
 
 
-def test_provider_failure_raises_and_never_runs_the_structural_route(tmp_path, monkeypatch):
+def test_provider_failure_raises_without_any_other_route(tmp_path):
     from src.bounded_model_call_v1 import ModelCallLimits
     from src.operations_console_v1 import ConsoleError
-    import src.decision_tree_experiment_v1 as experiment
     frozen = _tree_pdf(tmp_path)
-    called = []
-    monkeypatch.setattr(experiment, "baseline_arm", lambda *a, **k: called.append("baseline"))
 
     def timeout(*_args, **_kwargs):
         raise ConsoleError("pre_review_llm_processing_timeout")
@@ -267,10 +264,9 @@ def test_provider_failure_raises_and_never_runs_the_structural_route(tmp_path, m
     with pytest.raises(ConsoleError):
         request_proposal(frozen, api_key="k", model="m", limits=ModelCallLimits(total=5),
                          post_json=lambda *a: refused)
-    assert called == []
 
 
-def test_comparison_and_preregistered_decision_never_activate(tmp_path):
+def test_acceptance_comparison_and_preregistered_decision(tmp_path):
     frozen = _tree_pdf(tmp_path)
     reference = {"units": [{"text": "Is er sprake van een mantelzorger?"}, {"text": "Bespreek de situatie."},
                            {"text": "Maak een afspraak."}],
@@ -280,19 +276,16 @@ def test_comparison_and_preregistered_decision_never_activate(tmp_path):
                                   "label": "Nee"}],
                  "conditions": [{"context": "Alleen bij volwassen mantelzorgers.",
                                  "applies_to": "Bespreek de situatie."}]}
-    base = compare_to_reference(baseline_arm(frozen), reference, frozen["fragments"])
-    cand = compare_to_reference(candidate_arm(frozen, _proposal(_Source(frozen)), model="m"),
-                                reference, frozen["fragments"])
-    assert cand["fabricated_content"] == base["fabricated_content"] == 0
-    assert cand["edges"]["recall"] == 1.0 and base["edges"]["recall"] < 1.0
-    assert cand["correction_actions"] < base["correction_actions"]
-    case = {"source_sha256": frozen["source_sha256"], "reference_independent": False,
-            "results": {ROUTES[0]: base, ROUTES[1]: cand}}
+    result = compare_to_reference(candidate_arm(frozen, _proposal(_Source(frozen)), model="m"),
+                                  reference, frozen["fragments"])
+    assert result["fabricated_content"] == 0
+    assert result["edges"]["recall"] == 1.0 and result["units"]["recall"] == 1.0
+    case = {"source_sha256": frozen["source_sha256"], "reference_independent": False, "result": result}
     assert decide({"thresholds": {}}, [case])["reason"] == "thresholds_unspecified"
-    thresholds = {k: 0.9 for k in THRESHOLD_KEYS} | {"correction_actions_max_ratio_to_baseline": 1.0}
+    thresholds = {k: 0.9 for k in THRESHOLD_KEYS} | {"correction_actions_max_per_reference_unit": 1.0}
     assert decide({"thresholds": thresholds}, [case])["reason"] == "independent_reference_missing"
     case["reference_independent"] = True
-    assert decide({"thresholds": thresholds}, [case])["decision"] == "READY FOR IMPLEMENTATION"
+    assert decide({"thresholds": thresholds}, [case])["decision"] == "ACCEPTANCE_CRITERIA_MET"
     assert decide({"thresholds": thresholds | {"edge_precision_min": 1.1}}, [case])["decision"] == "ITERATE"
 
 
@@ -303,41 +296,23 @@ def test_preregistration_is_blocked_until_thresholds_and_references_exist():
     assert criteria["corpus"] == []
 
 
-def test_candidate_route_is_not_reachable_from_production_composition():
-    """Static import proof: only the Audit experiment and its tests import the route."""
-    route_modules = {"decision_tree_proposal_v1", "decision_tree_construction_v1", "decision_tree_experiment_v1"}
-    importers = set()
-    for path in (ROOT / "src").rglob("*.py"):
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            names = ([a.name for a in node.names] if isinstance(node, ast.Import) else
-                     [node.module or ""] if isinstance(node, ast.ImportFrom) else [])
-            if any(name.split(".")[-1] in route_modules for name in names):
-                importers.add(path.stem)
-    assert importers <= route_modules
-    from src.passage_formation_policy_v1 import REASON_AUTHORITATIVE_TREE, resolve_passage_formation_strategy
-    for mode in ("semantic-source-bound-v2", "semantic-source-bound-v3", "deterministic-v1"):
-        assert resolve_passage_formation_strategy(content_kind="boom", deployment_mode=mode).reason == \
-            REASON_AUTHORITATIVE_TREE
-
-
-def test_legacy_inventory_flags_running_and_retryable_structural_work():
+def test_legacy_inventory_lists_retired_route_work_read_only():
     from src.decision_tree_experiment_v1 import legacy_route_inventory
     envelopes = [
         {"snapshot_id": "snap-a", "content_kind": "pdf", "class": "beslisboom",
          "decision_unit_contract": "decision-unit-construction-v1",
          "processing_configuration": {"mode": "semantic-source-bound-v2"},
          "processing_attempts": [{"attempt_id": "a1", "state": "running"}]},
-        {"snapshot_id": "snap-b", "content_kind": "pdf", "class": "beslisboom",
-         "publication_eligibility": "pre_review_blocked", "processing_attempts": []},
+        {"snapshot_id": "snap-b", "content_kind": "boom", "class": "beslisboom", "decision_graph": {}},
         {"snapshot_id": "snap-c", "content_kind": "pdf", "class": "beslisboom",
-         "decision_unit_contract": "decision-unit-construction-v1", "processing_attempts": [{"state": "succeeded"}]},
+         "decision_tree_formation": {"route": "decision-tree-source-bound-v1"}},
         {"snapshot_id": "snap-d", "content_kind": "pdf", "class": "richtlijn"},
     ]
     before = deepcopy(envelopes)
     report = legacy_route_inventory(envelopes)
     assert envelopes == before
-    assert [r["snapshot_id"] for r in report["snapshots"]] == ["snap-a", "snap-b", "snap-c"]
+    assert [r["snapshot_id"] for r in report["legacy_snapshots"]] == ["snap-a", "snap-b"]
     # The recorded prose mode does not describe the route a tree actually used.
-    assert report["snapshots"][0]["recorded_processing_mode"] == "semantic-source-bound-v2"
-    assert report["snapshots"][0]["recorded_route"] == "decision-unit-construction-v1"
-    assert report["decommission_blockers"] == ["snap-a", "snap-b"]
+    assert report["legacy_snapshots"][0]["recorded_processing_mode"] == "semantic-source-bound-v2"
+    assert report["legacy_snapshots"][0]["recorded_route"] == "decision-unit-construction-v1"
+    assert report["attempts_reserved_before_cutover"] == ["snap-a"]

@@ -224,6 +224,11 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             from src.knowledge_materialisation_v1 import _read_source_blocks
             from src.semantic_transform_generic_v1 import _fragment_ref
             fragments = self.review_source_fragments(snapshot_id)
+            envelope = self._envelope(snapshot_id)
+            if fragments is None and envelope.get("decision_tree_formation"):
+                # Decision-tree units are corrected through the same materialiser view.
+                source_path, _ = self._verified_source_bytes(envelope)
+                fragments = self._read_source_fragments(envelope, source_path)
             # Verify the existing object's references before offering new ranges.
             self.source_fragment_catalog(snapshot_id=snapshot_id, object_id=object_id)
             raw = {row["fragment_id"]: row for row in fragments}

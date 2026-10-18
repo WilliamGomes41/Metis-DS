@@ -33,7 +33,7 @@ def test_governance_documents_exist() -> None:
 def test_protocol_has_one_current_v4_norm_and_required_hierarchy() -> None:
     protocol = _read("PROTOCOL.md")
     assert protocol.count("# V&VN Data Services — Protocol v4") == 1
-    assert protocol.count("**Versie:** 4.1.0") == 1
+    assert protocol.count("**Versie:** 4.2.0") == 1
     assert "PROTOCOL.md → ROADMAP.md → acceptatietests → code" in protocol
     assert "De geldende normatieve baseline is Protocol v2." not in protocol
     assert "## 16. Eerdere protocolversies zijn historie" in protocol

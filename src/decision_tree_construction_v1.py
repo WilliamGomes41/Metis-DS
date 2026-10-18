@@ -26,6 +26,8 @@ CONTRACT = "decision-tree-construction-v1"
 FORMATION_MODE = "decision-tree-source-bound-v1"
 HUMAN_CONFIRMATION = "human_route_confirmation_required"
 _MODES = {"start": "continue", "action": "continue", "outcome": "terminal", "context": "context"}
+# Closed decision-tree taxonomy; a proposal, confirmed only by human review.
+PROPOSED_TYPES = {"start": "path", "question": "node", "action": "node", "outcome": "outcome"}
 
 
 def proposal_inputs(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -34,17 +36,10 @@ def proposal_inputs(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return selection_source_blocks(fragments)
 
 
-def _pseudo_objects(units: list[dict[str, Any]], candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Reference-keyed endpoints for the bounded geometric proposer (evidence only)."""
-    return [{"object_id": unit["ref"], "object_type": "unit",
-             "content": {"clean_text": candidate["clean_text"]}, "metadata": {},
-             "provenance": {"source_fragments": [{"raw_object_id": fid} for fid in candidate["source_fragment_ids"]]}}
-            for unit, candidate in zip(units, candidates)]
-
-
 def construct(proposal: Any, *, document_id: str, title: str, family: str, class_: str,
               content_kind: str, fragments: list[dict[str, Any]],
-              inventory: dict[str, Any], model: str) -> dict[str, Any]:
+              inventory: dict[str, Any], model: str,
+              proposed_types: dict[str, str] | None = None) -> dict[str, Any]:
     """Return a spec plus a graph plan; raise on any proposal or materialisation failure."""
     from src.knowledge_materialisation_v1 import (
         materialise_knowledge_candidates,
@@ -58,8 +53,14 @@ def construct(proposal: Any, *, document_id: str, title: str, family: str, class
     blocks = proposal_inputs(fragments)
     validate_proposal(proposal, blocks=blocks, inventory=inventory)
     units = proposal["units"]
-    decisions = [{"decision_kind": "semantic_selection", "selection_origin": SELECTION_ORIGIN_PROPOSAL,
-                  "spans": deepcopy(unit["spans"]), "source_text": unit["quoted_text"]} for unit in units]
+    decisions = []
+    for unit in units:
+        decision = {"decision_kind": "semantic_selection", "selection_origin": SELECTION_ORIGIN_PROPOSAL,
+                    "spans": deepcopy(unit["spans"]), "source_text": unit["quoted_text"]}
+        proposed = (proposed_types or {}).get(unit["ref"], PROPOSED_TYPES.get(unit["role"]))
+        if proposed:
+            decision.update(emit_proposed_type=True, proposed_object_type=proposed)
+        decisions.append(decision)
     candidates = materialise_knowledge_candidates(decisions, document_id=document_id, fragments=fragments)
     provenance = {"formation_mode": FORMATION_MODE, "model": str(model),
                   "source_blocks_hash": stable_hash(blocks), "proposal_hash": stable_hash(proposal)}
@@ -72,10 +73,6 @@ def construct(proposal: Any, *, document_id: str, title: str, family: str, class
     by_fragment = {f["fragment_id"]: f for f in fragments}
     endpoint_fragments = {unit["ref"]: [by_fragment[fid] for fid in candidate["source_fragment_ids"]]
                           for unit, candidate in zip(units, candidates)}
-    geometric: list[dict[str, Any]] = []
-    if any(item.get("kind") == "graphic" for item in (inventory.get("items") or {}).values()):
-        from src.pdf_route_proposals_v1 import propose_routes
-        geometric = propose_routes(fragments, _pseudo_objects(units, candidates), inventory)
 
     unresolved_codes = {(row["subject"], row["code"]) for row in proposal["unresolved"]}
     role_unresolved = {subject for subject, code in unresolved_codes if code == "role_ambiguous"}
@@ -101,8 +98,13 @@ def construct(proposal: Any, *, document_id: str, title: str, family: str, class
             label = resolve_source_selection([row["label_span"]], fragments=fragments)
             label_text, label_ids = label["source_text"], label["source_fragment_ids"]
             used_labels.update(label_ids)
+        elif row["kind"] == "answer":
+            # Literal label of the cited explicit export relation (validated present).
+            items = inventory.get("items") or {}
+            label_text = next(str(items[i]["record"].get("label") or "") for i in row["evidence_ids"]
+                              if items[i].get("kind") == "export_edge")
         codes = relation_findings(row, endpoint_fragments=endpoint_fragments, label_fragment_ids=label_ids,
-                                  label_text=label_text, inventory=inventory, geometric=geometric,
+                                  label_text=label_text, inventory=inventory,
                                   fragments_by_id=by_fragment)
         source, target = object_for[row["from"]], object_for.get(row["to"]) if row["to"] else None
         if row["ref"] in doubted:

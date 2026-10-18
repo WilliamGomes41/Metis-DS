@@ -14,6 +14,8 @@ def bind_fixture_selections(console, selections=None):
     """Select literal paragraphs; optionally restrict to (literal, type) pairs."""
     def provider(_url, _headers, payload, _timeout):
         data = json.loads(payload["input"][1]["content"])
+        if payload["text"]["format"]["name"] == "decision_tree_proposal":
+            return _decision_tree_response(data)
         objects = []
         for block in data["source_blocks"]:
             text = block["text"]
@@ -44,6 +46,20 @@ def bind_fixture_selections(console, selections=None):
         "METIS_PASSAGE_FORMATION_MODE": "semantic-source-bound-v1",
         "METIS_LLM_API_KEY": "fixture", "METIS_LLM_MODEL": "fixture",
     }, post_json=provider)
+
+
+def _decision_tree_response(data):
+    """One unit per source block, open roles, no connections: the reviewer builds the graph."""
+    from src.decision_tree_proposal_v1 import CONTRACT
+    units = [{"ref": f"u{i + 1}", "role": "action", "selection": None, "entry": False,
+              "quoted_text": block["text"], "spans": [{"block_id": block["block_id"], "start": 0,
+                                                       "end": len(block["text"])}]}
+             for i, block in enumerate(data["source_blocks"])]
+    proposal = {"contract": CONTRACT, "units": units, "connections": [], "context_bindings": [],
+                "result_bundles": [], "unresolved": [{"ref": f"r{i + 1}", "subject": u["ref"],
+                                                      "code": "role_ambiguous"} for i, u in enumerate(units)]}
+    return {"status": "completed", "output": [{"type": "message", "content": [
+        {"type": "output_text", "text": json.dumps(proposal)}]}]}
 
 
 def legacy_recommendation_fixture(console, snapshot_id):

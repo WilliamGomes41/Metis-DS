@@ -154,14 +154,19 @@ def validate_proposal(proposal: Any, *, blocks: list[dict[str, Any]],
             _fail("decision_proposal_endpoint_unknown", ref=ref)
         if row["kind"] not in CONNECTION_KINDS:
             _fail("decision_proposal_connection_invalid", ref=ref)
-        if (row["kind"] == "answer") != (row["label_span"] is not None):
-            _fail("decision_proposal_label_invalid", ref=ref)
-        if row["label_span"] is not None:
-            _span(row["label_span"], by_block)
         ids = row["evidence_ids"]
         if not isinstance(ids, list) or len(set(map(str, ids))) != len(ids) or any(
                 not isinstance(i, str) or i not in evidence for i in ids):
             _fail("decision_proposal_evidence_unknown", ref=ref)
+        # An answer label is literal source text: a selected span, or the label
+        # of an explicit export relation that the connection cites.
+        exported = any(evidence[i].get("kind") == "export_edge" for i in ids)
+        if row["label_span"] is not None:
+            if row["kind"] != "answer":
+                _fail("decision_proposal_label_invalid", ref=ref)
+            _span(row["label_span"], by_block)
+        elif row["kind"] == "answer" and not exported:
+            _fail("decision_proposal_label_invalid", ref=ref)
     for row in proposal["context_bindings"]:
         _exact_keys(row, _BINDING, "decision_proposal_binding_invalid")
         ref = fresh(row["ref"])
@@ -188,13 +193,9 @@ def validate_proposal(proposal: Any, *, blocks: list[dict[str, Any]],
 
 def relation_findings(connection: dict[str, Any], *, endpoint_fragments: dict[str, list[dict[str, Any]]],
                       label_fragment_ids: list[str], label_text: str | None,
-                      inventory: dict[str, Any], geometric: list[dict[str, Any]],
+                      inventory: dict[str, Any],
                       fragments_by_id: dict[str, dict[str, Any]]) -> list[str]:
-    """Check that cited evidence supports this relation; an empty list confirms nothing.
-
-    ``geometric`` are the existing bounded route proposals between the same
-    temporary references (``pdf_route_proposals_v1``), reused as evidence only.
-    """
+    """Check that cited evidence supports this relation; an empty list confirms nothing."""
     items = inventory.get("items") or {}
     ids = connection["evidence_ids"]
     kinds = {items[i]["kind"] for i in ids}
@@ -202,7 +203,7 @@ def relation_findings(connection: dict[str, Any], *, endpoint_fragments: dict[st
     findings: list[str] = []
     if target is None:
         return ["target_unknown"]
-    if connection["kind"] == "answer":
+    if connection["kind"] == "answer" and "export_edge" not in kinds:
         if not label_text or not set(label_fragment_ids) <= set(ids) or not any(
                 items[i].get("text") == label_text for i in label_fragment_ids):
             findings.append("label_not_bound_to_relation")
@@ -226,27 +227,40 @@ def relation_findings(connection: dict[str, Any], *, endpoint_fragments: dict[st
         return findings
     if "graphic" not in kinds:
         return [*findings, "relation_evidence_missing"]
-    cited = {i for i in ids if items[i]["kind"] == "graphic"}
-    if connection["kind"] == "answer" and not _label_on_route(
-            [fragments_by_id.get(i) or {} for i in label_fragment_ids], [items[i] for i in cited],
-            endpoint_fragments[source], endpoint_fragments[target]):
+    routes = _Routes([items[i] for i in ids if items[i]["kind"] == "graphic"])
+    joining = routes.joining(endpoint_fragments[source], endpoint_fragments[target])
+    if not joining:
+        return [*findings, "graphic_not_bound_to_endpoints"]
+    if connection["kind"] == "answer" and not routes.labelled(
+            joining, [fragments_by_id.get(i) or {} for i in label_fragment_ids]):
         findings.append("label_not_on_route")
-    matches = [p for p in geometric if {p["from"], p["to"]} == {source, target}
-               and cited & set(p["evidence_ids"])]
-    if not matches:
-        findings.append("graphic_not_bound_to_endpoints")
-    elif all("direction_unverified" in p["uncertainties"] for p in matches):
-        findings.append("direction_unverified")
-    elif not any(p["from"] == source and p["to"] == target for p in matches
-                 if "direction_unverified" not in p["uncertainties"]):
+    tips = routes.tips(joining)
+    at_target = routes.touching(tips, endpoint_fragments[target])
+    at_source = routes.touching(tips, endpoint_fragments[source])
+    if at_source and not at_target:
         findings.append("direction_conflict")
+    elif at_target == at_source:
+        findings.append("direction_unverified")
     return findings
 
 
-
-LABEL_DISTANCE = 18  # Same bounds as the existing geometric route proposal.
+LABEL_DISTANCE = 18
 ANCHOR_DISTANCE = 35
 VERTEX_TOLERANCE = 2
+WING_MIN, WING_MAX = 2, 15
+
+
+def _bezier(points, t):
+    return [sum(weight * point[axis] for weight, point in zip(
+        ((1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t * t, t ** 3), points)) for axis in (0, 1)]
+
+
+def _point_segment_distance(point, a, b) -> float:
+    from math import hypot
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    length = dx * dx + dy * dy
+    t = max(0, min(1, ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / length)) if length else 0
+    return hypot(point[0] - a[0] - t * dx, point[1] - a[1] - t * dy)
 
 
 def _rect_distance(point, box) -> float:
@@ -255,53 +269,83 @@ def _rect_distance(point, box) -> float:
     return hypot(max(box[0] - x, 0, x - box[2]), max(box[1] - y, 0, y - box[3]))
 
 
-def _label_on_route(labels: list[dict[str, Any]], graphics: list[dict[str, Any]],
-                    source: list[dict[str, Any]], target: list[dict[str, Any]]) -> bool:
-    """A literal label lies on a connected line touching both endpoints; nearness is not meaning."""
-    from math import hypot
-    from src.pdf_route_proposals_v1 import _bezier, _point_segment_distance
-    if not labels:
-        return False
-    for label in labels:
-        box = label.get("bbox")
-        if not box or len(box) != 4:
-            return False
-        page = label.get("source_page")
-        segments = []
+class _Routes:
+    """Connected line components of the cited drawings only; geometry is evidence, not meaning."""
+
+    def __init__(self, graphics: list[dict[str, Any]]) -> None:
+        from math import hypot
+        self.points: list[tuple[float, float, Any]] = []
+        self.parent: list[int] = []
+        self.adjacent: dict[int, set[int]] = {}
+        self.segments: list[tuple[int, int]] = []
         for item in graphics:
-            if item.get("page") != page:
-                continue
-            segments.extend(tuple(map(tuple, seg)) for seg in item.get("segments", []))
+            page = item.get("page")
+            lines = [tuple(map(tuple, seg)) for seg in item.get("segments", [])]
             for curve in item.get("curves", []):
                 sampled = [tuple(_bezier(curve, i / 8)) for i in range(9)]
-                segments.extend(zip(sampled, sampled[1:]))
-        points: list[tuple] = []
-        parent: list[int] = []
+                lines.extend(zip(sampled, sampled[1:]))
+            for a, b in lines:
+                left, right = self._vertex(a, page, hypot), self._vertex(b, page, hypot)
+                if left != right:
+                    self.segments.append((left, right))
+                    self.adjacent[left].add(right)
+                    self.adjacent[right].add(left)
+                    self.parent[self._root(left)] = self._root(right)
 
-        def vertex(point):
-            for index, prior in enumerate(points):
-                if hypot(point[0] - prior[0], point[1] - prior[1]) <= VERTEX_TOLERANCE:
-                    return index
-            points.append(point)
-            parent.append(len(parent))
-            return len(points) - 1
+    def _vertex(self, point, page, hypot) -> int:
+        for index, (x, y, p) in enumerate(self.points):
+            if p == page and hypot(point[0] - x, point[1] - y) <= VERTEX_TOLERANCE:
+                return index
+        self.points.append((point[0], point[1], page))
+        self.parent.append(len(self.parent))
+        self.adjacent[len(self.points) - 1] = set()
+        return len(self.points) - 1
 
-        def root(index):
-            while parent[index] != index:
-                index = parent[index]
-            return index
-        ends = [(vertex(a), vertex(b)) for a, b in segments]
-        for a, b in ends:
-            parent[root(a)] = root(b)
-        boxes = {side: [f["bbox"] for f in rows if f.get("bbox") and f.get("source_page") == page]
-                 for side, rows in (("source", source), ("target", target))}
+    def _root(self, index: int) -> int:
+        while self.parent[index] != index:
+            index = self.parent[index]
+        return index
 
-        def touches(component, side):
-            return any(root(i) == component and _rect_distance(points[i], b) <= ANCHOR_DISTANCE
-                       for i in range(len(points)) for b in boxes[side])
-        corners = [(x, y) for x in (box[0], box[2]) for y in (box[1], box[3])]
-        if not any(touches(root(a), "source") and touches(root(a), "target")
-                   and any(_point_segment_distance(p, seg[0], seg[1]) <= LABEL_DISTANCE for p in corners)
-                   for seg, (a, _b) in zip(segments, ends)):
+    def touching(self, vertices, fragments) -> set[int]:
+        boxes = [(f["bbox"], f.get("source_page")) for f in fragments if f.get("bbox")]
+        return {v for v in vertices for box, page in boxes
+                if self.points[v][2] == page and _rect_distance(self.points[v][:2], box) <= ANCHOR_DISTANCE}
+
+    def joining(self, source, target) -> set[int]:
+        """Vertices of components that touch both endpoints."""
+        everything = range(len(self.points))
+        roots = ({self._root(v) for v in self.touching(everything, source)}
+                 & {self._root(v) for v in self.touching(everything, target)})
+        return {v for v in everything if self._root(v) in roots}
+
+    def labelled(self, component: set[int], labels: list[dict[str, Any]]) -> bool:
+        if not labels:
             return False
-    return True
+        for label in labels:
+            box = label.get("bbox")
+            if not box or len(box) != 4:
+                return False
+            corners = [(x, y) for x in (box[0], box[2]) for y in (box[1], box[3])]
+            if not any(a in component and self.points[a][2] == label.get("source_page")
+                       and _point_segment_distance(p, self.points[a][:2], self.points[b][:2]) <= LABEL_DISTANCE
+                       for a, b in self.segments for p in corners):
+                return False
+        return True
+
+    def tips(self, component: set[int]) -> set[int]:
+        """Arrow tips: two short symmetric wings beside one shaft."""
+        from math import hypot
+        found = set()
+        for v in component:
+            x, y, _ = self.points[v]
+            short = [n for n in self.adjacent[v] if len(self.adjacent[n]) == 1
+                     and WING_MIN <= hypot(self.points[n][0] - x, self.points[n][1] - y) <= WING_MAX]
+            shaft = [n for n in self.adjacent[v] if n not in short]
+            if len(short) != 2 or len(shaft) != 1:
+                continue
+            axis = [self.points[shaft[0]][j] - self.points[v][j] for j in (0, 1)]
+            wings = [[self.points[n][j] - self.points[v][j] for j in (0, 1)] for n in short]
+            cross = [axis[0] * w[1] - axis[1] * w[0] for w in wings]
+            if cross[0] * cross[1] < 0 and all(axis[0] * w[0] + axis[1] * w[1] > 0 for w in wings):
+                found.add(v)
+        return found

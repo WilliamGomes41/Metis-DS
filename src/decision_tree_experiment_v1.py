@@ -1,39 +1,24 @@
-"""Audit-domain experiment: structural baseline versus source-bound proposal route.
+"""Audit-domain acceptance evidence for the decision-tree formation route.
 
-Both arms run on the same frozen source bytes and the same extraction. Nothing
-here writes KnowledgeObjects, review bindings, workflow state or publication
-records; outputs are comparison evidence only (Protocol §10). The best outcome
-``decide`` can return is ``READY FOR IMPLEMENTATION``; it never activates a route.
+The active route (``decision_tree_route_v1``) is measured on frozen sources
+against an independent human reference. Nothing here writes KnowledgeObjects,
+review bindings, workflow state or publication records (Protocol §10). Human
+graph review stays the only confirmation of an interpretation.
 """
 from __future__ import annotations
 
-import json
 import re
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from src.integrity_kernel import sha256_bytes, stable_hash
 
-VERSION = "decision-tree-route-experiment-v1"
-ROUTES = ("structural-baseline", "semantic-proposal-candidate")
-PROPOSER_VERSION = "decision-tree-proposer-v1"
+VERSION = "decision-tree-route-acceptance-v1"
+ROUTE = "decision-tree-source-bound-v1"
 FABRICATED_CONTENT_MAX = 0  # Protocol §10: zero tolerance, not a tunable threshold.
 THRESHOLD_KEYS = ("unit_recall_min", "unit_precision_min", "edge_recall_min", "edge_precision_min",
-                  "condition_recall_min", "correction_actions_max_ratio_to_baseline")
-PROPOSER_PROMPT = (
-    "You propose the structure of one decision tree from frozen source blocks. "
-    "Select exact character spans only; never write, repair or summarise source text. "
-    "quoted_text must equal the selected spans joined by single spaces. "
-    "Roles: start, question, action, outcome, context. Answer labels (for example Ja/Nee) "
-    "are route evidence on a connection (label_span), never units. Cite evidence_ids from "
-    "evidence_items that support each connection itself. Use to=null for a target you "
-    "cannot identify and add an unresolved entry instead of guessing."
-)
-
-
-class ExperimentError(ValueError):
-    pass
+                  "condition_recall_min", "correction_actions_max_per_reference_unit")
 
 
 def _manifest(source_id: str, title: str, digest: str) -> dict[str, Any]:
@@ -45,35 +30,21 @@ def _manifest(source_id: str, title: str, digest: str) -> dict[str, Any]:
 
 
 def frozen_input(path: Path, *, document_id: str, source_id: str) -> dict[str, Any]:
-    """One extraction shared by both arms; evidence inventory is reconstructable."""
-    from src.decision_graph_v1 import evidence_inventory, pdf_fragments
+    """The route's own source representation and reconstructable evidence."""
+    from src.decision_graph_v1 import source_evidence
+    from src.decision_tree_route_v1 import source_fragments
     data = Path(path).read_bytes()
     digest = sha256_bytes(data)
-    fragments = list(pdf_fragments(Path(path), document_id=document_id, source_id=source_id, use_docling=False))
+    fragments = list(source_fragments("pdf", Path(path), data, document_id=document_id, source_id=source_id,
+                                      use_docling=False))
     return {"path": Path(path), "data": data, "source_sha256": digest, "document_id": document_id,
             "source_id": source_id, "fragments": fragments,
-            "inventory": evidence_inventory(Path(path), fragments, digest)}
+            "inventory": source_evidence(Path(path), data, "pdf", fragments, digest)}
 
 
-def baseline_arm(frozen: dict[str, Any], *, title: str = "Beslisboom") -> dict[str, Any]:
-    """Current structural route, read-only: unit construction plus geometric proposals."""
-    from src.beslisboom_path_v1 import boom_spec_from_fragments
-    from src.decision_graph_v1 import graph_issues, prepare_graph
-    from src.decision_unit_construction_v1 import construction_spec
-    from src.operations_console_v1 import transform_generic
-    fragments = deepcopy(frozen["fragments"])
-    spec = construction_spec(boom_spec_from_fragments(document_id=frozen["document_id"], title=title,
-                             family="experiment", class_="beslisboom", fragments=fragments), fragments)
-    objects = transform_generic(spec, _manifest(frozen["source_id"], title, frozen["source_sha256"]), fragments)
-    prepared = prepare_graph(frozen["path"], frozen["data"], "pdf", fragments, objects, frozen["source_sha256"])
-    graph = prepared["decision_graph"]
-    return {"route": ROUTES[0], "objects": objects, "graph": graph, "context_bindings": [],
-            "issues": graph_issues(graph, objects, prepared["decision_graph_evidence"])}
-
-
-def candidate_arm(frozen: dict[str, Any], proposal: Any, *, model: str,
-                  title: str = "Beslisboom") -> dict[str, Any]:
-    """Proposal -> sole materialiser -> existing transform and graph validation."""
+def route_output(frozen: dict[str, Any], proposal: Any, *, model: str,
+                 title: str = "Beslisboom") -> dict[str, Any]:
+    """Proposal -> sole materialiser -> existing transform and graph validation (no writes)."""
     from src.decision_graph_v1 import graph_issues
     from src.decision_tree_construction_v1 import bind_graph, construct
     from src.operations_console_v1 import transform_generic
@@ -83,45 +54,15 @@ def candidate_arm(frozen: dict[str, Any], proposal: Any, *, model: str,
                              inventory=frozen["inventory"], model=model)
     objects = transform_generic(construction["spec"], _manifest(frozen["source_id"], title, frozen["source_sha256"]),
                                 fragments)
-    # Source-derived bundle evidence, exactly as the existing graph preparation stamps it.
     from src.decision_bundles_v1 import stamp_bundles
     from src.integrity_kernel import stamp_canonical_hashes
     stamp_bundles(fragments, objects)
     for obj in objects:
         stamp_canonical_hashes(obj)
     graph = bind_graph(construction, objects, frozen["source_sha256"])
-    return {"route": ROUTES[1], "objects": objects, "graph": graph, "construction": construction,
+    return {"route": ROUTE, "objects": objects, "graph": graph, "construction": construction,
             "context_bindings": construction["context_bindings"],
             "issues": graph_issues(graph, objects, frozen["inventory"])}
-
-
-def request_proposal(frozen: dict[str, Any], *, api_key: str, model: str, limits: Any,
-                     post_json: Callable | None = None) -> dict[str, Any]:
-    """Bounded provider call outside any write transaction; failures never fall back."""
-    from src.decision_tree_construction_v1 import proposal_inputs
-    from src.decision_tree_proposal_v1 import proposal_schema
-    from src.llm_provider_v1 import OPENAI_RESPONSES_URL
-    from src.operations_console_v1 import ConsoleError
-    from src.pre_review_semantic_v1 import _bounded_provider_json, _extract_output_text
-    if not str(api_key or "").strip():
-        raise ConsoleError("pre_review_llm_api_key_required")
-    evidence_items = {key: {k: v for k, v in item.items() if k in {"kind", "text", "page", "bbox", "record"}}
-                      for key, item in frozen["inventory"]["items"].items()}
-    payload = {"model": model, "input": [
-        {"role": "developer", "content": PROPOSER_PROMPT},
-        {"role": "user", "content": json.dumps({"source_blocks": proposal_inputs(frozen["fragments"]),
-                                                "evidence_items": evidence_items}, ensure_ascii=False)}],
-        "text": {"format": {"type": "json_schema", "name": "decision_tree_proposal", "strict": True,
-                            "schema": proposal_schema()}}}
-    headers = {"Authorization": f"Bearer {api_key.strip()}", "Content-Type": "application/json"}
-    response = (_bounded_provider_json(OPENAI_RESPONSES_URL, headers, payload, limits) if post_json is None
-                else post_json(OPENAI_RESPONSES_URL, headers, payload, limits.total))
-    if not isinstance(response, dict):
-        raise ConsoleError("pre_review_llm_response_invalid")
-    try:
-        return json.loads(_extract_output_text(response))
-    except json.JSONDecodeError as exc:
-        raise ConsoleError("pre_review_llm_response_invalid") from exc
 
 
 def _norm(text: Any) -> str:
@@ -169,46 +110,45 @@ def decide(criteria: dict[str, Any], cases: list[dict[str, Any]]) -> dict[str, A
         return {"decision": "BLOCKED", "reason": "independent_reference_missing"}
     failures = []
     for case in cases:
-        base, cand = case["results"][ROUTES[0]], case["results"][ROUTES[1]]
+        result = case["result"]
+        per_unit = result["correction_actions"] / max(result["units"]["reference"], 1)
         checks = {
-            "fabricated_content": cand["fabricated_content"] <= FABRICATED_CONTENT_MAX,
-            "unit_recall": (cand["units"]["recall"] or 0) >= thresholds["unit_recall_min"],
-            "unit_precision": (cand["units"]["precision"] or 0) >= thresholds["unit_precision_min"],
-            "edge_recall": (cand["edges"]["recall"] or 0) >= thresholds["edge_recall_min"],
-            "edge_precision": (cand["edges"]["precision"] or 0) >= thresholds["edge_precision_min"],
-            "condition_recall": cand["conditions"]["recall"] is None
-            or cand["conditions"]["recall"] >= thresholds["condition_recall_min"],
-            "correction_work": cand["correction_actions"]
-            <= thresholds["correction_actions_max_ratio_to_baseline"] * max(base["correction_actions"], 1),
+            "fabricated_content": result["fabricated_content"] <= FABRICATED_CONTENT_MAX,
+            "unit_recall": (result["units"]["recall"] or 0) >= thresholds["unit_recall_min"],
+            "unit_precision": (result["units"]["precision"] or 0) >= thresholds["unit_precision_min"],
+            "edge_recall": (result["edges"]["recall"] or 0) >= thresholds["edge_recall_min"],
+            "edge_precision": (result["edges"]["precision"] or 0) >= thresholds["edge_precision_min"],
+            "condition_recall": result["conditions"]["recall"] is None
+            or result["conditions"]["recall"] >= thresholds["condition_recall_min"],
+            "correction_work": per_unit <= thresholds["correction_actions_max_per_reference_unit"],
         }
         failures.extend({"source_sha256": case["source_sha256"], "check": k} for k, ok in checks.items() if not ok)
     return ({"decision": "ITERATE", "failures": failures} if failures else
-            {"decision": "READY FOR IMPLEMENTATION",
-             "note": "Geen activering: omschakeling vereist protocolwijziging (§15) en een afzonderlijke PR."})
+            {"decision": "ACCEPTANCE_CRITERIA_MET",
+             "note": "Inhoudelijke acceptatie van de route op dit corpus; menselijke graafreview blijft per document vereist."})
 
 
 def legacy_route_inventory(envelopes: list[dict[str, Any]]) -> dict[str, Any]:
-    """Read-only decommission precondition: which PDF trees still depend on the old route.
+    """Read-only: decision trees formed under the retired structural route.
 
-    The structural route is implied by class and kind, not by the recorded
-    prose ``processing_configuration``; the durable marker is the envelope's
-    ``decision_unit_contract``. Nothing is changed or re-routed here.
+    Their evidence stays readable; re-forming or correcting their units fails
+    closed and needs an explicit successor revision. Attempts reserved before
+    the cutover are listed so an operator can see them; nothing is changed.
     """
     rows = []
     for envelope in envelopes:
-        if envelope.get("content_kind") != "pdf" or envelope.get("class") != "beslisboom":
+        if envelope.get("class") != "beslisboom" or envelope.get("decision_tree_formation"):
             continue
         attempts = envelope.get("processing_attempts") or []
         rows.append({
             "snapshot_id": envelope.get("snapshot_id"),
+            "content_kind": envelope.get("content_kind"),
             "recorded_route": envelope.get("decision_unit_contract")
             or ("structural-graph-without-unit-contract" if "decision_graph" in envelope else None),
             "recorded_processing_mode": (envelope.get("processing_configuration") or {}).get("mode"),
             "running_attempts": [a.get("attempt_id") for a in attempts if a.get("state") == "running"],
-            "retryable_blocked": envelope.get("publication_eligibility") == "pre_review_blocked",
             "publication_eligibility": envelope.get("publication_eligibility"),
             "graph_reviews": len(envelope.get("decision_graph_reviews") or []),
         })
-    return {"version": VERSION, "snapshots": rows,
-            "decommission_blockers": [r["snapshot_id"] for r in rows
-                                      if r["running_attempts"] or r["retryable_blocked"]]}
+    return {"version": VERSION, "legacy_snapshots": rows,
+            "attempts_reserved_before_cutover": [r["snapshot_id"] for r in rows if r["running_attempts"]]}

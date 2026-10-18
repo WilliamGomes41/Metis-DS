@@ -144,9 +144,10 @@ def install_decision_review_routes(app, console, require, page):
                 '<button>Deze actuele passage bevestigen</button></form>' for o in rows
                 if not (o.get("metadata") or {}).get("decision_unit_construction", {}).get("role") == "branch_label")
         problems = publication_issues(env, console.snapshot_objects(document))
-        proposals = env.get("decision_graph_proposals", [])
-        proposal_note = (f'<p>{len(proposals)} geometrische verbindingsvoorstellen. Richting, antwoordlabel en eindpunten '
-                         'zijn nog niet bevestigd. Controleer ook verbindingen die niet zijn herkend.</p>' if proposals else '')
+        unresolved = [u for u in graph.get("unresolved", []) if u != "human_route_confirmation_required"]
+        proposal_note = (f'<p>{len(unresolved)} verbindingen of rollen zijn niet uit de bron te binden en blijven open. '
+                         'Voorgestelde verbindingen zijn nog niet bevestigd; controleer ook verbindingen die ontbreken.</p>'
+                         if "decision_tree_formation" in env else '')
         original = f'/review/brondocument?document={esc(document)}&amp;object={esc(rows[0]["object_id"])}' if rows else ""
         from src.operations_console_app import _task_links
         return page('<h1>Beslisroutes controleren</h1>' + _task_links("review")

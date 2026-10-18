@@ -1,15 +1,14 @@
 {
   "experiment_id": "decision-tree-semantic-proposal-route-v1",
-  "definition_version": "decision-tree-route-experiment-v1",
+  "definition_version": "decision-tree-route-acceptance-v1",
   "status": "preregistration_incomplete",
-  "protocol_basis": "PROTOCOL.md v4.1 §5.4 (strategie C) en §10",
+  "protocol_basis": "PROTOCOL.md v4.2 §5.4 (strategie C) en §10",
   "routes": {
-    "baseline": "structural-baseline: decision-unit-construction-v1 + pdf_route_proposals_v1 (huidige standaardroute)",
-    "candidate": "semantic-proposal-candidate: decision-tree-proposal-v1 -> materialise_knowledge_candidates -> decision-tree-construction-v1"
+    "active": "decision-tree-source-bound-v1: voorstel (PDF: model; JSON: deterministisch uit export) -> materialise_knowledge_candidates -> decision-tree-construction-v1"
   },
   "corpus": [],
   "corpus_requirements": [
-    "Bevroren PDF-beslisbomen met vastgelegde SHA-256; beide armen gebruiken dezelfde bronbytes en dezelfde extractie.",
+    "Bevroren PDF-beslisbomen met vastgelegde SHA-256 en de bronrepresentatie van de route.",
     "Per bron één onafhankelijke menselijke referentie (eenheden, verbindingen met letterlijke labels, voorwaarden), vastgelegd vóórdat kandidaatuitvoer is gezien.",
     "Referentiemaker is niet de ontwikkelaar van de kandidaatroute; naam, datum en methode worden per referentie vastgelegd.",
     "De set bevat ten minste samengestelde eenheden, voorwaarden, resultaatbundels, paginaovergangen en een pagina met onopgeloste verbindingen."
@@ -19,12 +18,12 @@
     "edges: recall, precision op (van, naar, label)",
     "conditions: recall op (context, geldt-voor)",
     "fabricated_content: aantal eenheden met niet uit de bron herleidbare tekst",
-    "correction_actions: omissions + additions over eenheden, verbindingen en voorwaarden (ondergrens voor correctiewerk)",
+    "correction_actions: omissions + additions over eenheden, verbindingen en voorwaarden, gedeeld door het aantal referentie-eenheden",
     "blocking_issues: graph_issues van de bestaande validator"
   ],
   "fixed_rules": {
     "fabricated_content_max": 0,
-    "activation": "Geen. De hoogste uitkomst is READY FOR IMPLEMENTATION (§10); omschakeling vereist een protocolwijziging (§15) en een afzonderlijke Class A-PR."
+    "activation": "Niet van toepassing: de route is actief. Uitkomst ACCEPTANCE_CRITERIA_MET of ITERATE; menselijke graafreview blijft per document vereist."
   },
   "thresholds": {
     "unit_recall_min": null,
@@ -32,11 +31,12 @@
     "edge_recall_min": null,
     "edge_precision_min": null,
     "condition_recall_min": null,
-    "correction_actions_max_ratio_to_baseline": null
+    "correction_actions_max_per_reference_unit": null
   },
   "open_decisions": [
     "Numerieke grenswaarden: vast te stellen door William vóór uitvoering.",
     "Corpus en onafhankelijke referentiemaker: aan te wijzen door William.",
-    "Model en promptversie voor de kandidaatarm: vast te leggen bij uitvoering."
-  ]
+    "Model- en promptversie: vastgelegd per verwerkingspoging (decision_tree_formation.model, proposal_hash)."
+  ],
+  "purpose": "Inhoudelijke acceptatie van de actieve route na omschakeling zonder voorafgaand experiment (besluit William 2026-10-18). Er is geen baseline meer: de structurele route is verwijderd."
 }
