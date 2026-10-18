@@ -15,8 +15,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-from src.audit_archive_store_v1 import AuditArchiveStoreError, AzureAuditArchiveStore
-from src.audit_room_v1 import install_audit_routes
 from src.azure_postgres_credential_v1 import CachedAzurePostgresCredential
 from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 from src.closed_review_loop_v1 import install_closed_review_routes
@@ -32,6 +30,7 @@ from src.proportionate_review_v1 import install_proportionate_review_routes
 from src.publish_readiness_ui_v1 import install_publish_readiness_ui
 from src.review_closure_v1 import harden_legacy_repair_routes
 from src.review_workboard_v1 import install_review_workboard
+from src.semantic_safety_app_v1 import install_semantic_safety_routes
 from src.structured_logging_v1 import install_startup_reinstall, install_structured_logging
 from src.topology_bound_v1 import assert_supported_topology
 from src.workflows.workflow_badge_counts_postgres_v1 import (
@@ -44,7 +43,6 @@ from src.workflows.workflow_identity_cutover_v1 import CutoverPostgresWorkflowId
 from src.workflows.workflow_identity_postgres_v1 import (
     PostgresWorkflowIdentityStore,
 )
-from src.workflows.workflow_remaining_cutover_v1 import bind_remaining_route_backends
 from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
 from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 from src.workflows.workflow_transaction_v1 import bind_workflow_stores
@@ -133,18 +131,6 @@ def _immutable_source_store() -> AzureBlobSourceStore | None:
     return AzureBlobSourceStore()
 
 
-def _audit_archive_store() -> AzureAuditArchiveStore | None:
-    """Use managed identity when audit archive coordinates are available."""
-    if not _running_in_azure():
-        return None
-    try:
-        return AzureAuditArchiveStore()
-    except AuditArchiveStoreError as exc:
-        if exc.args and exc.args[0] == "audit_archive_account_invalid":
-            return None
-        raise
-
-
 def bootstrap_accounts(console: OperationsConsole) -> None:
     if os.getenv("METIS_CONSOLE_AUTH", "local").strip().lower() == "entra":
         return
@@ -182,7 +168,6 @@ def build_app() -> object:
     topology = assert_supported_topology()
     data_root = _env_path("CONSOLE_DATA_ROOT", _default_data_root())
     immutable_store = _immutable_source_store()
-    audit_archive_store = _audit_archive_store()
     postgres_credential = _postgres_credential()
     canonical_store = _canonical_store(credential=postgres_credential) if postgres else None
     workflow_identity_store = _workflow_identity_store(credential=postgres_credential) if postgres else None
@@ -217,7 +202,6 @@ def build_app() -> object:
             workflow_review_store=workflow_review_store,
             workflow_remaining_store=workflow_remaining_store,
         )
-        bind_remaining_route_backends(workflow_remaining_store)
     else:
         console = DurablePublicationConsole(**common)
 
@@ -244,7 +228,7 @@ def build_app() -> object:
     install_deterministic_review_repair_routes(app, console)
     install_closed_review_routes(app, console)
     harden_legacy_repair_routes(app, console)
-    install_audit_routes(app, console, archive_store=audit_archive_store)
+    install_semantic_safety_routes(app, console)
     install_navigation_simplification(app)
     app.state.operations_kernel = console
     app.state.console_topology = topology

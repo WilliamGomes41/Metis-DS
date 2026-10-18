@@ -38,7 +38,7 @@ def test_partial_configuration_refused_before_storage(bits, monkeypatch, tmp_pat
         raise AssertionError("storage_or_credentials_opened_before_refusal")
 
     for name in ("_postgres_credential", "_canonical_store", "_immutable_source_store",
-                 "_audit_archive_store", "_workflow_identity_store", "_workflow_document_store",
+                 "_workflow_identity_store", "_workflow_document_store",
                  "_workflow_review_store", "_workflow_remaining_store"):
         monkeypatch.setattr(asgi, name, forbidden)
     with pytest.raises(RuntimeError) as exc:
@@ -107,18 +107,8 @@ def test_local_cli_cannot_ignore_configured_authorities(monkeypatch, mode, comma
         getattr(cli, command)(Namespace())
 
 
-@pytest.fixture
-def restore_audit_registry():
-    from src import audit_room_v1
-    original = audit_room_v1.AuditRegistry
-    try:
-        yield
-    finally:
-        audit_room_v1.AuditRegistry = original
-
-
 @pytest.mark.parametrize("azure", [False, True])
-def test_native_complete_build_login_and_restart(azure, tmp_path, monkeypatch, recovery_postgres, restore_audit_registry):
+def test_native_complete_build_login_and_restart(azure, tmp_path, monkeypatch, recovery_postgres):
     from fastapi.testclient import TestClient
     for key in SETTINGS:
         monkeypatch.setenv(key, "postgres")
@@ -130,7 +120,6 @@ def test_native_complete_build_login_and_restart(azure, tmp_path, monkeypatch, r
         # Immutable bytes are outside this configuration/PG proof. No paid calls.
         from tests.test_publication_chain_recovery_v1 import FakeBlobStore
         monkeypatch.setattr(asgi, "_immutable_source_store", lambda: FakeBlobStore({}))
-        monkeypatch.setattr(asgi, "_audit_archive_store", lambda: None)
     app = asgi.build_app()
     kernel = app.state.operations_kernel
     assert kernel.workflow_remaining_store is not None
