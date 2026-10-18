@@ -1,6 +1,6 @@
 # Metis governance
 
-**Status:** actief onder Protocol v4.0.0  
+**Status:** actief onder Protocol v4.1.0  
 **Datum:** 2026-09-27
 
 Dit bestand is het compacte operationele governance-register. Het is geen tweede protocol, geen geschiedenislog en geen vijfde stuurlaag.
