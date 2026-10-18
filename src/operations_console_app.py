@@ -4125,6 +4125,8 @@ def create_console_app(
                 f'{int(progress.get("pending_task_count") or 0)} nog open.</p>'
             )
         diagnostic = ((envelope.get("processing_attempts") or [{}])[-1].get("diagnostic") or {})
+        pages = [str(p) for p in diagnostic.get("unverified_pages") or [] if type(p) is int]
+        pages_html = f'<p>Pagina’s zonder verwerkbare brontekst: {_esc(", ".join(pages))}</p>' if pages else ""
         detail = _esc(json.dumps(diagnostic, ensure_ascii=False, indent=2))
         reviewer_links = (f'<p><a href="/settings/technical?document={_esc(document)}">Passagediagnostiek en exports</a></p>'
                           if "reviewer" in roles and account["account_id"] in envelope.get("named_reviewers", []) else "")
@@ -4133,6 +4135,7 @@ def create_console_app(
           <h1>Verwerkingsbeheer: {_esc(envelope.get("title"))}</h1>
           <p>{_esc(ERROR_COPY.get(code, "Controleer de actuele verwerking."))}</p>
           <p>Code: <code>{_esc(code)}</code></p>
+          {pages_html}
           {progress_html}
           <p>Nieuwe poging vanaf: {_esc(processing.get("retry_not_before") or "niet van toepassing")}</p>
           {"".join(controls)}<pre>{detail}</pre>{reviewer_links}

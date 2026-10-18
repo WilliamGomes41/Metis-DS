@@ -214,8 +214,11 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
     # model; none of those possibilities proves complete source extraction.
     # Navigation accounts only for a page without other unverified body content.
     navigation_pages -= unverified_body_pages
-    if selected - {row["source_page"] for row in out} - navigation_pages:
-        raise DoclingError("docling_page_text_unverified")
+    missing = selected - {row["source_page"] for row in out} - navigation_pages
+    if missing:
+        error = DoclingError("docling_page_text_unverified")
+        error.pages = sorted(missing)  # Page numbers only; never source text.
+        raise error
     record.update(extraction_id=extraction_id, bindings=bindings, exclusions=exclusions,
                   selected_pages=sorted(selected), navigation_pages=sorted(navigation_pages & selected),
                   metrics=deepcopy(result.get("metrics", {})))

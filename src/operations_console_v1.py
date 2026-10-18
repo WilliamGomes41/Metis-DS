@@ -2822,7 +2822,9 @@ class OperationsConsole:
             return (extract_docling(path, document_id=document_id, source_id=source_id, deadline=deadline)
                     if enabled() else extract_pdf(path, document_id=document_id, source_id=source_id))
         except DoclingError as exc:
-            raise ConsoleError(exc.code) from exc
+            error = ConsoleError(exc.code)
+            error.unverified_pages = getattr(exc, "pages", None)
+            raise error from exc
 
     @diagnostic_phase("source_read")
     def _read_source_fragments(self, envelope, path):

@@ -292,3 +292,21 @@ def test_busy_pdf_prefix_does_not_starve_unrelated_html(console, tmp_path, monke
         await dispatcher.stop()
     asyncio.run(scenario())
     assert calls == [1]
+
+
+def test_stopped_delivery_logs_only_the_bounded_failure_code(caplog):
+    # INC-01: the stop warning named no cause; the stored attempt code was
+    # needed to explain it. Exception prose never reaches the log.
+    dispatcher = SourceProcessingDispatcher(console=None)
+    attempt = {"attempt_id": "pa_00000000000000000000000000000000"}
+    for error, expected in ((ConsoleError("docling_page_text_unverified", "page 4 text"), "docling_page_text_unverified"),
+                            (RuntimeError("provider prose with Secret"), "unclassified")):
+        def failing(sid, attempt, error=error):
+            raise error
+        dispatcher._execute = failing
+        caplog.clear()
+        with caplog.at_level("WARNING", logger="src.source_processing_dispatch_v1"):
+            asyncio.run(dispatcher._deliver("snap-1", attempt))
+        messages = [record.getMessage() for record in caplog.records]
+        assert f"source_dispatch_attempt_stopped code={expected}" in messages
+        assert not any("page 4" in m or "Secret" in m for m in messages)

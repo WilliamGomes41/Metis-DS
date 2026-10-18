@@ -33,6 +33,7 @@ EXPLANATIONS = {
     'source_assessment_bounds_invalid': ('Ongeldig beoordelingsbereik', 'De beoordeling moet naar een geldig bereik in de opgegeven bron verwijzen.'),
     'semantic_span_hidden_gap': ('Niet-verantwoorde onderbreking', 'Het bronbereik moet voldoen aan het geldende aaneengeslotenheidscontract.'),
     'semantic_dependency_rejected': ('Afhankelijk voorstel afgewezen', 'De benodigde afhankelijkheid moet door de bestaande controle worden geaccepteerd.'),
+    'docling_page_text_unverified': ('Pagina zonder verwerkbare brontekst', 'Elke geselecteerde pagina moet verwerkbare brontekst of een herkende inhoudsopgave opleveren; lege en gescande pagina\u2019s blokkeren. De verwerkingsdiagnose noemt de paginanummers.'),
     'source_task_budget_exhausted': ('Taakbudget bereikt', 'Verwerking moet binnen het geldende taakbudget blijven; de uitvoerhistorie bepaalt welk werk nog openstaat.'),
     'source_formation_incomplete': ('Bronverwerking nog onvolledig', 'Alle vereiste bronverwerking moet volgens de bestaande controles zijn verantwoord.'),
     'review_work_incomplete': ('Review nog niet afgerond', 'De bestaande reviewverplichtingen moeten zijn afgerond.'),

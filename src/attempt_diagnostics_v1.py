@@ -76,6 +76,9 @@ def finish_diagnostic(attempt, error=None):
     diagnostic = attempt.setdefault("diagnostic", {"version": VERSION, "checkpoints": []})
     code = attempt.get("validation_code") or attempt.get("error_code") or "succeeded"
     category, advice = classification(code) if error else ("success", "continue_review")
+    pages = getattr(error, "unverified_pages", None)
+    if isinstance(pages, list) and pages and all(type(p) is int and 0 < p <= 100000 for p in pages):
+        diagnostic["unverified_pages"] = sorted(set(pages))[:200]
     diagnostic.update(outcome=attempt["state"], reason_code=code, category=category,
                       recovery_advice=advice,
                       evidence_availability="partial_limit" if diagnostic.get("omitted_evidence") else "recorded" if "validator_input" in diagnostic else "not_recorded")

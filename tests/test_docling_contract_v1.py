@@ -432,3 +432,11 @@ def test_unverified_page_failure_is_durable_and_visible_without_partial_activati
         assert pre_review["blocked"] and pre_review["object_count"] == 0
         assert pre_review["reason_code"] == expected_code
         assert "lege en gescande pagina’s" in pre_review["message"]
+        diagnostic = restarted._envelope(sid)["processing_attempts"][-1]["diagnostic"]
+        if all_text_missing:
+            assert "unverified_pages" not in diagnostic
+        else:
+            # The failure names the page, never its text.
+            assert diagnostic["unverified_pages"] == [2]
+            page = client.get("/settings/technical/processing", params={"document": sid}).text
+            assert "Pagina’s zonder verwerkbare brontekst: 2" in page
