@@ -113,6 +113,8 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
                     and not row.get("unresolved_reason")):
                 targets.append((target, row["span"], state))
 
+    from src.knowledge_materialisation_v1 import _read_source_blocks
+    source_blocks = None
     result = {}
     for obj in objects:
         oid = str(obj.get("object_id") or "")
@@ -136,7 +138,12 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
         invalid_source = source_record and (not evidence or not spans_are_exact(evidence.get("spans")))
         if source_record and not invalid_source and fragments is not None:
             try:
-                invalid_source = not verify_literal_source(obj, fragments, (obj.get("source") or {}).get("source_checksum"))
+                # This projection never mutates fragments: read the full-source
+                # view once instead of comparing the whole input per record.
+                if source_blocks is None:
+                    source_blocks = _read_source_blocks(fragments, include_headings=True)
+                invalid_source = not verify_literal_source(obj, fragments, (obj.get("source") or {}).get("source_checksum"),
+                                                           source_blocks=source_blocks)
             except (AttributeError, KeyError, TypeError, ValueError):
                 invalid_source = True
         if oid in conflicts or invalid_source:

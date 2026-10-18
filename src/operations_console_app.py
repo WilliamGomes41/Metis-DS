@@ -5425,6 +5425,7 @@ def create_console_app(
         return RedirectResponse(target, status_code=303)
 
     @app.get("/review", response_class=HTMLResponse)
+    @state.source_selection_read_scope()
     def review_get(request: Request, document: str = "", object: str = "", task: str = "",
                    context_target: str = "", context_mode: str = "", context_saved: str = "") -> str:
         with diagnostic_phase("authorization"):
