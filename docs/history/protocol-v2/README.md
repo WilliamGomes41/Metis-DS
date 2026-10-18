@@ -10,7 +10,7 @@ This directory marks the Protocol v2 governance line as historical material for 
 
 ## Legacy v2 documents
 
-The individual `docs/PROTOCOL_V2_*` files and `data/assurance/protocol_v2_*_approval.json` manifests are historical evidence. They intentionally remain at their original repository paths wherever approval manifests or regression evidence bind those paths and/or bytes. Moving them merely for directory tidiness would weaken the audit chain.
+The individual `PROTOCOL_V2_*` documents are stored here with their original bytes. Their former `docs/PROTOCOL_V2_*` paths are relative compatibility symlinks into this directory. Existing approval manifests, historical links and regression evidence can still resolve the original paths and verify the same hashes. The `data/assurance/protocol_v2_*_approval.json` manifests remain unchanged.
 
 After Protocol v3 activation, these files MUST NOT be treated as an additional current steering layer. `PROTOCOL.md` is the current norm; `ROADMAP.md` is the active change register. Historical files are consulted only for audit, provenance, regression history, or reconstruction of prior decisions.
 
@@ -18,4 +18,4 @@ Historical Protocol-v2 regression tests resolve legacy reads of the former root 
 
 ## Migration rule
 
-Do not create new Protocol v2 deltas. Do not create a new chain of Protocol v3 delta files. Persistent invariants are edited directly into the current Protocol v3; temporary implementation history belongs in `CHANGELOG.md`, an audit report, or `docs/history/`.
+Do not create new protocol delta chains. Persistent invariants are edited directly into the current root `PROTOCOL.md` (v4.1.0); temporary implementation history belongs in `CHANGELOG.md`, an audit report, or `docs/history/`.
