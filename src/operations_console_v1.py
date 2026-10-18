@@ -214,6 +214,16 @@ class ConsoleError(ValueError):
         super().__init__(message or code)
 
 
+def docling_console_error(exc):
+    """One Docling-to-console conversion for every extraction route.
+
+    Carries the unverified page numbers (never text) to the attempt diagnostic.
+    """
+    error = ConsoleError(exc.code)
+    error.unverified_pages = getattr(exc, "pages", None)
+    return error
+
+
 def transform_generic(spec, manifest, fragments):
     """Keep materialisation failures in the existing command error channel."""
     from src.knowledge_materialisation_v1 import MaterialisationError
@@ -2822,9 +2832,7 @@ class OperationsConsole:
             return (extract_docling(path, document_id=document_id, source_id=source_id, deadline=deadline)
                     if enabled() else extract_pdf(path, document_id=document_id, source_id=source_id))
         except DoclingError as exc:
-            error = ConsoleError(exc.code)
-            error.unverified_pages = getattr(exc, "pages", None)
-            raise error from exc
+            raise docling_console_error(exc) from exc
 
     @diagnostic_phase("source_read")
     def _read_source_fragments(self, envelope, path):
@@ -2929,7 +2937,7 @@ class OperationsConsole:
             except Exception as exc:
                 from src.docling_contract_v1 import DoclingError
                 if isinstance(exc, DoclingError):
-                    raise ConsoleError(exc.code) from exc
+                    raise docling_console_error(exc) from exc
                 raise ConsoleError("invalid_decision_pdf") from exc
             spec = boom_spec_from_fragments(document_id=document_id, title=title,
                                            family=family, class_=class_, fragments=fragments)

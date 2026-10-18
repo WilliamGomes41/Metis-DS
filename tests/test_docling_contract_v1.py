@@ -448,3 +448,21 @@ def test_unverified_page_failure_is_durable_and_visible_without_partial_activati
     attempt = {"state": "failed", "error_code": "docling_page_text_unverified"}
     finish_diagnostic(attempt, error)
     assert attempt["diagnostic"]["unverified_pages"] == list(range(1, 1001))
+
+
+def test_decision_tree_pdf_route_keeps_unverified_page_numbers(tmp_path, monkeypatch):
+    # The beslisboom route converts Docling errors separately; it must carry
+    # the same page diagnostics as the guideline route.
+    import src.decision_graph_v1 as decision_graph
+    from src.operations_console_v1 import OperationsConsole, ConsoleError
+    def unverified(*args, **kwargs):
+        error = DoclingError("docling_page_text_unverified")
+        error.pages = [3]
+        raise error
+    monkeypatch.setattr(decision_graph, "pdf_fragments", unverified)
+    console = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    with pytest.raises(ConsoleError) as raised:
+        console._deterministic_fragments_and_spec("pdf", tmp_path / "boom.pdf", data=b"%PDF", document_id="doc",
+            source_id="src", title="Boom", family="test", class_="beslisboom")
+    assert raised.value.code == "docling_page_text_unverified"
+    assert raised.value.unverified_pages == [3]
