@@ -21,22 +21,13 @@ def execute(console: Any, **command: Any) -> dict[str, Any]:
     reviews = getattr(console, "workflow_review_store", None)
     if documents is None and reviews is None:
         return _execute(console, **command)
-    from src.workflows.workflow_transaction_v1 import bind_workflow_stores, workflow_transaction, workflow_transaction_active
+    from src.workflows.workflow_transaction_v1 import bind_workflow_stores, workflow_transaction_active
     if documents is None or reviews is None or workflow_transaction_active():
         raise ConsoleError("decision_review_independent_transaction_required")
     bind_workflow_stores(documents, reviews, getattr(console, "workflow_identity_store", None),
                          getattr(console, "workflow_remaining_store", None))
-    with console._store_write_lock():
-        try:
-            with workflow_transaction(reviews) as connection:
-                connection.execute("SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
-                                   (command["snapshot_id"],))
-                result = _execute(console, **command)
-            return result
-        except Exception:
-            console._reload_store_locked()
-            console._remirror_review_runtime()
-            raise
+    with console._store_command(command["snapshot_id"], lock_row=True):
+        return _execute(console, **command)
 
 
 def _execute(console: Any, *, action: str, actor_id: str, snapshot_id: str,
