@@ -23,7 +23,8 @@ def _console(root, config):
     console = _raw_console(root, config)
     bind_fixture_selections(console)
     return console
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import seed_canonical_release
 
 
 def blocked(root, config, monkeypatch):
@@ -155,6 +156,9 @@ def test_reservation_guards_do_not_change_existing_work(workflow_postgres, tmp_p
         objects = [{"object_id": "existing", "object_version": "1", "content": {"raw_text": "Existing work"}}]
     if mutation in {"published", "reviews", "objects"}:
         console.workflow_document_store.write_bundle(envelope=envelope, objects=objects)
+    if mutation == "published":
+        # R+ publication truth is the canonical release history, not the envelope flag.
+        seed_canonical_release(console.workflow_document_store, snapshot_id=sid, token="retry-" + sid)
     elif mutation == "unauthorized":
         actor = console.create_account(username="visitor", password="visitor-secret", roles=("publisher",))["account_id"]
     before = deepcopy(console._envelope(sid))
@@ -207,6 +211,8 @@ def test_changes_during_provider_work_block_stale_activation(workflow_postgres, 
                 retained.append({"object_id": "concurrent-work", "object_version": "1", "content": {"raw_text": "Retained"}})
             second.workflow_document_store.write_bundle(envelope=envelope, objects=retained or None)
             if change == "published":
+                # R+ publication truth is the canonical release history, not the envelope flag.
+                seed_canonical_release(second.workflow_document_store, snapshot_id=sid, token="stale-" + sid)
                 sealed.append(deepcopy(second.workflow_document_store.get_envelope(sid)))
         return result
     monkeypatch.setattr(console, "_fragments_and_spec", changed)

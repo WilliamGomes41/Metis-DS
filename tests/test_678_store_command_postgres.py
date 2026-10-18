@@ -27,7 +27,7 @@ from src.review_ledger import append_event
 from src.workflows import workflow_documents_cutover_v1 as documents_cutover
 from src.workflows import workflow_review_cutover_v1 as rc
 from src.workflows.workflow_transaction_v1 import workflow_transaction_active
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 from tests.test_r2_rollback_remirror_postgres import (
     _approve, _assert_disk_mirrors_equal_pg, _console, _inject_fault, _setup, _state,
 )

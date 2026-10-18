@@ -25,10 +25,8 @@ from src.passage_register_v1 import passage_register_of
 from src.review_disposition_v1 import definitive_review_disposition
 from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
 from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
-from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
-from src.workflows.workflow_review_cutover_v1 import PostgresReviewWorkflowDurablePublicationConsole
-from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
-from src.workflows.workflow_transaction_v1 import bind_workflow_stores
+from src.workflows.workflow_badge_counts_postgres_v1 import FastBadgePostgresCompleteWorkflowDurablePublicationConsole
+from tests.complete_workflow_support import complete_console
 from src.workflows.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -88,20 +86,10 @@ def _console(
     *,
     runtime_name: str,
 ) -> PostgresWorkflowDurablePublicationConsole:
-    # #665: PG documents require PG review authority on the same config.
-    identity = PostgresWorkflowIdentityStore(config)
-    documents = PostgresConcurrentWorkflowDocumentStore(config)
-    reviews = PostgresWorkflowReviewStore(config)
-    bind_workflow_stores(identity, documents, reviews)
-    return PostgresReviewWorkflowDurablePublicationConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources" / "private",
-        runtime=tmp_path / runtime_name,
-        immutable_source_store=source,
+    return complete_console(
+        tmp_path, config, source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / runtime_name, immutable_source_store=source,
         canonical_publication_store=PostgresCanonicalPublicationStore(config),
-        workflow_identity_store=identity,
-        workflow_document_store=documents,
-        workflow_review_store=reviews,
     )
 
 

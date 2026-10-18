@@ -133,7 +133,7 @@ def test_kernel_ui_export_and_manual_reset_survive_restart(tmp_path, make_consol
         reopened.reextract_unpublished(actor_id=author['account_id'], snapshot_id=sid)
 
 
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 def test_native_container_reset_restart(workflow_postgres, tmp_path):

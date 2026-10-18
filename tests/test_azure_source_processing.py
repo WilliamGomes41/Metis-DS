@@ -16,7 +16,7 @@ from src.operations_console_v1 import ConsoleError
 from src.processing_retry_v1 import now
 from tests.test_availability_repair import accounts, bind, provider, installed_app, login, drain, state
 from tests.test_review_batch_atomic_postgres import _console
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 class ImmutableBlobFixture:
@@ -274,14 +274,16 @@ def test_binding_never_replaces_methods_or_reader_and_catalog_calls_no_provider(
 
 
 def test_azure_cannot_use_local_workflow_fallback(monkeypatch):
-    from src.console_asgi import _require_azure_workflow_authorities
+    from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS, validate_workflow_store_configuration
     monkeypatch.setenv("WEBSITE_SITE_NAME", "synthetic")
-    for missing in range(4):
-        stores = [object()] * 4
-        stores[missing] = None
-        with pytest.raises(RuntimeError, match="azure_workflow_authorities_required"):
-            _require_azure_workflow_authorities(*stores)
-    _require_azure_workflow_authorities(*([object()] * 4))
+    for key in POSTGRES_STORE_SETTINGS:
+        monkeypatch.setenv(key, "postgres")
+    for key in POSTGRES_STORE_SETTINGS:
+        monkeypatch.delenv(key)
+        with pytest.raises(RuntimeError):
+            validate_workflow_store_configuration()
+        monkeypatch.setenv(key, "postgres")
+    assert validate_workflow_store_configuration() is True
 
 
 def test_native_receipt_requires_blob_readback_even_with_valid_cache(workflow_postgres, tmp_path):

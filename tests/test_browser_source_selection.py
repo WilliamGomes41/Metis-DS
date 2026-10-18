@@ -11,7 +11,7 @@ import time
 import urllib.request
 
 import pytest
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 @pytest.mark.skipif(not os.environ.get("METIS_BROWSER_EXECUTABLE"), reason="Browser proof runs in the required GitHub acceptance job")

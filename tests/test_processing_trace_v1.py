@@ -14,7 +14,7 @@ from src.request_diagnostics_v1 import RequestDiagnostics
 from src.source_processing_dispatch_v1 import SourceProcessingDispatcher
 from tests.test_source_dispatch_hardening import console, receive
 from tests.test_availability_repair import accounts, bind, provider, login
-from tests.test_workflow_transaction_v1 import workflow_postgres
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 def test_http_origin_survives_restart_duplicate_and_read_only_export(console, tmp_path, monkeypatch):

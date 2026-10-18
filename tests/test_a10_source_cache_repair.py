@@ -28,8 +28,9 @@ from src.operations_console_v1 import ConsoleError
 from src.review_ledger import read_events
 from src.review_policy_v1 import CONTRACT as REVIEW_POLICY_CONTRACT
 from src.source_preparation_context_v1 import KEY
+from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
 from tests.semantic_fixture_support import bind_fixture_selections, install_fixture_history
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 TEXT = "De verpleegkundige bespreekt passende ondersteuning. De keuze wordt samen geevalueerd."
@@ -70,8 +71,10 @@ def installed(root, cache, backend, patch):
     source = AzureBlobSourceStore(blob_service_client=DiskBlobTransport(root / "immutable"))
     patch.setattr(composition, "_immutable_source_store", lambda: source)
     stores = [None] * 4
+    for name in POSTGRES_STORE_SETTINGS:
+        patch.delenv(name, raising=False)
     if backend == "postgres":
-        from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+        from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig, PostgresCanonicalPublicationStore
         from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
         from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
         from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
@@ -79,6 +82,11 @@ def installed(root, cache, backend, patch):
         config = PostgresCanonicalConfig(dsn=os.environ["METIS_TEST_POSTGRES_DSN"])
         stores = [PostgresWorkflowIdentityStore(config), PostgresConcurrentWorkflowDocumentStore(config),
                   PostgresWorkflowReviewStore(config), PostgresWorkflowRemainingStore(config)]
+        # #718: only a complete PostgreSQL configuration selects native authority.
+        for name in POSTGRES_STORE_SETTINGS:
+            patch.setenv(name, "postgres")
+        canonical = PostgresCanonicalPublicationStore(config)
+        patch.setattr(composition, "_canonical_store", lambda canonical=canonical, **kw: canonical)
     for name, store in zip(("_workflow_identity_store", "_workflow_document_store",
                             "_workflow_review_store", "_workflow_remaining_store"), stores):
         patch.setattr(composition, name, lambda store=store, **kw: store)

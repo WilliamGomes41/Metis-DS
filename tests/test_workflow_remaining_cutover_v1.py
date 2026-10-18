@@ -10,6 +10,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS, validate_workflow_store_configuration
 from src.workflows.workflow_remaining_cutover_v1 import PostgresAuditRegistry
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,12 +49,25 @@ def test_audit_registry_uses_shared_store_not_runtime_files() -> None:
 
 
 
-def test_remaining_store_is_explicit_and_requires_previous_cutovers() -> None:
+def _refused_partial_configurations(monkeypatch, setting):
+    """#718: a store is opt-in by its setting and never selected without the complete set."""
+    assert setting in POSTGRES_STORE_SETTINGS
+    monkeypatch.delenv("WEBSITE_SITE_NAME", raising=False)
+    for name in POSTGRES_STORE_SETTINGS:
+        monkeypatch.setenv(name, "postgres")
+    assert validate_workflow_store_configuration() is True
+    for missing in POSTGRES_STORE_SETTINGS:
+        monkeypatch.delenv(missing)
+        with pytest.raises(RuntimeError):
+            validate_workflow_store_configuration()
+        monkeypatch.setenv(missing, "postgres")
+    asgi = (ROOT / "src" / "console_asgi.py").read_text(encoding="utf-8")
+    assert "validate_workflow_store_configuration()" in asgi
+
+
+def test_remaining_store_is_explicit_and_requires_previous_cutovers(monkeypatch) -> None:
+    _refused_partial_configurations(monkeypatch, "METIS_WORKFLOW_REMAINING_STORE")
     source = (ROOT / "src" / "console_asgi.py").read_text(encoding="utf-8")
-    assert "METIS_WORKFLOW_REMAINING_STORE" in source
-    assert "workflow_identity_store_required_for_remaining_store" in source
-    assert "workflow_document_store_required_for_remaining_store" in source
-    assert "workflow_review_store_required_for_remaining_store" in source
     assert "migrate_workflow_remaining_postgres" not in source
 
 

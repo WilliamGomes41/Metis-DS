@@ -58,8 +58,8 @@ from src.workflows.workflow_review_cutover_v1 import (
 )
 from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore, WorkflowReviewStoreError
 from src.workflows.workflow_transaction_v1 import bind_workflow_stores
-from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: F401
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as recovery_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[1]
 CODE = "workflow_review_store_required_for_document_store"
@@ -82,16 +82,7 @@ def _docs_only(root, config):
     )
 
 
-def _review_tier(root, config):
-    identity = PostgresWorkflowIdentityStore(config)
-    documents = PostgresConcurrentWorkflowDocumentStore(config)
-    reviews = PostgresWorkflowReviewStore(config)
-    bind_workflow_stores(identity, documents, reviews)
-    return PostgresReviewWorkflowDurablePublicationConsole(
-        root=root, source_store=root / "sources", runtime=root / "runtime",
-        workflow_identity_store=identity, workflow_document_store=documents,
-        workflow_review_store=reviews,
-    )
+from tests.complete_workflow_support import complete_console as _review_tier
 
 
 def _accounts(console):
@@ -188,7 +179,10 @@ def test_t1_build_app_refuses_tier_d_before_any_postgres_read(monkeypatch, tmp_p
         asgi.build_app()
     assert constructed == []
     assert connects == []
-    _assert_refused(info.value)
+    if review_kind == "file":
+        assert str(info.value) == "unsupported_workflow_review_store"
+    else:
+        _assert_refused(info.value)
     assert not data_root.exists() or not any(data_root.rglob("*"))
 
 

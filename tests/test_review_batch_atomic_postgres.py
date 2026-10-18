@@ -13,25 +13,10 @@ from fastapi.testclient import TestClient
 
 from src.operations_console_app import create_console_app
 from src.proportionate_review_v1 import install_proportionate_review_routes, normal_risk_batch_queue
-from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
-from src.workflows.workflow_review_cutover_v1 import PostgresReviewWorkflowDurablePublicationConsole
-from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
-from src.workflows.workflow_transaction_v1 import bind_workflow_stores
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
-def _console(root, config):
-    identity = PostgresWorkflowIdentityStore(config)
-    documents = PostgresConcurrentWorkflowDocumentStore(config)
-    reviews = PostgresWorkflowReviewStore(config)
-    bind_workflow_stores(identity, documents, reviews)
-    console = PostgresReviewWorkflowDurablePublicationConsole(
-        root=root, source_store=root / "sources", runtime=root / "runtime",
-        workflow_identity_store=identity, workflow_document_store=documents,
-        workflow_review_store=reviews,
-    )
-    return console
+from tests.complete_workflow_support import complete_console as _console
 
 
 def _client(console):

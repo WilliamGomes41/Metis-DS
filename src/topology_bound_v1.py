@@ -11,19 +11,18 @@ import os
 import re
 from typing import Mapping
 
+from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
+
 DEFAULT_WORKERS = 1
 SUPPORTED_WORKERS = (1, 2)
 SUPPORTED_INSTANCE_COUNT = 1
 SUPPORTED_WRITE_MODE = "sequential"
 
 DURABLE_MULTI_WORKER_SETTINGS = {
-    "METIS_CANONICAL_STORE": "postgres",
-    "METIS_WORKFLOW_STORE": "postgres",
-    "METIS_WORKFLOW_DOCUMENT_STORE": "postgres",
-    "METIS_WORKFLOW_REVIEW_STORE": "postgres",
-    "METIS_WORKFLOW_REMAINING_STORE": "postgres",
+    **dict.fromkeys(POSTGRES_STORE_SETTINGS, "postgres"),
     "CONSOLE_IMMUTABLE_SOURCE_STORE": "azure",
 }
+
 
 WORKER_ENV_KEYS = (
     "CONSOLE_GUNICORN_WORKERS",

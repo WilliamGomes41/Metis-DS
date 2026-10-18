@@ -14,7 +14,7 @@ from tests.test_availability_repair import installed_app, drain
 from tests.test_recoverable_formation_v1 import system
 from tests.test_recommendation_coverage_v1 import FIRST, SECOND
 from tests.test_review_batch_atomic_postgres import _console
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 @pytest.fixture(params=["file", "postgres"])

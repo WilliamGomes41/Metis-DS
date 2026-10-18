@@ -27,7 +27,7 @@ from src.bounded_model_call_v1 import ModelCallLimits
 from tests.model_transport_support import peer
 from tests.test_source_bound_fields_v2 import fragment, proposal, TEXT
 from tests.test_review_batch_atomic_postgres import _console, _client
-from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
+from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 def response(payload):
