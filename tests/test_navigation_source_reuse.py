@@ -240,3 +240,43 @@ def test_full_source_keeps_headings_and_input_changes_invalidate_both_views(sour
     assert source_lineage_resolves(candidate, fragments=fragments)
     assert source_lineage_resolves(candidate, fragments=fragments)
     assert len(calls) == 6
+
+
+def test_source_accountability_reads_source_once_with_unchanged_outcome(tmp_path, monkeypatch):
+    # Smetten review: every source record re-compared the full source input.
+    import src.knowledge_materialisation_v1 as materialisation
+    import src.source_context_review_v1 as context_review
+    from src.source_accountability_v1 import is_source_record
+    from src.source_containers_v1 import source_accountability
+    console = ReviewClosureConsole(root=tmp_path, source_store=tmp_path / "source",
+                                   runtime=tmp_path / "runtime")
+    author = console.create_account(username="author", password="fixture-only", roles=("researcher",))
+    reviewer = console.create_account(username="reviewer", password="fixture-only", roles=("reviewer",))
+    texts = [f"Begrip {i} is een beschrijving van een afzonderlijke waarneming." for i in range(20)]
+    bind_fixture_selections(console, [(text, "definition") for text in texts[:2]])
+    sid = console.ingest(
+        actor_id=author["account_id"], filename="source.html", content_type="text/html",
+        data=("<html><body>" + "".join(f"<p>{text}</p>" for text in texts) + "</body></html>").encode(),
+        ingest_kind="new", title="Source records", version="1.0", date="2026-10-18",
+        live_url="", class_="richtlijn", family="probe", named_reviewers=[reviewer["account_id"]],
+    )["snapshot_id"]
+    objects = console.snapshot_objects(sid)
+    fragments = console.review_source_fragments(sid)
+    assert sum(map(is_source_record, objects)) >= 15
+
+    original_verify = context_review.verify_literal_source
+    monkeypatch.setattr(context_review, "verify_literal_source",
+                        lambda obj, rows, source_hash, **_: original_verify(obj, rows, source_hash))
+    expected = source_accountability(objects, fragments=fragments)
+    monkeypatch.setattr(context_review, "verify_literal_source", original_verify)
+
+    original_read = materialisation._read_source_blocks
+    full_reads = []
+
+    def counted(rows, *, include_headings=False):
+        full_reads.append(include_headings)
+        return original_read(rows, include_headings=include_headings)
+
+    monkeypatch.setattr(materialisation, "_read_source_blocks", counted)
+    assert source_accountability(objects, fragments=fragments) == expected
+    assert full_reads.count(True) == 1
