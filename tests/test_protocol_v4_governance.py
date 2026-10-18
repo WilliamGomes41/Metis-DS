@@ -8,6 +8,8 @@ Storage concurrency and stale-write behavior remain covered by
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+import hashlib
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -80,3 +82,39 @@ def test_v4_0_snapshot_is_frozen_and_formation_frame_is_current() -> None:
         assert strategy in protocol
     assert "Een strategie introduceert geen parallelle kandidaatmaker." in protocol
     assert "Zij wijzigt nooit een vastgelegde of lopende route." in protocol
+
+
+def test_previous_protocols_are_archived_without_breaking_approval_evidence() -> None:
+    archive = ROOT / "docs/history/protocol-v2"
+    protocols = sorted(archive.glob("PROTOCOL_V2_*.md"))
+    assert protocols, "historical protocol bytes must live under history"
+    assert {p.name for p in protocols} == {
+        p.name for p in (ROOT / "docs").glob("PROTOCOL_V2_*.md")
+    }
+    for archived in protocols:
+        assert archived.is_file() and not archived.is_symlink()
+        legacy = ROOT / "docs" / archived.name
+        assert legacy.is_symlink(), "old paths are compatibility links only"
+        assert legacy.readlink() == Path("history/protocol-v2") / archived.name
+        assert legacy.resolve() == archived.resolve()
+
+    for manifest_path in (ROOT / "data/assurance").glob("protocol_v2_*_approval.json"):
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        legacy = ROOT / manifest["protocol_path"]
+        assert legacy.resolve().parent == archive.resolve()
+        assert hashlib.sha256(legacy.read_bytes()).hexdigest() == manifest["protocol_sha256"]
+
+
+def test_v4_1_is_vigerend_while_implementation_gaps_remain_explicit() -> None:
+    protocol = read("PROTOCOL.md")
+    assert protocol.startswith("# V&VN Data Services — Protocol v4.1\n")
+    assert "**Status:** Vigerend — enige actuele protocolnorm" in protocol
+    assert "**Versie:** 4.1.0" in protocol
+    assert "## R4.6 Vormingskader per bron invoeren" in read("ROADMAP.md")
+    assert "norm vastgelegd; implementatie open" in read("ROADMAP.md")
+    workflow = read("docs/DEVELOPMENT_WORKFLOW.md")
+    assert "product- en veiligheidsregels staan uitsluitend in `PROTOCOL.md` (v4.1.0)" in workflow
+    assert "Alle v2.6–v2.11-regels blijven van kracht" not in workflow
+    assert "Alle v2.6–v2.11-regels blijven van kracht" in read(
+        "docs/history/protocol-v2/DEVELOPMENT_WORKFLOW_PRE_V4_1_2026-10-18.md"
+    )

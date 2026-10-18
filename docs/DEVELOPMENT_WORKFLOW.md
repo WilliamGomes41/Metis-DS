@@ -53,25 +53,13 @@ Iedere materiële PR vermeldt minimaal:
 - vooraf vastgelegde tests of acceptatiecases;
 - uitgevoerde preflight, CI, volledige tests en echte-casevalidatie;
 - source-, schema-, publication-, answerability-, security- en privacy-impact waar toepasselijk;
-- infrastructure / cost impact (Protocol v2.3): `None`, existing dependency, changed dependency, new dependency, or removed dependency; bij iets anders dan `None` het infrastructuurmanifest en de stackbaseline bijwerken of expliciet blokkeren;
+- infrastructure / cost impact: `None`, existing dependency, changed dependency, new dependency, or removed dependency; bij iets anders dan `None` het infrastructuurmanifest en de stackbaseline bijwerken of expliciet blokkeren;
 - exacte commit/snapshot die iedere reviewer heeft beoordeeld;
 - resterende blokkades, afwijkingen en herstelactie.
 
 Een PR met code maar zonder vereiste tests en controleerbaar bewijs is procesmatig incompleet.
 
-Protocol v2.6 keurt een interne operations console goed als DS-oppervlak. Een PR die console-UI, console-identiteit, review-afdwinging of publish-autorisatie toevoegt is minstens C5 spanning C3. Een zorgapp-frontend, chatbot, EPD/ECD-UI of publieke website in deze repository blijft verboden. Chat is geen consoleruimte. Deze protocol-PR implementeert geen UI.
-
-Protocol v2.7 legt first-wave bron, object-level retrieve-and-abstain API en distributieregels vast. Alle v2.6-consoleregels blijven van kracht. Fase 2 bron 2-opslag mag niet worden overgeslagen. Geen Vercel, Neon of LLM-vendor. Deze protocol-PR implementeert geen UI en geen productcode.
-
-Protocol v2.8 legt primaire gebruikers, klasse×familie-bronhiërarchie en console-bouwvolgorde vast. Alle v2.6-consoleregels en alle v2.7-bron-/API-/distributieregels blijven van kracht, behalve de begrensde supersessie van de bouwvolgorde: de volgende implementatie is een echte console-MVP op de bestaande kernel, geen mockup; Continentie bron 2 komt via die console binnen; duurzame immutable opslag wordt niet overgeslagen. RAG op kennisplatform-HTML is niet het product. Geen Vercel, Neon of LLM-vendor. Deze protocol-PR implementeert geen UI, geen mockup en geen productcode.
-
-Protocol v2.9 legt taakgerichte onderzoeker-UX en de V&VN digitale stylesheet vast. Alle v2.6-kamers, v2.7-ingesttypen en v2.8-gebruikers-/hiërarchieregels blijven van kracht. De console-UX-rewrite op de bestaande kernel is nu in code (PR #25), geen Azure, geen Vercel/Neon, geen mockup; de G2-locator blijft de publicatieblocker.
-
-Protocol v2.10 legt Documentenhierarchie, wachttaak-badges en de Accounts-kamer vast. Alle v2.6-kamers, v2.7-ingesttypen, v2.8-gebruikers-/hiërarchieregels en v2.9-UX-/huisstyleregels blijven van kracht. Het console-vervolg op de nu-in-code v2.9-UX (PR #25 gemerged) blijft verplicht: hernoemen, echte badges, Accounts; geen Azure, geen Vercel/Neon, geen mockup, geen chat, geen verpleegkundigen-UI; de G2-locator blijft de publicatieblocker. De v2.10-protocol-PR wijzigt `src/operations_console_*.py` niet en implementeert de nieuwe UI niet.
-
-Protocol v2.11 legt geüploade HTML-freeze, weigering van live URL-HTML, verplichte source locators en fail-closed Product API zonder locator vast. Alle v2.6-kamers, v2.7-bron-/API-/distributieregels (behalve de begrensde HTML-URL-ingestzin), v2.8-gebruikers-/hiërarchieregels, v2.9-UX-/huisstyleregels en v2.10-console-/nav-/accountsregels blijven van kracht. HTML wordt niet geheel verboden. v2.11-kernelwerk blijft verplichte wet: live URL-HTML bij ingest weigeren; Product API fail-closed `supported` zonder source locator. PROTOCOL → tests → code later. Geen Azure, geen Vercel/Neon, geen mockup; de G2-locator blijft de publicatieblocker. Deze protocol-PR wijzigt `src/operations_console_*.py` en `src/product_api_*.py` niet en implementeert ingest-weigering noch API-fail-closed.
-
-Protocol v2.12 legt extractie als structuur/provenance only, de gesloten object-typeset met unclassified-default, answerability als vraagtype × objecttype, publish-binding aan het objecttupel, en serving vanuit een atomaire gepubliceerde projectie vast. Alle v2.6–v2.11-regels blijven van kracht, behalve de begrensde supersessie van extractie-betekenis, «alleen recommendations», envelope-`review_passes`, live-governance-per-query, en de eerstvolgende implementatie. De volgende implementatie is de Implementation engineer op de bestaande kernel; DAARNA G2/Azure. v2.11-kernelwerk blijft verplichte wet en is geen supersessie van v2.12 §10. Geen Azure, geen Vercel/Neon, geen mockup; deze protocol-PR wijzigt `src/operations_console_*.py`, `src/extract_*.py` of `src/product_api_*.py` niet. GD-03 wordt niet heropend.
+De actuele product- en veiligheidsregels staan uitsluitend in `PROTOCOL.md` (v4.1.0). Historische V2-uitvoeringsgolven zijn bewaard in `docs/history/protocol-v2/DEVELOPMENT_WORKFLOW_PRE_V4_1_2026-10-18.md` en voegen geen actuele verplichtingen toe.
 
 ## 6. CI-governance-invarianten
 
