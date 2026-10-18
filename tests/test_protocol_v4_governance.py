@@ -17,12 +17,12 @@ def read(path: str) -> str:
 def test_v4_is_current_and_v3_is_frozen() -> None:
     current, old = read("PROTOCOL.md"), read("docs/history/protocol-v3/PROTOCOL.md")
     assert current.startswith("# V&VN Data Services — Protocol v4")
-    assert "**Versie:** 4.0.0" in current
+    assert "**Versie:** 4.1.0" in current
     assert old.startswith("# V&VN Data Services — Protocol v3")
     assert "**Versie:** 3.0.0" in old
     assert read("ROADMAP.md").startswith("# Metis — Roadmap v4")
     assert read("docs/history/protocol-v3/ROADMAP.md").startswith("# Metis — Roadmap v3")
-    assert "Protocol v4.0.0" in read("docs/GOVERNANCE.md")
+    assert "Protocol v4.1.0" in read("docs/GOVERNANCE.md")
 
 def test_v4_retains_safety_and_describes_actual_modes() -> None:
     protocol = read("PROTOCOL.md")
@@ -39,7 +39,7 @@ def test_v4_retains_safety_and_describes_actual_modes() -> None:
 
 def test_new_release_records_current_protocol() -> None:
     from src.operations_console_v1 import PUBLICATION_PROTOCOL_VERSION
-    assert PUBLICATION_PROTOCOL_VERSION == "4.0.0"
+    assert PUBLICATION_PROTOCOL_VERSION == "4.1.0"
 
 
 def test_documented_formation_roles_match_existing_policy() -> None:
@@ -68,3 +68,15 @@ def test_documented_formation_roles_match_existing_policy() -> None:
     assert "Een deterministisch typelabel vormt op zichzelf geen toegelaten kenniskandidaat" in protocol
     assert "Een geslaagde controle bewijst geen semantische of klinische volledigheid" in protocol
     assert "Inleveren → Bronselectie → Review → Publicatie → Documenten" in protocol
+
+
+def test_v4_0_snapshot_is_frozen_and_formation_frame_is_current() -> None:
+    old = read("docs/history/protocol-v4.0/PROTOCOL.md")
+    assert "**Versie:** 4.0.0" in old
+    assert "### 5.4 Vormingskader" not in old
+    protocol = read("PROTOCOL.md")
+    assert "### 5.4 Vormingskader en bronsoortstrategieën" in protocol
+    for strategy in ("B. Richtlijn", "C. Beslisboom"):
+        assert strategy in protocol
+    assert "Een strategie introduceert geen parallelle kandidaatmaker." in protocol
+    assert "Zij wijzigt nooit een vastgelegde of lopende route." in protocol
