@@ -62,6 +62,39 @@ def _remirror_warning_already_logged(original: BaseException) -> bool:
     return False
 
 
+_UNREADABLE_TAIL = object()
+
+
+def _ledger_mirror_tail_hash(path: Path) -> Any:
+    """``event_hash`` of the mirror's last line, read backwards from the end.
+
+    None for an empty or missing mirror; ``_UNREADABLE_TAIL`` when the last
+    line cannot be read or parsed, which never matches an anchor.
+    """
+    try:
+        with path.open("rb") as handle:
+            position = handle.seek(0, 2)
+            data = b""
+            while position > 0:
+                step = min(65536, position)
+                position -= step
+                handle.seek(position)
+                data = handle.read(step) + data
+                if b"\n" in data.rstrip(b"\n"):
+                    break
+    except FileNotFoundError:
+        return None
+    except OSError:
+        return _UNREADABLE_TAIL
+    line = data.rstrip(b"\n").rsplit(b"\n", 1)[-1]
+    if not line:
+        return None
+    try:
+        return json.loads(line)["event_hash"]
+    except (ValueError, KeyError, TypeError):
+        return _UNREADABLE_TAIL
+
+
 class _PostgresWorkflowReviewMixin:
     workflow_review_store: PostgresWorkflowReviewStore
     # #665 naad B: the documents mixin only constructs under review authority.
@@ -301,7 +334,7 @@ class _PostgresWorkflowReviewMixin:
         """
         try:
             if command.events:
-                self.workflow_review_store._mirror_events(command.events)
+                self._project_committed_events(command.events)
             if command.bindings:
                 self._bindings = self.workflow_review_store.read_bindings()
                 self._bindings_baseline = deepcopy(self._bindings)
@@ -321,6 +354,27 @@ class _PostgresWorkflowReviewMixin:
                 "store_command_remirror_failed snapshot_ids=%s error_type=%s",
                 ",".join(sorted(command.snapshot_ids)), type(remirror_exc).__name__,
             )
+
+    def _project_committed_events(self, deferred: list[dict[str, Any]]) -> None:
+        """B1 (#708): append the command's committed events as read from PostgreSQL.
+
+        One bounded read anchored on the hash the command chained onto. The
+        deferred copies only name which rows to read. A mirror tail or rows that
+        do not match that chain mean the mirror is stale: rebuild it in full.
+        """
+        anchor = deferred[0].get("previous_event_hash")
+        try:
+            committed = self.workflow_review_store.read_events_after(anchor, len(deferred))
+        except WorkflowReviewStoreError as exc:
+            if exc.args != ("workflow_review_chain_conflict",):
+                raise
+            committed = []
+        if (_ledger_mirror_tail_hash(self._ledger_path) == anchor
+                and [event["event_hash"] for event in committed] == [event["event_hash"] for event in deferred]):
+            self.workflow_review_store._mirror_events(committed)
+            return
+        logging.getLogger(__name__).warning("store_command_ledger_divergence events=%d", len(deferred))
+        self._remirror_review_runtime()
 
     @contextmanager
     def _reprocessing_transaction(self, snapshot_id: str) -> Iterator[None]:

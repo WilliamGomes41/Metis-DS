@@ -97,4 +97,4 @@ Adversarial proof matrix: see "Adversarial review" below.
 ## Limits
 
 - The compatibility path keeps the old nested behavior for the raw-transaction owners until step 2. S9/#705 (heading batch copy restore) and S13/#707 (`_apply_local_release_copy`) are not changed here.
-- The single mirror rebuild after a commit appends the committed ledger lines and re-reads bindings, the touched envelopes and the touched objects. It does not re-read the full ledger (the existing O(E) full remirror stays failure-only).
+- The single mirror rebuild after a commit appends the committed ledger lines and re-reads bindings, the touched envelopes and the touched objects. It does not re-read the full ledger (the existing O(E) full remirror stays failure-only). Since #708 B1 the ledger lines come from one bounded PostgreSQL read anchored on the command's chain, not from the buffer copies; see `708-b1-ledger-projection.md`.
