@@ -1,0 +1,21 @@
+// Run in vvn-metis-console-insights > Logs.
+// Error groups by fingerprint over the last 24 hours, with the deepest Metis frame.
+traces
+| where timestamp > ago(24h)
+| where customDimensions.event == "request_finished"
+| extend d = parse_json(message)
+| where isnotempty(d.error)
+| summarize Count = count(), FirstSeen = min(timestamp), LastSeen = max(timestamp),
+    Routes = make_set(tostring(d.route), 5), Commits = make_set(tostring(d.version), 5),
+    Example = any(tostring(d.request_id)), Trace = any(tostring(d.trace_id))
+    by Fingerprint = tostring(d.error.fingerprint), Type = tostring(d.error.type),
+       Code = tostring(d.error.code), Where = tostring(d.error.frames[-1])
+| order by Count desc
+
+// Requests that started but never finished (aborted: crash, timeout kill, restart).
+// traces
+// | where timestamp > ago(24h) and customDimensions.event in ("request_started", "request_running", "request_finished")
+// | summarize Finished = countif(customDimensions.event == "request_finished"),
+//     LastSeen = max(timestamp), Route = any(tostring(parse_json(message).route))
+//     by RequestId = tostring(customDimensions.request_id)
+// | where Finished == 0 and LastSeen < ago(1m)

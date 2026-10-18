@@ -143,6 +143,14 @@ def install_console_performance(app: Any) -> None:
                 # Only the matched route template is logged, never the raw URL.
                 route = getattr(request.scope.get("route"), "path", "<unmatched>")
                 try:
+                    from src.request_diagnostics_v1 import note_request_metrics
+                    note_request_metrics(
+                        db_connections=metrics.connections, db_queries=metrics.queries,
+                        db_connect_ms=metrics.connect_ms, db_query_ms=metrics.query_ms,
+                        badge_ms=metrics.badge_ms)
+                except Exception:
+                    pass
+                try:
                     _LOGGER.info(
                         "console_performance route=%s status=%d duration_ms=%.3f "
                         "badge_ms=%.3f db_connections=%d db_queries=%d "
