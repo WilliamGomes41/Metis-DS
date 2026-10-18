@@ -112,3 +112,9 @@ def test_v4_1_is_vigerend_while_implementation_gaps_remain_explicit() -> None:
     assert "**Versie:** 4.1.0" in protocol
     assert "## R4.6 Vormingskader per bron invoeren" in read("ROADMAP.md")
     assert "norm vastgelegd; implementatie open" in read("ROADMAP.md")
+    workflow = read("docs/DEVELOPMENT_WORKFLOW.md")
+    assert "product- en veiligheidsregels staan uitsluitend in `PROTOCOL.md` (v4.1.0)" in workflow
+    assert "Alle v2.6–v2.11-regels blijven van kracht" not in workflow
+    assert "Alle v2.6–v2.11-regels blijven van kracht" in read(
+        "docs/history/protocol-v2/DEVELOPMENT_WORKFLOW_PRE_V4_1_2026-10-18.md"
+    )

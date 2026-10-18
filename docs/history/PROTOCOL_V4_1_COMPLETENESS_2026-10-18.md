@@ -35,3 +35,5 @@ De vergelijking van `docs/history/protocol-v4.0/PROTOCOL.md` met de actuele root
 Alle 33 afzonderlijke V2-protocolbestanden zijn met identieke bytes naar `docs/history/protocol-v2/` verplaatst. Op de oude paden staan uitsluitend relatieve compatibiliteitslinks. Dit bewaart de pad- en hashbinding van bestaande approval-manifests en historische verwijzingen zonder een tweede inhoudelijke kopie buiten history te bewaren.
 
 De V3- en v4.0-snapshots en alle historische approval-manifests blijven byte-identiek. Bestaande releaseversies worden niet gewijzigd. `PROTOCOL.md` blijft de enige actuele norm; de roadmap bevat het open implementatiewerk.
+
+Ook de oude V2-uitvoeringsgolven in `docs/DEVELOPMENT_WORKFLOW.md` zijn uit de actuele werkwijze gehaald. De volledige eerdere werkwijze blijft byte-identiek beschikbaar als `protocol-v2/DEVELOPMENT_WORKFLOW_PRE_V4_1_2026-10-18.md`; de actuele werkwijze verwijst voor product- en veiligheidsregels uitsluitend naar v4.1.
