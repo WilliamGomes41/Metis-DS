@@ -440,3 +440,11 @@ def test_unverified_page_failure_is_durable_and_visible_without_partial_activati
             assert diagnostic["unverified_pages"] == [2]
             page = client.get("/settings/technical/processing", params={"document": sid}).text
             assert "Pagina’s zonder verwerkbare brontekst: 2" in page
+    # A long document's complete list is kept, never silently cut short.
+    from src.attempt_diagnostics_v1 import finish_diagnostic
+    from src.operations_console_v1 import ConsoleError
+    error = ConsoleError("docling_page_text_unverified")
+    error.unverified_pages = list(range(1, 1001))
+    attempt = {"state": "failed", "error_code": "docling_page_text_unverified"}
+    finish_diagnostic(attempt, error)
+    assert attempt["diagnostic"]["unverified_pages"] == list(range(1, 1001))
