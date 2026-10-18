@@ -130,6 +130,11 @@ def _selection_blocks(fragments):
     }
 
 
+def selection_source_blocks(fragments: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The exact public source view that selection proposals may reference."""
+    return [public for public, _source in _selection_blocks(list(fragments)).values()]
+
+
 def resolve_source_selection(
     spans: Any, *, fragments: Iterable[dict[str, Any]], source_blocks=None
 ) -> dict[str, Any]:
