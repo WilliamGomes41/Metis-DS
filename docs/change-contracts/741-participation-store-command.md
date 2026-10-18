@@ -58,3 +58,34 @@ If that contract must change, stop and reclassify instead of changing policy.
 Scope exclusions: other #741/#742 owners, #705 heading-copy recovery, #708 guard,
 ledger reread policy, publication kernel changes, #686 and other N+1 work. This
 slice does not close the parent issues, merge a PR or deploy anything.
+
+## Verification and separate closure review
+
+- Baseline native loop on main `93f9023`: three document-store reloads, 48
+  domain SQL calls and eight mirror writes inside the open transaction.
+- Red test commit `cded2d8`: 10 failed / 4 passed, covering both complete local
+  and Azure R+ classes. The existing participation suite passed 17 tests before
+  production changes.
+- Migrated owner: 14 passed, zero skips; one reload and 46 domain SQL calls on
+  the same optional-add fixture. The new CI JUnit no-skip check passed locally.
+  This is a statement-count observation, not a latency benchmark. Store and
+  participant savepoints remain intentional.
+- Existing participation, explicit-policy, graph, native concurrency, #678 and
+  R2 suites: 68 passed, zero skips with native PG enabled. These retain the
+  file-backed cases as well as native cases and cover evidence/history,
+  restart, stale writers and publication races.
+- Separate closure pass: `_reviewer` and `_execute` are byte-identical to the
+  base; local/independent-entry guard ASTs are unchanged. The only supported
+  command entry is manage_review_participation (including its HTTP route).
+  Foreign-owner/partial-store entry reaches the same existing rejection
+  predicate; those unchanged guards were also inspected. Failure tests cover
+  pre-commit faults, real deferred-FK COMMIT failure, failed recovery and a
+  failed post-commit mirror write. No additional blocking finding in this slice.
+- Broad local suite without a PG DSN: 4,979 passed, 4 failed, 558 skipped,
+  6 xfailed. The four failures also reproduce on unchanged main `93f9023`:
+  missing local psql and the three proxy-sensitive HTTPS SNI / redirect
+  rebinding / metadata tests in security_harden_wave3. No security guard was
+  changed; this is not a wholly green local-suite claim.
+- Repository/release preflights, compilation, architecture boundary check and
+  six architecture invariant tests passed. Exact-head CI and required external
+  Sherlock/Argos/adversarial review and human GO remain pending.
