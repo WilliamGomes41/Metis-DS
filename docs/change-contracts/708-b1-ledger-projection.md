@@ -27,8 +27,12 @@ not the authority. The change replaces only that line.
   that anchor and the read rows carry exactly the command's hashes. Otherwise
   it logs `store_command_ledger_divergence events=<n>` (counts only) and runs
   the existing full `_remirror_review_runtime()`.
+- Rows that fail the chain check are NOOIT copied: the conflict propagates as
+  a post-commit mirror failure (`store_command_remirror_failed`, U4) and no
+  full rebuild runs, because `read_events()` would copy the same corruption.
 - The mirror tail is read backwards from the end of the file; no full mirror
-  read.
+  read. A tail line whose recomputed hash differs from its `event_hash` is no
+  anchor, so a tampered tail is rebuilt instead of extended.
 
 ## Domain-first overlay
 
@@ -57,7 +61,7 @@ Rollback/recovery plan: revert; a restart rebuilds the mirror from PostgreSQL.
 Cutover trigger: merge after CI, Sherlock/Argos and William's GO.
 Cleanup/decommission criteria: none; command.events remains the set of row hashes to project.
 Failure blast radius: a stale or fully rebuilt ledger mirror; no PostgreSQL impact.
-Adversarial proof matrix: buffer copy altered after flush (projection must not contain it); unbuffered reprocessing events; stale mirror tail (rebuild + warning); no full read_events on the success path; no mirror write in an open transaction; existing rollback, COMMIT-failure, caught participant and post-commit failure cases.
+Adversarial proof matrix: buffer copy altered after flush (projection must not contain it); unbuffered reprocessing events; stale mirror tail and tampered tail with its old hash (rebuild + warning); committed rows failing the chain check (no copy, no full read); no full read_events on the success path; no mirror write in an open transaction; existing rollback, COMMIT-failure, caught participant and post-commit failure cases.
 ```
 
 ## Limits

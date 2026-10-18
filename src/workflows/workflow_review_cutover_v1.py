@@ -10,6 +10,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Iterator
 
+from src.integrity_kernel import stable_hash
 from src.operations_console_v1 import ConsoleError, _atomic_replace_bytes, _atomic_write
 from src.request_diagnostics_v1 import diagnostic_phase
 from src.review_ledger import buffer_events, register_backend
@@ -69,7 +70,8 @@ def _ledger_mirror_tail_hash(path: Path) -> Any:
     """``event_hash`` of the mirror's last line, read backwards from the end.
 
     None for an empty or missing mirror; ``_UNREADABLE_TAIL`` when the last
-    line cannot be read or parsed, which never matches an anchor.
+    line cannot be read or parsed or does not match its own hash, which
+    never matches an anchor.
     """
     try:
         with path.open("rb") as handle:
@@ -90,9 +92,11 @@ def _ledger_mirror_tail_hash(path: Path) -> Any:
     if not line:
         return None
     try:
-        return json.loads(line)["event_hash"]
-    except (ValueError, KeyError, TypeError):
+        body = json.loads(line)
+        got = body.pop("event_hash")
+    except (ValueError, KeyError, TypeError, AttributeError):
         return _UNREADABLE_TAIL
+    return got if stable_hash(body) == got else _UNREADABLE_TAIL
 
 
 class _PostgresWorkflowReviewMixin:
@@ -361,14 +365,10 @@ class _PostgresWorkflowReviewMixin:
         One bounded read anchored on the hash the command chained onto. The
         deferred copies only name which rows to read. A mirror tail or rows that
         do not match that chain mean the mirror is stale: rebuild it in full.
+        Rows that fail the chain check raise: NOOIT copy them into the mirror.
         """
         anchor = deferred[0].get("previous_event_hash")
-        try:
-            committed = self.workflow_review_store.read_events_after(anchor, len(deferred))
-        except WorkflowReviewStoreError as exc:
-            if exc.args != ("workflow_review_chain_conflict",):
-                raise
-            committed = []
+        committed = self.workflow_review_store.read_events_after(anchor, len(deferred))
         if (_ledger_mirror_tail_hash(self._ledger_path) == anchor
                 and [event["event_hash"] for event in committed] == [event["event_hash"] for event in deferred]):
             self.workflow_review_store._mirror_events(committed)
