@@ -105,7 +105,7 @@ def processing_trace(envelope):
     replay = mapping(envelope.get('semantic_replay'))
     provider = mapping(replay.get('provider_evidence'))
     progress = mapping(provider.get('formation_progress'))
-    return {'schema': VERSION,
+    trace = {'schema': VERSION,
         'snapshot_id': token(envelope.get('snapshot_id'), r'snap-[0-9a-f]{16}-[0-9a-f]{8}'),
         'source_hash': sha(envelope.get('sha256')),
         'observed_at': datetime.now(timezone.utc).isoformat(),
@@ -122,6 +122,9 @@ def processing_trace(envelope):
         'limitations': ['diagnostic_checkpoints_do_not_authorize_resume',
             'checkpoint_payload_history_not_retained', 'formation_and_publication_not_assessed',
             'logs_are_not_commit_proof']}
+    from src.processing_margins_v1 import processing_margins
+    trace['processing_margins'] = processing_margins(trace)
+    return trace
 
 
 def clean_trace(raw):

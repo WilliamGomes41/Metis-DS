@@ -98,3 +98,23 @@ explicitly incomplete. Existing processing ZIP export v13 adds
 `processing_trace.csv` containing this same bounded JSON projection. Raw evidence
 in other existing ZIP datasets retains its existing access restrictions; the
 bounded trace is not a claim that the entire old ZIP is free of source text.
+
+## PR 3: verwerkings- en herstelmarges
+
+Dezelfde JSON bevat nu `processing_margins`: gemeten wachttijd vóór claim,
+uitvoertijd sinds claim, resterende opgeslagen pogingstijd, checkpointleeftijd
+en de tussentijd bij expliciete retry-verwijzingen. De documentdiagnose in Inzicht
+toont deze gegevens met dezelfde bestaande verwerkingsbevoegdheden. Een verlopen
+deadline verandert de opgeslagen toestand niet; herstelrechten blijven bij de
+kernel. Ontbrekende tijden blijven onbekend en een oud checkpoint bewijst geen
+stilstand.
+
+Een experimentele vergelijking gebruikt minimaal drie eerdere technisch geslaagde
+pogingen met dezelfde bron, configuratie, uitvoerversie en pogingsoort. Alleen
+uitkomsten van vóór de betreffende claim tellen mee. Als bij claim minder tijd
+overbleef dan hun mediane uitvoertijd, toont Inzicht de meetbasis en onderzoeksadvies.
+Dit is geen voorspelde storingstijd of garantie op voldoende interventietijd.
+
+De grens blijft 64 pogingen en 128 checkpoints; afgekapt of tegenstrijdig bewijs
+blijft zichtbaar. Pogingaantallen zijn geen retrybudget. Zie
+[het ontwerp en de bewijsgrenzen](../change-contracts/processing-recovery-margins.md).
