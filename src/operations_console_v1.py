@@ -213,6 +213,16 @@ class ConsoleError(ValueError):
         super().__init__(message or code)
 
 
+def docling_console_error(exc):
+    """One Docling-to-console conversion for every extraction route.
+
+    Carries the unverified page numbers (never text) to the attempt diagnostic.
+    """
+    error = ConsoleError(exc.code)
+    error.unverified_pages = getattr(exc, "pages", None)
+    return error
+
+
 def transform_generic(spec, manifest, fragments):
     """Keep materialisation failures in the existing command error channel."""
     from src.knowledge_materialisation_v1 import MaterialisationError
@@ -2835,7 +2845,7 @@ class OperationsConsole:
             return (extract_docling(path, document_id=document_id, source_id=source_id, deadline=deadline)
                     if enabled() else extract_pdf(path, document_id=document_id, source_id=source_id))
         except DoclingError as exc:
-            raise ConsoleError(exc.code) from exc
+            raise docling_console_error(exc) from exc
 
     @diagnostic_phase("source_read")
     def _read_source_fragments(self, envelope, path):
@@ -2936,15 +2946,9 @@ class OperationsConsole:
         retained_fragments = (formation_context or {}).get("retained_fragments")
         if class_ == "beslisboom" and kind in {"pdf", "boom"}:
             from src.decision_tree_route_v1 import prepare
-            try:
-                return prepare(kind, path, data=data, document_id=document_id, source_id=source_id,
-                               title=title, family=family, class_=class_, formation_context=formation_context,
-                               proposer=getattr(self, "_decision_tree_proposer", None))
-            except Exception as exc:
-                from src.docling_contract_v1 import DoclingError
-                if isinstance(exc, DoclingError):
-                    raise ConsoleError(exc.code) from exc
-                raise
+            return prepare(kind, path, data=data, document_id=document_id, source_id=source_id,
+                           title=title, family=family, class_=class_, formation_context=formation_context,
+                           proposer=getattr(self, "_decision_tree_proposer", None))
         if kind == "boom":
             try:
                 fragments = extract_boom_fragments(data, document_id=document_id, source_id=source_id)

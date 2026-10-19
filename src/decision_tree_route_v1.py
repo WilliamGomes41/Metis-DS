@@ -178,8 +178,11 @@ def prepare(kind: str, path: Path, *, data: bytes, document_id: str, source_id: 
                                       deadline=context.get("attempt_deadline")))
     except Exception as exc:
         from src.docling_contract_v1 import DoclingError
-        from src.operations_console_v1 import ConsoleError
-        if isinstance(exc, (DoclingError, ConsoleError)):
+        from src.operations_console_v1 import ConsoleError, docling_console_error
+        if isinstance(exc, DoclingError):
+            # Same conversion as every extraction route: code plus page numbers.
+            raise docling_console_error(exc) from exc
+        if isinstance(exc, ConsoleError):
             raise
         raise _error("invalid_boom_freeze" if kind == "boom" else "invalid_decision_pdf") from exc
     if kind == "pdf":

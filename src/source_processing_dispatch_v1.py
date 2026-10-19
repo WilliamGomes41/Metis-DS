@@ -110,12 +110,14 @@ class SourceProcessingDispatcher:
             from src.console_performance_v1 import detached_performance_scope
             with detached_request_diagnostics(), detached_performance_scope():
                 await asyncio.to_thread(self._execute, sid, attempt)
-        except Exception:
+        except Exception as exc:
             # Kernel failure evidence/expiry remains authoritative. Do not
-            # print provider prose, source text or credentials.
-            from src.processing_trace_v1 import observe
+            # print provider prose, source text or credentials: only the
+            # kernel-bounded code that the failed attempt also stores.
+            from src.processing_trace_v1 import observe, token
             observe('processing_delivery_stopped', sid, attempt)
-            LOG.warning("source_dispatch_attempt_stopped")
+            LOG.warning("source_dispatch_attempt_stopped code=%s",
+                        token(getattr(exc, "code", None), r'[a-z][a-z0-9_]{0,95}') or "unclassified")
 
     async def scan(self):
         room = self.max_workers - len(self.workers)

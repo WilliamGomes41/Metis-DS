@@ -432,3 +432,57 @@ def test_unverified_page_failure_is_durable_and_visible_without_partial_activati
         assert pre_review["blocked"] and pre_review["object_count"] == 0
         assert pre_review["reason_code"] == expected_code
         assert "lege en gescande pagina’s" in pre_review["message"]
+        diagnostic = restarted._envelope(sid)["processing_attempts"][-1]["diagnostic"]
+        if all_text_missing:
+            assert "unverified_pages" not in diagnostic
+        else:
+            # The failure names the page, never its text.
+            assert diagnostic["unverified_pages"] == [2]
+            page = client.get("/settings/technical/processing", params={"document": sid}).text
+            assert "Pagina’s zonder verwerkbare brontekst: 2" in page
+    # A long document's complete list is kept, never silently cut short.
+    from src.attempt_diagnostics_v1 import finish_diagnostic
+    from src.operations_console_v1 import ConsoleError
+    error = ConsoleError("docling_page_text_unverified")
+    error.unverified_pages = list(range(1, 1001))
+    attempt = {"state": "failed", "error_code": "docling_page_text_unverified"}
+    finish_diagnostic(attempt, error)
+    assert attempt["diagnostic"]["unverified_pages"] == list(range(1, 1001))
+
+
+def test_decision_tree_pdf_route_keeps_unverified_page_numbers(tmp_path, monkeypatch):
+    # The beslisboom route converts Docling errors separately; it must carry
+    # the same page diagnostics as the guideline route.
+    import src.decision_graph_v1 as decision_graph
+    from src.operations_console_v1 import OperationsConsole, ConsoleError
+    def unverified(*args, **kwargs):
+        error = DoclingError("docling_page_text_unverified")
+        error.pages = [3]
+        raise error
+    monkeypatch.setattr(decision_graph, "pdf_fragments", unverified)
+    console = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    with pytest.raises(ConsoleError) as raised:
+        console._deterministic_fragments_and_spec("pdf", tmp_path / "boom.pdf", data=b"%PDF", document_id="doc",
+            source_id="src", title="Boom", family="test", class_="beslisboom")
+    assert raised.value.code == "docling_page_text_unverified"
+    assert raised.value.unverified_pages == [3]
+
+
+def test_decision_tree_pdf_route_keeps_unverified_page_numbers_on_the_semantic_binding(tmp_path, monkeypatch):
+    # The bound pre-review strategy calls the route directly; it converts identically.
+    import src.decision_graph_v1 as decision_graph
+    from src.operations_console_v1 import OperationsConsole, ConsoleError
+    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    def unverified(*args, **kwargs):
+        error = DoclingError("docling_page_text_unverified")
+        error.pages = [3]
+        raise error
+    monkeypatch.setattr(decision_graph, "pdf_fragments", unverified)
+    console = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    bind_pre_review_semantic_processing(console, environ={"METIS_LLM_API_KEY": "k", "METIS_LLM_MODEL": "m"},
+                                        post_json=lambda *a: pytest.fail("no model call before extraction"))
+    with pytest.raises(ConsoleError) as raised:
+        console._fragments_and_spec("pdf", tmp_path / "boom.pdf", data=b"%PDF", document_id="doc",
+            source_id="src", title="Boom", family="test", class_="beslisboom")
+    assert raised.value.code == "docling_page_text_unverified"
+    assert raised.value.unverified_pages == [3]

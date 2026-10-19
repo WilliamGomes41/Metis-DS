@@ -76,6 +76,11 @@ def finish_diagnostic(attempt, error=None):
     diagnostic = attempt.setdefault("diagnostic", {"version": VERSION, "checkpoints": []})
     code = attempt.get("validation_code") or attempt.get("error_code") or "succeeded"
     category, advice = classification(code) if error else ("success", "continue_review")
+    pages = getattr(error, "unverified_pages", None)
+    # The extractor accepts at most 1,000 pages: the complete list fits, never truncated.
+    if (isinstance(pages, list) and 0 < len(pages) <= 1000
+            and all(type(p) is int and 0 < p <= 1000 for p in pages)):
+        diagnostic["unverified_pages"] = sorted(set(pages))
     diagnostic.update(outcome=attempt["state"], reason_code=code, category=category,
                       recovery_advice=advice,
                       evidence_availability="partial_limit" if diagnostic.get("omitted_evidence") else "recorded" if "validator_input" in diagnostic else "not_recorded")
