@@ -19,7 +19,7 @@ from unittest.mock import patch
 from fastapi import FastAPI, HTTPException
 from starlette.requests import Request
 
-from src.processing_forecast_v1 import deadline_forecast, MAX_DOCUMENTS, MAX_RECORDS, MAX_ATTEMPTS
+from src.processing_forecast_v1 import deadline_forecast, LOOKBACK_SECONDS, MAX_DOCUMENTS, MAX_RECORDS, MAX_ATTEMPTS
 from src.source_selection_ui_v1 import deadline_forecast_html, install
 from src.source_selection_v1 import estimate, authorize
 from src.operations_console_v1 import ConsoleError
@@ -162,6 +162,43 @@ class ForecastTests(unittest.TestCase):
         rows = [document(i + 1, start=-100000 + i * 300, duration=100) for i in range(MAX_RECORDS + 1)]
         self.assertEqual(forecast(rows=rows)['reason'], 'record_limit')
 
+    def test_unrelated_legacy_and_large_stores_do_not_hold_every_forecast(self):
+        legacy = document(200, start=-50000, duration=100, budget=300)
+        legacy['content_kind'] = 'pdf'
+        del legacy['processing_attempts'][0]['processing_configuration']
+        report = forecast(rows=history() + [legacy])
+        self.assertEqual(report['status'], 'shadow_only')
+        self.assertEqual(report['evidence']['invalid'], 0)
+        self.assertEqual(report['evidence']['other_route_or_size'], 1)
+        others = []
+        for i in range(MAX_RECORDS + 2):
+            other = document(1000 + i, start=-90000 + i * 10, duration=100, budget=300)
+            other['content_kind'] = 'pdf'
+            others.append(other)
+        report = forecast(rows=history() + others)
+        self.assertEqual(report['status'], 'shadow_only')
+        self.assertEqual(report['evidence']['other_route_or_size'], MAX_RECORDS + 2)
+        rows = history()
+        for row in rows[:3]:
+            row['processing_attempts'][0]['processing_configuration'] = {'mode': 'other'}
+        report = forecast(rows=rows)
+        self.assertEqual(report['evidence']['other_configuration'], 3)
+        self.assertEqual(report['evidence']['invalid'], 0)
+
+    def test_comparable_invalid_or_failed_work_still_holds_inside_lookback_only(self):
+        old = -LOOKBACK_SECONDS - 3600
+        failed = document(300, start=old, duration=100, budget=300, state='failed')
+        legacy = document(301, start=old - 600, duration=100, budget=300)
+        del legacy['processing_attempts'][0]['processing_configuration']
+        report = forecast(rows=history() + [failed, legacy])
+        self.assertEqual(report['status'], 'shadow_only')
+        self.assertEqual(report['evidence']['outside_lookback'], 2)
+        recent_failed = document(302, start=-5000, duration=100, budget=300, state='failed')
+        self.assertEqual(forecast(rows=history() + [recent_failed])['reason'], 'noncompletion_bias')
+        recent_legacy = document(303, start=-5000, duration=100, budget=300)
+        del recent_legacy['processing_attempts'][0]['processing_configuration']
+        self.assertEqual(forecast(rows=history() + [recent_legacy])['reason'], 'invalid_history')
+
     def test_expired_boundary_and_exhausted_range_do_not_become_zero_eta(self):
         current = document(100, start=-100, budget=80)
         report = forecast(current)
@@ -217,18 +254,21 @@ class ForecastSelectionTests(unittest.TestCase):
         def request(actor):
             return Request({'type': 'http', 'query_string': b'',
                 'headers': [(b'x-test-account', actor.encode())] if actor else []})
+        def page(response):
+            self.assertEqual(response.headers['cache-control'], 'no-store')
+            return response.body.decode()
         before = deepcopy(store._envelopes)
         with self.assertRaises(HTTPException): handler(request(None), 'snapshot-100')
         self.assertEqual(store.reads, 0)
         with self.assertRaises(ConsoleError): handler(request('outsider'), 'snapshot-100')
         with patch('src.processing_forecast_v1.datetime', wraps=datetime) as clock:
             clock.now.return_value = CLOCK
-            text = handler(request('researcher'), 'snapshot-100')
+            text = page(handler(request('researcher'), 'snapshot-100'))
             self.assertIn('op basis van 6 eerdere vergelijkbare pogingen', text)
-            text = handler(request('reviewer'), 'snapshot-100')
+            text = page(handler(request('reviewer'), 'snapshot-100'))
             self.assertIn('Te weinig vergelijkbare metingen', text)
             self.assertNotIn('op basis van 6 eerdere', text)
-            self.assertNotIn('id="deadline-schaduwprognose"', handler(request('researcher'), ''))
+            self.assertNotIn('id="deadline-schaduwprognose"', page(handler(request('researcher'), '')))
         self.assertEqual(store._envelopes, before)
 
 

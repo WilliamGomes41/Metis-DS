@@ -128,8 +128,10 @@ historie. Een chronologische toets gebruikt per eerdere aanvraag uitsluitend
 uitkomsten die toen al bekend waren; de weergave noemt ook gemiste en onterechte
 grenssignalen binnen de toetsbare, technisch geslaagde pogingen.
 
-Ontbrekende configuratie/timing, mislukte of destijds nog onvoltooide vergelijkbare
-pogingen, onvoldoende toetsbare historie of een analyselimiet geven HOLD. Er zijn
+Alleen documenten met dezelfde route en vergelijkbare grootte, en pogingen van de
+laatste 30 dagen, tellen mee. Ontbrekende configuratie/timing, mislukte of destijds
+nog onvoltooide vergelijkbare pogingen, onvoldoende toetsbare historie of een
+analyselimiet geven HOLD. Er zijn
 geen automatische ingrepen en geen bewezen voorspellende nauwkeurigheid of
 gegarandeerde handelingsruimte. Deze schaduwberekening wijzigt de bestaande
 verwerkingsspoor-export niet. Zie het

@@ -46,6 +46,9 @@ def deadline_forecast_html(report, esc):
     text += (f'<p>Meetbasis: {evidence["retained"]} bruikbare pogingrecords onderzocht, '
              f'{evidence["invalid"]} ongeldige records; voor de huidige schatting '
              f'{evidence["censored"]} toen nog onvoltooid en {evidence["failed"]} niet geslaagd. '
+             f'Buiten beschouwing: {evidence["other_route_or_size"]} met andere route of grootte, '
+             f'{evidence["other_configuration"]} met andere configuratie, '
+             f'{evidence["outside_lookback"]} ouder dan 30 dagen. '
              'Ontbrekende historie is niet vast te stellen.</p>')
     if evidence['over_document_limit'] or evidence['over_attempt_limit'] or evidence['unexamined_at_least']:
         text += (f'<p>Analyse gestopt op een limiet: {evidence["over_document_limit"]} documenten of '
@@ -213,9 +216,11 @@ def install(app, console, require, page, nav, esc):
         # durable authority; no browser state can start another attempt.
         script = '<script>setTimeout(function(){ window.location.reload(); }, 5000);</script>' if running_selected else ''
         script += '<script>document.querySelectorAll("form[action=\\"/source-selection/start\\"]").forEach(function(form){form.addEventListener("submit",function(event){if(form.dataset.submitting){event.preventDefault();return;}form.dataset.submitting="yes";form.querySelector("button").disabled=true;});});</script>'
-        return page(nav(actor, 'selection') + '<section class="room" id="source-selection"><h1>Bronselectie</h1>' + notice
+        # Per-actor progress and shadow timing: never cache.
+        return HTMLResponse(page(nav(actor, 'selection') + '<section class="room" id="source-selection"><h1>Bronselectie</h1>' + notice
                     + '<form method="get"><label>Document<select name="document">' + options + '</select></label><button>Document selecteren</button></form>'
-                    + ''.join(sorted(cards, key=lambda card: 'data-selected="true"' not in card)) + '</section>' + script)
+                    + ''.join(sorted(cards, key=lambda card: 'data-selected="true"' not in card)) + '</section>' + script),
+                    headers={'Cache-Control': 'no-store'})
 
     @app.get('/inzicht/document/verwerkingsspoor')
     def processing_trace_export(request: Request, document: str = ''):

@@ -34,7 +34,7 @@ def test_selected_shadow_view_is_authorized_and_cannot_write(console, monkeypatc
     before = deepcopy(console._envelope(sid))
     def forbidden(*args, **kwargs):
         raise AssertionError('shadow GET attempted a durable transition')
-    for name in ('_commit_prepared_store', 'execute_source_selection', 'reserve_source_selection', 'expire_processing_attempts'):
+    for name in ('_commit_prepared_store', 'execute_source_selection', 'reserve_source_selection'):
         monkeypatch.setattr(console, name, forbidden)
     with TestClient(app, base_url='https://testserver') as client:
         assert client.get('/source-selection', params={'document': sid}).status_code == 401

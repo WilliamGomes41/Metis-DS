@@ -86,8 +86,13 @@ synthetic case identifies pressure at reservation, 80 seconds before expiry.
 
 ## Cost, limits and decision gates
 
-The adapter stops at 256 visible documents, 64 attempts per document or 128
-analyzable ingest records, with an explicit HOLD reason. It never silently samples
+Only documents with the current route and a comparable size (0.5–2×) are
+examined, and only ingest attempts that started within the last 30 days. The
+adapter stops at 256 such candidate documents, 64 attempts per document or 128
+analyzable ingest records, with an explicit HOLD reason. Attempts of other routes,
+sizes or configurations and older attempts are counted separately; they neither
+train nor hold the range. An invalid or failed attempt still holds the forecast
+when it could have been comparable (same route, size and lookback). It never silently samples
 a complete-looking cohort. These are computational limits, not retention changes.
 The report counts documents/attempts over their limits; at an early record-limit
 stop it reports a lower bound of unexamined records rather than a fabricated total.
@@ -134,3 +139,14 @@ envelopes, 128 accepted records, 124 scoreable cases) measured median wall/CPU
 22.5ms, maximum wall 43.9ms, temporary traced peak 70,137 bytes and 1,111 JSON bytes
 for the derived report. This measures the added calculation, excluding existing
 page/store reads and rendering. It is not a production overhead guarantee.
+
+## Review correction R1
+
+Before R1 every visible document counted towards the limits and the invalid-history
+check, and failures never aged out. One unrelated legacy attempt without stored
+configuration, more than 128 processed documents or one comparable failure at any
+time therefore held every forecast. R1 filters by route, size and configuration
+first and applies a 30-day lookback; regression tests cover all three cases and
+failed before the change. The installed HTTP test no longer patches a
+non-existent console method; durable writes still go through the patched
+`_commit_prepared_store`.

@@ -10,6 +10,9 @@ MAX_DOCUMENTS = 256
 MAX_RECORDS = 128
 MAX_ATTEMPTS = 64
 HORIZONS = (300, 900, 3600, 21600, 86400)
+# Older attempts describe an earlier deployment and data mix; they neither train
+# nor block the shadow range. Not a retention change: older records stay stored.
+LOOKBACK_SECONDS = 30 * 86400
 
 
 def _time(value):
@@ -47,6 +50,13 @@ def _record(envelope, attempt):
     return {'id': attempt['attempt_id'], 'start': start, 'finish': finish, 'state': state,
             'size': size, 'route': route, 'configuration': configuration,
             'deadline': _time(attempt.get('expires_at'))}
+
+
+def _candidate(document, current):
+    """Envelope-level route and size match; attempt evidence is checked later."""
+    size = (document.get('received_source') or {}).get('bytes')
+    return ((document.get('content_kind'), document.get('class')) == current['route']
+            and _size(size) and .5 <= size / current['size'] <= 2)
 
 
 def _comparable(left, right):
@@ -111,7 +121,8 @@ def deadline_forecast(envelope, documents, *, observed_at=None):
     report = {'schema': 'processing-deadline-shadow-v1', 'status': 'hold', 'reason': None,
               'coverage': 'not_established', 'range_seconds': None, 'sample_count': 0,
               'evidence': dict(retained=0, invalid=0, ignored_kind=0, censored=0, failed=0,
-                               over_document_limit=0, over_attempt_limit=0, unexamined_at_least=0),
+                               over_document_limit=0, over_attempt_limit=0, unexamined_at_least=0,
+                               other_route_or_size=0, other_configuration=0, outside_lookback=0),
               'evaluation': None, 'deadline_remaining_seconds': None, 'pressure': None,
               'horizons': {str(h): {'stored_boundary_within_horizon': None,
                                    'predictive_accuracy': 'not_established'} for h in HORIZONS},
@@ -123,9 +134,6 @@ def deadline_forecast(envelope, documents, *, observed_at=None):
 
     if not clock:
         return hold('invalid_observation_time')
-    if len(documents) > MAX_DOCUMENTS:
-        report['evidence']['over_document_limit'] = len(documents) - MAX_DOCUMENTS
-        return hold('document_limit')
     attempts = envelope.get('processing_attempts') or []
     if not attempts or len(attempts) > MAX_ATTEMPTS:
         report['evidence']['over_attempt_limit'] = max(0, len(attempts) - MAX_ATTEMPTS)
@@ -145,8 +153,16 @@ def deadline_forecast(envelope, documents, *, observed_at=None):
         report['horizons'][str(h)]['stored_boundary_within_horizon'] = 0 < remaining <= h
     if remaining <= 0:
         return hold('stored_deadline_elapsed')
+    # Only documents that could supply comparable timing are examined, so an
+    # unrelated, legacy or large store does not hold every forecast.
+    candidates = [document for document in documents if _candidate(document, current)]
+    report['evidence']['other_route_or_size'] = len(documents) - len(candidates)
+    if len(candidates) > MAX_DOCUMENTS:
+        report['evidence']['over_document_limit'] = len(candidates) - MAX_DOCUMENTS
+        return hold('document_limit')
+    window_start = clock.timestamp() - LOOKBACK_SECONDS
     records, identities = [], set()
-    for document in documents:
+    for document in candidates:
         rows = document.get('processing_attempts') or []
         if len(rows) > MAX_ATTEMPTS:
             report['evidence']['over_attempt_limit'] = len(rows) - MAX_ATTEMPTS
@@ -155,11 +171,19 @@ def deadline_forecast(envelope, documents, *, observed_at=None):
             if raw.get('kind') != 'ingest':
                 report['evidence']['ignored_kind'] += 1
                 continue
+            started = _time(raw.get('started_at'))
+            if started is not None and started.timestamp() < window_start:
+                report['evidence']['outside_lookback'] += 1
+                continue
             row = _record(document, raw)
             if not row:
+                # Same route and size: the record could have been comparable.
                 report['evidence']['invalid'] += 1
                 continue
             if row['start'] > clock:
+                continue
+            if row['configuration'] != current['configuration']:
+                report['evidence']['other_configuration'] += 1
                 continue
             if row['id'] in identities:
                 return hold('ambiguous_attempt_identity')
