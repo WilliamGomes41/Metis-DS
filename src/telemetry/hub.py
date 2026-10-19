@@ -163,7 +163,13 @@ class JsonlSink:
         self._last_prune = time.monotonic()
         # Workers prune the same directory: a file may vanish between listing and stat.
         stats = []
-        for path in self.files():
+        try:
+            paths = self.files()
+        except OSError:
+            # Pruning is housekeeping: a failed listing MAG NIET stop writing.
+            # Reads still report listing failures as read_errors.
+            return
+        for path in paths:
             try:
                 stat = path.stat()
             except FileNotFoundError:
@@ -291,6 +297,9 @@ class TelemetryHub:
                             continue
                         if _after(event, since_epoch):
                             yield event
+            except FileNotFoundError:
+                # Pruned by another worker after listing: retention, not a read failure.
+                continue
             except (OSError, UnicodeError):
                 counts["read_errors"] += 1
                 continue

@@ -77,3 +77,13 @@ insights use a warning and explain that telemetry loss or processing interruptio
 are both possible; no crash is inferred. The operator checks measurement coverage
 first. Existing exception/error severity is unchanged. A corrupt-finish regression
 checks this distinction and that a later recorded finish removes the warning.
+
+## Review corrections R3 and R4
+
+R3: a file that another worker prunes between listing and reading is retention,
+not a read failure. It is skipped without a `read_errors` count, so a normal
+multi-worker prune does not mark the scan `partial`.
+
+R4: `prune()` treats a failed directory listing as a skipped housekeeping round.
+Writing continues on the disk store; only reads report listing failures. Both
+corrections have a regression test that failed before the change.
