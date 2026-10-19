@@ -705,19 +705,19 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
 
 
 def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole) -> None:
-    """Revision-pinned repair routes plus read-only Review evidence in Audit."""
+    """Revision-pinned repair routes plus read-only Review evidence in Inzicht."""
 
     def account_for(request: Request) -> dict[str, Any]:
         return console.session_account(request.cookies.get("console_session"))
 
-    def chrome(request: Request, body: str, current: str) -> str:
+    def chrome(request: Request, body: str, current: str, *, title: str = "Review herstel — V&amp;VN Data Services") -> str:
         from src.operations_console_app import _nav, _page
 
         account = account_for(request)
         return _page(
             f"{_nav(account, current)}"
             f"<section class='room'>{body}</section>",
-            title="Review herstel — V&amp;VN Data Services",
+            title=title,
         )
 
     @app.get("/review/repair", response_class=HTMLResponse)
@@ -815,7 +815,7 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
             "<p class='lead'>Voorgestelde correcties worden hier pas expliciet uitgevoerd. "
             "Elk formulier is gebonden aan de getoonde snapshot-revisie.</p>"
             + ("".join(cards) or "<p class='muted'>Geen herstelwerk.</p>")
-            + "<p><a href='/audit/review-signals'>Bekijk signalen uit Review</a></p>",
+            + "<p><a href='/inzicht/reviewsignalen'>Bekijk signalen uit Review</a></p>",
             "review",
         )
 
@@ -857,8 +857,15 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
         )
         return RedirectResponse("/review/repair", status_code=303)
 
-    @app.get("/audit/review-signals", response_class=HTMLResponse)
+    @app.get("/audit/review-signals", include_in_schema=False)
+    def legacy_review_signals(request: Request) -> RedirectResponse:
+        account_for(request)
+        query = request.url.query
+        return RedirectResponse("/inzicht/reviewsignalen" + ("?" + query if query else ""), status_code=303)
+
+    @app.get("/inzicht/reviewsignalen", response_class=HTMLResponse)
     def audit_review_signals(request: Request) -> str:
+        from src.insight_v1 import insight_tabs
         account = account_for(request)
         if "researcher" not in set(account.get("roles") or []):
             raise ConsoleError("researcher_role_required")
@@ -878,11 +885,11 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
             )
         return chrome(
             request,
-            "<p><a href='/inzicht?tab=controles'>← Inzicht · Controles</a></p>"
+            insight_tabs("controles") + "<p><a href='/inzicht?tab=controles'>← Inzicht · Controles</a></p>"
             "<h1>Signalen uit Review</h1>"
             "<p class='lead'>Append-only evidence van review en herstel. "
             "Deze pagina wijzigt geen kennisobjecten.</p>"
             "<p><a class='btn-secondary' href='/review/repair'>Open herstelwerk in Review</a></p>"
             + ("".join(rows) or "<p class='muted'>Nog geen signalen.</p>"),
-            "audit",
+            "settings", title="Reviewsignalen — Inzicht — Metis",
         )

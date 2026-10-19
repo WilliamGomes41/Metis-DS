@@ -1,9 +1,10 @@
-"""Authorized, passive quality reporting in Settings; no workflow authority."""
+"""Authorized quality table and report history in Inzicht; no workflow authority."""
 from contextlib import nullcontext
 from copy import deepcopy
 from datetime import date
 from html import escape
 import logging
+from urllib.parse import urlencode
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse
@@ -113,23 +114,25 @@ def install_quality_routes(app, state, require, page, *, tabs=lambda current: ""
     store = quality_store(state)
     app.state.quality_store = store
 
-    @app.get("/settings/quality", response_class=HTMLResponse)
     def quality(request: Request):
+        from src.operations_console_app import _nav
         account = require(request)
-        body = (tabs("kwaliteit") + '<p><a href="/settings">← Instellingen</a> · <a href="/settings/technical">Technisch beheer</a></p><h1>Kwaliteit &amp; werkproces</h1>'
+        context = {k: v for k, v in request.query_params.items() if k not in {"tab", "view"}}
+        graph_url = escape('/inzicht?' + urlencode({**context, 'tab': 'kwaliteit'}), quote=True)
+        body = (_nav(account, "settings") + '<section class="room">' + tabs("kwaliteit") + '<h1>Kwaliteit &amp; werkproces</h1>'
                 '<p>Automatisch afgeleid uit bestaande verwerking en review, voor bronnen waarvan je uploader of aangewezen reviewer bent.</p>'
-                '<p>Dit is de tabelweergave. <a href="/inzicht?tab=kwaliteit">Bekijk dezelfde meting als grafieken in Inzicht</a>.</p>')
+                f'<nav aria-label="Kwaliteitsweergave"><a href="{graph_url}">Grafieken</a> · <strong aria-current="page">Tabel en rapporthistorie</strong></nav>')
         try:
             filters = validate_filters(request.query_params)
             view = quality_view(state, store, account, filters, request.query_params.get("report"))
         except QualityViewError as exc:
             if exc.status == 400:
-                return HTMLResponse(page('<h1>Ongeldige periode</h1><a href="/settings/quality">Terug</a>'), status_code=400)
-            return HTMLResponse(page(body + f'<p>{escape(exc.reason)}</p>'), status_code=exc.status)
+                return HTMLResponse(page('<h1>Ongeldige periode</h1><a href="/inzicht?tab=kwaliteit&amp;view=table">Terug</a>'), status_code=400)
+            return HTMLResponse(page(body + f'<p>{escape(exc.reason)}</p></section>'), status_code=exc.status)
         report, history = view["report"], view["history"]
         filters = report["filters"]
         esc = lambda value: escape(str(value))
-        body += '<form method="get"><p>Ingestcohort (UTC; activiteit tot gegevensgrens)</p>'
+        body += '<form method="get" action="/inzicht"><input type="hidden" name="tab" value="kwaliteit"><input type="hidden" name="view" value="table"><p>Ingestcohort (UTC; activiteit tot gegevensgrens)</p>'
         for key, label, typ in (("from", "Vanaf", "date"), ("to", "Tot en met", "date"), ("kind", "Inhoudstype", "text"), ("ingest", "Ingesttype", "text")):
             body += f'<label>{label} <input type="{typ}" name="{key}" value="{esc(filters.get(key, ""))}"></label> '
         body += '<label>Verwerkingsroute <select name="route">'
@@ -163,6 +166,8 @@ def install_quality_routes(app, state, require, page, *, tabs=lambda current: ""
         body += '<h2>Rapporthistorie</h2><p>Eerdere beschikbare metingen blijven ongewijzigd bewaard.</p><ul>'
         for old in history[:20]:
             r = old["report"]
-            body += f'<li><a href="/settings/quality?report={esc(old["calculation_id"])}">{esc(r["as_of"])}</a> · {esc(r["definition_version"])} · {r["cohort_size"]} bronnen · {r["open_passages"]} open passages · {len(old["attempts"])} poging(en)</li>'
+            body += f'<li><a href="/inzicht?tab=kwaliteit&amp;view=table&amp;report={esc(old["calculation_id"])}">{esc(r["as_of"])}</a> · {esc(r["definition_version"])} · {r["cohort_size"]} bronnen · {r["open_passages"]} open passages · {len(old["attempts"])} poging(en)</li>'
         body += '</ul>'
-        return page('<section class="room">' + body + '</section>', title='Kwaliteit & werkproces — Metis')
+        return HTMLResponse(page(body + '</section>', title='Kwaliteit & werkproces — Inzicht — Metis'), headers={"Cache-Control": "no-store"})
+
+    app.state.insight_quality_table = quality

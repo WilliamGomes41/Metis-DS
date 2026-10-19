@@ -60,9 +60,7 @@ from src.review_duty_v1 import authoritative_review_type, review_duty_for, revie
 from src.review_interaction_v1 import (
     build_review_interaction_evidence,
     new_review_interaction_id,
-    review_burden_projection,
 )
-from src.review_ledger import read_events
 from src.review_context_v1 import (
     AUTHORITY_CONFIRMED,
     DIRECTION_INCOMING,
@@ -823,12 +821,26 @@ def _nav(account: dict[str, Any] | None, current: str = "") -> str:
     """
 
 
+def _diagnosis_access(account: dict[str, Any], envelope: dict[str, Any]) -> bool:
+    """Who may open /inzicht/document: processing readers or publishers."""
+    roles = set(account.get("roles") or [])
+    return bool(roles & {"researcher", "publisher"}) or (
+        "reviewer" in roles and account.get("account_id") in (envelope.get("named_reviewers") or []))
+
+
+def _diagnosis_link(account: dict[str, Any], envelope: dict[str, Any] | None) -> str:
+    if not envelope or not _diagnosis_access(account, envelope):
+        return ""
+    query = _esc(urlencode({"document": envelope["snapshot_id"]}))
+    return f'<p><a href="/inzicht/document?{query}">Bekijk diagnose in Inzicht</a></p>'
+
+
 def _task_links(topic: str) -> str:
     """Separate destinations, never embedded instructional or diagnostic UI."""
     return (
         '<nav class="task-secondary-nav" aria-label="Hulp en beheer">'
-        f'<a href="/help/{_esc(topic)}">Uitleg bij deze taak</a> · '
-        '<a href="/settings/technical">Technisch beheer</a></nav>'
+        f'<a href="/help/{_esc(topic)}">Uitleg bij deze taak</a>'
+        '</nav>'
     )
 
 
@@ -3819,6 +3831,7 @@ def _render_review_room(
               {conflict_html if not chosen_object_id else ""}
               {"".join(cards) if not chosen else ""}
               {objects_html or empty}
+              {_diagnosis_link(account, chosen_row)}
             </section>
             """
     )
@@ -3981,7 +3994,7 @@ def create_console_app(
                 back += f'<p><a href="/review/participants?{_esc(urlencode({"document": document}))}">Terug naar deelnemersbeheer</a></p>'
         technical_details = (
             f'<details><summary>Technische informatie voor de beheerder</summary><code>{_esc(exc.code)}</code>{processing_details}</details>'
-            if _request.url.path.startswith(("/settings", "/audit", "/inzicht")) else ""
+            if _request.url.path.startswith("/inzicht") else ""
         )
         if not technical_details and (exc.code.startswith(("pre_review_", "processing_"))):
             message = "De verwerking is niet beschikbaar. Deze taak kan nu niet worden uitgevoerd."
@@ -4075,7 +4088,7 @@ def create_console_app(
               De gekozen reviewvorm bepaalt de aanvullende deelname; bestaande onafhankelijke
               controles blijven gelden. Bij bestaande reviewregels mag de uploader niet de enige reviewer zijn.</p>
               <h2>Verwerking</h2><p>Metis maakt voorstellen; een voorstel is geen inhoudelijk besluit.
-              De verwerking kan worden geblokkeerd. Diagnose en nieuwe verwerkingspogingen staan bij technisch beheer.</p>"""),
+              De verwerking kan worden geblokkeerd. Diagnose staat in Inzicht; starten en hervatten doe je in Bronselectie.</p>"""),
             "review": ("Beoordelen", "/review", """
               <h2>Bron en betekenis</h2><p>Controleer de passage met de oorspronkelijke bron en de relevante context.
               Metis doet een voorstel; jij bepaalt wat met de passage gebeurt.
@@ -4109,7 +4122,7 @@ def create_console_app(
             "documents": ("Documenten", "/tree", """
               <h2>Documentbeheer</h2><p>Zoek een document en open de beschikbare taak.
               Gepubliceerde versies blijven ongewijzigd. Een wijziging van documenttype kan een nieuwe
-              beoordeling of verwerking vereisen. Verwerking en technische herstelpogingen staan in technisch beheer.</p>"""),
+              beoordeling of verwerking vereisen. Documentdiagnostiek staat in Inzicht; starten en hervatten doe je in Bronselectie.</p>"""),
         }
         if topic not in topics:
             raise ConsoleError("unknown_document")
@@ -4118,53 +4131,6 @@ def create_console_app(
                      f'<h1>Uitleg: {_esc(title)}</h1>{content}'
                      f'<p><a href="{back}">Terug naar {_esc(title)}</a></p></section>',
                      title=f'Uitleg: {_esc(title)} — Metis')
-
-    @app.get("/settings/technical/processing", response_class=HTMLResponse)
-    def processing_management(request: Request, document: str) -> str:
-        account = _require(request)
-        envelope = state._envelope(document)
-        roles = set(account.get("roles") or [])
-        # Same authorization as processing_status/retry: researchers or assigned reviewers.
-        processing = state.processing_status(document, actor_id=account["account_id"])
-        controls = []
-        if processing.get("resume_allowed") or processing["retry_allowed"]:
-            controls.append(f'<a class="btn-primary" href="/source-selection?{_esc(urlencode({"document": document}))}">Naar Bronselectie voor Starten of Hervatten</a>')
-        if ("publisher" in roles
-                and (account["account_id"] in envelope.get("named_reviewers", [])
-                     or account["account_id"] == envelope.get("uploader_account_id"))
-                and processing.get("reason_code") == "processing_attempt_limit_reached"
-                and not envelope.get("processing_recovery")):
-            controls.append(f'''<form method="post" action="/tree/processing-recovery">
-              <input type="hidden" name="snapshot_id" value="{_esc(document)}">
-              <label>Reden voor eenmalig herstel<input name="reason" required maxlength="1000"></label>
-              <button type="submit">Een herstelpoging autoriseren</button></form>''')
-        code = ("source_formation_incomplete" if processing.get("formation_incomplete")
-                else processing.get("error_code") or processing.get("reason_code") or "")
-        progress = processing.get("formation_progress") or {}
-        progress_html = ""
-        if progress.get("planned_task_count"):
-            progress_html = (
-                f'<p>Vormingstaken: {int(progress.get("terminal_task_count") or 0)} van '
-                f'{int(progress.get("planned_task_count") or 0)} afgehandeld; '
-                f'{int(progress.get("pending_task_count") or 0)} nog open.</p>'
-            )
-        diagnostic = ((envelope.get("processing_attempts") or [{}])[-1].get("diagnostic") or {})
-        pages = [str(p) for p in diagnostic.get("unverified_pages") or [] if type(p) is int]
-        pages_html = f'<p>Pagina’s zonder verwerkbare brontekst: {_esc(", ".join(pages))}</p>' if pages else ""
-        detail = _esc(json.dumps(diagnostic, ensure_ascii=False, indent=2))
-        reviewer_links = (f'<p><a href="/settings/technical?document={_esc(document)}">Passagediagnostiek en exports</a></p>'
-                          if "reviewer" in roles and account["account_id"] in envelope.get("named_reviewers", []) else "")
-        return _page(f'''{_nav(account, "settings")}<section class="room">
-          <p><a href="/settings/technical">Terug naar technisch beheer</a></p>
-          <h1>Verwerkingsbeheer: {_esc(envelope.get("title"))}</h1>
-          <p>{_esc(ERROR_COPY.get(code, "Controleer de actuele verwerking."))}</p>
-          <p>Code: <code>{_esc(code)}</code></p>
-          {pages_html}
-          {progress_html}
-          <p>Nieuwe poging vanaf: {_esc(processing.get("retry_not_before") or "niet van toepassing")}</p>
-          {"".join(controls)}<pre>{detail}</pre>{reviewer_links}
-          <p><a href="/review?document={_esc(document)}">Naar beoordeling</a> · <a href="/tree">Naar Documenten</a></p>
-          </section>''', title="Verwerkingsbeheer — Metis")
 
     @app.get("/settings", response_class=HTMLResponse)
     def settings_home(request: Request) -> str:
@@ -4176,7 +4142,7 @@ def create_console_app(
             <a class="doc-card" href="/inzicht?tab=systeem" style="text-decoration:none;"><p class="doc-title">Systeem</p><p>Verzoeken, fouten, fasen en deploys, tot op de milliseconde.</p></a>
             <a class="doc-card" href="/inzicht?tab=kwaliteit" style="text-decoration:none;"><p class="doc-title">Kwaliteit &amp; werkproces</p><p>Bruikbaarheid van voorstellen, herstelwerk en open werk.</p></a>
             <a class="doc-card" href="/inzicht?tab=documenten" style="text-decoration:none;"><p class="doc-title">Documenten</p><p>Verwerking, blokkades en systeemfouten per document.</p></a>
-            <a class="doc-card" href="/inzicht?tab=controles" style="text-decoration:none;"><p class="doc-title">Controles</p><p>Audits, veiligheidstests, routevergelijking en exports.</p></a>
+            <a class="doc-card" href="/inzicht?tab=controles" style="text-decoration:none;"><p class="doc-title">Controles</p><p>Veiligheidstests, routevergelijking en reviewsignalen.</p></a>
           </div>
           <div style="height:18px" aria-hidden="true"></div>
           <h2>Beheer</h2>
@@ -4187,7 +4153,7 @@ def create_console_app(
             </a>
             <a class="doc-card" href="/settings/technical" style="text-decoration:none;">
               <p class="doc-title">Technisch beheer</p>
-              <p>Modelconfiguratie, API-toegang, verwerkingsproblemen herstellen en exports.</p>
+              <p>Modelconfiguratie en API-toegang.</p>
             </a>
             <a class="doc-card" href="/settings/chatgpt" style="text-decoration:none;"><p class="doc-title">ChatGPT-koppeling</p><p>Verbindingsstatus en toegang tot alleen-lezen onderzoek vanuit ChatGPT.</p></a>
           </div>
@@ -4214,104 +4180,17 @@ def create_console_app(
         )
 
     @app.get("/settings/technical", response_class=HTMLResponse)
-    def technical_management(request: Request, document: str = "", q: str = "", page: int = 1) -> str:
+    def technical_management(request: Request, document: str = "", q: str = "", page: int = 1):
         account = _require(request)
-        document_panel = ""
         if document:
-            if "reviewer" not in set(account.get("roles") or []):
-                raise ConsoleError("reviewer_role_required")
-            envelope = state._envelope(document)
-            if account["account_id"] not in (envelope.get("named_reviewers") or []):
-                raise ConsoleError("reviewer_not_named_on_snapshot")
-            objects = state.snapshot_objects(document)
-            burden = review_burden_projection(read_events(state._ledger_path), snapshot_id=document)
-            document_panel = f'''
-              <h2>Verwerkingsproblemen herstellen: {_esc(envelope.get("title"))}</h2>
-              <p><a href="/inzicht?tab=documenten">Inzicht › Documenten</a> ·
-              <a href="/review?document={_esc(document)}">Naar inhoudelijke review</a>
-              · <a href="/settings/technical/exports?document={_esc(document)}">Exports</a></p>
-              <p><a href="/review?document={_esc(document)}&amp;task=repair">Passages corrigeren</a></p>
-              <details><summary>Diagnostiek en brondekking</summary>
-                {_processing_diagnostics_html(objects)}{_coverage_panel(objects)}
-              </details>
-              <details class="review-burden"><summary>Reviewinteracties</summary>
-                <p>{int(burden["review_interactions"])} gemeten menselijke interacties voor
-                {int(burden["object_decisions"])} objectbesluiten.</p>
-                <p>Historische besluiten zonder gemeten interactie: {int(burden["legacy_unmeasured_decisions"])}.</p>
-              </details>
-            '''
-        if document:
-            return _page(f'{_nav(account, "settings")}<section class="room">'
-                         '<p><a href="/settings/technical">Terug naar technisch beheer</a></p>'
-                         + document_panel + '</section>', title="Documentdiagnostiek — Metis")
-        assigned = [row for row in state.list_envelopes()
-                    if "researcher" in set(account.get("roles") or []) or (
-                        "reviewer" in set(account.get("roles") or [])
-                        and account["account_id"] in (row.get("named_reviewers") or []))]
-        assigned, list_controls = _document_list_page(assigned, q=q, page=page, path="/settings/technical")
-        documents = "".join(
-            f'<li><a href="/settings/technical/processing?document={_esc(row["snapshot_id"])}">{_esc(row.get("title"))} · {_esc(row.get("version"))}</a></li>'
-            for row in assigned
-        )
-        return _page(f'''
-          {_nav(account, "settings")}
-          <section class="room">
-            <p><a href="/settings">← Instellingen</a></p>
-            <h1>Technisch beheer</h1>
-            {_passage_formation_status_html(state)}
-            <p class="lead">Configuratie, technische controles en experimenten op één plek. Testresultaten zijn geen inhoudelijke beoordeling van documenten.</p>
-            <p class="field-help">Diagnostiek, kwaliteit, telemetrie en controles staan samen in <a href="/inzicht">Inzicht</a>; per document vind je ze onder <a href="/inzicht?tab=documenten">Inzicht › Documenten</a>.</p>
-            <h2>Configuratie en koppelingen</h2>
-            <div class="doc-list">
-              <a class="doc-card" href="/settings/llm"><p class="doc-title">Modelconfiguratie</p><p>Bekijk de ingestelde provider en het model.</p></a>
-              <a class="doc-card" href="/settings/api-access"><p class="doc-title">API-toegang</p><p>Beheer koppelingen en toegangsgegevens.</p></a>
-            </div>
-            <h2>Tests en experimenten</h2>
-            <div class="doc-list">
-              <a class="doc-card" href="/inzicht/veiligheidstests"><p class="doc-title">Semantische veiligheidstests</p><p>Controleer vaste testgevallen voor weglatingen, voorwaarden, uitzonderingen en ontkenningen.</p></a>
-              <a class="doc-card" href="/settings/quality/compare"><p class="doc-title">Routevergelijking</p><p>Vergelijk verwerkingsroutes op dezelfde bron.</p></a>
-            </div>
-            <h2>Exports</h2>
-            <a class="doc-card" href="/settings/technical/exports">Alle exports</a>
-            <h2>Verwerkingsproblemen herstellen</h2>
-            {list_controls}
-            <ul>{documents or '<li>Geen documenten gevonden.</li>'}</ul>
-            {document_panel}
-          </section>
-        ''', title="Technisch beheer — Metis")
-
-    @app.get("/settings/technical/exports", response_class=HTMLResponse)
-    def technical_exports(request: Request, document: str = "", q: str = "", page: int = 1) -> str:
-        account = _require(request)
-        if "reviewer" not in set(account.get("roles") or []):
-            raise ConsoleError("reviewer_role_required")
-        assigned = [row for row in state.list_envelopes()
-                    if account["account_id"] in (row.get("named_reviewers") or [])]
-        if document and not any(row["snapshot_id"] == document for row in assigned):
-            raise ConsoleError("reviewer_not_named_on_snapshot")
-        visible, controls = _document_list_page(assigned, q=q, page=page, path="/settings/technical/exports")
-        if document:
-            visible = [row for row in assigned if row["snapshot_id"] == document]
-            controls = '<p><a href="/settings/technical/exports">Alle documenten</a></p>'
-        cards = []
-        for row in visible:
-            snapshot = _esc(quote(row["snapshot_id"], safe=""))
-            opened = " open" if document else ""
-            cards.append(f'''<details class="doc-card document-disclosure"{opened}>
-              <summary>{_document_summary(row)}</summary>
-              <ul class="export-options">
-                <li>Bronpassages:
-                  <a href="/review/passages-export?document={snapshot}&amp;format=csv">CSV</a> ·
-                  <a href="/review/passages-export?document={snapshot}&amp;format=json">JSON</a></li>
-                <li><a href="/review/processing-diagnostics?document={snapshot}">Diagnostiek (JSON)</a></li>
-                <li><a href="/review/processing-diagnostics-detail?document={snapshot}">Detaildiagnostiek (JSON)</a></li>
-                <li><a href="/review/processing-evidence-export?document={snapshot}">Download verwerkingsbewijs als CSV-pakket</a></li>
-              </ul>
-            </details>''')
-        return _page(f'''{_nav(account, "settings")}
-          <section class="room"><p><a href="/settings/technical">← Technisch beheer</a></p>
-          <h1>Exports</h1>{controls}<div class="doc-list">
-          {"".join(cards) or "<p>Geen documenten gevonden.</p>"}</div></section>''', title="Exports — Metis")
+            return RedirectResponse("/inzicht/document?" + request.url.query, status_code=303, headers={"Cache-Control": "no-store"})
+        return _page(f'''{_nav(account, "settings")}<section class="room">
+          <h1>Technisch beheer</h1>{_passage_formation_status_html(state)}
+          <p class="lead">Configuratie en toegangsbeheer.</p>
+          <div class="doc-list">
+            <a class="doc-card" href="/settings/llm"><p class="doc-title">Modelconfiguratie</p><p>Bekijk de ingestelde provider en het model.</p></a>
+            <a class="doc-card" href="/settings/api-access"><p class="doc-title">API-toegang</p><p>Beheer koppelingen en toegangsgegevens.</p></a>
+          </div></section>''', title="Technisch beheer — Metis")
 
     @app.get("/settings/api-access", response_class=HTMLResponse)
     def settings_api_access(request: Request) -> str:
@@ -5235,6 +5114,9 @@ def create_console_app(
         can_move = "researcher" in account["roles"] or "publisher" in account["roles"]
         can_promote = "reviewer" in account["roles"]
         payload = state.family_tree()
+        named_on = ({row["snapshot_id"] for row in state.list_envelopes()
+                     if account["account_id"] in (row.get("named_reviewers") or [])}
+                    if can_promote and not can_move else set())
         move_family_options = "".join(
             f'<option value="{_esc(family)}"></option>'
             for family in sorted(payload["families"], key=str.casefold)
@@ -5306,6 +5188,7 @@ def create_console_app(
                       <summary>{_document_summary(child)}</summary>
                       {pre_review_notice}
                       <div class="doc-actions">{"".join(actions)}</div>
+                      {f'<p><a href="/inzicht/document?{_esc(urlencode({"document": child["snapshot_id"]}))}">Bekijk diagnose in Inzicht</a></p>' if can_move or child['snapshot_id'] in named_on else ''}
                       {_unpublished_delete_control(child, account=account, console=state, next_path="/tree", mutable=mutable)}
                     </details>
                     """
@@ -5334,9 +5217,9 @@ def create_console_app(
     def tree_processing_recovery(request: Request, snapshot_id: str = Form(...), reason: str = Form(...)):
         account = _require(request)
         state.authorize_processing_recovery(actor_id=account["account_id"], snapshot_id=snapshot_id, reason=reason)
-        return RedirectResponse("/settings/technical/processing?" + urlencode({"document": snapshot_id}), status_code=303)
+        return RedirectResponse("/inzicht/document?" + urlencode({"document": snapshot_id}), status_code=303)
 
-    @app.get("/review/processing-diagnostic-replay", response_class=JSONResponse)
+    @app.get("/inzicht/document/poging", response_class=JSONResponse)
     def review_processing_diagnostic_replay(request: Request, document: str, attempt_id: str):
         account = _require(request)
         if "reviewer" not in set(account.get("roles") or []):
@@ -5466,7 +5349,7 @@ def create_console_app(
             context_target=context_target, context_mode=context_mode, context_saved=context_saved == "yes",
         )
 
-    @app.get("/review/passages-export")
+    @app.get("/inzicht/document/passages")
     def review_passages_export(request: Request, document: str = "", format: str = "json") -> Response:
         account = _require(request)
         if "reviewer" not in set(account.get("roles") or []):
@@ -5497,7 +5380,7 @@ def create_console_app(
             "rows": rows,
         }, headers=headers)
 
-    @app.get("/review/processing-evidence-export")
+    @app.get("/inzicht/document/verwerkingsbewijs")
     def review_processing_evidence_export(request: Request, document: str = "") -> Response:
         account = _require(request)
         if "reviewer" not in set(account.get("roles") or []):
@@ -5519,7 +5402,7 @@ def create_console_app(
             "Cache-Control": "no-store",
         })
 
-    @app.get("/review/processing-diagnostics", response_class=JSONResponse)
+    @app.get("/inzicht/document/diagnostiek", response_class=JSONResponse)
     def review_processing_diagnostics(request: Request, document: str = "") -> JSONResponse:
         account = _require(request)
         if "reviewer" not in set(account.get("roles") or []):
@@ -5558,7 +5441,7 @@ def create_console_app(
         return JSONResponse(payload, headers={"Cache-Control": "no-store"})
 
 
-    @app.get("/review/processing-diagnostics-detail", response_class=JSONResponse)
+    @app.get("/inzicht/document/detaildiagnostiek", response_class=JSONResponse)
     def review_processing_diagnostics_detail(request: Request, document: str = "") -> JSONResponse:
         account = _require(request)
         if "reviewer" not in set(account.get("roles") or []):
@@ -6349,6 +6232,8 @@ def create_console_app(
     install_decision_review_routes(app, state, _require, _page)
     from src.review_participation_ui_v1 import install_routes as install_participation_routes
     install_participation_routes(app, state, _require, _page)
+    from src.insight_v1 import install_insight_legacy_routes
+    install_insight_legacy_routes(app, _require)
     return app
 
 

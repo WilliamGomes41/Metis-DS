@@ -71,7 +71,9 @@ def test_settings_hub_channels_inzicht_beheer_and_uitleg(tmp_path):
         assert f'href="/inzicht?tab={key}"' in settings
     assert 'href="/settings/quality"' not in settings and 'href="/telemetry"' not in settings
     technical = client.get('/settings/technical').text
-    assert 'href="/inzicht?tab=documenten"' in technical
+    assert 'href="/settings/llm"' in technical
+    for removed in ('href="/inzicht', 'href="/settings/quality', 'href="/settings/technical/exports', 'Verwerkingsproblemen herstellen'):
+        assert removed not in technical
 
 
 def test_quality_projection_keeps_teller_noemer_and_shows_a_score_drop():
