@@ -193,7 +193,8 @@ def _observed(scope):
     if scope['type'] != 'http':
         return False
     path = scope.get('path') or ''
-    return not any(path.startswith(prefix) for prefix in EXCLUDED_PREFIXES)
+    # Dot segments are never quiet assets: probes like /brand/.env stay observed.
+    return '/.' in path or not any(path.startswith(prefix) for prefix in EXCLUDED_PREFIXES)
 
 
 def doc_ref(snapshot_id):

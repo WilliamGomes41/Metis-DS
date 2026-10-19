@@ -97,7 +97,8 @@ def test_callback_state_rejection_records_its_cause(monkeypatch, events, params)
 
 
 _PROBES = ['/.env', '/.git/config', '/.aws/credentials', '/.kube/config',
-           '/%2eenv', '/.ENV', '/.Git/HEAD', '/app/.env', '/api/.env.local', '/static%2f.ssh/id_rsa']
+           '/%2eenv', '/.ENV', '/.Git/HEAD', '/app/.env', '/api/.env.local', '/static%2f.ssh/id_rsa',
+           '/brand/.env', '/health/.git/config', '/favicon/.aws/credentials']
 
 
 @pytest.mark.parametrize('path', _PROBES)
