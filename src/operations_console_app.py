@@ -3593,6 +3593,29 @@ def _source_context_card(console: OperationsConsole, snapshot_id: str, obj: dict
     return ''.join(parts) + panel + '</section>'
 
 
+def _formation_incomplete_banner(console, snapshot_id: str, objects: list[dict[str, Any]]) -> str:
+    """Point to recovery when formation left no knowledge candidate at all.
+
+    Read-only: reuses the deep processing status (#516), so review closure of
+    the pending ranges or an unavailable resume hides this guidance.
+    """
+    from src.source_accountability_v1 import is_source_record
+    if any(obj.get("object_type") not in {"document", "heading"} and not is_source_record(obj) for obj in objects):
+        return ""
+    try:
+        status = console.processing_status(snapshot_id)
+    except ConsoleError:
+        return ""
+    if not (status.get("formation_incomplete") and status.get("resume_allowed")):
+        return ""
+    link = f'/source-selection?{urlencode({"document": snapshot_id})}'
+    return ('<div class="banner warn" role="alert" data-formation-incomplete>'
+            '<p><strong>Kennisvorming onvolledig.</strong> Metis heeft voor dit document nog geen kennisvoorstellen '
+            'gevormd; de afgewezen voorstellen en de bron zijn bewaard. Hervat eerst de verwerking. '
+            'Handel bronregels pas af nadat de kennisvorming is hersteld.</p>'
+            f'<p><a class="btn-primary" href="{_esc(link)}">Naar Bronselectie om te hervatten</a></p></div>')
+
+
 @source_reconstruction_scope(reuse_existing=True)
 @diagnostic_phase("review_render")
 def _render_review_room(
@@ -3664,6 +3687,7 @@ def _render_review_room(
             )
             all_object_versions = []
         review_path = review_path_for_klasse(chosen_row["class"])
+        objects_html += _formation_incomplete_banner(console, chosen, snapshot_objects)
         audit_signals: list[dict[str, Any]] = []
         if history_enabled:
             audit_reader = getattr(console, "audit_review_signals", None)
@@ -4125,6 +4149,8 @@ def create_console_app(
                 f'{int(progress.get("pending_task_count") or 0)} nog open.</p>'
             )
         diagnostic = ((envelope.get("processing_attempts") or [{}])[-1].get("diagnostic") or {})
+        pages = [str(p) for p in diagnostic.get("unverified_pages") or [] if type(p) is int]
+        pages_html = f'<p>Pagina’s zonder verwerkbare brontekst: {_esc(", ".join(pages))}</p>' if pages else ""
         detail = _esc(json.dumps(diagnostic, ensure_ascii=False, indent=2))
         reviewer_links = (f'<p><a href="/settings/technical?document={_esc(document)}">Passagediagnostiek en exports</a></p>'
                           if "reviewer" in roles and account["account_id"] in envelope.get("named_reviewers", []) else "")
@@ -4133,6 +4159,7 @@ def create_console_app(
           <h1>Verwerkingsbeheer: {_esc(envelope.get("title"))}</h1>
           <p>{_esc(ERROR_COPY.get(code, "Controleer de actuele verwerking."))}</p>
           <p>Code: <code>{_esc(code)}</code></p>
+          {pages_html}
           {progress_html}
           <p>Nieuwe poging vanaf: {_esc(processing.get("retry_not_before") or "niet van toepassing")}</p>
           {"".join(controls)}<pre>{detail}</pre>{reviewer_links}

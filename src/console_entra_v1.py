@@ -87,9 +87,12 @@ class MicrosoftLogin:
         from msal import ConfidentialClientApplication
         self.config = config
         # Per-handshake clients: no shared mutable user token cache; no offline scope.
+        # Regional ESTS endpoints serve app-only tokens, never this user sign-in:
+        # opt out explicitly instead of detecting the App Service region per login.
         self._factory = lambda: ConfidentialClientApplication(
             config.client_id, client_credential=config.client_secret,
             authority=config.authority, exclude_scopes=["offline_access"], timeout=10,
+            azure_region=False,
         )
 
     def begin(self) -> dict[str, Any]:
