@@ -63,3 +63,17 @@ message and the empty-population rendering, including request-detail omissions.
 Deployment and production predictive accuracy are outside this slice. No new
 dependency or platform is introduced. Revert code to remove the additions; no
 domain migration, data restore or lifecycle rollback is necessary.
+
+## Review corrections R1 and R2
+
+R1: enumerate files using `os.scandir`, which propagates directory access errors
+to the existing best-effort read/write boundaries. A real POSIX permission test
+checks denial, per-scan error counts, and recovery after access is restored.
+An empty readable directory remains distinct from a directory that cannot be read.
+
+R2: the API state `aborted` and its counters keep their existing semantics, but
+presentation says that completion is missing. Advice, state badges, groups and
+insights use a warning and explain that telemetry loss or processing interruption
+are both possible; no crash is inferred. The operator checks measurement coverage
+first. Existing exception/error severity is unchanged. A corrupt-finish regression
+checks this distinction and that a later recorded finish removes the warning.

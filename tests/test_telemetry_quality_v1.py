@@ -10,6 +10,7 @@
 from collections import deque
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -89,6 +90,62 @@ class TelemetryQualityTests(unittest.TestCase):
             self.assertEqual(quality["read"]["malformed_lines"], 0)
             self.hub.configure(None)
 
+    @unittest.skipUnless(os.name == "posix" and os.geteuid() != 0,
+                         "POSIX directory permissions require a non-root user")
+    def test_real_directory_permission_failure_is_visible_and_recovers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            self.hub.configure(directory)
+            self.hub.record(event(self.now - 10))
+            original_mode = directory.stat().st_mode & 0o777
+            directory.chmod(0)
+            try:
+                with self.assertRaises(PermissionError):
+                    os.listdir(directory)
+                for _ in range(2):
+                    events, _, quality = self.read(self.now - 60)
+                    self.assertEqual(events, [])
+                    self.assertEqual(quality["read"]["read_errors"], 1)
+                    self.assertIn("read_errors", quality["reasons"])
+                    self.assertEqual(self.hub.dropped, 0)
+            finally:
+                directory.chmod(original_mode)
+            events, _, quality = self.read(self.now - 60)
+            self.assertEqual(len(events), 1)
+            self.assertEqual(quality["read"]["read_errors"], 0)
+            self.assertEqual(quality["status"], "no_known_loss")
+            self.hub.configure(None)
+
+    def test_missing_finish_is_an_observation_not_a_confirmed_worker_failure(self):
+        from src.telemetry.analysis import request_detail, summarize
+        with tempfile.TemporaryDirectory() as directory:
+            self.hub.configure(Path(directory))
+            self.hub.record(event(self.now - 100, "request_started"))
+            with self.hub._sink._path.open("a") as handle:
+                handle.write("corrupted_request_finished\n")
+            events, _, quality = self.read(self.now - 900)
+            self.assertEqual(quality["read"]["malformed_lines"], 1)
+            summary = summarize(events, now=self.now, since=self.now - 900)
+            warning = next(item for item in summary["insights"]
+                           if item["filter"] == {"state": "aborted"})
+            self.assertEqual(warning["severity"], "warning")
+            self.assertIn("telemetrie", warning["detail"])
+            detail = request_detail(events, "a" * 32, now=self.now)
+            self.assertEqual(detail["request"]["state"], "aborted")  # API compatibility
+            self.assertEqual(detail["guidance"]["category"], "missing_completion")
+            self.assertIn("niet vastgesteld", detail["guidance"]["explanation"])
+            self.assertIn("meetdekking", detail["guidance"]["steps"][0])
+            # A recorded finish must resolve the missing-completion warning,
+            # even while an unrelated corrupt line still makes the scan partial.
+            self.hub.record(event(self.now - 90))
+            events, _, quality = self.read(self.now - 900)
+            summary = summarize(events, now=self.now, since=self.now - 900)
+            self.assertEqual(quality["read"]["malformed_lines"], 1)
+            self.assertEqual(summary["kpis"]["aborted"], 0)
+            self.assertFalse(any(item["filter"] == {"state": "aborted"}
+                                 for item in summary["insights"]))
+            self.hub.configure(None)
+
     def test_analysis_omission_counts_distinguish_window_and_lookback(self):
         for i in range(4):
             self.hub.record(event(self.now - 3000 + i))
@@ -136,9 +193,13 @@ class TelemetryQualityTests(unittest.TestCase):
         data = summarize(events, now=self.now, since=self.now - 60)
         data["telemetry"]["quality"] = quality
         # Run the production presentation functions; capture their text output.
-        helpers = _SCRIPT[_SCRIPT.index("const nf ="): _SCRIPT.index("function stateBadge(")]
+        labels = _SCRIPT[_SCRIPT.index("const STATE_NL ="): _SCRIPT.index("const SEV_NL =")]
+        helpers = _SCRIPT[_SCRIPT.index("const nf ="): _SCRIPT.index("function query(")]
         note = _SCRIPT[_SCRIPT.index("function qualityNote("): _SCRIPT.index("function renderInsights(")]
         kpis = _SCRIPT[_SCRIPT.index("function renderKpis("): _SCRIPT.index("const tip =")]
+        errors = _SCRIPT[_SCRIPT.index("function renderErrors("): _SCRIPT.index("function sortable(")]
+        missing = summarize([event(self.now - 100, "request_started")],
+                            now=self.now, since=self.now - 900)
         harness = """
 const assert = require('node:assert/strict');
 const el = (tag, attrs={}, ...children) => ({text:attrs.text || '', children:children.flat()});
@@ -146,6 +207,8 @@ const text = node => typeof node === 'string' ? node : (node?.text || '') + ' ' 
 let tiles;
 const $ = () => ({replaceChildren:(...nodes) => {tiles=nodes;}});
 const sparkline = () => el('svg'); // Chart internals are outside this text-rendering test.
+const icon = kind => el('icon', {text:kind});
+const sev = kind => el('badge', {text:kind});
 """
         checks = """
 renderKpis(data);
@@ -158,9 +221,18 @@ data.telemetry.quality.analysis.lookback_omitted = 2;
 const explanation = text(qualityNote(data.telemetry));
 assert.ok(explanation.includes('3 events uit het gekozen venster'));
 assert.ok(explanation.includes('2 eerdere events voor reconstructie'));
+const missingBadge = text(stateBadge('aborted'));
+assert.ok(missingBadge.includes('Afronding ontbreekt') && missingBadge.includes('warning'));
+assert.ok(!missingBadge.includes('critical'));
+assert.ok(text(stateBadge('error')).includes('critical'));
+renderErrors(groups);
+const groupText = tiles.map(text).join(' ');
+assert.ok(groupText.includes('warning') && groupText.includes('telemetrie'));
+assert.ok(!groupText.includes('critical'));
 """
-        result = subprocess.run([shutil.which("node")], input=harness+helpers+note+kpis+
-                                "\nconst data="+json.dumps(data)+";\n"+checks,
+        result = subprocess.run([shutil.which("node")], input=harness+labels+helpers+note+kpis+errors+
+                                "\nconst data="+json.dumps(data)+";\nconst groups="+
+                                json.dumps(missing["errors"])+";\n"+checks,
                                 text=True, capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
 

@@ -183,7 +183,12 @@ class JsonlSink:
                 path.unlink(missing_ok=True)
 
     def files(self) -> list[Path]:
-        return [path for path in self.directory.glob("events-*.jsonl") if path.is_file()]
+        # Path.glob can suppress directory access errors and look like an empty
+        # store. Let the existing read/write boundaries observe those failures.
+        with os.scandir(self.directory) as entries:
+            return [Path(entry.path) for entry in entries
+                    if entry.name.startswith("events-") and entry.name.endswith(".jsonl")
+                    and entry.is_file()]
 
     def close(self) -> None:
         if self._handle is not None:
