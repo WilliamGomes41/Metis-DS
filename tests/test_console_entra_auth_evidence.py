@@ -4,6 +4,11 @@ Incident 2026-10-19: a scanner caused three /auth/microsoft 503s whose cause was
 swallowed before diagnostics could record it, and dotfile probes started
 Entra authentication flows.
 """
+# release-control-evidence: scope/belofte every Entra 503/403/404/429 carries a safe, recorded cause
+# release-control-evidence: toegang dotfile probes never reach session or Entra; real routes still require sign-in
+# release-control-evidence: beschikbaarheid parallel scans start no flows; flow starts are capped with Retry-After
+# release-control-evidence: slop no message text, state or code reaches the diagnostic records
+# release-control-evidence: releasebewijs tests only; no live deployment or production log evidence
 import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -13,7 +18,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.console_entra_routes_v1 import _denied_path, install_entra_routes
+from src.console_entra_routes_v1 import (
+    DEFAULT_FLOW_STARTS_PER_MINUTE, _denied_path, flow_starts_per_minute, install_entra_routes,
+)
 from src.operations_console_app import _page, create_console_app
 from src.operations_console_v1 import ConsoleError
 from src.request_diagnostics_v1 import RequestDiagnostics, _LOGGER
@@ -174,3 +181,45 @@ def test_registered_metis_routes_still_require_sign_in(tmp_path, monkeypatch, pa
     response = TestClient(app, base_url='https://testserver').get(path, follow_redirects=False)
     assert response.status_code == 303
     assert response.headers['location'] == '/auth/microsoft?next=' + path.replace('/', '%2F')
+
+
+def test_parallel_flow_start_burst_is_capped_with_retry_after(monkeypatch, events):
+    monkeypatch.setenv('METIS_AUTH_FLOW_STARTS_PER_MINUTE', '30')
+    started = []
+    lock = threading.Lock()
+    def begin():
+        with lock:
+            started.append(1)
+        return {'auth_uri': 'https://login.microsoftonline.com/x', 'state': 's'}
+    def renew_session(token):
+        raise ConsoleError('workflow_session_required')
+    def consume_flow(handle):
+        raise ConsoleError('entra_flow_missing')
+    identity = SimpleNamespace(config=None, save_flow=lambda flow: 'h', renew_session=renew_session,
+                               consume_flow=consume_flow)
+    client = _client(monkeypatch, identity, login=SimpleNamespace(begin=begin))
+    with client, ThreadPoolExecutor(max_workers=42) as pool:
+        responses = list(pool.map(lambda _: client.get('/auth/microsoft', follow_redirects=False), range(42)))
+        # Navigation and the callback stay outside the flow-start ceiling.
+        assert client.get('/settings', follow_redirects=False).status_code == 303
+        assert client.get('/auth/microsoft/callback', params={'state': 's'},
+                          follow_redirects=False).status_code == 403
+    statuses = sorted(r.status_code for r in responses)
+    assert statuses == [303] * 30 + [429] * 12
+    assert len(started) == 30
+    for response in responses:
+        if response.status_code == 429:
+            assert 1 <= int(response.headers['retry-after']) <= 60
+            assert response.headers['cache-control'] == 'no-store'
+            assert 'location' not in response.headers
+    denied = [r for r in _finished(events) if r['status'] == 429]
+    assert len(denied) == 12 and all(r['error']['code'] == 'rate_limit_exceeded' for r in denied)
+
+
+@pytest.mark.parametrize('raw,expected', [
+    (None, DEFAULT_FLOW_STARTS_PER_MINUTE), ('300', 300), ('0', DEFAULT_FLOW_STARTS_PER_MINUTE),
+    ('-5', DEFAULT_FLOW_STARTS_PER_MINUTE), ('veel', DEFAULT_FLOW_STARTS_PER_MINUTE),
+])
+def test_flow_start_ceiling_configuration_falls_back_safely(raw, expected):
+    environ = {} if raw is None else {'METIS_AUTH_FLOW_STARTS_PER_MINUTE': raw}
+    assert flow_starts_per_minute(environ) == expected

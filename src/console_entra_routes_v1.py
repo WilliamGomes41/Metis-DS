@@ -1,4 +1,5 @@
 """HTTP handshake and emergency deny control for the console Entra boundary."""
+import os
 from urllib.parse import urlencode, urlsplit
 
 from fastapi import Form, Request
@@ -6,6 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from src.console_entra_v1 import FLOW_COOKIE, SESSION_SECONDS, MicrosoftLogin
 from src.operations_console_v1 import ConsoleError
+from src.product_security_v1 import SlidingWindowRateLimiter
 from src.request_diagnostics_v1 import note_handled_error, note_handled_exception
 
 
@@ -13,6 +15,20 @@ SESSION_COOKIE = "console_session"
 # Secret-bearing dotfile names no Metis route serves; answered before any session
 # or Entra work so scanners cannot start authentication flows through them.
 _DENIED_SEGMENTS = (".env", ".git", ".aws", ".kube", ".ssh", ".svn", ".docker", ".npmrc")
+
+
+# Every flow start writes a handshake record to the identity store. One ceiling
+# for all clients: forwarded client addresses are not trusted at this boundary.
+# The limiter is per worker; the supported topology is at most two workers.
+DEFAULT_FLOW_STARTS_PER_MINUTE = 120
+
+
+def flow_starts_per_minute(environ=os.environ):
+    try:
+        value = int(environ.get("METIS_AUTH_FLOW_STARTS_PER_MINUTE", DEFAULT_FLOW_STARTS_PER_MINUTE))
+    except ValueError:
+        return DEFAULT_FLOW_STARTS_PER_MINUTE
+    return value if value >= 1 else DEFAULT_FLOW_STARTS_PER_MINUTE
 
 
 def _denied_path(path):
@@ -33,6 +49,8 @@ def identity_unavailable_response(render_page):
 def install_entra_routes(app, console, identity, *, render_page):
     provider = MicrosoftLogin(identity.config)
     app.state.microsoft_login = provider
+    flow_limiter = SlidingWindowRateLimiter()
+    flow_limit = flow_starts_per_minute()
 
     def failure(status=403):
         if status == 503:
@@ -88,6 +106,15 @@ def install_entra_routes(app, console, identity, *, render_page):
 
     @app.get("/auth/microsoft")
     def begin(request: Request):
+        allowed, retry_after = flow_limiter.allow("auth:flow_start", flow_limit)
+        if not allowed:
+            note_handled_error("rate_limit_exceeded")
+            return HTMLResponse(render_page(
+                '<section class="room login-card"><h1>Te veel aanmeldpogingen</h1>'
+                '<p>Er worden nu te veel aanmeldingen tegelijk gestart. Probeer het over een minuut opnieuw.</p>'
+                '<p><a href="/login">Terug naar aanmelden</a></p></section>'
+            ), status_code=429, headers={"Retry-After": str(retry_after), "Cache-Control": "no-store",
+                                         "Referrer-Policy": "no-referrer"})
         try:
             # Replacing an abandoned handshake consumes its record, if any.
             if request.cookies.get(FLOW_COOKIE):
