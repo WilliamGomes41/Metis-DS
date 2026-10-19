@@ -149,6 +149,7 @@ def install_entra_routes(app, console, identity, *, render_page):
             # Fail before network exchange for missing/duplicate/mismatched state.
             if (len(request.query_params.getlist("state")) != 1
                     or not supplied.get("state") or supplied["state"] != flow.get("state")):
+                note_handled_error("entra_state_mismatch")
                 return failure()
             claims = app.state.microsoft_login.finish(flow, supplied)
             session = identity.sign_in(claims)

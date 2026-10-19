@@ -81,6 +81,21 @@ def test_callback_denial_records_console_error_code(monkeypatch, events):
     assert 'SECRET-CODE' not in json.dumps(events)
 
 
+@pytest.mark.parametrize('params', [
+    {'code': 'SECRET-CODE'}, {'state': 'other', 'code': 'SECRET-CODE'},
+    [('state', 'flow-state'), ('state', 'flow-state'), ('code', 'SECRET-CODE')],
+])
+def test_callback_state_rejection_records_its_cause(monkeypatch, events, params):
+    identity = SimpleNamespace(config=None, consume_flow=lambda handle: {'state': 'flow-state'})
+    login = SimpleNamespace(finish=lambda flow, supplied: pytest.fail('state must fail before code exchange'))
+    client = _client(monkeypatch, identity, login=login)
+    response = client.get('/auth/microsoft/callback', params=params, follow_redirects=False)
+    assert response.status_code == 403
+    [finished] = _finished(events)
+    assert finished['error'] == {'type': 'ConsoleError', 'code': 'entra_state_mismatch', 'handled': True}
+    assert 'SECRET-CODE' not in json.dumps(events) and 'flow-state' not in json.dumps(events)
+
+
 _PROBES = ['/.env', '/.git/config', '/.aws/credentials', '/.kube/config',
            '/%2eenv', '/.ENV', '/.Git/HEAD', '/app/.env', '/api/.env.local', '/static%2f.ssh/id_rsa']
 
