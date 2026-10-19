@@ -45,7 +45,7 @@ def install_telemetry_routes(app: FastAPI, *, require_account: Callable[[Request
         now = time.time()
         quality: dict[str, Any] = {}
         events, truncated = recent_events(now - seconds - 3600, window_start=now - seconds, quality=quality)
-        body = summarize(events, filters=_filters(request), now=now, since=now - seconds)
+        body = summarize(events, filters=_filters(request), now=now, since=now - seconds, quality=quality)
         body["window"]["key"] = key
         body["telemetry"].update({"store": "disk" if HUB.directory else "memory", "dropped": HUB.dropped,
                                   "truncated": truncated, "quality": quality})

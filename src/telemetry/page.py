@@ -146,6 +146,7 @@ _BODY = r"""
 
   <div id="tm-body">
     <div id="tm-quality" role="status" aria-live="polite"></div>
+    <div id="tm-historical" style="margin-bottom:14px"></div>
     <div class="tm-insights" id="tm-insights" aria-label="Inzichten"></div>
     <div class="tm-kpis" id="tm-kpis"></div>
     <div class="tm-grid">
@@ -355,6 +356,7 @@ function render() {
   fillSelect('#tm-commit', data.options.commits, state.filters.commit, 'Alle deploys');
   renderControls();
   $('#tm-quality').replaceChildren(qualityNote(data.telemetry));
+  renderHistorical(data.historical);
   renderInsights(data.insights);
   renderKpis(data);
   lineChart($('#chart-latency'), data.series, [{ key: 'p50', label: 'p50', color: 'var(--series-1)' }, { key: 'p95', label: 'p95', color: 'var(--series-2)' }], data.window.bucket_seconds);
@@ -389,6 +391,32 @@ function qualityNote(telemetry) {
   return el('div', { class: 'tm-card', style: 'margin-bottom:14px' },
     el('strong', { text: q.status === 'no_known_loss' ? 'Meetdekking niet vastgesteld' : 'Onvoldoende zicht voor een volledig beeld' }),
     el('p', { class: 'help', text: parts.join(' ') }));
+}
+
+function renderHistorical(h) {
+  const box = $('#tm-historical');
+  if (!h) { box.replaceChildren(); return; }
+  const reasons = {
+    measurement_quality: 'Geen vergelijking: meetkwaliteit is onvoldoende of onbekend.',
+    selection_bias: 'Geen vergelijking onder een verzoek-, fout-, status- of uitkomstfilter.',
+    insufficient_history: 'Onvoldoende vergelijkbare historie: per route, methode en commit zijn 15 tijdvakken van 5 minuten met elk minstens 5 afgeronde verzoeken nodig.',
+  };
+  const note = h.reason ? reasons[h.reason] : h.findings.length
+    ? 'Aanhoudende afwijking in de waargenomen metingen. Oorzaak en tijd tot een storing zijn niet vastgesteld.'
+    : 'Geen aanhoudende afwijking in de onderzochte metingen. Dit bewijst geen gezondheid.';
+  const fmt = (v, unit) => unit === 'fraction' ? pct(v) : ms(v);
+  const labels = { latency_p50_ms: 'Mediane responstijd', latency_spread_ms: 'Spreiding p90 − p50' };
+  box.replaceChildren(el('div', { class: 'tm-card' },
+    el('h2', { text: 'Historische afwijkingen · experimenteel' }),
+    el('p', { class: 'tm-sub', text: 'Laatste 15 minuten tegenover het voorafgaande uur, ook bij een langer gekozen tijdvenster.' }),
+    el('p', { class: 'help', text: note }),
+    el('p', { class: 'help', text: `Referentie ${time(h.reference.since, true)} – ${time(h.reference.until, true)}; vergelijking ${time(h.evaluation.since, true)} – ${time(h.evaluation.until, true)}. ${h.evaluated_metrics} metingen onderzocht; ${h.unsupported_cohorts} cohorten en ${h.unsupported_phase_metrics} fasemetingen onvoldoende ondersteund; ${h.excluded_requests} verzoeken uitgesloten; ${h.omitted_cohorts} cohorten en ${h.omitted_findings} bevindingen niet getoond door limieten.` }),
+    ...(h.findings || []).map(f => el('div', { class: 'group' },
+      el('strong', { text: `${labels[f.metric] || 'Faseaandeel ' + f.metric.slice(12)} · ${f.cohort.method} ${f.cohort.route} · ${f.cohort.commit.slice(0, 12)}` }),
+      el('p', { class: 'help', text: `Referentie ${fmt(f.baseline, f.unit)} (${f.reference_samples} verzoeken); nu ${fmt(f.observed, f.unit)} (${f.evaluation_samples} verzoeken). Alle drie tijdvakken overschrijden de referentie met meer dan ${fmt(f.minimum_change, f.unit)}. ${f.consequence}` }),
+      el('p', { class: 'help', text: f.action }),
+      el('button', { type: 'button', class: 'tm-btn', text: 'Bekijk deze route en commit', onclick: () => applyFilters(f.cohort) }))),
+    el('p', { class: 'help', text: h.uncertainty })));
 }
 
 function renderInsights(items) {
