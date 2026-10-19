@@ -185,6 +185,42 @@ class TelemetryQualityTests(unittest.TestCase):
             self.assertIn("record_failures", quality["reasons"])
             self.assertEqual(quality["source"], "process_ring")
 
+    def test_file_pruned_by_another_worker_during_scan_is_not_a_read_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            self.hub.configure(directory)
+            self.hub.record(event(self.now - 10))
+            pruned = directory / "events-other-worker.jsonl"
+            pruned.write_text(json.dumps(event(self.now - 30)) + "\n")
+            listed = hub_module.JsonlSink.files
+
+            def pruned_after_listing(sink):
+                paths = listed(sink)
+                pruned.unlink()
+                return paths
+            with patch.object(hub_module.JsonlSink, "files", pruned_after_listing):
+                events, _, quality = self.read(self.now - 60)
+            self.assertEqual(len(events), 1)
+            self.assertEqual(quality["read"]["read_errors"], 0)
+            self.assertEqual(quality["status"], "no_known_loss")
+            self.hub.configure(None)
+
+    def test_transient_listing_failure_during_prune_keeps_disk_store(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.hub.configure(Path(directory))
+            self.hub.record(event(self.now - 10))
+            sink = self.hub._sink
+            sink._last_prune = time.monotonic() - 120
+            with patch.object(hub_module.JsonlSink, "files", side_effect=OSError(5, "Input/output error")):
+                self.hub.record(event(self.now - 5))
+            self.assertIs(self.hub._sink, sink)
+            self.assertEqual(self.hub.dropped, 0)
+            self.hub.record(event(self.now - 1))
+            events, _, quality = self.read(self.now - 60)
+            self.assertEqual(len(events), 3)
+            self.assertEqual(quality["source"], "instance_files")
+            self.hub.configure(None)
+
     @unittest.skipUnless(shutil.which("node"), "JavaScript runtime unavailable")
     def test_existing_ui_renders_omissions_and_no_zero_percent_without_requests(self):
         from src.telemetry.analysis import summarize

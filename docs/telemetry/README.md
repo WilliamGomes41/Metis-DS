@@ -109,7 +109,7 @@ Grafieken over dezelfde meting als de tabelpagina:
 - De procescounters gelden sinds het ontstaan van deze hub en noemen de runtime;
   ze tellen geen productiebreed verlies. Bufferevents kunnen nog op schijf staan.
   Leesfouten gelden voor gescande bestanden, ook als hun tijd niet vast te stellen
-  is. Oudste/nieuwste observaties bewijzen geen aaneengesloten dekking. Eerdere
+  is. Een bestand dat een andere worker tijdens de scan opruimt, telt niet als leesfout. Oudste/nieuwste observaties bewijzen geen aaneengesloten dekking. Eerdere
   retentieverwijdering, ontbrekende producenten en exportverlies blijven onbekend;
   `coverage` blijft daarom `not_established`. Zeven dagen is geen garantie op
   zeven dagen beschikbare gegevens.
